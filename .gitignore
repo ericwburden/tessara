@@ -1,0 +1,28 @@
+# Rust
+/target/
+
+# Leptos / frontend build output
+/dist/
+/.output/
+/.vercel/
+node_modules/
+
+# Local configuration
+.env
+.env.*
+!.env.example
+
+# Database and local runtime artifacts
+*.sqlite
+*.sqlite3
+*.db
+/tmp/
+/logs/
+
+# Editors and OS files
+.idea/
+.vscode/
+*.swp
+*.swo
+Thumbs.db
+.DS_Store

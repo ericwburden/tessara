@@ -1,0 +1,35 @@
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: tessara
+      POSTGRES_USER: tessara
+      POSTGRES_PASSWORD: tessara
+    ports:
+      - "5432:5432"
+    volumes:
+      - tessara-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tessara -d tessara"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgres://tessara:tessara@postgres:5432/tessara
+      TESSARA_BIND_ADDR: 0.0.0.0:8080
+      TESSARA_DEV_ADMIN_EMAIL: admin@tessara.local
+      TESSARA_DEV_ADMIN_PASSWORD: tessara-dev-admin
+      RUST_LOG: tessara_api=debug,tower_http=info,sqlx=warn
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  tessara-postgres:
