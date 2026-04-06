@@ -1,0 +1,16 @@
+.git/
+target/
+tmp/
+.env
+.env.*
+!.env.example
+
+*.log
+*.sqlite
+*.sqlite3
+*.db
+
+.idea/
+.vscode/
+Thumbs.db
+.DS_Store

@@ -7,7 +7,7 @@ RUN cargo build --release -p tessara-api
 FROM debian:trixie-slim AS runtime
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates \
+    && apt-get install -y --no-install-recommends ca-certificates python3-minimal \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

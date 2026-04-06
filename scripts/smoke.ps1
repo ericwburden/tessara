@@ -1,5 +1,6 @@
 param(
     [switch]$KeepServices,
+    [switch]$ComposeApi,
     [int]$ApiTimeoutSeconds = 600
 )
 
@@ -48,8 +49,13 @@ try {
     New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
     Remove-Item -LiteralPath $apiOut, $apiErr -ErrorAction SilentlyContinue
 
-    docker compose up -d postgres | Out-Host
-    Assert-LastExitCode "docker compose up"
+    if ($ComposeApi) {
+        docker compose up -d --build | Out-Host
+        Assert-LastExitCode "docker compose up"
+    } else {
+        docker compose up -d postgres | Out-Host
+        Assert-LastExitCode "docker compose up"
+    }
 
     $postgresDeadline = (Get-Date).AddSeconds(120)
     do {
@@ -78,17 +84,19 @@ try {
         }
     }
 
-    cargo test -p tessara-api --test demo_flow | Out-Host
-    Assert-LastExitCode "cargo test -p tessara-api --test demo_flow"
+    if (-not $ComposeApi) {
+        cargo test -p tessara-api --test demo_flow | Out-Host
+        Assert-LastExitCode "cargo test -p tessara-api --test demo_flow"
 
-    $apiProcess = Start-Process `
-        -FilePath "cargo" `
-        -ArgumentList @("run", "-p", "tessara-api") `
-        -WorkingDirectory $repoRoot `
-        -NoNewWindow `
-        -PassThru `
-        -RedirectStandardOutput $apiOut `
-        -RedirectStandardError $apiErr
+        $apiProcess = Start-Process `
+            -FilePath "cargo" `
+            -ArgumentList @("run", "-p", "tessara-api") `
+            -WorkingDirectory $repoRoot `
+            -NoNewWindow `
+            -PassThru `
+            -RedirectStandardOutput $apiOut `
+            -RedirectStandardError $apiErr
+    }
 
     $deadline = (Get-Date).AddSeconds($ApiTimeoutSeconds)
     do {
@@ -99,7 +107,7 @@ try {
                 break
             }
         } catch {
-            if ($apiProcess.HasExited) {
+            if ($null -ne $apiProcess -and $apiProcess.HasExited) {
                 throw "API exited before becoming healthy. stderr:`n$(Get-Content -Raw -LiteralPath $apiErr -ErrorAction SilentlyContinue)"
             }
         }

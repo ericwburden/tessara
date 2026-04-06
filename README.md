@@ -87,12 +87,17 @@ cargo fmt --all --check
 cargo check -p tessara-api
 cargo test --workspace
 .\scripts\smoke.ps1
+.\scripts\smoke.ps1 -ComposeApi
 ```
 
 Testing should focus on behavior that protects domain and workflow boundaries:
 validation rules, compatibility/missing-data behavior, projection/reporting
 contracts, and end-to-end slice regressions. Avoid placeholder tests that only
 assert generated boilerplate.
+
+The default smoke script uses Docker for Postgres and runs the API locally with
+`cargo run`. Use `.\scripts\smoke.ps1 -ComposeApi` to validate the fully
+containerized Compose deployment path, including the API image.
 
 Seed the deterministic demo dataset into a running database:
 
