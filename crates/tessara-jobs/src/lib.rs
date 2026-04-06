@@ -1,14 +1,4 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+//! Background job orchestration for Tessara.
+//!
+//! This crate is reserved for analytics refresh and maintenance jobs once the
+//! project moves beyond the API-managed local refresh endpoint.

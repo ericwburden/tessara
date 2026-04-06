@@ -1,14 +1,4 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+//! Shared Tessara primitives.
+//!
+//! This crate is reserved for cross-cutting identifiers, errors, timestamps,
+//! and domain primitives once they are stable enough to share across crates.

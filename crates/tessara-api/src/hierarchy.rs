@@ -269,3 +269,48 @@ pub fn validate_json_value(field_type: &str, value: &Value) -> ApiResult<()> {
         )))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::{validate_field_type, validate_json_value};
+
+    #[test]
+    fn validates_supported_field_types() {
+        for field_type in [
+            "text",
+            "number",
+            "boolean",
+            "date",
+            "single_choice",
+            "multi_choice",
+        ] {
+            assert!(
+                validate_field_type(field_type).is_ok(),
+                "{field_type} should be accepted"
+            );
+        }
+
+        assert!(validate_field_type("file_upload").is_err());
+    }
+
+    #[test]
+    fn validates_json_values_against_field_types() {
+        assert!(validate_json_value("text", &json!("hello")).is_ok());
+        assert!(validate_json_value("date", &json!("2026-04-06")).is_ok());
+        assert!(validate_json_value("single_choice", &json!("yes")).is_ok());
+        assert!(validate_json_value("number", &json!(42)).is_ok());
+        assert!(validate_json_value("boolean", &json!(true)).is_ok());
+        assert!(validate_json_value("multi_choice", &json!(["a", "b"])).is_ok());
+    }
+
+    #[test]
+    fn rejects_json_values_that_do_not_match_field_types() {
+        assert!(validate_json_value("text", &json!(42)).is_err());
+        assert!(validate_json_value("number", &json!("42")).is_err());
+        assert!(validate_json_value("boolean", &json!("true")).is_err());
+        assert!(validate_json_value("multi_choice", &json!(["a", 2])).is_err());
+        assert!(validate_json_value("unknown", &json!("value")).is_err());
+    }
+}

@@ -1,14 +1,4 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+//! Identity and authorization domain logic for Tessara.
+//!
+//! This crate is reserved for account, role, capability, and scoped permission
+//! behavior once those boundaries are extracted from the API-first slice.

@@ -1,0 +1,105 @@
+//! Tessara API service crate.
+//!
+//! This crate owns the HTTP routing layer and the current API-first vertical
+//! slice implementation. Most endpoint modules are deliberately private so the
+//! public Rust API stays focused on service startup, shared configuration, and
+//! deterministic demo seeding.
+
+mod analytics;
+mod auth;
+pub mod config;
+mod dashboards;
+pub mod db;
+pub mod demo;
+pub mod error;
+mod forms;
+mod hierarchy;
+mod reporting;
+mod submissions;
+
+use axum::{
+    Router,
+    response::Html,
+    routing::{get, post, put},
+};
+use db::AppState;
+use tower_http::{cors::CorsLayer, trace::TraceLayer};
+
+/// Builds the complete Tessara HTTP router for the supplied application state.
+///
+/// The router includes the API endpoints for the current vertical slice plus a
+/// minimal local admin shell at `/`. It is kept as a public function so tests,
+/// binaries, and future deployment adapters can construct the same service
+/// surface without duplicating route registration.
+pub fn router(state: AppState) -> Router {
+    Router::new()
+        .route("/", get(|| async { Html(tessara_web::admin_shell_html()) }))
+        .route("/health", get(|| async { "ok" }))
+        .route("/api/auth/login", post(auth::login))
+        .route("/api/me", get(auth::me))
+        .route("/api/admin/node-types", post(hierarchy::create_node_type))
+        .route(
+            "/api/admin/node-type-relationships",
+            post(hierarchy::create_node_type_relationship),
+        )
+        .route(
+            "/api/admin/node-metadata-fields",
+            post(hierarchy::create_node_metadata_field),
+        )
+        .route("/api/admin/nodes", post(hierarchy::create_node))
+        .route("/api/nodes", get(hierarchy::list_nodes))
+        .route("/api/admin/forms", post(forms::create_form))
+        .route(
+            "/api/admin/forms/{form_id}/versions",
+            post(forms::create_form_version),
+        )
+        .route(
+            "/api/admin/form-versions/{form_version_id}/sections",
+            post(forms::create_form_section),
+        )
+        .route(
+            "/api/admin/form-versions/{form_version_id}/fields",
+            post(forms::create_form_field),
+        )
+        .route(
+            "/api/admin/form-versions/{form_version_id}/publish",
+            post(forms::publish_form_version),
+        )
+        .route(
+            "/api/form-versions/{form_version_id}/render",
+            get(forms::render_form_version),
+        )
+        .route("/api/submissions/drafts", post(submissions::create_draft))
+        .route(
+            "/api/submissions/{submission_id}/values",
+            put(submissions::save_submission_values),
+        )
+        .route(
+            "/api/submissions/{submission_id}/submit",
+            post(submissions::submit_submission),
+        )
+        .route(
+            "/api/admin/analytics/refresh",
+            post(analytics::refresh_analytics),
+        )
+        .route(
+            "/api/admin/analytics/status",
+            get(analytics::analytics_status),
+        )
+        .route("/api/admin/reports", post(reporting::create_report))
+        .route("/api/reports/{report_id}/table", get(reporting::run_report))
+        .route("/api/admin/charts", post(dashboards::create_chart))
+        .route("/api/admin/dashboards", post(dashboards::create_dashboard))
+        .route(
+            "/api/admin/dashboards/{dashboard_id}/components",
+            post(dashboards::add_dashboard_component),
+        )
+        .route(
+            "/api/dashboards/{dashboard_id}",
+            get(dashboards::get_dashboard),
+        )
+        .route("/api/demo/seed", post(demo::seed_demo_endpoint))
+        .layer(CorsLayer::permissive())
+        .layer(TraceLayer::new_for_http())
+        .with_state(state)
+}

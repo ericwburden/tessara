@@ -1,17 +1,13 @@
 use axum::{Json, extract::State, http::HeaderMap};
 use serde::Serialize;
 
-use crate::{
-    auth,
-    db::AppState,
-    error::{ApiError, ApiResult},
-};
+use crate::{auth, db::AppState, error::ApiResult};
 
 #[derive(Serialize)]
 pub struct AnalyticsStatus {
-    node_count: i64,
-    submitted_count: i64,
-    value_count: i64,
+    pub node_count: i64,
+    pub submitted_count: i64,
+    pub value_count: i64,
 }
 
 pub async fn refresh_analytics(
@@ -19,7 +15,10 @@ pub async fn refresh_analytics(
     headers: HeaderMap,
 ) -> ApiResult<Json<AnalyticsStatus>> {
     auth::require_capability(&state.pool, &headers, "analytics:refresh").await?;
+    Ok(Json(refresh_projection(&state.pool).await?))
+}
 
+pub async fn refresh_projection(pool: &sqlx::PgPool) -> ApiResult<AnalyticsStatus> {
     let statements = [
         "DELETE FROM analytics.submission_value_fact",
         "DELETE FROM analytics.submission_fact",
@@ -82,29 +81,30 @@ pub async fn refresh_analytics(
     ];
 
     for statement in statements {
-        sqlx::query(statement)
-            .execute(&state.pool)
-            .await
-            .map_err(ApiError::Database)?;
+        sqlx::query(statement).execute(pool).await?;
     }
 
-    analytics_status(State(state)).await
+    analytics_status_for_pool(pool).await
 }
 
 pub async fn analytics_status(State(state): State<AppState>) -> ApiResult<Json<AnalyticsStatus>> {
+    Ok(Json(analytics_status_for_pool(&state.pool).await?))
+}
+
+pub async fn analytics_status_for_pool(pool: &sqlx::PgPool) -> ApiResult<AnalyticsStatus> {
     let node_count = sqlx::query_scalar("SELECT COUNT(*) FROM analytics.node_dim")
-        .fetch_one(&state.pool)
+        .fetch_one(pool)
         .await?;
     let submitted_count = sqlx::query_scalar("SELECT COUNT(*) FROM analytics.submission_fact")
-        .fetch_one(&state.pool)
+        .fetch_one(pool)
         .await?;
     let value_count = sqlx::query_scalar("SELECT COUNT(*) FROM analytics.submission_value_fact")
-        .fetch_one(&state.pool)
+        .fetch_one(pool)
         .await?;
 
-    Ok(Json(AnalyticsStatus {
+    Ok(AnalyticsStatus {
         node_count,
         submitted_count,
         value_count,
-    }))
+    })
 }

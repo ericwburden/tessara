@@ -233,3 +233,33 @@ fn string_value(array: &StringArray, index: usize) -> Option<String> {
         Some(array.value(index).to_string())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use arrow::array::StringArray;
+
+    use super::{string_value, validate_missing_policy};
+
+    #[test]
+    fn accepts_supported_missing_data_policies() {
+        for policy in ["null", "exclude_row", "bucket_unknown"] {
+            assert!(
+                validate_missing_policy(policy).is_ok(),
+                "{policy} should be accepted"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_unknown_missing_data_policies() {
+        assert!(validate_missing_policy("drop_column").is_err());
+    }
+
+    #[test]
+    fn string_value_preserves_nulls_from_arrow_arrays() {
+        let values = StringArray::from(vec![Some("North"), None]);
+
+        assert_eq!(string_value(&values, 0), Some("North".to_string()));
+        assert_eq!(string_value(&values, 1), None);
+    }
+}

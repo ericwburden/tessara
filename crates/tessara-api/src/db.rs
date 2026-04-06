@@ -1,13 +1,26 @@
+//! Database connection, migration, and seed wiring for the API service.
+
 use sqlx::{PgPool, postgres::PgPoolOptions};
 
 use crate::config::Config;
 
+/// Shared application state injected into Axum handlers.
+///
+/// The state currently holds the PostgreSQL pool and immutable runtime config.
+/// Keeping it small makes handler dependencies explicit and easy to test.
 #[derive(Clone)]
 pub struct AppState {
+    /// PostgreSQL connection pool for OLTP and analytics projection queries.
     pub pool: PgPool,
+    /// Runtime configuration used by handlers such as the development login.
     pub config: Config,
 }
 
+/// Connects to PostgreSQL, applies embedded migrations, and seeds the
+/// development administrator role/capability graph.
+///
+/// This is the primary startup entry point for both the API server and
+/// command-line maintenance modes such as `seed-demo`.
 pub async fn connect_and_prepare(config: &Config) -> anyhow::Result<PgPool> {
     let pool = PgPoolOptions::new()
         .max_connections(10)

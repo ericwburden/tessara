@@ -78,6 +78,26 @@ Useful checks:
 ```powershell
 cargo fmt --all --check
 cargo check -p tessara-api
+cargo test --workspace
+.\scripts\smoke.ps1
+```
+
+Testing should focus on behavior that protects domain and workflow boundaries:
+validation rules, compatibility/missing-data behavior, projection/reporting
+contracts, and end-to-end slice regressions. Avoid placeholder tests that only
+assert generated boilerplate.
+
+Seed the deterministic demo dataset into a running database:
+
+```powershell
+$env:DATABASE_URL='postgres://tessara:tessara@localhost:5432/tessara'
+cargo run -p tessara-api -- seed-demo
+```
+
+The API also serves the first local shell at:
+
+```text
+http://localhost:8080/
 ```
 
 ## First Target Slice
@@ -101,3 +121,4 @@ The first implementation milestone should prove an end-to-end thread:
 - Slice 4: draft creation, draft value save, submit transition, audit events.
 - Slice 5: manual analytics projection refresh into `analytics.*` tables.
 - Slice 6: report definition and DataFusion-backed table execution.
+- Slice 7 start: dashboard/chart endpoints and a minimal local admin shell.

@@ -3421,6 +3421,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sqlx",
+ "tessara-web",
  "thiserror",
  "tokio",
  "tower-http",
