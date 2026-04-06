@@ -1,9 +1,10 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, str::FromStr};
 
 use axum::{Json, extract::State, http::HeaderMap};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::Row;
+use tessara_core::{FieldType, FieldTypeError};
 use uuid::Uuid;
 
 use crate::{
@@ -101,7 +102,7 @@ pub async fn create_node_metadata_field(
     Json(payload): Json<CreateNodeMetadataFieldRequest>,
 ) -> ApiResult<Json<IdResponse>> {
     auth::require_capability(&state.pool, &headers, "hierarchy:write").await?;
-    validate_field_type(&payload.field_type)?;
+    let field_type = parse_field_type(&payload.field_type)?;
 
     let id = sqlx::query_scalar(
         r#"
@@ -114,7 +115,7 @@ pub async fn create_node_metadata_field(
     .bind(payload.node_type_id)
     .bind(payload.key)
     .bind(payload.label)
-    .bind(payload.field_type)
+    .bind(field_type.as_str())
     .bind(payload.required)
     .fetch_one(&state.pool)
     .await?;
@@ -172,9 +173,9 @@ pub async fn create_node(
     for row in &field_rows {
         let key: String = row.try_get("key")?;
         let required: bool = row.try_get("required")?;
-        let field_type: String = row.try_get("field_type")?;
+        let field_type = parse_field_type(&row.try_get::<String, _>("field_type")?)?;
         match payload.metadata.get(&key) {
-            Some(value) => validate_json_value(&field_type, value)?,
+            Some(value) => validate_field_value(field_type, value)?,
             None if required => {
                 return Err(ApiError::BadRequest(format!(
                     "metadata field '{key}' is required"
@@ -240,77 +241,16 @@ pub async fn list_nodes(State(state): State<AppState>) -> ApiResult<Json<Vec<Nod
     Ok(Json(nodes))
 }
 
-pub fn validate_field_type(field_type: &str) -> ApiResult<()> {
-    match field_type {
-        "text" | "number" | "boolean" | "date" | "single_choice" | "multi_choice" => Ok(()),
-        other => Err(ApiError::BadRequest(format!(
-            "unsupported field type '{other}'"
-        ))),
-    }
+pub(crate) fn parse_field_type(field_type: &str) -> ApiResult<FieldType> {
+    FieldType::from_str(field_type).map_err(field_type_error)
 }
 
-pub fn validate_json_value(field_type: &str, value: &Value) -> ApiResult<()> {
-    let valid = match field_type {
-        "text" | "date" | "single_choice" => value.is_string(),
-        "number" => value.is_number(),
-        "boolean" => value.is_boolean(),
-        "multi_choice" => value
-            .as_array()
-            .map(|items| items.iter().all(Value::is_string))
-            .unwrap_or(false),
-        _ => false,
-    };
-
-    if valid {
-        Ok(())
-    } else {
-        Err(ApiError::BadRequest(format!(
-            "value does not match field type '{field_type}'"
-        )))
-    }
+pub(crate) fn validate_field_value(field_type: FieldType, value: &Value) -> ApiResult<()> {
+    field_type
+        .validate_json_value(value)
+        .map_err(field_type_error)
 }
 
-#[cfg(test)]
-mod tests {
-    use serde_json::json;
-
-    use super::{validate_field_type, validate_json_value};
-
-    #[test]
-    fn validates_supported_field_types() {
-        for field_type in [
-            "text",
-            "number",
-            "boolean",
-            "date",
-            "single_choice",
-            "multi_choice",
-        ] {
-            assert!(
-                validate_field_type(field_type).is_ok(),
-                "{field_type} should be accepted"
-            );
-        }
-
-        assert!(validate_field_type("file_upload").is_err());
-    }
-
-    #[test]
-    fn validates_json_values_against_field_types() {
-        assert!(validate_json_value("text", &json!("hello")).is_ok());
-        assert!(validate_json_value("date", &json!("2026-04-06")).is_ok());
-        assert!(validate_json_value("single_choice", &json!("yes")).is_ok());
-        assert!(validate_json_value("number", &json!(42)).is_ok());
-        assert!(validate_json_value("boolean", &json!(true)).is_ok());
-        assert!(validate_json_value("multi_choice", &json!(["a", "b"])).is_ok());
-    }
-
-    #[test]
-    fn rejects_json_values_that_do_not_match_field_types() {
-        assert!(validate_json_value("text", &json!(42)).is_err());
-        assert!(validate_json_value("number", &json!("42")).is_err());
-        assert!(validate_json_value("boolean", &json!("true")).is_err());
-        assert!(validate_json_value("multi_choice", &json!(["a", 2])).is_err());
-        assert!(validate_json_value("unknown", &json!("value")).is_err());
-    }
+fn field_type_error(error: FieldTypeError) -> ApiError {
+    ApiError::BadRequest(error.to_string())
 }

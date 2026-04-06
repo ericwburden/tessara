@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use axum::{
     Json,
     extract::{Path, State},
@@ -6,6 +8,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::Row;
+use tessara_dashboards::ChartType;
 use uuid::Uuid;
 
 use crate::{
@@ -66,15 +69,20 @@ pub async fn create_chart(
 ) -> ApiResult<Json<IdResponse>> {
     auth::require_capability(&state.pool, &headers, "reports:write").await?;
 
-    let chart_type = payload.chart_type.unwrap_or_else(|| "table".into());
-    validate_chart_type(&chart_type)?;
+    let chart_type = payload
+        .chart_type
+        .as_deref()
+        .map(ChartType::from_str)
+        .transpose()
+        .map_err(|error| ApiError::BadRequest(error.to_string()))?
+        .unwrap_or(ChartType::Table);
 
     let id = sqlx::query_scalar(
         "INSERT INTO charts (name, report_id, chart_type) VALUES ($1, $2, $3) RETURNING id",
     )
     .bind(payload.name)
     .bind(payload.report_id)
-    .bind(chart_type)
+    .bind(chart_type.as_str())
     .fetch_one(&state.pool)
     .await?;
 
@@ -177,33 +185,4 @@ pub async fn get_dashboard(
         name: dashboard.try_get("name")?,
         components,
     }))
-}
-
-fn validate_chart_type(chart_type: &str) -> ApiResult<()> {
-    match chart_type {
-        "table" | "bar" | "summary" => Ok(()),
-        other => Err(ApiError::BadRequest(format!(
-            "unsupported chart type '{other}'"
-        ))),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::validate_chart_type;
-
-    #[test]
-    fn accepts_supported_chart_types() {
-        for chart_type in ["table", "bar", "summary"] {
-            assert!(
-                validate_chart_type(chart_type).is_ok(),
-                "{chart_type} should be accepted"
-            );
-        }
-    }
-
-    #[test]
-    fn rejects_unknown_chart_types() {
-        assert!(validate_chart_type("scatter").is_err());
-    }
 }

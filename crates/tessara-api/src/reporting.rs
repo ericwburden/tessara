@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{str::FromStr, sync::Arc};
 
 use arrow::{
     array::{Array, ArrayRef, StringArray},
@@ -13,6 +13,7 @@ use axum::{
 use datafusion::{datasource::MemTable, prelude::SessionContext};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
+use tessara_reporting::MissingDataPolicy;
 use uuid::Uuid;
 
 use crate::{
@@ -71,8 +72,13 @@ pub async fn create_report(
             .await?;
 
     for (position, field) in payload.fields.into_iter().enumerate() {
-        let missing_policy = field.missing_policy.unwrap_or_else(|| "null".into());
-        validate_missing_policy(&missing_policy)?;
+        let missing_policy = field
+            .missing_policy
+            .as_deref()
+            .map(MissingDataPolicy::from_str)
+            .transpose()
+            .map_err(|error| ApiError::BadRequest(error.to_string()))?
+            .unwrap_or(MissingDataPolicy::Null);
 
         sqlx::query(
             r#"
@@ -84,7 +90,7 @@ pub async fn create_report(
         .bind(report_id)
         .bind(field.logical_key)
         .bind(field.source_field_key)
-        .bind(missing_policy)
+        .bind(missing_policy.as_str())
         .bind(position as i32)
         .execute(&state.pool)
         .await?;
@@ -209,15 +215,6 @@ pub async fn run_report(
     Ok(Json(ReportTable { report_id, rows }))
 }
 
-fn validate_missing_policy(policy: &str) -> ApiResult<()> {
-    match policy {
-        "null" | "exclude_row" | "bucket_unknown" => Ok(()),
-        other => Err(ApiError::BadRequest(format!(
-            "unsupported missing-data policy '{other}'"
-        ))),
-    }
-}
-
 fn as_string_array(batch: &RecordBatch, column: usize) -> ApiResult<&StringArray> {
     batch
         .column(column)
@@ -238,22 +235,7 @@ fn string_value(array: &StringArray, index: usize) -> Option<String> {
 mod tests {
     use arrow::array::StringArray;
 
-    use super::{string_value, validate_missing_policy};
-
-    #[test]
-    fn accepts_supported_missing_data_policies() {
-        for policy in ["null", "exclude_row", "bucket_unknown"] {
-            assert!(
-                validate_missing_policy(policy).is_ok(),
-                "{policy} should be accepted"
-            );
-        }
-    }
-
-    #[test]
-    fn rejects_unknown_missing_data_policies() {
-        assert!(validate_missing_policy("drop_column").is_err());
-    }
+    use super::string_value;
 
     #[test]
     fn string_value_preserves_nulls_from_arrow_arrays() {

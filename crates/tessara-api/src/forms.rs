@@ -11,7 +11,7 @@ use crate::{
     auth,
     db::AppState,
     error::{ApiError, ApiResult},
-    hierarchy::{IdResponse, validate_field_type},
+    hierarchy::{IdResponse, parse_field_type},
 };
 
 #[derive(Deserialize)]
@@ -157,7 +157,7 @@ pub async fn create_form_field(
 ) -> ApiResult<Json<IdResponse>> {
     auth::require_capability(&state.pool, &headers, "forms:write").await?;
     assert_form_version_draft(&state.pool, form_version_id).await?;
-    validate_field_type(&payload.field_type)?;
+    let field_type = parse_field_type(&payload.field_type)?;
 
     let id = sqlx::query_scalar(
         r#"
@@ -171,7 +171,7 @@ pub async fn create_form_field(
     .bind(payload.section_id)
     .bind(payload.key)
     .bind(payload.label)
-    .bind(payload.field_type)
+    .bind(field_type.as_str())
     .bind(payload.required)
     .bind(payload.position)
     .fetch_one(&state.pool)

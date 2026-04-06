@@ -35,16 +35,51 @@ function Invoke-Json {
     Invoke-RestMethod @params
 }
 
+function Assert-LastExitCode {
+    param([string]$CommandName)
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "$CommandName failed with exit code $LASTEXITCODE"
+    }
+}
+
 try {
     Set-Location $repoRoot
     New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
     Remove-Item -LiteralPath $apiOut, $apiErr -ErrorAction SilentlyContinue
 
     docker compose up -d postgres | Out-Host
+    Assert-LastExitCode "docker compose up"
+
+    $postgresDeadline = (Get-Date).AddSeconds(120)
+    do {
+        docker compose exec -T postgres pg_isready -U tessara -d postgres | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            break
+        }
+        Start-Sleep -Seconds 2
+    } while ((Get-Date) -lt $postgresDeadline)
+
+    if ((Get-Date) -ge $postgresDeadline) {
+        throw "Timed out waiting for Postgres readiness"
+    }
 
     $env:DATABASE_URL = "postgres://tessara:tessara@localhost:5432/tessara"
+    $env:TEST_DATABASE_URL = "postgres://tessara:tessara@localhost:5432/tessara_test"
     $env:TESSARA_BIND_ADDR = "127.0.0.1:8080"
     $env:RUST_LOG = "tessara_api=debug,sqlx=warn"
+
+    foreach ($databaseName in @("tessara", "tessara_test")) {
+        $dbExists = docker compose exec -T postgres psql -U tessara -d postgres -tc "SELECT 1 FROM pg_database WHERE datname = '$databaseName'"
+        Assert-LastExitCode "checking $databaseName database"
+        if (-not ($dbExists | Select-String "1" -Quiet)) {
+            docker compose exec -T postgres psql -U tessara -d postgres -c "CREATE DATABASE $databaseName" | Out-Host
+            Assert-LastExitCode "creating $databaseName database"
+        }
+    }
+
+    cargo test -p tessara-api --test demo_flow | Out-Host
+    Assert-LastExitCode "cargo test -p tessara-api --test demo_flow"
 
     $apiProcess = Start-Process `
         -FilePath "cargo" `
@@ -113,5 +148,6 @@ finally {
 
     if (-not $KeepServices) {
         docker compose down -v | Out-Host
+        Assert-LastExitCode "docker compose down"
     }
 }

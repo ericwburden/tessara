@@ -36,6 +36,13 @@ The workspace has these crates scaffolded now. The first implementation keeps
 the vertical slice logic in `tessara-api` so the local service is runnable while
 the domain seams are still stabilizing.
 
+Pure domain rules should move out of `tessara-api` as soon as their contracts
+stabilize. Current extracted examples:
+
+- `tessara-core`: shared field type parsing and JSON value validation
+- `tessara-reporting`: missing-data policy parsing
+- `tessara-dashboards`: chart type parsing
+
 ## Local Development
 
 Copy the environment template if you want to run the API outside Docker:

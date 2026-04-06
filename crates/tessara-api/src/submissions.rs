@@ -8,13 +8,14 @@ use axum::{
 use serde::Deserialize;
 use serde_json::Value;
 use sqlx::Row;
+use tessara_core::FieldType;
 use uuid::Uuid;
 
 use crate::{
     auth,
     db::AppState,
     error::{ApiError, ApiResult},
-    hierarchy::{IdResponse, validate_json_value},
+    hierarchy::{IdResponse, parse_field_type, validate_field_value},
 };
 
 #[derive(Deserialize)]
@@ -31,7 +32,7 @@ pub struct SaveSubmissionValuesRequest {
 struct FormFieldContract {
     id: Uuid,
     key: String,
-    field_type: String,
+    field_type: FieldType,
     required: bool,
 }
 
@@ -105,7 +106,7 @@ pub async fn save_submission_values(
         let field = fields
             .get(&key)
             .ok_or_else(|| ApiError::BadRequest(format!("unknown form field '{key}'")))?;
-        validate_json_value(&field.field_type, &value)?;
+        validate_field_value(field.field_type, &value)?;
 
         sqlx::query(
             r#"
@@ -222,7 +223,7 @@ async fn fields_by_key(
             FormFieldContract {
                 id: row.try_get("id")?,
                 key,
-                field_type: row.try_get("field_type")?,
+                field_type: parse_field_type(&row.try_get::<String, _>("field_type")?)?,
                 required: row.try_get("required")?,
             },
         );
