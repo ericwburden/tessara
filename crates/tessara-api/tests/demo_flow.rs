@@ -1,3 +1,5 @@
+use std::sync::LazyLock;
+
 use axum::{
     body::{Body, to_bytes},
     http::{Request, StatusCode, header},
@@ -6,50 +8,20 @@ use serde_json::{Value, json};
 use sqlx::{PgPool, postgres::PgPoolOptions};
 use tessara_api::{config::Config, db, router};
 use tower::ServiceExt;
+use uuid::Uuid;
+
+static TEST_DATABASE_LOCK: LazyLock<tokio::sync::Mutex<()>> =
+    LazyLock::new(|| tokio::sync::Mutex::new(()));
 
 #[tokio::test]
 async fn demo_seed_report_and_dashboard_flow_works_against_database() {
-    let Some(database_url) = std::env::var("TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping database integration test; TEST_DATABASE_URL is not set");
-        return;
-    };
-
-    reset_database(&database_url).await;
-    let config = Config {
-        database_url,
-        bind_addr: "127.0.0.1:0".to_string(),
-        dev_admin_email: "admin@tessara.local".to_string(),
-        dev_admin_password: "tessara-dev-admin".to_string(),
-    };
-    let pool = db::connect_and_prepare(&config)
-        .await
-        .expect("database should migrate and seed");
-    let state = db::AppState { pool, config };
-    let app = router(state);
-
-    let login = request_json(
-        app.clone(),
-        Request::builder()
-            .method("POST")
-            .uri("/api/auth/login")
-            .header(header::CONTENT_TYPE, "application/json")
-            .body(Body::from(
-                json!({
-                    "email": "admin@tessara.local",
-                    "password": "tessara-dev-admin"
-                })
-                .to_string(),
-            ))
-            .expect("valid login request"),
-    )
-    .await;
-    let token = login["token"]
-        .as_str()
-        .expect("login response should contain token");
+    let _guard = TEST_DATABASE_LOCK.lock().await;
+    let Some(app) = test_app().await else { return };
+    let token = login_token(app.clone()).await;
 
     let seed = request_json(
         app.clone(),
-        authorized_request("POST", "/api/demo/seed", token, None),
+        authorized_request("POST", "/api/demo/seed", &token, None),
     )
     .await;
     assert_eq!(seed["analytics_values"], 1);
@@ -62,7 +34,7 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
         authorized_request(
             "GET",
             &format!("/api/reports/{report_id}/table"),
-            token,
+            &token,
             None,
         ),
     )
@@ -84,7 +56,324 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
     assert_eq!(dashboard["components"][0]["chart"]["report_id"], report_id);
 }
 
+#[tokio::test]
+async fn form_builder_guards_cross_version_sections_and_supersedes_previous_publish() {
+    let _guard = TEST_DATABASE_LOCK.lock().await;
+    let Some(app) = test_app().await else { return };
+    let token = login_token(app.clone()).await;
+
+    let form = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/forms",
+            &token,
+            Some(json!({
+                "name": "Monthly Service Report",
+                "slug": "monthly-service-report",
+                "scope_node_type_id": null
+            })),
+        ),
+    )
+    .await;
+    let form_id = id_from(&form);
+
+    let version_one_id = create_form_version(app.clone(), &token, form_id, "v1").await;
+    let section_one_id = create_form_section(app.clone(), &token, version_one_id, "Main").await;
+    create_number_field(
+        app.clone(),
+        &token,
+        version_one_id,
+        section_one_id,
+        "participants",
+    )
+    .await;
+    request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            &format!("/api/admin/form-versions/{version_one_id}/publish"),
+            &token,
+            None,
+        ),
+    )
+    .await;
+
+    let version_two_id = create_form_version(app.clone(), &token, form_id, "v2").await;
+    let cross_version_field = request_status_and_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            &format!("/api/admin/form-versions/{version_two_id}/fields"),
+            &token,
+            Some(json!({
+                "section_id": section_one_id,
+                "key": "participants",
+                "label": "Participants",
+                "field_type": "number",
+                "required": true,
+                "position": 0
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(cross_version_field.0, StatusCode::BAD_REQUEST);
+    assert!(
+        cross_version_field.1["error"]
+            .as_str()
+            .expect("error body should include message")
+            .contains("same form version")
+    );
+
+    let section_two_id = create_form_section(app.clone(), &token, version_two_id, "Main").await;
+    create_number_field(
+        app.clone(),
+        &token,
+        version_two_id,
+        section_two_id,
+        "participants",
+    )
+    .await;
+    request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            &format!("/api/admin/form-versions/{version_two_id}/publish"),
+            &token,
+            None,
+        ),
+    )
+    .await;
+
+    let version_one = request_json(
+        app.clone(),
+        Request::builder()
+            .method("GET")
+            .uri(format!("/api/form-versions/{version_one_id}/render"))
+            .body(Body::empty())
+            .expect("valid render request"),
+    )
+    .await;
+    let version_two = request_json(
+        app,
+        Request::builder()
+            .method("GET")
+            .uri(format!("/api/form-versions/{version_two_id}/render"))
+            .body(Body::empty())
+            .expect("valid render request"),
+    )
+    .await;
+    assert_eq!(version_one["status"], "superseded");
+    assert_eq!(version_two["status"], "published");
+}
+
+#[tokio::test]
+async fn hierarchy_builder_rejects_required_metadata_after_nodes_exist() {
+    let _guard = TEST_DATABASE_LOCK.lock().await;
+    let Some(app) = test_app().await else { return };
+    let token = login_token(app.clone()).await;
+
+    let unauthorized = request_status_and_json(
+        app.clone(),
+        Request::builder()
+            .method("POST")
+            .uri("/api/admin/node-types")
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(
+                json!({
+                    "name": "Organization",
+                    "slug": "organization"
+                })
+                .to_string(),
+            ))
+            .expect("valid unauthorized request"),
+    )
+    .await;
+    assert_eq!(unauthorized.0, StatusCode::UNAUTHORIZED);
+
+    let node_type = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/node-types",
+            &token,
+            Some(json!({
+                "name": "Organization",
+                "slug": "organization"
+            })),
+        ),
+    )
+    .await;
+    let node_type_id = id_from(&node_type);
+
+    request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/nodes",
+            &token,
+            Some(json!({
+                "node_type_id": node_type_id,
+                "parent_node_id": null,
+                "name": "Pilot Organization",
+                "metadata": {}
+            })),
+        ),
+    )
+    .await;
+
+    let required_metadata = request_status_and_json(
+        app,
+        authorized_request(
+            "POST",
+            "/api/admin/node-metadata-fields",
+            &token,
+            Some(json!({
+                "node_type_id": node_type_id,
+                "key": "region",
+                "label": "Region",
+                "field_type": "text",
+                "required": true
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(required_metadata.0, StatusCode::BAD_REQUEST);
+    assert!(
+        required_metadata.1["error"]
+            .as_str()
+            .expect("error body should include message")
+            .contains("cannot be added after nodes")
+    );
+}
+
+async fn test_app() -> Option<axum::Router> {
+    let Some(database_url) = std::env::var("TEST_DATABASE_URL").ok() else {
+        eprintln!("skipping database integration test; TEST_DATABASE_URL is not set");
+        return None;
+    };
+
+    reset_database(&database_url).await;
+    let config = Config {
+        database_url,
+        bind_addr: "127.0.0.1:0".to_string(),
+        dev_admin_email: "admin@tessara.local".to_string(),
+        dev_admin_password: "tessara-dev-admin".to_string(),
+    };
+    let pool = db::connect_and_prepare(&config)
+        .await
+        .expect("database should migrate and seed");
+    let state = db::AppState { pool, config };
+
+    Some(router(state))
+}
+
+async fn login_token(app: axum::Router) -> String {
+    let login = request_json(
+        app,
+        Request::builder()
+            .method("POST")
+            .uri("/api/auth/login")
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(
+                json!({
+                    "email": "admin@tessara.local",
+                    "password": "tessara-dev-admin"
+                })
+                .to_string(),
+            ))
+            .expect("valid login request"),
+    )
+    .await;
+
+    login["token"]
+        .as_str()
+        .expect("login response should contain token")
+        .to_string()
+}
+
+async fn create_form_version(
+    app: axum::Router,
+    token: &str,
+    form_id: Uuid,
+    version_label: &str,
+) -> Uuid {
+    let version = request_json(
+        app,
+        authorized_request(
+            "POST",
+            &format!("/api/admin/forms/{form_id}/versions"),
+            token,
+            Some(json!({
+                "version_label": version_label,
+                "compatibility_group_name": "Default compatibility"
+            })),
+        ),
+    )
+    .await;
+
+    id_from(&version)
+}
+
+async fn create_form_section(
+    app: axum::Router,
+    token: &str,
+    form_version_id: Uuid,
+    title: &str,
+) -> Uuid {
+    let section = request_json(
+        app,
+        authorized_request(
+            "POST",
+            &format!("/api/admin/form-versions/{form_version_id}/sections"),
+            token,
+            Some(json!({
+                "title": title,
+                "position": 0
+            })),
+        ),
+    )
+    .await;
+
+    id_from(&section)
+}
+
+async fn create_number_field(
+    app: axum::Router,
+    token: &str,
+    form_version_id: Uuid,
+    section_id: Uuid,
+    key: &str,
+) -> Uuid {
+    let field = request_json(
+        app,
+        authorized_request(
+            "POST",
+            &format!("/api/admin/form-versions/{form_version_id}/fields"),
+            token,
+            Some(json!({
+                "section_id": section_id,
+                "key": key,
+                "label": "Participants",
+                "field_type": "number",
+                "required": true,
+                "position": 0
+            })),
+        ),
+    )
+    .await;
+
+    id_from(&field)
+}
+
 async fn request_json(app: axum::Router, request: Request<Body>) -> Value {
+    let (status, body) = request_status_and_json(app, request).await;
+    assert_eq!(status, StatusCode::OK, "unexpected response: {body}");
+
+    body
+}
+
+async fn request_status_and_json(app: axum::Router, request: Request<Body>) -> (StatusCode, Value) {
     let response = app
         .oneshot(request)
         .await
@@ -93,13 +382,16 @@ async fn request_json(app: axum::Router, request: Request<Body>) -> Value {
     let body = to_bytes(response.into_body(), usize::MAX)
         .await
         .expect("response body should be readable");
-    assert_eq!(
+
+    (
         status,
-        StatusCode::OK,
-        "unexpected response: {}",
-        String::from_utf8_lossy(&body)
-    );
-    serde_json::from_slice(&body).expect("response should be JSON")
+        serde_json::from_slice(&body).unwrap_or_else(|_| {
+            panic!(
+                "response should be JSON: {}",
+                String::from_utf8_lossy(&body)
+            )
+        }),
+    )
 }
 
 fn authorized_request(method: &str, uri: &str, token: &str, body: Option<Value>) -> Request<Body> {
@@ -116,6 +408,14 @@ fn authorized_request(method: &str, uri: &str, token: &str, body: Option<Value>)
     };
 
     builder.body(body).expect("valid authorized request")
+}
+
+fn id_from(value: &Value) -> Uuid {
+    value["id"]
+        .as_str()
+        .expect("response should contain id")
+        .parse()
+        .expect("response id should be a UUID")
 }
 
 async fn reset_database(database_url: &str) {

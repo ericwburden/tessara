@@ -104,6 +104,19 @@ pub async fn create_node_metadata_field(
     auth::require_capability(&state.pool, &headers, "hierarchy:write").await?;
     let field_type = parse_field_type(&payload.field_type)?;
 
+    if payload.required {
+        let existing_node_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM nodes WHERE node_type_id = $1")
+                .bind(payload.node_type_id)
+                .fetch_one(&state.pool)
+                .await?;
+        if existing_node_count > 0 {
+            return Err(ApiError::BadRequest(
+                "required metadata fields cannot be added after nodes of that type exist".into(),
+            ));
+        }
+    }
+
     let id = sqlx::query_scalar(
         r#"
         INSERT INTO node_metadata_field_definitions
