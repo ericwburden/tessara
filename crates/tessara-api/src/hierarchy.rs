@@ -1,6 +1,10 @@
 use std::{collections::HashMap, str::FromStr};
 
-use axum::{Json, extract::State, http::HeaderMap};
+use axum::{
+    Json,
+    extract::{Query, State},
+    http::HeaderMap,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::Row;
@@ -42,6 +46,11 @@ pub struct CreateNodeRequest {
     name: String,
     #[serde(default)]
     metadata: HashMap<String, Value>,
+}
+
+#[derive(Deserialize)]
+pub struct ListNodesQuery {
+    q: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -393,7 +402,15 @@ pub async fn create_node(
     Ok(Json(IdResponse { id: node_id }))
 }
 
-pub async fn list_nodes(State(state): State<AppState>) -> ApiResult<Json<Vec<NodeResponse>>> {
+pub async fn list_nodes(
+    State(state): State<AppState>,
+    Query(query): Query<ListNodesQuery>,
+) -> ApiResult<Json<Vec<NodeResponse>>> {
+    let search = query
+        .q
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
     let rows = sqlx::query(
         r#"
         SELECT
@@ -416,6 +433,11 @@ pub async fn list_nodes(State(state): State<AppState>) -> ApiResult<Json<Vec<Nod
         LEFT JOIN node_metadata_values ON node_metadata_values.node_id = nodes.id
         LEFT JOIN node_metadata_field_definitions
             ON node_metadata_field_definitions.id = node_metadata_values.field_definition_id
+        WHERE (
+            $1::text IS NULL
+            OR nodes.name ILIKE '%' || $1 || '%'
+            OR node_types.name ILIKE '%' || $1 || '%'
+        )
         GROUP BY
             nodes.id,
             nodes.node_type_id,
@@ -427,6 +449,7 @@ pub async fn list_nodes(State(state): State<AppState>) -> ApiResult<Json<Vec<Nod
         ORDER BY nodes.created_at, nodes.name
         "#,
     )
+    .bind(search)
     .fetch_all(&state.pool)
     .await?;
 

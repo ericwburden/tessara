@@ -46,6 +46,7 @@ pub fn admin_shell_html(style: &str, script: &str) -> String {
           <input id="parent-node-id" placeholder="Optional parent node ID">
           <input id="node-name" placeholder="Node name" value="Local Organization">
           <input id="node-metadata-json" placeholder='Node metadata JSON, e.g. {{"region":"North"}}' value='{{"region":"North"}}'>
+          <input id="node-search" placeholder="Search nodes">
           <input id="form-name" placeholder="Form name">
           <input id="form-slug" placeholder="Form slug">
           <input id="form-scope-node-type-id" placeholder="Optional form scope node type ID">

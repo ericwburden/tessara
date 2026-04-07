@@ -29,6 +29,7 @@ mod tests {
         assert!(html.contains("/api/auth/login"));
         assert!(html.contains("/api/demo/seed"));
         assert!(html.contains("/api/nodes"));
+        assert!(html.contains("node-search"));
         assert!(html.contains("/api/admin/node-types"));
         assert!(html.contains("/api/admin/node-type-relationships"));
         assert!(html.contains("/api/admin/node-metadata-fields"));

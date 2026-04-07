@@ -83,7 +83,7 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
         app.clone(),
         Request::builder()
             .method("GET")
-            .uri("/api/nodes")
+            .uri("/api/nodes?q=Demo")
             .body(Body::empty())
             .expect("valid nodes request"),
     )

@@ -444,7 +444,8 @@ pub const SCRIPT: &str = r#"
 
       async function loadNodes() {
         try {
-          const payload = await request("/api/nodes");
+          const search = inputValue("node-search");
+          const payload = await request(search ? `/api/nodes?q=${encodeURIComponent(search)}` : "/api/nodes");
           show(payload);
           showCards(payload, (node) => `
             <article class="card">
