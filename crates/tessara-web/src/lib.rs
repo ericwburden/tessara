@@ -62,6 +62,7 @@ mod tests {
         assert!(html.contains("/api/dashboards/"));
         assert!(html.contains("/api/dashboards"));
         assert!(html.contains("/api/reports/"));
+        assert!(html.contains("/api/reports/${component.chart.report_id}/table"));
         assert!(html.contains("/api/reports"));
         assert!(html.contains("report-fields-json"));
         assert!(html.contains("Inspect Report By ID"));

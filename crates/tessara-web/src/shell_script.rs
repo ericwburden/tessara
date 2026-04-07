@@ -797,15 +797,31 @@ pub const SCRIPT: &str = r#"
       }
 
       async function loadDashboardByValue(dashboardId) {
+        if (!token) await login();
         const payload = await request(`/api/dashboards/${dashboardId}`);
         show(payload);
-        showCards(payload.components, (component) => `
-          <article class="card">
-            <h3>${escapeHtml(component.chart.name)}</h3>
-            <p>${escapeHtml(component.chart.chart_type)} chart</p>
-            <p class="muted">Report ${escapeHtml(component.chart.report_id || "None")}</p>
-          </article>
-        `);
+        const cards = await Promise.all(payload.components.map(async (component) => {
+          let rows = [];
+          if (component.chart.report_id) {
+            const report = await request(`/api/reports/${component.chart.report_id}/table`);
+            rows = report.rows;
+          }
+          return `
+            <article class="card">
+              <h3>${escapeHtml(component.chart.name)}</h3>
+              <p>${escapeHtml(component.chart.chart_type)} chart</p>
+              <p class="muted">Report ${escapeHtml(component.chart.report_id || "None")}</p>
+              <ul>
+                ${rows.map((row) => `
+                  <li>${escapeHtml(row.node_name || "Unknown node")}: ${escapeHtml(row.logical_key)} = ${escapeHtml(row.field_value)}</li>
+                `).join("")}
+              </ul>
+            </article>
+          `;
+        }));
+        document.getElementById("screen").innerHTML = cards.length
+          ? cards.join("")
+          : '<p class="muted">No dashboard components found.</p>';
       }
 
       async function loadReportById() {
