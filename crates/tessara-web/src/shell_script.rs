@@ -822,6 +822,7 @@ pub const SCRIPT: &str = r#"
           return `
             <div class="actions form-actions">
               <p class="muted">This submitted response is read-only. Open a draft submission to edit values.</p>
+              <button type="button" onclick="clearResponseContext()">Clear Response Context</button>
             </div>
           `;
         }
@@ -831,6 +832,7 @@ pub const SCRIPT: &str = r#"
               <button type="button" onclick="saveRenderedFormValues()">Save Values</button>
               <button type="button" onclick="submitDraft()">Submit Draft</button>
               <button type="button" onclick="discardDraft()">Discard Draft</button>
+              <button type="button" onclick="clearResponseContext()">Clear Response Context</button>
             </div>
           `;
         }
@@ -839,6 +841,15 @@ pub const SCRIPT: &str = r#"
             <button type="button" onclick="createDraft()">Create Draft</button>
           </div>
         `;
+      }
+
+      function clearResponseContext() {
+        setInput("submission-id", "");
+        selectedSubmissionFormVersionId = null;
+        selectedSubmissionStatus = null;
+        selectedSubmissionValues = {};
+        show({ response_context: "cleared" });
+        if (renderedForm) renderForm(renderedForm.form_version_id);
       }
 
       function useSection(sectionId, sectionTitle = sectionId, position = 0) {

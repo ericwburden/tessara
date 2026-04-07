@@ -437,6 +437,7 @@ fn SubmissionScreen() -> impl IntoView {
                 <button type="button" onclick="saveRenderedFormValues()">"Save Values"</button>
                 <button type="button" onclick="submitDraft()">"Submit"</button>
                 <button type="button" onclick="discardDraft()">"Discard Draft"</button>
+                <button type="button" onclick="clearResponseContext()">"Clear Response Context"</button>
             </div>
         </section>
     }

@@ -188,6 +188,7 @@ mod tests {
         assert!(html.contains("Save Values"));
         assert!(html.contains("Submit"));
         assert!(html.contains("Discard Draft"));
+        assert!(html.contains("Clear Response Context"));
         assert!(html.contains("Start Demo Submission"));
         assert!(html.contains("startDemoSubmissionFlow"));
         assert!(html.contains("Review Submissions"));
