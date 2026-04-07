@@ -198,6 +198,30 @@ pub const SCRIPT: &str = r#"
         }
       }
 
+      async function loadAppSummary() {
+        try {
+          if (!token) await login();
+          const payload = await request("/api/app/summary");
+          show(payload);
+          const cards = [
+            ["Published forms", payload.published_form_versions],
+            ["Draft submissions", payload.draft_submissions],
+            ["Submitted submissions", payload.submitted_submissions],
+            ["Reports", payload.reports],
+            ["Dashboards", payload.dashboards],
+            ["Charts", payload.charts]
+          ];
+          showCards(cards, ([label, count]) => `
+            <article class="card">
+              <h3>${escapeHtml(label)}</h3>
+              <p>${escapeHtml(count)}</p>
+            </article>
+          `);
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
       async function loadNodeTypes() {
         try {
           if (!token) await login();

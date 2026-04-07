@@ -6,6 +6,7 @@
 //! deterministic demo seeding.
 
 mod analytics;
+mod app_summary;
 mod auth;
 pub mod config;
 mod dashboards;
@@ -52,6 +53,7 @@ pub fn router(state: AppState) -> Router {
             get(|| async { Html(tessara_web::migration_application_shell_html()) }),
         )
         .route("/health", get(|| async { "ok" }))
+        .route("/api/app/summary", get(app_summary::get_summary))
         .route("/api/auth/login", post(auth::login))
         .route("/api/me", get(auth::me))
         .route(

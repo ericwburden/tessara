@@ -137,7 +137,7 @@ pub async fn list_reports(
         SELECT reports.id, reports.name, reports.form_id, forms.name AS form_name
         FROM reports
         LEFT JOIN forms ON forms.id = reports.form_id
-        ORDER BY name, created_at
+        ORDER BY reports.name, reports.created_at
         "#,
     )
     .fetch_all(&state.pool)

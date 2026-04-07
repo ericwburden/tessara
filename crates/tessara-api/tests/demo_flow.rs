@@ -25,6 +25,16 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
     )
     .await;
     assert_eq!(seed["analytics_values"], 1);
+    let app_summary = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/app/summary", &token, None),
+    )
+    .await;
+    assert_eq!(app_summary["published_form_versions"], 1);
+    assert_eq!(app_summary["submitted_submissions"], 1);
+    assert_eq!(app_summary["reports"], 1);
+    assert_eq!(app_summary["dashboards"], 1);
+    assert_eq!(app_summary["charts"], 1);
     let legacy_validation = request_json(
         app.clone(),
         authorized_request(
@@ -158,7 +168,7 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
             .expect("published forms response should be an array")
             .iter()
             .any(|form_version| form_version["form_id"] == seed["form_id"]
-                && form_version["form_name"] == "Monthly Participation"
+                && form_version["form_name"] == "Quarterly Check In"
                 && form_version["form_version_id"] == seed["form_version_id"]
                 && form_version["version_label"] == "v1")
     );
@@ -230,8 +240,7 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
             .as_array()
             .expect("reports response should be an array")
             .iter()
-            .any(|report| report["id"] == report_id
-                && report["form_name"] == "Monthly Participation")
+            .any(|report| report["id"] == report_id && report["form_name"] == "Quarterly Check In")
     );
     let report_definition = request_json(
         app.clone(),
@@ -246,7 +255,7 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
             .any(|binding| binding["logical_key"] == "participants"
                 && binding["source_field_key"] == "participants")
     );
-    assert_eq!(report_definition["form_name"], "Monthly Participation");
+    assert_eq!(report_definition["form_name"], "Quarterly Check In");
     let chart_id = seed["chart_id"]
         .as_str()
         .expect("seed response should contain chart id");
@@ -262,8 +271,8 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
             .iter()
             .any(|chart| chart["id"] == chart_id
                 && chart["chart_type"] == "table"
-                && chart["report_name"] == "Participation Report"
-                && chart["report_form_name"] == "Monthly Participation"
+                && chart["report_name"] == "Participants Report"
+                && chart["report_form_name"] == "Quarterly Check In"
                 && chart["report_id"] == report_id)
     );
 
@@ -282,11 +291,11 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
     assert_eq!(dashboard["components"][0]["chart"]["report_id"], report_id);
     assert_eq!(
         dashboard["components"][0]["chart"]["report_name"],
-        "Participation Report"
+        "Participants Report"
     );
     assert_eq!(
         dashboard["components"][0]["chart"]["report_form_name"],
-        "Monthly Participation"
+        "Quarterly Check In"
     );
     let dashboards = request_json(
         app,

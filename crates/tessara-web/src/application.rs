@@ -101,6 +101,7 @@ fn ApplicationShell() -> impl IntoView {
                 <div class="actions">
                     <button type="button" onclick="login()">"Log In"</button>
                     <button type="button" onclick="seedDemo()">"Seed Demo"</button>
+                    <button type="button" onclick="loadAppSummary()">"Load App Summary"</button>
                     <a class="button-link" href="/app/admin">"Open Admin Setup"</a>
                     <a class="button-link" href="/app/reports">"Open Reporting Workspace"</a>
                     <a class="button-link" href="/app/migration">"Open Migration Workbench"</a>
@@ -149,6 +150,7 @@ fn AdminApplicationShell() -> impl IntoView {
                 <div class="actions">
                     <button type="button" onclick="login()">"Log In"</button>
                     <button type="button" onclick="seedDemo()">"Seed Demo"</button>
+                    <button type="button" onclick="loadAppSummary()">"Load App Summary"</button>
                     <a class="button-link" href="/app">"Open Submission Workspace"</a>
                     <a class="button-link" href="/app/reports">"Open Reporting Workspace"</a>
                     <a class="button-link" href="/app/migration">"Open Migration Workbench"</a>
@@ -196,6 +198,7 @@ fn MigrationApplicationShell() -> impl IntoView {
                 </p>
                 <div class="actions">
                     <button type="button" onclick="login()">"Log In"</button>
+                    <button type="button" onclick="loadAppSummary()">"Load App Summary"</button>
                     <a class="button-link" href="/app">"Open Submission Workspace"</a>
                     <a class="button-link" href="/app/admin">"Open Admin Setup"</a>
                     <a class="button-link" href="/app/reports">"Open Reporting Workspace"</a>
@@ -241,6 +244,7 @@ fn ReportingApplicationShell() -> impl IntoView {
                 <div class="actions">
                     <button type="button" onclick="login()">"Log In"</button>
                     <button type="button" onclick="seedDemo()">"Seed Demo"</button>
+                    <button type="button" onclick="loadAppSummary()">"Load App Summary"</button>
                     <a class="button-link" href="/app">"Open Submission Workspace"</a>
                     <a class="button-link" href="/app/admin">"Open Admin Setup"</a>
                     <a class="button-link" href="/app/migration">"Open Migration Workbench"</a>
