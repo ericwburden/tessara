@@ -6,10 +6,37 @@ pub const SCRIPT: &str = r#"
       let demoDashboardId = null;
       let demoReportId = null;
       let renderedForm = null;
+      const selections = {};
 
       function show(value) {
         document.getElementById("output").textContent =
           typeof value === "string" ? value : JSON.stringify(value, null, 2);
+      }
+
+      function setInput(id, value) {
+        const element = document.getElementById(id);
+        if (element) element.value = value ?? "";
+      }
+
+      function selectRecord(kind, label, id, bindings = {}) {
+        selections[kind] = { label, id };
+        for (const [inputId, value] of Object.entries(bindings)) {
+          setInput(inputId, value);
+        }
+        renderSelections();
+      }
+
+      function renderSelections() {
+        const entries = Object.entries(selections);
+        document.getElementById("selection-state").innerHTML = entries.length
+          ? entries.map(([kind, record]) => `
+              <article class="selection-item">
+                <h3>${escapeHtml(kind)}</h3>
+                <p>${escapeHtml(record.label)}</p>
+                <code>${escapeHtml(record.id)}</code>
+              </article>
+            `).join("")
+          : '<p class="muted">No records selected yet.</p>';
       }
 
       function escapeHtml(value) {
@@ -123,6 +150,25 @@ pub const SCRIPT: &str = r#"
           document.getElementById("dashboard-id").value = demoDashboardId;
           document.getElementById("report-id").value = demoReportId;
           document.getElementById("chart-id").value = payload.chart_id;
+          selectRecord("form version", payload.form_version_id, payload.form_version_id, {
+            "form-version-id": payload.form_version_id,
+            "form-id": payload.form_id
+          });
+          selectRecord("node", payload.organization_node_id, payload.organization_node_id, {
+            "node-id": payload.organization_node_id
+          });
+          selectRecord("submission", payload.submission_id, payload.submission_id, {
+            "submission-id": payload.submission_id
+          });
+          selectRecord("report", payload.report_id, payload.report_id, {
+            "report-id": payload.report_id
+          });
+          selectRecord("chart", payload.chart_id, payload.chart_id, {
+            "chart-id": payload.chart_id
+          });
+          selectRecord("dashboard", payload.dashboard_id, payload.dashboard_id, {
+            "dashboard-id": payload.dashboard_id
+          });
           show(payload);
         } catch (error) {
           show(error.message);
@@ -139,7 +185,9 @@ pub const SCRIPT: &str = r#"
               <h3>${escapeHtml(nodeType.name)}</h3>
               <p class="muted">${escapeHtml(nodeType.slug)}</p>
               <p>${nodeType.node_count} nodes</p>
-              <button type="button" onclick="useNodeType('${escapeHtml(nodeType.id)}')">Use Node Type</button>
+              <button type="button" onclick="useNodeType('${escapeHtml(nodeType.id)}', '${escapeHtml(nodeType.name)}')">Use Node Type</button>
+              <button type="button" onclick="useParentNodeType('${escapeHtml(nodeType.id)}', '${escapeHtml(nodeType.name)}')">Use Parent Type</button>
+              <button type="button" onclick="useChildNodeType('${escapeHtml(nodeType.id)}', '${escapeHtml(nodeType.name)}')">Use Child Type</button>
               <code>${escapeHtml(nodeType.id)}</code>
             </article>
           `);
@@ -168,10 +216,24 @@ pub const SCRIPT: &str = r#"
         }
       }
 
-      function useNodeType(nodeTypeId) {
-        document.getElementById("node-type-id").value = nodeTypeId;
-        document.getElementById("metadata-node-type-id").value = nodeTypeId;
-        document.getElementById("form-scope-node-type-id").value = nodeTypeId;
+      function useNodeType(nodeTypeId, nodeTypeName = nodeTypeId) {
+        selectRecord("node type", nodeTypeName, nodeTypeId, {
+          "node-type-id": nodeTypeId,
+          "metadata-node-type-id": nodeTypeId,
+          "form-scope-node-type-id": nodeTypeId
+        });
+      }
+
+      function useParentNodeType(nodeTypeId, nodeTypeName = nodeTypeId) {
+        selectRecord("parent node type", nodeTypeName, nodeTypeId, {
+          "parent-node-type-id": nodeTypeId
+        });
+      }
+
+      function useChildNodeType(nodeTypeId, nodeTypeName = nodeTypeId) {
+        selectRecord("child node type", nodeTypeName, nodeTypeId, {
+          "child-node-type-id": nodeTypeId
+        });
       }
 
       async function loadRelationships() {
@@ -183,6 +245,8 @@ pub const SCRIPT: &str = r#"
             <article class="card">
               <h3>${escapeHtml(relationship.parent_name)} -> ${escapeHtml(relationship.child_name)}</h3>
               <p class="muted">${escapeHtml(relationship.parent_node_type_id)} -> ${escapeHtml(relationship.child_node_type_id)}</p>
+              <button type="button" onclick="useParentNodeType('${escapeHtml(relationship.parent_node_type_id)}', '${escapeHtml(relationship.parent_name)}')">Use Parent Type</button>
+              <button type="button" onclick="useChildNodeType('${escapeHtml(relationship.child_node_type_id)}', '${escapeHtml(relationship.child_name)}')">Use Child Type</button>
             </article>
           `);
         } catch (error) {
@@ -218,6 +282,7 @@ pub const SCRIPT: &str = r#"
               <h3>${escapeHtml(field.label)}</h3>
               <p>${escapeHtml(field.node_type_name)}.${escapeHtml(field.key)}</p>
               <p>${escapeHtml(field.field_type)}${field.required ? " required" : ""}</p>
+              <button type="button" onclick="useNodeType('${escapeHtml(field.node_type_id)}', '${escapeHtml(field.node_type_name)}')">Use Node Type</button>
               <code>${escapeHtml(field.id)}</code>
             </article>
           `);
@@ -280,12 +345,13 @@ pub const SCRIPT: &str = r#"
               <p class="muted">${escapeHtml(form.slug)}</p>
               <p>Scope: ${escapeHtml(form.scope_node_type_name || "Global")}</p>
               <p>${form.versions.length} versions</p>
-              <button type="button" onclick="useForm('${escapeHtml(form.id)}')">Use Form</button>
+              <button type="button" onclick="useForm('${escapeHtml(form.id)}', '${escapeHtml(form.name)}')">Use Form</button>
               <ul>
                 ${form.versions.map((version) => `
                   <li>
                     ${escapeHtml(version.version_label)}:
                     ${escapeHtml(version.status)}
+                    <button type="button" onclick="useFormVersion('${escapeHtml(version.id)}', '${escapeHtml(form.id)}', '${escapeHtml(form.name)} ${escapeHtml(version.version_label)}')">Use Version</button>
                     <button type="button" onclick="renderForm('${escapeHtml(version.id)}')">Render</button>
                   </li>
                 `).join("")}
@@ -297,8 +363,17 @@ pub const SCRIPT: &str = r#"
         }
       }
 
-      function useForm(formId) {
-        document.getElementById("form-id").value = formId;
+      function useForm(formId, formName = formId) {
+        selectRecord("form", formName, formId, {
+          "form-id": formId
+        });
+      }
+
+      function useFormVersion(formVersionId, formId, label = formVersionId) {
+        selectRecord("form version", label, formVersionId, {
+          "form-version-id": formVersionId,
+          "form-id": formId
+        });
       }
 
       async function createForm() {
@@ -412,6 +487,7 @@ pub const SCRIPT: &str = r#"
           renderedForm = payload;
           document.getElementById("form-version-id").value = payload.form_version_id;
           document.getElementById("form-id").value = payload.form_id;
+          useFormVersion(payload.form_version_id, payload.form_id, `${payload.form_name} ${payload.version_label}`);
           show(payload);
           document.getElementById("screen").innerHTML = `
             <article class="card">
@@ -452,8 +528,9 @@ pub const SCRIPT: &str = r#"
               <h3>${escapeHtml(node.name)}</h3>
               <p>${escapeHtml(node.node_type_name)}${node.parent_node_name ? ` under ${escapeHtml(node.parent_node_name)}` : ""}</p>
               <p class="muted">${escapeHtml(JSON.stringify(node.metadata))}</p>
-              <button type="button" onclick="useTargetNode('${escapeHtml(node.id)}')">Use Target</button>
-              <button type="button" onclick="useParentNode('${escapeHtml(node.id)}')">Use Parent</button>
+              <button type="button" onclick="useTargetNode('${escapeHtml(node.id)}', '${escapeHtml(node.name)}')">Use Target</button>
+              <button type="button" onclick="useParentNode('${escapeHtml(node.id)}', '${escapeHtml(node.name)}')">Use Parent</button>
+              <button type="button" onclick="useNodeType('${escapeHtml(node.node_type_id)}', '${escapeHtml(node.node_type_name)}')">Use Node Type</button>
               <code>${escapeHtml(node.id)}</code>
             </article>
           `);
@@ -462,12 +539,16 @@ pub const SCRIPT: &str = r#"
         }
       }
 
-      function useTargetNode(nodeId) {
-        document.getElementById("node-id").value = nodeId;
+      function useTargetNode(nodeId, nodeName = nodeId) {
+        selectRecord("node", nodeName, nodeId, {
+          "node-id": nodeId
+        });
       }
 
-      function useParentNode(nodeId) {
-        document.getElementById("parent-node-id").value = nodeId;
+      function useParentNode(nodeId, nodeName = nodeId) {
+        selectRecord("parent node", nodeName, nodeId, {
+          "parent-node-id": nodeId
+        });
       }
 
       async function loadSubmissions() {
@@ -481,6 +562,7 @@ pub const SCRIPT: &str = r#"
               <p>${escapeHtml(submission.version_label)} on ${escapeHtml(submission.node_name)}</p>
               <p>Status: ${escapeHtml(submission.status)}</p>
               <p>${submission.value_count} saved values</p>
+              <button type="button" onclick="useSubmission('${escapeHtml(submission.id)}', '${escapeHtml(submission.form_name)} ${escapeHtml(submission.version_label)}')">Use Submission</button>
               <button type="button" onclick="loadSubmissionByValue('${escapeHtml(submission.id)}')">Open</button>
               <code>${escapeHtml(submission.id)}</code>
             </article>
@@ -520,12 +602,21 @@ pub const SCRIPT: &str = r#"
         }
       }
 
+      function useSubmission(submissionId, label = submissionId) {
+        selectRecord("submission", label, submissionId, {
+          "submission-id": submissionId
+        });
+      }
+
       async function loadSubmissionByValue(submissionId) {
         if (!token) await login();
         const payload = await request(`/api/submissions/${submissionId}`);
         document.getElementById("submission-id").value = payload.id;
         document.getElementById("form-version-id").value = payload.form_version_id;
         document.getElementById("node-id").value = payload.node_id;
+        useSubmission(payload.id, `${payload.form_name} ${payload.version_label}`);
+        useFormVersion(payload.form_version_id, payload.form_id, `${payload.form_name} ${payload.version_label}`);
+        useTargetNode(payload.node_id, payload.node_name);
         show(payload);
         document.getElementById("screen").innerHTML = `
           <article class="card">
@@ -688,7 +779,8 @@ pub const SCRIPT: &str = r#"
               <h3>${escapeHtml(chart.name)}</h3>
               <p>${escapeHtml(chart.chart_type)} chart</p>
               <p class="muted">Report ${escapeHtml(chart.report_id || "None")}</p>
-              <button type="button" onclick="useChart('${escapeHtml(chart.id)}')">Use Chart</button>
+              <button type="button" onclick="useChart('${escapeHtml(chart.id)}', '${escapeHtml(chart.name)}', '${escapeHtml(chart.report_id || "")}')">Use Chart</button>
+              ${chart.report_id ? `<button type="button" onclick="useReport('${escapeHtml(chart.report_id)}', 'Report for ${escapeHtml(chart.name)}')">Use Report</button>` : ""}
               <code>${escapeHtml(chart.id)}</code>
             </article>
           `);
@@ -697,8 +789,11 @@ pub const SCRIPT: &str = r#"
         }
       }
 
-      function useChart(chartId) {
-        document.getElementById("chart-id").value = chartId;
+      function useChart(chartId, chartName = chartId, reportId = "") {
+        selectRecord("chart", chartName, chartId, {
+          "chart-id": chartId,
+          ...(reportId ? { "report-id": reportId } : {})
+        });
       }
 
       async function createDashboard() {
@@ -749,12 +844,27 @@ pub const SCRIPT: &str = r#"
             <article class="card">
               <h3>${escapeHtml(dashboard.name)}</h3>
               <p>${dashboard.component_count} components</p>
+              <button type="button" onclick="useDashboard('${escapeHtml(dashboard.id)}', '${escapeHtml(dashboard.name)}')">Use Dashboard</button>
               <button type="button" onclick="loadDashboardByValue('${escapeHtml(dashboard.id)}')">Open</button>
             </article>
           `);
         } catch (error) {
           show(error.message);
         }
+      }
+
+      function useDashboard(dashboardId, dashboardName = dashboardId) {
+        demoDashboardId = dashboardId;
+        selectRecord("dashboard", dashboardName, dashboardId, {
+          "dashboard-id": dashboardId
+        });
+      }
+
+      function useReport(reportId, reportName = reportId) {
+        demoReportId = reportId;
+        selectRecord("report", reportName, reportId, {
+          "report-id": reportId
+        });
       }
 
       async function loadReports() {
@@ -766,6 +876,7 @@ pub const SCRIPT: &str = r#"
             <article class="card">
               <h3>${escapeHtml(report.name)}</h3>
               <p class="muted">Form ${escapeHtml(report.form_id || "Any")}</p>
+              <button type="button" onclick="useReport('${escapeHtml(report.id)}', '${escapeHtml(report.name)}')">Use Report</button>
               <button type="button" onclick="loadReportDefinition('${escapeHtml(report.id)}')">Inspect</button>
               <button type="button" onclick="loadReportByValue('${escapeHtml(report.id)}')">Run</button>
             </article>
@@ -780,6 +891,8 @@ pub const SCRIPT: &str = r#"
         const payload = await request(`/api/reports/${reportId}`);
         document.getElementById("report-id").value = payload.id;
         if (payload.form_id) document.getElementById("form-id").value = payload.form_id;
+        useReport(payload.id, payload.name);
+        if (payload.form_id) useForm(payload.form_id, payload.form_name || payload.form_id);
         document.getElementById("report-fields-json").value = JSON.stringify(payload.bindings.map((binding) => ({
           logical_key: binding.logical_key,
           source_field_key: binding.source_field_key,
@@ -826,6 +939,7 @@ pub const SCRIPT: &str = r#"
       async function loadDashboardByValue(dashboardId) {
         if (!token) await login();
         const payload = await request(`/api/dashboards/${dashboardId}`);
+        useDashboard(payload.id, payload.name);
         show(payload);
         const cards = await Promise.all(payload.components.map(async (component) => {
           let rows = [];
@@ -865,6 +979,7 @@ pub const SCRIPT: &str = r#"
       async function loadReportByValue(reportId) {
         if (!token) await login();
         const payload = await request(`/api/reports/${reportId}/table`);
+        useReport(reportId);
         show(payload);
         showCards(payload.rows, (row) => `
           <article class="card">

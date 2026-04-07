@@ -49,6 +49,18 @@ pub const STYLE: &str = r#"
         margin: 16px 0 0;
         padding-left: 24px;
       }
+      .selection-grid {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        margin-top: 16px;
+      }
+      .selection-item {
+        border: 1px solid #374151;
+        border-radius: 12px;
+        background: #111827;
+        padding: 12px;
+      }
       .cards {
         display: grid;
         gap: 12px;

@@ -41,6 +41,7 @@ fn AdminShell() -> impl IntoView {
                 <WorkflowSectionView section=&PRIMARY_SECTION/>
             </section>
             <UserTestingGuide/>
+            <SelectionContext/>
             <section class="panel">
                 <h2>"Builder Workflows"</h2>
                 <p class="muted">
@@ -63,6 +64,21 @@ fn AdminShell() -> impl IntoView {
                 <pre id="output">"No API calls yet."</pre>
             </section>
         </main>
+    }
+}
+
+#[component]
+fn SelectionContext() -> impl IntoView {
+    view! {
+        <section class="panel">
+            <h2>"Selected Context"</h2>
+            <p class="muted">
+                "Selections from cards populate workflow inputs and are summarized here."
+            </p>
+            <div id="selection-state" class="selection-grid">
+                <p class="muted">"No records selected yet."</p>
+            </div>
+        </section>
     }
 }
 
