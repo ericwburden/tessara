@@ -106,14 +106,23 @@ pub fn admin_shell_html() -> &'static str {
           <button type="button" onclick="loadNodeTypes()">Hierarchy Screen</button>
           <button type="button" onclick="loadForms()">Forms Screen</button>
           <button type="button" onclick="loadNodes()">Load Nodes</button>
+          <button type="button" onclick="loadSubmissions()">Load Submissions</button>
           <button type="button" onclick="loadDashboards()">Load Dashboards</button>
           <button type="button" onclick="loadReports()">Load Reports</button>
           <button type="button" onclick="loadDashboard()">Load Demo Dashboard</button>
         </div>
         <div class="inputs">
+          <input id="form-version-id" placeholder="Published form version ID">
+          <input id="node-id" placeholder="Target node ID">
+          <input id="submission-id" placeholder="Draft submission ID">
+          <input id="participants-value" placeholder="Participants value" value="42">
           <input id="dashboard-id" placeholder="Dashboard ID from seed or import output">
           <input id="report-id" placeholder="Report ID from seed or import output">
           <div class="actions">
+            <button type="button" onclick="createDraft()">Create Draft</button>
+            <button type="button" onclick="saveParticipants()">Save Participants</button>
+            <button type="button" onclick="submitDraft()">Submit Draft</button>
+            <button type="button" onclick="refreshAnalytics()">Refresh Analytics</button>
             <button type="button" onclick="loadDashboardById()">Load Dashboard By ID</button>
             <button type="button" onclick="loadReportById()">Load Report By ID</button>
           </div>
@@ -190,6 +199,9 @@ pub fn admin_shell_html() -> &'static str {
           const payload = await request("/api/demo/seed", { method: "POST" });
           demoDashboardId = payload.dashboard_id;
           demoReportId = payload.report_id;
+          document.getElementById("form-version-id").value = payload.form_version_id;
+          document.getElementById("node-id").value = payload.organization_node_id;
+          document.getElementById("submission-id").value = payload.submission_id;
           document.getElementById("dashboard-id").value = demoDashboardId;
           document.getElementById("report-id").value = demoReportId;
           show(payload);
@@ -279,6 +291,84 @@ pub fn admin_shell_html() -> &'static str {
               <code>${escapeHtml(node.id)}</code>
             </article>
           `);
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function loadSubmissions() {
+        try {
+          if (!token) await login();
+          const payload = await request("/api/submissions");
+          show(payload);
+          showCards(payload, (submission) => `
+            <article class="card">
+              <h3>${escapeHtml(submission.form_name)}</h3>
+              <p>${escapeHtml(submission.version_label)} on ${escapeHtml(submission.node_name)}</p>
+              <p>Status: ${escapeHtml(submission.status)}</p>
+              <p>${submission.value_count} saved values</p>
+              <code>${escapeHtml(submission.id)}</code>
+            </article>
+          `);
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function createDraft() {
+        try {
+          if (!token) await login();
+          const payload = await request("/api/submissions/drafts", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              form_version_id: inputValue("form-version-id"),
+              node_id: inputValue("node-id")
+            })
+          });
+          document.getElementById("submission-id").value = payload.id;
+          show(payload);
+          await loadSubmissions();
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function saveParticipants() {
+        try {
+          if (!token) await login();
+          const submissionId = inputValue("submission-id");
+          if (!submissionId) throw new Error("Create or enter a draft submission first.");
+          const value = Number(inputValue("participants-value"));
+          const payload = await request(`/api/submissions/${submissionId}/values`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ values: { participants: value } })
+          });
+          show(payload);
+          await loadSubmissions();
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function submitDraft() {
+        try {
+          if (!token) await login();
+          const submissionId = inputValue("submission-id");
+          if (!submissionId) throw new Error("Create or enter a draft submission first.");
+          const payload = await request(`/api/submissions/${submissionId}/submit`, { method: "POST" });
+          show(payload);
+          await loadSubmissions();
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function refreshAnalytics() {
+        try {
+          if (!token) await login();
+          show(await request("/api/admin/analytics/refresh", { method: "POST" }));
         } catch (error) {
           show(error.message);
         }
@@ -390,6 +480,9 @@ mod tests {
         assert!(html.contains("/api/admin/node-types"));
         assert!(html.contains("/api/admin/forms"));
         assert!(html.contains("/api/form-versions/"));
+        assert!(html.contains("/api/submissions"));
+        assert!(html.contains("/api/submissions/drafts"));
+        assert!(html.contains("/api/admin/analytics/refresh"));
         assert!(html.contains("/api/dashboards/"));
         assert!(html.contains("/api/dashboards"));
         assert!(html.contains("/api/reports/"));

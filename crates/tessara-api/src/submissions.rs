@@ -5,7 +5,7 @@ use axum::{
     extract::{Path, State},
     http::HeaderMap,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::Row;
 use tessara_core::FieldType;
@@ -27,6 +27,19 @@ pub struct CreateDraftRequest {
 #[derive(Deserialize)]
 pub struct SaveSubmissionValuesRequest {
     values: HashMap<String, Value>,
+}
+
+#[derive(Serialize)]
+pub struct SubmissionSummary {
+    id: Uuid,
+    form_version_id: Uuid,
+    form_name: String,
+    version_label: String,
+    node_id: Uuid,
+    node_name: String,
+    status: String,
+    value_count: i64,
+    submitted_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 struct FormFieldContract {
@@ -89,6 +102,66 @@ pub async fn create_draft(
     .await?;
 
     Ok(Json(IdResponse { id: submission_id }))
+}
+
+/// Lists submissions for the current local workflow shell.
+pub async fn list_submissions(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> ApiResult<Json<Vec<SubmissionSummary>>> {
+    auth::require_capability(&state.pool, &headers, "submissions:write").await?;
+
+    let rows = sqlx::query(
+        r#"
+        SELECT
+            submissions.id,
+            submissions.form_version_id,
+            forms.name AS form_name,
+            form_versions.version_label,
+            submissions.node_id,
+            nodes.name AS node_name,
+            submissions.status::text AS status,
+            submissions.submitted_at,
+            COUNT(submission_values.field_id) AS value_count
+        FROM submissions
+        JOIN form_versions ON form_versions.id = submissions.form_version_id
+        JOIN forms ON forms.id = form_versions.form_id
+        JOIN nodes ON nodes.id = submissions.node_id
+        LEFT JOIN submission_values ON submission_values.submission_id = submissions.id
+        GROUP BY
+            submissions.id,
+            submissions.form_version_id,
+            forms.name,
+            form_versions.version_label,
+            submissions.node_id,
+            nodes.name,
+            submissions.status,
+            submissions.submitted_at,
+            submissions.created_at
+        ORDER BY submissions.created_at, submissions.id
+        "#,
+    )
+    .fetch_all(&state.pool)
+    .await?;
+
+    let submissions = rows
+        .into_iter()
+        .map(|row| {
+            Ok(SubmissionSummary {
+                id: row.try_get("id")?,
+                form_version_id: row.try_get("form_version_id")?,
+                form_name: row.try_get("form_name")?,
+                version_label: row.try_get("version_label")?,
+                node_id: row.try_get("node_id")?,
+                node_name: row.try_get("node_name")?,
+                status: row.try_get("status")?,
+                value_count: row.try_get("value_count")?,
+                submitted_at: row.try_get("submitted_at")?,
+            })
+        })
+        .collect::<Result<Vec<_>, sqlx::Error>>()?;
+
+    Ok(Json(submissions))
 }
 
 pub async fn save_submission_values(

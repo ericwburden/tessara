@@ -77,6 +77,7 @@ pub fn router(state: AppState) -> Router {
             get(forms::render_form_version),
         )
         .route("/api/submissions/drafts", post(submissions::create_draft))
+        .route("/api/submissions", get(submissions::list_submissions))
         .route(
             "/api/submissions/{submission_id}/values",
             put(submissions::save_submission_values),

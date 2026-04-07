@@ -55,6 +55,21 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
                 && form["versions"][0]["status"] == "published")
     );
 
+    let submissions = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/submissions", &token, None),
+    )
+    .await;
+    assert!(
+        submissions
+            .as_array()
+            .expect("submissions response should be an array")
+            .iter()
+            .any(|submission| submission["id"] == seed["submission_id"]
+                && submission["status"] == "submitted"
+                && submission["value_count"] == 1)
+    );
+
     let report_id = seed["report_id"]
         .as_str()
         .expect("seed response should contain report id");
