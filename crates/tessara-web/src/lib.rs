@@ -126,6 +126,12 @@ pub fn admin_shell_html() -> &'static str {
           <input id="field-key" placeholder="Field key" value="participants">
           <input id="field-label" placeholder="Field label" value="Participants">
           <input id="field-type" placeholder="Field type" value="number">
+          <input id="report-name" placeholder="Report name" value="Participants Report">
+          <input id="report-logical-key" placeholder="Report logical key" value="participants">
+          <input id="report-source-field-key" placeholder="Report source field key" value="participants">
+          <input id="chart-id" placeholder="Chart ID">
+          <input id="chart-name" placeholder="Chart name" value="Participants Table">
+          <input id="dashboard-name" placeholder="Dashboard name" value="Local Dashboard">
           <input id="node-id" placeholder="Target node ID">
           <input id="submission-id" placeholder="Draft submission ID">
           <input id="participants-value" placeholder="Participants value" value="42">
@@ -138,6 +144,10 @@ pub fn admin_shell_html() -> &'static str {
             <button type="button" onclick="createSection()">Create Section</button>
             <button type="button" onclick="createField()">Create Field</button>
             <button type="button" onclick="publishVersion()">Publish Version</button>
+            <button type="button" onclick="createReport()">Create Report</button>
+            <button type="button" onclick="createChart()">Create Chart</button>
+            <button type="button" onclick="createDashboard()">Create Dashboard</button>
+            <button type="button" onclick="addDashboardComponent()">Add Component</button>
             <button type="button" onclick="createDraft()">Create Draft</button>
             <button type="button" onclick="saveParticipants()">Save Participants</button>
             <button type="button" onclick="submitDraft()">Submit Draft</button>
@@ -224,6 +234,7 @@ pub fn admin_shell_html() -> &'static str {
           document.getElementById("submission-id").value = payload.submission_id;
           document.getElementById("dashboard-id").value = demoDashboardId;
           document.getElementById("report-id").value = demoReportId;
+          document.getElementById("chart-id").value = payload.chart_id;
           show(payload);
         } catch (error) {
           show(error.message);
@@ -522,6 +533,91 @@ pub fn admin_shell_html() -> &'static str {
         }
       }
 
+      async function createReport() {
+        try {
+          if (!token) await login();
+          const formId = inputValue("form-id");
+          const payload = await request("/api/admin/reports", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: inputValue("report-name"),
+              form_id: formId || null,
+              fields: [{
+                logical_key: inputValue("report-logical-key"),
+                source_field_key: inputValue("report-source-field-key"),
+                missing_policy: "null"
+              }]
+            })
+          });
+          document.getElementById("report-id").value = payload.id;
+          show(payload);
+          await loadReports();
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function createChart() {
+        try {
+          if (!token) await login();
+          const reportId = inputValue("report-id");
+          const payload = await request("/api/admin/charts", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: inputValue("chart-name"),
+              report_id: reportId || null,
+              chart_type: "table"
+            })
+          });
+          document.getElementById("chart-id").value = payload.id;
+          show(payload);
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function createDashboard() {
+        try {
+          if (!token) await login();
+          const payload = await request("/api/admin/dashboards", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: inputValue("dashboard-name") })
+          });
+          document.getElementById("dashboard-id").value = payload.id;
+          show(payload);
+          await loadDashboards();
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function addDashboardComponent() {
+        try {
+          if (!token) await login();
+          const dashboardId = inputValue("dashboard-id");
+          const chartId = inputValue("chart-id");
+          if (!dashboardId || !chartId) {
+            throw new Error("Create or enter dashboard and chart IDs first.");
+          }
+          const payload = await request(`/api/admin/dashboards/${dashboardId}/components`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              chart_id: chartId,
+              position: 0,
+              config: { title: inputValue("chart-name") || "Chart" }
+            })
+          });
+          show(payload);
+          await loadDashboardByValue(dashboardId);
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
       async function loadDashboards() {
         try {
           const payload = await request("/api/dashboards");
@@ -631,7 +727,13 @@ mod tests {
         assert!(html.contains("Create Form"));
         assert!(html.contains("Create Version"));
         assert!(html.contains("Publish Version"));
+        assert!(html.contains("Create Report"));
+        assert!(html.contains("Create Chart"));
+        assert!(html.contains("Add Component"));
         assert!(html.contains("/api/admin/form-versions/"));
+        assert!(html.contains("/api/admin/reports"));
+        assert!(html.contains("/api/admin/charts"));
+        assert!(html.contains("/api/admin/dashboards"));
         assert!(html.contains("/api/form-versions/"));
         assert!(html.contains("/api/submissions"));
         assert!(html.contains("/api/submissions/drafts"));
