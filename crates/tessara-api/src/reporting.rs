@@ -149,6 +149,23 @@ pub async fn update_report(
     Ok(Json(IdResponse { id: report_id }))
 }
 
+/// Deletes an existing report definition and its field bindings.
+pub async fn delete_report(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(report_id): Path<Uuid>,
+) -> ApiResult<Json<IdResponse>> {
+    auth::require_capability(&state.pool, &headers, "reports:write").await?;
+    require_report_exists(&state.pool, report_id).await?;
+
+    sqlx::query("DELETE FROM reports WHERE id = $1")
+        .bind(report_id)
+        .execute(&state.pool)
+        .await?;
+
+    Ok(Json(IdResponse { id: report_id }))
+}
+
 pub async fn list_reports(
     State(state): State<AppState>,
     headers: HeaderMap,

@@ -984,6 +984,24 @@ pub const SCRIPT: &str = r#"
         }
       }
 
+      async function deleteReport() {
+        try {
+          if (!token) await login();
+          const reportId = inputValue("report-id");
+          if (!reportId) throw new Error("Select or enter a report ID first.");
+          const payload = await request(`/api/admin/reports/${reportId}`, {
+            method: "DELETE"
+          });
+          setInput("report-id", "");
+          setInput("report-fields-json", "");
+          reportBindings = [];
+          show(payload);
+          await loadReports();
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
       function addReportBinding() {
         try {
           const binding = {
@@ -1129,6 +1147,22 @@ pub const SCRIPT: &str = r#"
         }
       }
 
+      async function deleteChart() {
+        try {
+          if (!token) await login();
+          const chartId = inputValue("chart-id");
+          if (!chartId) throw new Error("Select or enter a chart ID first.");
+          const payload = await request(`/api/admin/charts/${chartId}`, {
+            method: "DELETE"
+          });
+          setInput("chart-id", "");
+          show(payload);
+          await loadCharts();
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
       async function loadCharts() {
         try {
           if (!token) await login();
@@ -1189,6 +1223,23 @@ pub const SCRIPT: &str = r#"
           });
           show(payload);
           await loadDashboardByValue(dashboardId);
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function deleteDashboard() {
+        try {
+          if (!token) await login();
+          const dashboardId = inputValue("dashboard-id");
+          if (!dashboardId) throw new Error("Select or enter a dashboard ID first.");
+          const payload = await request(`/api/admin/dashboards/${dashboardId}`, {
+            method: "DELETE"
+          });
+          setInput("dashboard-id", "");
+          setInput("dashboard-component-id", "");
+          show(payload);
+          await loadDashboards();
         } catch (error) {
           show(error.message);
         }

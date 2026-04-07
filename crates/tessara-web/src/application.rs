@@ -563,14 +563,17 @@ fn ReportAdminScreen() -> impl IntoView {
                 <button type="button" onclick="clearReportBindings()">"Clear Bindings"</button>
                 <button type="button" onclick="createReport()">"Create Report"</button>
                 <button type="button" onclick="updateReport()">"Update Report"</button>
+                <button type="button" onclick="deleteReport()">"Remove Report"</button>
                 <button type="button" onclick="loadReports()">"Load Reports"</button>
                 <button type="button" onclick="loadReportDefinitionById()">"Inspect Report"</button>
                 <button type="button" onclick="loadReportById()">"Run Report"</button>
                 <button type="button" onclick="createChart()">"Create Chart"</button>
                 <button type="button" onclick="updateChart()">"Update Chart"</button>
+                <button type="button" onclick="deleteChart()">"Remove Chart"</button>
                 <button type="button" onclick="loadCharts()">"Load Charts"</button>
                 <button type="button" onclick="createDashboard()">"Create Dashboard"</button>
                 <button type="button" onclick="updateDashboard()">"Update Dashboard"</button>
+                <button type="button" onclick="deleteDashboard()">"Remove Dashboard"</button>
                 <button type="button" onclick="addDashboardComponent()">"Add Component"</button>
                 <button type="button" onclick="updateDashboardComponent()">"Update Component"</button>
                 <button type="button" onclick="deleteDashboardComponent()">"Remove Component"</button>

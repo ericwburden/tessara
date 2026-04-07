@@ -95,6 +95,9 @@ mod tests {
         assert!(html.contains("/api/charts"));
         assert!(html.contains("Load Charts"));
         assert!(html.contains("/api/admin/dashboards"));
+        assert!(html.contains("Remove Report"));
+        assert!(html.contains("Remove Chart"));
+        assert!(html.contains("Remove Dashboard"));
         assert!(html.contains("/api/form-versions/"));
         assert!(html.contains("/api/forms/published"));
         assert!(html.contains("/api/submissions"));
@@ -200,8 +203,11 @@ mod tests {
         assert!(html.contains("Publish Version"));
         assert!(html.contains("Add Binding"));
         assert!(html.contains("Update Report"));
+        assert!(html.contains("Remove Report"));
         assert!(html.contains("Update Chart"));
+        assert!(html.contains("Remove Chart"));
         assert!(html.contains("Update Dashboard"));
+        assert!(html.contains("Remove Dashboard"));
         assert!(html.contains("Update Component"));
         assert!(html.contains("Remove Component"));
         assert!(html.contains("Open Submission Workspace"));

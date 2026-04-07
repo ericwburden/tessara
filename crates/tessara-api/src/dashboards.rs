@@ -124,6 +124,23 @@ pub async fn update_chart(
     Ok(Json(IdResponse { id: chart_id }))
 }
 
+/// Deletes an existing chart definition and removes any dashboard components using it.
+pub async fn delete_chart(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(chart_id): Path<Uuid>,
+) -> ApiResult<Json<IdResponse>> {
+    auth::require_capability(&state.pool, &headers, "reports:write").await?;
+    require_chart_exists(&state.pool, chart_id).await?;
+
+    sqlx::query("DELETE FROM charts WHERE id = $1")
+        .bind(chart_id)
+        .execute(&state.pool)
+        .await?;
+
+    Ok(Json(IdResponse { id: chart_id }))
+}
+
 /// Lists chart definitions for dashboard builder screens.
 pub async fn list_charts(
     State(state): State<AppState>,
@@ -197,6 +214,23 @@ pub async fn update_dashboard(
 
     sqlx::query("UPDATE dashboards SET name = $1 WHERE id = $2")
         .bind(payload.name)
+        .bind(dashboard_id)
+        .execute(&state.pool)
+        .await?;
+
+    Ok(Json(IdResponse { id: dashboard_id }))
+}
+
+/// Deletes an existing dashboard and its component layout.
+pub async fn delete_dashboard(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(dashboard_id): Path<Uuid>,
+) -> ApiResult<Json<IdResponse>> {
+    auth::require_capability(&state.pool, &headers, "reports:write").await?;
+    require_dashboard_exists(&state.pool, dashboard_id).await?;
+
+    sqlx::query("DELETE FROM dashboards WHERE id = $1")
         .bind(dashboard_id)
         .execute(&state.pool)
         .await?;

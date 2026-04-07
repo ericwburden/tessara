@@ -1606,7 +1606,7 @@ async fn reporting_and_dashboard_builders_return_diagnostics_for_invalid_referen
             .all(|component| component["id"] != component_id.to_string())
     );
     let missing_component_dashboard = request_status_and_json(
-        app,
+        app.clone(),
         authorized_request(
             "POST",
             &format!("/api/admin/dashboards/{}/components", Uuid::new_v4()),
@@ -1620,6 +1620,105 @@ async fn reporting_and_dashboard_builders_return_diagnostics_for_invalid_referen
     )
     .await;
     assert_eq!(missing_component_dashboard.0, StatusCode::NOT_FOUND);
+
+    request_json(
+        app.clone(),
+        authorized_request(
+            "DELETE",
+            &format!("/api/admin/charts/{valid_chart_id}"),
+            &token,
+            None,
+        ),
+    )
+    .await;
+    let charts_after_delete = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/charts", &token, None),
+    )
+    .await;
+    assert!(
+        charts_after_delete
+            .as_array()
+            .expect("chart list should be an array")
+            .iter()
+            .all(|chart| chart["id"] != valid_chart_id.to_string())
+    );
+    let missing_delete_chart = request_status_and_json(
+        app.clone(),
+        authorized_request(
+            "DELETE",
+            &format!("/api/admin/charts/{}", Uuid::new_v4()),
+            &token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(missing_delete_chart.0, StatusCode::NOT_FOUND);
+
+    request_json(
+        app.clone(),
+        authorized_request(
+            "DELETE",
+            &format!("/api/admin/dashboards/{dashboard_id}"),
+            &token,
+            None,
+        ),
+    )
+    .await;
+    let deleted_dashboard = request_status_and_json(
+        app.clone(),
+        Request::builder()
+            .method("GET")
+            .uri(format!("/api/dashboards/{dashboard_id}"))
+            .body(Body::empty())
+            .expect("valid dashboard request"),
+    )
+    .await;
+    assert_eq!(deleted_dashboard.0, StatusCode::NOT_FOUND);
+    let missing_delete_dashboard = request_status_and_json(
+        app.clone(),
+        authorized_request(
+            "DELETE",
+            &format!("/api/admin/dashboards/{}", Uuid::new_v4()),
+            &token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(missing_delete_dashboard.0, StatusCode::NOT_FOUND);
+
+    request_json(
+        app.clone(),
+        authorized_request(
+            "DELETE",
+            &format!("/api/admin/reports/{valid_report_id}"),
+            &token,
+            None,
+        ),
+    )
+    .await;
+    let deleted_report = request_status_and_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/reports/{valid_report_id}"),
+            &token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(deleted_report.0, StatusCode::NOT_FOUND);
+    let missing_delete_report = request_status_and_json(
+        app,
+        authorized_request(
+            "DELETE",
+            &format!("/api/admin/reports/{}", Uuid::new_v4()),
+            &token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(missing_delete_report.0, StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]
