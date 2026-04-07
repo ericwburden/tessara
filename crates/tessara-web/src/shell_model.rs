@@ -315,10 +315,10 @@ const LEGACY_FIXTURE_INPUT: TextArea = TextArea::new(
     "Paste legacy fixture JSON for validation",
 );
 
-const MIGRATION_ACTIONS: &[Action] = &[Action::new(
-    "validateLegacyFixture()",
-    "Validate Legacy Fixture",
-)];
+const MIGRATION_ACTIONS: &[Action] = &[
+    Action::new("validateLegacyFixture()", "Validate Legacy Fixture"),
+    Action::new("dryRunLegacyFixture()", "Dry-Run Legacy Fixture"),
+];
 
 /// Top-level shell actions for login, seeding, and navigation.
 pub(crate) const PRIMARY_SECTION: WorkflowSection = WorkflowSection::new(

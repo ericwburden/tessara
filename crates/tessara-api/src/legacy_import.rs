@@ -242,6 +242,16 @@ pub async fn validate_legacy_fixture_endpoint(
     Ok(Json(validate_legacy_fixture_str(&payload.fixture_json)?))
 }
 
+/// Dry-runs a legacy fixture submitted through the local migration workbench.
+pub async fn dry_run_legacy_fixture_endpoint(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<ValidateLegacyFixtureRequest>,
+) -> ApiResult<Json<LegacyImportDryRunReport>> {
+    auth::require_capability(&state.pool, &headers, "admin:all").await?;
+    Ok(Json(dry_run_legacy_fixture_str(&payload.fixture_json)?))
+}
+
 /// Imports a legacy rehearsal fixture from a JSON file path.
 pub async fn import_legacy_fixture_file(
     pool: &PgPool,

@@ -845,6 +845,29 @@ pub const SCRIPT: &str = r#"
         }
       }
 
+      async function dryRunLegacyFixture() {
+        try {
+          if (!token) await login();
+          const fixtureJson = inputValue("legacy-fixture-json");
+          if (!fixtureJson) throw new Error("Paste legacy fixture JSON first.");
+          const payload = await request("/api/admin/legacy-fixtures/dry-run", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ fixture_json: fixtureJson })
+          });
+          show(payload);
+          document.getElementById("screen").innerHTML = `
+            <article class="card">
+              <h3>${escapeHtml(payload.fixture_name)}</h3>
+              <p>Would import: ${payload.would_import ? "yes" : "no"}</p>
+              <p>${payload.validation.issue_count} validation issues</p>
+            </article>
+          `;
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
       async function createChart() {
         try {
           if (!token) await login();

@@ -38,6 +38,21 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
     )
     .await;
     assert_eq!(legacy_validation["issue_count"], 0);
+    let legacy_dry_run = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/legacy-fixtures/dry-run",
+            &token,
+            Some(json!({
+                "fixture_json": include_str!("../../../fixtures/legacy-rehearsal.json")
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(legacy_dry_run["fixture_name"], "legacy-rehearsal");
+    assert_eq!(legacy_dry_run["would_import"], true);
+    assert_eq!(legacy_dry_run["validation"]["issue_count"], 0);
 
     let node_types = request_json(
         app.clone(),

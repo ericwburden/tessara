@@ -107,6 +107,10 @@ pub fn router(state: AppState) -> Router {
             "/api/admin/legacy-fixtures/validate",
             post(legacy_import::validate_legacy_fixture_endpoint),
         )
+        .route(
+            "/api/admin/legacy-fixtures/dry-run",
+            post(legacy_import::dry_run_legacy_fixture_endpoint),
+        )
         .route("/api/admin/reports", post(reporting::create_report))
         .route("/api/reports", get(reporting::list_reports))
         .route("/api/reports/{report_id}", get(reporting::get_report))

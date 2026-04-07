@@ -71,7 +71,9 @@ mod tests {
         assert!(html.contains("Load Submission By ID"));
         assert!(html.contains("/api/admin/analytics/refresh"));
         assert!(html.contains("/api/admin/legacy-fixtures/validate"));
+        assert!(html.contains("/api/admin/legacy-fixtures/dry-run"));
         assert!(html.contains("Validate Legacy Fixture"));
+        assert!(html.contains("Dry-Run Legacy Fixture"));
         assert!(html.contains("/api/dashboards/"));
         assert!(html.contains("/api/dashboards"));
         assert!(html.contains("/api/reports/"));
