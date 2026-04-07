@@ -533,6 +533,7 @@ pub const SCRIPT: &str = r#"
               ${payload.sections.map((section) => `
                 <section class="form-section">
                   <h4>${escapeHtml(section.title)}</h4>
+                  <button type="button" onclick="useSection('${escapeHtml(section.id)}', '${escapeHtml(section.title)}')">Use Section</button>
                   <div class="form-fields">
                     ${section.fields.map((field) => `
                       <div class="form-field">
@@ -540,6 +541,7 @@ pub const SCRIPT: &str = r#"
                           ${escapeHtml(field.label)} (${escapeHtml(field.field_type)}${field.required ? ", required" : ""})
                         </label>
                         ${renderFieldInput(field)}
+                        <button type="button" onclick="useField('${escapeHtml(field.key)}', '${escapeHtml(field.label)}', '${escapeHtml(field.field_type)}')">Use Field Settings</button>
                       </div>
                     `).join("")}
                   </div>
@@ -555,6 +557,21 @@ pub const SCRIPT: &str = r#"
         } catch (error) {
           show(error.message);
         }
+      }
+
+      function useSection(sectionId, sectionTitle = sectionId) {
+        selectRecord("form section", sectionTitle, sectionId, {
+          "section-id": sectionId,
+          "section-title": sectionTitle
+        });
+      }
+
+      function useField(fieldKey, fieldLabel = fieldKey, fieldType = "text") {
+        selectRecord("form field", fieldLabel, fieldKey, {
+          "field-key": fieldKey,
+          "field-label": fieldLabel,
+          "field-type": fieldType
+        });
       }
 
       async function loadNodes() {
