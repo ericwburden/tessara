@@ -1263,6 +1263,80 @@ async fn reporting_and_dashboard_builders_return_diagnostics_for_invalid_referen
         ),
     )
     .await;
+    let valid_chart_id = id_from(&valid_chart);
+    request_json(
+        app.clone(),
+        authorized_request(
+            "PUT",
+            &format!("/api/admin/charts/{valid_chart_id}"),
+            &token,
+            Some(json!({
+                "name": "Updated Participants Chart",
+                "report_id": valid_report_id,
+                "chart_type": "table"
+            })),
+        ),
+    )
+    .await;
+    let updated_charts = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/charts", &token, None),
+    )
+    .await;
+    assert!(
+        updated_charts
+            .as_array()
+            .expect("chart list should be an array")
+            .iter()
+            .any(|chart| chart["id"] == valid_chart_id.to_string()
+                && chart["name"] == "Updated Participants Chart")
+    );
+    let missing_update_chart = request_status_and_json(
+        app.clone(),
+        authorized_request(
+            "PUT",
+            &format!("/api/admin/charts/{}", Uuid::new_v4()),
+            &token,
+            Some(json!({
+                "name": "Missing Chart",
+                "report_id": valid_report_id,
+                "chart_type": "table"
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(missing_update_chart.0, StatusCode::NOT_FOUND);
+    request_json(
+        app.clone(),
+        authorized_request(
+            "PUT",
+            &format!("/api/admin/dashboards/{dashboard_id}"),
+            &token,
+            Some(json!({"name": "Updated Diagnostics Dashboard"})),
+        ),
+    )
+    .await;
+    let updated_dashboard = request_json(
+        app.clone(),
+        Request::builder()
+            .method("GET")
+            .uri(format!("/api/dashboards/{dashboard_id}"))
+            .body(Body::empty())
+            .expect("valid dashboard request"),
+    )
+    .await;
+    assert_eq!(updated_dashboard["name"], "Updated Diagnostics Dashboard");
+    let missing_update_dashboard = request_status_and_json(
+        app.clone(),
+        authorized_request(
+            "PUT",
+            &format!("/api/admin/dashboards/{}", Uuid::new_v4()),
+            &token,
+            Some(json!({"name": "Missing Dashboard"})),
+        ),
+    )
+    .await;
+    assert_eq!(missing_update_dashboard.0, StatusCode::NOT_FOUND);
     let missing_component_dashboard = request_status_and_json(
         app,
         authorized_request(
@@ -1270,7 +1344,7 @@ async fn reporting_and_dashboard_builders_return_diagnostics_for_invalid_referen
             &format!("/api/admin/dashboards/{}/components", Uuid::new_v4()),
             &token,
             Some(json!({
-                "chart_id": id_from(&valid_chart),
+                "chart_id": valid_chart_id,
                 "position": 0,
                 "config": {}
             })),

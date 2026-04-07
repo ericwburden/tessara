@@ -538,6 +538,11 @@ fn ReportAdminScreen() -> impl IntoView {
                 <label><span>"Report missing-data policy"</span><input id="report-missing-policy" placeholder="null" value="null" /></label>
                 <label><span>"Report bindings JSON"</span><input id="report-fields-json" placeholder="Optional bindings JSON" value="" /></label>
                 <label><span>"Report ID"</span><input id="report-id" placeholder="Selected report ID" value="" /></label>
+                <label><span>"Chart ID"</span><input id="chart-id" placeholder="Selected chart ID" value="" /></label>
+                <label><span>"Chart name"</span><input id="chart-name" placeholder="Participants Table" value="Participants Table" /></label>
+                <label><span>"Chart type"</span><input id="chart-type" placeholder="table" value="table" /></label>
+                <label><span>"Dashboard ID"</span><input id="dashboard-id" placeholder="Selected dashboard ID" value="" /></label>
+                <label><span>"Dashboard name"</span><input id="dashboard-name" placeholder="Local Dashboard" value="Local Dashboard" /></label>
             </div>
             <div class="actions">
                 <button type="button" onclick="addReportBinding()">"Add Binding"</button>
@@ -547,6 +552,12 @@ fn ReportAdminScreen() -> impl IntoView {
                 <button type="button" onclick="loadReports()">"Load Reports"</button>
                 <button type="button" onclick="loadReportDefinitionById()">"Inspect Report"</button>
                 <button type="button" onclick="loadReportById()">"Run Report"</button>
+                <button type="button" onclick="createChart()">"Create Chart"</button>
+                <button type="button" onclick="updateChart()">"Update Chart"</button>
+                <button type="button" onclick="loadCharts()">"Load Charts"</button>
+                <button type="button" onclick="createDashboard()">"Create Dashboard"</button>
+                <button type="button" onclick="updateDashboard()">"Update Dashboard"</button>
+                <button type="button" onclick="loadDashboardById()">"Load Dashboard"</button>
             </div>
         </section>
     }

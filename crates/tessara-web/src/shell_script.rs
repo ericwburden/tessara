@@ -1041,6 +1041,28 @@ pub const SCRIPT: &str = r#"
         }
       }
 
+      async function updateChart() {
+        try {
+          if (!token) await login();
+          const chartId = inputValue("chart-id");
+          if (!chartId) throw new Error("Select or enter a chart ID first.");
+          const reportId = inputValue("report-id");
+          const payload = await request(`/api/admin/charts/${chartId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: inputValue("chart-name"),
+              report_id: reportId || null,
+              chart_type: inputValue("chart-type") || "table"
+            })
+          });
+          show(payload);
+          await loadCharts();
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
       async function loadCharts() {
         try {
           if (!token) await login();
@@ -1084,6 +1106,23 @@ pub const SCRIPT: &str = r#"
           document.getElementById("dashboard-id").value = payload.id;
           show(payload);
           await loadDashboards();
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function updateDashboard() {
+        try {
+          if (!token) await login();
+          const dashboardId = inputValue("dashboard-id");
+          if (!dashboardId) throw new Error("Select or enter a dashboard ID first.");
+          const payload = await request(`/api/admin/dashboards/${dashboardId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: inputValue("dashboard-name") })
+          });
+          show(payload);
+          await loadDashboardByValue(dashboardId);
         } catch (error) {
           show(error.message);
         }

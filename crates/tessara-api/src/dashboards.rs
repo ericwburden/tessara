@@ -79,13 +79,7 @@ pub async fn create_chart(
     auth::require_capability(&state.pool, &headers, "reports:write").await?;
     require_text("chart name", &payload.name)?;
 
-    let chart_type = payload
-        .chart_type
-        .as_deref()
-        .map(ChartType::from_str)
-        .transpose()
-        .map_err(|error| ApiError::BadRequest(error.to_string()))?
-        .unwrap_or(ChartType::Table);
+    let chart_type = parse_chart_type(payload.chart_type.as_deref())?;
 
     if let Some(report_id) = payload.report_id {
         require_report_exists(&state.pool, report_id).await?;
@@ -101,6 +95,33 @@ pub async fn create_chart(
     .await?;
 
     Ok(Json(IdResponse { id }))
+}
+
+/// Updates an existing chart definition.
+pub async fn update_chart(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(chart_id): Path<Uuid>,
+    Json(payload): Json<CreateChartRequest>,
+) -> ApiResult<Json<IdResponse>> {
+    auth::require_capability(&state.pool, &headers, "reports:write").await?;
+    require_chart_exists(&state.pool, chart_id).await?;
+    require_text("chart name", &payload.name)?;
+    let chart_type = parse_chart_type(payload.chart_type.as_deref())?;
+
+    if let Some(report_id) = payload.report_id {
+        require_report_exists(&state.pool, report_id).await?;
+    }
+
+    sqlx::query("UPDATE charts SET name = $1, report_id = $2, chart_type = $3 WHERE id = $4")
+        .bind(payload.name)
+        .bind(payload.report_id)
+        .bind(chart_type.as_str())
+        .bind(chart_id)
+        .execute(&state.pool)
+        .await?;
+
+    Ok(Json(IdResponse { id: chart_id }))
 }
 
 /// Lists chart definitions for dashboard builder screens.
@@ -161,6 +182,26 @@ pub async fn create_dashboard(
         .await?;
 
     Ok(Json(IdResponse { id }))
+}
+
+/// Updates an existing dashboard definition.
+pub async fn update_dashboard(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(dashboard_id): Path<Uuid>,
+    Json(payload): Json<CreateDashboardRequest>,
+) -> ApiResult<Json<IdResponse>> {
+    auth::require_capability(&state.pool, &headers, "reports:write").await?;
+    require_dashboard_exists(&state.pool, dashboard_id).await?;
+    require_text("dashboard name", &payload.name)?;
+
+    sqlx::query("UPDATE dashboards SET name = $1 WHERE id = $2")
+        .bind(payload.name)
+        .bind(dashboard_id)
+        .execute(&state.pool)
+        .await?;
+
+    Ok(Json(IdResponse { id: dashboard_id }))
 }
 
 pub async fn add_dashboard_component(
@@ -282,6 +323,14 @@ pub async fn get_dashboard(
         name: dashboard.try_get("name")?,
         components,
     }))
+}
+
+fn parse_chart_type(chart_type: Option<&str>) -> ApiResult<ChartType> {
+    chart_type
+        .map(ChartType::from_str)
+        .transpose()
+        .map_err(|error| ApiError::BadRequest(error.to_string()))
+        .map(|chart_type| chart_type.unwrap_or(ChartType::Table))
 }
 
 async fn require_report_exists(pool: &sqlx::PgPool, report_id: Uuid) -> ApiResult<()> {

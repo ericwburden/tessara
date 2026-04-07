@@ -155,8 +155,16 @@ pub fn router(state: AppState) -> Router {
         .route("/api/reports/{report_id}", get(reporting::get_report))
         .route("/api/reports/{report_id}/table", get(reporting::run_report))
         .route("/api/admin/charts", post(dashboards::create_chart))
+        .route(
+            "/api/admin/charts/{chart_id}",
+            put(dashboards::update_chart),
+        )
         .route("/api/charts", get(dashboards::list_charts))
         .route("/api/admin/dashboards", post(dashboards::create_dashboard))
+        .route(
+            "/api/admin/dashboards/{dashboard_id}",
+            put(dashboards::update_dashboard),
+        )
         .route(
             "/api/admin/dashboards/{dashboard_id}/components",
             post(dashboards::add_dashboard_component),

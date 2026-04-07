@@ -308,8 +308,10 @@ const REPORTING_ACTIONS: &[Action] = &[
     Action::new("loadReportById()", "Load Report By ID"),
     Action::new("loadReportDefinitionById()", "Inspect Report By ID"),
     Action::new("createChart()", "Create Chart"),
+    Action::new("updateChart()", "Update Chart"),
     Action::new("loadCharts()", "Load Charts"),
     Action::new("createDashboard()", "Create Dashboard"),
+    Action::new("updateDashboard()", "Update Dashboard"),
     Action::new("addDashboardComponent()", "Add Component"),
     Action::new("loadDashboardById()", "Load Dashboard By ID"),
 ];
