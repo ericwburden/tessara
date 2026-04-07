@@ -103,6 +103,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/reports", get(reporting::list_reports))
         .route("/api/reports/{report_id}/table", get(reporting::run_report))
         .route("/api/admin/charts", post(dashboards::create_chart))
+        .route("/api/charts", get(dashboards::list_charts))
         .route("/api/admin/dashboards", post(dashboards::create_dashboard))
         .route(
             "/api/admin/dashboards/{dashboard_id}/components",

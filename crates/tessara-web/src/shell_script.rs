@@ -638,14 +638,38 @@ pub const SCRIPT: &str = r#"
             body: JSON.stringify({
               name: inputValue("chart-name"),
               report_id: reportId || null,
-              chart_type: "table"
+              chart_type: inputValue("chart-type") || "table"
             })
           });
           document.getElementById("chart-id").value = payload.id;
           show(payload);
+          await loadCharts();
         } catch (error) {
           show(error.message);
         }
+      }
+
+      async function loadCharts() {
+        try {
+          if (!token) await login();
+          const payload = await request("/api/charts");
+          show(payload);
+          showCards(payload, (chart) => `
+            <article class="card">
+              <h3>${escapeHtml(chart.name)}</h3>
+              <p>${escapeHtml(chart.chart_type)} chart</p>
+              <p class="muted">Report ${escapeHtml(chart.report_id || "None")}</p>
+              <button type="button" onclick="useChart('${escapeHtml(chart.id)}')">Use Chart</button>
+              <code>${escapeHtml(chart.id)}</code>
+            </article>
+          `);
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      function useChart(chartId) {
+        document.getElementById("chart-id").value = chartId;
       }
 
       async function createDashboard() {

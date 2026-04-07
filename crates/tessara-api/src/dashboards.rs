@@ -101,6 +101,40 @@ pub async fn create_chart(
     Ok(Json(IdResponse { id }))
 }
 
+/// Lists chart definitions for dashboard builder screens.
+pub async fn list_charts(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> ApiResult<Json<Vec<ChartResponse>>> {
+    auth::require_capability(&state.pool, &headers, "reports:read").await?;
+
+    let rows = sqlx::query(
+        r#"
+        SELECT id, name, chart_type::text AS chart_type, report_id
+        FROM charts
+        ORDER BY name, created_at
+        "#,
+    )
+    .fetch_all(&state.pool)
+    .await?;
+
+    let charts = rows
+        .into_iter()
+        .map(|row| {
+            let report_id: Option<Uuid> = row.try_get("report_id")?;
+            Ok(ChartResponse {
+                id: row.try_get("id")?,
+                name: row.try_get("name")?,
+                chart_type: row.try_get("chart_type")?,
+                report_id,
+                report_url: report_id.map(|id| format!("/api/reports/{id}/table")),
+            })
+        })
+        .collect::<Result<Vec<_>, sqlx::Error>>()?;
+
+    Ok(Json(charts))
+}
+
 pub async fn create_dashboard(
     State(state): State<AppState>,
     headers: HeaderMap,

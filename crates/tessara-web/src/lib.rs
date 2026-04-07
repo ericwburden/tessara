@@ -48,6 +48,8 @@ mod tests {
         assert!(html.contains("/api/admin/form-versions/"));
         assert!(html.contains("/api/admin/reports"));
         assert!(html.contains("/api/admin/charts"));
+        assert!(html.contains("/api/charts"));
+        assert!(html.contains("Load Charts"));
         assert!(html.contains("/api/admin/dashboards"));
         assert!(html.contains("/api/form-versions/"));
         assert!(html.contains("/api/submissions"));

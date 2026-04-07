@@ -63,6 +63,7 @@ pub fn admin_shell_html(style: &str, script: &str) -> String {
           <input id="report-source-field-key" placeholder="Report source field key" value="participants">
           <input id="chart-id" placeholder="Chart ID">
           <input id="chart-name" placeholder="Chart name" value="Participants Table">
+          <input id="chart-type" placeholder="Chart type" value="table">
           <input id="dashboard-name" placeholder="Dashboard name" value="Local Dashboard">
           <input id="node-id" placeholder="Target node ID">
           <input id="submission-id" placeholder="Draft submission ID">
@@ -83,6 +84,7 @@ pub fn admin_shell_html(style: &str, script: &str) -> String {
             <button type="button" onclick="publishVersion()">Publish Version</button>
             <button type="button" onclick="createReport()">Create Report</button>
             <button type="button" onclick="createChart()">Create Chart</button>
+            <button type="button" onclick="loadCharts()">Load Charts</button>
             <button type="button" onclick="createDashboard()">Create Dashboard</button>
             <button type="button" onclick="addDashboardComponent()">Add Component</button>
             <button type="button" onclick="createDraft()">Create Draft</button>

@@ -169,6 +169,23 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
             .iter()
             .any(|report| report["id"] == report_id)
     );
+    let chart_id = seed["chart_id"]
+        .as_str()
+        .expect("seed response should contain chart id");
+    let charts = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/charts", &token, None),
+    )
+    .await;
+    assert!(
+        charts
+            .as_array()
+            .expect("charts response should be an array")
+            .iter()
+            .any(|chart| chart["id"] == chart_id
+                && chart["chart_type"] == "table"
+                && chart["report_id"] == report_id)
+    );
 
     let dashboard_id = seed["dashboard_id"]
         .as_str()
