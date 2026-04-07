@@ -129,8 +129,19 @@ The API also serves the first local shell at:
 http://localhost:8080/
 ```
 
+For user testing, start the Compose stack and open that URL in a browser. Use
+the development login above, then click `Seed Demo` to populate the deterministic
+hierarchy, form, submission, report, and dashboard example. Stop and reset the
+local test deployment with:
+
+```powershell
+docker compose down -v
+```
+
 The local shell now covers the main demo workflow surfaces:
 
+- Leptos SSR-rendered shell structure with the current JavaScript controller
+  retained for immediate local workflow testing.
 - Admin read screens for hierarchy types, forms, reports, dashboards, nodes,
   and submissions.
 - Admin builder controls for node types, forms, form versions, sections, fields,
