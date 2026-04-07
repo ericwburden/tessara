@@ -184,6 +184,10 @@ mod tests {
         assert!(html.contains("Submit Data"));
         assert!(html.contains("Choose Published Form"));
         assert!(html.contains("Choose Target Node"));
+        assert!(html.contains("Open Selected Form"));
+        assert!(html.contains("Use Selected Target"));
+        assert!(html.contains("Open This Form"));
+        assert!(html.contains("Use Target and Continue"));
         assert!(html.contains("Create Draft"));
         assert!(html.contains("Save Values"));
         assert!(html.contains("Submit"));

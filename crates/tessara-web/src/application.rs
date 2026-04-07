@@ -432,6 +432,8 @@ fn SubmissionScreen() -> impl IntoView {
             <div class="actions">
                 <button type="button" onclick="loadPublishedForms()">"Choose Published Form"</button>
                 <button type="button" onclick="loadNodes()">"Choose Target Node"</button>
+                <button type="button" onclick="useSelectedTargetNodeAndContinue()">"Use Selected Target"</button>
+                <button type="button" onclick="openSelectedFormVersion()">"Open Selected Form"</button>
                 <button type="button" onclick="renderForm(inputValue('form-version-id'))">"Open Form"</button>
                 <button type="button" onclick="createDraft()">"Create Draft"</button>
                 <button type="button" onclick="saveRenderedFormValues()">"Save Values"</button>

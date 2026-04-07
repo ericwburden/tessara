@@ -263,6 +263,8 @@ const SUBMISSION_INPUTS: &[TextInput] = &[
 
 const SUBMISSION_ACTIONS: &[Action] = &[
     Action::new("createDraft()", "Create Draft"),
+    Action::new("openSelectedFormVersion()", "Open Selected Form"),
+    Action::new("useSelectedTargetNodeAndContinue()", "Use Selected Target"),
     Action::new("saveRenderedFormValues()", "Save Rendered Values"),
     Action::new("saveParticipants()", "Save Participants"),
     Action::new("submitDraft()", "Submit Draft"),

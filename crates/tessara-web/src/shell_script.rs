@@ -582,12 +582,22 @@ pub const SCRIPT: &str = r#"
               <p class="muted">${escapeHtml(formVersion.form_slug)} ${escapeHtml(formVersion.version_label)}</p>
               <p>${formVersion.field_count} fields</p>
               <button type="button" onclick="useFormVersion('${escapeHtml(formVersion.form_version_id)}', '${escapeHtml(formVersion.form_id)}', '${escapeHtml(formVersion.form_name)} ${escapeHtml(formVersion.version_label)}')">Use Published Version</button>
+              <button type="button" onclick="openPublishedFormVersion('${escapeHtml(formVersion.form_version_id)}', '${escapeHtml(formVersion.form_id)}', '${escapeHtml(formVersion.form_name)} ${escapeHtml(formVersion.version_label)}')">Open This Form</button>
               <button type="button" onclick="renderForm('${escapeHtml(formVersion.form_version_id)}')">Render Form</button>
             </article>
           `);
         } catch (error) {
           show(error.message);
         }
+      }
+
+      async function openPublishedFormVersion(formVersionId, formId, label = formVersionId) {
+        useFormVersion(formVersionId, formId, label);
+        await renderForm(formVersionId);
+      }
+
+      async function openSelectedFormVersion() {
+        await openPublishedFormVersion(inputValue("form-version-id"), inputValue("form-id"), "Selected Form");
       }
 
       async function createForm() {
@@ -776,6 +786,7 @@ pub const SCRIPT: &str = r#"
 
       async function renderForm(formVersionId) {
         try {
+          if (!formVersionId) throw new Error("Choose a published form before opening the response form.");
           const payload = await request(`/api/form-versions/${formVersionId}/render`);
           renderedForm = payload;
           document.getElementById("form-version-id").value = payload.form_version_id;
@@ -889,6 +900,7 @@ pub const SCRIPT: &str = r#"
               <p>${escapeHtml(node.node_type_name)}${node.parent_node_name ? ` under ${escapeHtml(node.parent_node_name)}` : ""}</p>
               <p class="muted">${escapeHtml(JSON.stringify(node.metadata))}</p>
               <button type="button" onclick="useTargetNode('${escapeHtml(node.id)}', '${escapeHtml(node.name)}')">Use Target</button>
+              <button type="button" onclick="useTargetNodeAndContinue('${escapeHtml(node.id)}', '${escapeHtml(node.name)}')">Use Target and Continue</button>
               <button type="button" onclick="useParentNode('${escapeHtml(node.id)}', '${escapeHtml(node.name)}')">Use Parent</button>
               <button type="button" onclick="useNodeType('${escapeHtml(node.node_type_id)}', '${escapeHtml(node.node_type_name)}')">Use Node Type</button>
               <code>${escapeHtml(node.id)}</code>
@@ -904,6 +916,19 @@ pub const SCRIPT: &str = r#"
           "node-id": nodeId,
           "node-name": nodeName
         });
+      }
+
+      async function useTargetNodeAndContinue(nodeId, nodeName = nodeId) {
+        useTargetNode(nodeId, nodeName);
+        if (renderedForm) {
+          await renderForm(renderedForm.form_version_id);
+        }
+      }
+
+      async function useSelectedTargetNodeAndContinue() {
+        const nodeId = inputValue("node-id");
+        if (!nodeId) throw new Error("Choose a target node before continuing.");
+        await useTargetNodeAndContinue(nodeId, inputValue("node-name") || nodeId);
       }
 
       function useParentNode(nodeId, nodeName = nodeId) {
