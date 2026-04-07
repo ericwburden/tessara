@@ -112,6 +112,12 @@ The API also serves the first local shell at:
 http://localhost:8080/
 ```
 
+## Migration Planning
+
+Slice 9 legacy mapping is tracked in
+[docs/legacy-mapping.md](docs/legacy-mapping.md). Treat that document as a
+behavior inventory and import-planning guide, not as a schema to reproduce.
+
 ## First Target Slice
 
 The first implementation milestone should prove an end-to-end thread:
