@@ -334,12 +334,42 @@ async fn form_builder_guards_cross_version_sections_and_supersedes_previous_publ
             .contains("already in use")
     );
     let section_one_id = create_form_section(app.clone(), &token, version_one_id, "Main").await;
-    create_number_field(
+    let field_one_id = create_number_field(
         app.clone(),
         &token,
         version_one_id,
         section_one_id,
         "participants",
+    )
+    .await;
+    request_json(
+        app.clone(),
+        authorized_request(
+            "PUT",
+            &format!("/api/admin/form-sections/{section_one_id}"),
+            &token,
+            Some(json!({
+                "title": "Updated Main",
+                "position": 1
+            })),
+        ),
+    )
+    .await;
+    request_json(
+        app.clone(),
+        authorized_request(
+            "PUT",
+            &format!("/api/admin/form-fields/{field_one_id}"),
+            &token,
+            Some(json!({
+                "section_id": section_one_id,
+                "key": "participant_count",
+                "label": "Participant Count",
+                "field_type": "number",
+                "required": false,
+                "position": 1
+            })),
+        ),
     )
     .await;
     request_json(
@@ -352,6 +382,30 @@ async fn form_builder_guards_cross_version_sections_and_supersedes_previous_publ
         ),
     )
     .await;
+    let published_field_update = request_status_and_json(
+        app.clone(),
+        authorized_request(
+            "PUT",
+            &format!("/api/admin/form-fields/{field_one_id}"),
+            &token,
+            Some(json!({
+                "section_id": section_one_id,
+                "key": "participants",
+                "label": "Participants",
+                "field_type": "number",
+                "required": true,
+                "position": 0
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(published_field_update.0, StatusCode::BAD_REQUEST);
+    assert!(
+        published_field_update.1["error"]
+            .as_str()
+            .expect("error body should include message")
+            .contains("cannot be modified")
+    );
 
     let version_two_id = create_form_version(app.clone(), &token, form_id, "v2").await;
     let cross_version_field = request_status_and_json(
@@ -419,6 +473,16 @@ async fn form_builder_guards_cross_version_sections_and_supersedes_previous_publ
     .await;
     assert_eq!(version_one["status"], "superseded");
     assert_eq!(version_one["form_name"], "Monthly Service Report");
+    assert_eq!(version_one["sections"][0]["title"], "Updated Main");
+    assert_eq!(
+        version_one["sections"][0]["fields"][0]["key"],
+        "participant_count"
+    );
+    assert_eq!(
+        version_one["sections"][0]["fields"][0]["label"],
+        "Participant Count"
+    );
+    assert_eq!(version_one["sections"][0]["fields"][0]["required"], false);
     assert_eq!(version_two["status"], "published");
     assert_eq!(version_two["form_name"], "Monthly Service Report");
 }

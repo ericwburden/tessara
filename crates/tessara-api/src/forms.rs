@@ -47,6 +47,22 @@ pub struct CreateFormFieldRequest {
     position: i32,
 }
 
+#[derive(Deserialize)]
+pub struct UpdateFormSectionRequest {
+    title: String,
+    position: i32,
+}
+
+#[derive(Deserialize)]
+pub struct UpdateFormFieldRequest {
+    section_id: Uuid,
+    key: String,
+    label: String,
+    field_type: String,
+    required: bool,
+    position: i32,
+}
+
 #[derive(Serialize)]
 pub struct RenderedForm {
     form_version_id: Uuid,
@@ -418,6 +434,77 @@ pub async fn create_form_field(
     Ok(Json(IdResponse { id }))
 }
 
+/// Updates an editable form section in a draft form version.
+pub async fn update_form_section(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(section_id): Path<Uuid>,
+    Json(payload): Json<UpdateFormSectionRequest>,
+) -> ApiResult<Json<IdResponse>> {
+    auth::require_capability(&state.pool, &headers, "forms:write").await?;
+    let form_version_id = require_section_form_version(&state.pool, section_id).await?;
+    assert_form_version_draft(&state.pool, form_version_id).await?;
+    require_text("section title", &payload.title)?;
+
+    sqlx::query("UPDATE form_sections SET title = $1, position = $2 WHERE id = $3")
+        .bind(payload.title)
+        .bind(payload.position)
+        .bind(section_id)
+        .execute(&state.pool)
+        .await?;
+
+    Ok(Json(IdResponse { id: section_id }))
+}
+
+/// Updates an editable form field in a draft form version.
+pub async fn update_form_field(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(field_id): Path<Uuid>,
+    Json(payload): Json<UpdateFormFieldRequest>,
+) -> ApiResult<Json<IdResponse>> {
+    auth::require_capability(&state.pool, &headers, "forms:write").await?;
+    let existing = require_form_field(&state.pool, field_id).await?;
+    assert_form_version_draft(&state.pool, existing.form_version_id).await?;
+    require_text("field key", &payload.key)?;
+    require_text("field label", &payload.label)?;
+    if payload.key != existing.key {
+        require_form_field_key_available(&state.pool, existing.form_version_id, &payload.key)
+            .await?;
+    }
+    let field_type = parse_field_type(&payload.field_type)?;
+    assert_section_belongs_to_form_version(
+        &state.pool,
+        existing.form_version_id,
+        payload.section_id,
+    )
+    .await?;
+
+    sqlx::query(
+        r#"
+        UPDATE form_fields
+        SET section_id = $1,
+            key = $2,
+            label = $3,
+            field_type = $4::field_type,
+            required = $5,
+            position = $6
+        WHERE id = $7
+        "#,
+    )
+    .bind(payload.section_id)
+    .bind(payload.key)
+    .bind(payload.label)
+    .bind(field_type.as_str())
+    .bind(payload.required)
+    .bind(payload.position)
+    .bind(field_id)
+    .execute(&state.pool)
+    .await?;
+
+    Ok(Json(IdResponse { id: field_id }))
+}
+
 pub async fn publish_form_version(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -542,6 +629,32 @@ pub async fn render_form_version(
         status: version.try_get("status")?,
         sections,
     }))
+}
+
+async fn require_section_form_version(pool: &sqlx::PgPool, section_id: Uuid) -> ApiResult<Uuid> {
+    sqlx::query_scalar("SELECT form_version_id FROM form_sections WHERE id = $1")
+        .bind(section_id)
+        .fetch_optional(pool)
+        .await?
+        .ok_or_else(|| ApiError::NotFound(format!("form section {section_id}")))
+}
+
+struct ExistingFormField {
+    form_version_id: Uuid,
+    key: String,
+}
+
+async fn require_form_field(pool: &sqlx::PgPool, field_id: Uuid) -> ApiResult<ExistingFormField> {
+    let row = sqlx::query("SELECT form_version_id, key FROM form_fields WHERE id = $1")
+        .bind(field_id)
+        .fetch_optional(pool)
+        .await?
+        .ok_or_else(|| ApiError::NotFound(format!("form field {field_id}")))?;
+
+    Ok(ExistingFormField {
+        form_version_id: row.try_get("form_version_id")?,
+        key: row.try_get("key")?,
+    })
 }
 
 async fn assert_form_version_draft(pool: &sqlx::PgPool, form_version_id: Uuid) -> ApiResult<()> {

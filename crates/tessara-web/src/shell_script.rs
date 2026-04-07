@@ -480,6 +480,26 @@ pub const SCRIPT: &str = r#"
         }
       }
 
+      async function updateSection() {
+        try {
+          if (!token) await login();
+          const sectionId = inputValue("section-id");
+          if (!sectionId) throw new Error("Select or enter a section ID first.");
+          const payload = await request(`/api/admin/form-sections/${sectionId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              title: inputValue("section-title"),
+              position: 0
+            })
+          });
+          show(payload);
+          if (inputValue("form-version-id")) await renderForm(inputValue("form-version-id"));
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
       async function createField() {
         try {
           if (!token) await login();
@@ -502,6 +522,33 @@ pub const SCRIPT: &str = r#"
           });
           show(payload);
           await renderForm(formVersionId);
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function updateField() {
+        try {
+          if (!token) await login();
+          const fieldId = inputValue("field-id");
+          const sectionId = inputValue("section-id");
+          if (!fieldId || !sectionId) {
+            throw new Error("Select or enter a field ID and section ID first.");
+          }
+          const payload = await request(`/api/admin/form-fields/${fieldId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              section_id: sectionId,
+              key: inputValue("field-key"),
+              label: inputValue("field-label"),
+              field_type: inputValue("field-type"),
+              required: booleanInputValue("field-required"),
+              position: 0
+            })
+          });
+          show(payload);
+          if (inputValue("form-version-id")) await renderForm(inputValue("form-version-id"));
         } catch (error) {
           show(error.message);
         }
@@ -547,7 +594,7 @@ pub const SCRIPT: &str = r#"
                           ${escapeHtml(field.label)} (${escapeHtml(field.field_type)}${field.required ? ", required" : ""})
                         </label>
                         ${renderFieldInput(field)}
-                        <button type="button" onclick="useField('${escapeHtml(field.key)}', '${escapeHtml(field.label)}', '${escapeHtml(field.field_type)}')">Use Field Settings</button>
+                        <button type="button" onclick="useField('${escapeHtml(field.id)}', '${escapeHtml(field.key)}', '${escapeHtml(field.label)}', '${escapeHtml(field.field_type)}', ${field.required ? "true" : "false"})">Use Field Settings</button>
                         <button type="button" onclick="useReportField('${escapeHtml(field.key)}', '${escapeHtml(field.label)}')">Use Report Source</button>
                       </div>
                     `).join("")}
@@ -573,11 +620,13 @@ pub const SCRIPT: &str = r#"
         });
       }
 
-      function useField(fieldKey, fieldLabel = fieldKey, fieldType = "text") {
-        selectRecord("form field", fieldLabel, fieldKey, {
+      function useField(fieldId, fieldKey, fieldLabel = fieldKey, fieldType = "text", required = true) {
+        selectRecord("form field", fieldLabel, fieldId, {
+          "field-id": fieldId,
           "field-key": fieldKey,
           "field-label": fieldLabel,
-          "field-type": fieldType
+          "field-type": fieldType,
+          "field-required": required ? "true" : "false"
         });
       }
 

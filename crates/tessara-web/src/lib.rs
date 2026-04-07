@@ -64,6 +64,9 @@ mod tests {
         assert!(html.contains("Use Section"));
         assert!(html.contains("Use Field Settings"));
         assert!(html.contains("Use Report Source"));
+        assert!(html.contains("Update Section"));
+        assert!(html.contains("Update Field"));
+        assert!(html.contains("/api/admin/form-fields/${fieldId}"));
         assert!(html.contains("Add Binding"));
         assert!(html.contains("report-missing-policy"));
         assert!(html.contains("Metadata required"));

@@ -198,6 +198,7 @@ const FORM_INPUTS: &[TextInput] = &[
     ),
     TextInput::new("section-id", "Section ID", "Section ID", ""),
     TextInput::new("section-title", "Section title", "Section title", "Main"),
+    TextInput::new("field-id", "Field ID", "Field ID", ""),
     TextInput::new("field-key", "Field key", "Field key", "participants"),
     TextInput::new("field-label", "Field label", "Field label", "Participants"),
     TextInput::new("field-type", "Field type", "Field type", "number"),
@@ -208,7 +209,9 @@ const FORM_ACTIONS: &[Action] = &[
     Action::new("createForm()", "Create Form"),
     Action::new("createFormVersion()", "Create Version"),
     Action::new("createSection()", "Create Section"),
+    Action::new("updateSection()", "Update Section"),
     Action::new("createField()", "Create Field"),
+    Action::new("updateField()", "Update Field"),
     Action::new("publishVersion()", "Publish Version"),
 ];
 

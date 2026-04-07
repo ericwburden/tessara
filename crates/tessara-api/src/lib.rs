@@ -70,6 +70,14 @@ pub fn router(state: AppState) -> Router {
             post(forms::create_form_field),
         )
         .route(
+            "/api/admin/form-sections/{section_id}",
+            put(forms::update_form_section),
+        )
+        .route(
+            "/api/admin/form-fields/{field_id}",
+            put(forms::update_form_field),
+        )
+        .route(
             "/api/admin/form-versions/{form_version_id}/publish",
             post(forms::publish_form_version),
         )
