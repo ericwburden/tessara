@@ -88,6 +88,7 @@ cargo check -p tessara-api
 cargo test --workspace
 .\scripts\smoke.ps1
 .\scripts\smoke.ps1 -ComposeApi
+.\scripts\rehearse-legacy-import.ps1
 ```
 
 Testing should focus on behavior that protects domain and workflow boundaries:
@@ -98,6 +99,11 @@ assert generated boilerplate.
 The default smoke script uses Docker for Postgres and runs the API locally with
 `cargo run`. Use `.\scripts\smoke.ps1 -ComposeApi` to validate the fully
 containerized Compose deployment path, including the API image.
+
+The legacy import rehearsal script starts Docker Postgres, imports
+`fixtures/legacy-rehearsal.json` through the CLI importer, starts the API
+locally, verifies the imported report/dashboard path, and then tears down the
+test volume unless `-KeepServices` is provided.
 
 Seed the deterministic demo dataset into a running database:
 
