@@ -543,6 +543,9 @@ fn ReportAdminScreen() -> impl IntoView {
                 <label><span>"Chart type"</span><input id="chart-type" placeholder="table" value="table" /></label>
                 <label><span>"Dashboard ID"</span><input id="dashboard-id" placeholder="Selected dashboard ID" value="" /></label>
                 <label><span>"Dashboard name"</span><input id="dashboard-name" placeholder="Local Dashboard" value="Local Dashboard" /></label>
+                <label><span>"Dashboard component ID"</span><input id="dashboard-component-id" placeholder="Selected dashboard component ID" value="" /></label>
+                <label><span>"Dashboard component position"</span><input id="dashboard-component-position" placeholder="0" value="0" /></label>
+                <label><span>"Dashboard component config JSON"</span><input id="dashboard-component-config-json" placeholder="{\"title\":\"Chart\"}" value="" /></label>
             </div>
             <div class="actions">
                 <button type="button" onclick="addReportBinding()">"Add Binding"</button>
@@ -557,6 +560,9 @@ fn ReportAdminScreen() -> impl IntoView {
                 <button type="button" onclick="loadCharts()">"Load Charts"</button>
                 <button type="button" onclick="createDashboard()">"Create Dashboard"</button>
                 <button type="button" onclick="updateDashboard()">"Update Dashboard"</button>
+                <button type="button" onclick="addDashboardComponent()">"Add Component"</button>
+                <button type="button" onclick="updateDashboardComponent()">"Update Component"</button>
+                <button type="button" onclick="deleteDashboardComponent()">"Remove Component"</button>
                 <button type="button" onclick="loadDashboardById()">"Load Dashboard"</button>
             </div>
         </section>

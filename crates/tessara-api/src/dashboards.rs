@@ -225,15 +225,56 @@ pub async fn add_dashboard_component(
     .bind(dashboard_id)
     .bind(payload.chart_id)
     .bind(payload.position)
-    .bind(if payload.config.is_null() {
-        serde_json::json!({})
-    } else {
-        payload.config
-    })
+    .bind(normalize_component_config(payload.config))
     .fetch_one(&state.pool)
     .await?;
 
     Ok(Json(IdResponse { id }))
+}
+
+/// Updates an existing dashboard component.
+pub async fn update_dashboard_component(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(component_id): Path<Uuid>,
+    Json(payload): Json<AddDashboardComponentRequest>,
+) -> ApiResult<Json<IdResponse>> {
+    auth::require_capability(&state.pool, &headers, "reports:write").await?;
+    require_dashboard_component_exists(&state.pool, component_id).await?;
+    require_chart_exists(&state.pool, payload.chart_id).await?;
+
+    sqlx::query(
+        r#"
+        UPDATE dashboard_components
+        SET chart_id = $1, position = $2, config = $3
+        WHERE id = $4
+        "#,
+    )
+    .bind(payload.chart_id)
+    .bind(payload.position)
+    .bind(normalize_component_config(payload.config))
+    .bind(component_id)
+    .execute(&state.pool)
+    .await?;
+
+    Ok(Json(IdResponse { id: component_id }))
+}
+
+/// Removes a dashboard component from its dashboard.
+pub async fn delete_dashboard_component(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(component_id): Path<Uuid>,
+) -> ApiResult<Json<IdResponse>> {
+    auth::require_capability(&state.pool, &headers, "reports:write").await?;
+    require_dashboard_component_exists(&state.pool, component_id).await?;
+
+    sqlx::query("DELETE FROM dashboard_components WHERE id = $1")
+        .bind(component_id)
+        .execute(&state.pool)
+        .await?;
+
+    Ok(Json(IdResponse { id: component_id }))
 }
 
 pub async fn list_dashboards(
@@ -333,6 +374,14 @@ fn parse_chart_type(chart_type: Option<&str>) -> ApiResult<ChartType> {
         .map(|chart_type| chart_type.unwrap_or(ChartType::Table))
 }
 
+fn normalize_component_config(config: Value) -> Value {
+    if config.is_null() {
+        serde_json::json!({})
+    } else {
+        config
+    }
+}
+
 async fn require_report_exists(pool: &sqlx::PgPool, report_id: Uuid) -> ApiResult<()> {
     let exists: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM reports WHERE id = $1)")
         .bind(report_id)
@@ -366,5 +415,23 @@ async fn require_chart_exists(pool: &sqlx::PgPool, chart_id: Uuid) -> ApiResult<
         Ok(())
     } else {
         Err(ApiError::NotFound(format!("chart {chart_id}")))
+    }
+}
+
+async fn require_dashboard_component_exists(
+    pool: &sqlx::PgPool,
+    component_id: Uuid,
+) -> ApiResult<()> {
+    let exists: bool =
+        sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM dashboard_components WHERE id = $1)")
+            .bind(component_id)
+            .fetch_one(pool)
+            .await?;
+    if exists {
+        Ok(())
+    } else {
+        Err(ApiError::NotFound(format!(
+            "dashboard component {component_id}"
+        )))
     }
 }

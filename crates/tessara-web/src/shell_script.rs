@@ -49,6 +49,14 @@ pub const SCRIPT: &str = r#"
           .replaceAll("'", "&#39;");
       }
 
+      function jsStringArg(value) {
+        return String(value ?? "")
+          .replaceAll("\\", "\\\\")
+          .replaceAll("'", "\\'")
+          .replaceAll("\n", "\\n")
+          .replaceAll("\r", "\\r");
+      }
+
       function showCards(records, render) {
         document.getElementById("screen").innerHTML = records.length
           ? records.map(render).join("")
@@ -1141,15 +1149,65 @@ pub const SCRIPT: &str = r#"
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               chart_id: chartId,
-              position: 0,
-              config: { title: inputValue("chart-name") || "Chart" }
+              position: Number(inputValue("dashboard-component-position") || 0),
+              config: dashboardComponentConfig()
             })
           });
+          setInput("dashboard-component-id", payload.id);
           show(payload);
           await loadDashboardByValue(dashboardId);
         } catch (error) {
           show(error.message);
         }
+      }
+
+      async function updateDashboardComponent() {
+        try {
+          if (!token) await login();
+          const componentId = inputValue("dashboard-component-id");
+          const dashboardId = inputValue("dashboard-id");
+          const chartId = inputValue("chart-id");
+          if (!componentId || !chartId) {
+            throw new Error("Select or enter a dashboard component ID and chart ID first.");
+          }
+          const payload = await request(`/api/admin/dashboard-components/${componentId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              chart_id: chartId,
+              position: Number(inputValue("dashboard-component-position") || 0),
+              config: dashboardComponentConfig()
+            })
+          });
+          show(payload);
+          if (dashboardId) await loadDashboardByValue(dashboardId);
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function deleteDashboardComponent() {
+        try {
+          if (!token) await login();
+          const componentId = inputValue("dashboard-component-id");
+          const dashboardId = inputValue("dashboard-id");
+          if (!componentId) {
+            throw new Error("Select or enter a dashboard component ID first.");
+          }
+          const payload = await request(`/api/admin/dashboard-components/${componentId}`, {
+            method: "DELETE"
+          });
+          setInput("dashboard-component-id", "");
+          show(payload);
+          if (dashboardId) await loadDashboardByValue(dashboardId);
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      function dashboardComponentConfig() {
+        const configJson = inputValue("dashboard-component-config-json");
+        return configJson ? JSON.parse(configJson) : { title: inputValue("chart-name") || "Chart" };
       }
 
       async function loadDashboards() {
@@ -1274,6 +1332,7 @@ pub const SCRIPT: &str = r#"
               <h3>${escapeHtml(component.chart.name)}</h3>
               <p>${escapeHtml(component.chart.chart_type)} chart</p>
               <p class="muted">Report ${escapeHtml(component.chart.report_name || component.chart.report_id || "None")}${component.chart.report_form_name ? ` on ${escapeHtml(component.chart.report_form_name)}` : ""}</p>
+              <button type="button" onclick="useDashboardComponent('${escapeHtml(component.id)}', '${escapeHtml(component.chart.id)}', ${component.position}, '${escapeHtml(jsStringArg(JSON.stringify(component.config)))}')">Use Component</button>
               <ul>
                 ${rows.map((row) => `
                   <li>${escapeHtml(row.node_name || "Unknown node")}: ${escapeHtml(row.logical_key)} = ${escapeHtml(row.field_value)}</li>
@@ -1285,6 +1344,15 @@ pub const SCRIPT: &str = r#"
         document.getElementById("screen").innerHTML = cards.length
           ? cards.join("")
           : '<p class="muted">No dashboard components found.</p>';
+      }
+
+      function useDashboardComponent(componentId, chartId, position, configJson) {
+        selectRecord("dashboard component", componentId, componentId, {
+          "dashboard-component-id": componentId,
+          "chart-id": chartId,
+          "dashboard-component-position": String(position),
+          "dashboard-component-config-json": configJson
+        });
       }
 
       async function loadReportById() {

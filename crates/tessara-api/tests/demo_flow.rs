@@ -1337,6 +1337,94 @@ async fn reporting_and_dashboard_builders_return_diagnostics_for_invalid_referen
     )
     .await;
     assert_eq!(missing_update_dashboard.0, StatusCode::NOT_FOUND);
+    let component = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            &format!("/api/admin/dashboards/{dashboard_id}/components"),
+            &token,
+            Some(json!({
+                "chart_id": valid_chart_id,
+                "position": 2,
+                "config": {"title": "Initial chart"}
+            })),
+        ),
+    )
+    .await;
+    let component_id = id_from(&component);
+    request_json(
+        app.clone(),
+        authorized_request(
+            "PUT",
+            &format!("/api/admin/dashboard-components/{component_id}"),
+            &token,
+            Some(json!({
+                "chart_id": valid_chart_id,
+                "position": 1,
+                "config": {"title": "Updated chart"}
+            })),
+        ),
+    )
+    .await;
+    let dashboard_with_component = request_json(
+        app.clone(),
+        Request::builder()
+            .method("GET")
+            .uri(format!("/api/dashboards/{dashboard_id}"))
+            .body(Body::empty())
+            .expect("valid dashboard request"),
+    )
+    .await;
+    assert!(
+        dashboard_with_component["components"]
+            .as_array()
+            .expect("dashboard should include components")
+            .iter()
+            .any(|component| component["id"] == component_id.to_string()
+                && component["position"] == 1
+                && component["config"]["title"] == "Updated chart")
+    );
+    let missing_update_component = request_status_and_json(
+        app.clone(),
+        authorized_request(
+            "PUT",
+            &format!("/api/admin/dashboard-components/{}", Uuid::new_v4()),
+            &token,
+            Some(json!({
+                "chart_id": valid_chart_id,
+                "position": 0,
+                "config": {}
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(missing_update_component.0, StatusCode::NOT_FOUND);
+    request_json(
+        app.clone(),
+        authorized_request(
+            "DELETE",
+            &format!("/api/admin/dashboard-components/{component_id}"),
+            &token,
+            None,
+        ),
+    )
+    .await;
+    let dashboard_after_delete = request_json(
+        app.clone(),
+        Request::builder()
+            .method("GET")
+            .uri(format!("/api/dashboards/{dashboard_id}"))
+            .body(Body::empty())
+            .expect("valid dashboard request"),
+    )
+    .await;
+    assert!(
+        dashboard_after_delete["components"]
+            .as_array()
+            .expect("dashboard should include components")
+            .iter()
+            .all(|component| component["id"] != component_id.to_string())
+    );
     let missing_component_dashboard = request_status_and_json(
         app,
         authorized_request(

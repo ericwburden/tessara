@@ -90,6 +90,7 @@ mod tests {
         assert!(html.contains("/api/admin/reports/${reportId}"));
         assert!(html.contains("/api/admin/charts/${chartId}"));
         assert!(html.contains("/api/admin/dashboards/${dashboardId}"));
+        assert!(html.contains("/api/admin/dashboard-components/${componentId}"));
         assert!(html.contains("/api/admin/charts"));
         assert!(html.contains("/api/charts"));
         assert!(html.contains("Load Charts"));
@@ -188,6 +189,8 @@ mod tests {
         assert!(html.contains("Update Report"));
         assert!(html.contains("Update Chart"));
         assert!(html.contains("Update Dashboard"));
+        assert!(html.contains("Update Component"));
+        assert!(html.contains("Remove Component"));
         assert!(html.contains("Open Submission Workspace"));
         assert!(html.contains("Open Migration Workbench"));
         assert!(html.contains("Open Reporting Workspace"));

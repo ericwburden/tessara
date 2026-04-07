@@ -298,6 +298,24 @@ const REPORTING_INPUTS: &[TextInput] = &[
         "Dashboard ID from seed or import output",
         "",
     ),
+    TextInput::new(
+        "dashboard-component-id",
+        "Dashboard component ID",
+        "Selected dashboard component ID",
+        "",
+    ),
+    TextInput::new(
+        "dashboard-component-position",
+        "Dashboard component position",
+        "Dashboard component position",
+        "0",
+    ),
+    TextInput::new(
+        "dashboard-component-config-json",
+        "Dashboard component config JSON",
+        "Optional dashboard component config JSON",
+        "",
+    ),
 ];
 
 const REPORTING_ACTIONS: &[Action] = &[
@@ -313,6 +331,8 @@ const REPORTING_ACTIONS: &[Action] = &[
     Action::new("createDashboard()", "Create Dashboard"),
     Action::new("updateDashboard()", "Update Dashboard"),
     Action::new("addDashboardComponent()", "Add Component"),
+    Action::new("updateDashboardComponent()", "Update Component"),
+    Action::new("deleteDashboardComponent()", "Remove Component"),
     Action::new("loadDashboardById()", "Load Dashboard By ID"),
 ];
 

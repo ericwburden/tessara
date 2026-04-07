@@ -170,6 +170,11 @@ pub fn router(state: AppState) -> Router {
             post(dashboards::add_dashboard_component),
         )
         .route(
+            "/api/admin/dashboard-components/{component_id}",
+            put(dashboards::update_dashboard_component)
+                .delete(dashboards::delete_dashboard_component),
+        )
+        .route(
             "/api/dashboards/{dashboard_id}",
             get(dashboards::get_dashboard),
         )
