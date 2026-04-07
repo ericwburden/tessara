@@ -269,6 +269,49 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
             .iter()
             .any(|event| event["event_type"] == "seed_demo")
     );
+    let draft = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/submissions/drafts",
+            &token,
+            Some(json!({
+                "form_version_id": seed["form_version_id"],
+                "node_id": seed["organization_node_id"]
+            })),
+        ),
+    )
+    .await;
+    let draft_id = draft["id"]
+        .as_str()
+        .expect("draft response should contain id");
+    request_json(
+        app.clone(),
+        authorized_request(
+            "DELETE",
+            &format!("/api/submissions/{draft_id}"),
+            &token,
+            None,
+        ),
+    )
+    .await;
+    let deleted_draft = request_status_and_json(
+        app.clone(),
+        authorized_request("GET", &format!("/api/submissions/{draft_id}"), &token, None),
+    )
+    .await;
+    assert_eq!(deleted_draft.0, StatusCode::NOT_FOUND);
+    let delete_submitted = request_status_and_json(
+        app.clone(),
+        authorized_request(
+            "DELETE",
+            &format!("/api/submissions/{submission_id}"),
+            &token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(delete_submitted.0, StatusCode::BAD_REQUEST);
 
     let report_id = seed["report_id"]
         .as_str()

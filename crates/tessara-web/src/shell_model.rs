@@ -243,6 +243,7 @@ const SUBMISSION_ACTIONS: &[Action] = &[
     Action::new("saveRenderedFormValues()", "Save Rendered Values"),
     Action::new("saveParticipants()", "Save Participants"),
     Action::new("submitDraft()", "Submit Draft"),
+    Action::new("discardDraft()", "Discard Draft"),
     Action::new("loadSubmissionById()", "Load Submission By ID"),
     Action::new("refreshAnalytics()", "Refresh Analytics"),
 ];

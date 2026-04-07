@@ -152,6 +152,7 @@ mod tests {
         assert!(html.contains("Create Draft"));
         assert!(html.contains("Save Values"));
         assert!(html.contains("Submit"));
+        assert!(html.contains("Discard Draft"));
         assert!(html.contains("Start Demo Submission"));
         assert!(html.contains("startDemoSubmissionFlow"));
         assert!(html.contains("Review Submissions"));
@@ -167,6 +168,8 @@ mod tests {
         assert!(html.contains("/api/app/summary"));
         assert!(html.contains("/api/forms/published"));
         assert!(html.contains("/api/submissions/drafts"));
+        assert!(html.contains("DELETE"));
+        assert!(html.contains("submission-status-filter"));
         assert!(html.contains("/api/reports"));
         assert!(html.contains("sessionStorage"));
         assert!(html.contains("tessara.devToken"));

@@ -112,7 +112,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/submissions", get(submissions::list_submissions))
         .route(
             "/api/submissions/{submission_id}",
-            get(submissions::get_submission),
+            get(submissions::get_submission).delete(submissions::delete_draft_submission),
         )
         .route(
             "/api/submissions/{submission_id}/values",

@@ -872,6 +872,20 @@ pub const SCRIPT: &str = r#"
         }
       }
 
+      async function discardDraft() {
+        try {
+          if (!token) await login();
+          const submissionId = inputValue("submission-id");
+          if (!submissionId) throw new Error("Create or enter a draft submission first.");
+          const payload = await request(`/api/submissions/${submissionId}`, { method: "DELETE" });
+          setInput("submission-id", "");
+          show(payload);
+          await loadSubmissions();
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
       async function refreshAnalytics() {
         try {
           if (!token) await login();

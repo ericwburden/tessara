@@ -413,6 +413,23 @@ pub async fn submit_submission(
     Ok(Json(IdResponse { id: submission_id }))
 }
 
+/// Deletes an unsubmitted draft submission.
+pub async fn delete_draft_submission(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(submission_id): Path<Uuid>,
+) -> ApiResult<Json<IdResponse>> {
+    auth::require_capability(&state.pool, &headers, "submissions:write").await?;
+    require_draft_submission(&state.pool, submission_id).await?;
+
+    sqlx::query("DELETE FROM submissions WHERE id = $1")
+        .bind(submission_id)
+        .execute(&state.pool)
+        .await?;
+
+    Ok(Json(IdResponse { id: submission_id }))
+}
+
 fn parse_submission_status_filter(status: Option<String>) -> ApiResult<Option<String>> {
     match status.as_deref() {
         None | Some("") => Ok(None),
