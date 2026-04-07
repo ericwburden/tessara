@@ -66,6 +66,24 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
                 && field["node_type_name"] == "Organization"
                 && field["required"] == true)
     );
+    let nodes = request_json(
+        app.clone(),
+        Request::builder()
+            .method("GET")
+            .uri("/api/nodes")
+            .body(Body::empty())
+            .expect("valid nodes request"),
+    )
+    .await;
+    assert!(
+        nodes
+            .as_array()
+            .expect("nodes response should be an array")
+            .iter()
+            .any(|node| node["name"] == "Demo Organization"
+                && node["node_type_name"] == "Organization"
+                && node["metadata"]["region"] == "North")
+    );
 
     let forms = request_json(
         app.clone(),

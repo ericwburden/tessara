@@ -42,6 +42,10 @@ pub fn admin_shell_html(style: &str, script: &str) -> String {
           <input id="metadata-key" placeholder="Metadata key" value="region">
           <input id="metadata-label" placeholder="Metadata label" value="Region">
           <input id="metadata-field-type" placeholder="Metadata field type" value="text">
+          <input id="node-type-id" placeholder="Node type ID for node creation">
+          <input id="parent-node-id" placeholder="Optional parent node ID">
+          <input id="node-name" placeholder="Node name" value="Local Organization">
+          <input id="node-metadata-json" placeholder='Node metadata JSON, e.g. {{"region":"North"}}' value='{{"region":"North"}}'>
           <input id="form-name" placeholder="Form name">
           <input id="form-slug" placeholder="Form slug">
           <input id="form-scope-node-type-id" placeholder="Optional form scope node type ID">
@@ -71,6 +75,7 @@ pub fn admin_shell_html(style: &str, script: &str) -> String {
             <button type="button" onclick="createRelationship()">Create Relationship</button>
             <button type="button" onclick="loadMetadataFields()">Load Metadata Fields</button>
             <button type="button" onclick="createMetadataField()">Create Metadata Field</button>
+            <button type="button" onclick="createNode()">Create Node</button>
             <button type="button" onclick="createForm()">Create Form</button>
             <button type="button" onclick="createFormVersion()">Create Version</button>
             <button type="button" onclick="createSection()">Create Section</button>

@@ -30,6 +30,11 @@ pub const SCRIPT: &str = r#"
         return document.getElementById(id).value.trim();
       }
 
+      function jsonInputValue(id) {
+        const value = inputValue(id);
+        return value ? JSON.parse(value) : {};
+      }
+
       async function request(path, options = {}) {
         const headers = { ...(options.headers || {}) };
         if (token) headers.Authorization = `Bearer ${token}`;
@@ -86,6 +91,7 @@ pub const SCRIPT: &str = r#"
               <h3>${escapeHtml(nodeType.name)}</h3>
               <p class="muted">${escapeHtml(nodeType.slug)}</p>
               <p>${nodeType.node_count} nodes</p>
+              <button type="button" onclick="useNodeType('${escapeHtml(nodeType.id)}')">Use Node Type</button>
               <code>${escapeHtml(nodeType.id)}</code>
             </article>
           `);
@@ -105,11 +111,19 @@ pub const SCRIPT: &str = r#"
               slug: inputValue("node-type-slug")
             })
           });
+          document.getElementById("node-type-id").value = payload.id;
+          document.getElementById("metadata-node-type-id").value = payload.id;
           show(payload);
           await loadNodeTypes();
         } catch (error) {
           show(error.message);
         }
+      }
+
+      function useNodeType(nodeTypeId) {
+        document.getElementById("node-type-id").value = nodeTypeId;
+        document.getElementById("metadata-node-type-id").value = nodeTypeId;
+        document.getElementById("form-scope-node-type-id").value = nodeTypeId;
       }
 
       async function loadRelationships() {
@@ -180,6 +194,28 @@ pub const SCRIPT: &str = r#"
           });
           show(payload);
           await loadMetadataFields();
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function createNode() {
+        try {
+          if (!token) await login();
+          const parentNodeId = inputValue("parent-node-id");
+          const payload = await request("/api/admin/nodes", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              node_type_id: inputValue("node-type-id"),
+              parent_node_id: parentNodeId || null,
+              name: inputValue("node-name"),
+              metadata: jsonInputValue("node-metadata-json")
+            })
+          });
+          document.getElementById("node-id").value = payload.id;
+          show(payload);
+          await loadNodes();
         } catch (error) {
           show(error.message);
         }
@@ -354,7 +390,8 @@ pub const SCRIPT: &str = r#"
           showCards(payload, (node) => `
             <article class="card">
               <h3>${escapeHtml(node.name)}</h3>
-              <p class="muted">Node type ${escapeHtml(node.node_type_id)}</p>
+              <p>${escapeHtml(node.node_type_name)}${node.parent_node_name ? ` under ${escapeHtml(node.parent_node_name)}` : ""}</p>
+              <p class="muted">${escapeHtml(JSON.stringify(node.metadata))}</p>
               <code>${escapeHtml(node.id)}</code>
             </article>
           `);

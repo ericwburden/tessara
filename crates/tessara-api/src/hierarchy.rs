@@ -52,8 +52,11 @@ pub struct IdResponse {
 pub struct NodeResponse {
     id: Uuid,
     node_type_id: Uuid,
+    node_type_name: String,
     parent_node_id: Option<Uuid>,
+    parent_node_name: Option<String>,
     name: String,
+    metadata: Value,
 }
 
 #[derive(Serialize)]
@@ -392,9 +395,35 @@ pub async fn create_node(
 pub async fn list_nodes(State(state): State<AppState>) -> ApiResult<Json<Vec<NodeResponse>>> {
     let rows = sqlx::query(
         r#"
-        SELECT id, node_type_id, parent_node_id, name
+        SELECT
+            nodes.id,
+            nodes.node_type_id,
+            node_types.name AS node_type_name,
+            nodes.parent_node_id,
+            parent_nodes.name AS parent_node_name,
+            nodes.name,
+            COALESCE(
+                jsonb_object_agg(
+                    node_metadata_field_definitions.key,
+                    node_metadata_values.value
+                ) FILTER (WHERE node_metadata_field_definitions.key IS NOT NULL),
+                '{}'::jsonb
+            ) AS metadata
         FROM nodes
-        ORDER BY created_at, name
+        JOIN node_types ON node_types.id = nodes.node_type_id
+        LEFT JOIN nodes AS parent_nodes ON parent_nodes.id = nodes.parent_node_id
+        LEFT JOIN node_metadata_values ON node_metadata_values.node_id = nodes.id
+        LEFT JOIN node_metadata_field_definitions
+            ON node_metadata_field_definitions.id = node_metadata_values.field_definition_id
+        GROUP BY
+            nodes.id,
+            nodes.node_type_id,
+            node_types.name,
+            nodes.parent_node_id,
+            parent_nodes.name,
+            nodes.name,
+            nodes.created_at
+        ORDER BY nodes.created_at, nodes.name
         "#,
     )
     .fetch_all(&state.pool)
@@ -406,8 +435,11 @@ pub async fn list_nodes(State(state): State<AppState>) -> ApiResult<Json<Vec<Nod
             Ok(NodeResponse {
                 id: row.try_get("id")?,
                 node_type_id: row.try_get("node_type_id")?,
+                node_type_name: row.try_get("node_type_name")?,
                 parent_node_id: row.try_get("parent_node_id")?,
+                parent_node_name: row.try_get("parent_node_name")?,
                 name: row.try_get("name")?,
+                metadata: row.try_get("metadata")?,
             })
         })
         .collect::<Result<Vec<_>, sqlx::Error>>()?;
