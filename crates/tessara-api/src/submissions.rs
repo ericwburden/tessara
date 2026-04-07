@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use axum::{
     Json,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::HeaderMap,
 };
 use serde::{Deserialize, Serialize};
@@ -33,9 +33,17 @@ pub struct SaveSubmissionValuesRequest {
     values: HashMap<String, Value>,
 }
 
+#[derive(Deserialize)]
+pub struct ListSubmissionsQuery {
+    status: Option<String>,
+    form_id: Option<Uuid>,
+    node_id: Option<Uuid>,
+}
+
 #[derive(Serialize)]
 pub struct SubmissionSummary {
     id: Uuid,
+    form_id: Uuid,
     form_version_id: Uuid,
     form_name: String,
     version_label: String,
@@ -43,6 +51,7 @@ pub struct SubmissionSummary {
     node_name: String,
     status: String,
     value_count: i64,
+    created_at: chrono::DateTime<chrono::Utc>,
     submitted_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
@@ -66,7 +75,8 @@ pub struct SubmissionValueDetail {
     key: String,
     label: String,
     field_type: String,
-    value: Value,
+    required: bool,
+    value: Option<Value>,
 }
 
 #[derive(Serialize)]
@@ -139,19 +149,23 @@ pub async fn create_draft(
 pub async fn list_submissions(
     State(state): State<AppState>,
     headers: HeaderMap,
+    Query(query): Query<ListSubmissionsQuery>,
 ) -> ApiResult<Json<Vec<SubmissionSummary>>> {
     auth::require_capability(&state.pool, &headers, "submissions:write").await?;
+    let status = parse_submission_status_filter(query.status)?;
 
     let rows = sqlx::query(
         r#"
         SELECT
             submissions.id,
+            forms.id AS form_id,
             submissions.form_version_id,
             forms.name AS form_name,
             form_versions.version_label,
             submissions.node_id,
             nodes.name AS node_name,
             submissions.status::text AS status,
+            submissions.created_at,
             submissions.submitted_at,
             COUNT(submission_values.field_id) AS value_count
         FROM submissions
@@ -159,19 +173,27 @@ pub async fn list_submissions(
         JOIN forms ON forms.id = form_versions.form_id
         JOIN nodes ON nodes.id = submissions.node_id
         LEFT JOIN submission_values ON submission_values.submission_id = submissions.id
+        WHERE ($1::submission_status IS NULL OR submissions.status = $1::submission_status)
+          AND ($2::uuid IS NULL OR forms.id = $2)
+          AND ($3::uuid IS NULL OR submissions.node_id = $3)
         GROUP BY
             submissions.id,
+            forms.id,
             submissions.form_version_id,
             forms.name,
             form_versions.version_label,
             submissions.node_id,
             nodes.name,
             submissions.status,
+            submissions.created_at,
             submissions.submitted_at,
             submissions.created_at
         ORDER BY submissions.created_at, submissions.id
         "#,
     )
+    .bind(status)
+    .bind(query.form_id)
+    .bind(query.node_id)
     .fetch_all(&state.pool)
     .await?;
 
@@ -180,6 +202,7 @@ pub async fn list_submissions(
         .map(|row| {
             Ok(SubmissionSummary {
                 id: row.try_get("id")?,
+                form_id: row.try_get("form_id")?,
                 form_version_id: row.try_get("form_version_id")?,
                 form_name: row.try_get("form_name")?,
                 version_label: row.try_get("version_label")?,
@@ -187,6 +210,7 @@ pub async fn list_submissions(
                 node_name: row.try_get("node_name")?,
                 status: row.try_get("status")?,
                 value_count: row.try_get("value_count")?,
+                created_at: row.try_get("created_at")?,
                 submitted_at: row.try_get("submitted_at")?,
             })
         })
@@ -233,6 +257,7 @@ pub async fn get_submission(
             form_fields.key,
             form_fields.label,
             form_fields.field_type::text AS field_type,
+            form_fields.required,
             submission_values.value
         FROM form_fields
         LEFT JOIN submission_values
@@ -249,15 +274,14 @@ pub async fn get_submission(
 
     let mut values = Vec::new();
     for value_row in value_rows {
-        if let Some(value) = value_row.try_get("value")? {
-            values.push(SubmissionValueDetail {
-                field_id: value_row.try_get("field_id")?,
-                key: value_row.try_get("key")?,
-                label: value_row.try_get("label")?,
-                field_type: value_row.try_get("field_type")?,
-                value,
-            });
-        }
+        values.push(SubmissionValueDetail {
+            field_id: value_row.try_get("field_id")?,
+            key: value_row.try_get("key")?,
+            label: value_row.try_get("label")?,
+            field_type: value_row.try_get("field_type")?,
+            required: value_row.try_get("required")?,
+            value: value_row.try_get("value")?,
+        });
     }
 
     let audit_rows = sqlx::query(
@@ -387,6 +411,16 @@ pub async fn submit_submission(
     .await?;
 
     Ok(Json(IdResponse { id: submission_id }))
+}
+
+fn parse_submission_status_filter(status: Option<String>) -> ApiResult<Option<String>> {
+    match status.as_deref() {
+        None | Some("") => Ok(None),
+        Some("draft" | "submitted") => Ok(status),
+        Some(value) => Err(ApiError::BadRequest(format!(
+            "unsupported submission status filter '{value}'"
+        ))),
+    }
 }
 
 async fn require_draft_submission(pool: &sqlx::PgPool, submission_id: Uuid) -> ApiResult<Uuid> {

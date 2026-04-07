@@ -230,6 +230,12 @@ const SUBMISSION_INPUTS: &[TextInput] = &[
         "Participants value",
         "42",
     ),
+    TextInput::new(
+        "submission-status-filter",
+        "Submission status filter",
+        "draft or submitted",
+        "",
+    ),
 ];
 
 const SUBMISSION_ACTIONS: &[Action] = &[

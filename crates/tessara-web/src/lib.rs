@@ -98,6 +98,7 @@ mod tests {
         assert!(html.contains("/api/form-versions/"));
         assert!(html.contains("/api/forms/published"));
         assert!(html.contains("/api/submissions"));
+        assert!(html.contains("submission-status-filter"));
         assert!(html.contains("/api/submissions/drafts"));
         assert!(html.contains("/api/submissions/${submissionId}"));
         assert!(html.contains("Save Rendered Values"));

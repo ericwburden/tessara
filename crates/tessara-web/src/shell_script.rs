@@ -728,7 +728,7 @@ pub const SCRIPT: &str = r#"
       async function loadSubmissions() {
         try {
           if (!token) await login();
-          const payload = await request("/api/submissions");
+          const payload = await request(submissionsUrl());
           show(payload);
           showCards(payload, (submission) => `
             <article class="card">
@@ -736,6 +736,7 @@ pub const SCRIPT: &str = r#"
               <p>${escapeHtml(submission.version_label)} on ${escapeHtml(submission.node_name)}</p>
               <p>Status: ${escapeHtml(submission.status)}</p>
               <p>${submission.value_count} saved values</p>
+              <p class="muted">Created ${escapeHtml(submission.created_at)}${submission.submitted_at ? `; submitted ${escapeHtml(submission.submitted_at)}` : ""}</p>
               <button type="button" onclick="useSubmission('${escapeHtml(submission.id)}', '${escapeHtml(submission.form_name)} ${escapeHtml(submission.version_label)}')">Use Submission</button>
               <button type="button" onclick="loadSubmissionByValue('${escapeHtml(submission.id)}')">Open</button>
               <code>${escapeHtml(submission.id)}</code>
@@ -744,6 +745,15 @@ pub const SCRIPT: &str = r#"
         } catch (error) {
           show(error.message);
         }
+      }
+
+      function submissionsUrl() {
+        const params = new URLSearchParams();
+        if (inputValue("submission-status-filter")) params.set("status", inputValue("submission-status-filter"));
+        if (inputValue("form-id")) params.set("form_id", inputValue("form-id"));
+        if (inputValue("node-id")) params.set("node_id", inputValue("node-id"));
+        const query = params.toString();
+        return query ? `/api/submissions?${query}` : "/api/submissions";
       }
 
       async function createDraft() {
@@ -799,7 +809,7 @@ pub const SCRIPT: &str = r#"
             <h4>Values</h4>
             <ul>
               ${payload.values.map((value) => `
-                <li>${escapeHtml(value.label)}: ${escapeHtml(JSON.stringify(value.value))}</li>
+                <li>${escapeHtml(value.label)}${value.required ? " *" : ""}: ${value.value === null ? "<span class=\"muted\">missing</span>" : escapeHtml(JSON.stringify(value.value))}</li>
               `).join("")}
             </ul>
             <h4>Audit</h4>

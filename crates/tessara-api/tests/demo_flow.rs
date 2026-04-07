@@ -206,6 +206,39 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
                 && submission["status"] == "submitted"
                 && submission["value_count"] == 1)
     );
+    let filtered_submissions = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!(
+                "/api/submissions?status=submitted&form_id={}&node_id={}",
+                seed["form_id"]
+                    .as_str()
+                    .expect("seed should include form id"),
+                seed["organization_node_id"]
+                    .as_str()
+                    .expect("seed should include organization node id")
+            ),
+            &token,
+            None,
+        ),
+    )
+    .await;
+    assert!(
+        filtered_submissions
+            .as_array()
+            .expect("filtered submissions response should be an array")
+            .iter()
+            .any(|submission| submission["id"] == seed["submission_id"]
+                && submission["form_id"] == seed["form_id"]
+                && submission["created_at"].as_str().is_some())
+    );
+    let invalid_submission_status = request_status_and_json(
+        app.clone(),
+        authorized_request("GET", "/api/submissions?status=archived", &token, None),
+    )
+    .await;
+    assert_eq!(invalid_submission_status.0, StatusCode::BAD_REQUEST);
     let submission_id = seed["submission_id"]
         .as_str()
         .expect("seed response should contain submission id");
@@ -225,7 +258,9 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
             .as_array()
             .expect("submission detail should include values")
             .iter()
-            .any(|value| value["key"] == "participants" && value["value"] == 42)
+            .any(|value| value["key"] == "participants"
+                && value["required"] == true
+                && value["value"] == 42)
     );
     assert!(
         submission_detail["audit_events"]

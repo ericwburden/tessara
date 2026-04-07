@@ -414,6 +414,12 @@ fn ReviewScreen() -> impl IntoView {
             <p class="muted">
                 "Inspect saved and submitted responses with their audit trail."
             </p>
+            <div class="inputs">
+                <label>
+                    <span>"Submission status filter"</span>
+                    <input id="submission-status-filter" placeholder="draft or submitted" value="" />
+                </label>
+            </div>
             <div class="actions">
                 <button type="button" onclick="loadSubmissions()">"Load Submissions"</button>
                 <button type="button" onclick="loadSubmissionById()">"Open Selected Submission"</button>
