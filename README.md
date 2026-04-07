@@ -126,6 +126,15 @@ The API also serves the first local shell at:
 http://localhost:8080/
 ```
 
+The local shell now covers the main demo workflow surfaces:
+
+- Admin read screens for hierarchy types, forms, reports, dashboards, nodes,
+  and submissions.
+- Admin builder controls for node types, forms, form versions, sections, fields,
+  reports, charts, dashboards, and dashboard components.
+- External workflow controls for draft creation, value save, submit, analytics
+  refresh, report execution, and dashboard inspection.
+
 ## Migration Planning
 
 Slice 9 legacy mapping is tracked in
@@ -153,15 +162,18 @@ The first implementation milestone should prove an end-to-end thread:
 - Slice 4: draft creation, draft value save, submit transition, audit events.
 - Slice 5: manual analytics projection refresh into `analytics.*` tables.
 - Slice 6: report definition and DataFusion-backed table execution.
-- Slice 7 start: dashboard/chart endpoints and a minimal local admin shell.
+- Slice 7: dashboard/chart endpoints, report/dashboard discovery, and local
+  dashboard inspection.
 - Slice 8 start: builder lifecycle hardening, diagnostics, and admin auth tests.
 - Slice 9 start: legacy behavior inventory and target Tessara mapping document.
 - Slice 10 start: fixture validation, CLI import, clean Docker-backed rehearsal,
   and imported report/dashboard inspection.
+- Next phase start: browser shell screens for admin builder, external
+  submission workflow, and report/dashboard builder workflows.
 
 ## Next Phase
 
 The initial roadmap pass now proves the full migration thread from configurable
 hierarchy through import rehearsal and reporting. The next milestone should
-turn the API-first shell into real admin/external screens, then continue moving
+continue turning the API-first shell into a structured frontend and keep moving
 stable domain contracts out of `tessara-api` into the domain crates.
