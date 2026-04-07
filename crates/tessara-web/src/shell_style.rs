@@ -43,6 +43,12 @@ pub const STYLE: &str = r#"
         background: #111827;
         padding: 16px;
       }
+      .test-guide {
+        display: grid;
+        gap: 8px;
+        margin: 16px 0 0;
+        padding-left: 24px;
+      }
       .cards {
         display: grid;
         gap: 12px;

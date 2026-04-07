@@ -40,6 +40,7 @@ fn AdminShell() -> impl IntoView {
                 </p>
                 <WorkflowSectionView section=&PRIMARY_SECTION/>
             </section>
+            <UserTestingGuide/>
             <section class="panel">
                 <h2>"Builder Workflows"</h2>
                 <p class="muted">
@@ -62,6 +63,26 @@ fn AdminShell() -> impl IntoView {
                 <pre id="output">"No API calls yet."</pre>
             </section>
         </main>
+    }
+}
+
+#[component]
+fn UserTestingGuide() -> impl IntoView {
+    view! {
+        <section class="panel">
+            <h2>"User Testing Guide"</h2>
+            <p class="muted">
+                "Recommended path for the current Docker Compose test deployment."
+            </p>
+            <ol class="test-guide">
+                <li>"Click Log In to create a development admin session."</li>
+                <li>"Click Seed Demo to populate the deterministic hierarchy, form, submission, report, and dashboard."</li>
+                <li>"Open Hierarchy Screen, Forms Screen, Load Submissions, Load Reports, and Load Dashboards to inspect seeded records."</li>
+                <li>"Use the Form Builder and Submission Workflow sections to create a new form path manually."</li>
+                <li>"Use Reports and Dashboards to create and inspect report/chart/dashboard configuration."</li>
+                <li>"Paste a legacy fixture into the Migration Workbench to validate migration inputs."</li>
+            </ol>
+        </section>
     }
 }
 

@@ -73,5 +73,7 @@ mod tests {
         assert!(html.contains("Dashboard ID from seed or import output"));
         assert!(html.contains("Hierarchy Screen"));
         assert!(html.contains("Forms Screen"));
+        assert!(html.contains("User Testing Guide"));
+        assert!(html.contains("Recommended path for the current Docker Compose test deployment."));
     }
 }
