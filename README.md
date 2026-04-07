@@ -101,10 +101,11 @@ The default smoke script uses Docker for Postgres and runs the API locally with
 `cargo run`. Use `.\scripts\smoke.ps1 -ComposeApi` to validate the fully
 containerized Compose deployment path, including the API image.
 
-The legacy import rehearsal script starts Docker Postgres, imports
-`fixtures/legacy-rehearsal.json` through the CLI importer, starts the API
-locally, verifies the imported report/dashboard path, and then tears down the
-test volume unless `-KeepServices` is provided.
+The legacy import rehearsal script validates and dry-runs
+`fixtures/legacy-rehearsal.json`, starts Docker Postgres, imports the fixture
+through the CLI importer, starts the API locally, verifies the imported
+report/dashboard path, and then tears down the test volume unless
+`-KeepServices` is provided.
 
 Seed the deterministic demo dataset into a running database:
 

@@ -153,7 +153,7 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
             .as_array()
             .expect("submission detail should include audit events")
             .iter()
-            .any(|event| event["event_type"] == "submit")
+            .any(|event| event["event_type"] == "seed_demo")
     );
 
     let report_id = seed["report_id"]

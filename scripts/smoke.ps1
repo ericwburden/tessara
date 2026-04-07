@@ -118,7 +118,7 @@ try {
     }
 
     $shell = Invoke-RestMethod -Uri "$baseUrl/" -TimeoutSec 30
-    if (-not ($shell -like "*Admin Shell*") -or -not ($shell -like "*Create Draft*")) {
+    if (-not ($shell -like "*Admin Shell*") -or -not ($shell -like "*Create Draft*") -or -not ($shell -like "*Validate Legacy Fixture*")) {
         throw "Expected local shell HTML to include admin and submission controls"
     }
 

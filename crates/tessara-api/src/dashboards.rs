@@ -112,7 +112,7 @@ pub async fn list_charts(
         r#"
         SELECT id, name, chart_type::text AS chart_type, report_id
         FROM charts
-        ORDER BY name, created_at
+        ORDER BY name, id
         "#,
     )
     .fetch_all(&state.pool)

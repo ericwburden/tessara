@@ -59,24 +59,33 @@ try {
         throw "Legacy fixture validation failed before import: $validationJson"
     }
 
+    $dryRunJson = cargo run -q -p tessara-api -- dry-run-legacy-fixture $resolvedFixture.Path
+    Assert-LastExitCode "cargo run dry-run-legacy-fixture"
+    $dryRun = $dryRunJson | ConvertFrom-Json
+
+    if (-not $dryRun.would_import) {
+        throw "Legacy fixture dry run reported it would not import: $dryRunJson"
+    }
+
     docker compose up -d --wait postgres | Out-Host
     Assert-LastExitCode "docker compose up"
 
     $databaseName = "tessara_import_rehearsal"
-    $databaseDeadline = (Get-Date).AddSeconds(120)
-    $dbExitCode = 1
+    $postgresDeadline = (Get-Date).AddSeconds(120)
     do {
-        $dbExists = docker compose exec -T postgres psql -U tessara -d postgres -tc "SELECT 1 FROM pg_database WHERE datname = '$databaseName'" 2>&1
-        $dbExitCode = $LASTEXITCODE
-        if ($dbExitCode -eq 0) {
+        docker compose exec -T postgres pg_isready -U tessara -d postgres | Out-Null
+        if ($LASTEXITCODE -eq 0) {
             break
         }
         Start-Sleep -Seconds 2
-    } while ((Get-Date) -lt $databaseDeadline)
+    } while ((Get-Date) -lt $postgresDeadline)
 
-    if ((Get-Date) -ge $databaseDeadline -and $dbExitCode -ne 0) {
-        throw "Timed out waiting for Postgres SQL queries"
+    if ((Get-Date) -ge $postgresDeadline) {
+        throw "Timed out waiting for Postgres readiness"
     }
+
+    $dbExists = docker compose exec -T postgres psql -U tessara -d postgres -tc "SELECT 1 FROM pg_database WHERE datname = '$databaseName'"
+    Assert-LastExitCode "checking $databaseName database"
 
     if (-not ($dbExists | Select-String "1" -Quiet)) {
         docker compose exec -T postgres psql -U tessara -d postgres -c "CREATE DATABASE $databaseName" | Out-Host
@@ -85,7 +94,7 @@ try {
 
     $env:DATABASE_URL = "postgres://tessara:tessara@localhost:5432/$databaseName"
     $env:TESSARA_BIND_ADDR = "127.0.0.1:8081"
-    $env:RUST_LOG = "tessara_api=debug,sqlx=warn"
+    $env:RUST_LOG = "error"
 
     $summaryJson = cargo run -q -p tessara-api -- import-legacy-fixture $resolvedFixture.Path
     Assert-LastExitCode "cargo run import-legacy-fixture"
@@ -94,6 +103,8 @@ try {
     if ($summary.analytics_values -lt 1) {
         throw "Expected imported analytics values, got $($summary.analytics_values)"
     }
+
+    $env:RUST_LOG = "tessara_api=debug,sqlx=warn"
 
     $apiProcess = Start-Process `
         -FilePath "cargo" `
