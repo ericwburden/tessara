@@ -112,6 +112,11 @@ pub fn admin_shell_html() -> &'static str {
           <button type="button" onclick="loadDashboard()">Load Demo Dashboard</button>
         </div>
         <div class="inputs">
+          <input id="node-type-name" placeholder="Node type name">
+          <input id="node-type-slug" placeholder="Node type slug">
+          <input id="form-name" placeholder="Form name">
+          <input id="form-slug" placeholder="Form slug">
+          <input id="form-scope-node-type-id" placeholder="Optional form scope node type ID">
           <input id="form-version-id" placeholder="Published form version ID">
           <input id="node-id" placeholder="Target node ID">
           <input id="submission-id" placeholder="Draft submission ID">
@@ -119,6 +124,8 @@ pub fn admin_shell_html() -> &'static str {
           <input id="dashboard-id" placeholder="Dashboard ID from seed or import output">
           <input id="report-id" placeholder="Report ID from seed or import output">
           <div class="actions">
+            <button type="button" onclick="createNodeType()">Create Node Type</button>
+            <button type="button" onclick="createForm()">Create Form</button>
             <button type="button" onclick="createDraft()">Create Draft</button>
             <button type="button" onclick="saveParticipants()">Save Participants</button>
             <button type="button" onclick="submitDraft()">Submit Draft</button>
@@ -228,6 +235,24 @@ pub fn admin_shell_html() -> &'static str {
         }
       }
 
+      async function createNodeType() {
+        try {
+          if (!token) await login();
+          const payload = await request("/api/admin/node-types", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: inputValue("node-type-name"),
+              slug: inputValue("node-type-slug")
+            })
+          });
+          show(payload);
+          await loadNodeTypes();
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
       async function loadForms() {
         try {
           if (!token) await login();
@@ -250,6 +275,26 @@ pub fn admin_shell_html() -> &'static str {
               </ul>
             </article>
           `);
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function createForm() {
+        try {
+          if (!token) await login();
+          const scopeNodeTypeId = inputValue("form-scope-node-type-id");
+          const payload = await request("/api/admin/forms", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: inputValue("form-name"),
+              slug: inputValue("form-slug"),
+              scope_node_type_id: scopeNodeTypeId || null
+            })
+          });
+          show(payload);
+          await loadForms();
         } catch (error) {
           show(error.message);
         }
@@ -479,6 +524,8 @@ mod tests {
         assert!(html.contains("/api/nodes"));
         assert!(html.contains("/api/admin/node-types"));
         assert!(html.contains("/api/admin/forms"));
+        assert!(html.contains("Create Node Type"));
+        assert!(html.contains("Create Form"));
         assert!(html.contains("/api/form-versions/"));
         assert!(html.contains("/api/submissions"));
         assert!(html.contains("/api/submissions/drafts"));
