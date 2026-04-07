@@ -5,6 +5,7 @@
 //! That gives us a real Rust frontend layer while preserving the existing
 //! user-testable API workflows during the migration.
 
+mod app_script;
 mod application;
 mod shell;
 mod shell_model;
@@ -27,7 +28,7 @@ pub fn admin_shell_html() -> String {
 /// admin workbench so user testing can exercise application workflows without
 /// navigating the full builder surface.
 pub fn application_shell_html() -> String {
-    application::application_shell_html(shell_style::STYLE, shell_script::SCRIPT)
+    application::application_shell_html(shell_style::STYLE, app_script::APPLICATION_SCRIPT)
 }
 
 /// Returns the HTML used for focused admin application screens.
@@ -37,12 +38,18 @@ pub fn admin_application_shell_html() -> String {
 
 /// Returns the HTML used for focused migration application screens.
 pub fn migration_application_shell_html() -> String {
-    application::migration_application_shell_html(shell_style::STYLE, shell_script::SCRIPT)
+    application::migration_application_shell_html(
+        shell_style::STYLE,
+        app_script::APPLICATION_SCRIPT,
+    )
 }
 
 /// Returns the HTML used for focused reporting application screens.
 pub fn reporting_application_shell_html() -> String {
-    application::reporting_application_shell_html(shell_style::STYLE, shell_script::SCRIPT)
+    application::reporting_application_shell_html(
+        shell_style::STYLE,
+        app_script::APPLICATION_SCRIPT,
+    )
 }
 
 #[cfg(test)]
@@ -151,6 +158,8 @@ mod tests {
         assert!(html.contains("/api/forms/published"));
         assert!(html.contains("/api/submissions/drafts"));
         assert!(html.contains("/api/reports"));
+        assert!(html.contains("sessionStorage"));
+        assert!(html.contains("tessara.devToken"));
         assert!(html.contains("selection-state"));
     }
 

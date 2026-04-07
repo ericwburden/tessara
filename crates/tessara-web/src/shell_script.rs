@@ -166,13 +166,13 @@ pub const SCRIPT: &str = r#"
           const payload = await request("/api/demo/seed", { method: "POST" });
           demoDashboardId = payload.dashboard_id;
           demoReportId = payload.report_id;
-          document.getElementById("form-version-id").value = payload.form_version_id;
-          document.getElementById("form-id").value = payload.form_id;
-          document.getElementById("node-id").value = payload.organization_node_id;
-          document.getElementById("submission-id").value = payload.submission_id;
-          document.getElementById("dashboard-id").value = demoDashboardId;
-          document.getElementById("report-id").value = demoReportId;
-          document.getElementById("chart-id").value = payload.chart_id;
+          setInput("form-version-id", payload.form_version_id);
+          setInput("form-id", payload.form_id);
+          setInput("node-id", payload.organization_node_id);
+          setInput("submission-id", payload.submission_id);
+          setInput("dashboard-id", demoDashboardId);
+          setInput("report-id", demoReportId);
+          setInput("chart-id", payload.chart_id);
           selectRecord("form version", payload.form_version_id, payload.form_version_id, {
             "form-version-id": payload.form_version_id,
             "form-id": payload.form_id

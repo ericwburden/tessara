@@ -285,6 +285,7 @@ fn SelectionContext() -> impl IntoView {
             <p class="muted">
                 "Selections from published forms, nodes, and submissions populate this workflow."
             </p>
+            <p id="session-status" class="muted">"Not signed in."</p>
             <div id="selection-state" class="selection-grid">
                 <p class="muted">"No records selected yet."</p>
             </div>
