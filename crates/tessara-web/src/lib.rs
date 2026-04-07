@@ -105,6 +105,8 @@ mod tests {
         assert!(html.contains("Published Forms"));
         assert!(html.contains("User Testing Guide"));
         assert!(html.contains("Recommended path for the current Docker Compose test deployment."));
+        assert!(html.contains("Open Application Shell"));
+        assert!(html.contains("/app"));
         assert!(html.contains("Selected Context"));
         assert!(html.contains("selection-state"));
     }

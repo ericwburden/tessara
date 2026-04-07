@@ -121,6 +121,14 @@ try {
     if (-not ($shell -like "*Admin Shell*") -or -not ($shell -like "*Create Draft*") -or -not ($shell -like "*Validate Legacy Fixture*")) {
         throw "Expected local shell HTML to include admin and submission controls"
     }
+    if (-not ($shell -like "*Open Application Shell*")) {
+        throw "Expected local shell HTML to link to application shell"
+    }
+
+    $appShell = Invoke-RestMethod -Uri "$baseUrl/app" -TimeoutSec 30
+    if (-not ($appShell -like "*Submission Workspace*") -or -not ($appShell -like "*Choose Published Form*") -or -not ($appShell -like "*Review Submissions*")) {
+        throw "Expected application shell HTML to include submission workflow controls"
+    }
 
     $login = Invoke-Json `
         -Method "Post" `

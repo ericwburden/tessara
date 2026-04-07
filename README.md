@@ -125,10 +125,16 @@ $env:DATABASE_URL='postgres://tessara:tessara@localhost:5432/tessara'
 cargo run -p tessara-api -- import-legacy-fixture .\fixtures\legacy-rehearsal.json
 ```
 
-The API also serves the first local shell at:
+The API serves the admin workbench shell at:
 
 ```text
 http://localhost:8080/
+```
+
+It also serves the first replacement-oriented application shell at:
+
+```text
+http://localhost:8080/app
 ```
 
 For user testing, start the Compose stack and open that URL in a browser. Use
@@ -144,6 +150,8 @@ The local shell now covers the main demo workflow surfaces:
 
 - Leptos SSR-rendered shell structure with the current JavaScript controller
   retained for immediate local workflow testing.
+- Separate `/app` application shell focused on the published form, draft,
+  submit, submission review, and report viewing workflow.
 - Roadmap-aligned workflow sections and an in-browser user testing guide for
   the Compose deployment path.
 - Admin read screens for hierarchy types, forms, reports, dashboards, nodes,

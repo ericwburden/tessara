@@ -38,6 +38,9 @@ fn AdminShell() -> impl IntoView {
                     "It can authenticate with the development admin, seed demo data, and "
                     "inspect the current node and dashboard state."
                 </p>
+                <div class="actions">
+                    <a class="button-link" href="/app">"Open Application Shell"</a>
+                </div>
                 <WorkflowSectionView section=&PRIMARY_SECTION/>
             </section>
             <UserTestingGuide/>
@@ -97,6 +100,7 @@ fn UserTestingGuide() -> impl IntoView {
                 <li>"Use the Form Builder and Submission Workflow sections to create a new form path manually."</li>
                 <li>"Use Reports and Dashboards to create and inspect report/chart/dashboard configuration."</li>
                 <li>"Paste a legacy fixture into the Migration Workbench to validate migration inputs."</li>
+                <li>"Open /app for the replacement-oriented submission workspace."</li>
             </ol>
         </section>
     }
