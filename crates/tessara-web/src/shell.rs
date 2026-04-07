@@ -2,12 +2,17 @@
 
 use leptos::prelude::*;
 
+use crate::brand::document_head_tags;
 use crate::shell_model::{Action, PRIMARY_SECTION, WORKFLOW_SECTIONS, WorkflowSection};
 
 /// Builds the local shell document from separately maintained style and script
 /// assets.
 pub fn admin_shell_html(style: &str, script: &str) -> String {
     let shell = view! { <AdminShell/> }.to_html();
+    let brand = document_head_tags(
+        "Tessara",
+        "Tessara local admin workbench for migration setup and workflow testing.",
+    );
 
     format!(
         r#"<!doctype html>
@@ -16,6 +21,7 @@ pub fn admin_shell_html(style: &str, script: &str) -> String {
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Tessara</title>
+    {brand}
     <style>{style}</style>
   </head>
   <body>
@@ -31,6 +37,10 @@ fn AdminShell() -> impl IntoView {
     view! {
         <main class="shell">
             <section class="panel hero">
+                <div class="brand-lockup">
+                    <img class="brand-mark" src="/assets/tessara-icon-256.svg" alt="" />
+                    <span>"Tessara"</span>
+                </div>
                 <p class="muted">"Tessara Core"</p>
                 <h1>"Admin Shell"</h1>
                 <p>

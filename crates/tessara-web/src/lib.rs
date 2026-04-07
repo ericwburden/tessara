@@ -7,6 +7,7 @@
 
 mod app_script;
 mod application;
+mod brand;
 mod shell;
 mod shell_model;
 mod shell_script;
@@ -50,6 +51,11 @@ pub fn reporting_application_shell_html() -> String {
         shell_style::STYLE,
         app_script::APPLICATION_SCRIPT,
     )
+}
+
+/// Returns an embedded Tessara SVG asset by public asset filename.
+pub fn svg_asset(name: &str) -> Option<&'static str> {
+    brand::svg_asset(name)
 }
 
 #[cfg(test)]
@@ -159,6 +165,10 @@ mod tests {
         assert!(html.contains("/app"));
         assert!(html.contains("Selected Context"));
         assert!(html.contains("selection-state"));
+        assert!(html.contains("tessara-icon-256.svg"));
+        assert!(html.contains("tessara-favicon-32.svg"));
+        assert!(html.contains("theme-color"));
+        assert!(html.contains("brand-lockup"));
     }
 
     #[test]
@@ -198,6 +208,8 @@ mod tests {
         assert!(html.contains("sessionStorage"));
         assert!(html.contains("tessara.devToken"));
         assert!(html.contains("selection-state"));
+        assert!(html.contains("tessara-icon-256.svg"));
+        assert!(html.contains("tessara-favicon-32.svg"));
     }
 
     #[test]

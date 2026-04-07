@@ -19,6 +19,18 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
     let Some(app) = test_app().await else { return };
     let token = login_token(app.clone()).await;
 
+    let (asset_status, asset_body) = request_status_and_text(
+        app.clone(),
+        Request::builder()
+            .method("GET")
+            .uri("/assets/tessara-favicon-32.svg")
+            .body(Body::empty())
+            .expect("valid asset request"),
+    )
+    .await;
+    assert_eq!(asset_status, StatusCode::OK);
+    assert!(asset_body.contains("<svg"));
+
     let seed = request_json(
         app.clone(),
         authorized_request("POST", "/api/demo/seed", &token, None),
@@ -2298,6 +2310,25 @@ async fn request_status_and_json(app: axum::Router, request: Request<Body>) -> (
                 String::from_utf8_lossy(&body)
             )
         }),
+    )
+}
+
+async fn request_status_and_text(
+    app: axum::Router,
+    request: Request<Body>,
+) -> (StatusCode, String) {
+    let response = app
+        .oneshot(request)
+        .await
+        .expect("router should produce response");
+    let status = response.status();
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("response body should be readable");
+
+    (
+        status,
+        String::from_utf8(body.to_vec()).expect("response should be UTF-8"),
     )
 }
 

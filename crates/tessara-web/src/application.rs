@@ -2,9 +2,15 @@
 
 use leptos::prelude::*;
 
+use crate::brand::document_head_tags;
+
 /// Builds the application shell document used for human workflow testing.
 pub fn application_shell_html(style: &str, script: &str) -> String {
     let shell = view! { <ApplicationShell/> }.to_html();
+    let brand = document_head_tags(
+        "Tessara App",
+        "Tessara submission workspace for local replacement workflow testing.",
+    );
 
     format!(
         r#"<!doctype html>
@@ -13,6 +19,7 @@ pub fn application_shell_html(style: &str, script: &str) -> String {
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Tessara App</title>
+    {brand}
     <style>{style}</style>
   </head>
   <body>
@@ -26,6 +33,10 @@ pub fn application_shell_html(style: &str, script: &str) -> String {
 /// Builds the focused admin application shell document.
 pub fn admin_application_shell_html(style: &str, script: &str) -> String {
     let shell = view! { <AdminApplicationShell/> }.to_html();
+    let brand = document_head_tags(
+        "Tessara Admin",
+        "Tessara admin setup workspace for hierarchy, forms, reports, and dashboards.",
+    );
 
     format!(
         r#"<!doctype html>
@@ -34,6 +45,7 @@ pub fn admin_application_shell_html(style: &str, script: &str) -> String {
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Tessara Admin</title>
+    {brand}
     <style>{style}</style>
   </head>
   <body>
@@ -47,6 +59,10 @@ pub fn admin_application_shell_html(style: &str, script: &str) -> String {
 /// Builds the focused migration workbench application shell document.
 pub fn migration_application_shell_html(style: &str, script: &str) -> String {
     let shell = view! { <MigrationApplicationShell/> }.to_html();
+    let brand = document_head_tags(
+        "Tessara Migration",
+        "Tessara migration workbench for validating and rehearsing legacy imports.",
+    );
 
     format!(
         r#"<!doctype html>
@@ -55,6 +71,7 @@ pub fn migration_application_shell_html(style: &str, script: &str) -> String {
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Tessara Migration</title>
+    {brand}
     <style>{style}</style>
   </head>
   <body>
@@ -68,6 +85,10 @@ pub fn migration_application_shell_html(style: &str, script: &str) -> String {
 /// Builds the focused reporting application shell document.
 pub fn reporting_application_shell_html(style: &str, script: &str) -> String {
     let shell = view! { <ReportingApplicationShell/> }.to_html();
+    let brand = document_head_tags(
+        "Tessara Reporting",
+        "Tessara reporting workspace for analytics, table reports, and dashboard previews.",
+    );
 
     format!(
         r#"<!doctype html>
@@ -76,6 +97,7 @@ pub fn reporting_application_shell_html(style: &str, script: &str) -> String {
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Tessara Reporting</title>
+    {brand}
     <style>{style}</style>
   </head>
   <body>
@@ -91,6 +113,7 @@ fn ApplicationShell() -> impl IntoView {
     view! {
         <main class="shell app-shell">
             <section class="panel hero">
+                <BrandLockup/>
                 <p class="muted">"Tessara Application"</p>
                 <h1>"Submission Workspace"</h1>
                 <p>
@@ -144,6 +167,7 @@ fn AdminApplicationShell() -> impl IntoView {
     view! {
         <main class="shell app-shell">
             <section class="panel hero">
+                <BrandLockup/>
                 <p class="muted">"Tessara Admin"</p>
                 <h1>"Setup Workspace"</h1>
                 <p>
@@ -193,6 +217,7 @@ fn MigrationApplicationShell() -> impl IntoView {
     view! {
         <main class="shell app-shell">
             <section class="panel hero">
+                <BrandLockup/>
                 <p class="muted">"Tessara Migration"</p>
                 <h1>"Migration Workbench"</h1>
                 <p>
@@ -240,6 +265,7 @@ fn ReportingApplicationShell() -> impl IntoView {
     view! {
         <main class="shell app-shell">
             <section class="panel hero">
+                <BrandLockup/>
                 <p class="muted">"Tessara Reporting"</p>
                 <h1>"Reporting Workspace"</h1>
                 <p>
@@ -282,6 +308,16 @@ fn ReportingApplicationShell() -> impl IntoView {
                 </section>
             </section>
         </main>
+    }
+}
+
+#[component]
+fn BrandLockup() -> impl IntoView {
+    view! {
+        <div class="brand-lockup">
+            <img class="brand-mark" src="/assets/tessara-icon-256.svg" alt="" />
+            <span>"Tessara"</span>
+        </div>
     }
 }
 

@@ -1,0 +1,22 @@
+<svg width="1200" height="320" viewBox="0 0 1200 320" xmlns="http://www.w3.org/2000/svg">
+<rect width="1200" height="320" rx="24" fill="#FFFFFF"/>
+<g transform="translate(80,70.0)">
+<rect width="180" height="180" rx="0" fill="#F8FAFC"/>
+<polygon points="90.0,57.6 104.4,64.8 90.0,72.0 75.6,64.8" fill="#E2E8F0"/>
+<polygon points="75.6,64.8 90.0,72.0 75.6,79.2 61.2,72.0" fill="#14B8A6"/>
+<polygon points="104.4,64.8 118.8,72.0 104.4,79.2 90.0,72.0" fill="#E2E8F0"/>
+<polygon points="90.0,72.0 104.4,79.2 90.0,86.4 75.6,79.2" fill="#E2E8F0"/>
+<polygon points="61.2,72.0 75.6,79.2 75.6,93.6 61.2,86.4" fill="#64748B"/>
+<polygon points="61.2,86.4 75.6,93.6 75.6,108.0 61.2,100.8" fill="#64748B"/>
+<polygon points="75.6,79.2 90.0,86.4 90.0,100.8 75.6,93.6" fill="#64748B"/>
+<polygon points="75.6,93.6 90.0,100.8 90.0,115.2 75.6,108.0" fill="#84CC16"/>
+<polygon points="118.8,72.0 104.4,79.2 104.4,93.6 118.8,86.4" fill="#F59E0B"/>
+<polygon points="118.8,86.4 104.4,93.6 104.4,108.0 118.8,100.8" fill="#334155"/>
+<polygon points="104.4,79.2 90.0,86.4 90.0,100.8 104.4,93.6" fill="#334155"/>
+<polygon points="104.4,93.6 90.0,100.8 90.0,115.2 104.4,108.0" fill="#334155"/>
+<polygon points="90.0,57.6 118.8,72.0 90.0,86.4 61.2,72.0" fill="none" stroke="#0F172A" stroke-width="2" stroke-linejoin="round"/>
+<polygon points="61.2,72.0 90.0,86.4 90.0,115.2 61.2,100.8" fill="none" stroke="#0F172A" stroke-width="2" stroke-linejoin="round"/>
+<polygon points="118.8,72.0 90.0,86.4 90.0,115.2 118.8,100.8" fill="none" stroke="#0F172A" stroke-width="2" stroke-linejoin="round"/>
+</g>
+<text x="300" y="180.0" fill="#0F172A" font-family="Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="96" font-weight="600" letter-spacing="-1">Tessara</text>
+</svg>

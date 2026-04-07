@@ -21,7 +21,9 @@ mod submissions;
 
 use axum::{
     Router,
-    response::Html,
+    extract::Path,
+    http::{StatusCode, header},
+    response::{Html, IntoResponse},
     routing::{delete, get, post, put},
 };
 use db::AppState;
@@ -36,6 +38,7 @@ use tower_http::{cors::CorsLayer, trace::TraceLayer};
 pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/", get(|| async { Html(tessara_web::admin_shell_html()) }))
+        .route("/assets/{asset_name}", get(svg_asset))
         .route(
             "/app",
             get(|| async { Html(tessara_web::application_shell_html()) }),
@@ -191,4 +194,15 @@ pub fn router(state: AppState) -> Router {
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
         .with_state(state)
+}
+
+async fn svg_asset(Path(asset_name): Path<String>) -> impl IntoResponse {
+    match tessara_web::svg_asset(&asset_name) {
+        Some(svg) => (
+            [(header::CONTENT_TYPE, "image/svg+xml; charset=utf-8")],
+            svg,
+        )
+            .into_response(),
+        None => (StatusCode::NOT_FOUND, "asset not found").into_response(),
+    }
 }
