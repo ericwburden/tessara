@@ -248,6 +248,143 @@ async fn hierarchy_builder_rejects_required_metadata_after_nodes_exist() {
 }
 
 #[tokio::test]
+async fn hierarchy_and_form_builders_return_diagnostics_for_invalid_references() {
+    let _guard = TEST_DATABASE_LOCK.lock().await;
+    let Some(app) = test_app().await else { return };
+    let token = login_token(app.clone()).await;
+
+    let missing_scoped_node_type = request_status_and_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/forms",
+            &token,
+            Some(json!({
+                "name": "Invalid Scoped Form",
+                "slug": "invalid-scoped-form",
+                "scope_node_type_id": Uuid::new_v4()
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(missing_scoped_node_type.0, StatusCode::NOT_FOUND);
+
+    let missing_form = request_status_and_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            &format!("/api/admin/forms/{}/versions", Uuid::new_v4()),
+            &token,
+            Some(json!({
+                "version_label": "v1",
+                "compatibility_group_name": "Default compatibility"
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(missing_form.0, StatusCode::NOT_FOUND);
+
+    let missing_metadata_node_type = request_status_and_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/node-metadata-fields",
+            &token,
+            Some(json!({
+                "node_type_id": Uuid::new_v4(),
+                "key": "region",
+                "label": "Region",
+                "field_type": "text",
+                "required": false
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(missing_metadata_node_type.0, StatusCode::NOT_FOUND);
+
+    let missing_node_type = request_status_and_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/nodes",
+            &token,
+            Some(json!({
+                "node_type_id": Uuid::new_v4(),
+                "parent_node_id": null,
+                "name": "Unknown Node",
+                "metadata": {}
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(missing_node_type.0, StatusCode::NOT_FOUND);
+
+    let organization_type_id = create_node_type(app.clone(), &token, "Organization", "org").await;
+    let program_type_id = create_node_type(app.clone(), &token, "Program", "program").await;
+    let activity_type_id = create_node_type(app.clone(), &token, "Activity", "activity").await;
+
+    let missing_relationship_node_type = request_status_and_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/node-type-relationships",
+            &token,
+            Some(json!({
+                "parent_node_type_id": organization_type_id,
+                "child_node_type_id": Uuid::new_v4()
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(missing_relationship_node_type.0, StatusCode::NOT_FOUND);
+
+    let self_relationship = request_status_and_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/node-type-relationships",
+            &token,
+            Some(json!({
+                "parent_node_type_id": organization_type_id,
+                "child_node_type_id": organization_type_id
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(self_relationship.0, StatusCode::BAD_REQUEST);
+    assert!(
+        self_relationship.1["error"]
+            .as_str()
+            .expect("error body should include message")
+            .contains("same type")
+    );
+
+    create_node_type_relationship(app.clone(), &token, organization_type_id, program_type_id).await;
+    create_node_type_relationship(app.clone(), &token, program_type_id, activity_type_id).await;
+
+    let cyclic_relationship = request_status_and_json(
+        app,
+        authorized_request(
+            "POST",
+            "/api/admin/node-type-relationships",
+            &token,
+            Some(json!({
+                "parent_node_type_id": activity_type_id,
+                "child_node_type_id": organization_type_id
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(cyclic_relationship.0, StatusCode::BAD_REQUEST);
+    assert!(
+        cyclic_relationship.1["error"]
+            .as_str()
+            .expect("error body should include message")
+            .contains("cycle")
+    );
+}
+
+#[tokio::test]
 async fn admin_mutation_routes_require_authentication() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
     let Some(app) = test_app().await else { return };
@@ -699,6 +836,45 @@ async fn create_form_version(
     .await;
 
     id_from(&version)
+}
+
+async fn create_node_type(app: axum::Router, token: &str, name: &str, slug: &str) -> Uuid {
+    let node_type = request_json(
+        app,
+        authorized_request(
+            "POST",
+            "/api/admin/node-types",
+            token,
+            Some(json!({
+                "name": name,
+                "slug": slug
+            })),
+        ),
+    )
+    .await;
+
+    id_from(&node_type)
+}
+
+async fn create_node_type_relationship(
+    app: axum::Router,
+    token: &str,
+    parent_node_type_id: Uuid,
+    child_node_type_id: Uuid,
+) {
+    request_json(
+        app,
+        authorized_request(
+            "POST",
+            "/api/admin/node-type-relationships",
+            token,
+            Some(json!({
+                "parent_node_type_id": parent_node_type_id,
+                "child_node_type_id": child_node_type_id
+            })),
+        ),
+    )
+    .await;
 }
 
 async fn create_form_section(

@@ -78,6 +78,14 @@ pub async fn create_node_type_relationship(
     Json(payload): Json<CreateNodeTypeRelationshipRequest>,
 ) -> ApiResult<Json<IdResponse>> {
     auth::require_capability(&state.pool, &headers, "hierarchy:write").await?;
+    require_node_type_exists(&state.pool, payload.parent_node_type_id).await?;
+    require_node_type_exists(&state.pool, payload.child_node_type_id).await?;
+    assert_relationship_is_acyclic(
+        &state.pool,
+        payload.parent_node_type_id,
+        payload.child_node_type_id,
+    )
+    .await?;
 
     sqlx::query(
         r#"
@@ -102,6 +110,7 @@ pub async fn create_node_metadata_field(
     Json(payload): Json<CreateNodeMetadataFieldRequest>,
 ) -> ApiResult<Json<IdResponse>> {
     auth::require_capability(&state.pool, &headers, "hierarchy:write").await?;
+    require_node_type_exists(&state.pool, payload.node_type_id).await?;
     let field_type = parse_field_type(&payload.field_type)?;
 
     if payload.required {
@@ -142,6 +151,7 @@ pub async fn create_node(
     Json(payload): Json<CreateNodeRequest>,
 ) -> ApiResult<Json<IdResponse>> {
     auth::require_capability(&state.pool, &headers, "hierarchy:write").await?;
+    require_node_type_exists(&state.pool, payload.node_type_id).await?;
 
     if let Some(parent_node_id) = payload.parent_node_id {
         let parent_type_id: Uuid =
@@ -266,4 +276,63 @@ pub(crate) fn validate_field_value(field_type: FieldType, value: &Value) -> ApiR
 
 fn field_type_error(error: FieldTypeError) -> ApiError {
     ApiError::BadRequest(error.to_string())
+}
+
+async fn require_node_type_exists(pool: &sqlx::PgPool, node_type_id: Uuid) -> ApiResult<()> {
+    let exists: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM node_types WHERE id = $1)")
+        .bind(node_type_id)
+        .fetch_one(pool)
+        .await?;
+
+    if exists {
+        Ok(())
+    } else {
+        Err(ApiError::NotFound(format!("node type {node_type_id}")))
+    }
+}
+
+async fn assert_relationship_is_acyclic(
+    pool: &sqlx::PgPool,
+    parent_node_type_id: Uuid,
+    child_node_type_id: Uuid,
+) -> ApiResult<()> {
+    if parent_node_type_id == child_node_type_id {
+        return Err(ApiError::BadRequest(
+            "node type relationships cannot point to the same type".into(),
+        ));
+    }
+
+    let would_create_cycle: bool = sqlx::query_scalar(
+        r#"
+        WITH RECURSIVE descendants(node_type_id) AS (
+            SELECT child_node_type_id
+            FROM node_type_relationships
+            WHERE parent_node_type_id = $1
+
+            UNION
+
+            SELECT node_type_relationships.child_node_type_id
+            FROM node_type_relationships
+            JOIN descendants
+                ON descendants.node_type_id = node_type_relationships.parent_node_type_id
+        )
+        SELECT EXISTS (
+            SELECT 1
+            FROM descendants
+            WHERE node_type_id = $2
+        )
+        "#,
+    )
+    .bind(child_node_type_id)
+    .bind(parent_node_type_id)
+    .fetch_one(pool)
+    .await?;
+
+    if would_create_cycle {
+        Err(ApiError::BadRequest(
+            "node type relationship would create a cycle".into(),
+        ))
+    } else {
+        Ok(())
+    }
 }

@@ -76,6 +76,9 @@ pub async fn create_form(
     Json(payload): Json<CreateFormRequest>,
 ) -> ApiResult<Json<IdResponse>> {
     auth::require_capability(&state.pool, &headers, "forms:write").await?;
+    if let Some(scope_node_type_id) = payload.scope_node_type_id {
+        require_node_type_exists(&state.pool, scope_node_type_id).await?;
+    }
 
     let id = sqlx::query_scalar(
         "INSERT INTO forms (name, slug, scope_node_type_id) VALUES ($1, $2, $3) RETURNING id",
@@ -96,6 +99,7 @@ pub async fn create_form_version(
     Json(payload): Json<CreateFormVersionRequest>,
 ) -> ApiResult<Json<IdResponse>> {
     auth::require_capability(&state.pool, &headers, "forms:write").await?;
+    require_form_exists(&state.pool, form_id).await?;
 
     let group_name = payload
         .compatibility_group_name
@@ -128,6 +132,32 @@ pub async fn create_form_version(
     .await?;
 
     Ok(Json(IdResponse { id }))
+}
+
+async fn require_node_type_exists(pool: &sqlx::PgPool, node_type_id: Uuid) -> ApiResult<()> {
+    let exists: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM node_types WHERE id = $1)")
+        .bind(node_type_id)
+        .fetch_one(pool)
+        .await?;
+
+    if exists {
+        Ok(())
+    } else {
+        Err(ApiError::NotFound(format!("node type {node_type_id}")))
+    }
+}
+
+async fn require_form_exists(pool: &sqlx::PgPool, form_id: Uuid) -> ApiResult<()> {
+    let exists: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM forms WHERE id = $1)")
+        .bind(form_id)
+        .fetch_one(pool)
+        .await?;
+
+    if exists {
+        Ok(())
+    } else {
+        Err(ApiError::NotFound(format!("form {form_id}")))
+    }
 }
 
 pub async fn create_form_section(
