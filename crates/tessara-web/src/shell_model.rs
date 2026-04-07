@@ -351,3 +351,64 @@ pub(crate) const WORKFLOW_SECTIONS: &[WorkflowSection] = &[
         MIGRATION_ACTIONS,
     ),
 ];
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashSet;
+
+    use super::{PRIMARY_SECTION, WORKFLOW_SECTIONS};
+
+    #[test]
+    fn workflow_sections_have_unique_dom_ids() {
+        let mut ids = HashSet::new();
+
+        for section in WORKFLOW_SECTIONS {
+            for input in section.inputs {
+                assert!(ids.insert(input.id), "duplicate input id {}", input.id);
+            }
+
+            if let Some(text_area) = section.text_area {
+                assert!(
+                    ids.insert(text_area.id),
+                    "duplicate text area id {}",
+                    text_area.id
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn workflow_sections_cover_testable_surfaces() {
+        assert!(!PRIMARY_SECTION.actions.is_empty());
+
+        let titles = WORKFLOW_SECTIONS
+            .iter()
+            .map(|section| section.title)
+            .collect::<Vec<_>>();
+
+        assert!(titles.contains(&"Hierarchy Builder"));
+        assert!(titles.contains(&"Form Builder"));
+        assert!(titles.contains(&"Submission Workflow"));
+        assert!(titles.contains(&"Reports and Dashboards"));
+        assert!(titles.contains(&"Migration Workbench"));
+    }
+
+    #[test]
+    fn workflow_actions_remain_bound_to_javascript_handlers() {
+        for section in std::iter::once(&PRIMARY_SECTION).chain(WORKFLOW_SECTIONS.iter()) {
+            assert!(
+                !section.actions.is_empty(),
+                "{} should expose at least one action",
+                section.title
+            );
+
+            for action in section.actions {
+                assert!(
+                    action.handler.ends_with("()"),
+                    "{} action should call a JavaScript function",
+                    action.label
+                );
+            }
+        }
+    }
+}
