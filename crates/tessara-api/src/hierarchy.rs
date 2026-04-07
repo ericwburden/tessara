@@ -72,6 +72,7 @@ pub async fn create_node_type(
     auth::require_capability(&state.pool, &headers, "hierarchy:write").await?;
     require_text("node type name", &payload.name)?;
     require_text("node type slug", &payload.slug)?;
+    require_node_type_slug_available(&state.pool, &payload.slug).await?;
 
     let id = sqlx::query_scalar("INSERT INTO node_types (name, slug) VALUES ($1, $2) RETURNING id")
         .bind(payload.name)
@@ -157,6 +158,7 @@ pub async fn create_node_metadata_field(
     require_node_type_exists(&state.pool, payload.node_type_id).await?;
     require_text("metadata key", &payload.key)?;
     require_text("metadata label", &payload.label)?;
+    require_node_metadata_key_available(&state.pool, payload.node_type_id, &payload.key).await?;
     let field_type = parse_field_type(&payload.field_type)?;
 
     if payload.required {
@@ -340,6 +342,44 @@ async fn require_node_type_exists(pool: &sqlx::PgPool, node_type_id: Uuid) -> Ap
         Ok(())
     } else {
         Err(ApiError::NotFound(format!("node type {node_type_id}")))
+    }
+}
+
+async fn require_node_type_slug_available(pool: &sqlx::PgPool, slug: &str) -> ApiResult<()> {
+    let exists: bool =
+        sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM node_types WHERE slug = $1)")
+            .bind(slug)
+            .fetch_one(pool)
+            .await?;
+
+    if exists {
+        Err(ApiError::BadRequest(format!(
+            "node type slug '{slug}' is already in use"
+        )))
+    } else {
+        Ok(())
+    }
+}
+
+async fn require_node_metadata_key_available(
+    pool: &sqlx::PgPool,
+    node_type_id: Uuid,
+    key: &str,
+) -> ApiResult<()> {
+    let exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM node_metadata_field_definitions WHERE node_type_id = $1 AND key = $2)",
+    )
+    .bind(node_type_id)
+    .bind(key)
+    .fetch_one(pool)
+    .await?;
+
+    if exists {
+        Err(ApiError::BadRequest(format!(
+            "metadata key '{key}' is already in use for node type {node_type_id}"
+        )))
+    } else {
+        Ok(())
     }
 }
 

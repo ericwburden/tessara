@@ -97,6 +97,7 @@ pub async fn create_form(
     auth::require_capability(&state.pool, &headers, "forms:write").await?;
     require_text("form name", &payload.name)?;
     require_text("form slug", &payload.slug)?;
+    require_form_slug_available(&state.pool, &payload.slug).await?;
     if let Some(scope_node_type_id) = payload.scope_node_type_id {
         require_node_type_exists(&state.pool, scope_node_type_id).await?;
     }
@@ -194,6 +195,7 @@ pub async fn create_form_version(
     auth::require_capability(&state.pool, &headers, "forms:write").await?;
     require_form_exists(&state.pool, form_id).await?;
     require_text("version label", &payload.version_label)?;
+    require_form_version_label_available(&state.pool, form_id, &payload.version_label).await?;
 
     let group_name = payload
         .compatibility_group_name
@@ -255,6 +257,43 @@ async fn require_form_exists(pool: &sqlx::PgPool, form_id: Uuid) -> ApiResult<()
     }
 }
 
+async fn require_form_slug_available(pool: &sqlx::PgPool, slug: &str) -> ApiResult<()> {
+    let exists: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM forms WHERE slug = $1)")
+        .bind(slug)
+        .fetch_one(pool)
+        .await?;
+
+    if exists {
+        Err(ApiError::BadRequest(format!(
+            "form slug '{slug}' is already in use"
+        )))
+    } else {
+        Ok(())
+    }
+}
+
+async fn require_form_version_label_available(
+    pool: &sqlx::PgPool,
+    form_id: Uuid,
+    version_label: &str,
+) -> ApiResult<()> {
+    let exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM form_versions WHERE form_id = $1 AND version_label = $2)",
+    )
+    .bind(form_id)
+    .bind(version_label)
+    .fetch_one(pool)
+    .await?;
+
+    if exists {
+        Err(ApiError::BadRequest(format!(
+            "form version label '{version_label}' is already in use for form {form_id}"
+        )))
+    } else {
+        Ok(())
+    }
+}
+
 pub async fn create_form_section(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -287,6 +326,7 @@ pub async fn create_form_field(
     assert_form_version_draft(&state.pool, form_version_id).await?;
     require_text("field key", &payload.key)?;
     require_text("field label", &payload.label)?;
+    require_form_field_key_available(&state.pool, form_version_id, &payload.key).await?;
     let field_type = parse_field_type(&payload.field_type)?;
     assert_section_belongs_to_form_version(&state.pool, form_version_id, payload.section_id)
         .await?;
@@ -466,6 +506,28 @@ async fn assert_section_belongs_to_form_version(
             "field section must belong to the same form version".into(),
         )),
         None => Err(ApiError::NotFound(format!("form section {section_id}"))),
+    }
+}
+
+async fn require_form_field_key_available(
+    pool: &sqlx::PgPool,
+    form_version_id: Uuid,
+    key: &str,
+) -> ApiResult<()> {
+    let exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM form_fields WHERE form_version_id = $1 AND key = $2)",
+    )
+    .bind(form_version_id)
+    .bind(key)
+    .fetch_one(pool)
+    .await?;
+
+    if exists {
+        Err(ApiError::BadRequest(format!(
+            "field key '{key}' is already in use for form version {form_version_id}"
+        )))
+    } else {
+        Ok(())
     }
 }
 

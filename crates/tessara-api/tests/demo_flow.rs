@@ -151,6 +151,26 @@ async fn form_builder_guards_cross_version_sections_and_supersedes_previous_publ
     let form_id = id_from(&form);
 
     let version_one_id = create_form_version(app.clone(), &token, form_id, "v1").await;
+    let duplicate_version_label = request_status_and_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            &format!("/api/admin/forms/{form_id}/versions"),
+            &token,
+            Some(json!({
+                "version_label": "v1",
+                "compatibility_group_name": "Default compatibility"
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(duplicate_version_label.0, StatusCode::BAD_REQUEST);
+    assert!(
+        duplicate_version_label.1["error"]
+            .as_str()
+            .expect("error body should include message")
+            .contains("already in use")
+    );
     let section_one_id = create_form_section(app.clone(), &token, version_one_id, "Main").await;
     create_number_field(
         app.clone(),
@@ -415,6 +435,27 @@ async fn hierarchy_and_form_builders_return_diagnostics_for_invalid_references()
     let organization_type_id = create_node_type(app.clone(), &token, "Organization", "org").await;
     let program_type_id = create_node_type(app.clone(), &token, "Program", "program").await;
     let activity_type_id = create_node_type(app.clone(), &token, "Activity", "activity").await;
+
+    let duplicate_node_type_slug = request_status_and_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/node-types",
+            &token,
+            Some(json!({
+                "name": "Duplicate Organization",
+                "slug": "org"
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(duplicate_node_type_slug.0, StatusCode::BAD_REQUEST);
+    assert!(
+        duplicate_node_type_slug.1["error"]
+            .as_str()
+            .expect("error body should include message")
+            .contains("already in use")
+    );
 
     let missing_relationship_node_type = request_status_and_json(
         app.clone(),
