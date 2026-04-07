@@ -567,6 +567,7 @@ fn FixtureScreen() -> impl IntoView {
                 <button type="button" onclick="loadLegacyFixtureExamples()">"Load Fixture Examples"</button>
                 <button type="button" onclick="validateLegacyFixture()">"Validate Fixture"</button>
                 <button type="button" onclick="dryRunLegacyFixture()">"Dry-Run Fixture"</button>
+                <button type="button" onclick="importLegacyFixture()">"Import Fixture"</button>
             </div>
         </section>
     }

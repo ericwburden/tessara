@@ -195,9 +195,11 @@ mod tests {
         assert!(html.contains("Load Fixture Examples"));
         assert!(html.contains("Validate Fixture"));
         assert!(html.contains("Dry-Run Fixture"));
+        assert!(html.contains("Import Fixture"));
         assert!(html.contains("/api/admin/legacy-fixtures/examples"));
         assert!(html.contains("/api/admin/legacy-fixtures/validate"));
         assert!(html.contains("/api/admin/legacy-fixtures/dry-run"));
+        assert!(html.contains("/api/admin/legacy-fixtures/import"));
         assert!(html.contains("Open Submission Workspace"));
         assert!(html.contains("Open Admin Setup"));
         assert!(html.contains("Open Reporting Workspace"));

@@ -139,6 +139,10 @@ pub fn router(state: AppState) -> Router {
             post(legacy_import::dry_run_legacy_fixture_endpoint),
         )
         .route(
+            "/api/admin/legacy-fixtures/import",
+            post(legacy_import::import_legacy_fixture_endpoint),
+        )
+        .route(
             "/api/admin/legacy-fixtures/examples",
             get(legacy_import::list_legacy_fixture_examples),
         )

@@ -714,6 +714,46 @@ pub const APPLICATION_SCRIPT: &str = r#"
         }
       }
 
+      async function importLegacyFixture() {
+        try {
+          if (!token) await login();
+          const fixtureJson = inputValue("legacy-fixture-json");
+          if (!fixtureJson) throw new Error("Paste legacy fixture JSON first.");
+          const payload = await request("/api/admin/legacy-fixtures/import", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ fixture_json: fixtureJson })
+          });
+          setInput("form-version-id", payload.form_version_id);
+          setInput("form-id", payload.form_id);
+          setInput("submission-id", payload.submission_id);
+          setInput("dashboard-id", payload.dashboard_id);
+          setInput("report-id", payload.report_id);
+          selectRecord("submission", payload.submission_id, payload.submission_id, {
+            "submission-id": payload.submission_id
+          });
+          selectRecord("report", payload.report_id, payload.report_id, {
+            "report-id": payload.report_id
+          });
+          selectRecord("dashboard", payload.dashboard_id, payload.dashboard_id, {
+            "dashboard-id": payload.dashboard_id
+          });
+          show(payload);
+          setScreen(`
+            <article class="card">
+              <h3>${escapeHtml(payload.fixture_name)}</h3>
+              <p>Imported submission ${escapeHtml(payload.submission_id)}</p>
+              <p>${escapeHtml(payload.analytics_values)} analytics values projected</p>
+              <button type="button" onclick="loadDashboardByValue('${escapeHtml(payload.dashboard_id)}')">Open Imported Dashboard</button>
+              <button type="button" onclick="loadReportByValue('${escapeHtml(payload.report_id)}')">Run Imported Report</button>
+            </article>
+          `);
+          await loadAppSummary();
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
       updateSessionStatus();
       renderSelections();
 "#;

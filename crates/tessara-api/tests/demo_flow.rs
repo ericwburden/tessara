@@ -63,6 +63,25 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
     assert_eq!(legacy_dry_run["fixture_name"], "legacy-rehearsal");
     assert_eq!(legacy_dry_run["would_import"], true);
     assert_eq!(legacy_dry_run["validation"]["issue_count"], 0);
+    let legacy_import = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/legacy-fixtures/import",
+            &token,
+            Some(json!({
+                "fixture_json": include_str!("../../../fixtures/legacy-rehearsal.json")
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(legacy_import["fixture_name"], "legacy-rehearsal");
+    assert!(
+        legacy_import["analytics_values"]
+            .as_i64()
+            .expect("legacy import should report analytics value count")
+            >= 1
+    );
     let legacy_examples = request_json(
         app.clone(),
         authorized_request("GET", "/api/admin/legacy-fixtures/examples", &token, None),

@@ -180,7 +180,7 @@ The local shell now covers the main demo workflow surfaces:
   analytics refresh, report execution, dashboard preview, and a one-click demo
   dashboard quick start.
 - Separate `/app/migration` operator shell focused on legacy fixture example
-  loading, validation, and dry-run rehearsal.
+  loading, validation, dry-run rehearsal, and fixture import.
 - Shared `/api/app/summary` readiness counters for focused application screens.
 - Roadmap-aligned workflow sections and an in-browser user testing guide for
   the Compose deployment path.

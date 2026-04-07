@@ -55,6 +55,11 @@ try {
     } else {
         docker compose up -d --wait postgres | Out-Host
         Assert-LastExitCode "docker compose up"
+        $composeApiContainer = docker compose ps -q api
+        if ($composeApiContainer) {
+            docker compose stop api | Out-Null
+            docker compose rm -f api | Out-Null
+        }
     }
 
     $postgresDeadline = (Get-Date).AddSeconds(120)
@@ -138,7 +143,7 @@ try {
         throw "Expected reporting application shell HTML to include report and dashboard workflow controls"
     }
     $migrationAppShell = Invoke-RestMethod -Uri "$baseUrl/app/migration" -TimeoutSec 30
-    if (-not ($migrationAppShell -like "*Migration Workbench*") -or -not ($migrationAppShell -like "*Legacy Fixture Validation*") -or -not ($migrationAppShell -like "*Load Fixture Examples*")) {
+    if (-not ($migrationAppShell -like "*Migration Workbench*") -or -not ($migrationAppShell -like "*Legacy Fixture Validation*") -or -not ($migrationAppShell -like "*Load Fixture Examples*") -or -not ($migrationAppShell -like "*Import Fixture*")) {
         throw "Expected migration application shell HTML to include fixture workflow controls"
     }
 
