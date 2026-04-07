@@ -51,6 +51,13 @@ try {
     Remove-Item -LiteralPath $apiOut, $apiErr -ErrorAction SilentlyContinue
 
     $resolvedFixture = Resolve-Path -LiteralPath $FixturePath
+    $validationJson = cargo run -q -p tessara-api -- validate-legacy-fixture $resolvedFixture.Path
+    Assert-LastExitCode "cargo run validate-legacy-fixture"
+    $validation = $validationJson | ConvertFrom-Json
+
+    if ($validation.issue_count -ne 0) {
+        throw "Legacy fixture validation failed before import: $validationJson"
+    }
 
     docker compose up -d --wait postgres | Out-Host
     Assert-LastExitCode "docker compose up"

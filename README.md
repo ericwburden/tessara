@@ -115,6 +115,7 @@ cargo run -p tessara-api -- seed-demo
 Run the first legacy migration rehearsal fixture:
 
 ```powershell
+cargo run -p tessara-api -- validate-legacy-fixture .\fixtures\legacy-rehearsal.json
 $env:DATABASE_URL='postgres://tessara:tessara@localhost:5432/tessara'
 cargo run -p tessara-api -- import-legacy-fixture .\fixtures\legacy-rehearsal.json
 ```
