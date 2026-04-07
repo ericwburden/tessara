@@ -52,6 +52,8 @@ mod tests {
         assert!(html.contains("/api/form-versions/"));
         assert!(html.contains("/api/submissions"));
         assert!(html.contains("/api/submissions/drafts"));
+        assert!(html.contains("Save Rendered Values"));
+        assert!(html.contains("saveRenderedFormValues"));
         assert!(html.contains("/api/admin/analytics/refresh"));
         assert!(html.contains("/api/dashboards/"));
         assert!(html.contains("/api/dashboards"));

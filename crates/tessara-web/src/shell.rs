@@ -86,6 +86,7 @@ pub fn admin_shell_html(style: &str, script: &str) -> String {
             <button type="button" onclick="createDashboard()">Create Dashboard</button>
             <button type="button" onclick="addDashboardComponent()">Add Component</button>
             <button type="button" onclick="createDraft()">Create Draft</button>
+            <button type="button" onclick="saveRenderedFormValues()">Save Rendered Values</button>
             <button type="button" onclick="saveParticipants()">Save Participants</button>
             <button type="button" onclick="submitDraft()">Submit Draft</button>
             <button type="button" onclick="refreshAnalytics()">Refresh Analytics</button>

@@ -5,6 +5,7 @@ pub const SCRIPT: &str = r#"
       let token = null;
       let demoDashboardId = null;
       let demoReportId = null;
+      let renderedForm = null;
 
       function show(value) {
         document.getElementById("output").textContent =
@@ -33,6 +34,53 @@ pub const SCRIPT: &str = r#"
       function jsonInputValue(id) {
         const value = inputValue(id);
         return value ? JSON.parse(value) : {};
+      }
+
+      function fieldInputId(field) {
+        return `form-field-${field.id}`;
+      }
+
+      function renderFieldInput(field) {
+        const required = field.required ? " required" : "";
+        if (field.field_type === "boolean") {
+          return `<input id="${escapeHtml(fieldInputId(field))}" type="checkbox"${required}>`;
+        }
+        const inputType = field.field_type === "number"
+          ? "number"
+          : field.field_type === "date"
+            ? "date"
+            : "text";
+        const placeholder = field.field_type === "multi_choice"
+          ? "Comma-separated choices"
+          : field.label;
+        return `<input id="${escapeHtml(fieldInputId(field))}" type="${inputType}" placeholder="${escapeHtml(placeholder)}"${required}>`;
+      }
+
+      function renderedFields() {
+        if (!renderedForm) throw new Error("Render a form version first.");
+        return renderedForm.sections.flatMap((section) => section.fields);
+      }
+
+      function collectRenderedValues() {
+        const values = {};
+        for (const field of renderedFields()) {
+          const element = document.getElementById(fieldInputId(field));
+          if (!element) continue;
+          if (field.field_type === "boolean") {
+            values[field.key] = element.checked;
+            continue;
+          }
+          const raw = element.value.trim();
+          if (raw === "") continue;
+          if (field.field_type === "number") {
+            values[field.key] = Number(raw);
+          } else if (field.field_type === "multi_choice") {
+            values[field.key] = raw.split(",").map((item) => item.trim()).filter(Boolean);
+          } else {
+            values[field.key] = raw;
+          }
+        }
+        return values;
       }
 
       async function request(path, options = {}) {
@@ -361,6 +409,9 @@ pub const SCRIPT: &str = r#"
       async function renderForm(formVersionId) {
         try {
           const payload = await request(`/api/form-versions/${formVersionId}/render`);
+          renderedForm = payload;
+          document.getElementById("form-version-id").value = payload.form_version_id;
+          document.getElementById("form-id").value = payload.form_id;
           show(payload);
           document.getElementById("screen").innerHTML = `
             <article class="card">
@@ -371,11 +422,19 @@ pub const SCRIPT: &str = r#"
                   <h4>${escapeHtml(section.title)}</h4>
                   <ul>
                     ${section.fields.map((field) => `
-                      <li>${escapeHtml(field.label)} (${escapeHtml(field.field_type)})</li>
+                      <li>
+                        <label for="${escapeHtml(fieldInputId(field))}">
+                          ${escapeHtml(field.label)} (${escapeHtml(field.field_type)})
+                        </label>
+                        ${renderFieldInput(field)}
+                      </li>
                     `).join("")}
                   </ul>
                 </section>
               `).join("")}
+              <button type="button" onclick="createDraft()">Create Draft</button>
+              <button type="button" onclick="saveRenderedFormValues()">Save Values</button>
+              <button type="button" onclick="submitDraft()">Submit Draft</button>
             </article>
           `;
         } catch (error) {
@@ -392,12 +451,22 @@ pub const SCRIPT: &str = r#"
               <h3>${escapeHtml(node.name)}</h3>
               <p>${escapeHtml(node.node_type_name)}${node.parent_node_name ? ` under ${escapeHtml(node.parent_node_name)}` : ""}</p>
               <p class="muted">${escapeHtml(JSON.stringify(node.metadata))}</p>
+              <button type="button" onclick="useTargetNode('${escapeHtml(node.id)}')">Use Target</button>
+              <button type="button" onclick="useParentNode('${escapeHtml(node.id)}')">Use Parent</button>
               <code>${escapeHtml(node.id)}</code>
             </article>
           `);
         } catch (error) {
           show(error.message);
         }
+      }
+
+      function useTargetNode(nodeId) {
+        document.getElementById("node-id").value = nodeId;
+      }
+
+      function useParentNode(nodeId) {
+        document.getElementById("parent-node-id").value = nodeId;
       }
 
       async function loadSubmissions() {
@@ -448,6 +517,23 @@ pub const SCRIPT: &str = r#"
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ values: { participants: value } })
+          });
+          show(payload);
+          await loadSubmissions();
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function saveRenderedFormValues() {
+        try {
+          if (!token) await login();
+          const submissionId = inputValue("submission-id");
+          if (!submissionId) throw new Error("Create or enter a draft submission first.");
+          const payload = await request(`/api/submissions/${submissionId}/values`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ values: collectRenderedValues() })
           });
           show(payload);
           await loadSubmissions();
