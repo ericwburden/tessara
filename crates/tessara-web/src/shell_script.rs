@@ -630,6 +630,32 @@ pub const SCRIPT: &str = r#"
         }
       }
 
+      async function validateLegacyFixture() {
+        try {
+          if (!token) await login();
+          const fixtureJson = inputValue("legacy-fixture-json");
+          if (!fixtureJson) throw new Error("Paste legacy fixture JSON first.");
+          const payload = await request("/api/admin/legacy-fixtures/validate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ fixture_json: fixtureJson })
+          });
+          show(payload);
+          showCards(payload.issues, (issue) => `
+            <article class="card">
+              <h3>${escapeHtml(issue.code)}</h3>
+              <p>${escapeHtml(issue.path)}</p>
+              <p>${escapeHtml(issue.message)}</p>
+            </article>
+          `);
+          if (payload.issue_count === 0) {
+            document.getElementById("screen").innerHTML = '<p class="muted">Legacy fixture validation passed.</p>';
+          }
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
       async function createChart() {
         try {
           if (!token) await login();

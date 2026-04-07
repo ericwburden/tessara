@@ -57,12 +57,15 @@ pub const STYLE: &str = r#"
         font-weight: 700;
         padding: 10px 16px;
       }
-      input {
+      input, textarea {
         border: 1px solid #4b5563;
         border-radius: 12px;
         background: #111827;
         color: #f9fafb;
         padding: 10px 12px;
+      }
+      textarea {
+        min-height: 160px;
       }
       pre {
         overflow: auto;

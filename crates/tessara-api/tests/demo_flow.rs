@@ -25,6 +25,19 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
     )
     .await;
     assert_eq!(seed["analytics_values"], 1);
+    let legacy_validation = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/legacy-fixtures/validate",
+            &token,
+            Some(json!({
+                "fixture_json": include_str!("../../../fixtures/legacy-rehearsal.json")
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(legacy_validation["issue_count"], 0);
 
     let node_types = request_json(
         app.clone(),

@@ -71,6 +71,7 @@ pub fn admin_shell_html(style: &str, script: &str) -> String {
           <input id="participants-value" placeholder="Participants value" value="42">
           <input id="dashboard-id" placeholder="Dashboard ID from seed or import output">
           <input id="report-id" placeholder="Report ID from seed or import output">
+          <textarea id="legacy-fixture-json" placeholder="Paste legacy fixture JSON for validation"></textarea>
           <div class="actions">
             <button type="button" onclick="createNodeType()">Create Node Type</button>
             <button type="button" onclick="loadRelationships()">Load Relationships</button>
@@ -97,6 +98,7 @@ pub fn admin_shell_html(style: &str, script: &str) -> String {
             <button type="button" onclick="loadDashboardById()">Load Dashboard By ID</button>
             <button type="button" onclick="loadReportById()">Load Report By ID</button>
             <button type="button" onclick="loadReportDefinitionById()">Inspect Report By ID</button>
+            <button type="button" onclick="validateLegacyFixture()">Validate Legacy Fixture</button>
           </div>
         </div>
       </section>

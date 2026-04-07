@@ -12,6 +12,7 @@ use std::{
 };
 
 use anyhow::Context;
+use axum::{Json, extract::State, http::HeaderMap};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::{PgPool, Row};
@@ -20,7 +21,8 @@ use tessara_reporting::MissingDataPolicy;
 use uuid::Uuid;
 
 use crate::{
-    analytics,
+    analytics, auth,
+    db::AppState,
     error::{ApiError, ApiResult},
 };
 
@@ -209,6 +211,21 @@ struct LegacyReport {
 struct LegacyDashboard {
     name: String,
     chart_name: String,
+}
+
+#[derive(Deserialize)]
+pub struct ValidateLegacyFixtureRequest {
+    fixture_json: String,
+}
+
+/// Validates a legacy fixture submitted through the local migration workbench.
+pub async fn validate_legacy_fixture_endpoint(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<ValidateLegacyFixtureRequest>,
+) -> ApiResult<Json<LegacyImportValidationReport>> {
+    auth::require_capability(&state.pool, &headers, "admin:all").await?;
+    Ok(Json(validate_legacy_fixture_str(&payload.fixture_json)?))
 }
 
 /// Imports a legacy rehearsal fixture from a JSON file path.
