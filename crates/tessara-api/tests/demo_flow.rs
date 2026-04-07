@@ -199,7 +199,8 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
             .as_array()
             .expect("reports response should be an array")
             .iter()
-            .any(|report| report["id"] == report_id)
+            .any(|report| report["id"] == report_id
+                && report["form_name"] == "Monthly Participation")
     );
     let report_definition = request_json(
         app.clone(),
@@ -214,6 +215,7 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
             .any(|binding| binding["logical_key"] == "participants"
                 && binding["source_field_key"] == "participants")
     );
+    assert_eq!(report_definition["form_name"], "Monthly Participation");
     let chart_id = seed["chart_id"]
         .as_str()
         .expect("seed response should contain chart id");

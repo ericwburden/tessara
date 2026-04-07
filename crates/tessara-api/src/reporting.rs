@@ -58,6 +58,7 @@ pub struct ReportSummary {
     id: Uuid,
     name: String,
     form_id: Option<Uuid>,
+    form_name: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -65,6 +66,7 @@ pub struct ReportDefinition {
     id: Uuid,
     name: String,
     form_id: Option<Uuid>,
+    form_name: Option<String>,
     bindings: Vec<ReportFieldBindingSummary>,
 }
 
@@ -132,8 +134,9 @@ pub async fn list_reports(
 
     let rows = sqlx::query(
         r#"
-        SELECT id, name, form_id
+        SELECT reports.id, reports.name, reports.form_id, forms.name AS form_name
         FROM reports
+        LEFT JOIN forms ON forms.id = reports.form_id
         ORDER BY name, created_at
         "#,
     )
@@ -147,6 +150,7 @@ pub async fn list_reports(
                 id: row.try_get("id")?,
                 name: row.try_get("name")?,
                 form_id: row.try_get("form_id")?,
+                form_name: row.try_get("form_name")?,
             })
         })
         .collect::<Result<Vec<_>, sqlx::Error>>()?;
@@ -162,11 +166,18 @@ pub async fn get_report(
 ) -> ApiResult<Json<ReportDefinition>> {
     auth::require_capability(&state.pool, &headers, "reports:read").await?;
 
-    let report = sqlx::query("SELECT id, name, form_id FROM reports WHERE id = $1")
-        .bind(report_id)
-        .fetch_optional(&state.pool)
-        .await?
-        .ok_or_else(|| ApiError::NotFound(format!("report {report_id}")))?;
+    let report = sqlx::query(
+        r#"
+        SELECT reports.id, reports.name, reports.form_id, forms.name AS form_name
+        FROM reports
+        LEFT JOIN forms ON forms.id = reports.form_id
+        WHERE reports.id = $1
+        "#,
+    )
+    .bind(report_id)
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or_else(|| ApiError::NotFound(format!("report {report_id}")))?;
 
     let rows = sqlx::query(
         r#"
@@ -197,6 +208,7 @@ pub async fn get_report(
         id: report.try_get("id")?,
         name: report.try_get("name")?,
         form_id: report.try_get("form_id")?,
+        form_name: report.try_get("form_name")?,
         bindings,
     }))
 }

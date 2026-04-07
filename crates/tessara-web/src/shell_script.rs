@@ -933,8 +933,9 @@ pub const SCRIPT: &str = r#"
           showCards(payload, (report) => `
             <article class="card">
               <h3>${escapeHtml(report.name)}</h3>
-              <p class="muted">Form ${escapeHtml(report.form_id || "Any")}</p>
+              <p class="muted">Form ${escapeHtml(report.form_name || report.form_id || "Any")}</p>
               <button type="button" onclick="useReport('${escapeHtml(report.id)}', '${escapeHtml(report.name)}')">Use Report</button>
+              ${report.form_id ? `<button type="button" onclick="useForm('${escapeHtml(report.form_id)}', '${escapeHtml(report.form_name || report.form_id)}')">Use Form</button>` : ""}
               <button type="button" onclick="loadReportDefinition('${escapeHtml(report.id)}')">Inspect</button>
               <button type="button" onclick="loadReportByValue('${escapeHtml(report.id)}')">Run</button>
             </article>
