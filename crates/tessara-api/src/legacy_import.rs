@@ -5,13 +5,18 @@
 //! end-to-end migration rehearsal while the final import model is still being
 //! defined.
 
-use std::{collections::HashMap, path::Path, str::FromStr};
+use std::{
+    collections::{HashMap, HashSet},
+    path::Path,
+    str::FromStr,
+};
 
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::{PgPool, Row};
 use tessara_core::FieldType;
+use tessara_reporting::MissingDataPolicy;
 use uuid::Uuid;
 
 use crate::{
@@ -44,6 +49,59 @@ pub struct LegacyImportSummary {
     pub dashboard_id: Uuid,
     /// Count of projected analytics values after import refresh.
     pub analytics_values: i64,
+}
+
+/// Validation report produced before importing a legacy rehearsal fixture.
+///
+/// The report is intentionally structured so migration rehearsals can surface
+/// actionable row/path-level feedback instead of failing at the first database
+/// constraint or type conversion error.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct LegacyImportValidationReport {
+    /// Number of validation issues found in the fixture.
+    pub issue_count: usize,
+    /// Specific validation issues ordered by fixture traversal.
+    pub issues: Vec<LegacyImportValidationIssue>,
+}
+
+impl LegacyImportValidationReport {
+    /// Returns `true` when the fixture is safe to hand to the database importer.
+    pub fn is_clean(&self) -> bool {
+        self.issues.is_empty()
+    }
+
+    fn into_error_message(self) -> String {
+        let preview = self
+            .issues
+            .iter()
+            .take(5)
+            .map(|issue| format!("{} at {}: {}", issue.code, issue.path, issue.message))
+            .collect::<Vec<_>>()
+            .join("; ");
+
+        if self.issue_count > 5 {
+            format!(
+                "legacy fixture validation failed with {} issues: {}; ...",
+                self.issue_count, preview
+            )
+        } else {
+            format!(
+                "legacy fixture validation failed with {} issues: {}",
+                self.issue_count, preview
+            )
+        }
+    }
+}
+
+/// Single actionable legacy fixture validation issue.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct LegacyImportValidationIssue {
+    /// Stable issue code suitable for filtering migration reports.
+    pub code: String,
+    /// JSON-like fixture path for the affected value.
+    pub path: String,
+    /// Human-readable explanation of the mapping or data problem.
+    pub message: String,
 }
 
 #[derive(Deserialize)]
@@ -171,9 +229,361 @@ pub async fn import_legacy_fixture_str(
     pool: &PgPool,
     fixture_json: &str,
 ) -> ApiResult<LegacyImportSummary> {
-    let fixture: LegacyFixture =
-        serde_json::from_str(fixture_json).map_err(|err| ApiError::BadRequest(err.to_string()))?;
+    let fixture = parse_legacy_fixture(fixture_json)?;
+    let validation = validate_legacy_fixture(&fixture);
+    if !validation.is_clean() {
+        return Err(ApiError::BadRequest(validation.into_error_message()));
+    }
+
     import_legacy_fixture(pool, fixture).await
+}
+
+/// Validates a legacy rehearsal fixture without writing to the database.
+///
+/// This is the preflight surface used by tests and migration scripts to find
+/// ambiguous mappings, missing field references, and type mismatches before an
+/// import attempts to mutate Tessara state.
+pub fn validate_legacy_fixture_str(fixture_json: &str) -> ApiResult<LegacyImportValidationReport> {
+    let fixture = parse_legacy_fixture(fixture_json)?;
+    Ok(validate_legacy_fixture(&fixture))
+}
+
+fn parse_legacy_fixture(fixture_json: &str) -> ApiResult<LegacyFixture> {
+    serde_json::from_str(fixture_json).map_err(|err| ApiError::BadRequest(err.to_string()))
+}
+
+fn validate_legacy_fixture(fixture: &LegacyFixture) -> LegacyImportValidationReport {
+    let mut validator = LegacyFixtureValidator::default();
+
+    validator.require_non_empty("name", &fixture.name, "fixture name");
+    validator.validate_node("partner", &fixture.partner);
+    validator.validate_node("program", &fixture.program);
+    validator.validate_node("activity", &fixture.activity);
+    validator.validate_session("session", &fixture.session);
+    validator.validate_distinct_node_legacy_ids(fixture);
+    validator.validate_choice_lists(&fixture.choice_lists);
+
+    let mut field_keys = HashMap::new();
+    validator.validate_form(&fixture.form, &mut field_keys);
+    validator.validate_submission(&fixture.submission, &field_keys);
+    validator.validate_report(&fixture.report, &field_keys);
+    validator.require_non_empty("dashboard.name", &fixture.dashboard.name, "dashboard name");
+    validator.require_non_empty(
+        "dashboard.chart_name",
+        &fixture.dashboard.chart_name,
+        "dashboard chart name",
+    );
+
+    validator.into_report()
+}
+
+#[derive(Default)]
+struct LegacyFixtureValidator {
+    issues: Vec<LegacyImportValidationIssue>,
+}
+
+impl LegacyFixtureValidator {
+    fn into_report(self) -> LegacyImportValidationReport {
+        LegacyImportValidationReport {
+            issue_count: self.issues.len(),
+            issues: self.issues,
+        }
+    }
+
+    fn validate_node(&mut self, path: &str, node: &LegacyNode) {
+        self.require_non_empty(
+            &format!("{path}.legacy_id"),
+            &node.legacy_id,
+            "node legacy ID",
+        );
+        self.require_non_empty(&format!("{path}.name"), &node.name, "node name");
+    }
+
+    fn validate_session(&mut self, path: &str, session: &LegacySession) {
+        self.require_non_empty(
+            &format!("{path}.legacy_id"),
+            &session.legacy_id,
+            "session legacy ID",
+        );
+        self.require_non_empty(&format!("{path}.name"), &session.name, "session name");
+        self.require_non_empty(&format!("{path}.date"), &session.date, "session date");
+    }
+
+    fn validate_distinct_node_legacy_ids(&mut self, fixture: &LegacyFixture) {
+        let mut seen = HashMap::new();
+        for (path, legacy_id) in [
+            ("partner.legacy_id", &fixture.partner.legacy_id),
+            ("program.legacy_id", &fixture.program.legacy_id),
+            ("activity.legacy_id", &fixture.activity.legacy_id),
+            ("session.legacy_id", &fixture.session.legacy_id),
+        ] {
+            if legacy_id.trim().is_empty() {
+                continue;
+            }
+            if let Some(previous_path) = seen.insert(legacy_id.as_str(), path) {
+                self.push_issue(
+                    "duplicate_node_legacy_id",
+                    path,
+                    format!(
+                        "node legacy ID '{legacy_id}' is also used at {previous_path}; import mappings must be unambiguous"
+                    ),
+                );
+            }
+        }
+    }
+
+    fn validate_choice_lists(&mut self, choice_lists: &[LegacyChoiceList]) {
+        let mut list_names = HashSet::new();
+        for (list_index, choice_list) in choice_lists.iter().enumerate() {
+            let list_path = format!("choice_lists[{list_index}]");
+            self.require_non_empty(
+                &format!("{list_path}.legacy_id"),
+                &choice_list.legacy_id,
+                "choice list legacy ID",
+            );
+            self.require_non_empty(
+                &format!("{list_path}.name"),
+                &choice_list.name,
+                "choice list name",
+            );
+            if !list_names.insert(choice_list.name.to_ascii_lowercase()) {
+                self.push_issue(
+                    "duplicate_choice_list_name",
+                    format!("{list_path}.name"),
+                    format!(
+                        "choice list name '{}' appears more than once in this fixture",
+                        choice_list.name
+                    ),
+                );
+            }
+
+            let mut choice_ids = HashSet::new();
+            for (choice_index, choice) in choice_list.choices.iter().enumerate() {
+                let choice_path = format!("{list_path}.choices[{choice_index}]");
+                self.require_non_empty(
+                    &format!("{choice_path}.legacy_id"),
+                    &choice.legacy_id,
+                    "choice legacy ID",
+                );
+                self.require_non_empty(
+                    &format!("{choice_path}.label"),
+                    &choice.label,
+                    "choice label",
+                );
+                if !choice.legacy_id.trim().is_empty()
+                    && !choice_ids.insert(choice.legacy_id.as_str())
+                {
+                    self.push_issue(
+                        "duplicate_choice_legacy_id",
+                        format!("{choice_path}.legacy_id"),
+                        format!(
+                            "choice legacy ID '{}' appears more than once in choice list '{}'",
+                            choice.legacy_id, choice_list.name
+                        ),
+                    );
+                }
+            }
+        }
+    }
+
+    fn validate_form<'a>(
+        &mut self,
+        form: &'a LegacyForm,
+        field_keys: &mut HashMap<&'a str, &'a LegacyField>,
+    ) {
+        self.require_non_empty("form.legacy_id", &form.legacy_id, "form legacy ID");
+        self.require_non_empty("form.name", &form.name, "form name");
+        self.require_non_empty("form.slug", &form.slug, "form slug");
+        self.require_non_empty(
+            "form.compatibility_group",
+            &form.compatibility_group,
+            "form compatibility group",
+        );
+        self.require_non_empty(
+            "form.version_label",
+            &form.version_label,
+            "form version label",
+        );
+        self.validate_scope("form.scope_node_type", &form.scope_node_type);
+
+        let mut section_labels = HashSet::new();
+        for (section_index, section) in form.sections.iter().enumerate() {
+            let section_path = format!("form.sections[{section_index}]");
+            self.require_non_empty(
+                &format!("{section_path}.legacy_id"),
+                &section.legacy_id,
+                "section legacy ID",
+            );
+            self.require_non_empty(
+                &format!("{section_path}.label"),
+                &section.label,
+                "section label",
+            );
+            if !section_labels.insert(section.label.to_ascii_lowercase()) {
+                self.push_issue(
+                    "duplicate_section_label",
+                    format!("{section_path}.label"),
+                    format!("section label '{}' appears more than once", section.label),
+                );
+            }
+
+            for (field_index, field) in section.fields.iter().enumerate() {
+                let field_path = format!("{section_path}.fields[{field_index}]");
+                self.require_non_empty(
+                    &format!("{field_path}.legacy_id"),
+                    &field.legacy_id,
+                    "field legacy ID",
+                );
+                self.require_non_empty(&format!("{field_path}.key"), &field.key, "field key");
+                self.require_non_empty(&format!("{field_path}.label"), &field.label, "field label");
+                if FieldType::from_str(&field.field_type).is_err() {
+                    self.push_issue(
+                        "unsupported_field_type",
+                        format!("{field_path}.field_type"),
+                        format!(
+                            "field '{}' uses unsupported type '{}'",
+                            field.key, field.field_type
+                        ),
+                    );
+                }
+                if !field.key.trim().is_empty()
+                    && field_keys.insert(field.key.as_str(), field).is_some()
+                {
+                    self.push_issue(
+                        "duplicate_form_field_key",
+                        format!("{field_path}.key"),
+                        format!("field key '{}' appears more than once", field.key),
+                    );
+                }
+            }
+        }
+    }
+
+    fn validate_submission(
+        &mut self,
+        submission: &LegacySubmission,
+        field_keys: &HashMap<&str, &LegacyField>,
+    ) {
+        self.require_non_empty(
+            "submission.legacy_id",
+            &submission.legacy_id,
+            "submission legacy ID",
+        );
+        self.validate_scope("submission.node_type", &submission.node_type);
+
+        for field in field_keys.values().filter(|field| field.required) {
+            if !submission.values.contains_key(&field.key) {
+                self.push_issue(
+                    "missing_required_submission_value",
+                    format!("submission.values.{}", field.key),
+                    format!(
+                        "required field '{}' is missing from the submission",
+                        field.key
+                    ),
+                );
+            }
+        }
+
+        for (field_key, value) in &submission.values {
+            let Some(field) = field_keys.get(field_key.as_str()) else {
+                self.push_issue(
+                    "unknown_submission_field",
+                    format!("submission.values.{field_key}"),
+                    format!("submission value references unknown form field '{field_key}'"),
+                );
+                continue;
+            };
+
+            let Ok(field_type) = FieldType::from_str(&field.field_type) else {
+                continue;
+            };
+            if let Err(error) = field_type.validate_json_value(value) {
+                self.push_issue(
+                    "invalid_submission_value_type",
+                    format!("submission.values.{field_key}"),
+                    format!(
+                        "submission value for field '{field_key}' is not compatible with {}: {error}",
+                        field_type.as_str()
+                    ),
+                );
+            }
+        }
+    }
+
+    fn validate_report(&mut self, report: &LegacyReport, field_keys: &HashMap<&str, &LegacyField>) {
+        self.require_non_empty("report.name", &report.name, "report name");
+        self.require_non_empty(
+            "report.logical_key",
+            &report.logical_key,
+            "report logical key",
+        );
+        self.require_non_empty(
+            "report.source_field_key",
+            &report.source_field_key,
+            "report source field key",
+        );
+        if MissingDataPolicy::from_str(&report.missing_policy).is_err() {
+            self.push_issue(
+                "unsupported_missing_policy",
+                "report.missing_policy",
+                format!(
+                    "report '{}' uses unsupported missing-data policy '{}'",
+                    report.name, report.missing_policy
+                ),
+            );
+        }
+        if !report.source_field_key.trim().is_empty()
+            && !field_keys.contains_key(report.source_field_key.as_str())
+        {
+            self.push_issue(
+                "unknown_report_source_field",
+                "report.source_field_key",
+                format!(
+                    "report '{}' references unknown source field '{}'",
+                    report.name, report.source_field_key
+                ),
+            );
+        }
+    }
+
+    fn validate_scope(&mut self, path: &str, scope: &str) {
+        self.require_non_empty(path, scope, "node type scope");
+        if !["partner", "program", "activity", "session"]
+            .iter()
+            .any(|allowed| allowed.eq_ignore_ascii_case(scope))
+        {
+            self.push_issue(
+                "unknown_node_type_scope",
+                path,
+                format!(
+                    "node type scope '{scope}' is not one of partner, program, activity, session"
+                ),
+            );
+        }
+    }
+
+    fn require_non_empty(&mut self, path: &str, value: &str, label: &str) {
+        if value.trim().is_empty() {
+            self.push_issue(
+                "missing_required_value",
+                path,
+                format!("{label} is required"),
+            );
+        }
+    }
+
+    fn push_issue(
+        &mut self,
+        code: impl Into<String>,
+        path: impl Into<String>,
+        message: impl Into<String>,
+    ) {
+        self.issues.push(LegacyImportValidationIssue {
+            code: code.into(),
+            path: path.into(),
+            message: message.into(),
+        });
+    }
 }
 
 async fn import_legacy_fixture(
@@ -941,4 +1351,55 @@ fn default_true() -> bool {
 
 fn default_missing_policy() -> String {
     "null".to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::Value;
+
+    use super::validate_legacy_fixture_str;
+
+    const LEGACY_FIXTURE: &str = include_str!("../../../fixtures/legacy-rehearsal.json");
+
+    #[test]
+    fn validation_accepts_representative_legacy_fixture() {
+        let report =
+            validate_legacy_fixture_str(LEGACY_FIXTURE).expect("fixture should deserialize");
+
+        assert!(report.is_clean());
+        assert_eq!(report.issue_count, 0);
+    }
+
+    #[test]
+    fn validation_reports_actionable_mapping_and_value_issues() {
+        let mut fixture: Value =
+            serde_json::from_str(LEGACY_FIXTURE).expect("fixture should parse as json");
+        fixture["program"]["legacy_id"] = fixture["partner"]["legacy_id"].clone();
+        fixture["form"]["scope_node_type"] = Value::String("county".to_string());
+        fixture["submission"]["node_type"] = Value::String("county".to_string());
+        fixture["form"]["sections"][0]["fields"][1]["key"] =
+            fixture["form"]["sections"][0]["fields"][0]["key"].clone();
+        fixture["form"]["sections"][0]["fields"][2]["field_type"] =
+            Value::String("file_upload".to_string());
+        fixture["submission"]["values"]["participants"] = Value::String("forty-two".to_string());
+        fixture["submission"]["values"]["unknown_field"] = Value::String("ignored".to_string());
+        fixture["report"]["source_field_key"] = Value::String("missing_field".to_string());
+        fixture["report"]["missing_policy"] = Value::String("drop_column".to_string());
+
+        let report = validate_legacy_fixture_str(&fixture.to_string())
+            .expect("invalid fixture should still deserialize");
+        let issue_codes = report
+            .issues
+            .iter()
+            .map(|issue| issue.code.as_str())
+            .collect::<Vec<_>>();
+
+        assert!(issue_codes.contains(&"duplicate_node_legacy_id"));
+        assert!(issue_codes.contains(&"unknown_node_type_scope"));
+        assert!(issue_codes.contains(&"duplicate_form_field_key"));
+        assert!(issue_codes.contains(&"unsupported_field_type"));
+        assert!(issue_codes.contains(&"unknown_submission_field"));
+        assert!(issue_codes.contains(&"unknown_report_source_field"));
+        assert!(issue_codes.contains(&"unsupported_missing_policy"));
+    }
 }
