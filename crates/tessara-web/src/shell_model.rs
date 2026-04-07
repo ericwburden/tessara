@@ -369,6 +369,7 @@ const REPORTING_ACTIONS: &[Action] = &[
     Action::new("deleteReport()", "Remove Report"),
     Action::new("loadReportById()", "Load Report By ID"),
     Action::new("loadReportDefinitionById()", "Inspect Report By ID"),
+    Action::new("refreshAnalyticsAndRunReport()", "Refresh and Run Report"),
     Action::new("createChart()", "Create Chart"),
     Action::new("updateChart()", "Update Chart"),
     Action::new("deleteChart()", "Remove Chart"),

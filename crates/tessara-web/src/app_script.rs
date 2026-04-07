@@ -677,6 +677,11 @@ pub const APPLICATION_SCRIPT: &str = r#"
         }
       }
 
+      async function refreshAnalyticsAndRunReport() {
+        await refreshAnalytics();
+        await loadReportById();
+      }
+
       function useReport(reportId, reportName = reportId) {
         selectRecord("report", reportName, reportId, {
           "report-id": reportId,
@@ -716,12 +721,21 @@ pub const APPLICATION_SCRIPT: &str = r#"
           missing_policy: binding.missing_policy
         }))));
         show(payload);
-        showCards(payload.bindings, (binding) => `
+        setScreen(`
           <article class="card">
-            <h3>${escapeHtml(binding.logical_key)}</h3>
-            <p>${escapeHtml(binding.source_field_key)} with ${escapeHtml(binding.missing_policy)}</p>
-            <button type="button" onclick="useReportBinding('${escapeHtml(binding.logical_key)}', '${escapeHtml(binding.source_field_key)}', '${escapeHtml(binding.missing_policy)}')">Use Binding</button>
+            <h3>Report Definition</h3>
+            <p>${escapeHtml(payload.name)}</p>
+            <p class="muted">${escapeHtml(payload.form_name || payload.form_id || "Any form")}</p>
+            <p>${payload.bindings.length} field bindings</p>
+            <button type="button" onclick="loadReportByValue('${escapeHtml(payload.id)}')">Run This Report</button>
           </article>
+          ${payload.bindings.map((binding) => `
+            <article class="card">
+              <h3>${escapeHtml(binding.logical_key)}</h3>
+              <p>${escapeHtml(binding.source_field_key)} with ${escapeHtml(binding.missing_policy)}</p>
+              <button type="button" onclick="useReportBinding('${escapeHtml(binding.logical_key)}', '${escapeHtml(binding.source_field_key)}', '${escapeHtml(binding.missing_policy)}')">Use Binding</button>
+            </article>
+          `).join("") || '<p class="muted">No report bindings configured.</p>'}
         `);
       }
 

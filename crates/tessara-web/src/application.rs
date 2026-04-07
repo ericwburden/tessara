@@ -364,6 +364,7 @@ fn ReportRunnerScreen() -> impl IntoView {
                 <button type="button" onclick="refreshAnalytics()">"Refresh Analytics"</button>
                 <button type="button" onclick="loadReports()">"Choose Report"</button>
                 <button type="button" onclick="loadReportDefinitionById()">"Inspect Report"</button>
+                <button type="button" onclick="refreshAnalyticsAndRunReport()">"Refresh and Run Report"</button>
                 <button type="button" onclick="loadReportById()">"Run Report"</button>
             </div>
         </section>
@@ -493,6 +494,7 @@ fn ReportScreen() -> impl IntoView {
             <div class="actions">
                 <button type="button" onclick="refreshAnalytics()">"Refresh Analytics"</button>
                 <button type="button" onclick="loadReports()">"Choose Report"</button>
+                <button type="button" onclick="refreshAnalyticsAndRunReport()">"Refresh and Run Report"</button>
                 <button type="button" onclick="loadReportById()">"Run Selected Report"</button>
             </div>
         </section>
@@ -621,6 +623,7 @@ fn ReportAdminScreen() -> impl IntoView {
                 <button type="button" onclick="deleteReport()">"Remove Report"</button>
                 <button type="button" onclick="loadReports()">"Load Reports"</button>
                 <button type="button" onclick="loadReportDefinitionById()">"Inspect Report"</button>
+                <button type="button" onclick="refreshAnalyticsAndRunReport()">"Refresh and Run Report"</button>
                 <button type="button" onclick="loadReportById()">"Run Report"</button>
                 <button type="button" onclick="createChart()">"Create Chart"</button>
                 <button type="button" onclick="updateChart()">"Update Chart"</button>

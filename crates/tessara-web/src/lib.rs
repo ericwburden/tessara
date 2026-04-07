@@ -221,6 +221,9 @@ mod tests {
         assert!(html.contains("Use Chart Context"));
         assert!(html.contains("Use Binding"));
         assert!(html.contains("Report Results"));
+        assert!(html.contains("Report Definition"));
+        assert!(html.contains("Run This Report"));
+        assert!(html.contains("Refresh and Run Report"));
         assert!(html.contains("table-wrap"));
         assert!(html.contains("/api/reports"));
         assert!(html.contains("sessionStorage"));
@@ -265,6 +268,9 @@ mod tests {
         assert!(html.contains("Use Binding"));
         assert!(html.contains("Remove Binding"));
         assert!(html.contains("Report Results"));
+        assert!(html.contains("Report Definition"));
+        assert!(html.contains("Run This Report"));
+        assert!(html.contains("Refresh and Run Report"));
         assert!(html.contains("Open Submission Workspace"));
         assert!(html.contains("Open Migration Workbench"));
         assert!(html.contains("Open Reporting Workspace"));
@@ -307,6 +313,7 @@ mod tests {
         assert!(html.contains("Choose Report"));
         assert!(html.contains("Inspect Report"));
         assert!(html.contains("Run Report"));
+        assert!(html.contains("Refresh and Run Report"));
         assert!(html.contains("Choose Dashboard"));
         assert!(html.contains("Open Dashboard"));
         assert!(html.contains("Choose Chart"));
