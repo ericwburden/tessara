@@ -63,6 +63,11 @@ pub const SCRIPT: &str = r#"
         return value ? JSON.parse(value) : {};
       }
 
+      function booleanInputValue(id) {
+        const value = inputValue(id).toLowerCase();
+        return value === "true" || value === "yes" || value === "1";
+      }
+
       function fieldInputId(field) {
         return `form-field-${field.id}`;
       }
@@ -319,7 +324,7 @@ pub const SCRIPT: &str = r#"
               key: inputValue("metadata-key"),
               label: inputValue("metadata-label"),
               field_type: inputValue("metadata-field-type"),
-              required: false
+              required: booleanInputValue("metadata-required")
             })
           });
           show(payload);
@@ -490,7 +495,7 @@ pub const SCRIPT: &str = r#"
               key: inputValue("field-key"),
               label: inputValue("field-label"),
               field_type: inputValue("field-type"),
-              required: true,
+              required: booleanInputValue("field-required"),
               position: 0
             })
           });

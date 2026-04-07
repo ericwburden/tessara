@@ -132,6 +132,12 @@ const HIERARCHY_INPUTS: &[TextInput] = &[
         "text",
     ),
     TextInput::new(
+        "metadata-required",
+        "Metadata required",
+        "true or false",
+        "false",
+    ),
+    TextInput::new(
         "node-type-id",
         "Node type ID",
         "Node type ID for node creation",
@@ -195,6 +201,7 @@ const FORM_INPUTS: &[TextInput] = &[
     TextInput::new("field-key", "Field key", "Field key", "participants"),
     TextInput::new("field-label", "Field label", "Field label", "Participants"),
     TextInput::new("field-type", "Field type", "Field type", "number"),
+    TextInput::new("field-required", "Field required", "true or false", "true"),
 ];
 
 const FORM_ACTIONS: &[Action] = &[
