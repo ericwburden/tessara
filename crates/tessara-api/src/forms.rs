@@ -70,6 +70,25 @@ pub struct RenderedField {
     position: i32,
 }
 
+#[derive(Serialize)]
+pub struct FormSummary {
+    id: Uuid,
+    name: String,
+    slug: String,
+    scope_node_type_id: Option<Uuid>,
+    scope_node_type_name: Option<String>,
+    versions: Vec<FormVersionSummary>,
+}
+
+#[derive(Serialize)]
+pub struct FormVersionSummary {
+    id: Uuid,
+    version_label: String,
+    status: String,
+    published_at: Option<chrono::DateTime<chrono::Utc>>,
+    field_count: i64,
+}
+
 pub async fn create_form(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -90,6 +109,78 @@ pub async fn create_form(
     .await?;
 
     Ok(Json(IdResponse { id }))
+}
+
+/// Lists forms and their versions for the admin builder shell.
+pub async fn list_forms(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> ApiResult<Json<Vec<FormSummary>>> {
+    auth::require_capability(&state.pool, &headers, "forms:write").await?;
+
+    let form_rows = sqlx::query(
+        r#"
+        SELECT forms.id, forms.name, forms.slug, forms.scope_node_type_id, node_types.name AS scope_node_type_name
+        FROM forms
+        LEFT JOIN node_types ON node_types.id = forms.scope_node_type_id
+        ORDER BY forms.created_at, forms.name
+        "#,
+    )
+    .fetch_all(&state.pool)
+    .await?;
+
+    let version_rows = sqlx::query(
+        r#"
+        SELECT
+            form_versions.id,
+            form_versions.form_id,
+            form_versions.version_label,
+            form_versions.status::text AS status,
+            form_versions.published_at,
+            COUNT(form_fields.id) AS field_count
+        FROM form_versions
+        LEFT JOIN form_fields ON form_fields.form_version_id = form_versions.id
+        GROUP BY
+            form_versions.id,
+            form_versions.form_id,
+            form_versions.version_label,
+            form_versions.status,
+            form_versions.published_at,
+            form_versions.created_at
+        ORDER BY form_versions.created_at, form_versions.version_label
+        "#,
+    )
+    .fetch_all(&state.pool)
+    .await?;
+
+    let mut forms = Vec::new();
+    for form in form_rows {
+        let form_id: Uuid = form.try_get("id")?;
+        let mut versions = Vec::new();
+        for version in &version_rows {
+            let version_form_id: Uuid = version.try_get("form_id")?;
+            if version_form_id == form_id {
+                versions.push(FormVersionSummary {
+                    id: version.try_get("id")?,
+                    version_label: version.try_get("version_label")?,
+                    status: version.try_get("status")?,
+                    published_at: version.try_get("published_at")?,
+                    field_count: version.try_get("field_count")?,
+                });
+            }
+        }
+
+        forms.push(FormSummary {
+            id: form_id,
+            name: form.try_get("name")?,
+            slug: form.try_get("slug")?,
+            scope_node_type_id: form.try_get("scope_node_type_id")?,
+            scope_node_type_name: form.try_get("scope_node_type_name")?,
+            versions,
+        });
+    }
+
+    Ok(Json(forms))
 }
 
 pub async fn create_form_version(

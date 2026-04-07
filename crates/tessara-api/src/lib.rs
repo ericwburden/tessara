@@ -38,7 +38,10 @@ pub fn router(state: AppState) -> Router {
         .route("/health", get(|| async { "ok" }))
         .route("/api/auth/login", post(auth::login))
         .route("/api/me", get(auth::me))
-        .route("/api/admin/node-types", post(hierarchy::create_node_type))
+        .route(
+            "/api/admin/node-types",
+            get(hierarchy::list_node_types).post(hierarchy::create_node_type),
+        )
         .route(
             "/api/admin/node-type-relationships",
             post(hierarchy::create_node_type_relationship),
@@ -49,7 +52,10 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/api/admin/nodes", post(hierarchy::create_node))
         .route("/api/nodes", get(hierarchy::list_nodes))
-        .route("/api/admin/forms", post(forms::create_form))
+        .route(
+            "/api/admin/forms",
+            get(forms::list_forms).post(forms::create_form),
+        )
         .route(
             "/api/admin/forms/{form_id}/versions",
             post(forms::create_form_version),

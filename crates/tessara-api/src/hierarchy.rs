@@ -56,6 +56,14 @@ pub struct NodeResponse {
     name: String,
 }
 
+#[derive(Serialize)]
+pub struct NodeTypeSummary {
+    id: Uuid,
+    name: String,
+    slug: String,
+    node_count: i64,
+}
+
 pub async fn create_node_type(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -70,6 +78,40 @@ pub async fn create_node_type(
         .await?;
 
     Ok(Json(IdResponse { id }))
+}
+
+/// Lists configured hierarchy node types for the admin builder shell.
+pub async fn list_node_types(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> ApiResult<Json<Vec<NodeTypeSummary>>> {
+    auth::require_capability(&state.pool, &headers, "hierarchy:write").await?;
+
+    let rows = sqlx::query(
+        r#"
+        SELECT node_types.id, node_types.name, node_types.slug, COUNT(nodes.id) AS node_count
+        FROM node_types
+        LEFT JOIN nodes ON nodes.node_type_id = node_types.id
+        GROUP BY node_types.id, node_types.name, node_types.slug, node_types.created_at
+        ORDER BY node_types.created_at, node_types.name
+        "#,
+    )
+    .fetch_all(&state.pool)
+    .await?;
+
+    let node_types = rows
+        .into_iter()
+        .map(|row| {
+            Ok(NodeTypeSummary {
+                id: row.try_get("id")?,
+                name: row.try_get("name")?,
+                slug: row.try_get("slug")?,
+                node_count: row.try_get("node_count")?,
+            })
+        })
+        .collect::<Result<Vec<_>, sqlx::Error>>()?;
+
+    Ok(Json(node_types))
 }
 
 pub async fn create_node_type_relationship(

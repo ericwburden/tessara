@@ -40,6 +40,17 @@ pub fn admin_shell_html() -> &'static str {
         background: #1f2937;
         padding: 24px;
       }
+      .cards {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      }
+      .card {
+        border: 1px solid #374151;
+        border-radius: 12px;
+        background: #111827;
+        padding: 16px;
+      }
       .actions {
         display: flex;
         flex-wrap: wrap;
@@ -92,6 +103,8 @@ pub fn admin_shell_html() -> &'static str {
         <div class="actions">
           <button type="button" onclick="login()">Log In</button>
           <button type="button" onclick="seedDemo()">Seed Demo</button>
+          <button type="button" onclick="loadNodeTypes()">Hierarchy Screen</button>
+          <button type="button" onclick="loadForms()">Forms Screen</button>
           <button type="button" onclick="loadNodes()">Load Nodes</button>
           <button type="button" onclick="loadDashboards()">Load Dashboards</button>
           <button type="button" onclick="loadReports()">Load Reports</button>
@@ -107,7 +120,11 @@ pub fn admin_shell_html() -> &'static str {
         </div>
       </section>
       <section class="panel">
-        <h2>Output</h2>
+        <h2>Screen</h2>
+        <div id="screen" class="cards"></div>
+      </section>
+      <section class="panel">
+        <h2>Raw Output</h2>
         <pre id="output">No API calls yet.</pre>
       </section>
     </main>
@@ -119,6 +136,21 @@ pub fn admin_shell_html() -> &'static str {
       function show(value) {
         document.getElementById("output").textContent =
           typeof value === "string" ? value : JSON.stringify(value, null, 2);
+      }
+
+      function escapeHtml(value) {
+        return String(value ?? "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#39;");
+      }
+
+      function showCards(records, render) {
+        document.getElementById("screen").innerHTML = records.length
+          ? records.map(render).join("")
+          : '<p class="muted">No records found.</p>';
       }
 
       function inputValue(id) {
@@ -166,9 +198,87 @@ pub fn admin_shell_html() -> &'static str {
         }
       }
 
+      async function loadNodeTypes() {
+        try {
+          if (!token) await login();
+          const payload = await request("/api/admin/node-types");
+          show(payload);
+          showCards(payload, (nodeType) => `
+            <article class="card">
+              <h3>${escapeHtml(nodeType.name)}</h3>
+              <p class="muted">${escapeHtml(nodeType.slug)}</p>
+              <p>${nodeType.node_count} nodes</p>
+              <code>${escapeHtml(nodeType.id)}</code>
+            </article>
+          `);
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function loadForms() {
+        try {
+          if (!token) await login();
+          const payload = await request("/api/admin/forms");
+          show(payload);
+          showCards(payload, (form) => `
+            <article class="card">
+              <h3>${escapeHtml(form.name)}</h3>
+              <p class="muted">${escapeHtml(form.slug)}</p>
+              <p>Scope: ${escapeHtml(form.scope_node_type_name || "Global")}</p>
+              <p>${form.versions.length} versions</p>
+              <ul>
+                ${form.versions.map((version) => `
+                  <li>
+                    ${escapeHtml(version.version_label)}:
+                    ${escapeHtml(version.status)}
+                    <button type="button" onclick="renderForm('${escapeHtml(version.id)}')">Render</button>
+                  </li>
+                `).join("")}
+              </ul>
+            </article>
+          `);
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function renderForm(formVersionId) {
+        try {
+          const payload = await request(`/api/form-versions/${formVersionId}/render`);
+          show(payload);
+          document.getElementById("screen").innerHTML = `
+            <article class="card">
+              <h3>Form ${escapeHtml(payload.version_label)}</h3>
+              <p>Status: ${escapeHtml(payload.status)}</p>
+              ${payload.sections.map((section) => `
+                <section>
+                  <h4>${escapeHtml(section.title)}</h4>
+                  <ul>
+                    ${section.fields.map((field) => `
+                      <li>${escapeHtml(field.label)} (${escapeHtml(field.field_type)})</li>
+                    `).join("")}
+                  </ul>
+                </section>
+              `).join("")}
+            </article>
+          `;
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
       async function loadNodes() {
         try {
-          show(await request("/api/nodes"));
+          const payload = await request("/api/nodes");
+          show(payload);
+          showCards(payload, (node) => `
+            <article class="card">
+              <h3>${escapeHtml(node.name)}</h3>
+              <p class="muted">Node type ${escapeHtml(node.node_type_id)}</p>
+              <code>${escapeHtml(node.id)}</code>
+            </article>
+          `);
         } catch (error) {
           show(error.message);
         }
@@ -176,7 +286,15 @@ pub fn admin_shell_html() -> &'static str {
 
       async function loadDashboards() {
         try {
-          show(await request("/api/dashboards"));
+          const payload = await request("/api/dashboards");
+          show(payload);
+          showCards(payload, (dashboard) => `
+            <article class="card">
+              <h3>${escapeHtml(dashboard.name)}</h3>
+              <p>${dashboard.component_count} components</p>
+              <button type="button" onclick="loadDashboardByValue('${escapeHtml(dashboard.id)}')">Open</button>
+            </article>
+          `);
         } catch (error) {
           show(error.message);
         }
@@ -185,7 +303,15 @@ pub fn admin_shell_html() -> &'static str {
       async function loadReports() {
         try {
           if (!token) await login();
-          show(await request("/api/reports"));
+          const payload = await request("/api/reports");
+          show(payload);
+          showCards(payload, (report) => `
+            <article class="card">
+              <h3>${escapeHtml(report.name)}</h3>
+              <p class="muted">Form ${escapeHtml(report.form_id || "Any")}</p>
+              <button type="button" onclick="loadReportByValue('${escapeHtml(report.id)}')">Run</button>
+            </article>
+          `);
         } catch (error) {
           show(error.message);
         }
@@ -204,10 +330,22 @@ pub fn admin_shell_html() -> &'static str {
         try {
           const dashboardId = inputValue("dashboard-id");
           if (!dashboardId) throw new Error("Enter a dashboard ID first.");
-          show(await request(`/api/dashboards/${dashboardId}`));
+          await loadDashboardByValue(dashboardId);
         } catch (error) {
           show(error.message);
         }
+      }
+
+      async function loadDashboardByValue(dashboardId) {
+        const payload = await request(`/api/dashboards/${dashboardId}`);
+        show(payload);
+        showCards(payload.components, (component) => `
+          <article class="card">
+            <h3>${escapeHtml(component.chart.name)}</h3>
+            <p>${escapeHtml(component.chart.chart_type)} chart</p>
+            <p class="muted">Report ${escapeHtml(component.chart.report_id || "None")}</p>
+          </article>
+        `);
       }
 
       async function loadReportById() {
@@ -215,10 +353,23 @@ pub fn admin_shell_html() -> &'static str {
           if (!token) await login();
           const reportId = inputValue("report-id");
           if (!reportId) throw new Error("Enter a report ID first.");
-          show(await request(`/api/reports/${reportId}/table`));
+          await loadReportByValue(reportId);
         } catch (error) {
           show(error.message);
         }
+      }
+
+      async function loadReportByValue(reportId) {
+        if (!token) await login();
+        const payload = await request(`/api/reports/${reportId}/table`);
+        show(payload);
+        showCards(payload.rows, (row) => `
+          <article class="card">
+            <h3>${escapeHtml(row.node_name || "Unknown node")}</h3>
+            <p>${escapeHtml(row.logical_key)}: ${escapeHtml(row.field_value)}</p>
+            <p class="muted">${escapeHtml(row.submission_id)}</p>
+          </article>
+        `);
       }
     </script>
   </body>
@@ -236,10 +387,15 @@ mod tests {
         assert!(html.contains("/api/auth/login"));
         assert!(html.contains("/api/demo/seed"));
         assert!(html.contains("/api/nodes"));
+        assert!(html.contains("/api/admin/node-types"));
+        assert!(html.contains("/api/admin/forms"));
+        assert!(html.contains("/api/form-versions/"));
         assert!(html.contains("/api/dashboards/"));
         assert!(html.contains("/api/dashboards"));
         assert!(html.contains("/api/reports/"));
         assert!(html.contains("/api/reports"));
         assert!(html.contains("Dashboard ID from seed or import output"));
+        assert!(html.contains("Hierarchy Screen"));
+        assert!(html.contains("Forms Screen"));
     }
 }

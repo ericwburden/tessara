@@ -26,6 +26,35 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
     .await;
     assert_eq!(seed["analytics_values"], 1);
 
+    let node_types = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/admin/node-types", &token, None),
+    )
+    .await;
+    assert!(
+        node_types
+            .as_array()
+            .expect("node type response should be an array")
+            .iter()
+            .any(|node_type| node_type["slug"] == "organization"
+                && node_type["node_count"].as_i64().unwrap_or_default() >= 1)
+    );
+
+    let forms = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/admin/forms", &token, None),
+    )
+    .await;
+    assert!(
+        forms
+            .as_array()
+            .expect("forms response should be an array")
+            .iter()
+            .any(|form| form["id"] == seed["form_id"]
+                && form["versions"][0]["id"] == seed["form_version_id"]
+                && form["versions"][0]["status"] == "published")
+    );
+
     let report_id = seed["report_id"]
         .as_str()
         .expect("seed response should contain report id");
