@@ -39,6 +39,36 @@ pub const APPLICATION_SCRIPT: &str = r#"
           : '<p class="muted">No records found.</p>');
       }
 
+      function reportRowsView(rows) {
+        if (rows.length === 0) {
+          return '<p class="muted">No submitted rows matched this report.</p>';
+        }
+        return `
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Node</th>
+                  <th>Field</th>
+                  <th>Value</th>
+                  <th>Submission</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rows.map((row) => `
+                  <tr>
+                    <td>${escapeHtml(row.node_name || "Unknown node")}</td>
+                    <td>${escapeHtml(row.logical_key || "")}</td>
+                    <td>${escapeHtml(row.field_value ?? "")}</td>
+                    <td>${row.submission_id ? `<button type="button" onclick="loadSubmissionByValue('${escapeHtml(row.submission_id)}')">Open</button>` : '<span class="muted">None</span>'}</td>
+                  </tr>
+                `).join("")}
+              </tbody>
+            </table>
+          </div>
+        `;
+      }
+
       function inputValue(id) {
         return document.getElementById(id)?.value.trim() ?? "";
       }
@@ -563,7 +593,10 @@ pub const APPLICATION_SCRIPT: &str = r#"
       }
 
       function useReport(reportId, reportName = reportId) {
-        selectRecord("report", reportName, reportId, { "report-id": reportId });
+        selectRecord("report", reportName, reportId, {
+          "report-id": reportId,
+          "report-name": reportName
+        });
       }
 
       async function loadReports() {
@@ -575,8 +608,7 @@ pub const APPLICATION_SCRIPT: &str = r#"
             <article class="card">
               <h3>${escapeHtml(report.name)}</h3>
               <p class="muted">Form ${escapeHtml(report.form_name || report.form_id || "Any")}</p>
-              <button type="button" onclick="useReport('${escapeHtml(report.id)}', '${escapeHtml(report.name)}')">Use Report</button>
-              ${report.form_id ? `<button type="button" onclick="useForm('${escapeHtml(report.form_id)}', '${escapeHtml(report.form_name || report.form_id)}')">Use Form</button>` : ""}
+              <button type="button" onclick="useReport('${escapeHtml(report.id)}', '${escapeHtml(report.name)}'); ${report.form_id ? `useForm('${escapeHtml(report.form_id)}', '${escapeHtml(report.form_name || report.form_id)}');` : ""}">Use Report Context</button>
               <button type="button" onclick="loadReportDefinition('${escapeHtml(report.id)}')">Inspect</button>
               <button type="button" onclick="loadReportByValue('${escapeHtml(report.id)}')">Run</button>
             </article>
@@ -633,18 +665,20 @@ pub const APPLICATION_SCRIPT: &str = r#"
         const payload = await request(`/api/reports/${reportId}/table`);
         useReport(reportId);
         show(payload);
-        showCards(payload.rows, (row) => `
+        setScreen(`
           <article class="card">
-            <h3>${escapeHtml(row.node_name || "Unknown node")}</h3>
-            <p>${escapeHtml(row.logical_key)}: ${escapeHtml(row.field_value)}</p>
-            <p class="muted">${escapeHtml(row.submission_id)}</p>
+            <h3>Report Results</h3>
+            <p>${payload.rows.length} rows returned.</p>
+            ${reportRowsView(payload.rows)}
           </article>
         `);
       }
 
-      function useChart(chartId, chartName = chartId, reportId = "", reportName = reportId) {
+      function useChart(chartId, chartName = chartId, reportId = "", reportName = reportId, chartType = "table") {
         selectRecord("chart", chartName, chartId, {
           "chart-id": chartId,
+          "chart-name": chartName,
+          "chart-type": chartType,
           ...(reportId ? { "report-id": reportId } : {})
         });
         if (reportId) useReport(reportId, reportName || reportId);
@@ -660,8 +694,8 @@ pub const APPLICATION_SCRIPT: &str = r#"
               <h3>${escapeHtml(chart.name)}</h3>
               <p>${escapeHtml(chart.chart_type)} chart</p>
               <p class="muted">Report ${escapeHtml(chart.report_name || "None")}${chart.report_form_name ? ` on ${escapeHtml(chart.report_form_name)}` : ""}</p>
-              <button type="button" onclick="useChart('${escapeHtml(chart.id)}', '${escapeHtml(chart.name)}', '${escapeHtml(chart.report_id || "")}', '${escapeHtml(chart.report_name || "")}')">Use Chart</button>
-              ${chart.report_id ? `<button type="button" onclick="useReport('${escapeHtml(chart.report_id)}', '${escapeHtml(chart.report_name || `Report for ${chart.name}`)}')">Use Report</button>` : ""}
+              <button type="button" onclick="useChart('${escapeHtml(chart.id)}', '${escapeHtml(chart.name)}', '${escapeHtml(chart.report_id || "")}', '${escapeHtml(chart.report_name || "")}', '${escapeHtml(chart.chart_type)}')">Use Chart Context</button>
+              ${chart.report_id ? `<button type="button" onclick="loadReportByValue('${escapeHtml(chart.report_id)}')">Run Report</button>` : ""}
               <code>${escapeHtml(chart.id)}</code>
             </article>
           `);
@@ -671,7 +705,10 @@ pub const APPLICATION_SCRIPT: &str = r#"
       }
 
       function useDashboard(dashboardId, dashboardName = dashboardId) {
-        selectRecord("dashboard", dashboardName, dashboardId, { "dashboard-id": dashboardId });
+        selectRecord("dashboard", dashboardName, dashboardId, {
+          "dashboard-id": dashboardId,
+          "dashboard-name": dashboardName
+        });
       }
 
       async function loadDashboards() {
@@ -716,10 +753,11 @@ pub const APPLICATION_SCRIPT: &str = r#"
             <article class="card">
               <h3>${escapeHtml(component.chart.name)}</h3>
               <p>${escapeHtml(component.chart.chart_type)} chart</p>
+              <p>Position ${component.position}</p>
               <p class="muted">Report ${escapeHtml(component.chart.report_name || component.chart.report_id || "None")}${component.chart.report_form_name ? ` on ${escapeHtml(component.chart.report_form_name)}` : ""}</p>
-              <ul>
-                ${rows.map((row) => `<li>${escapeHtml(row.node_name || "Unknown node")}: ${escapeHtml(row.logical_key)} = ${escapeHtml(row.field_value)}</li>`).join("")}
-              </ul>
+              <button type="button" onclick="useChart('${escapeHtml(component.chart.id)}', '${escapeHtml(component.chart.name)}', '${escapeHtml(component.chart.report_id || "")}', '${escapeHtml(component.chart.report_name || "")}', '${escapeHtml(component.chart.chart_type)}')">Use Chart Context</button>
+              ${component.chart.report_id ? `<button type="button" onclick="loadReportByValue('${escapeHtml(component.chart.report_id)}')">Open Report</button>` : ""}
+              ${reportRowsView(rows)}
             </article>
           `;
         }));

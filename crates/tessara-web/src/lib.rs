@@ -204,6 +204,10 @@ mod tests {
         assert!(html.contains("Use Form Version"));
         assert!(html.contains("Use Node"));
         assert!(html.contains("Open Response Form"));
+        assert!(html.contains("Use Report Context"));
+        assert!(html.contains("Use Chart Context"));
+        assert!(html.contains("Report Results"));
+        assert!(html.contains("table-wrap"));
         assert!(html.contains("/api/reports"));
         assert!(html.contains("sessionStorage"));
         assert!(html.contains("tessara.devToken"));
@@ -240,6 +244,10 @@ mod tests {
         assert!(html.contains("Remove Dashboard"));
         assert!(html.contains("Update Component"));
         assert!(html.contains("Remove Component"));
+        assert!(html.contains("Use Report Context"));
+        assert!(html.contains("Use Chart Context"));
+        assert!(html.contains("Use Component Context"));
+        assert!(html.contains("Report Results"));
         assert!(html.contains("Open Submission Workspace"));
         assert!(html.contains("Open Migration Workbench"));
         assert!(html.contains("Open Reporting Workspace"));

@@ -264,6 +264,25 @@ pub const STYLE: &str = r#"
         color: var(--light);
         padding: 16px;
       }
+      .table-wrap {
+        overflow-x: auto;
+      }
+      table {
+        border-collapse: collapse;
+        min-width: 100%;
+      }
+      th, td {
+        border-bottom: 1px solid var(--neutral);
+        padding: 10px 12px;
+        text-align: left;
+        vertical-align: top;
+      }
+      th {
+        color: var(--slate-dark);
+        font-size: 0.78rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
       .muted {
         color: var(--slate-mid);
       }
