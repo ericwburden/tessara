@@ -142,6 +142,8 @@ The local shell now covers the main demo workflow surfaces:
 
 - Leptos SSR-rendered shell structure with the current JavaScript controller
   retained for immediate local workflow testing.
+- Roadmap-aligned workflow sections and an in-browser user testing guide for
+  the Compose deployment path.
 - Admin read screens for hierarchy types, forms, reports, dashboards, nodes,
   and submissions.
 - Admin builder controls for node types, forms, form versions, sections, fields,
@@ -192,3 +194,7 @@ The initial roadmap pass now proves the full migration thread from configurable
 hierarchy through import rehearsal and reporting. The next milestone should
 continue turning the API-first shell into a structured frontend and keep moving
 stable domain contracts out of `tessara-api` into the domain crates.
+
+The Dockerfile uses BuildKit cache mounts for Cargo registry, git, and target
+caches so repeated `docker compose up -d --build` test deployments avoid
+rebuilding the entire Rust dependency graph after small frontend changes.
