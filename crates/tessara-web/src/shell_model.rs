@@ -199,11 +199,18 @@ const FORM_INPUTS: &[TextInput] = &[
     ),
     TextInput::new("section-id", "Section ID", "Section ID", ""),
     TextInput::new("section-title", "Section title", "Section title", "Main"),
+    TextInput::new(
+        "section-position",
+        "Section position",
+        "Section position",
+        "0",
+    ),
     TextInput::new("field-id", "Field ID", "Field ID", ""),
     TextInput::new("field-key", "Field key", "Field key", "participants"),
     TextInput::new("field-label", "Field label", "Field label", "Participants"),
     TextInput::new("field-type", "Field type", "Field type", "number"),
     TextInput::new("field-required", "Field required", "true or false", "true"),
+    TextInput::new("field-position", "Field position", "Field position", "0"),
 ];
 
 const FORM_ACTIONS: &[Action] = &[

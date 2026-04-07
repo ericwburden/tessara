@@ -109,6 +109,8 @@ mod tests {
         assert!(html.contains("Use Report Source"));
         assert!(html.contains("Update Section"));
         assert!(html.contains("Update Field"));
+        assert!(html.contains("section-position"));
+        assert!(html.contains("field-position"));
         assert!(html.contains("/api/admin/form-fields/${fieldId}"));
         assert!(html.contains("Add Binding"));
         assert!(html.contains("report-missing-policy"));
@@ -188,6 +190,8 @@ mod tests {
         assert!(html.contains("Update Node"));
         assert!(html.contains("Create Form"));
         assert!(html.contains("Update Field"));
+        assert!(html.contains("Section position"));
+        assert!(html.contains("Field position"));
         assert!(html.contains("Publish Version"));
         assert!(html.contains("Add Binding"));
         assert!(html.contains("Update Report"));

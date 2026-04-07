@@ -523,10 +523,10 @@ pub const SCRIPT: &str = r#"
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               title: inputValue("section-title"),
-              position: 0
+              position: Number(inputValue("section-position") || 0)
             })
           });
-          document.getElementById("section-id").value = payload.id;
+          setInput("section-id", payload.id);
           show(payload);
           await renderForm(formVersionId);
         } catch (error) {
@@ -544,7 +544,7 @@ pub const SCRIPT: &str = r#"
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               title: inputValue("section-title"),
-              position: 0
+              position: Number(inputValue("section-position") || 0)
             })
           });
           show(payload);
@@ -571,7 +571,7 @@ pub const SCRIPT: &str = r#"
               label: inputValue("field-label"),
               field_type: inputValue("field-type"),
               required: booleanInputValue("field-required"),
-              position: 0
+              position: Number(inputValue("field-position") || 0)
             })
           });
           show(payload);
@@ -598,7 +598,7 @@ pub const SCRIPT: &str = r#"
               label: inputValue("field-label"),
               field_type: inputValue("field-type"),
               required: booleanInputValue("field-required"),
-              position: 0
+              position: Number(inputValue("field-position") || 0)
             })
           });
           show(payload);
@@ -640,7 +640,7 @@ pub const SCRIPT: &str = r#"
               ${payload.sections.map((section) => `
                 <section class="form-section">
                   <h4>${escapeHtml(section.title)}</h4>
-                  <button type="button" onclick="useSection('${escapeHtml(section.id)}', '${escapeHtml(section.title)}')">Use Section</button>
+                  <button type="button" onclick="useSection('${escapeHtml(section.id)}', '${escapeHtml(section.title)}', ${section.position})">Use Section</button>
                   <div class="form-fields">
                     ${section.fields.map((field) => `
                       <div class="form-field">
@@ -648,7 +648,7 @@ pub const SCRIPT: &str = r#"
                           ${escapeHtml(field.label)} (${escapeHtml(field.field_type)}${field.required ? ", required" : ""})
                         </label>
                         ${renderFieldInput(field)}
-                        <button type="button" onclick="useField('${escapeHtml(field.id)}', '${escapeHtml(field.key)}', '${escapeHtml(field.label)}', '${escapeHtml(field.field_type)}', ${field.required ? "true" : "false"})">Use Field Settings</button>
+                        <button type="button" onclick="useField('${escapeHtml(field.id)}', '${escapeHtml(field.key)}', '${escapeHtml(field.label)}', '${escapeHtml(field.field_type)}', ${field.required ? "true" : "false"}, ${field.position})">Use Field Settings</button>
                         <button type="button" onclick="useReportField('${escapeHtml(field.key)}', '${escapeHtml(field.label)}')">Use Report Source</button>
                       </div>
                     `).join("")}
@@ -667,20 +667,22 @@ pub const SCRIPT: &str = r#"
         }
       }
 
-      function useSection(sectionId, sectionTitle = sectionId) {
+      function useSection(sectionId, sectionTitle = sectionId, position = 0) {
         selectRecord("form section", sectionTitle, sectionId, {
           "section-id": sectionId,
-          "section-title": sectionTitle
+          "section-title": sectionTitle,
+          "section-position": String(position)
         });
       }
 
-      function useField(fieldId, fieldKey, fieldLabel = fieldKey, fieldType = "text", required = true) {
+      function useField(fieldId, fieldKey, fieldLabel = fieldKey, fieldType = "text", required = true, position = 0) {
         selectRecord("form field", fieldLabel, fieldId, {
           "field-id": fieldId,
           "field-key": fieldKey,
           "field-label": fieldLabel,
           "field-type": fieldType,
-          "field-required": required ? "true" : "false"
+          "field-required": required ? "true" : "false",
+          "field-position": String(position)
         });
       }
 

@@ -509,11 +509,13 @@ fn FormAdminScreen() -> impl IntoView {
                 <label><span>"Form version ID"</span><input id="form-version-id" placeholder="Selected form version ID" value="" /></label>
                 <label><span>"Section ID"</span><input id="section-id" placeholder="Selected section ID" value="" /></label>
                 <label><span>"Section title"</span><input id="section-title" placeholder="Main" value="Main" /></label>
+                <label><span>"Section position"</span><input id="section-position" placeholder="0" value="0" /></label>
                 <label><span>"Field ID"</span><input id="field-id" placeholder="Selected field ID" value="" /></label>
                 <label><span>"Field key"</span><input id="field-key" placeholder="participants" value="participants" /></label>
                 <label><span>"Field label"</span><input id="field-label" placeholder="Participants" value="Participants" /></label>
                 <label><span>"Field type"</span><input id="field-type" placeholder="number" value="number" /></label>
                 <label><span>"Field required"</span><input id="field-required" placeholder="true or false" value="true" /></label>
+                <label><span>"Field position"</span><input id="field-position" placeholder="0" value="0" /></label>
             </div>
             <div class="actions">
                 <button type="button" onclick="loadForms()">"Load Forms"</button>
