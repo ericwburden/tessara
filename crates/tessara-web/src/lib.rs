@@ -117,7 +117,15 @@ pub fn admin_shell_html() -> &'static str {
           <input id="form-name" placeholder="Form name">
           <input id="form-slug" placeholder="Form slug">
           <input id="form-scope-node-type-id" placeholder="Optional form scope node type ID">
+          <input id="form-id" placeholder="Form ID">
+          <input id="form-version-label" placeholder="Form version label" value="v1">
+          <input id="compatibility-group-name" placeholder="Compatibility group name" value="Default compatibility">
           <input id="form-version-id" placeholder="Published form version ID">
+          <input id="section-id" placeholder="Section ID">
+          <input id="section-title" placeholder="Section title" value="Main">
+          <input id="field-key" placeholder="Field key" value="participants">
+          <input id="field-label" placeholder="Field label" value="Participants">
+          <input id="field-type" placeholder="Field type" value="number">
           <input id="node-id" placeholder="Target node ID">
           <input id="submission-id" placeholder="Draft submission ID">
           <input id="participants-value" placeholder="Participants value" value="42">
@@ -126,6 +134,10 @@ pub fn admin_shell_html() -> &'static str {
           <div class="actions">
             <button type="button" onclick="createNodeType()">Create Node Type</button>
             <button type="button" onclick="createForm()">Create Form</button>
+            <button type="button" onclick="createFormVersion()">Create Version</button>
+            <button type="button" onclick="createSection()">Create Section</button>
+            <button type="button" onclick="createField()">Create Field</button>
+            <button type="button" onclick="publishVersion()">Publish Version</button>
             <button type="button" onclick="createDraft()">Create Draft</button>
             <button type="button" onclick="saveParticipants()">Save Participants</button>
             <button type="button" onclick="submitDraft()">Submit Draft</button>
@@ -207,6 +219,7 @@ pub fn admin_shell_html() -> &'static str {
           demoDashboardId = payload.dashboard_id;
           demoReportId = payload.report_id;
           document.getElementById("form-version-id").value = payload.form_version_id;
+          document.getElementById("form-id").value = payload.form_id;
           document.getElementById("node-id").value = payload.organization_node_id;
           document.getElementById("submission-id").value = payload.submission_id;
           document.getElementById("dashboard-id").value = demoDashboardId;
@@ -264,6 +277,7 @@ pub fn admin_shell_html() -> &'static str {
               <p class="muted">${escapeHtml(form.slug)}</p>
               <p>Scope: ${escapeHtml(form.scope_node_type_name || "Global")}</p>
               <p>${form.versions.length} versions</p>
+              <button type="button" onclick="useForm('${escapeHtml(form.id)}')">Use Form</button>
               <ul>
                 ${form.versions.map((version) => `
                   <li>
@@ -280,6 +294,10 @@ pub fn admin_shell_html() -> &'static str {
         }
       }
 
+      function useForm(formId) {
+        document.getElementById("form-id").value = formId;
+      }
+
       async function createForm() {
         try {
           if (!token) await login();
@@ -292,6 +310,91 @@ pub fn admin_shell_html() -> &'static str {
               slug: inputValue("form-slug"),
               scope_node_type_id: scopeNodeTypeId || null
             })
+          });
+          document.getElementById("form-id").value = payload.id;
+          show(payload);
+          await loadForms();
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function createFormVersion() {
+        try {
+          if (!token) await login();
+          const formId = inputValue("form-id");
+          if (!formId) throw new Error("Create or enter a form ID first.");
+          const payload = await request(`/api/admin/forms/${formId}/versions`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              version_label: inputValue("form-version-label"),
+              compatibility_group_name: inputValue("compatibility-group-name")
+            })
+          });
+          document.getElementById("form-version-id").value = payload.id;
+          show(payload);
+          await loadForms();
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function createSection() {
+        try {
+          if (!token) await login();
+          const formVersionId = inputValue("form-version-id");
+          if (!formVersionId) throw new Error("Create or enter a form version ID first.");
+          const payload = await request(`/api/admin/form-versions/${formVersionId}/sections`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              title: inputValue("section-title"),
+              position: 0
+            })
+          });
+          document.getElementById("section-id").value = payload.id;
+          show(payload);
+          await renderForm(formVersionId);
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function createField() {
+        try {
+          if (!token) await login();
+          const formVersionId = inputValue("form-version-id");
+          const sectionId = inputValue("section-id");
+          if (!formVersionId || !sectionId) {
+            throw new Error("Create or enter a form version ID and section ID first.");
+          }
+          const payload = await request(`/api/admin/form-versions/${formVersionId}/fields`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              section_id: sectionId,
+              key: inputValue("field-key"),
+              label: inputValue("field-label"),
+              field_type: inputValue("field-type"),
+              required: true,
+              position: 0
+            })
+          });
+          show(payload);
+          await renderForm(formVersionId);
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function publishVersion() {
+        try {
+          if (!token) await login();
+          const formVersionId = inputValue("form-version-id");
+          if (!formVersionId) throw new Error("Create or enter a form version ID first.");
+          const payload = await request(`/api/admin/form-versions/${formVersionId}/publish`, {
+            method: "POST"
           });
           show(payload);
           await loadForms();
@@ -526,6 +629,9 @@ mod tests {
         assert!(html.contains("/api/admin/forms"));
         assert!(html.contains("Create Node Type"));
         assert!(html.contains("Create Form"));
+        assert!(html.contains("Create Version"));
+        assert!(html.contains("Publish Version"));
+        assert!(html.contains("/api/admin/form-versions/"));
         assert!(html.contains("/api/form-versions/"));
         assert!(html.contains("/api/submissions"));
         assert!(html.contains("/api/submissions/drafts"));
