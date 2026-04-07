@@ -1096,6 +1096,48 @@ async fn legacy_fixture_import_rehearsal_projects_report_and_dashboard() {
     );
 }
 
+#[tokio::test]
+async fn legacy_fixture_import_rehearsal_is_repeatable() {
+    let _guard = TEST_DATABASE_LOCK.lock().await;
+    let Some(state) = test_state().await else {
+        return;
+    };
+    let fixture = include_str!("../../../fixtures/legacy-rehearsal.json");
+
+    let first = legacy_import::import_legacy_fixture_str(&state.pool, fixture)
+        .await
+        .expect("first legacy fixture import should succeed");
+    let second = legacy_import::import_legacy_fixture_str(&state.pool, fixture)
+        .await
+        .expect("second legacy fixture import should succeed");
+
+    assert_eq!(first.partner_node_id, second.partner_node_id);
+    assert_eq!(first.program_node_id, second.program_node_id);
+    assert_eq!(first.activity_node_id, second.activity_node_id);
+    assert_eq!(first.session_node_id, second.session_node_id);
+    assert_eq!(first.form_id, second.form_id);
+    assert_eq!(first.form_version_id, second.form_version_id);
+    assert_eq!(first.submission_id, second.submission_id);
+    assert_eq!(first.report_id, second.report_id);
+    assert_eq!(first.dashboard_id, second.dashboard_id);
+
+    let audit_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM submission_audit_events WHERE event_type LIKE 'legacy_import:legacy-rehearsal:%'",
+    )
+    .fetch_one(&state.pool)
+    .await
+    .expect("audit count should query");
+    assert_eq!(audit_count, 1);
+
+    let dashboard_component_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM dashboard_components WHERE dashboard_id = $1")
+            .bind(first.dashboard_id)
+            .fetch_one(&state.pool)
+            .await
+            .expect("dashboard component count should query");
+    assert_eq!(dashboard_component_count, 1);
+}
+
 async fn test_app() -> Option<axum::Router> {
     Some(router(test_state().await?))
 }
