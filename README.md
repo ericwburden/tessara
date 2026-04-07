@@ -166,11 +166,12 @@ The first implementation milestone should prove an end-to-end thread:
 - Slice 7: dashboard/chart endpoints, report/dashboard discovery, and local
   dashboard inspection.
 - Slice 8 start: builder lifecycle hardening, diagnostics, and admin auth tests.
-- Slice 9 start: legacy behavior inventory and target Tessara mapping document.
-- Slice 10 start: fixture validation, CLI import, clean Docker-backed rehearsal,
-  and imported report/dashboard inspection.
-- Next phase start: browser shell screens for admin builder, external
-  submission workflow, and report/dashboard builder workflows.
+- Slice 9: legacy behavior inventory, fixture coverage inventory, and remaining
+  mapping-expansion risks.
+- Slice 10: fixture validation, CLI import, clean Docker-backed rehearsal,
+  imported report/dashboard inspection, and local validation workbench.
+- Next phase: browser shell screens for admin builder, external submission
+  workflow, report/dashboard builder workflows, and migration workbench.
 
 ## Next Phase
 

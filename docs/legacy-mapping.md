@@ -157,9 +157,45 @@ Chart mapping:
 | `PieChart` | pie chart |
 | `SummaryBar` | ranked bar chart |
 
-Current Tessara only supports a table-style chart domain rule. Do not import
-legacy chart definitions until chart config schemas exist for the target chart
-types.
+Current Tessara validates `table`, `bar`, and `summary` chart type names, but
+only table-style report preview is functionally implemented. Do not import
+legacy chart definitions beyond table-compatible components until chart config
+schemas and execution semantics exist for the target chart types.
+
+## Current Fixture Coverage
+
+`fixtures/legacy-rehearsal.json` now exercises these importable concepts:
+
+| Fixture area | Current import behavior |
+| --- | --- |
+| Partner, Program, Activity, Session hierarchy | Imported as node types and runtime nodes with `legacy_id`, `is_active`, `locked`, and `session_date` metadata. |
+| Hierarchy relationships | Imported as `Partner -> Program -> Activity -> Session`. |
+| Choice list | Imported into `choice_lists` and `choice_list_items`; inactive choice behavior is represented as metadata-like choice items for now. |
+| Form and version | Imported as a published `legacy-v1` form version in the fixture compatibility group. |
+| Date, number, text, single-choice, multi-choice fields | Imported using current Tessara field types and validated before database writes. |
+| Submitted entry | Imported as a submitted Tessara submission with an audit event containing the fixture and legacy entry IDs. |
+| Report | Imported as a single field binding from `participants` to `participants`. |
+| Dashboard | Imported with one table chart component linked to the imported report. |
+
+Validation currently catches duplicate legacy IDs, duplicate form keys,
+unsupported field types, unsupported missing-data policies, unknown submission
+fields, invalid submission value types, unknown report source fields, and
+unknown node-type scopes before import.
+
+## Remaining Mapping Expansion
+
+Use additional fixtures to cover these legacy behaviors before treating the
+importer as migration-ready:
+
+| Needed fixture | Purpose |
+| --- | --- |
+| Inactive/locked hierarchy records | Confirm whether inactive data remains queryable and how locked records surface in admin screens. |
+| Partner-scoped choice lists | Decide whether choice-list scope belongs in ownership metadata, node scope, or a separate relationship. |
+| Public/unassigned form flow | Decide whether legacy public forms become anonymous links, assignment tokens, or scoped availability. |
+| Editable submitted records | Define import behavior for entries that remain editable or are locked after a deadline. |
+| Selector fields | Block or map `ProgramSelectField`, `ActivitySelectField`, `SessionSelectField`, and enrolled-client selectors after target selector field types exist. |
+| Aggregated reports | Prove DataFusion aggregation output against legacy count, unique, total, mean, median, and identity behavior. |
+| Non-table dashboard charts | Define config schemas for badge, gauge, bar, trend, pie, and ranked-summary charts before importing them. |
 
 ## Workflows to Preserve
 
