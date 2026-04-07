@@ -304,6 +304,7 @@ const REPORTING_ACTIONS: &[Action] = &[
     Action::new("addReportBinding()", "Add Binding"),
     Action::new("clearReportBindings()", "Clear Bindings"),
     Action::new("createReport()", "Create Report"),
+    Action::new("updateReport()", "Update Report"),
     Action::new("loadReportById()", "Load Report By ID"),
     Action::new("loadReportDefinitionById()", "Inspect Report By ID"),
     Action::new("createChart()", "Create Chart"),

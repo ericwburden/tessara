@@ -543,6 +543,7 @@ fn ReportAdminScreen() -> impl IntoView {
                 <button type="button" onclick="addReportBinding()">"Add Binding"</button>
                 <button type="button" onclick="clearReportBindings()">"Clear Bindings"</button>
                 <button type="button" onclick="createReport()">"Create Report"</button>
+                <button type="button" onclick="updateReport()">"Update Report"</button>
                 <button type="button" onclick="loadReports()">"Load Reports"</button>
                 <button type="button" onclick="loadReportDefinitionById()">"Inspect Report"</button>
                 <button type="button" onclick="loadReportById()">"Run Report"</button>

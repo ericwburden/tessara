@@ -1196,6 +1196,59 @@ async fn reporting_and_dashboard_builders_return_diagnostics_for_invalid_referen
         ),
     )
     .await;
+    let valid_report_id = id_from(&valid_report);
+    request_json(
+        app.clone(),
+        authorized_request(
+            "PUT",
+            &format!("/api/admin/reports/{valid_report_id}"),
+            &token,
+            Some(json!({
+                "name": "Updated Participants Report",
+                "form_id": form_id,
+                "fields": [{
+                    "logical_key": "participant_count",
+                    "source_field_key": "participants",
+                    "missing_policy": "bucket_unknown"
+                }]
+            })),
+        ),
+    )
+    .await;
+    let updated_report = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/reports/{valid_report_id}"),
+            &token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(updated_report["name"], "Updated Participants Report");
+    assert_eq!(
+        updated_report["bindings"][0]["logical_key"],
+        "participant_count"
+    );
+    let missing_update_report = request_status_and_json(
+        app.clone(),
+        authorized_request(
+            "PUT",
+            &format!("/api/admin/reports/{}", Uuid::new_v4()),
+            &token,
+            Some(json!({
+                "name": "Missing Report",
+                "form_id": form_id,
+                "fields": [{
+                    "logical_key": "participants",
+                    "source_field_key": "participants",
+                    "missing_policy": "null"
+                }]
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(missing_update_report.0, StatusCode::NOT_FOUND);
     let valid_chart = request_json(
         app.clone(),
         authorized_request(
@@ -1204,7 +1257,7 @@ async fn reporting_and_dashboard_builders_return_diagnostics_for_invalid_referen
             &token,
             Some(json!({
                 "name": "Participants Chart",
-                "report_id": id_from(&valid_report),
+                "report_id": valid_report_id,
                 "chart_type": "table"
             })),
         ),

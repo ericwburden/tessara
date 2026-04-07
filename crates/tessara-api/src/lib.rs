@@ -147,6 +147,10 @@ pub fn router(state: AppState) -> Router {
             get(legacy_import::list_legacy_fixture_examples),
         )
         .route("/api/admin/reports", post(reporting::create_report))
+        .route(
+            "/api/admin/reports/{report_id}",
+            put(reporting::update_report),
+        )
         .route("/api/reports", get(reporting::list_reports))
         .route("/api/reports/{report_id}", get(reporting::get_report))
         .route("/api/reports/{report_id}/table", get(reporting::run_report))

@@ -104,22 +104,45 @@ pub async fn create_report(
             .fetch_one(&mut *tx)
             .await?;
 
-    for (position, field) in fields.into_iter().enumerate() {
-        sqlx::query(
-            r#"
-            INSERT INTO report_field_bindings
-                (report_id, logical_key, source_field_key, missing_policy, position)
-            VALUES ($1, $2, $3, $4::missing_data_policy, $5)
-            "#,
-        )
+    insert_report_field_bindings(&mut tx, report_id, fields).await?;
+
+    tx.commit().await?;
+
+    Ok(Json(IdResponse { id: report_id }))
+}
+
+/// Updates an existing report definition and replaces its field bindings.
+pub async fn update_report(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(report_id): Path<Uuid>,
+    Json(payload): Json<CreateReportRequest>,
+) -> ApiResult<Json<IdResponse>> {
+    auth::require_capability(&state.pool, &headers, "reports:write").await?;
+    require_report_exists(&state.pool, report_id).await?;
+    require_text("report name", &payload.name)?;
+
+    if payload.fields.is_empty() {
+        return Err(ApiError::BadRequest(
+            "a report requires at least one field binding".into(),
+        ));
+    }
+
+    let fields =
+        validate_report_field_bindings(&state.pool, payload.form_id, payload.fields).await?;
+
+    let mut tx = state.pool.begin().await?;
+    sqlx::query("UPDATE reports SET name = $1, form_id = $2 WHERE id = $3")
+        .bind(payload.name)
+        .bind(payload.form_id)
         .bind(report_id)
-        .bind(field.logical_key)
-        .bind(field.source_field_key)
-        .bind(field.missing_policy.as_str())
-        .bind(position as i32)
         .execute(&mut *tx)
         .await?;
-    }
+    sqlx::query("DELETE FROM report_field_bindings WHERE report_id = $1")
+        .bind(report_id)
+        .execute(&mut *tx)
+        .await?;
+    insert_report_field_bindings(&mut tx, report_id, fields).await?;
 
     tx.commit().await?;
 
@@ -352,6 +375,31 @@ async fn validate_report_field_bindings(
     }
 
     Ok(parsed_fields)
+}
+
+async fn insert_report_field_bindings(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    report_id: Uuid,
+    fields: Vec<ReportFieldBindingDraft>,
+) -> ApiResult<()> {
+    for (position, field) in fields.into_iter().enumerate() {
+        sqlx::query(
+            r#"
+            INSERT INTO report_field_bindings
+                (report_id, logical_key, source_field_key, missing_policy, position)
+            VALUES ($1, $2, $3, $4::missing_data_policy, $5)
+            "#,
+        )
+        .bind(report_id)
+        .bind(field.logical_key)
+        .bind(field.source_field_key)
+        .bind(field.missing_policy.as_str())
+        .bind(position as i32)
+        .execute(&mut **tx)
+        .await?;
+    }
+
+    Ok(())
 }
 
 async fn require_form_exists(pool: &sqlx::PgPool, form_id: Uuid) -> ApiResult<()> {

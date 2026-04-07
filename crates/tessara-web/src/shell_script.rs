@@ -890,6 +890,34 @@ pub const SCRIPT: &str = r#"
         }
       }
 
+      async function updateReport() {
+        try {
+          if (!token) await login();
+          const reportId = inputValue("report-id");
+          if (!reportId) throw new Error("Select or enter a report ID first.");
+          const formId = inputValue("form-id");
+          const bindingsJson = inputValue("report-fields-json");
+          const fields = bindingsJson ? JSON.parse(bindingsJson) : [{
+            logical_key: inputValue("report-logical-key"),
+            source_field_key: inputValue("report-source-field-key"),
+            missing_policy: inputValue("report-missing-policy") || "null"
+          }];
+          const payload = await request(`/api/admin/reports/${reportId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: inputValue("report-name"),
+              form_id: formId || null,
+              fields
+            })
+          });
+          show(payload);
+          await loadReportDefinition(reportId);
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
       function addReportBinding() {
         try {
           const binding = {
