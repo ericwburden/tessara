@@ -1,8 +1,14 @@
+# syntax=docker/dockerfile:1.7
+
 FROM rust:1.94-bookworm AS builder
 
 WORKDIR /app
 COPY . .
-RUN cargo build --release -p tessara-api
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    --mount=type=cache,target=/app/target \
+    cargo build --release -p tessara-api \
+    && cp /app/target/release/tessara-api /tmp/tessara-api
 
 FROM debian:trixie-slim AS runtime
 
@@ -11,7 +17,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY --from=builder /app/target/release/tessara-api /usr/local/bin/tessara-api
+COPY --from=builder /tmp/tessara-api /usr/local/bin/tessara-api
 
 EXPOSE 8080
 CMD ["tessara-api"]
