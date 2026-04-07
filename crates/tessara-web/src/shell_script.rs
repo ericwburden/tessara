@@ -1474,7 +1474,14 @@ pub const SCRIPT: &str = r#"
 
       function dashboardComponentConfig() {
         const configJson = inputValue("dashboard-component-config-json");
-        return configJson ? JSON.parse(configJson) : { title: inputValue("chart-name") || "Chart" };
+        const config = configJson ? JSON.parse(configJson) : {};
+        const title = inputValue("dashboard-component-title");
+        if (title) {
+          config.title = title;
+        } else if (!config.title) {
+          config.title = inputValue("chart-name") || "Chart";
+        }
+        return config;
       }
 
       async function loadDashboards() {
@@ -1551,8 +1558,17 @@ pub const SCRIPT: &str = r#"
           <article class="card">
             <h3>${escapeHtml(binding.logical_key)}</h3>
             <p>${escapeHtml(binding.source_field_key)} with ${escapeHtml(binding.missing_policy)}</p>
+            <button type="button" onclick="useReportBinding('${escapeHtml(binding.logical_key)}', '${escapeHtml(binding.source_field_key)}', '${escapeHtml(binding.missing_policy)}')">Use Binding</button>
           </article>
         `);
+      }
+
+      function useReportBinding(logicalKey, sourceFieldKey, missingPolicy) {
+        selectRecord("report binding", logicalKey, sourceFieldKey, {
+          "report-logical-key": logicalKey,
+          "report-source-field-key": sourceFieldKey,
+          "report-missing-policy": missingPolicy
+        });
       }
 
       async function loadReportDefinitionById() {
@@ -1591,14 +1607,16 @@ pub const SCRIPT: &str = r#"
         show(payload);
         const cards = await Promise.all(payload.components.map(async (component) => {
           let rows = [];
+          const componentTitle = component.config?.title || component.chart.name;
           if (component.chart.report_id) {
             const report = await request(`/api/reports/${component.chart.report_id}/table`);
             rows = report.rows;
           }
           return `
             <article class="card">
-              <h3>${escapeHtml(component.chart.name)}</h3>
+              <h3>${escapeHtml(componentTitle)}</h3>
               <p>${escapeHtml(component.chart.chart_type)} chart</p>
+              <p class="muted">Chart ${escapeHtml(component.chart.name)}</p>
               <p>Position ${component.position}</p>
               <p class="muted">Report ${escapeHtml(component.chart.report_name || component.chart.report_id || "None")}${component.chart.report_form_name ? ` on ${escapeHtml(component.chart.report_form_name)}` : ""}</p>
               <button type="button" onclick="useDashboardComponent('${escapeHtml(component.id)}', '${escapeHtml(component.chart.id)}', ${component.position}, '${escapeHtml(jsStringArg(JSON.stringify(component.config)))}', '${escapeHtml(component.chart.name)}', '${escapeHtml(component.chart.chart_type)}', '${escapeHtml(component.chart.report_id || "")}', '${escapeHtml(component.chart.report_name || "")}')">Use Component Context</button>
@@ -1613,12 +1631,14 @@ pub const SCRIPT: &str = r#"
       }
 
       function useDashboardComponent(componentId, chartId, position, configJson, chartName = chartId, chartType = "table", reportId = "", reportName = reportId) {
+        const config = JSON.parse(configJson || "{}");
         selectRecord("dashboard component", componentId, componentId, {
           "dashboard-component-id": componentId,
           "chart-id": chartId,
           "chart-name": chartName,
           "chart-type": chartType,
           "dashboard-component-position": String(position),
+          "dashboard-component-title": config.title || chartName,
           "dashboard-component-config-json": configJson,
           ...(reportId ? { "report-id": reportId } : {})
         });

@@ -665,8 +665,17 @@ pub const APPLICATION_SCRIPT: &str = r#"
           <article class="card">
             <h3>${escapeHtml(binding.logical_key)}</h3>
             <p>${escapeHtml(binding.source_field_key)} with ${escapeHtml(binding.missing_policy)}</p>
+            <button type="button" onclick="useReportBinding('${escapeHtml(binding.logical_key)}', '${escapeHtml(binding.source_field_key)}', '${escapeHtml(binding.missing_policy)}')">Use Binding</button>
           </article>
         `);
+      }
+
+      function useReportBinding(logicalKey, sourceFieldKey, missingPolicy) {
+        selectRecord("report binding", logicalKey, sourceFieldKey, {
+          "report-logical-key": logicalKey,
+          "report-source-field-key": sourceFieldKey,
+          "report-missing-policy": missingPolicy
+        });
       }
 
       async function loadReportDefinitionById() {
@@ -775,14 +784,16 @@ pub const APPLICATION_SCRIPT: &str = r#"
         show(payload);
         const cards = await Promise.all(payload.components.map(async (component) => {
           let rows = [];
+          const componentTitle = component.config?.title || component.chart.name;
           if (component.chart.report_id) {
             const report = await request(`/api/reports/${component.chart.report_id}/table`);
             rows = report.rows;
           }
           return `
             <article class="card">
-              <h3>${escapeHtml(component.chart.name)}</h3>
+              <h3>${escapeHtml(componentTitle)}</h3>
               <p>${escapeHtml(component.chart.chart_type)} chart</p>
+              <p class="muted">Chart ${escapeHtml(component.chart.name)}</p>
               <p>Position ${component.position}</p>
               <p class="muted">Report ${escapeHtml(component.chart.report_name || component.chart.report_id || "None")}${component.chart.report_form_name ? ` on ${escapeHtml(component.chart.report_form_name)}` : ""}</p>
               <button type="button" onclick="useChart('${escapeHtml(component.chart.id)}', '${escapeHtml(component.chart.name)}', '${escapeHtml(component.chart.report_id || "")}', '${escapeHtml(component.chart.report_name || "")}', '${escapeHtml(component.chart.chart_type)}')">Use Chart Context</button>

@@ -341,6 +341,12 @@ const REPORTING_INPUTS: &[TextInput] = &[
         "0",
     ),
     TextInput::new(
+        "dashboard-component-title",
+        "Dashboard component title",
+        "Chart title",
+        "",
+    ),
+    TextInput::new(
         "dashboard-component-config-json",
         "Dashboard component config JSON",
         "Optional dashboard component config JSON",
