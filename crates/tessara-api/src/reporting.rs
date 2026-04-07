@@ -1,4 +1,4 @@
-use std::{collections::HashSet, str::FromStr, sync::Arc};
+use std::sync::Arc;
 
 use arrow::{
     array::{Array, ArrayRef, StringArray},
@@ -13,7 +13,9 @@ use axum::{
 use datafusion::{datasource::MemTable, prelude::SessionContext};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
-use tessara_reporting::MissingDataPolicy;
+use tessara_reporting::{
+    ReportFieldBindingDraft, ReportFieldBindingInput, parse_report_field_bindings,
+};
 use uuid::Uuid;
 
 use crate::{
@@ -35,12 +37,6 @@ pub struct CreateReportFieldBindingRequest {
     logical_key: String,
     source_field_key: String,
     missing_policy: Option<String>,
-}
-
-struct ParsedReportFieldBinding {
-    logical_key: String,
-    source_field_key: String,
-    missing_policy: MissingDataPolicy,
 }
 
 #[derive(Serialize)]
@@ -262,38 +258,18 @@ async fn validate_report_field_bindings(
     pool: &sqlx::PgPool,
     form_id: Option<Uuid>,
     fields: Vec<CreateReportFieldBindingRequest>,
-) -> ApiResult<Vec<ParsedReportFieldBinding>> {
+) -> ApiResult<Vec<ReportFieldBindingDraft>> {
     if let Some(form_id) = form_id {
         require_form_exists(pool, form_id).await?;
     }
 
-    let mut logical_keys = HashSet::new();
-    let mut parsed_fields = Vec::with_capacity(fields.len());
-    for field in fields {
-        require_text("report logical key", &field.logical_key)?;
-        require_text("report source field key", &field.source_field_key)?;
-
-        if !logical_keys.insert(field.logical_key.clone()) {
-            return Err(ApiError::BadRequest(format!(
-                "report logical field '{}' is duplicated",
-                field.logical_key
-            )));
-        }
-
-        let missing_policy = field
-            .missing_policy
-            .as_deref()
-            .map(MissingDataPolicy::from_str)
-            .transpose()
-            .map_err(|error| ApiError::BadRequest(error.to_string()))?
-            .unwrap_or(MissingDataPolicy::Null);
-
-        parsed_fields.push(ParsedReportFieldBinding {
-            logical_key: field.logical_key,
-            source_field_key: field.source_field_key,
-            missing_policy,
-        });
-    }
+    let parsed_fields =
+        parse_report_field_bindings(fields.iter().map(|field| ReportFieldBindingInput {
+            logical_key: &field.logical_key,
+            source_field_key: &field.source_field_key,
+            missing_policy: field.missing_policy.as_deref(),
+        }))
+        .map_err(|error| ApiError::BadRequest(error.to_string()))?;
 
     if let Some(form_id) = form_id {
         assert_report_source_fields_exist(pool, form_id, &parsed_fields).await?;
@@ -329,7 +305,7 @@ async fn require_report_exists(pool: &sqlx::PgPool, report_id: Uuid) -> ApiResul
 async fn assert_report_source_fields_exist(
     pool: &sqlx::PgPool,
     form_id: Uuid,
-    fields: &[ParsedReportFieldBinding],
+    fields: &[ReportFieldBindingDraft],
 ) -> ApiResult<()> {
     for field in fields {
         let exists: bool = sqlx::query_scalar(

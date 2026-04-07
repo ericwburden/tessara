@@ -5,4 +5,5 @@ edition = "2024"
 
 [dependencies]
 serde = { workspace = true }
+tessara-core = { path = "../tessara-core" }
 thiserror = { workspace = true }
