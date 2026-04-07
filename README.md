@@ -154,3 +154,14 @@ The first implementation milestone should prove an end-to-end thread:
 - Slice 5: manual analytics projection refresh into `analytics.*` tables.
 - Slice 6: report definition and DataFusion-backed table execution.
 - Slice 7 start: dashboard/chart endpoints and a minimal local admin shell.
+- Slice 8 start: builder lifecycle hardening, diagnostics, and admin auth tests.
+- Slice 9 start: legacy behavior inventory and target Tessara mapping document.
+- Slice 10 start: fixture validation, CLI import, clean Docker-backed rehearsal,
+  and imported report/dashboard inspection.
+
+## Next Phase
+
+The initial roadmap pass now proves the full migration thread from configurable
+hierarchy through import rehearsal and reporting. The next milestone should
+turn the API-first shell into real admin/external screens, then continue moving
+stable domain contracts out of `tessara-api` into the domain crates.
