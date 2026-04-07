@@ -93,6 +93,8 @@ pub fn admin_shell_html() -> &'static str {
           <button type="button" onclick="login()">Log In</button>
           <button type="button" onclick="seedDemo()">Seed Demo</button>
           <button type="button" onclick="loadNodes()">Load Nodes</button>
+          <button type="button" onclick="loadDashboards()">Load Dashboards</button>
+          <button type="button" onclick="loadReports()">Load Reports</button>
           <button type="button" onclick="loadDashboard()">Load Demo Dashboard</button>
         </div>
         <div class="inputs">
@@ -172,6 +174,23 @@ pub fn admin_shell_html() -> &'static str {
         }
       }
 
+      async function loadDashboards() {
+        try {
+          show(await request("/api/dashboards"));
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function loadReports() {
+        try {
+          if (!token) await login();
+          show(await request("/api/reports"));
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
       async function loadDashboard() {
         try {
           if (!demoDashboardId) await seedDemo();
@@ -218,7 +237,9 @@ mod tests {
         assert!(html.contains("/api/demo/seed"));
         assert!(html.contains("/api/nodes"));
         assert!(html.contains("/api/dashboards/"));
+        assert!(html.contains("/api/dashboards"));
         assert!(html.contains("/api/reports/"));
+        assert!(html.contains("/api/reports"));
         assert!(html.contains("Dashboard ID from seed or import output"));
     }
 }

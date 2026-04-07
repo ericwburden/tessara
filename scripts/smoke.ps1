@@ -53,7 +53,7 @@ try {
         docker compose up -d --build | Out-Host
         Assert-LastExitCode "docker compose up"
     } else {
-        docker compose up -d postgres | Out-Host
+        docker compose up -d --wait postgres | Out-Host
         Assert-LastExitCode "docker compose up"
     }
 

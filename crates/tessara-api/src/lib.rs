@@ -88,6 +88,7 @@ pub fn router(state: AppState) -> Router {
             get(analytics::analytics_status),
         )
         .route("/api/admin/reports", post(reporting::create_report))
+        .route("/api/reports", get(reporting::list_reports))
         .route("/api/reports/{report_id}/table", get(reporting::run_report))
         .route("/api/admin/charts", post(dashboards::create_chart))
         .route("/api/admin/dashboards", post(dashboards::create_dashboard))
@@ -99,6 +100,7 @@ pub fn router(state: AppState) -> Router {
             "/api/dashboards/{dashboard_id}",
             get(dashboards::get_dashboard),
         )
+        .route("/api/dashboards", get(dashboards::list_dashboards))
         .route("/api/demo/seed", post(demo::seed_demo_endpoint))
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())

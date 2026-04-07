@@ -57,6 +57,13 @@ pub struct ReportTableRow {
     field_value: Option<String>,
 }
 
+#[derive(Serialize)]
+pub struct ReportSummary {
+    id: Uuid,
+    name: String,
+    form_id: Option<Uuid>,
+}
+
 pub async fn create_report(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -101,6 +108,36 @@ pub async fn create_report(
     tx.commit().await?;
 
     Ok(Json(IdResponse { id: report_id }))
+}
+
+pub async fn list_reports(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> ApiResult<Json<Vec<ReportSummary>>> {
+    auth::require_capability(&state.pool, &headers, "reports:read").await?;
+
+    let rows = sqlx::query(
+        r#"
+        SELECT id, name, form_id
+        FROM reports
+        ORDER BY name, created_at
+        "#,
+    )
+    .fetch_all(&state.pool)
+    .await?;
+
+    let reports = rows
+        .into_iter()
+        .map(|row| {
+            Ok(ReportSummary {
+                id: row.try_get("id")?,
+                name: row.try_get("name")?,
+                form_id: row.try_get("form_id")?,
+            })
+        })
+        .collect::<Result<Vec<_>, sqlx::Error>>()?;
+
+    Ok(Json(reports))
 }
 
 pub async fn run_report(

@@ -40,12 +40,24 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
     )
     .await;
     assert_eq!(report["rows"][0]["field_value"], "42");
+    let reports = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/reports", &token, None),
+    )
+    .await;
+    assert!(
+        reports
+            .as_array()
+            .expect("reports response should be an array")
+            .iter()
+            .any(|report| report["id"] == report_id)
+    );
 
     let dashboard_id = seed["dashboard_id"]
         .as_str()
         .expect("seed response should contain dashboard id");
     let dashboard = request_json(
-        app,
+        app.clone(),
         Request::builder()
             .method("GET")
             .uri(format!("/api/dashboards/{dashboard_id}"))
@@ -54,6 +66,22 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
     )
     .await;
     assert_eq!(dashboard["components"][0]["chart"]["report_id"], report_id);
+    let dashboards = request_json(
+        app,
+        Request::builder()
+            .method("GET")
+            .uri("/api/dashboards")
+            .body(Body::empty())
+            .expect("valid dashboard list request"),
+    )
+    .await;
+    assert!(
+        dashboards
+            .as_array()
+            .expect("dashboards response should be an array")
+            .iter()
+            .any(|dashboard| dashboard["id"] == dashboard_id)
+    );
 }
 
 #[tokio::test]

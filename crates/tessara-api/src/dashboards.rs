@@ -62,6 +62,13 @@ pub struct ChartResponse {
     report_url: Option<String>,
 }
 
+#[derive(Serialize)]
+pub struct DashboardSummary {
+    id: Uuid,
+    name: String,
+    component_count: i64,
+}
+
 pub async fn create_chart(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -138,6 +145,35 @@ pub async fn add_dashboard_component(
     .await?;
 
     Ok(Json(IdResponse { id }))
+}
+
+pub async fn list_dashboards(
+    State(state): State<AppState>,
+) -> ApiResult<Json<Vec<DashboardSummary>>> {
+    let rows = sqlx::query(
+        r#"
+        SELECT dashboards.id, dashboards.name, COUNT(dashboard_components.id) AS component_count
+        FROM dashboards
+        LEFT JOIN dashboard_components ON dashboard_components.dashboard_id = dashboards.id
+        GROUP BY dashboards.id, dashboards.name
+        ORDER BY dashboards.name, dashboards.id
+        "#,
+    )
+    .fetch_all(&state.pool)
+    .await?;
+
+    let dashboards = rows
+        .into_iter()
+        .map(|row| {
+            Ok(DashboardSummary {
+                id: row.try_get("id")?,
+                name: row.try_get("name")?,
+                component_count: row.try_get("component_count")?,
+            })
+        })
+        .collect::<Result<Vec<_>, sqlx::Error>>()?;
+
+    Ok(Json(dashboards))
 }
 
 pub async fn get_dashboard(
