@@ -133,6 +133,10 @@ try {
     if (-not ($adminAppShell -like "*Setup Workspace*") -or -not ($adminAppShell -like "*Hierarchy Setup*") -or -not ($adminAppShell -like "*Form Builder*")) {
         throw "Expected admin application shell HTML to include setup workflow controls"
     }
+    $migrationAppShell = Invoke-RestMethod -Uri "$baseUrl/app/migration" -TimeoutSec 30
+    if (-not ($migrationAppShell -like "*Migration Workbench*") -or -not ($migrationAppShell -like "*Legacy Fixture Validation*") -or -not ($migrationAppShell -like "*Load Fixture Examples*")) {
+        throw "Expected migration application shell HTML to include fixture workflow controls"
+    }
 
     $login = Invoke-Json `
         -Method "Post" `

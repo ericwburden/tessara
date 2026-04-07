@@ -143,6 +143,12 @@ Focused admin setup screens are available at:
 http://localhost:8080/app/admin
 ```
 
+The focused migration workbench is available at:
+
+```text
+http://localhost:8080/app/migration
+```
+
 For user testing, start the Compose stack and open that URL in a browser. Use
 the development login above, then click `Seed Demo` to populate the deterministic
 hierarchy, form, submission, report, and dashboard example. Stop and reset the
@@ -160,6 +166,8 @@ The local shell now covers the main demo workflow surfaces:
   submit, submission review, and report viewing workflow.
 - Separate `/app/admin` setup shell focused on hierarchy, form, and report
   builder workflows without the full migration workbench surface.
+- Separate `/app/migration` operator shell focused on legacy fixture example
+  loading, validation, and dry-run rehearsal.
 - Roadmap-aligned workflow sections and an in-browser user testing guide for
   the Compose deployment path.
 - Admin read screens for hierarchy types, forms, reports, dashboards, nodes,
