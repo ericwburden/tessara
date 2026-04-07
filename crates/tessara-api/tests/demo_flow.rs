@@ -114,6 +114,34 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
                 && submission["status"] == "submitted"
                 && submission["value_count"] == 1)
     );
+    let submission_id = seed["submission_id"]
+        .as_str()
+        .expect("seed response should contain submission id");
+    let submission_detail = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/submissions/{submission_id}"),
+            &token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(submission_detail["status"], "submitted");
+    assert!(
+        submission_detail["values"]
+            .as_array()
+            .expect("submission detail should include values")
+            .iter()
+            .any(|value| value["key"] == "participants" && value["value"] == 42)
+    );
+    assert!(
+        submission_detail["audit_events"]
+            .as_array()
+            .expect("submission detail should include audit events")
+            .iter()
+            .any(|event| event["event_type"] == "submit")
+    );
 
     let report_id = seed["report_id"]
         .as_str()

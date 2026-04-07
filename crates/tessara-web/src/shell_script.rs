@@ -480,6 +480,7 @@ pub const SCRIPT: &str = r#"
               <p>${escapeHtml(submission.version_label)} on ${escapeHtml(submission.node_name)}</p>
               <p>Status: ${escapeHtml(submission.status)}</p>
               <p>${submission.value_count} saved values</p>
+              <button type="button" onclick="loadSubmissionByValue('${escapeHtml(submission.id)}')">Open</button>
               <code>${escapeHtml(submission.id)}</code>
             </article>
           `);
@@ -505,6 +506,44 @@ pub const SCRIPT: &str = r#"
         } catch (error) {
           show(error.message);
         }
+      }
+
+      async function loadSubmissionById() {
+        try {
+          if (!token) await login();
+          const submissionId = inputValue("submission-id");
+          if (!submissionId) throw new Error("Enter a submission ID first.");
+          await loadSubmissionByValue(submissionId);
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function loadSubmissionByValue(submissionId) {
+        if (!token) await login();
+        const payload = await request(`/api/submissions/${submissionId}`);
+        document.getElementById("submission-id").value = payload.id;
+        document.getElementById("form-version-id").value = payload.form_version_id;
+        document.getElementById("node-id").value = payload.node_id;
+        show(payload);
+        document.getElementById("screen").innerHTML = `
+          <article class="card">
+            <h3>${escapeHtml(payload.form_name)} ${escapeHtml(payload.version_label)}</h3>
+            <p>${escapeHtml(payload.node_name)}: ${escapeHtml(payload.status)}</p>
+            <h4>Values</h4>
+            <ul>
+              ${payload.values.map((value) => `
+                <li>${escapeHtml(value.label)}: ${escapeHtml(JSON.stringify(value.value))}</li>
+              `).join("")}
+            </ul>
+            <h4>Audit</h4>
+            <ul>
+              ${payload.audit_events.map((event) => `
+                <li>${escapeHtml(event.event_type)} by ${escapeHtml(event.account_email || "system")}</li>
+              `).join("")}
+            </ul>
+          </article>
+        `;
       }
 
       async function saveParticipants() {

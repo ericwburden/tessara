@@ -42,6 +42,36 @@ pub struct SubmissionSummary {
     submitted_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
+#[derive(Serialize)]
+pub struct SubmissionDetail {
+    id: Uuid,
+    form_version_id: Uuid,
+    form_name: String,
+    version_label: String,
+    node_id: Uuid,
+    node_name: String,
+    status: String,
+    submitted_at: Option<chrono::DateTime<chrono::Utc>>,
+    values: Vec<SubmissionValueDetail>,
+    audit_events: Vec<SubmissionAuditEventSummary>,
+}
+
+#[derive(Serialize)]
+pub struct SubmissionValueDetail {
+    field_id: Uuid,
+    key: String,
+    label: String,
+    field_type: String,
+    value: Value,
+}
+
+#[derive(Serialize)]
+pub struct SubmissionAuditEventSummary {
+    event_type: String,
+    account_email: Option<String>,
+    created_at: chrono::DateTime<chrono::Utc>,
+}
+
 struct FormFieldContract {
     id: Uuid,
     key: String,
@@ -162,6 +192,112 @@ pub async fn list_submissions(
         .collect::<Result<Vec<_>, sqlx::Error>>()?;
 
     Ok(Json(submissions))
+}
+
+/// Returns a submission with saved values and audit history for inspection.
+pub async fn get_submission(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(submission_id): Path<Uuid>,
+) -> ApiResult<Json<SubmissionDetail>> {
+    auth::require_capability(&state.pool, &headers, "submissions:write").await?;
+
+    let row = sqlx::query(
+        r#"
+        SELECT
+            submissions.id,
+            submissions.form_version_id,
+            forms.name AS form_name,
+            form_versions.version_label,
+            submissions.node_id,
+            nodes.name AS node_name,
+            submissions.status::text AS status,
+            submissions.submitted_at
+        FROM submissions
+        JOIN form_versions ON form_versions.id = submissions.form_version_id
+        JOIN forms ON forms.id = form_versions.form_id
+        JOIN nodes ON nodes.id = submissions.node_id
+        WHERE submissions.id = $1
+        "#,
+    )
+    .bind(submission_id)
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or_else(|| ApiError::NotFound(format!("submission {submission_id}")))?;
+
+    let value_rows = sqlx::query(
+        r#"
+        SELECT
+            form_fields.id AS field_id,
+            form_fields.key,
+            form_fields.label,
+            form_fields.field_type::text AS field_type,
+            submission_values.value
+        FROM form_fields
+        LEFT JOIN submission_values
+            ON submission_values.field_id = form_fields.id
+            AND submission_values.submission_id = $1
+        WHERE form_fields.form_version_id = $2
+        ORDER BY form_fields.position, form_fields.label
+        "#,
+    )
+    .bind(submission_id)
+    .bind(row.try_get::<Uuid, _>("form_version_id")?)
+    .fetch_all(&state.pool)
+    .await?;
+
+    let mut values = Vec::new();
+    for value_row in value_rows {
+        if let Some(value) = value_row.try_get("value")? {
+            values.push(SubmissionValueDetail {
+                field_id: value_row.try_get("field_id")?,
+                key: value_row.try_get("key")?,
+                label: value_row.try_get("label")?,
+                field_type: value_row.try_get("field_type")?,
+                value,
+            });
+        }
+    }
+
+    let audit_rows = sqlx::query(
+        r#"
+        SELECT
+            submission_audit_events.event_type,
+            accounts.email AS account_email,
+            submission_audit_events.created_at
+        FROM submission_audit_events
+        LEFT JOIN accounts ON accounts.id = submission_audit_events.account_id
+        WHERE submission_audit_events.submission_id = $1
+        ORDER BY submission_audit_events.created_at, submission_audit_events.id
+        "#,
+    )
+    .bind(submission_id)
+    .fetch_all(&state.pool)
+    .await?;
+
+    let audit_events = audit_rows
+        .into_iter()
+        .map(|audit_row| {
+            Ok(SubmissionAuditEventSummary {
+                event_type: audit_row.try_get("event_type")?,
+                account_email: audit_row.try_get("account_email")?,
+                created_at: audit_row.try_get("created_at")?,
+            })
+        })
+        .collect::<Result<Vec<_>, sqlx::Error>>()?;
+
+    Ok(Json(SubmissionDetail {
+        id: row.try_get("id")?,
+        form_version_id: row.try_get("form_version_id")?,
+        form_name: row.try_get("form_name")?,
+        version_label: row.try_get("version_label")?,
+        node_id: row.try_get("node_id")?,
+        node_name: row.try_get("node_name")?,
+        status: row.try_get("status")?,
+        submitted_at: row.try_get("submitted_at")?,
+        values,
+        audit_events,
+    }))
 }
 
 pub async fn save_submission_values(

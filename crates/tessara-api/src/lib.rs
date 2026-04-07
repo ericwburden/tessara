@@ -80,6 +80,10 @@ pub fn router(state: AppState) -> Router {
         .route("/api/submissions/drafts", post(submissions::create_draft))
         .route("/api/submissions", get(submissions::list_submissions))
         .route(
+            "/api/submissions/{submission_id}",
+            get(submissions::get_submission),
+        )
+        .route(
             "/api/submissions/{submission_id}/values",
             put(submissions::save_submission_values),
         )
