@@ -14,6 +14,7 @@ pub mod demo;
 pub mod error;
 mod forms;
 mod hierarchy;
+pub mod legacy_import;
 mod reporting;
 mod submissions;
 

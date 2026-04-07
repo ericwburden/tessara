@@ -1,0 +1,129 @@
+{
+  "name": "legacy-rehearsal",
+  "partner": {
+    "legacy_id": "partner-1",
+    "name": "Legacy Partner",
+    "is_active": true,
+    "locked": false
+  },
+  "program": {
+    "legacy_id": "program-1",
+    "name": "Legacy Program",
+    "is_active": true,
+    "locked": false
+  },
+  "activity": {
+    "legacy_id": "activity-1",
+    "name": "Legacy Activity",
+    "is_active": true,
+    "locked": false
+  },
+  "session": {
+    "legacy_id": "session-1",
+    "name": "Legacy Session",
+    "date": "2026-04-06",
+    "is_active": true,
+    "locked": false
+  },
+  "choice_lists": [
+    {
+      "legacy_id": "choice-list-1",
+      "name": "Attendance Status",
+      "is_active": true,
+      "choices": [
+        {
+          "legacy_id": "present",
+          "label": "Present",
+          "description": "Participant attended",
+          "ordering": 1,
+          "is_active": true
+        },
+        {
+          "legacy_id": "excused",
+          "label": "Excused",
+          "description": "Participant was excused",
+          "ordering": 2,
+          "is_active": true
+        }
+      ]
+    }
+  ],
+  "form": {
+    "legacy_id": "form-1",
+    "name": "Legacy Attendance Form",
+    "slug": "legacy-attendance-form",
+    "scope_node_type": "session",
+    "compatibility_group": "Legacy Attendance Compatible",
+    "version_label": "legacy-v1",
+    "sections": [
+      {
+        "legacy_id": "section-1",
+        "label": "Attendance",
+        "position": 1,
+        "fields": [
+          {
+            "legacy_id": "field-1",
+            "key": "service_date",
+            "label": "Service Date",
+            "field_type": "date",
+            "required": true,
+            "position": 1
+          },
+          {
+            "legacy_id": "field-2",
+            "key": "participants",
+            "label": "Participants",
+            "field_type": "number",
+            "required": true,
+            "position": 2
+          },
+          {
+            "legacy_id": "field-3",
+            "key": "notes",
+            "label": "Notes",
+            "field_type": "text",
+            "required": false,
+            "position": 3
+          },
+          {
+            "legacy_id": "field-4",
+            "key": "attendance_status",
+            "label": "Attendance Status",
+            "field_type": "single_choice",
+            "required": true,
+            "position": 4
+          },
+          {
+            "legacy_id": "field-5",
+            "key": "services_received",
+            "label": "Services Received",
+            "field_type": "multi_choice",
+            "required": false,
+            "position": 5
+          }
+        ]
+      }
+    ]
+  },
+  "submission": {
+    "legacy_id": "entry-1",
+    "node_type": "session",
+    "values": {
+      "service_date": "2026-04-06",
+      "participants": 42,
+      "notes": "Imported from representative legacy fixture.",
+      "attendance_status": "present",
+      "services_received": ["case_management", "transportation"]
+    }
+  },
+  "report": {
+    "name": "Legacy Participants Report",
+    "logical_key": "participants",
+    "source_field_key": "participants",
+    "missing_policy": "null"
+  },
+  "dashboard": {
+    "name": "Legacy Rehearsal Dashboard",
+    "chart_name": "Legacy Participants Table"
+  }
+}

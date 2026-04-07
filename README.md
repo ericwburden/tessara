@@ -106,6 +106,13 @@ $env:DATABASE_URL='postgres://tessara:tessara@localhost:5432/tessara'
 cargo run -p tessara-api -- seed-demo
 ```
 
+Run the first legacy migration rehearsal fixture:
+
+```powershell
+$env:DATABASE_URL='postgres://tessara:tessara@localhost:5432/tessara'
+cargo run -p tessara-api -- import-legacy-fixture .\fixtures\legacy-rehearsal.json
+```
+
 The API also serves the first local shell at:
 
 ```text

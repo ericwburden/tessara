@@ -6,7 +6,7 @@ use axum::{
 };
 use serde_json::{Value, json};
 use sqlx::{PgPool, postgres::PgPoolOptions};
-use tessara_api::{config::Config, db, router};
+use tessara_api::{config::Config, db, legacy_import, router};
 use tower::ServiceExt;
 use uuid::Uuid;
 
@@ -770,7 +770,54 @@ async fn reporting_and_dashboard_builders_return_diagnostics_for_invalid_referen
     assert_eq!(missing_component_dashboard.0, StatusCode::NOT_FOUND);
 }
 
+#[tokio::test]
+async fn legacy_fixture_import_rehearsal_projects_report_and_dashboard() {
+    let _guard = TEST_DATABASE_LOCK.lock().await;
+    let Some(state) = test_state().await else {
+        return;
+    };
+    let summary = legacy_import::import_legacy_fixture_str(
+        &state.pool,
+        include_str!("../../../fixtures/legacy-rehearsal.json"),
+    )
+    .await
+    .expect("legacy fixture should import");
+    assert_eq!(summary.analytics_values, 5);
+
+    let app = router(state);
+    let token = login_token(app.clone()).await;
+    let report = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/reports/{}/table", summary.report_id),
+            &token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(report["rows"][0]["field_value"], "42");
+
+    let dashboard = request_json(
+        app,
+        Request::builder()
+            .method("GET")
+            .uri(format!("/api/dashboards/{}", summary.dashboard_id))
+            .body(Body::empty())
+            .expect("valid imported dashboard request"),
+    )
+    .await;
+    assert_eq!(
+        dashboard["components"][0]["chart"]["report_id"],
+        summary.report_id.to_string()
+    );
+}
+
 async fn test_app() -> Option<axum::Router> {
+    Some(router(test_state().await?))
+}
+
+async fn test_state() -> Option<db::AppState> {
     let Some(database_url) = std::env::var("TEST_DATABASE_URL").ok() else {
         eprintln!("skipping database integration test; TEST_DATABASE_URL is not set");
         return None;
@@ -788,7 +835,7 @@ async fn test_app() -> Option<axum::Router> {
         .expect("database should migrate and seed");
     let state = db::AppState { pool, config };
 
-    Some(router(state))
+    Some(state)
 }
 
 async fn login_token(app: axum::Router) -> String {
