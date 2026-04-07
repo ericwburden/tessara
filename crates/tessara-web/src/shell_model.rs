@@ -257,6 +257,12 @@ const REPORTING_INPUTS: &[TextInput] = &[
         "participants",
     ),
     TextInput::new(
+        "report-missing-policy",
+        "Report missing-data policy",
+        "null, exclude_row, or bucket_unknown",
+        "null",
+    ),
+    TextInput::new(
         "report-fields-json",
         "Report bindings JSON",
         "Optional report bindings JSON",
@@ -291,6 +297,8 @@ const REPORTING_INPUTS: &[TextInput] = &[
 ];
 
 const REPORTING_ACTIONS: &[Action] = &[
+    Action::new("addReportBinding()", "Add Binding"),
+    Action::new("clearReportBindings()", "Clear Bindings"),
     Action::new("createReport()", "Create Report"),
     Action::new("loadReportById()", "Load Report By ID"),
     Action::new("loadReportDefinitionById()", "Inspect Report By ID"),

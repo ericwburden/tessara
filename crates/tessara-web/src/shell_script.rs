@@ -6,6 +6,7 @@ pub const SCRIPT: &str = r#"
       let demoDashboardId = null;
       let demoReportId = null;
       let renderedForm = null;
+      let reportBindings = [];
       const selections = {};
 
       function show(value) {
@@ -774,7 +775,7 @@ pub const SCRIPT: &str = r#"
           const fields = bindingsJson ? JSON.parse(bindingsJson) : [{
             logical_key: inputValue("report-logical-key"),
             source_field_key: inputValue("report-source-field-key"),
-            missing_policy: "null"
+            missing_policy: inputValue("report-missing-policy") || "null"
           }];
           const payload = await request("/api/admin/reports", {
             method: "POST",
@@ -791,6 +792,31 @@ pub const SCRIPT: &str = r#"
         } catch (error) {
           show(error.message);
         }
+      }
+
+      function addReportBinding() {
+        try {
+          const binding = {
+            logical_key: inputValue("report-logical-key"),
+            source_field_key: inputValue("report-source-field-key"),
+            missing_policy: inputValue("report-missing-policy") || "null"
+          };
+          if (!binding.logical_key || !binding.source_field_key) {
+            throw new Error("Select or enter a report logical key and source field key first.");
+          }
+          reportBindings = reportBindings.filter((existing) => existing.logical_key !== binding.logical_key);
+          reportBindings.push(binding);
+          document.getElementById("report-fields-json").value = JSON.stringify(reportBindings);
+          show({ report_bindings: reportBindings });
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      function clearReportBindings() {
+        reportBindings = [];
+        document.getElementById("report-fields-json").value = "";
+        show({ report_bindings: reportBindings });
       }
 
       async function validateLegacyFixture() {
@@ -975,6 +1001,11 @@ pub const SCRIPT: &str = r#"
           source_field_key: binding.source_field_key,
           missing_policy: binding.missing_policy
         })));
+        reportBindings = payload.bindings.map((binding) => ({
+          logical_key: binding.logical_key,
+          source_field_key: binding.source_field_key,
+          missing_policy: binding.missing_policy
+        }));
         show(payload);
         showCards(payload.bindings, (binding) => `
           <article class="card">
