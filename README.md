@@ -172,11 +172,13 @@ The local shell now covers the main demo workflow surfaces:
   smaller application controller with session-token reuse; `/app/admin` still
   uses the full builder controller.
 - Separate `/app` application shell focused on the published form, draft,
-  submit, submission review, and report viewing workflow.
+  submit, submission review, report viewing workflow, and a one-click demo
+  submission quick start.
 - Separate `/app/admin` setup shell focused on hierarchy, form, and report
   builder workflows without the full migration workbench surface.
 - Separate `/app/reports` reporting shell focused on report inspection,
-  analytics refresh, report execution, and dashboard preview.
+  analytics refresh, report execution, dashboard preview, and a one-click demo
+  dashboard quick start.
 - Separate `/app/migration` operator shell focused on legacy fixture example
   loading, validation, and dry-run rehearsal.
 - Shared `/api/app/summary` readiness counters for focused application screens.

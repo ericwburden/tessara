@@ -126,7 +126,7 @@ try {
     }
 
     $appShell = Invoke-RestMethod -Uri "$baseUrl/app" -TimeoutSec 30
-    if (-not ($appShell -like "*Submission Workspace*") -or -not ($appShell -like "*Choose Published Form*") -or -not ($appShell -like "*Review Submissions*") -or -not ($appShell -like "*Load App Summary*")) {
+    if (-not ($appShell -like "*Submission Workspace*") -or -not ($appShell -like "*Choose Published Form*") -or -not ($appShell -like "*Review Submissions*") -or -not ($appShell -like "*Load App Summary*") -or -not ($appShell -like "*Start Demo Submission*")) {
         throw "Expected application shell HTML to include submission workflow controls"
     }
     $adminAppShell = Invoke-RestMethod -Uri "$baseUrl/app/admin" -TimeoutSec 30
@@ -134,7 +134,7 @@ try {
         throw "Expected admin application shell HTML to include setup workflow controls"
     }
     $reportingAppShell = Invoke-RestMethod -Uri "$baseUrl/app/reports" -TimeoutSec 30
-    if (-not ($reportingAppShell -like "*Reporting Workspace*") -or -not ($reportingAppShell -like "*Report Runner*") -or -not ($reportingAppShell -like "*Dashboard Preview*")) {
+    if (-not ($reportingAppShell -like "*Reporting Workspace*") -or -not ($reportingAppShell -like "*Report Runner*") -or -not ($reportingAppShell -like "*Dashboard Preview*") -or -not ($reportingAppShell -like "*Open Demo Dashboard*")) {
         throw "Expected reporting application shell HTML to include report and dashboard workflow controls"
     }
     $migrationAppShell = Invoke-RestMethod -Uri "$baseUrl/app/migration" -TimeoutSec 30
