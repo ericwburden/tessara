@@ -100,6 +100,8 @@ fn ApplicationShell() -> impl IntoView {
                 </p>
                 <div class="actions">
                     <button type="button" onclick="login()">"Log In"</button>
+                    <button type="button" onclick="loadCurrentUser()">"Current User"</button>
+                    <button type="button" onclick="logout()">"Log Out"</button>
                     <button type="button" onclick="seedDemo()">"Seed Demo"</button>
                     <button type="button" onclick="startDemoSubmissionFlow()">"Start Demo Submission"</button>
                     <button type="button" onclick="loadAppSummary()">"Load App Summary"</button>
@@ -199,6 +201,8 @@ fn MigrationApplicationShell() -> impl IntoView {
                 </p>
                 <div class="actions">
                     <button type="button" onclick="login()">"Log In"</button>
+                    <button type="button" onclick="loadCurrentUser()">"Current User"</button>
+                    <button type="button" onclick="logout()">"Log Out"</button>
                     <button type="button" onclick="loadAppSummary()">"Load App Summary"</button>
                     <a class="button-link" href="/app">"Open Submission Workspace"</a>
                     <a class="button-link" href="/app/admin">"Open Admin Setup"</a>
@@ -244,6 +248,8 @@ fn ReportingApplicationShell() -> impl IntoView {
                 </p>
                 <div class="actions">
                     <button type="button" onclick="login()">"Log In"</button>
+                    <button type="button" onclick="loadCurrentUser()">"Current User"</button>
+                    <button type="button" onclick="logout()">"Log Out"</button>
                     <button type="button" onclick="seedDemo()">"Seed Demo"</button>
                     <button type="button" onclick="openDemoDashboard()">"Open Demo Dashboard"</button>
                     <button type="button" onclick="loadAppSummary()">"Load App Summary"</button>

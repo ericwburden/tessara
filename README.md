@@ -169,8 +169,8 @@ The local shell now covers the main demo workflow surfaces:
 - Leptos SSR-rendered shell structure with the current JavaScript controller
   retained for immediate local workflow testing.
 - Focused `/app`, `/app/reports`, and `/app/migration` screens now use a
-  smaller application controller with session-token reuse; `/app/admin` still
-  uses the full builder controller.
+  smaller application controller with session-token reuse, current-user
+  inspection, and logout; `/app/admin` still uses the full builder controller.
 - Separate `/app` application shell focused on the published form, draft,
   submit, submission review, report viewing workflow, and a one-click demo
   submission quick start.

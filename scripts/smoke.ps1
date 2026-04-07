@@ -131,7 +131,7 @@ try {
     }
 
     $appShell = Invoke-RestMethod -Uri "$baseUrl/app" -TimeoutSec 30
-    if (-not ($appShell -like "*Submission Workspace*") -or -not ($appShell -like "*Choose Published Form*") -or -not ($appShell -like "*Review Submissions*") -or -not ($appShell -like "*Load App Summary*") -or -not ($appShell -like "*Start Demo Submission*")) {
+    if (-not ($appShell -like "*Submission Workspace*") -or -not ($appShell -like "*Choose Published Form*") -or -not ($appShell -like "*Review Submissions*") -or -not ($appShell -like "*Load App Summary*") -or -not ($appShell -like "*Start Demo Submission*") -or -not ($appShell -like "*Current User*") -or -not ($appShell -like "*Log Out*")) {
         throw "Expected application shell HTML to include submission workflow controls"
     }
     $adminAppShell = Invoke-RestMethod -Uri "$baseUrl/app/admin" -TimeoutSec 30

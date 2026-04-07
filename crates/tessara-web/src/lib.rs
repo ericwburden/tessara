@@ -156,6 +156,9 @@ mod tests {
         assert!(html.contains("Open Migration Workbench"));
         assert!(html.contains("Open Reporting Workspace"));
         assert!(html.contains("Load App Summary"));
+        assert!(html.contains("Current User"));
+        assert!(html.contains("Log Out"));
+        assert!(html.contains("/api/me"));
         assert!(html.contains("/api/app/summary"));
         assert!(html.contains("/api/forms/published"));
         assert!(html.contains("/api/submissions/drafts"));
@@ -204,6 +207,8 @@ mod tests {
         assert!(html.contains("Open Admin Setup"));
         assert!(html.contains("Open Reporting Workspace"));
         assert!(html.contains("Load App Summary"));
+        assert!(html.contains("Current User"));
+        assert!(html.contains("Log Out"));
     }
 
     #[test]
@@ -223,6 +228,8 @@ mod tests {
         assert!(html.contains("Open Dashboard"));
         assert!(html.contains("Choose Chart"));
         assert!(html.contains("Load App Summary"));
+        assert!(html.contains("Current User"));
+        assert!(html.contains("Log Out"));
         assert!(html.contains("/api/admin/analytics/refresh"));
         assert!(html.contains("/api/app/summary"));
         assert!(html.contains("/api/reports"));

@@ -46,11 +46,16 @@ pub const APPLICATION_SCRIPT: &str = r#"
         if (element) element.value = value ?? "";
       }
 
-      function updateSessionStatus() {
+      function updateSessionStatus(account = null) {
         const element = document.getElementById("session-status");
-        if (element) element.textContent = token
-          ? "Authenticated for local testing."
-          : "Not signed in.";
+        if (!element) return;
+        if (!token) {
+          element.textContent = "Not signed in.";
+          return;
+        }
+        element.textContent = account?.email
+          ? `Signed in as ${account.email}.`
+          : "Authenticated for local testing.";
       }
 
       function selectRecord(kind, label, id, bindings = {}) {
@@ -100,6 +105,31 @@ pub const APPLICATION_SCRIPT: &str = r#"
           window.sessionStorage.setItem("tessara.devToken", token);
           updateSessionStatus();
           show({ authenticated: true });
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      function logout() {
+        token = null;
+        window.sessionStorage.removeItem("tessara.devToken");
+        updateSessionStatus();
+        show({ authenticated: false });
+      }
+
+      async function loadCurrentUser() {
+        try {
+          if (!token) await login();
+          const payload = await request("/api/me");
+          updateSessionStatus(payload);
+          show(payload);
+          setScreen(`
+            <article class="card">
+              <h3>${escapeHtml(payload.display_name)}</h3>
+              <p>${escapeHtml(payload.email)}</p>
+              <p class="muted">${escapeHtml(payload.capabilities.join(", "))}</p>
+            </article>
+          `);
         } catch (error) {
           show(error.message);
         }
