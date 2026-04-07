@@ -118,6 +118,12 @@ const HIERARCHY_INPUTS: &[TextInput] = &[
         "Metadata node type ID",
         "",
     ),
+    TextInput::new(
+        "metadata-field-id",
+        "Metadata field ID",
+        "Metadata field ID",
+        "",
+    ),
     TextInput::new("metadata-key", "Metadata key", "Metadata key", "region"),
     TextInput::new(
         "metadata-label",
@@ -165,6 +171,7 @@ const HIERARCHY_ACTIONS: &[Action] = &[
     Action::new("createRelationship()", "Create Relationship"),
     Action::new("loadMetadataFields()", "Load Metadata Fields"),
     Action::new("createMetadataField()", "Create Metadata Field"),
+    Action::new("updateMetadataField()", "Update Metadata Field"),
     Action::new("createNode()", "Create Node"),
     Action::new("updateNode()", "Update Node"),
 ];

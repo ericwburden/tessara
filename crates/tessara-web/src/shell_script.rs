@@ -337,6 +337,7 @@ pub const SCRIPT: &str = r#"
               <h3>${escapeHtml(field.label)}</h3>
               <p>${escapeHtml(field.node_type_name)}.${escapeHtml(field.key)}</p>
               <p>${escapeHtml(field.field_type)}${field.required ? " required" : ""}</p>
+              <button type="button" onclick="useMetadataField('${escapeHtml(field.id)}', '${escapeHtml(field.node_type_id)}', '${escapeHtml(field.node_type_name)}', '${escapeHtml(field.key)}', '${escapeHtml(field.label)}', '${escapeHtml(field.field_type)}', ${field.required ? "true" : "false"})">Use Metadata Field</button>
               <button type="button" onclick="useNodeType('${escapeHtml(field.node_type_id)}', '${escapeHtml(field.node_type_name)}')">Use Node Type</button>
               <code>${escapeHtml(field.id)}</code>
             </article>
@@ -344,6 +345,18 @@ pub const SCRIPT: &str = r#"
         } catch (error) {
           show(error.message);
         }
+      }
+
+      function useMetadataField(fieldId, nodeTypeId, nodeTypeName, key, label, fieldType, required) {
+        selectRecord("metadata field", label, fieldId, {
+          "metadata-field-id": fieldId,
+          "metadata-node-type-id": nodeTypeId,
+          "metadata-key": key,
+          "metadata-label": label,
+          "metadata-field-type": fieldType,
+          "metadata-required": required ? "true" : "false"
+        });
+        useNodeType(nodeTypeId, nodeTypeName);
       }
 
       async function createMetadataField() {
@@ -354,6 +367,28 @@ pub const SCRIPT: &str = r#"
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               node_type_id: inputValue("metadata-node-type-id"),
+              key: inputValue("metadata-key"),
+              label: inputValue("metadata-label"),
+              field_type: inputValue("metadata-field-type"),
+              required: booleanInputValue("metadata-required")
+            })
+          });
+          show(payload);
+          await loadMetadataFields();
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function updateMetadataField() {
+        try {
+          if (!token) await login();
+          const fieldId = inputValue("metadata-field-id");
+          if (!fieldId) throw new Error("Select or enter a metadata field ID first.");
+          const payload = await request(`/api/admin/node-metadata-fields/${fieldId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
               key: inputValue("metadata-key"),
               label: inputValue("metadata-label"),
               field_type: inputValue("metadata-field-type"),

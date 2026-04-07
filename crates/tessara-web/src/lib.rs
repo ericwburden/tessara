@@ -77,6 +77,8 @@ mod tests {
         assert!(html.contains("Create Node Type"));
         assert!(html.contains("Create Relationship"));
         assert!(html.contains("Create Metadata Field"));
+        assert!(html.contains("Update Metadata Field"));
+        assert!(html.contains("metadata-field-id"));
         assert!(html.contains("Create Node"));
         assert!(html.contains("node-metadata-json"));
         assert!(html.contains("Create Form"));
@@ -122,6 +124,7 @@ mod tests {
         assert!(html.contains("report-missing-policy"));
         assert!(html.contains("Metadata required"));
         assert!(html.contains("Field required"));
+        assert!(html.contains("/api/admin/node-metadata-fields/${fieldId}"));
         assert!(html.contains("Load Submission By ID"));
         assert!(html.contains("/api/admin/analytics/refresh"));
         assert!(html.contains("/api/admin/legacy-fixtures/validate"));
@@ -193,6 +196,7 @@ mod tests {
         assert!(html.contains("Form Builder"));
         assert!(html.contains("Report Builder"));
         assert!(html.contains("Create Node Type"));
+        assert!(html.contains("Update Metadata Field"));
         assert!(html.contains("Update Node"));
         assert!(html.contains("Create Form"));
         assert!(html.contains("Remove Section"));

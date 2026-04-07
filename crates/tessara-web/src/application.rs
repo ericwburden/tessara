@@ -467,6 +467,7 @@ fn HierarchyAdminScreen() -> impl IntoView {
                 <label><span>"Node type slug"</span><input id="node-type-slug" placeholder="organization" value="" /></label>
                 <label><span>"Node type ID"</span><input id="node-type-id" placeholder="Selected node type ID" value="" /></label>
                 <label><span>"Metadata node type ID"</span><input id="metadata-node-type-id" placeholder="Metadata node type ID" value="" /></label>
+                <label><span>"Metadata field ID"</span><input id="metadata-field-id" placeholder="Selected metadata field ID" value="" /></label>
                 <label><span>"Metadata key"</span><input id="metadata-key" placeholder="region" value="region" /></label>
                 <label><span>"Metadata label"</span><input id="metadata-label" placeholder="Region" value="Region" /></label>
                 <label><span>"Metadata field type"</span><input id="metadata-field-type" placeholder="text" value="text" /></label>
@@ -482,6 +483,7 @@ fn HierarchyAdminScreen() -> impl IntoView {
                 <button type="button" onclick="createNodeType()">"Create Node Type"</button>
                 <button type="button" onclick="loadMetadataFields()">"Load Metadata Fields"</button>
                 <button type="button" onclick="createMetadataField()">"Create Metadata Field"</button>
+                <button type="button" onclick="updateMetadataField()">"Update Metadata Field"</button>
                 <button type="button" onclick="loadNodes()">"Load Nodes"</button>
                 <button type="button" onclick="createNode()">"Create Node"</button>
                 <button type="button" onclick="updateNode()">"Update Node"</button>

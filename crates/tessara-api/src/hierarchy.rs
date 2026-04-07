@@ -40,6 +40,14 @@ pub struct CreateNodeMetadataFieldRequest {
 }
 
 #[derive(Deserialize)]
+pub struct UpdateNodeMetadataFieldRequest {
+    key: String,
+    label: String,
+    field_type: String,
+    required: bool,
+}
+
+#[derive(Deserialize)]
 pub struct CreateNodeRequest {
     node_type_id: Uuid,
     parent_node_id: Option<Uuid>,
@@ -285,11 +293,7 @@ pub async fn create_node_metadata_field(
     let field_type = parse_field_type(&payload.field_type)?;
 
     if payload.required {
-        let existing_node_count: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM nodes WHERE node_type_id = $1")
-                .bind(payload.node_type_id)
-                .fetch_one(&state.pool)
-                .await?;
+        let existing_node_count = node_count_for_type(&state.pool, payload.node_type_id).await?;
         if existing_node_count > 0 {
             return Err(ApiError::BadRequest(
                 "required metadata fields cannot be added after nodes of that type exist".into(),
@@ -314,6 +318,70 @@ pub async fn create_node_metadata_field(
     .await?;
 
     Ok(Json(IdResponse { id }))
+}
+
+struct ExistingMetadataField {
+    node_type_id: Uuid,
+    key: String,
+    field_type: String,
+    required: bool,
+}
+
+/// Updates metadata field display and safe schema settings for a node type.
+pub async fn update_node_metadata_field(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(field_id): Path<Uuid>,
+    Json(payload): Json<UpdateNodeMetadataFieldRequest>,
+) -> ApiResult<Json<IdResponse>> {
+    auth::require_capability(&state.pool, &headers, "hierarchy:write").await?;
+    let existing = require_node_metadata_field(&state.pool, field_id).await?;
+    require_text("metadata key", &payload.key)?;
+    require_text("metadata label", &payload.label)?;
+    let field_type = parse_field_type(&payload.field_type)?;
+
+    let existing_node_count = node_count_for_type(&state.pool, existing.node_type_id).await?;
+    if existing_node_count > 0 {
+        if payload.key != existing.key {
+            return Err(ApiError::BadRequest(
+                "metadata field keys cannot be changed after nodes of that type exist".into(),
+            ));
+        }
+
+        if field_type.as_str() != existing.field_type {
+            return Err(ApiError::BadRequest(
+                "metadata field types cannot be changed after nodes of that type exist".into(),
+            ));
+        }
+
+        if payload.required && !existing.required {
+            return Err(ApiError::BadRequest(
+                "metadata fields cannot be made required after nodes of that type exist".into(),
+            ));
+        }
+    }
+
+    if payload.key != existing.key {
+        require_node_metadata_key_available(&state.pool, existing.node_type_id, &payload.key)
+            .await?;
+    }
+
+    sqlx::query(
+        r#"
+        UPDATE node_metadata_field_definitions
+        SET key = $1, label = $2, field_type = $3::field_type, required = $4
+        WHERE id = $5
+        "#,
+    )
+    .bind(payload.key)
+    .bind(payload.label)
+    .bind(field_type.as_str())
+    .bind(payload.required)
+    .bind(field_id)
+    .execute(&state.pool)
+    .await?;
+
+    Ok(Json(IdResponse { id: field_id }))
 }
 
 pub async fn create_node(
@@ -654,6 +722,39 @@ async fn require_node_metadata_key_available(
     } else {
         Ok(())
     }
+}
+
+async fn require_node_metadata_field(
+    pool: &sqlx::PgPool,
+    field_id: Uuid,
+) -> ApiResult<ExistingMetadataField> {
+    let row = sqlx::query(
+        r#"
+        SELECT node_type_id, key, field_type::text AS field_type, required
+        FROM node_metadata_field_definitions
+        WHERE id = $1
+        "#,
+    )
+    .bind(field_id)
+    .fetch_optional(pool)
+    .await?
+    .ok_or_else(|| ApiError::NotFound(format!("metadata field {field_id}")))?;
+
+    Ok(ExistingMetadataField {
+        node_type_id: row.try_get("node_type_id")?,
+        key: row.try_get("key")?,
+        field_type: row.try_get("field_type")?,
+        required: row.try_get("required")?,
+    })
+}
+
+async fn node_count_for_type(pool: &sqlx::PgPool, node_type_id: Uuid) -> ApiResult<i64> {
+    Ok(
+        sqlx::query_scalar("SELECT COUNT(*) FROM nodes WHERE node_type_id = $1")
+            .bind(node_type_id)
+            .fetch_one(pool)
+            .await?,
+    )
 }
 
 async fn assert_relationship_is_acyclic(

@@ -750,7 +750,7 @@ async fn hierarchy_builder_rejects_required_metadata_after_nodes_exist() {
     .await;
     let node_type_id = id_from(&node_type);
 
-    request_json(
+    let metadata_field = request_json(
         app.clone(),
         authorized_request(
             "POST",
@@ -760,6 +760,22 @@ async fn hierarchy_builder_rejects_required_metadata_after_nodes_exist() {
                 "node_type_id": node_type_id,
                 "key": "region",
                 "label": "Region",
+                "field_type": "text",
+                "required": false
+            })),
+        ),
+    )
+    .await;
+    let metadata_field_id = id_from(&metadata_field);
+    request_json(
+        app.clone(),
+        authorized_request(
+            "PUT",
+            &format!("/api/admin/node-metadata-fields/{metadata_field_id}"),
+            &token,
+            Some(json!({
+                "key": "region_code",
+                "label": "Region Code",
                 "field_type": "text",
                 "required": false
             })),
@@ -777,7 +793,7 @@ async fn hierarchy_builder_rejects_required_metadata_after_nodes_exist() {
                 "node_type_id": node_type_id,
                 "parent_node_id": null,
                 "name": "Pilot Organization",
-                "metadata": {"region": "North"}
+                "metadata": {"region_code": "North"}
             })),
         ),
     )
@@ -793,7 +809,7 @@ async fn hierarchy_builder_rejects_required_metadata_after_nodes_exist() {
             Some(json!({
                 "parent_node_id": null,
                 "name": "Updated Pilot Organization",
-                "metadata": {"region": "South"}
+                "metadata": {"region_code": "South"}
             })),
         ),
     )
@@ -814,7 +830,89 @@ async fn hierarchy_builder_rejects_required_metadata_after_nodes_exist() {
             .iter()
             .any(|node| node["id"] == node_id.to_string()
                 && node["name"] == "Updated Pilot Organization"
-                && node["metadata"]["region"] == "South")
+                && node["metadata"]["region_code"] == "South")
+    );
+
+    request_json(
+        app.clone(),
+        authorized_request(
+            "PUT",
+            &format!("/api/admin/node-metadata-fields/{metadata_field_id}"),
+            &token,
+            Some(json!({
+                "key": "region_code",
+                "label": "Region",
+                "field_type": "text",
+                "required": false
+            })),
+        ),
+    )
+    .await;
+    let required_metadata_update = request_status_and_json(
+        app.clone(),
+        authorized_request(
+            "PUT",
+            &format!("/api/admin/node-metadata-fields/{metadata_field_id}"),
+            &token,
+            Some(json!({
+                "key": "region_code",
+                "label": "Region",
+                "field_type": "text",
+                "required": true
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(required_metadata_update.0, StatusCode::BAD_REQUEST);
+    assert!(
+        required_metadata_update.1["error"]
+            .as_str()
+            .expect("error body should include message")
+            .contains("cannot be made required")
+    );
+    let metadata_key_update = request_status_and_json(
+        app.clone(),
+        authorized_request(
+            "PUT",
+            &format!("/api/admin/node-metadata-fields/{metadata_field_id}"),
+            &token,
+            Some(json!({
+                "key": "region",
+                "label": "Region",
+                "field_type": "text",
+                "required": false
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(metadata_key_update.0, StatusCode::BAD_REQUEST);
+    assert!(
+        metadata_key_update.1["error"]
+            .as_str()
+            .expect("error body should include message")
+            .contains("keys cannot be changed")
+    );
+    let metadata_type_update = request_status_and_json(
+        app.clone(),
+        authorized_request(
+            "PUT",
+            &format!("/api/admin/node-metadata-fields/{metadata_field_id}"),
+            &token,
+            Some(json!({
+                "key": "region_code",
+                "label": "Region",
+                "field_type": "number",
+                "required": false
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(metadata_type_update.0, StatusCode::BAD_REQUEST);
+    assert!(
+        metadata_type_update.1["error"]
+            .as_str()
+            .expect("error body should include message")
+            .contains("types cannot be changed")
     );
 
     let required_metadata = request_status_and_json(
