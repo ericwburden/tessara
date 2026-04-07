@@ -117,6 +117,11 @@ try {
         throw "Timed out waiting for API health. stderr:`n$(Get-Content -Tail 80 -LiteralPath $apiErr -ErrorAction SilentlyContinue)"
     }
 
+    $shell = Invoke-RestMethod -Uri "$baseUrl/" -TimeoutSec 30
+    if (-not ($shell -like "*Admin Shell*") -or -not ($shell -like "*Create Draft*")) {
+        throw "Expected local shell HTML to include admin and submission controls"
+    }
+
     $login = Invoke-Json `
         -Method "Post" `
         -Uri "$baseUrl/api/auth/login" `
