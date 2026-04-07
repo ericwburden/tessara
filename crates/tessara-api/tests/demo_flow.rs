@@ -247,6 +247,392 @@ async fn hierarchy_builder_rejects_required_metadata_after_nodes_exist() {
     );
 }
 
+#[tokio::test]
+async fn admin_mutation_routes_require_authentication() {
+    let _guard = TEST_DATABASE_LOCK.lock().await;
+    let Some(app) = test_app().await else { return };
+    let form_id = Uuid::new_v4();
+    let form_version_id = Uuid::new_v4();
+    let dashboard_id = Uuid::new_v4();
+    let node_type_id = Uuid::new_v4();
+    let parent_node_type_id = Uuid::new_v4();
+    let chart_id = Uuid::new_v4();
+
+    let requests = vec![
+        Request::builder()
+            .method("POST")
+            .uri("/api/admin/node-types")
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(
+                json!({"name": "Organization", "slug": "organization"}).to_string(),
+            ))
+            .expect("valid node type request"),
+        Request::builder()
+            .method("POST")
+            .uri("/api/admin/node-type-relationships")
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(
+                json!({
+                    "parent_node_type_id": parent_node_type_id,
+                    "child_node_type_id": node_type_id
+                })
+                .to_string(),
+            ))
+            .expect("valid relationship request"),
+        Request::builder()
+            .method("POST")
+            .uri("/api/admin/node-metadata-fields")
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(
+                json!({
+                    "node_type_id": node_type_id,
+                    "key": "region",
+                    "label": "Region",
+                    "field_type": "text",
+                    "required": false
+                })
+                .to_string(),
+            ))
+            .expect("valid metadata request"),
+        Request::builder()
+            .method("POST")
+            .uri("/api/admin/nodes")
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(
+                json!({
+                    "node_type_id": node_type_id,
+                    "parent_node_id": null,
+                    "name": "Demo Organization",
+                    "metadata": {}
+                })
+                .to_string(),
+            ))
+            .expect("valid node request"),
+        Request::builder()
+            .method("POST")
+            .uri("/api/admin/forms")
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(
+                json!({
+                    "name": "Monthly Report",
+                    "slug": "monthly-report",
+                    "scope_node_type_id": null
+                })
+                .to_string(),
+            ))
+            .expect("valid form request"),
+        Request::builder()
+            .method("POST")
+            .uri(format!("/api/admin/forms/{form_id}/versions"))
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(
+                json!({
+                    "version_label": "v1",
+                    "compatibility_group_name": "Default compatibility"
+                })
+                .to_string(),
+            ))
+            .expect("valid form version request"),
+        Request::builder()
+            .method("POST")
+            .uri(format!(
+                "/api/admin/form-versions/{form_version_id}/sections"
+            ))
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(
+                json!({"title": "Main", "position": 0}).to_string(),
+            ))
+            .expect("valid section request"),
+        Request::builder()
+            .method("POST")
+            .uri(format!("/api/admin/form-versions/{form_version_id}/fields"))
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(
+                json!({
+                    "section_id": Uuid::new_v4(),
+                    "key": "participants",
+                    "label": "Participants",
+                    "field_type": "number",
+                    "required": true,
+                    "position": 0
+                })
+                .to_string(),
+            ))
+            .expect("valid field request"),
+        Request::builder()
+            .method("POST")
+            .uri(format!(
+                "/api/admin/form-versions/{form_version_id}/publish"
+            ))
+            .body(Body::empty())
+            .expect("valid publish request"),
+        Request::builder()
+            .method("POST")
+            .uri("/api/admin/analytics/refresh")
+            .body(Body::empty())
+            .expect("valid analytics request"),
+        Request::builder()
+            .method("POST")
+            .uri("/api/admin/reports")
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(
+                json!({
+                    "name": "Participants Report",
+                    "form_id": null,
+                    "fields": [{
+                        "logical_key": "participants",
+                        "source_field_key": "participants",
+                        "missing_policy": "null"
+                    }]
+                })
+                .to_string(),
+            ))
+            .expect("valid report request"),
+        Request::builder()
+            .method("POST")
+            .uri("/api/admin/charts")
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(
+                json!({
+                    "name": "Participants Chart",
+                    "report_id": null,
+                    "chart_type": "table"
+                })
+                .to_string(),
+            ))
+            .expect("valid chart request"),
+        Request::builder()
+            .method("POST")
+            .uri("/api/admin/dashboards")
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(json!({"name": "Dashboard"}).to_string()))
+            .expect("valid dashboard request"),
+        Request::builder()
+            .method("POST")
+            .uri(format!("/api/admin/dashboards/{dashboard_id}/components"))
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(
+                json!({
+                    "chart_id": chart_id,
+                    "position": 0,
+                    "config": {}
+                })
+                .to_string(),
+            ))
+            .expect("valid dashboard component request"),
+        Request::builder()
+            .method("POST")
+            .uri("/api/demo/seed")
+            .body(Body::empty())
+            .expect("valid demo seed request"),
+    ];
+
+    for request in requests {
+        let uri = request.uri().to_string();
+        let (status, _) = request_status_and_json(app.clone(), request).await;
+        assert_eq!(
+            status,
+            StatusCode::UNAUTHORIZED,
+            "{uri} should require auth"
+        );
+    }
+}
+
+#[tokio::test]
+async fn reporting_and_dashboard_builders_return_diagnostics_for_invalid_references() {
+    let _guard = TEST_DATABASE_LOCK.lock().await;
+    let Some(app) = test_app().await else { return };
+    let token = login_token(app.clone()).await;
+
+    let form = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/forms",
+            &token,
+            Some(json!({
+                "name": "Monthly Service Report",
+                "slug": "monthly-service-report",
+                "scope_node_type_id": null
+            })),
+        ),
+    )
+    .await;
+    let form_id = id_from(&form);
+    let form_version_id = create_form_version(app.clone(), &token, form_id, "v1").await;
+    let section_id = create_form_section(app.clone(), &token, form_version_id, "Main").await;
+    create_number_field(
+        app.clone(),
+        &token,
+        form_version_id,
+        section_id,
+        "participants",
+    )
+    .await;
+
+    let missing_field = request_status_and_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/reports",
+            &token,
+            Some(json!({
+                "name": "Invalid Report",
+                "form_id": form_id,
+                "fields": [{
+                    "logical_key": "missing",
+                    "source_field_key": "missing",
+                    "missing_policy": "null"
+                }]
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(missing_field.0, StatusCode::BAD_REQUEST);
+    assert!(
+        missing_field.1["error"]
+            .as_str()
+            .expect("error body should include message")
+            .contains("not available on form")
+    );
+
+    let duplicate_logical_key = request_status_and_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/reports",
+            &token,
+            Some(json!({
+                "name": "Duplicate Logical Field Report",
+                "form_id": form_id,
+                "fields": [
+                    {
+                        "logical_key": "participants",
+                        "source_field_key": "participants",
+                        "missing_policy": "null"
+                    },
+                    {
+                        "logical_key": "participants",
+                        "source_field_key": "participants",
+                        "missing_policy": "bucket_unknown"
+                    }
+                ]
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(duplicate_logical_key.0, StatusCode::BAD_REQUEST);
+    assert!(
+        duplicate_logical_key.1["error"]
+            .as_str()
+            .expect("error body should include message")
+            .contains("duplicated")
+    );
+
+    let missing_report = request_status_and_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/reports/{}/table", Uuid::new_v4()),
+            &token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(missing_report.0, StatusCode::NOT_FOUND);
+
+    let missing_chart_report = request_status_and_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/charts",
+            &token,
+            Some(json!({
+                "name": "Missing Report Chart",
+                "report_id": Uuid::new_v4(),
+                "chart_type": "table"
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(missing_chart_report.0, StatusCode::NOT_FOUND);
+
+    let dashboard = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/dashboards",
+            &token,
+            Some(json!({"name": "Diagnostics Dashboard"})),
+        ),
+    )
+    .await;
+    let dashboard_id = id_from(&dashboard);
+    let missing_component_chart = request_status_and_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            &format!("/api/admin/dashboards/{dashboard_id}/components"),
+            &token,
+            Some(json!({
+                "chart_id": Uuid::new_v4(),
+                "position": 0,
+                "config": {}
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(missing_component_chart.0, StatusCode::NOT_FOUND);
+
+    let valid_report = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/reports",
+            &token,
+            Some(json!({
+                "name": "Participants Report",
+                "form_id": form_id,
+                "fields": [{
+                    "logical_key": "participants",
+                    "source_field_key": "participants",
+                    "missing_policy": "null"
+                }]
+            })),
+        ),
+    )
+    .await;
+    let valid_chart = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/charts",
+            &token,
+            Some(json!({
+                "name": "Participants Chart",
+                "report_id": id_from(&valid_report),
+                "chart_type": "table"
+            })),
+        ),
+    )
+    .await;
+    let missing_component_dashboard = request_status_and_json(
+        app,
+        authorized_request(
+            "POST",
+            &format!("/api/admin/dashboards/{}/components", Uuid::new_v4()),
+            &token,
+            Some(json!({
+                "chart_id": id_from(&valid_chart),
+                "position": 0,
+                "config": {}
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(missing_component_dashboard.0, StatusCode::NOT_FOUND);
+}
+
 async fn test_app() -> Option<axum::Router> {
     let Some(database_url) = std::env::var("TEST_DATABASE_URL").ok() else {
         eprintln!("skipping database integration test; TEST_DATABASE_URL is not set");

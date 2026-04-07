@@ -77,6 +77,10 @@ pub async fn create_chart(
         .map_err(|error| ApiError::BadRequest(error.to_string()))?
         .unwrap_or(ChartType::Table);
 
+    if let Some(report_id) = payload.report_id {
+        require_report_exists(&state.pool, report_id).await?;
+    }
+
     let id = sqlx::query_scalar(
         "INSERT INTO charts (name, report_id, chart_type) VALUES ($1, $2, $3) RETURNING id",
     )
@@ -111,6 +115,9 @@ pub async fn add_dashboard_component(
     Json(payload): Json<AddDashboardComponentRequest>,
 ) -> ApiResult<Json<IdResponse>> {
     auth::require_capability(&state.pool, &headers, "reports:write").await?;
+
+    require_dashboard_exists(&state.pool, dashboard_id).await?;
+    require_chart_exists(&state.pool, payload.chart_id).await?;
 
     let id = sqlx::query_scalar(
         r#"
@@ -185,4 +192,40 @@ pub async fn get_dashboard(
         name: dashboard.try_get("name")?,
         components,
     }))
+}
+
+async fn require_report_exists(pool: &sqlx::PgPool, report_id: Uuid) -> ApiResult<()> {
+    let exists: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM reports WHERE id = $1)")
+        .bind(report_id)
+        .fetch_one(pool)
+        .await?;
+    if exists {
+        Ok(())
+    } else {
+        Err(ApiError::NotFound(format!("report {report_id}")))
+    }
+}
+
+async fn require_dashboard_exists(pool: &sqlx::PgPool, dashboard_id: Uuid) -> ApiResult<()> {
+    let exists: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM dashboards WHERE id = $1)")
+        .bind(dashboard_id)
+        .fetch_one(pool)
+        .await?;
+    if exists {
+        Ok(())
+    } else {
+        Err(ApiError::NotFound(format!("dashboard {dashboard_id}")))
+    }
+}
+
+async fn require_chart_exists(pool: &sqlx::PgPool, chart_id: Uuid) -> ApiResult<()> {
+    let exists: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM charts WHERE id = $1)")
+        .bind(chart_id)
+        .fetch_one(pool)
+        .await?;
+    if exists {
+        Ok(())
+    } else {
+        Err(ApiError::NotFound(format!("chart {chart_id}")))
+    }
 }

@@ -1,4 +1,4 @@
-use std::{str::FromStr, sync::Arc};
+use std::{collections::HashSet, str::FromStr, sync::Arc};
 
 use arrow::{
     array::{Array, ArrayRef, StringArray},
@@ -37,6 +37,12 @@ pub struct CreateReportFieldBindingRequest {
     missing_policy: Option<String>,
 }
 
+struct ParsedReportFieldBinding {
+    logical_key: String,
+    source_field_key: String,
+    missing_policy: MissingDataPolicy,
+}
+
 #[derive(Serialize)]
 pub struct ReportTable {
     report_id: Uuid,
@@ -64,22 +70,18 @@ pub async fn create_report(
         ));
     }
 
+    let fields =
+        validate_report_field_bindings(&state.pool, payload.form_id, payload.fields).await?;
+
+    let mut tx = state.pool.begin().await?;
     let report_id: Uuid =
         sqlx::query_scalar("INSERT INTO reports (name, form_id) VALUES ($1, $2) RETURNING id")
             .bind(payload.name)
             .bind(payload.form_id)
-            .fetch_one(&state.pool)
+            .fetch_one(&mut *tx)
             .await?;
 
-    for (position, field) in payload.fields.into_iter().enumerate() {
-        let missing_policy = field
-            .missing_policy
-            .as_deref()
-            .map(MissingDataPolicy::from_str)
-            .transpose()
-            .map_err(|error| ApiError::BadRequest(error.to_string()))?
-            .unwrap_or(MissingDataPolicy::Null);
-
+    for (position, field) in fields.into_iter().enumerate() {
         sqlx::query(
             r#"
             INSERT INTO report_field_bindings
@@ -90,11 +92,13 @@ pub async fn create_report(
         .bind(report_id)
         .bind(field.logical_key)
         .bind(field.source_field_key)
-        .bind(missing_policy.as_str())
+        .bind(field.missing_policy.as_str())
         .bind(position as i32)
-        .execute(&state.pool)
+        .execute(&mut *tx)
         .await?;
     }
+
+    tx.commit().await?;
 
     Ok(Json(IdResponse { id: report_id }))
 }
@@ -105,6 +109,7 @@ pub async fn run_report(
     Path(report_id): Path<Uuid>,
 ) -> ApiResult<Json<ReportTable>> {
     auth::require_capability(&state.pool, &headers, "reports:read").await?;
+    require_report_exists(&state.pool, report_id).await?;
 
     let source_rows = sqlx::query(
         r#"
@@ -213,6 +218,103 @@ pub async fn run_report(
     }
 
     Ok(Json(ReportTable { report_id, rows }))
+}
+
+async fn validate_report_field_bindings(
+    pool: &sqlx::PgPool,
+    form_id: Option<Uuid>,
+    fields: Vec<CreateReportFieldBindingRequest>,
+) -> ApiResult<Vec<ParsedReportFieldBinding>> {
+    if let Some(form_id) = form_id {
+        require_form_exists(pool, form_id).await?;
+    }
+
+    let mut logical_keys = HashSet::new();
+    let mut parsed_fields = Vec::with_capacity(fields.len());
+    for field in fields {
+        if !logical_keys.insert(field.logical_key.clone()) {
+            return Err(ApiError::BadRequest(format!(
+                "report logical field '{}' is duplicated",
+                field.logical_key
+            )));
+        }
+
+        let missing_policy = field
+            .missing_policy
+            .as_deref()
+            .map(MissingDataPolicy::from_str)
+            .transpose()
+            .map_err(|error| ApiError::BadRequest(error.to_string()))?
+            .unwrap_or(MissingDataPolicy::Null);
+
+        parsed_fields.push(ParsedReportFieldBinding {
+            logical_key: field.logical_key,
+            source_field_key: field.source_field_key,
+            missing_policy,
+        });
+    }
+
+    if let Some(form_id) = form_id {
+        assert_report_source_fields_exist(pool, form_id, &parsed_fields).await?;
+    }
+
+    Ok(parsed_fields)
+}
+
+async fn require_form_exists(pool: &sqlx::PgPool, form_id: Uuid) -> ApiResult<()> {
+    let exists: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM forms WHERE id = $1)")
+        .bind(form_id)
+        .fetch_one(pool)
+        .await?;
+    if exists {
+        Ok(())
+    } else {
+        Err(ApiError::NotFound(format!("form {form_id}")))
+    }
+}
+
+async fn require_report_exists(pool: &sqlx::PgPool, report_id: Uuid) -> ApiResult<()> {
+    let exists: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM reports WHERE id = $1)")
+        .bind(report_id)
+        .fetch_one(pool)
+        .await?;
+    if exists {
+        Ok(())
+    } else {
+        Err(ApiError::NotFound(format!("report {report_id}")))
+    }
+}
+
+async fn assert_report_source_fields_exist(
+    pool: &sqlx::PgPool,
+    form_id: Uuid,
+    fields: &[ParsedReportFieldBinding],
+) -> ApiResult<()> {
+    for field in fields {
+        let exists: bool = sqlx::query_scalar(
+            r#"
+            SELECT EXISTS (
+                SELECT 1
+                FROM form_fields
+                JOIN form_versions ON form_versions.id = form_fields.form_version_id
+                WHERE form_versions.form_id = $1 AND form_fields.key = $2
+            )
+            "#,
+        )
+        .bind(form_id)
+        .bind(&field.source_field_key)
+        .fetch_one(pool)
+        .await?;
+
+        if !exists {
+            return Err(ApiError::BadRequest(format!(
+                "report source field '{}' is not available on form {form_id}",
+                field.source_field_key
+            )));
+        }
+    }
+
+    Ok(())
 }
 
 fn as_string_array(batch: &RecordBatch, column: usize) -> ApiResult<&StringArray> {
