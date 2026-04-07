@@ -940,6 +940,34 @@ pub const SCRIPT: &str = r#"
         }
       }
 
+      async function loadLegacyFixtureExamples() {
+        try {
+          if (!token) await login();
+          const payload = await request("/api/admin/legacy-fixtures/examples");
+          show(payload.map((fixture) => ({ name: fixture.name, bytes: fixture.fixture_json.length })));
+          showCards(payload, (fixture) => `
+            <article class="card">
+              <h3>${escapeHtml(fixture.name)}</h3>
+              <p>${fixture.fixture_json.length} bytes</p>
+              <button type="button" onclick="useLegacyFixture('${escapeHtml(fixture.name)}')">Use Fixture</button>
+            </article>
+          `);
+          window.legacyFixtureExamples = Object.fromEntries(payload.map((fixture) => [fixture.name, fixture.fixture_json]));
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      function useLegacyFixture(name) {
+        const fixture = window.legacyFixtureExamples?.[name];
+        if (!fixture) {
+          show(`Fixture example '${name}' has not been loaded.`);
+          return;
+        }
+        document.getElementById("legacy-fixture-json").value = fixture;
+        show({ selected_fixture: name });
+      }
+
       async function createChart() {
         try {
           if (!token) await login();

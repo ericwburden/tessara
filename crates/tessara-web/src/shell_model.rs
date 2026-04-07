@@ -320,6 +320,7 @@ const LEGACY_FIXTURE_INPUT: TextArea = TextArea::new(
 );
 
 const MIGRATION_ACTIONS: &[Action] = &[
+    Action::new("loadLegacyFixtureExamples()", "Load Fixture Examples"),
     Action::new("validateLegacyFixture()", "Validate Legacy Fixture"),
     Action::new("dryRunLegacyFixture()", "Dry-Run Legacy Fixture"),
 ];

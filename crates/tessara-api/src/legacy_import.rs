@@ -80,6 +80,15 @@ pub struct LegacyImportDryRunReport {
     pub validation: LegacyImportValidationReport,
 }
 
+/// Fixture example exposed by the local migration workbench.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct LegacyFixtureExample {
+    /// Human-readable fixture identifier.
+    pub name: String,
+    /// Complete fixture JSON ready for validation or dry-run.
+    pub fixture_json: String,
+}
+
 impl LegacyImportValidationReport {
     /// Returns `true` when the fixture is safe to hand to the database importer.
     pub fn is_clean(&self) -> bool {
@@ -250,6 +259,24 @@ pub async fn dry_run_legacy_fixture_endpoint(
 ) -> ApiResult<Json<LegacyImportDryRunReport>> {
     auth::require_capability(&state.pool, &headers, "admin:all").await?;
     Ok(Json(dry_run_legacy_fixture_str(&payload.fixture_json)?))
+}
+
+/// Lists bundled legacy fixture examples for local migration workbench testing.
+pub async fn list_legacy_fixture_examples(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> ApiResult<Json<Vec<LegacyFixtureExample>>> {
+    auth::require_capability(&state.pool, &headers, "admin:all").await?;
+    Ok(Json(vec![
+        LegacyFixtureExample {
+            name: "legacy-rehearsal".to_string(),
+            fixture_json: include_str!("../../../fixtures/legacy-rehearsal.json").to_string(),
+        },
+        LegacyFixtureExample {
+            name: "legacy-inactive-locked".to_string(),
+            fixture_json: include_str!("../../../fixtures/legacy-inactive-locked.json").to_string(),
+        },
+    ]))
 }
 
 /// Imports a legacy rehearsal fixture from a JSON file path.

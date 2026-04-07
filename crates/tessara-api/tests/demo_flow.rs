@@ -53,6 +53,22 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
     assert_eq!(legacy_dry_run["fixture_name"], "legacy-rehearsal");
     assert_eq!(legacy_dry_run["would_import"], true);
     assert_eq!(legacy_dry_run["validation"]["issue_count"], 0);
+    let legacy_examples = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/admin/legacy-fixtures/examples", &token, None),
+    )
+    .await;
+    assert!(
+        legacy_examples
+            .as_array()
+            .expect("legacy example response should be an array")
+            .iter()
+            .any(|example| example["name"] == "legacy-inactive-locked"
+                && example["fixture_json"]
+                    .as_str()
+                    .expect("example should include fixture json")
+                    .contains("Inactive Partner"))
+    );
 
     let node_types = request_json(
         app.clone(),
