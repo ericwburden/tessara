@@ -9,6 +9,29 @@ use std::{fmt, str::FromStr};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+/// Validates that user-configurable text is present after trimming.
+///
+/// Tessara builders use this at API boundaries for names, slugs, keys, and
+/// labels that would otherwise persist as ambiguous blank configuration.
+pub fn validate_required_text(
+    field_name: &'static str,
+    value: &str,
+) -> Result<(), RequiredTextError> {
+    if value.trim().is_empty() {
+        Err(RequiredTextError { field_name })
+    } else {
+        Ok(())
+    }
+}
+
+/// Error returned when required builder text is empty or whitespace.
+#[derive(Debug, Clone, Eq, PartialEq, thiserror::Error)]
+#[error("{field_name} is required")]
+pub struct RequiredTextError {
+    /// User-facing field name that failed validation.
+    pub field_name: &'static str,
+}
+
 /// Typed value category used by configurable metadata and form fields.
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -105,7 +128,18 @@ mod tests {
 
     use serde_json::json;
 
-    use super::FieldType;
+    use super::{FieldType, validate_required_text};
+
+    #[test]
+    fn validates_required_text() {
+        assert!(validate_required_text("name", "Quarterly Report").is_ok());
+        assert_eq!(
+            validate_required_text("name", "   ")
+                .expect_err("blank text should fail")
+                .to_string(),
+            "name is required"
+        );
+    }
 
     #[test]
     fn parses_supported_field_types() {

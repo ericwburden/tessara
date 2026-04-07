@@ -4,7 +4,7 @@ use axum::{Json, extract::State, http::HeaderMap};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::Row;
-use tessara_core::{FieldType, FieldTypeError};
+use tessara_core::{FieldType, FieldTypeError, validate_required_text};
 use uuid::Uuid;
 
 use crate::{
@@ -70,6 +70,8 @@ pub async fn create_node_type(
     Json(payload): Json<CreateNodeTypeRequest>,
 ) -> ApiResult<Json<IdResponse>> {
     auth::require_capability(&state.pool, &headers, "hierarchy:write").await?;
+    require_text("node type name", &payload.name)?;
+    require_text("node type slug", &payload.slug)?;
 
     let id = sqlx::query_scalar("INSERT INTO node_types (name, slug) VALUES ($1, $2) RETURNING id")
         .bind(payload.name)
@@ -153,6 +155,8 @@ pub async fn create_node_metadata_field(
 ) -> ApiResult<Json<IdResponse>> {
     auth::require_capability(&state.pool, &headers, "hierarchy:write").await?;
     require_node_type_exists(&state.pool, payload.node_type_id).await?;
+    require_text("metadata key", &payload.key)?;
+    require_text("metadata label", &payload.label)?;
     let field_type = parse_field_type(&payload.field_type)?;
 
     if payload.required {
@@ -194,6 +198,7 @@ pub async fn create_node(
 ) -> ApiResult<Json<IdResponse>> {
     auth::require_capability(&state.pool, &headers, "hierarchy:write").await?;
     require_node_type_exists(&state.pool, payload.node_type_id).await?;
+    require_text("node name", &payload.name)?;
 
     if let Some(parent_node_id) = payload.parent_node_id {
         let parent_type_id: Uuid =
@@ -314,6 +319,11 @@ pub(crate) fn validate_field_value(field_type: FieldType, value: &Value) -> ApiR
     field_type
         .validate_json_value(value)
         .map_err(field_type_error)
+}
+
+pub(crate) fn require_text(field_name: &'static str, value: &str) -> ApiResult<()> {
+    validate_required_text(field_name, value)
+        .map_err(|error| ApiError::BadRequest(error.to_string()))
 }
 
 fn field_type_error(error: FieldTypeError) -> ApiError {

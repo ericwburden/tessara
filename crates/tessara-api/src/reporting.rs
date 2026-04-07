@@ -20,7 +20,7 @@ use crate::{
     auth,
     db::AppState,
     error::{ApiError, ApiResult},
-    hierarchy::IdResponse,
+    hierarchy::{IdResponse, require_text},
 };
 
 #[derive(Deserialize)]
@@ -70,6 +70,7 @@ pub async fn create_report(
     Json(payload): Json<CreateReportRequest>,
 ) -> ApiResult<Json<IdResponse>> {
     auth::require_capability(&state.pool, &headers, "reports:write").await?;
+    require_text("report name", &payload.name)?;
 
     if payload.fields.is_empty() {
         return Err(ApiError::BadRequest(
@@ -269,6 +270,9 @@ async fn validate_report_field_bindings(
     let mut logical_keys = HashSet::new();
     let mut parsed_fields = Vec::with_capacity(fields.len());
     for field in fields {
+        require_text("report logical key", &field.logical_key)?;
+        require_text("report source field key", &field.source_field_key)?;
+
         if !logical_keys.insert(field.logical_key.clone()) {
             return Err(ApiError::BadRequest(format!(
                 "report logical field '{}' is duplicated",

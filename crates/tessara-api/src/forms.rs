@@ -11,7 +11,7 @@ use crate::{
     auth,
     db::AppState,
     error::{ApiError, ApiResult},
-    hierarchy::{IdResponse, parse_field_type},
+    hierarchy::{IdResponse, parse_field_type, require_text},
 };
 
 #[derive(Deserialize)]
@@ -95,6 +95,8 @@ pub async fn create_form(
     Json(payload): Json<CreateFormRequest>,
 ) -> ApiResult<Json<IdResponse>> {
     auth::require_capability(&state.pool, &headers, "forms:write").await?;
+    require_text("form name", &payload.name)?;
+    require_text("form slug", &payload.slug)?;
     if let Some(scope_node_type_id) = payload.scope_node_type_id {
         require_node_type_exists(&state.pool, scope_node_type_id).await?;
     }
@@ -191,10 +193,12 @@ pub async fn create_form_version(
 ) -> ApiResult<Json<IdResponse>> {
     auth::require_capability(&state.pool, &headers, "forms:write").await?;
     require_form_exists(&state.pool, form_id).await?;
+    require_text("version label", &payload.version_label)?;
 
     let group_name = payload
         .compatibility_group_name
         .unwrap_or_else(|| "Default compatibility".into());
+    require_text("compatibility group name", &group_name)?;
     let compatibility_group_id: Uuid = sqlx::query_scalar(
         r#"
         INSERT INTO compatibility_groups (form_id, name)
@@ -259,6 +263,7 @@ pub async fn create_form_section(
 ) -> ApiResult<Json<IdResponse>> {
     auth::require_capability(&state.pool, &headers, "forms:write").await?;
     assert_form_version_draft(&state.pool, form_version_id).await?;
+    require_text("section title", &payload.title)?;
 
     let id = sqlx::query_scalar(
         "INSERT INTO form_sections (form_version_id, title, position) VALUES ($1, $2, $3) RETURNING id",
@@ -280,6 +285,8 @@ pub async fn create_form_field(
 ) -> ApiResult<Json<IdResponse>> {
     auth::require_capability(&state.pool, &headers, "forms:write").await?;
     assert_form_version_draft(&state.pool, form_version_id).await?;
+    require_text("field key", &payload.key)?;
+    require_text("field label", &payload.label)?;
     let field_type = parse_field_type(&payload.field_type)?;
     assert_section_belongs_to_form_version(&state.pool, form_version_id, payload.section_id)
         .await?;

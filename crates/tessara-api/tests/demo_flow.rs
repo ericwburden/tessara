@@ -325,6 +325,27 @@ async fn hierarchy_and_form_builders_return_diagnostics_for_invalid_references()
     let Some(app) = test_app().await else { return };
     let token = login_token(app.clone()).await;
 
+    let blank_node_type = request_status_and_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/node-types",
+            &token,
+            Some(json!({
+                "name": "   ",
+                "slug": "blank-node-type"
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(blank_node_type.0, StatusCode::BAD_REQUEST);
+    assert!(
+        blank_node_type.1["error"]
+            .as_str()
+            .expect("error body should include message")
+            .contains("node type name is required")
+    );
+
     let missing_scoped_node_type = request_status_and_json(
         app.clone(),
         authorized_request(

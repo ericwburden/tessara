@@ -15,7 +15,7 @@ use crate::{
     auth,
     db::AppState,
     error::{ApiError, ApiResult},
-    hierarchy::IdResponse,
+    hierarchy::{IdResponse, require_text},
 };
 
 #[derive(Deserialize)]
@@ -75,6 +75,7 @@ pub async fn create_chart(
     Json(payload): Json<CreateChartRequest>,
 ) -> ApiResult<Json<IdResponse>> {
     auth::require_capability(&state.pool, &headers, "reports:write").await?;
+    require_text("chart name", &payload.name)?;
 
     let chart_type = payload
         .chart_type
@@ -106,6 +107,7 @@ pub async fn create_dashboard(
     Json(payload): Json<CreateDashboardRequest>,
 ) -> ApiResult<Json<IdResponse>> {
     auth::require_capability(&state.pool, &headers, "reports:write").await?;
+    require_text("dashboard name", &payload.name)?;
 
     let id = sqlx::query_scalar("INSERT INTO dashboards (name) VALUES ($1) RETURNING id")
         .bind(payload.name)
