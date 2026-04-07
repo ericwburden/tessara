@@ -86,6 +86,7 @@ Useful checks:
 cargo fmt --all --check
 cargo check -p tessara-api
 cargo test --workspace
+cargo clippy --workspace --all-targets -- -D warnings
 .\scripts\smoke.ps1
 .\scripts\smoke.ps1 -ComposeApi
 .\scripts\rehearse-legacy-import.ps1
