@@ -63,6 +63,7 @@ mod tests {
         assert!(html.contains("Required fields missing"));
         assert!(html.contains("Use Section"));
         assert!(html.contains("Use Field Settings"));
+        assert!(html.contains("Use Report Source"));
         assert!(html.contains("Load Submission By ID"));
         assert!(html.contains("/api/admin/analytics/refresh"));
         assert!(html.contains("/api/admin/legacy-fixtures/validate"));

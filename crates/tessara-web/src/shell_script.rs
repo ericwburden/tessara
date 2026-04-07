@@ -542,6 +542,7 @@ pub const SCRIPT: &str = r#"
                         </label>
                         ${renderFieldInput(field)}
                         <button type="button" onclick="useField('${escapeHtml(field.key)}', '${escapeHtml(field.label)}', '${escapeHtml(field.field_type)}')">Use Field Settings</button>
+                        <button type="button" onclick="useReportField('${escapeHtml(field.key)}', '${escapeHtml(field.label)}')">Use Report Source</button>
                       </div>
                     `).join("")}
                   </div>
@@ -571,6 +572,13 @@ pub const SCRIPT: &str = r#"
           "field-key": fieldKey,
           "field-label": fieldLabel,
           "field-type": fieldType
+        });
+      }
+
+      function useReportField(fieldKey, fieldLabel = fieldKey) {
+        selectRecord("report field", fieldLabel, fieldKey, {
+          "report-logical-key": fieldKey,
+          "report-source-field-key": fieldKey
         });
       }
 
