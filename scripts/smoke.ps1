@@ -129,6 +129,10 @@ try {
     if (-not ($appShell -like "*Submission Workspace*") -or -not ($appShell -like "*Choose Published Form*") -or -not ($appShell -like "*Review Submissions*")) {
         throw "Expected application shell HTML to include submission workflow controls"
     }
+    $adminAppShell = Invoke-RestMethod -Uri "$baseUrl/app/admin" -TimeoutSec 30
+    if (-not ($adminAppShell -like "*Setup Workspace*") -or -not ($adminAppShell -like "*Hierarchy Setup*") -or -not ($adminAppShell -like "*Form Builder*")) {
+        throw "Expected admin application shell HTML to include setup workflow controls"
+    }
 
     $login = Invoke-Json `
         -Method "Post" `

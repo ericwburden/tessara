@@ -137,6 +137,12 @@ It also serves the first replacement-oriented application shell at:
 http://localhost:8080/app
 ```
 
+Focused admin setup screens are available at:
+
+```text
+http://localhost:8080/app/admin
+```
+
 For user testing, start the Compose stack and open that URL in a browser. Use
 the development login above, then click `Seed Demo` to populate the deterministic
 hierarchy, form, submission, report, and dashboard example. Stop and reset the
@@ -152,6 +158,8 @@ The local shell now covers the main demo workflow surfaces:
   retained for immediate local workflow testing.
 - Separate `/app` application shell focused on the published form, draft,
   submit, submission review, and report viewing workflow.
+- Separate `/app/admin` setup shell focused on hierarchy, form, and report
+  builder workflows without the full migration workbench surface.
 - Roadmap-aligned workflow sections and an in-browser user testing guide for
   the Compose deployment path.
 - Admin read screens for hierarchy types, forms, reports, dashboards, nodes,
