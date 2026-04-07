@@ -237,6 +237,33 @@ pub async fn create_node_type_relationship(
     }))
 }
 
+/// Removes a parent/child node-type relationship if no existing nodes depend on it.
+pub async fn delete_node_type_relationship(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((parent_node_type_id, child_node_type_id)): Path<(Uuid, Uuid)>,
+) -> ApiResult<Json<IdResponse>> {
+    auth::require_capability(&state.pool, &headers, "hierarchy:write").await?;
+    require_node_type_relationship_exists(&state.pool, parent_node_type_id, child_node_type_id)
+        .await?;
+    assert_relationship_unused(&state.pool, parent_node_type_id, child_node_type_id).await?;
+
+    sqlx::query(
+        r#"
+        DELETE FROM node_type_relationships
+        WHERE parent_node_type_id = $1 AND child_node_type_id = $2
+        "#,
+    )
+    .bind(parent_node_type_id)
+    .bind(child_node_type_id)
+    .execute(&state.pool)
+    .await?;
+
+    Ok(Json(IdResponse {
+        id: child_node_type_id,
+    }))
+}
+
 /// Lists node metadata field definitions for admin screens.
 pub async fn list_node_metadata_fields(
     State(state): State<AppState>,
@@ -721,6 +748,61 @@ async fn require_node_metadata_key_available(
         )))
     } else {
         Ok(())
+    }
+}
+
+async fn require_node_type_relationship_exists(
+    pool: &sqlx::PgPool,
+    parent_node_type_id: Uuid,
+    child_node_type_id: Uuid,
+) -> ApiResult<()> {
+    let exists: bool = sqlx::query_scalar(
+        r#"
+        SELECT EXISTS (
+            SELECT 1
+            FROM node_type_relationships
+            WHERE parent_node_type_id = $1 AND child_node_type_id = $2
+        )
+        "#,
+    )
+    .bind(parent_node_type_id)
+    .bind(child_node_type_id)
+    .fetch_one(pool)
+    .await?;
+
+    if exists {
+        Ok(())
+    } else {
+        Err(ApiError::NotFound(format!(
+            "node type relationship {parent_node_type_id} -> {child_node_type_id}"
+        )))
+    }
+}
+
+async fn assert_relationship_unused(
+    pool: &sqlx::PgPool,
+    parent_node_type_id: Uuid,
+    child_node_type_id: Uuid,
+) -> ApiResult<()> {
+    let usage_count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT COUNT(*)
+        FROM nodes AS child_nodes
+        JOIN nodes AS parent_nodes ON parent_nodes.id = child_nodes.parent_node_id
+        WHERE parent_nodes.node_type_id = $1 AND child_nodes.node_type_id = $2
+        "#,
+    )
+    .bind(parent_node_type_id)
+    .bind(child_node_type_id)
+    .fetch_one(pool)
+    .await?;
+
+    if usage_count == 0 {
+        Ok(())
+    } else {
+        Err(ApiError::BadRequest(
+            "node type relationship cannot be removed while existing nodes use it".into(),
+        ))
     }
 }
 

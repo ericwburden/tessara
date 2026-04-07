@@ -169,6 +169,7 @@ const HIERARCHY_ACTIONS: &[Action] = &[
     Action::new("createNodeType()", "Create Node Type"),
     Action::new("loadRelationships()", "Load Relationships"),
     Action::new("createRelationship()", "Create Relationship"),
+    Action::new("deleteRelationship()", "Remove Relationship"),
     Action::new("loadMetadataFields()", "Load Metadata Fields"),
     Action::new("createMetadataField()", "Create Metadata Field"),
     Action::new("updateMetadataField()", "Update Metadata Field"),

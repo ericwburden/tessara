@@ -967,6 +967,149 @@ async fn hierarchy_and_form_builders_return_diagnostics_for_invalid_references()
             .contains("node type name is required")
     );
 
+    let parent_type = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/node-types",
+            &token,
+            Some(json!({
+                "name": "Parent Organization",
+                "slug": "parent-organization"
+            })),
+        ),
+    )
+    .await;
+    let parent_type_id = id_from(&parent_type);
+    let child_type = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/node-types",
+            &token,
+            Some(json!({
+                "name": "Child Program",
+                "slug": "child-program"
+            })),
+        ),
+    )
+    .await;
+    let child_type_id = id_from(&child_type);
+    request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/node-type-relationships",
+            &token,
+            Some(json!({
+                "parent_node_type_id": parent_type_id,
+                "child_node_type_id": child_type_id
+            })),
+        ),
+    )
+    .await;
+    request_json(
+        app.clone(),
+        authorized_request(
+            "DELETE",
+            &format!("/api/admin/node-type-relationships/{parent_type_id}/{child_type_id}"),
+            &token,
+            None,
+        ),
+    )
+    .await;
+    let removed_relationship = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/admin/node-type-relationships", &token, None),
+    )
+    .await;
+    assert!(
+        removed_relationship
+            .as_array()
+            .expect("relationship list should be an array")
+            .iter()
+            .all(
+                |relationship| relationship["parent_node_type_id"] != parent_type_id.to_string()
+                    || relationship["child_node_type_id"] != child_type_id.to_string()
+            )
+    );
+    request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/node-type-relationships",
+            &token,
+            Some(json!({
+                "parent_node_type_id": parent_type_id,
+                "child_node_type_id": child_type_id
+            })),
+        ),
+    )
+    .await;
+    let parent_node = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/nodes",
+            &token,
+            Some(json!({
+                "node_type_id": parent_type_id,
+                "parent_node_id": null,
+                "name": "Parent Node",
+                "metadata": {}
+            })),
+        ),
+    )
+    .await;
+    let parent_node_id = id_from(&parent_node);
+    request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/nodes",
+            &token,
+            Some(json!({
+                "node_type_id": child_type_id,
+                "parent_node_id": parent_node_id,
+                "name": "Child Node",
+                "metadata": {}
+            })),
+        ),
+    )
+    .await;
+    let used_relationship_delete = request_status_and_json(
+        app.clone(),
+        authorized_request(
+            "DELETE",
+            &format!("/api/admin/node-type-relationships/{parent_type_id}/{child_type_id}"),
+            &token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(used_relationship_delete.0, StatusCode::BAD_REQUEST);
+    assert!(
+        used_relationship_delete.1["error"]
+            .as_str()
+            .expect("error body should include message")
+            .contains("existing nodes use it")
+    );
+    let missing_relationship_delete = request_status_and_json(
+        app.clone(),
+        authorized_request(
+            "DELETE",
+            &format!(
+                "/api/admin/node-type-relationships/{}/{}",
+                Uuid::new_v4(),
+                Uuid::new_v4()
+            ),
+            &token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(missing_relationship_delete.0, StatusCode::NOT_FOUND);
+
     let missing_scoped_node_type = request_status_and_json(
         app.clone(),
         authorized_request(

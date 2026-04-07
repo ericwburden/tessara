@@ -76,6 +76,12 @@ mod tests {
         assert!(html.contains("/api/admin/forms"));
         assert!(html.contains("Create Node Type"));
         assert!(html.contains("Create Relationship"));
+        assert!(html.contains("Remove Relationship"));
+        assert!(
+            html.contains(
+                "/api/admin/node-type-relationships/${parentNodeTypeId}/${childNodeTypeId}"
+            )
+        );
         assert!(html.contains("Create Metadata Field"));
         assert!(html.contains("Update Metadata Field"));
         assert!(html.contains("metadata-field-id"));
@@ -196,6 +202,7 @@ mod tests {
         assert!(html.contains("Form Builder"));
         assert!(html.contains("Report Builder"));
         assert!(html.contains("Create Node Type"));
+        assert!(html.contains("Remove Relationship"));
         assert!(html.contains("Update Metadata Field"));
         assert!(html.contains("Update Node"));
         assert!(html.contains("Create Form"));

@@ -466,6 +466,8 @@ fn HierarchyAdminScreen() -> impl IntoView {
                 <label><span>"Node type name"</span><input id="node-type-name" placeholder="Organization" value="" /></label>
                 <label><span>"Node type slug"</span><input id="node-type-slug" placeholder="organization" value="" /></label>
                 <label><span>"Node type ID"</span><input id="node-type-id" placeholder="Selected node type ID" value="" /></label>
+                <label><span>"Parent node type ID"</span><input id="parent-node-type-id" placeholder="Relationship parent type ID" value="" /></label>
+                <label><span>"Child node type ID"</span><input id="child-node-type-id" placeholder="Relationship child type ID" value="" /></label>
                 <label><span>"Metadata node type ID"</span><input id="metadata-node-type-id" placeholder="Metadata node type ID" value="" /></label>
                 <label><span>"Metadata field ID"</span><input id="metadata-field-id" placeholder="Selected metadata field ID" value="" /></label>
                 <label><span>"Metadata key"</span><input id="metadata-key" placeholder="region" value="region" /></label>
@@ -481,6 +483,9 @@ fn HierarchyAdminScreen() -> impl IntoView {
             <div class="actions">
                 <button type="button" onclick="loadNodeTypes()">"Load Node Types"</button>
                 <button type="button" onclick="createNodeType()">"Create Node Type"</button>
+                <button type="button" onclick="loadRelationships()">"Load Relationships"</button>
+                <button type="button" onclick="createRelationship()">"Create Relationship"</button>
+                <button type="button" onclick="deleteRelationship()">"Remove Relationship"</button>
                 <button type="button" onclick="loadMetadataFields()">"Load Metadata Fields"</button>
                 <button type="button" onclick="createMetadataField()">"Create Metadata Field"</button>
                 <button type="button" onclick="updateMetadataField()">"Update Metadata Field"</button>

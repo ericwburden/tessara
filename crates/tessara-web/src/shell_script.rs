@@ -300,6 +300,7 @@ pub const SCRIPT: &str = r#"
             <article class="card">
               <h3>${escapeHtml(relationship.parent_name)} -> ${escapeHtml(relationship.child_name)}</h3>
               <p class="muted">${escapeHtml(relationship.parent_node_type_id)} -> ${escapeHtml(relationship.child_node_type_id)}</p>
+              <button type="button" onclick="useRelationship('${escapeHtml(relationship.parent_node_type_id)}', '${escapeHtml(relationship.child_node_type_id)}', '${escapeHtml(relationship.parent_name)} -> ${escapeHtml(relationship.child_name)}')">Use Relationship</button>
               <button type="button" onclick="useParentNodeType('${escapeHtml(relationship.parent_node_type_id)}', '${escapeHtml(relationship.parent_name)}')">Use Parent Type</button>
               <button type="button" onclick="useChildNodeType('${escapeHtml(relationship.child_node_type_id)}', '${escapeHtml(relationship.child_name)}')">Use Child Type</button>
             </article>
@@ -307,6 +308,13 @@ pub const SCRIPT: &str = r#"
         } catch (error) {
           show(error.message);
         }
+      }
+
+      function useRelationship(parentNodeTypeId, childNodeTypeId, label) {
+        selectRecord("node type relationship", label, `${parentNodeTypeId} -> ${childNodeTypeId}`, {
+          "parent-node-type-id": parentNodeTypeId,
+          "child-node-type-id": childNodeTypeId
+        });
       }
 
       async function createRelationship() {
@@ -319,6 +327,24 @@ pub const SCRIPT: &str = r#"
               parent_node_type_id: inputValue("parent-node-type-id"),
               child_node_type_id: inputValue("child-node-type-id")
             })
+          });
+          show(payload);
+          await loadRelationships();
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function deleteRelationship() {
+        try {
+          if (!token) await login();
+          const parentNodeTypeId = inputValue("parent-node-type-id");
+          const childNodeTypeId = inputValue("child-node-type-id");
+          if (!parentNodeTypeId || !childNodeTypeId) {
+            throw new Error("Select or enter parent and child node type IDs first.");
+          }
+          const payload = await request(`/api/admin/node-type-relationships/${parentNodeTypeId}/${childNodeTypeId}`, {
+            method: "DELETE"
           });
           show(payload);
           await loadRelationships();

@@ -22,7 +22,7 @@ mod submissions;
 use axum::{
     Router,
     response::Html,
-    routing::{get, post, put},
+    routing::{delete, get, post, put},
 };
 use db::AppState;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
@@ -64,6 +64,10 @@ pub fn router(state: AppState) -> Router {
             "/api/admin/node-type-relationships",
             get(hierarchy::list_node_type_relationships)
                 .post(hierarchy::create_node_type_relationship),
+        )
+        .route(
+            "/api/admin/node-type-relationships/{parent_node_type_id}/{child_node_type_id}",
+            delete(hierarchy::delete_node_type_relationship),
         )
         .route(
             "/api/admin/node-metadata-fields",
