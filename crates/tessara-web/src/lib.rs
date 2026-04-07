@@ -224,6 +224,7 @@ mod tests {
         assert!(html.contains("Report Definition"));
         assert!(html.contains("Run This Report"));
         assert!(html.contains("Refresh and Run Report"));
+        assert!(html.contains("Refresh and Reopen Dashboard"));
         assert!(html.contains("table-wrap"));
         assert!(html.contains("/api/reports"));
         assert!(html.contains("sessionStorage"));
@@ -271,6 +272,8 @@ mod tests {
         assert!(html.contains("Report Definition"));
         assert!(html.contains("Run This Report"));
         assert!(html.contains("Refresh and Run Report"));
+        assert!(html.contains("Refresh and Reopen Dashboard"));
+        assert!(html.contains("Refresh and Open Dashboard"));
         assert!(html.contains("Open Submission Workspace"));
         assert!(html.contains("Open Migration Workbench"));
         assert!(html.contains("Open Reporting Workspace"));
@@ -316,6 +319,7 @@ mod tests {
         assert!(html.contains("Refresh and Run Report"));
         assert!(html.contains("Choose Dashboard"));
         assert!(html.contains("Open Dashboard"));
+        assert!(html.contains("Refresh and Open Dashboard"));
         assert!(html.contains("Choose Chart"));
         assert!(html.contains("Load App Summary"));
         assert!(html.contains("Current User"));

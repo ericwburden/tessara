@@ -682,6 +682,11 @@ pub const APPLICATION_SCRIPT: &str = r#"
         await loadReportById();
       }
 
+      async function refreshAnalyticsAndOpenDashboard() {
+        await refreshAnalytics();
+        await loadDashboardById();
+      }
+
       function useReport(reportId, reportName = reportId) {
         selectRecord("report", reportName, reportId, {
           "report-id": reportId,
@@ -851,6 +856,14 @@ pub const APPLICATION_SCRIPT: &str = r#"
         const payload = await request(`/api/dashboards/${dashboardId}`);
         useDashboard(payload.id, payload.name);
         show(payload);
+        const header = `
+          <article class="card">
+            <h3>Dashboard Preview</h3>
+            <p>${escapeHtml(payload.name)}</p>
+            <p>${payload.components.length} components</p>
+            <button type="button" onclick="refreshAnalyticsAndOpenDashboard()">Refresh and Reopen Dashboard</button>
+          </article>
+        `;
         const cards = await Promise.all(payload.components.map(async (component) => {
           let rows = [];
           const componentTitle = component.config?.title || component.chart.name;
@@ -871,7 +884,7 @@ pub const APPLICATION_SCRIPT: &str = r#"
             </article>
           `;
         }));
-        setScreen(cards.length ? cards.join("") : '<p class="muted">No dashboard components found.</p>');
+        setScreen(header + (cards.length ? cards.join("") : '<p class="muted">No dashboard components found.</p>'));
       }
 
       async function loadLegacyFixtureExamples() {

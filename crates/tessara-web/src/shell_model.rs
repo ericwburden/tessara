@@ -380,6 +380,10 @@ const REPORTING_ACTIONS: &[Action] = &[
     Action::new("addDashboardComponent()", "Add Component"),
     Action::new("updateDashboardComponent()", "Update Component"),
     Action::new("deleteDashboardComponent()", "Remove Component"),
+    Action::new(
+        "refreshAnalyticsAndOpenDashboard()",
+        "Refresh and Open Dashboard",
+    ),
     Action::new("loadDashboardById()", "Load Dashboard By ID"),
 ];
 

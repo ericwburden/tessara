@@ -392,6 +392,7 @@ fn DashboardPreviewScreen() -> impl IntoView {
             </div>
             <div class="actions">
                 <button type="button" onclick="loadDashboards()">"Choose Dashboard"</button>
+                <button type="button" onclick="refreshAnalyticsAndOpenDashboard()">"Refresh and Open Dashboard"</button>
                 <button type="button" onclick="loadDashboardById()">"Open Dashboard"</button>
                 <button type="button" onclick="loadCharts()">"Choose Chart"</button>
             </div>
@@ -635,6 +636,7 @@ fn ReportAdminScreen() -> impl IntoView {
                 <button type="button" onclick="addDashboardComponent()">"Add Component"</button>
                 <button type="button" onclick="updateDashboardComponent()">"Update Component"</button>
                 <button type="button" onclick="deleteDashboardComponent()">"Remove Component"</button>
+                <button type="button" onclick="refreshAnalyticsAndOpenDashboard()">"Refresh and Open Dashboard"</button>
                 <button type="button" onclick="loadDashboardById()">"Load Dashboard"</button>
             </div>
         </section>
