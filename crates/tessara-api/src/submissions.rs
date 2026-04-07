@@ -38,6 +38,7 @@ pub struct ListSubmissionsQuery {
     status: Option<String>,
     form_id: Option<Uuid>,
     node_id: Option<Uuid>,
+    q: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -58,12 +59,14 @@ pub struct SubmissionSummary {
 #[derive(Serialize)]
 pub struct SubmissionDetail {
     id: Uuid,
+    form_id: Uuid,
     form_version_id: Uuid,
     form_name: String,
     version_label: String,
     node_id: Uuid,
     node_name: String,
     status: String,
+    created_at: chrono::DateTime<chrono::Utc>,
     submitted_at: Option<chrono::DateTime<chrono::Utc>>,
     values: Vec<SubmissionValueDetail>,
     audit_events: Vec<SubmissionAuditEventSummary>,
@@ -153,6 +156,11 @@ pub async fn list_submissions(
 ) -> ApiResult<Json<Vec<SubmissionSummary>>> {
     auth::require_capability(&state.pool, &headers, "submissions:write").await?;
     let status = parse_submission_status_filter(query.status)?;
+    let search = query
+        .q
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
 
     let rows = sqlx::query(
         r#"
@@ -176,6 +184,12 @@ pub async fn list_submissions(
         WHERE ($1::submission_status IS NULL OR submissions.status = $1::submission_status)
           AND ($2::uuid IS NULL OR forms.id = $2)
           AND ($3::uuid IS NULL OR submissions.node_id = $3)
+          AND (
+              $4::text IS NULL
+              OR forms.name ILIKE '%' || $4 || '%'
+              OR nodes.name ILIKE '%' || $4 || '%'
+              OR form_versions.version_label ILIKE '%' || $4 || '%'
+          )
         GROUP BY
             submissions.id,
             forms.id,
@@ -194,6 +208,7 @@ pub async fn list_submissions(
     .bind(status)
     .bind(query.form_id)
     .bind(query.node_id)
+    .bind(search)
     .fetch_all(&state.pool)
     .await?;
 
@@ -231,12 +246,14 @@ pub async fn get_submission(
         r#"
         SELECT
             submissions.id,
+            forms.id AS form_id,
             submissions.form_version_id,
             forms.name AS form_name,
             form_versions.version_label,
             submissions.node_id,
             nodes.name AS node_name,
             submissions.status::text AS status,
+            submissions.created_at,
             submissions.submitted_at
         FROM submissions
         JOIN form_versions ON form_versions.id = submissions.form_version_id
@@ -313,12 +330,14 @@ pub async fn get_submission(
 
     Ok(Json(SubmissionDetail {
         id: row.try_get("id")?,
+        form_id: row.try_get("form_id")?,
         form_version_id: row.try_get("form_version_id")?,
         form_name: row.try_get("form_name")?,
         version_label: row.try_get("version_label")?,
         node_id: row.try_get("node_id")?,
         node_name: row.try_get("node_name")?,
         status: row.try_get("status")?,
+        created_at: row.try_get("created_at")?,
         submitted_at: row.try_get("submitted_at")?,
         values,
         audit_events,

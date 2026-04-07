@@ -417,6 +417,10 @@ fn ReviewScreen() -> impl IntoView {
             </p>
             <div class="inputs">
                 <label>
+                    <span>"Submission search"</span>
+                    <input id="submission-search" placeholder="Search form, node, or version" value="" />
+                </label>
+                <label>
                     <span>"Submission status filter"</span>
                     <input id="submission-status-filter" placeholder="draft or submitted" value="" />
                 </label>

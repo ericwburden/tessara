@@ -109,6 +109,7 @@ mod tests {
         assert!(html.contains("/api/form-versions/"));
         assert!(html.contains("/api/forms/published"));
         assert!(html.contains("/api/submissions"));
+        assert!(html.contains("submission-search"));
         assert!(html.contains("submission-status-filter"));
         assert!(html.contains("/api/submissions/drafts"));
         assert!(html.contains("/api/submissions/${submissionId}"));
@@ -187,6 +188,9 @@ mod tests {
         assert!(html.contains("/api/submissions/drafts"));
         assert!(html.contains("DELETE"));
         assert!(html.contains("submission-status-filter"));
+        assert!(html.contains("Submission search"));
+        assert!(html.contains("Use Form Version"));
+        assert!(html.contains("Use Node"));
         assert!(html.contains("/api/reports"));
         assert!(html.contains("sessionStorage"));
         assert!(html.contains("tessara.devToken"));

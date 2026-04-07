@@ -458,6 +458,8 @@ pub const APPLICATION_SCRIPT: &str = r#"
               <p>${submission.value_count} saved values</p>
               <p class="muted">Created ${escapeHtml(submission.created_at)}${submission.submitted_at ? `; submitted ${escapeHtml(submission.submitted_at)}` : ""}</p>
               <button type="button" onclick="useSubmission('${escapeHtml(submission.id)}', '${escapeHtml(submission.form_name)} ${escapeHtml(submission.version_label)}')">Use Submission</button>
+              <button type="button" onclick="useFormVersion('${escapeHtml(submission.form_version_id)}', '${escapeHtml(submission.form_id)}', '${escapeHtml(submission.form_name)} ${escapeHtml(submission.version_label)}')">Use Form Version</button>
+              <button type="button" onclick="useTargetNode('${escapeHtml(submission.node_id)}', '${escapeHtml(submission.node_name)}')">Use Node</button>
               <button type="button" onclick="loadSubmissionByValue('${escapeHtml(submission.id)}')">Open</button>
               <code>${escapeHtml(submission.id)}</code>
             </article>
@@ -469,6 +471,7 @@ pub const APPLICATION_SCRIPT: &str = r#"
 
       function submissionsUrl() {
         const params = new URLSearchParams();
+        if (inputValue("submission-search")) params.set("q", inputValue("submission-search"));
         if (inputValue("submission-status-filter")) params.set("status", inputValue("submission-status-filter"));
         if (inputValue("form-id")) params.set("form_id", inputValue("form-id"));
         if (inputValue("node-id")) params.set("node_id", inputValue("node-id"));
@@ -505,6 +508,7 @@ pub const APPLICATION_SCRIPT: &str = r#"
           <article class="card">
             <h3>${escapeHtml(payload.form_name)} ${escapeHtml(payload.version_label)}</h3>
             <p>${escapeHtml(payload.node_name)}: ${escapeHtml(payload.status)}</p>
+            <p class="muted">Created ${escapeHtml(payload.created_at)}${payload.submitted_at ? `; submitted ${escapeHtml(payload.submitted_at)}` : ""}</p>
             <h4>Values</h4>
             <ul>
               ${payload.values.map((value) => `<li>${escapeHtml(value.label)}${value.required ? " *" : ""}: ${value.value === null ? "<span class=\"muted\">missing</span>" : escapeHtml(JSON.stringify(value.value))}</li>`).join("")}

@@ -234,6 +234,12 @@ const FORM_ACTIONS: &[Action] = &[
 ];
 
 const SUBMISSION_INPUTS: &[TextInput] = &[
+    TextInput::new(
+        "submission-search",
+        "Submission search",
+        "Search form, node, or version",
+        "",
+    ),
     TextInput::new("node-id", "Target node ID", "Target node ID", ""),
     TextInput::new(
         "submission-id",

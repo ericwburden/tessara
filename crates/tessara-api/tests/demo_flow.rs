@@ -211,7 +211,7 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
         authorized_request(
             "GET",
             &format!(
-                "/api/submissions?status=submitted&form_id={}&node_id={}",
+                "/api/submissions?status=submitted&form_id={}&node_id={}&q=Quarterly",
                 seed["form_id"]
                     .as_str()
                     .expect("seed should include form id"),
@@ -253,6 +253,8 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
     )
     .await;
     assert_eq!(submission_detail["status"], "submitted");
+    assert_eq!(submission_detail["form_id"], seed["form_id"]);
+    assert!(submission_detail["created_at"].as_str().is_some());
     assert!(
         submission_detail["values"]
             .as_array()
