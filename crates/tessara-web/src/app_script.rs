@@ -107,38 +107,63 @@ pub const APPLICATION_SCRIPT: &str = r#"
 
       async function seedDemo() {
         try {
-          if (!token) await login();
-          const payload = await request("/api/demo/seed", { method: "POST" });
-          setInput("form-version-id", payload.form_version_id);
-          setInput("form-id", payload.form_id);
-          setInput("node-id", payload.organization_node_id);
-          setInput("submission-id", payload.submission_id);
-          setInput("dashboard-id", payload.dashboard_id);
-          setInput("report-id", payload.report_id);
-          setInput("chart-id", payload.chart_id);
-          selectRecord("form version", payload.form_version_id, payload.form_version_id, {
-            "form-version-id": payload.form_version_id,
-            "form-id": payload.form_id
-          });
-          selectRecord("node", payload.organization_node_id, payload.organization_node_id, {
-            "node-id": payload.organization_node_id
-          });
-          selectRecord("submission", payload.submission_id, payload.submission_id, {
-            "submission-id": payload.submission_id
-          });
-          selectRecord("report", payload.report_id, payload.report_id, {
-            "report-id": payload.report_id
-          });
-          selectRecord("chart", payload.chart_id, payload.chart_id, {
-            "chart-id": payload.chart_id
-          });
-          selectRecord("dashboard", payload.dashboard_id, payload.dashboard_id, {
-            "dashboard-id": payload.dashboard_id
-          });
-          show(payload);
+          await seedDemoForRoute();
         } catch (error) {
           show(error.message);
         }
+      }
+
+      async function startDemoSubmissionFlow() {
+        try {
+          const payload = await seedDemoForRoute();
+          await renderForm(payload.form_version_id);
+          await loadSubmissions();
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function openDemoDashboard() {
+        try {
+          const payload = await seedDemoForRoute();
+          await refreshAnalytics();
+          await loadDashboardByValue(payload.dashboard_id);
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function seedDemoForRoute() {
+        if (!token) await login();
+        const payload = await request("/api/demo/seed", { method: "POST" });
+        setInput("form-version-id", payload.form_version_id);
+        setInput("form-id", payload.form_id);
+        setInput("node-id", payload.organization_node_id);
+        setInput("submission-id", payload.submission_id);
+        setInput("dashboard-id", payload.dashboard_id);
+        setInput("report-id", payload.report_id);
+        setInput("chart-id", payload.chart_id);
+        selectRecord("form version", payload.form_version_id, payload.form_version_id, {
+          "form-version-id": payload.form_version_id,
+          "form-id": payload.form_id
+        });
+        selectRecord("node", payload.organization_node_id, payload.organization_node_id, {
+          "node-id": payload.organization_node_id
+        });
+        selectRecord("submission", payload.submission_id, payload.submission_id, {
+          "submission-id": payload.submission_id
+        });
+        selectRecord("report", payload.report_id, payload.report_id, {
+          "report-id": payload.report_id
+        });
+        selectRecord("chart", payload.chart_id, payload.chart_id, {
+          "chart-id": payload.chart_id
+        });
+        selectRecord("dashboard", payload.dashboard_id, payload.dashboard_id, {
+          "dashboard-id": payload.dashboard_id
+        });
+        show(payload);
+        return payload;
       }
 
       async function loadAppSummary() {

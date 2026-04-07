@@ -147,6 +147,8 @@ mod tests {
         assert!(html.contains("Create Draft"));
         assert!(html.contains("Save Values"));
         assert!(html.contains("Submit"));
+        assert!(html.contains("Start Demo Submission"));
+        assert!(html.contains("startDemoSubmissionFlow"));
         assert!(html.contains("Review Submissions"));
         assert!(html.contains("View Reports"));
         assert!(html.contains("Open Admin Workbench"));
@@ -209,6 +211,8 @@ mod tests {
         assert!(html.contains("Reporting Workspace"));
         assert!(html.contains("Report Runner"));
         assert!(html.contains("Dashboard Preview"));
+        assert!(html.contains("Open Demo Dashboard"));
+        assert!(html.contains("openDemoDashboard"));
         assert!(html.contains("Refresh Analytics"));
         assert!(html.contains("Choose Report"));
         assert!(html.contains("Inspect Report"));
