@@ -44,6 +44,27 @@ pub fn admin_application_shell_html(style: &str, script: &str) -> String {
     )
 }
 
+/// Builds the focused migration workbench application shell document.
+pub fn migration_application_shell_html(style: &str, script: &str) -> String {
+    let shell = view! { <MigrationApplicationShell/> }.to_html();
+
+    format!(
+        r#"<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Tessara Migration</title>
+    <style>{style}</style>
+  </head>
+  <body>
+    {shell}
+    <script>{script}</script>
+  </body>
+</html>"#
+    )
+}
+
 #[component]
 fn ApplicationShell() -> impl IntoView {
     view! {
@@ -60,6 +81,7 @@ fn ApplicationShell() -> impl IntoView {
                     <button type="button" onclick="login()">"Log In"</button>
                     <button type="button" onclick="seedDemo()">"Seed Demo"</button>
                     <a class="button-link" href="/app/admin">"Open Admin Setup"</a>
+                    <a class="button-link" href="/app/migration">"Open Migration Workbench"</a>
                     <a class="button-link" href="/">"Open Admin Workbench"</a>
                 </div>
             </section>
@@ -106,6 +128,7 @@ fn AdminApplicationShell() -> impl IntoView {
                     <button type="button" onclick="login()">"Log In"</button>
                     <button type="button" onclick="seedDemo()">"Seed Demo"</button>
                     <a class="button-link" href="/app">"Open Submission Workspace"</a>
+                    <a class="button-link" href="/app/migration">"Open Migration Workbench"</a>
                     <a class="button-link" href="/">"Open Admin Workbench"</a>
                 </div>
             </section>
@@ -125,6 +148,49 @@ fn AdminApplicationShell() -> impl IntoView {
                     <ReportAdminScreen/>
                     <section class="app-screen">
                         <h2>"Screen Output"</h2>
+                        <div id="screen" class="cards"></div>
+                    </section>
+                    <section class="app-screen">
+                        <h2>"Raw Output"</h2>
+                        <pre id="output">"No API calls yet."</pre>
+                    </section>
+                </section>
+            </section>
+        </main>
+    }
+}
+
+#[component]
+fn MigrationApplicationShell() -> impl IntoView {
+    view! {
+        <main class="shell app-shell">
+            <section class="panel hero">
+                <p class="muted">"Tessara Migration"</p>
+                <h1>"Migration Workbench"</h1>
+                <p>
+                    "This operator screen validates and dry-runs representative legacy fixtures "
+                    "before running import rehearsals."
+                </p>
+                <div class="actions">
+                    <button type="button" onclick="login()">"Log In"</button>
+                    <a class="button-link" href="/app">"Open Submission Workspace"</a>
+                    <a class="button-link" href="/app/admin">"Open Admin Setup"</a>
+                    <a class="button-link" href="/">"Open Admin Workbench"</a>
+                </div>
+            </section>
+            <section class="app-layout">
+                <aside class="panel app-sidebar">
+                    <h2>"Migration Workflow"</h2>
+                    <nav class="app-nav" aria-label="Migration workflow">
+                        <a href="#fixture-screen">"Fixtures"</a>
+                        <a href="#result-screen">"Results"</a>
+                    </nav>
+                    <SelectionContext/>
+                </aside>
+                <section class="panel app-main">
+                    <FixtureScreen/>
+                    <section id="result-screen" class="app-screen">
+                        <h2>"Validation Results"</h2>
                         <div id="screen" class="cards"></div>
                     </section>
                     <section class="app-screen">
@@ -336,6 +402,33 @@ fn ReportAdminScreen() -> impl IntoView {
                 <button type="button" onclick="loadReports()">"Load Reports"</button>
                 <button type="button" onclick="loadReportDefinitionById()">"Inspect Report"</button>
                 <button type="button" onclick="loadReportById()">"Run Report"</button>
+            </div>
+        </section>
+    }
+}
+
+#[component]
+fn FixtureScreen() -> impl IntoView {
+    view! {
+        <section id="fixture-screen" class="app-screen">
+            <p class="eyebrow">"Migration Screen"</p>
+            <h2>"Legacy Fixture Validation"</h2>
+            <p class="muted">
+                "Load a bundled fixture or paste fixture JSON, then validate or dry-run before import rehearsal."
+            </p>
+            <div class="inputs">
+                <label>
+                    <span>"Legacy fixture JSON"</span>
+                    <textarea
+                        id="legacy-fixture-json"
+                        placeholder="Paste legacy fixture JSON"
+                    ></textarea>
+                </label>
+            </div>
+            <div class="actions">
+                <button type="button" onclick="loadLegacyFixtureExamples()">"Load Fixture Examples"</button>
+                <button type="button" onclick="validateLegacyFixture()">"Validate Fixture"</button>
+                <button type="button" onclick="dryRunLegacyFixture()">"Dry-Run Fixture"</button>
             </div>
         </section>
     }

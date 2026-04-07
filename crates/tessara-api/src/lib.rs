@@ -43,6 +43,10 @@ pub fn router(state: AppState) -> Router {
             "/app/admin",
             get(|| async { Html(tessara_web::admin_application_shell_html()) }),
         )
+        .route(
+            "/app/migration",
+            get(|| async { Html(tessara_web::migration_application_shell_html()) }),
+        )
         .route("/health", get(|| async { "ok" }))
         .route("/api/auth/login", post(auth::login))
         .route("/api/me", get(auth::me))

@@ -35,9 +35,17 @@ pub fn admin_application_shell_html() -> String {
     application::admin_application_shell_html(shell_style::STYLE, shell_script::SCRIPT)
 }
 
+/// Returns the HTML used for focused migration application screens.
+pub fn migration_application_shell_html() -> String {
+    application::migration_application_shell_html(shell_style::STYLE, shell_script::SCRIPT)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{admin_application_shell_html, admin_shell_html, application_shell_html};
+    use super::{
+        admin_application_shell_html, admin_shell_html, application_shell_html,
+        migration_application_shell_html,
+    };
 
     #[test]
     fn shell_links_to_current_demo_api_contract() {
@@ -131,6 +139,7 @@ mod tests {
         assert!(html.contains("View Reports"));
         assert!(html.contains("Open Admin Workbench"));
         assert!(html.contains("Open Admin Setup"));
+        assert!(html.contains("Open Migration Workbench"));
         assert!(html.contains("/api/forms/published"));
         assert!(html.contains("/api/submissions/drafts"));
         assert!(html.contains("/api/reports"));
@@ -152,6 +161,23 @@ mod tests {
         assert!(html.contains("Publish Version"));
         assert!(html.contains("Add Binding"));
         assert!(html.contains("Open Submission Workspace"));
+        assert!(html.contains("Open Migration Workbench"));
         assert!(html.contains("selection-state"));
+    }
+
+    #[test]
+    fn migration_application_shell_exposes_fixture_workflow() {
+        let html = migration_application_shell_html();
+
+        assert!(html.contains("Migration Workbench"));
+        assert!(html.contains("Legacy Fixture Validation"));
+        assert!(html.contains("Load Fixture Examples"));
+        assert!(html.contains("Validate Fixture"));
+        assert!(html.contains("Dry-Run Fixture"));
+        assert!(html.contains("/api/admin/legacy-fixtures/examples"));
+        assert!(html.contains("/api/admin/legacy-fixtures/validate"));
+        assert!(html.contains("/api/admin/legacy-fixtures/dry-run"));
+        assert!(html.contains("Open Submission Workspace"));
+        assert!(html.contains("Open Admin Setup"));
     }
 }
