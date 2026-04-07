@@ -17,6 +17,7 @@ tessara-dashboards = { path = "../tessara-dashboards" }
 tessara-forms = { path = "../tessara-forms" }
 tessara-hierarchy = { path = "../tessara-hierarchy" }
 tessara-reporting = { path = "../tessara-reporting" }
+tessara-submissions = { path = "../tessara-submissions" }
 tessara-web = { path = "../tessara-web" }
 thiserror = { workspace = true }
 tokio = { workspace = true }

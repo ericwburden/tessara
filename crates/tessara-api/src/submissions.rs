@@ -9,6 +9,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::Row;
 use tessara_core::FieldType;
+use tessara_submissions::{
+    RequiredFieldStatus, ensure_form_version_accepts_submission, ensure_required_values_present,
+    ensure_submission_is_draft,
+};
 use uuid::Uuid;
 
 use crate::{
@@ -91,11 +95,8 @@ pub async fn create_draft(
             .bind(payload.form_version_id)
             .fetch_optional(&state.pool)
             .await?;
-    if status.as_deref() != Some("published") {
-        return Err(ApiError::BadRequest(
-            "submissions can only use published form versions".into(),
-        ));
-    }
+    ensure_form_version_accepts_submission(status.as_deref().unwrap_or_default())
+        .map_err(|error| ApiError::BadRequest(error.to_string()))?;
 
     let assignment_id: Uuid = sqlx::query_scalar(
         r#"
@@ -359,14 +360,12 @@ pub async fn submit_submission(
     .fetch_all(&state.pool)
     .await?;
 
-    for field in fields.values() {
-        if field.required && !submitted_field_ids.contains(&field.id) {
-            return Err(ApiError::BadRequest(format!(
-                "required field '{}' is missing",
-                field.key
-            )));
-        }
-    }
+    ensure_required_values_present(fields.values().map(|field| RequiredFieldStatus {
+        key: &field.key,
+        required: field.required,
+        has_value: submitted_field_ids.contains(&field.id),
+    }))
+    .map_err(|error| ApiError::BadRequest(error.to_string()))?;
 
     sqlx::query(
         r#"
@@ -400,11 +399,7 @@ async fn require_draft_submission(pool: &sqlx::PgPool, submission_id: Uuid) -> A
     .ok_or_else(|| ApiError::NotFound(format!("submission {submission_id}")))?;
 
     let status: String = row.try_get("status")?;
-    if status != "draft" {
-        return Err(ApiError::BadRequest(
-            "submitted records are immutable in the initial workflow".into(),
-        ));
-    }
+    ensure_submission_is_draft(&status).map_err(|error| ApiError::BadRequest(error.to_string()))?;
 
     Ok(row.try_get("form_version_id")?)
 }

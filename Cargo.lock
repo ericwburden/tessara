@@ -4192,6 +4192,7 @@ dependencies = [
  "tessara-forms",
  "tessara-hierarchy",
  "tessara-reporting",
+ "tessara-submissions",
  "tessara-web",
  "thiserror 2.0.18",
  "tokio",
