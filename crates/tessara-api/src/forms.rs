@@ -5,6 +5,10 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use sqlx::{Postgres, Row, Transaction};
+use tessara_forms::{
+    ensure_form_version_editable, ensure_form_version_publishable,
+    ensure_section_belongs_to_form_version,
+};
 use uuid::Uuid;
 
 use crate::{
@@ -548,10 +552,8 @@ async fn assert_form_version_draft(pool: &sqlx::PgPool, form_version_id: Uuid) -
             .await?;
 
     match status.as_deref() {
-        Some("draft") => Ok(()),
-        Some(_) => Err(ApiError::BadRequest(
-            "published form versions cannot be modified".into(),
-        )),
+        Some(status) => ensure_form_version_editable(status)
+            .map_err(|error| ApiError::BadRequest(error.to_string())),
         None => Err(ApiError::NotFound(format!(
             "form version {form_version_id}"
         ))),
@@ -570,10 +572,10 @@ async fn assert_section_belongs_to_form_version(
             .await?;
 
     match section_form_version_id {
-        Some(actual_form_version_id) if actual_form_version_id == form_version_id => Ok(()),
-        Some(_) => Err(ApiError::BadRequest(
-            "field section must belong to the same form version".into(),
-        )),
+        Some(actual_form_version_id) => {
+            ensure_section_belongs_to_form_version(actual_form_version_id == form_version_id)
+                .map_err(|error| ApiError::BadRequest(error.to_string()))
+        }
         None => Err(ApiError::NotFound(format!("form section {section_id}"))),
     }
 }
@@ -623,33 +625,19 @@ async fn require_publishable_form_version(
     .ok_or_else(|| ApiError::NotFound(format!("form version {form_version_id}")))?;
 
     let status: String = version.try_get("status")?;
-    if status != "draft" {
-        return Err(ApiError::BadRequest(
-            "only draft form versions can be published".into(),
-        ));
-    }
-
     let section_count: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM form_sections WHERE form_version_id = $1")
             .bind(form_version_id)
             .fetch_one(&mut **tx)
             .await?;
-    if section_count == 0 {
-        return Err(ApiError::BadRequest(
-            "cannot publish a form version without sections".into(),
-        ));
-    }
 
     let field_count: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM form_fields WHERE form_version_id = $1")
             .bind(form_version_id)
             .fetch_one(&mut **tx)
             .await?;
-    if field_count == 0 {
-        return Err(ApiError::BadRequest(
-            "cannot publish a form version without fields".into(),
-        ));
-    }
+    ensure_form_version_publishable(&status, section_count, field_count)
+        .map_err(|error| ApiError::BadRequest(error.to_string()))?;
 
     Ok(PublishableFormVersion {
         form_id: version.try_get("form_id")?,

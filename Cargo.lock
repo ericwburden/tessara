@@ -4189,6 +4189,7 @@ dependencies = [
  "sqlx",
  "tessara-core",
  "tessara-dashboards",
+ "tessara-forms",
  "tessara-hierarchy",
  "tessara-reporting",
  "tessara-web",
