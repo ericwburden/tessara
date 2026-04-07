@@ -464,6 +464,9 @@ fn ReviewScreen() -> impl IntoView {
             </div>
             <div class="actions">
                 <button type="button" onclick="loadSubmissions()">"Load Submissions"</button>
+                <button type="button" onclick="showDraftSubmissions()">"Show Drafts"</button>
+                <button type="button" onclick="showSubmittedSubmissions()">"Show Submitted"</button>
+                <button type="button" onclick="clearSubmissionReviewFilters()">"Clear Review Filters"</button>
                 <button type="button" onclick="loadSubmissionById()">"Open Selected Submission"</button>
             </div>
         </section>

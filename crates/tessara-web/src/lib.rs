@@ -192,6 +192,9 @@ mod tests {
         assert!(html.contains("Start Demo Submission"));
         assert!(html.contains("startDemoSubmissionFlow"));
         assert!(html.contains("Review Submissions"));
+        assert!(html.contains("Show Drafts"));
+        assert!(html.contains("Show Submitted"));
+        assert!(html.contains("Clear Review Filters"));
         assert!(html.contains("View Reports"));
         assert!(html.contains("Open Admin Workbench"));
         assert!(html.contains("Open Admin Setup"));

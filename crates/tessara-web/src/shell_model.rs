@@ -268,6 +268,9 @@ const SUBMISSION_ACTIONS: &[Action] = &[
     Action::new("submitDraft()", "Submit Draft"),
     Action::new("discardDraft()", "Discard Draft"),
     Action::new("clearResponseContext()", "Clear Response Context"),
+    Action::new("showDraftSubmissions()", "Show Drafts"),
+    Action::new("showSubmittedSubmissions()", "Show Submitted"),
+    Action::new("clearSubmissionReviewFilters()", "Clear Review Filters"),
     Action::new("loadSubmissionById()", "Load Submission By ID"),
     Action::new("refreshAnalytics()", "Refresh Analytics"),
 ];

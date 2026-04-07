@@ -577,6 +577,25 @@ pub const APPLICATION_SCRIPT: &str = r#"
         return query ? `/api/submissions?${query}` : "/api/submissions";
       }
 
+      function filterSubmissionsByStatus(status) {
+        setInput("submission-status-filter", status);
+        loadSubmissions();
+      }
+
+      function showDraftSubmissions() {
+        filterSubmissionsByStatus("draft");
+      }
+
+      function showSubmittedSubmissions() {
+        filterSubmissionsByStatus("submitted");
+      }
+
+      function clearSubmissionReviewFilters() {
+        setInput("submission-search", "");
+        setInput("submission-status-filter", "");
+        loadSubmissions();
+      }
+
       function useSubmission(submissionId, label = submissionId) {
         selectRecord("submission", label, submissionId, { "submission-id": submissionId });
       }
