@@ -42,6 +42,8 @@ stabilize. Current extracted examples:
 - `tessara-core`: shared field type parsing and JSON value validation
 - `tessara-reporting`: missing-data policy parsing
 - `tessara-dashboards`: chart type parsing
+- `tessara-forms`: form version lifecycle and section/field compatibility rules
+- `tessara-submissions`: draft/edit/submit workflow rules and required value checks
 
 ## Local Development
 
@@ -150,6 +152,12 @@ The local shell now covers the main demo workflow surfaces:
   reports, charts, dashboards, and dashboard components.
 - External workflow controls for draft creation, value save, submit, analytics
   refresh, report execution, and dashboard inspection.
+- Selection-driven shortcuts for choosing node types, nodes, forms, form
+  versions, sections, fields, reports, charts, and dashboards without copying
+  raw IDs between most shell workflows.
+- Report-builder controls for assembling binding JSON from selected form fields.
+- Migration workbench controls for validating and dry-running pasted legacy
+  fixture JSON through the API.
 
 ## Migration Planning
 
@@ -187,6 +195,10 @@ The first implementation milestone should prove an end-to-end thread:
   imported report/dashboard inspection, and local validation workbench.
 - Next phase: browser shell screens for admin builder, external submission
   workflow, report/dashboard builder workflows, and migration workbench.
+- Next phase progress: Leptos shell foundation, selection-driven workflow
+  shortcuts, rendered form submission controls, report binding builder controls,
+  migration dry-run workbench endpoint, repeatable legacy import coverage, and
+  extracted form/submission domain rules.
 
 ## Next Phase
 
