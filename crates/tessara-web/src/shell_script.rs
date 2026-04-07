@@ -376,6 +376,24 @@ pub const SCRIPT: &str = r#"
         });
       }
 
+      async function loadPublishedForms() {
+        try {
+          const payload = await request("/api/forms/published");
+          show(payload);
+          showCards(payload, (formVersion) => `
+            <article class="card">
+              <h3>${escapeHtml(formVersion.form_name)}</h3>
+              <p class="muted">${escapeHtml(formVersion.form_slug)} ${escapeHtml(formVersion.version_label)}</p>
+              <p>${formVersion.field_count} fields</p>
+              <button type="button" onclick="useFormVersion('${escapeHtml(formVersion.form_version_id)}', '${escapeHtml(formVersion.form_id)}', '${escapeHtml(formVersion.form_name)} ${escapeHtml(formVersion.version_label)}')">Use Published Version</button>
+              <button type="button" onclick="renderForm('${escapeHtml(formVersion.form_version_id)}')">Render Form</button>
+            </article>
+          `);
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
       async function createForm() {
         try {
           if (!token) await login();

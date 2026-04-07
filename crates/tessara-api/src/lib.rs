@@ -77,6 +77,10 @@ pub fn router(state: AppState) -> Router {
             "/api/form-versions/{form_version_id}/render",
             get(forms::render_form_version),
         )
+        .route(
+            "/api/forms/published",
+            get(forms::list_published_form_versions),
+        )
         .route("/api/submissions/drafts", post(submissions::create_draft))
         .route("/api/submissions", get(submissions::list_submissions))
         .route(

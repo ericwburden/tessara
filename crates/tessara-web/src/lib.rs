@@ -54,6 +54,7 @@ mod tests {
         assert!(html.contains("Load Charts"));
         assert!(html.contains("/api/admin/dashboards"));
         assert!(html.contains("/api/form-versions/"));
+        assert!(html.contains("/api/forms/published"));
         assert!(html.contains("/api/submissions"));
         assert!(html.contains("/api/submissions/drafts"));
         assert!(html.contains("/api/submissions/${submissionId}"));
@@ -73,6 +74,7 @@ mod tests {
         assert!(html.contains("Dashboard ID from seed or import output"));
         assert!(html.contains("Hierarchy Screen"));
         assert!(html.contains("Forms Screen"));
+        assert!(html.contains("Published Forms"));
         assert!(html.contains("User Testing Guide"));
         assert!(html.contains("Recommended path for the current Docker Compose test deployment."));
         assert!(html.contains("Selected Context"));

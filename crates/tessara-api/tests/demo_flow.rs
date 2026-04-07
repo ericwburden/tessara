@@ -112,6 +112,25 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
                 && form["versions"][0]["id"] == seed["form_version_id"]
                 && form["versions"][0]["status"] == "published")
     );
+    let published_forms = request_json(
+        app.clone(),
+        Request::builder()
+            .method("GET")
+            .uri("/api/forms/published")
+            .body(Body::empty())
+            .expect("valid published forms request"),
+    )
+    .await;
+    assert!(
+        published_forms
+            .as_array()
+            .expect("published forms response should be an array")
+            .iter()
+            .any(|form_version| form_version["form_id"] == seed["form_id"]
+                && form_version["form_name"] == "Monthly Participation"
+                && form_version["form_version_id"] == seed["form_version_id"]
+                && form_version["version_label"] == "v1")
+    );
 
     let submissions = request_json(
         app.clone(),
@@ -372,7 +391,9 @@ async fn form_builder_guards_cross_version_sections_and_supersedes_previous_publ
     )
     .await;
     assert_eq!(version_one["status"], "superseded");
+    assert_eq!(version_one["form_name"], "Monthly Service Report");
     assert_eq!(version_two["status"], "published");
+    assert_eq!(version_two["form_name"], "Monthly Service Report");
 }
 
 #[tokio::test]

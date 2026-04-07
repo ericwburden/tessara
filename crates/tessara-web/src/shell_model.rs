@@ -89,6 +89,7 @@ const PRIMARY_ACTIONS: &[Action] = &[
     Action::new("seedDemo()", "Seed Demo"),
     Action::new("loadNodeTypes()", "Hierarchy Screen"),
     Action::new("loadForms()", "Forms Screen"),
+    Action::new("loadPublishedForms()", "Published Forms"),
     Action::new("loadNodes()", "Load Nodes"),
     Action::new("loadSubmissions()", "Load Submissions"),
     Action::new("loadDashboards()", "Load Dashboards"),

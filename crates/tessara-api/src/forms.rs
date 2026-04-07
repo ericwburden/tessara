@@ -47,6 +47,7 @@ pub struct CreateFormFieldRequest {
 pub struct RenderedForm {
     form_version_id: Uuid,
     form_id: Uuid,
+    form_name: String,
     version_label: String,
     status: String,
     sections: Vec<RenderedSection>,
@@ -85,6 +86,17 @@ pub struct FormVersionSummary {
     id: Uuid,
     version_label: String,
     status: String,
+    published_at: Option<chrono::DateTime<chrono::Utc>>,
+    field_count: i64,
+}
+
+#[derive(Serialize)]
+pub struct PublishedFormVersionSummary {
+    form_id: Uuid,
+    form_name: String,
+    form_slug: String,
+    form_version_id: Uuid,
+    version_label: String,
     published_at: Option<chrono::DateTime<chrono::Utc>>,
     field_count: i64,
 }
@@ -182,6 +194,56 @@ pub async fn list_forms(
             versions,
         });
     }
+
+    Ok(Json(forms))
+}
+
+/// Lists published form versions available for submission.
+pub async fn list_published_form_versions(
+    State(state): State<AppState>,
+) -> ApiResult<Json<Vec<PublishedFormVersionSummary>>> {
+    let rows = sqlx::query(
+        r#"
+        SELECT
+            forms.id AS form_id,
+            forms.name AS form_name,
+            forms.slug AS form_slug,
+            form_versions.id AS form_version_id,
+            form_versions.version_label,
+            form_versions.published_at,
+            COUNT(form_fields.id) AS field_count
+        FROM form_versions
+        JOIN forms ON forms.id = form_versions.form_id
+        LEFT JOIN form_fields ON form_fields.form_version_id = form_versions.id
+        WHERE form_versions.status = 'published'::form_version_status
+        GROUP BY
+            forms.id,
+            forms.name,
+            forms.slug,
+            form_versions.id,
+            form_versions.version_label,
+            form_versions.published_at,
+            form_versions.created_at
+        ORDER BY forms.name, form_versions.created_at
+        "#,
+    )
+    .fetch_all(&state.pool)
+    .await?;
+
+    let forms = rows
+        .into_iter()
+        .map(|row| {
+            Ok(PublishedFormVersionSummary {
+                form_id: row.try_get("form_id")?,
+                form_name: row.try_get("form_name")?,
+                form_slug: row.try_get("form_slug")?,
+                form_version_id: row.try_get("form_version_id")?,
+                version_label: row.try_get("version_label")?,
+                published_at: row.try_get("published_at")?,
+                field_count: row.try_get("field_count")?,
+            })
+        })
+        .collect::<Result<Vec<_>, sqlx::Error>>()?;
 
     Ok(Json(forms))
 }
@@ -402,9 +464,15 @@ pub async fn render_form_version(
 ) -> ApiResult<Json<RenderedForm>> {
     let version = sqlx::query(
         r#"
-        SELECT id, form_id, version_label, status::text AS status
+        SELECT
+            form_versions.id,
+            form_versions.form_id,
+            forms.name AS form_name,
+            form_versions.version_label,
+            form_versions.status::text AS status
         FROM form_versions
-        WHERE id = $1
+        JOIN forms ON forms.id = form_versions.form_id
+        WHERE form_versions.id = $1
         "#,
     )
     .bind(form_version_id)
@@ -465,6 +533,7 @@ pub async fn render_form_version(
     Ok(Json(RenderedForm {
         form_version_id,
         form_id: version.try_get("form_id")?,
+        form_name: version.try_get("form_name")?,
         version_label: version.try_get("version_label")?,
         status: version.try_get("status")?,
         sections,
