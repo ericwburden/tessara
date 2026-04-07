@@ -59,6 +59,8 @@ pub struct ChartResponse {
     name: String,
     chart_type: String,
     report_id: Option<Uuid>,
+    report_name: Option<String>,
+    report_form_name: Option<String>,
     report_url: Option<String>,
 }
 
@@ -110,9 +112,17 @@ pub async fn list_charts(
 
     let rows = sqlx::query(
         r#"
-        SELECT id, name, chart_type::text AS chart_type, report_id
+        SELECT
+            charts.id,
+            charts.name,
+            charts.chart_type::text AS chart_type,
+            charts.report_id,
+            reports.name AS report_name,
+            forms.name AS report_form_name
         FROM charts
-        ORDER BY name, id
+        LEFT JOIN reports ON reports.id = charts.report_id
+        LEFT JOIN forms ON forms.id = reports.form_id
+        ORDER BY charts.name, charts.id
         "#,
     )
     .fetch_all(&state.pool)
@@ -127,6 +137,8 @@ pub async fn list_charts(
                 name: row.try_get("name")?,
                 chart_type: row.try_get("chart_type")?,
                 report_id,
+                report_name: row.try_get("report_name")?,
+                report_form_name: row.try_get("report_form_name")?,
                 report_url: report_id.map(|id| format!("/api/reports/{id}/table")),
             })
         })
@@ -231,9 +243,13 @@ pub async fn get_dashboard(
             charts.id AS chart_id,
             charts.name AS chart_name,
             charts.chart_type,
-            charts.report_id
+            charts.report_id,
+            reports.name AS report_name,
+            forms.name AS report_form_name
         FROM dashboard_components
         JOIN charts ON charts.id = dashboard_components.chart_id
+        LEFT JOIN reports ON reports.id = charts.report_id
+        LEFT JOIN forms ON forms.id = reports.form_id
         WHERE dashboard_components.dashboard_id = $1
         ORDER BY dashboard_components.position, charts.name
         "#,
@@ -254,6 +270,8 @@ pub async fn get_dashboard(
                 name: row.try_get("chart_name")?,
                 chart_type: row.try_get("chart_type")?,
                 report_id,
+                report_name: row.try_get("report_name")?,
+                report_form_name: row.try_get("report_form_name")?,
                 report_url: report_id.map(|id| format!("/api/reports/{id}/table")),
             },
         });

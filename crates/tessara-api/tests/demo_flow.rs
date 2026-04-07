@@ -231,6 +231,8 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
             .iter()
             .any(|chart| chart["id"] == chart_id
                 && chart["chart_type"] == "table"
+                && chart["report_name"] == "Participation Report"
+                && chart["report_form_name"] == "Monthly Participation"
                 && chart["report_id"] == report_id)
     );
 
@@ -247,6 +249,14 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
     )
     .await;
     assert_eq!(dashboard["components"][0]["chart"]["report_id"], report_id);
+    assert_eq!(
+        dashboard["components"][0]["chart"]["report_name"],
+        "Participation Report"
+    );
+    assert_eq!(
+        dashboard["components"][0]["chart"]["report_form_name"],
+        "Monthly Participation"
+    );
     let dashboards = request_json(
         app,
         Request::builder()

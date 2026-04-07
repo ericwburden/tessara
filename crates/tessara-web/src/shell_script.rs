@@ -836,9 +836,9 @@ pub const SCRIPT: &str = r#"
             <article class="card">
               <h3>${escapeHtml(chart.name)}</h3>
               <p>${escapeHtml(chart.chart_type)} chart</p>
-              <p class="muted">Report ${escapeHtml(chart.report_id || "None")}</p>
-              <button type="button" onclick="useChart('${escapeHtml(chart.id)}', '${escapeHtml(chart.name)}', '${escapeHtml(chart.report_id || "")}')">Use Chart</button>
-              ${chart.report_id ? `<button type="button" onclick="useReport('${escapeHtml(chart.report_id)}', 'Report for ${escapeHtml(chart.name)}')">Use Report</button>` : ""}
+              <p class="muted">Report ${escapeHtml(chart.report_name || "None")}${chart.report_form_name ? ` on ${escapeHtml(chart.report_form_name)}` : ""}</p>
+              <button type="button" onclick="useChart('${escapeHtml(chart.id)}', '${escapeHtml(chart.name)}', '${escapeHtml(chart.report_id || "")}', '${escapeHtml(chart.report_name || "")}')">Use Chart</button>
+              ${chart.report_id ? `<button type="button" onclick="useReport('${escapeHtml(chart.report_id)}', '${escapeHtml(chart.report_name || `Report for ${chart.name}`)}')">Use Report</button>` : ""}
               <code>${escapeHtml(chart.id)}</code>
             </article>
           `);
@@ -847,11 +847,16 @@ pub const SCRIPT: &str = r#"
         }
       }
 
-      function useChart(chartId, chartName = chartId, reportId = "") {
+      function useChart(chartId, chartName = chartId, reportId = "", reportName = reportId) {
         selectRecord("chart", chartName, chartId, {
           "chart-id": chartId,
           ...(reportId ? { "report-id": reportId } : {})
         });
+        if (reportId) {
+          selectRecord("report", reportName || reportId, reportId, {
+            "report-id": reportId
+          });
+        }
       }
 
       async function createDashboard() {
@@ -1010,7 +1015,7 @@ pub const SCRIPT: &str = r#"
             <article class="card">
               <h3>${escapeHtml(component.chart.name)}</h3>
               <p>${escapeHtml(component.chart.chart_type)} chart</p>
-              <p class="muted">Report ${escapeHtml(component.chart.report_id || "None")}</p>
+              <p class="muted">Report ${escapeHtml(component.chart.report_name || component.chart.report_id || "None")}${component.chart.report_form_name ? ` on ${escapeHtml(component.chart.report_form_name)}` : ""}</p>
               <ul>
                 ${rows.map((row) => `
                   <li>${escapeHtml(row.node_name || "Unknown node")}: ${escapeHtml(row.logical_key)} = ${escapeHtml(row.field_value)}</li>
