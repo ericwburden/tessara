@@ -9,6 +9,8 @@
 pub const APPLICATION_SCRIPT: &str = r#"
       let token = window.sessionStorage.getItem("tessara.devToken");
       let renderedForm = null;
+      let selectedSubmissionFormVersionId = null;
+      let selectedSubmissionValues = {};
       const selections = {};
 
       function escapeHtml(value) {
@@ -330,6 +332,7 @@ pub const APPLICATION_SCRIPT: &str = r#"
               </div>
             </article>
           `);
+          prefillRenderedValues();
         } catch (error) {
           show(error.message);
         }
@@ -360,6 +363,31 @@ pub const APPLICATION_SCRIPT: &str = r#"
           }
         }
         return values;
+      }
+
+      function submissionValuesByKey(values) {
+        return Object.fromEntries(
+          values
+            .filter((value) => value.value !== null)
+            .map((value) => [value.key, value.value])
+        );
+      }
+
+      function prefillRenderedValues() {
+        if (!renderedForm || selectedSubmissionFormVersionId !== renderedForm.form_version_id) return;
+        for (const field of renderedFields()) {
+          const value = selectedSubmissionValues[field.key];
+          if (value === undefined || value === null) continue;
+          const element = document.getElementById(fieldInputId(field));
+          if (!element) continue;
+          if (field.field_type === "boolean") {
+            element.checked = Boolean(value);
+          } else if (Array.isArray(value)) {
+            element.value = value.join(", ");
+          } else {
+            element.value = String(value);
+          }
+        }
       }
 
       function validateRenderedValues(values) {
@@ -500,6 +528,8 @@ pub const APPLICATION_SCRIPT: &str = r#"
         setInput("submission-id", payload.id);
         setInput("form-version-id", payload.form_version_id);
         setInput("node-id", payload.node_id);
+        selectedSubmissionFormVersionId = payload.form_version_id;
+        selectedSubmissionValues = submissionValuesByKey(payload.values);
         useSubmission(payload.id, `${payload.form_name} ${payload.version_label}`);
         useFormVersion(payload.form_version_id, payload.form_id, `${payload.form_name} ${payload.version_label}`);
         useTargetNode(payload.node_id, payload.node_name);
@@ -509,6 +539,7 @@ pub const APPLICATION_SCRIPT: &str = r#"
             <h3>${escapeHtml(payload.form_name)} ${escapeHtml(payload.version_label)}</h3>
             <p>${escapeHtml(payload.node_name)}: ${escapeHtml(payload.status)}</p>
             <p class="muted">Created ${escapeHtml(payload.created_at)}${payload.submitted_at ? `; submitted ${escapeHtml(payload.submitted_at)}` : ""}</p>
+            <button type="button" onclick="renderForm('${escapeHtml(payload.form_version_id)}')">Open Response Form</button>
             <h4>Values</h4>
             <ul>
               ${payload.values.map((value) => `<li>${escapeHtml(value.label)}${value.required ? " *" : ""}: ${value.value === null ? "<span class=\"muted\">missing</span>" : escapeHtml(JSON.stringify(value.value))}</li>`).join("")}

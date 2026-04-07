@@ -116,6 +116,8 @@ mod tests {
         assert!(html.contains("Save Rendered Values"));
         assert!(html.contains("saveRenderedFormValues"));
         assert!(html.contains("Required fields missing"));
+        assert!(html.contains("prefillRenderedValues"));
+        assert!(html.contains("Open Response Form"));
         assert!(html.contains("Use Section"));
         assert!(html.contains("Use Field Settings"));
         assert!(html.contains("Use Report Source"));
@@ -191,6 +193,7 @@ mod tests {
         assert!(html.contains("Submission search"));
         assert!(html.contains("Use Form Version"));
         assert!(html.contains("Use Node"));
+        assert!(html.contains("Open Response Form"));
         assert!(html.contains("/api/reports"));
         assert!(html.contains("sessionStorage"));
         assert!(html.contains("tessara.devToken"));
