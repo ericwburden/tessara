@@ -60,6 +60,23 @@ pub struct ReportSummary {
     form_id: Option<Uuid>,
 }
 
+#[derive(Serialize)]
+pub struct ReportDefinition {
+    id: Uuid,
+    name: String,
+    form_id: Option<Uuid>,
+    bindings: Vec<ReportFieldBindingSummary>,
+}
+
+#[derive(Serialize)]
+pub struct ReportFieldBindingSummary {
+    id: Uuid,
+    logical_key: String,
+    source_field_key: String,
+    missing_policy: String,
+    position: i32,
+}
+
 pub async fn create_report(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -135,6 +152,53 @@ pub async fn list_reports(
         .collect::<Result<Vec<_>, sqlx::Error>>()?;
 
     Ok(Json(reports))
+}
+
+/// Returns a report definition with its configured field bindings.
+pub async fn get_report(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(report_id): Path<Uuid>,
+) -> ApiResult<Json<ReportDefinition>> {
+    auth::require_capability(&state.pool, &headers, "reports:read").await?;
+
+    let report = sqlx::query("SELECT id, name, form_id FROM reports WHERE id = $1")
+        .bind(report_id)
+        .fetch_optional(&state.pool)
+        .await?
+        .ok_or_else(|| ApiError::NotFound(format!("report {report_id}")))?;
+
+    let rows = sqlx::query(
+        r#"
+        SELECT id, logical_key, source_field_key, missing_policy::text AS missing_policy, position
+        FROM report_field_bindings
+        WHERE report_id = $1
+        ORDER BY position, logical_key
+        "#,
+    )
+    .bind(report_id)
+    .fetch_all(&state.pool)
+    .await?;
+
+    let bindings = rows
+        .into_iter()
+        .map(|row| {
+            Ok(ReportFieldBindingSummary {
+                id: row.try_get("id")?,
+                logical_key: row.try_get("logical_key")?,
+                source_field_key: row.try_get("source_field_key")?,
+                missing_policy: row.try_get("missing_policy")?,
+                position: row.try_get("position")?,
+            })
+        })
+        .collect::<Result<Vec<_>, sqlx::Error>>()?;
+
+    Ok(Json(ReportDefinition {
+        id: report.try_get("id")?,
+        name: report.try_get("name")?,
+        form_id: report.try_get("form_id")?,
+        bindings,
+    }))
 }
 
 pub async fn run_report(

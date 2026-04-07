@@ -169,6 +169,19 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
             .iter()
             .any(|report| report["id"] == report_id)
     );
+    let report_definition = request_json(
+        app.clone(),
+        authorized_request("GET", &format!("/api/reports/{report_id}"), &token, None),
+    )
+    .await;
+    assert!(
+        report_definition["bindings"]
+            .as_array()
+            .expect("report definition should include bindings")
+            .iter()
+            .any(|binding| binding["logical_key"] == "participants"
+                && binding["source_field_key"] == "participants")
+    );
     let chart_id = seed["chart_id"]
         .as_str()
         .expect("seed response should contain chart id");

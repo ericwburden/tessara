@@ -63,6 +63,8 @@ mod tests {
         assert!(html.contains("/api/dashboards"));
         assert!(html.contains("/api/reports/"));
         assert!(html.contains("/api/reports"));
+        assert!(html.contains("report-fields-json"));
+        assert!(html.contains("Inspect Report By ID"));
         assert!(html.contains("Dashboard ID from seed or import output"));
         assert!(html.contains("Hierarchy Screen"));
         assert!(html.contains("Forms Screen"));

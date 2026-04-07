@@ -61,6 +61,7 @@ pub fn admin_shell_html(style: &str, script: &str) -> String {
           <input id="report-name" placeholder="Report name" value="Participants Report">
           <input id="report-logical-key" placeholder="Report logical key" value="participants">
           <input id="report-source-field-key" placeholder="Report source field key" value="participants">
+          <input id="report-fields-json" placeholder='Optional report bindings JSON'>
           <input id="chart-id" placeholder="Chart ID">
           <input id="chart-name" placeholder="Chart name" value="Participants Table">
           <input id="chart-type" placeholder="Chart type" value="table">
@@ -95,6 +96,7 @@ pub fn admin_shell_html(style: &str, script: &str) -> String {
             <button type="button" onclick="refreshAnalytics()">Refresh Analytics</button>
             <button type="button" onclick="loadDashboardById()">Load Dashboard By ID</button>
             <button type="button" onclick="loadReportById()">Load Report By ID</button>
+            <button type="button" onclick="loadReportDefinitionById()">Inspect Report By ID</button>
           </div>
         </div>
       </section>

@@ -607,17 +607,19 @@ pub const SCRIPT: &str = r#"
         try {
           if (!token) await login();
           const formId = inputValue("form-id");
+          const bindingsJson = inputValue("report-fields-json");
+          const fields = bindingsJson ? JSON.parse(bindingsJson) : [{
+            logical_key: inputValue("report-logical-key"),
+            source_field_key: inputValue("report-source-field-key"),
+            missing_policy: "null"
+          }];
           const payload = await request("/api/admin/reports", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               name: inputValue("report-name"),
               form_id: formId || null,
-              fields: [{
-                logical_key: inputValue("report-logical-key"),
-                source_field_key: inputValue("report-source-field-key"),
-                missing_policy: "null"
-              }]
+              fields
             })
           });
           document.getElementById("report-id").value = payload.id;
@@ -737,9 +739,39 @@ pub const SCRIPT: &str = r#"
             <article class="card">
               <h3>${escapeHtml(report.name)}</h3>
               <p class="muted">Form ${escapeHtml(report.form_id || "Any")}</p>
+              <button type="button" onclick="loadReportDefinition('${escapeHtml(report.id)}')">Inspect</button>
               <button type="button" onclick="loadReportByValue('${escapeHtml(report.id)}')">Run</button>
             </article>
           `);
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function loadReportDefinition(reportId) {
+        if (!token) await login();
+        const payload = await request(`/api/reports/${reportId}`);
+        document.getElementById("report-id").value = payload.id;
+        if (payload.form_id) document.getElementById("form-id").value = payload.form_id;
+        document.getElementById("report-fields-json").value = JSON.stringify(payload.bindings.map((binding) => ({
+          logical_key: binding.logical_key,
+          source_field_key: binding.source_field_key,
+          missing_policy: binding.missing_policy
+        })));
+        show(payload);
+        showCards(payload.bindings, (binding) => `
+          <article class="card">
+            <h3>${escapeHtml(binding.logical_key)}</h3>
+            <p>${escapeHtml(binding.source_field_key)} with ${escapeHtml(binding.missing_policy)}</p>
+          </article>
+        `);
+      }
+
+      async function loadReportDefinitionById() {
+        try {
+          const reportId = inputValue("report-id");
+          if (!reportId) throw new Error("Enter a report ID first.");
+          await loadReportDefinition(reportId);
         } catch (error) {
           show(error.message);
         }
