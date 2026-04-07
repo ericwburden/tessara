@@ -10,6 +10,7 @@ pub const APPLICATION_SCRIPT: &str = r#"
       let token = window.sessionStorage.getItem("tessara.devToken");
       let renderedForm = null;
       let selectedSubmissionFormVersionId = null;
+      let selectedSubmissionStatus = null;
       let selectedSubmissionValues = {};
       const selections = {};
 
@@ -355,17 +356,39 @@ pub const APPLICATION_SCRIPT: &str = r#"
                   </div>
                 </section>
               `).join("")}
-              <div class="actions form-actions">
-                <button type="button" onclick="createDraft()">Create Draft</button>
-                <button type="button" onclick="saveRenderedFormValues()">Save Values</button>
-                <button type="button" onclick="submitDraft()">Submit Draft</button>
-              </div>
+              ${renderResponseFormActions()}
             </article>
           `);
           prefillRenderedValues();
         } catch (error) {
           show(error.message);
         }
+      }
+
+      function renderResponseFormActions() {
+        const hasMatchingSubmission = inputValue("submission-id")
+          && selectedSubmissionFormVersionId === renderedForm?.form_version_id;
+        if (hasMatchingSubmission && selectedSubmissionStatus === "submitted") {
+          return `
+            <div class="actions form-actions">
+              <p class="muted">This submitted response is read-only. Open a draft submission to edit values.</p>
+            </div>
+          `;
+        }
+        if (hasMatchingSubmission) {
+          return `
+            <div class="actions form-actions">
+              <button type="button" onclick="saveRenderedFormValues()">Save Values</button>
+              <button type="button" onclick="submitDraft()">Submit Draft</button>
+              <button type="button" onclick="discardDraft()">Discard Draft</button>
+            </div>
+          `;
+        }
+        return `
+          <div class="actions form-actions">
+            <button type="button" onclick="createDraft()">Create Draft</button>
+          </div>
+        `;
       }
 
       function renderedFields() {
@@ -449,9 +472,12 @@ pub const APPLICATION_SCRIPT: &str = r#"
             })
           });
           setInput("submission-id", payload.id);
+          selectedSubmissionFormVersionId = renderedForm?.form_version_id ?? inputValue("form-version-id");
+          selectedSubmissionStatus = "draft";
+          selectedSubmissionValues = {};
           selectRecord("submission", payload.id, payload.id, { "submission-id": payload.id });
           show(payload);
-          await loadSubmissions();
+          await loadSubmissionByValue(payload.id);
         } catch (error) {
           show(error.message);
         }
@@ -470,7 +496,7 @@ pub const APPLICATION_SCRIPT: &str = r#"
             body: JSON.stringify({ values })
           });
           show(payload);
-          await loadSubmissions();
+          await loadSubmissionByValue(submissionId);
         } catch (error) {
           show(error.message);
         }
@@ -483,7 +509,7 @@ pub const APPLICATION_SCRIPT: &str = r#"
           if (!submissionId) throw new Error("Create or enter a draft submission first.");
           const payload = await request(`/api/submissions/${submissionId}/submit`, { method: "POST" });
           show(payload);
-          await loadSubmissions();
+          await loadSubmissionByValue(submissionId);
         } catch (error) {
           show(error.message);
         }
@@ -496,6 +522,9 @@ pub const APPLICATION_SCRIPT: &str = r#"
           if (!submissionId) throw new Error("Create or enter a draft submission first.");
           const payload = await request(`/api/submissions/${submissionId}`, { method: "DELETE" });
           setInput("submission-id", "");
+          selectedSubmissionFormVersionId = null;
+          selectedSubmissionStatus = null;
+          selectedSubmissionValues = {};
           show(payload);
           await loadSubmissions();
         } catch (error) {
@@ -559,6 +588,7 @@ pub const APPLICATION_SCRIPT: &str = r#"
         setInput("form-version-id", payload.form_version_id);
         setInput("node-id", payload.node_id);
         selectedSubmissionFormVersionId = payload.form_version_id;
+        selectedSubmissionStatus = payload.status;
         selectedSubmissionValues = submissionValuesByKey(payload.values);
         useSubmission(payload.id, `${payload.form_name} ${payload.version_label}`);
         useFormVersion(payload.form_version_id, payload.form_id, `${payload.form_name} ${payload.version_label}`);

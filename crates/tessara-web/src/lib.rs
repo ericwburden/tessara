@@ -124,6 +124,8 @@ mod tests {
         assert!(html.contains("Required fields missing"));
         assert!(html.contains("prefillRenderedValues"));
         assert!(html.contains("Open Response Form"));
+        assert!(html.contains("renderResponseFormActions"));
+        assert!(html.contains("This submitted response is read-only"));
         assert!(html.contains("Use Section"));
         assert!(html.contains("Use Field Settings"));
         assert!(html.contains("Use Report Source"));
