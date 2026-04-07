@@ -354,31 +354,8 @@ pub async fn create_node(
         }
     }
 
-    let field_rows = sqlx::query(
-        r#"
-        SELECT id, key, field_type::text AS field_type, required
-        FROM node_metadata_field_definitions
-        WHERE node_type_id = $1
-        "#,
-    )
-    .bind(payload.node_type_id)
-    .fetch_all(&state.pool)
-    .await?;
-
-    for row in &field_rows {
-        let key: String = row.try_get("key")?;
-        let required: bool = row.try_get("required")?;
-        let field_type = parse_field_type(&row.try_get::<String, _>("field_type")?)?;
-        match payload.metadata.get(&key) {
-            Some(value) => validate_field_value(field_type, value)?,
-            None if required => {
-                return Err(ApiError::BadRequest(format!(
-                    "metadata field '{key}' is required"
-                )));
-            }
-            None => {}
-        }
-    }
+    let field_rows = metadata_field_rows(&state.pool, payload.node_type_id).await?;
+    validate_node_metadata_values(&field_rows, &payload.metadata, true)?;
 
     let node_id: Uuid = sqlx::query_scalar(
         "INSERT INTO nodes (node_type_id, parent_node_id, name) VALUES ($1, $2, $3) RETURNING id",
@@ -389,23 +366,7 @@ pub async fn create_node(
     .fetch_one(&state.pool)
     .await?;
 
-    for row in field_rows {
-        let key: String = row.try_get("key")?;
-        if let Some(value) = payload.metadata.get(&key) {
-            let field_definition_id: Uuid = row.try_get("id")?;
-            sqlx::query(
-                r#"
-                INSERT INTO node_metadata_values (node_id, field_definition_id, value)
-                VALUES ($1, $2, $3)
-                "#,
-            )
-            .bind(node_id)
-            .bind(field_definition_id)
-            .bind(value)
-            .execute(&state.pool)
-            .await?;
-        }
-    }
+    upsert_node_metadata_values(&state.pool, node_id, &field_rows, &payload.metadata).await?;
 
     Ok(Json(IdResponse { id: node_id }))
 }
