@@ -40,11 +40,16 @@ pub fn migration_application_shell_html() -> String {
     application::migration_application_shell_html(shell_style::STYLE, shell_script::SCRIPT)
 }
 
+/// Returns the HTML used for focused reporting application screens.
+pub fn reporting_application_shell_html() -> String {
+    application::reporting_application_shell_html(shell_style::STYLE, shell_script::SCRIPT)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
         admin_application_shell_html, admin_shell_html, application_shell_html,
-        migration_application_shell_html,
+        migration_application_shell_html, reporting_application_shell_html,
     };
 
     #[test]
@@ -140,6 +145,7 @@ mod tests {
         assert!(html.contains("Open Admin Workbench"));
         assert!(html.contains("Open Admin Setup"));
         assert!(html.contains("Open Migration Workbench"));
+        assert!(html.contains("Open Reporting Workspace"));
         assert!(html.contains("/api/forms/published"));
         assert!(html.contains("/api/submissions/drafts"));
         assert!(html.contains("/api/reports"));
@@ -162,6 +168,7 @@ mod tests {
         assert!(html.contains("Add Binding"));
         assert!(html.contains("Open Submission Workspace"));
         assert!(html.contains("Open Migration Workbench"));
+        assert!(html.contains("Open Reporting Workspace"));
         assert!(html.contains("selection-state"));
     }
 
@@ -179,5 +186,29 @@ mod tests {
         assert!(html.contains("/api/admin/legacy-fixtures/dry-run"));
         assert!(html.contains("Open Submission Workspace"));
         assert!(html.contains("Open Admin Setup"));
+        assert!(html.contains("Open Reporting Workspace"));
+    }
+
+    #[test]
+    fn reporting_application_shell_exposes_report_dashboard_workflow() {
+        let html = reporting_application_shell_html();
+
+        assert!(html.contains("Reporting Workspace"));
+        assert!(html.contains("Report Runner"));
+        assert!(html.contains("Dashboard Preview"));
+        assert!(html.contains("Refresh Analytics"));
+        assert!(html.contains("Choose Report"));
+        assert!(html.contains("Inspect Report"));
+        assert!(html.contains("Run Report"));
+        assert!(html.contains("Choose Dashboard"));
+        assert!(html.contains("Open Dashboard"));
+        assert!(html.contains("Choose Chart"));
+        assert!(html.contains("/api/admin/analytics/refresh"));
+        assert!(html.contains("/api/reports"));
+        assert!(html.contains("/api/dashboards"));
+        assert!(html.contains("/api/charts"));
+        assert!(html.contains("Open Submission Workspace"));
+        assert!(html.contains("Open Admin Setup"));
+        assert!(html.contains("Open Migration Workbench"));
     }
 }

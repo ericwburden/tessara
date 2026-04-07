@@ -143,6 +143,12 @@ Focused admin setup screens are available at:
 http://localhost:8080/app/admin
 ```
 
+Focused reporting and dashboard screens are available at:
+
+```text
+http://localhost:8080/app/reports
+```
+
 The focused migration workbench is available at:
 
 ```text
@@ -166,6 +172,8 @@ The local shell now covers the main demo workflow surfaces:
   submit, submission review, and report viewing workflow.
 - Separate `/app/admin` setup shell focused on hierarchy, form, and report
   builder workflows without the full migration workbench surface.
+- Separate `/app/reports` reporting shell focused on report inspection,
+  analytics refresh, report execution, and dashboard preview.
 - Separate `/app/migration` operator shell focused on legacy fixture example
   loading, validation, and dry-run rehearsal.
 - Roadmap-aligned workflow sections and an in-browser user testing guide for

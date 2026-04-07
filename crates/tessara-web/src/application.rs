@@ -65,6 +65,27 @@ pub fn migration_application_shell_html(style: &str, script: &str) -> String {
     )
 }
 
+/// Builds the focused reporting application shell document.
+pub fn reporting_application_shell_html(style: &str, script: &str) -> String {
+    let shell = view! { <ReportingApplicationShell/> }.to_html();
+
+    format!(
+        r#"<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Tessara Reporting</title>
+    <style>{style}</style>
+  </head>
+  <body>
+    {shell}
+    <script>{script}</script>
+  </body>
+</html>"#
+    )
+}
+
 #[component]
 fn ApplicationShell() -> impl IntoView {
     view! {
@@ -81,6 +102,7 @@ fn ApplicationShell() -> impl IntoView {
                     <button type="button" onclick="login()">"Log In"</button>
                     <button type="button" onclick="seedDemo()">"Seed Demo"</button>
                     <a class="button-link" href="/app/admin">"Open Admin Setup"</a>
+                    <a class="button-link" href="/app/reports">"Open Reporting Workspace"</a>
                     <a class="button-link" href="/app/migration">"Open Migration Workbench"</a>
                     <a class="button-link" href="/">"Open Admin Workbench"</a>
                 </div>
@@ -128,6 +150,7 @@ fn AdminApplicationShell() -> impl IntoView {
                     <button type="button" onclick="login()">"Log In"</button>
                     <button type="button" onclick="seedDemo()">"Seed Demo"</button>
                     <a class="button-link" href="/app">"Open Submission Workspace"</a>
+                    <a class="button-link" href="/app/reports">"Open Reporting Workspace"</a>
                     <a class="button-link" href="/app/migration">"Open Migration Workbench"</a>
                     <a class="button-link" href="/">"Open Admin Workbench"</a>
                 </div>
@@ -175,6 +198,7 @@ fn MigrationApplicationShell() -> impl IntoView {
                     <button type="button" onclick="login()">"Log In"</button>
                     <a class="button-link" href="/app">"Open Submission Workspace"</a>
                     <a class="button-link" href="/app/admin">"Open Admin Setup"</a>
+                    <a class="button-link" href="/app/reports">"Open Reporting Workspace"</a>
                     <a class="button-link" href="/">"Open Admin Workbench"</a>
                 </div>
             </section>
@@ -204,6 +228,52 @@ fn MigrationApplicationShell() -> impl IntoView {
 }
 
 #[component]
+fn ReportingApplicationShell() -> impl IntoView {
+    view! {
+        <main class="shell app-shell">
+            <section class="panel hero">
+                <p class="muted">"Tessara Reporting"</p>
+                <h1>"Reporting Workspace"</h1>
+                <p>
+                    "This screen gives testers a focused place to refresh analytics, inspect "
+                    "table reports, and preview dashboards after submissions or import rehearsals."
+                </p>
+                <div class="actions">
+                    <button type="button" onclick="login()">"Log In"</button>
+                    <button type="button" onclick="seedDemo()">"Seed Demo"</button>
+                    <a class="button-link" href="/app">"Open Submission Workspace"</a>
+                    <a class="button-link" href="/app/admin">"Open Admin Setup"</a>
+                    <a class="button-link" href="/app/migration">"Open Migration Workbench"</a>
+                    <a class="button-link" href="/">"Open Admin Workbench"</a>
+                </div>
+            </section>
+            <section class="app-layout">
+                <aside class="panel app-sidebar">
+                    <h2>"Reporting Workflow"</h2>
+                    <nav class="app-nav" aria-label="Reporting workflow">
+                        <a href="#report-runner-screen">"Reports"</a>
+                        <a href="#dashboard-preview-screen">"Dashboards"</a>
+                    </nav>
+                    <SelectionContext/>
+                </aside>
+                <section class="panel app-main">
+                    <ReportRunnerScreen/>
+                    <DashboardPreviewScreen/>
+                    <section class="app-screen">
+                        <h2>"Screen Output"</h2>
+                        <div id="screen" class="cards"></div>
+                    </section>
+                    <section class="app-screen">
+                        <h2>"Raw Output"</h2>
+                        <pre id="output">"No API calls yet."</pre>
+                    </section>
+                </section>
+            </section>
+        </main>
+    }
+}
+
+#[component]
 fn SelectionContext() -> impl IntoView {
     view! {
         <section class="selection-panel">
@@ -213,6 +283,67 @@ fn SelectionContext() -> impl IntoView {
             </p>
             <div id="selection-state" class="selection-grid">
                 <p class="muted">"No records selected yet."</p>
+            </div>
+        </section>
+    }
+}
+
+#[component]
+fn ReportRunnerScreen() -> impl IntoView {
+    view! {
+        <section id="report-runner-screen" class="app-screen">
+            <p class="eyebrow">"Reporting Screen"</p>
+            <h2>"Report Runner"</h2>
+            <p class="muted">
+                "Choose a report, inspect its field bindings, and run the table output against refreshed analytics."
+            </p>
+            <div class="inputs">
+                <label>
+                    <span>"Report ID"</span>
+                    <input id="report-id" placeholder="Selected report ID" value="" />
+                </label>
+                <label>
+                    <span>"Form ID"</span>
+                    <input id="form-id" placeholder="Report form context" value="" />
+                </label>
+                <label>
+                    <span>"Report bindings JSON"</span>
+                    <input id="report-fields-json" placeholder="Loaded report bindings" value="" />
+                </label>
+            </div>
+            <div class="actions">
+                <button type="button" onclick="refreshAnalytics()">"Refresh Analytics"</button>
+                <button type="button" onclick="loadReports()">"Choose Report"</button>
+                <button type="button" onclick="loadReportDefinitionById()">"Inspect Report"</button>
+                <button type="button" onclick="loadReportById()">"Run Report"</button>
+            </div>
+        </section>
+    }
+}
+
+#[component]
+fn DashboardPreviewScreen() -> impl IntoView {
+    view! {
+        <section id="dashboard-preview-screen" class="app-screen">
+            <p class="eyebrow">"Reporting Screen"</p>
+            <h2>"Dashboard Preview"</h2>
+            <p class="muted">
+                "Choose a dashboard and preview each component with its current report rows."
+            </p>
+            <div class="inputs">
+                <label>
+                    <span>"Dashboard ID"</span>
+                    <input id="dashboard-id" placeholder="Selected dashboard ID" value="" />
+                </label>
+                <label>
+                    <span>"Chart ID"</span>
+                    <input id="chart-id" placeholder="Selected chart ID" value="" />
+                </label>
+            </div>
+            <div class="actions">
+                <button type="button" onclick="loadDashboards()">"Choose Dashboard"</button>
+                <button type="button" onclick="loadDashboardById()">"Open Dashboard"</button>
+                <button type="button" onclick="loadCharts()">"Choose Chart"</button>
             </div>
         </section>
     }

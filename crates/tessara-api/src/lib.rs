@@ -44,6 +44,10 @@ pub fn router(state: AppState) -> Router {
             get(|| async { Html(tessara_web::admin_application_shell_html()) }),
         )
         .route(
+            "/app/reports",
+            get(|| async { Html(tessara_web::reporting_application_shell_html()) }),
+        )
+        .route(
             "/app/migration",
             get(|| async { Html(tessara_web::migration_application_shell_html()) }),
         )
