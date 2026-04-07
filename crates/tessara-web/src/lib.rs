@@ -5,6 +5,7 @@
 //! That gives us a real Rust frontend layer while preserving the existing
 //! user-testable API workflows during the migration.
 
+mod application;
 mod shell;
 mod shell_model;
 mod shell_script;
@@ -19,9 +20,19 @@ pub fn admin_shell_html() -> String {
     shell::admin_shell_html(shell_style::STYLE, shell_script::SCRIPT)
 }
 
+/// Returns the HTML used for the first replacement-oriented application shell.
+///
+/// The application shell keeps the existing JavaScript controller while the
+/// Leptos screen structure stabilizes. It is intentionally separate from the
+/// admin workbench so user testing can exercise application workflows without
+/// navigating the full builder surface.
+pub fn application_shell_html() -> String {
+    application::application_shell_html(shell_style::STYLE, shell_script::SCRIPT)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::admin_shell_html;
+    use super::{admin_shell_html, application_shell_html};
 
     #[test]
     fn shell_links_to_current_demo_api_contract() {
@@ -95,6 +106,26 @@ mod tests {
         assert!(html.contains("User Testing Guide"));
         assert!(html.contains("Recommended path for the current Docker Compose test deployment."));
         assert!(html.contains("Selected Context"));
+        assert!(html.contains("selection-state"));
+    }
+
+    #[test]
+    fn application_shell_exposes_submission_workflow_screen() {
+        let html = application_shell_html();
+
+        assert!(html.contains("Submission Workspace"));
+        assert!(html.contains("Submit Data"));
+        assert!(html.contains("Choose Published Form"));
+        assert!(html.contains("Choose Target Node"));
+        assert!(html.contains("Create Draft"));
+        assert!(html.contains("Save Values"));
+        assert!(html.contains("Submit"));
+        assert!(html.contains("Review Submissions"));
+        assert!(html.contains("View Reports"));
+        assert!(html.contains("Open Admin Workbench"));
+        assert!(html.contains("/api/forms/published"));
+        assert!(html.contains("/api/submissions/drafts"));
+        assert!(html.contains("/api/reports"));
         assert!(html.contains("selection-state"));
     }
 }

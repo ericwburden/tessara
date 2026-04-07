@@ -20,6 +20,53 @@ pub const STYLE: &str = r#"
         display: grid;
         gap: 24px;
       }
+      .app-shell {
+        max-width: 1200px;
+      }
+      .app-layout {
+        display: grid;
+        gap: 24px;
+        grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+      }
+      .app-main {
+        display: grid;
+        gap: 16px;
+      }
+      .app-screen {
+        border: 1px solid #374151;
+        border-radius: 12px;
+        background: #111827;
+        padding: 16px;
+      }
+      .app-sidebar {
+        align-self: start;
+        display: grid;
+        gap: 16px;
+      }
+      .app-nav {
+        display: grid;
+        gap: 8px;
+      }
+      .app-nav a, .button-link {
+        border: 1px solid #38bdf8;
+        border-radius: 999px;
+        color: #bae6fd;
+        display: inline-block;
+        font-weight: 700;
+        padding: 10px 16px;
+        text-decoration: none;
+      }
+      .selection-panel {
+        display: grid;
+        gap: 8px;
+      }
+      .eyebrow {
+        color: #38bdf8;
+        font-size: 0.75rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
       .panel {
         border: 1px solid #374151;
         border-radius: 16px;
