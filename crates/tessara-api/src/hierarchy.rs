@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::Row;
 use tessara_core::{FieldType, FieldTypeError, validate_required_text};
+use tessara_hierarchy::validate_node_type_relationship;
 use uuid::Uuid;
 
 use crate::{
@@ -522,43 +523,16 @@ async fn assert_relationship_is_acyclic(
     parent_node_type_id: Uuid,
     child_node_type_id: Uuid,
 ) -> ApiResult<()> {
-    if parent_node_type_id == child_node_type_id {
-        return Err(ApiError::BadRequest(
-            "node type relationships cannot point to the same type".into(),
-        ));
-    }
-
-    let would_create_cycle: bool = sqlx::query_scalar(
-        r#"
-        WITH RECURSIVE descendants(node_type_id) AS (
-            SELECT child_node_type_id
-            FROM node_type_relationships
-            WHERE parent_node_type_id = $1
-
-            UNION
-
-            SELECT node_type_relationships.child_node_type_id
-            FROM node_type_relationships
-            JOIN descendants
-                ON descendants.node_type_id = node_type_relationships.parent_node_type_id
-        )
-        SELECT EXISTS (
-            SELECT 1
-            FROM descendants
-            WHERE node_type_id = $2
-        )
-        "#,
+    let existing_relationships = sqlx::query_as::<_, (Uuid, Uuid)>(
+        "SELECT parent_node_type_id, child_node_type_id FROM node_type_relationships",
     )
-    .bind(child_node_type_id)
-    .bind(parent_node_type_id)
-    .fetch_one(pool)
+    .fetch_all(pool)
     .await?;
 
-    if would_create_cycle {
-        Err(ApiError::BadRequest(
-            "node type relationship would create a cycle".into(),
-        ))
-    } else {
-        Ok(())
-    }
+    validate_node_type_relationship(
+        parent_node_type_id,
+        child_node_type_id,
+        &existing_relationships,
+    )
+    .map_err(|error| ApiError::BadRequest(error.to_string()))
 }

@@ -3423,6 +3423,7 @@ dependencies = [
  "sqlx",
  "tessara-core",
  "tessara-dashboards",
+ "tessara-hierarchy",
  "tessara-reporting",
  "tessara-web",
  "thiserror",
@@ -3466,6 +3467,9 @@ version = "0.1.0"
 [[package]]
 name = "tessara-hierarchy"
 version = "0.1.0"
+dependencies = [
+ "thiserror",
+]
 
 [[package]]
 name = "tessara-jobs"
