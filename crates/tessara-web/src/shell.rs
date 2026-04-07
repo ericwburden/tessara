@@ -36,6 +36,12 @@ pub fn admin_shell_html(style: &str, script: &str) -> String {
         <div class="inputs">
           <input id="node-type-name" placeholder="Node type name">
           <input id="node-type-slug" placeholder="Node type slug">
+          <input id="parent-node-type-id" placeholder="Parent node type ID">
+          <input id="child-node-type-id" placeholder="Child node type ID">
+          <input id="metadata-node-type-id" placeholder="Metadata node type ID">
+          <input id="metadata-key" placeholder="Metadata key" value="region">
+          <input id="metadata-label" placeholder="Metadata label" value="Region">
+          <input id="metadata-field-type" placeholder="Metadata field type" value="text">
           <input id="form-name" placeholder="Form name">
           <input id="form-slug" placeholder="Form slug">
           <input id="form-scope-node-type-id" placeholder="Optional form scope node type ID">
@@ -61,6 +67,10 @@ pub fn admin_shell_html(style: &str, script: &str) -> String {
           <input id="report-id" placeholder="Report ID from seed or import output">
           <div class="actions">
             <button type="button" onclick="createNodeType()">Create Node Type</button>
+            <button type="button" onclick="loadRelationships()">Load Relationships</button>
+            <button type="button" onclick="createRelationship()">Create Relationship</button>
+            <button type="button" onclick="loadMetadataFields()">Load Metadata Fields</button>
+            <button type="button" onclick="createMetadataField()">Create Metadata Field</button>
             <button type="button" onclick="createForm()">Create Form</button>
             <button type="button" onclick="createFormVersion()">Create Version</button>
             <button type="button" onclick="createSection()">Create Section</button>

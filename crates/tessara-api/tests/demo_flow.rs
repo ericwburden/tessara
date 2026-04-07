@@ -39,6 +39,33 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
             .any(|node_type| node_type["slug"] == "organization"
                 && node_type["node_count"].as_i64().unwrap_or_default() >= 1)
     );
+    let relationships = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/admin/node-type-relationships", &token, None),
+    )
+    .await;
+    assert!(
+        relationships
+            .as_array()
+            .expect("relationships response should be an array")
+            .iter()
+            .any(|relationship| relationship["parent_name"] == "Organization"
+                && relationship["child_name"] == "Program")
+    );
+    let metadata_fields = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/admin/node-metadata-fields", &token, None),
+    )
+    .await;
+    assert!(
+        metadata_fields
+            .as_array()
+            .expect("metadata response should be an array")
+            .iter()
+            .any(|field| field["key"] == "region"
+                && field["node_type_name"] == "Organization"
+                && field["required"] == true)
+    );
 
     let forms = request_json(
         app.clone(),

@@ -44,11 +44,12 @@ pub fn router(state: AppState) -> Router {
         )
         .route(
             "/api/admin/node-type-relationships",
-            post(hierarchy::create_node_type_relationship),
+            get(hierarchy::list_node_type_relationships)
+                .post(hierarchy::create_node_type_relationship),
         )
         .route(
             "/api/admin/node-metadata-fields",
-            post(hierarchy::create_node_metadata_field),
+            get(hierarchy::list_node_metadata_fields).post(hierarchy::create_node_metadata_field),
         )
         .route("/api/admin/nodes", post(hierarchy::create_node))
         .route("/api/nodes", get(hierarchy::list_nodes))

@@ -112,6 +112,79 @@ pub const SCRIPT: &str = r#"
         }
       }
 
+      async function loadRelationships() {
+        try {
+          if (!token) await login();
+          const payload = await request("/api/admin/node-type-relationships");
+          show(payload);
+          showCards(payload, (relationship) => `
+            <article class="card">
+              <h3>${escapeHtml(relationship.parent_name)} -> ${escapeHtml(relationship.child_name)}</h3>
+              <p class="muted">${escapeHtml(relationship.parent_node_type_id)} -> ${escapeHtml(relationship.child_node_type_id)}</p>
+            </article>
+          `);
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function createRelationship() {
+        try {
+          if (!token) await login();
+          const payload = await request("/api/admin/node-type-relationships", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              parent_node_type_id: inputValue("parent-node-type-id"),
+              child_node_type_id: inputValue("child-node-type-id")
+            })
+          });
+          show(payload);
+          await loadRelationships();
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function loadMetadataFields() {
+        try {
+          if (!token) await login();
+          const payload = await request("/api/admin/node-metadata-fields");
+          show(payload);
+          showCards(payload, (field) => `
+            <article class="card">
+              <h3>${escapeHtml(field.label)}</h3>
+              <p>${escapeHtml(field.node_type_name)}.${escapeHtml(field.key)}</p>
+              <p>${escapeHtml(field.field_type)}${field.required ? " required" : ""}</p>
+              <code>${escapeHtml(field.id)}</code>
+            </article>
+          `);
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function createMetadataField() {
+        try {
+          if (!token) await login();
+          const payload = await request("/api/admin/node-metadata-fields", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              node_type_id: inputValue("metadata-node-type-id"),
+              key: inputValue("metadata-key"),
+              label: inputValue("metadata-label"),
+              field_type: inputValue("metadata-field-type"),
+              required: false
+            })
+          });
+          show(payload);
+          await loadMetadataFields();
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
       async function loadForms() {
         try {
           if (!token) await login();

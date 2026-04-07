@@ -64,6 +64,25 @@ pub struct NodeTypeSummary {
     node_count: i64,
 }
 
+#[derive(Serialize)]
+pub struct NodeTypeRelationshipSummary {
+    parent_node_type_id: Uuid,
+    parent_name: String,
+    child_node_type_id: Uuid,
+    child_name: String,
+}
+
+#[derive(Serialize)]
+pub struct NodeMetadataFieldSummary {
+    id: Uuid,
+    node_type_id: Uuid,
+    node_type_name: String,
+    key: String,
+    label: String,
+    field_type: String,
+    required: bool,
+}
+
 pub async fn create_node_type(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -117,6 +136,46 @@ pub async fn list_node_types(
     Ok(Json(node_types))
 }
 
+/// Lists configured parent/child hierarchy relationships for admin screens.
+pub async fn list_node_type_relationships(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> ApiResult<Json<Vec<NodeTypeRelationshipSummary>>> {
+    auth::require_capability(&state.pool, &headers, "hierarchy:write").await?;
+
+    let rows = sqlx::query(
+        r#"
+        SELECT
+            node_type_relationships.parent_node_type_id,
+            parent_node_types.name AS parent_name,
+            node_type_relationships.child_node_type_id,
+            child_node_types.name AS child_name
+        FROM node_type_relationships
+        JOIN node_types AS parent_node_types
+            ON parent_node_types.id = node_type_relationships.parent_node_type_id
+        JOIN node_types AS child_node_types
+            ON child_node_types.id = node_type_relationships.child_node_type_id
+        ORDER BY parent_node_types.name, child_node_types.name
+        "#,
+    )
+    .fetch_all(&state.pool)
+    .await?;
+
+    let relationships = rows
+        .into_iter()
+        .map(|row| {
+            Ok(NodeTypeRelationshipSummary {
+                parent_node_type_id: row.try_get("parent_node_type_id")?,
+                parent_name: row.try_get("parent_name")?,
+                child_node_type_id: row.try_get("child_node_type_id")?,
+                child_name: row.try_get("child_name")?,
+            })
+        })
+        .collect::<Result<Vec<_>, sqlx::Error>>()?;
+
+    Ok(Json(relationships))
+}
+
 pub async fn create_node_type_relationship(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -147,6 +206,49 @@ pub async fn create_node_type_relationship(
     Ok(Json(IdResponse {
         id: payload.child_node_type_id,
     }))
+}
+
+/// Lists node metadata field definitions for admin screens.
+pub async fn list_node_metadata_fields(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> ApiResult<Json<Vec<NodeMetadataFieldSummary>>> {
+    auth::require_capability(&state.pool, &headers, "hierarchy:write").await?;
+
+    let rows = sqlx::query(
+        r#"
+        SELECT
+            node_metadata_field_definitions.id,
+            node_metadata_field_definitions.node_type_id,
+            node_types.name AS node_type_name,
+            node_metadata_field_definitions.key,
+            node_metadata_field_definitions.label,
+            node_metadata_field_definitions.field_type::text AS field_type,
+            node_metadata_field_definitions.required
+        FROM node_metadata_field_definitions
+        JOIN node_types ON node_types.id = node_metadata_field_definitions.node_type_id
+        ORDER BY node_types.name, node_metadata_field_definitions.key
+        "#,
+    )
+    .fetch_all(&state.pool)
+    .await?;
+
+    let fields = rows
+        .into_iter()
+        .map(|row| {
+            Ok(NodeMetadataFieldSummary {
+                id: row.try_get("id")?,
+                node_type_id: row.try_get("node_type_id")?,
+                node_type_name: row.try_get("node_type_name")?,
+                key: row.try_get("key")?,
+                label: row.try_get("label")?,
+                field_type: row.try_get("field_type")?,
+                required: row.try_get("required")?,
+            })
+        })
+        .collect::<Result<Vec<_>, sqlx::Error>>()?;
+
+    Ok(Json(fields))
 }
 
 pub async fn create_node_metadata_field(
