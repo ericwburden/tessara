@@ -29,6 +29,22 @@ async fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
+    if let Some(path) = command_path(
+        &args,
+        "dry-run-legacy-fixture",
+        "usage: tessara-api dry-run-legacy-fixture <path>",
+    )? {
+        let fixture = fs::read_to_string(&path)
+            .with_context(|| format!("failed to read legacy fixture {}", path.display()))?;
+        let report = tessara_api::legacy_import::dry_run_legacy_fixture_str(&fixture)?;
+        let would_import = report.would_import;
+        println!("{}", serde_json::to_string_pretty(&report)?);
+        if !would_import {
+            std::process::exit(2);
+        }
+        return Ok(());
+    }
+
     let config = Config::from_env()?;
     let pool = db::connect_and_prepare(&config).await?;
 

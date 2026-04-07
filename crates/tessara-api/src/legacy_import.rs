@@ -66,6 +66,20 @@ pub struct LegacyImportValidationReport {
     pub issues: Vec<LegacyImportValidationIssue>,
 }
 
+/// Dry-run report for a legacy fixture import.
+///
+/// Dry runs parse and validate the fixture but intentionally do not require a
+/// database connection or write any Tessara records.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct LegacyImportDryRunReport {
+    /// Fixture identifier from the import payload.
+    pub fixture_name: String,
+    /// Whether the fixture would be handed to the importer.
+    pub would_import: bool,
+    /// Validation details for the fixture.
+    pub validation: LegacyImportValidationReport,
+}
+
 impl LegacyImportValidationReport {
     /// Returns `true` when the fixture is safe to hand to the database importer.
     pub fn is_clean(&self) -> bool {
@@ -263,6 +277,20 @@ pub async fn import_legacy_fixture_str(
 pub fn validate_legacy_fixture_str(fixture_json: &str) -> ApiResult<LegacyImportValidationReport> {
     let fixture = parse_legacy_fixture(fixture_json)?;
     Ok(validate_legacy_fixture(&fixture))
+}
+
+/// Parses and validates a legacy fixture without touching the database.
+pub fn dry_run_legacy_fixture_str(fixture_json: &str) -> ApiResult<LegacyImportDryRunReport> {
+    let fixture = parse_legacy_fixture(fixture_json)?;
+    let fixture_name = fixture.name.clone();
+    let validation = validate_legacy_fixture(&fixture);
+    let would_import = validation.is_clean();
+
+    Ok(LegacyImportDryRunReport {
+        fixture_name,
+        would_import,
+        validation,
+    })
 }
 
 fn parse_legacy_fixture(fixture_json: &str) -> ApiResult<LegacyFixture> {
@@ -1374,7 +1402,7 @@ fn default_missing_policy() -> String {
 mod tests {
     use serde_json::Value;
 
-    use super::validate_legacy_fixture_str;
+    use super::{dry_run_legacy_fixture_str, validate_legacy_fixture_str};
 
     const LEGACY_FIXTURE: &str = include_str!("../../../fixtures/legacy-rehearsal.json");
 
@@ -1385,6 +1413,16 @@ mod tests {
 
         assert!(report.is_clean());
         assert_eq!(report.issue_count, 0);
+    }
+
+    #[test]
+    fn dry_run_reports_whether_fixture_would_import() {
+        let report =
+            dry_run_legacy_fixture_str(LEGACY_FIXTURE).expect("fixture should deserialize");
+
+        assert_eq!(report.fixture_name, "legacy-rehearsal");
+        assert!(report.would_import);
+        assert_eq!(report.validation.issue_count, 0);
     }
 
     #[test]
