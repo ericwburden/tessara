@@ -1,11 +1,12 @@
 //! Local frontend shell for the API-first Tessara vertical slice.
 //!
-//! The current implementation is intentionally dependency-light: it serves a
-//! structured HTML shell with colocated CSS and JavaScript modules. That keeps
-//! the browser workflows maintainable while the team decides when to introduce
-//! the full Leptos application layer.
+//! The current implementation uses Leptos SSR components for the shell
+//! structure and a browser-side JavaScript controller for workflow actions.
+//! That gives us a real Rust frontend layer while preserving the existing
+//! user-testable API workflows during the migration.
 
 mod shell;
+mod shell_model;
 mod shell_script;
 mod shell_style;
 

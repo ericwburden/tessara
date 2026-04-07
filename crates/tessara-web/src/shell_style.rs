@@ -26,6 +26,23 @@ pub const STYLE: &str = r#"
         background: #1f2937;
         padding: 24px;
       }
+      .hero .workflow-section {
+        border: 0;
+        background: transparent;
+        padding: 0;
+      }
+      .workflow-grid {
+        display: grid;
+        gap: 16px;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        margin-top: 16px;
+      }
+      .workflow-section {
+        border: 1px solid #374151;
+        border-radius: 12px;
+        background: #111827;
+        padding: 16px;
+      }
       .cards {
         display: grid;
         gap: 12px;
@@ -47,6 +64,13 @@ pub const STYLE: &str = r#"
         display: grid;
         gap: 12px;
         margin-top: 16px;
+      }
+      label {
+        display: grid;
+        gap: 6px;
+        color: #d1d5db;
+        font-size: 0.875rem;
+        font-weight: 700;
       }
       button {
         border: 0;
