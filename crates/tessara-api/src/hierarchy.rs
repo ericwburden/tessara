@@ -2,7 +2,7 @@ use std::{collections::HashMap, str::FromStr};
 
 use axum::{
     Json,
-    extract::{Query, State},
+    extract::{Path, Query, State},
     http::HeaderMap,
 };
 use serde::{Deserialize, Serialize};
@@ -42,6 +42,14 @@ pub struct CreateNodeMetadataFieldRequest {
 #[derive(Deserialize)]
 pub struct CreateNodeRequest {
     node_type_id: Uuid,
+    parent_node_id: Option<Uuid>,
+    name: String,
+    #[serde(default)]
+    metadata: HashMap<String, Value>,
+}
+
+#[derive(Deserialize)]
+pub struct UpdateNodeRequest {
     parent_node_id: Option<Uuid>,
     name: String,
     #[serde(default)]
@@ -402,6 +410,33 @@ pub async fn create_node(
     Ok(Json(IdResponse { id: node_id }))
 }
 
+/// Updates a hierarchy node name, parent, and provided metadata values.
+pub async fn update_node(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(node_id): Path<Uuid>,
+    Json(payload): Json<UpdateNodeRequest>,
+) -> ApiResult<Json<IdResponse>> {
+    auth::require_capability(&state.pool, &headers, "hierarchy:write").await?;
+    require_text("node name", &payload.name)?;
+    let node_type_id = require_node_type_for_node(&state.pool, node_id).await?;
+    assert_parent_allowed(&state.pool, node_id, node_type_id, payload.parent_node_id).await?;
+
+    let field_rows = metadata_field_rows(&state.pool, node_type_id).await?;
+    validate_node_metadata_values(&field_rows, &payload.metadata, false)?;
+
+    sqlx::query("UPDATE nodes SET parent_node_id = $1, name = $2 WHERE id = $3")
+        .bind(payload.parent_node_id)
+        .bind(payload.name)
+        .bind(node_id)
+        .execute(&state.pool)
+        .await?;
+
+    upsert_node_metadata_values(&state.pool, node_id, &field_rows, &payload.metadata).await?;
+
+    Ok(Json(IdResponse { id: node_id }))
+}
+
 pub async fn list_nodes(
     State(state): State<AppState>,
     Query(query): Query<ListNodesQuery>,
@@ -469,6 +504,125 @@ pub async fn list_nodes(
         .collect::<Result<Vec<_>, sqlx::Error>>()?;
 
     Ok(Json(nodes))
+}
+
+async fn require_node_type_for_node(pool: &sqlx::PgPool, node_id: Uuid) -> ApiResult<Uuid> {
+    sqlx::query_scalar("SELECT node_type_id FROM nodes WHERE id = $1")
+        .bind(node_id)
+        .fetch_optional(pool)
+        .await?
+        .ok_or_else(|| ApiError::NotFound(format!("node {node_id}")))
+}
+
+async fn assert_parent_allowed(
+    pool: &sqlx::PgPool,
+    node_id: Uuid,
+    node_type_id: Uuid,
+    parent_node_id: Option<Uuid>,
+) -> ApiResult<()> {
+    let Some(parent_node_id) = parent_node_id else {
+        return Ok(());
+    };
+
+    if parent_node_id == node_id {
+        return Err(ApiError::BadRequest("node cannot be its own parent".into()));
+    }
+
+    let parent_type_id: Uuid = sqlx::query_scalar("SELECT node_type_id FROM nodes WHERE id = $1")
+        .bind(parent_node_id)
+        .fetch_optional(pool)
+        .await?
+        .ok_or_else(|| ApiError::NotFound(format!("parent node {parent_node_id}")))?;
+
+    let relationship_exists: bool = sqlx::query_scalar(
+        r#"
+        SELECT EXISTS (
+            SELECT 1
+            FROM node_type_relationships
+            WHERE parent_node_type_id = $1 AND child_node_type_id = $2
+        )
+        "#,
+    )
+    .bind(parent_type_id)
+    .bind(node_type_id)
+    .fetch_one(pool)
+    .await?;
+
+    if relationship_exists {
+        Ok(())
+    } else {
+        Err(ApiError::BadRequest(
+            "node parent type is not allowed for this child type".into(),
+        ))
+    }
+}
+
+async fn metadata_field_rows(
+    pool: &sqlx::PgPool,
+    node_type_id: Uuid,
+) -> ApiResult<Vec<sqlx::postgres::PgRow>> {
+    Ok(sqlx::query(
+        r#"
+        SELECT id, key, field_type::text AS field_type, required
+        FROM node_metadata_field_definitions
+        WHERE node_type_id = $1
+        "#,
+    )
+    .bind(node_type_id)
+    .fetch_all(pool)
+    .await?)
+}
+
+fn validate_node_metadata_values(
+    field_rows: &[sqlx::postgres::PgRow],
+    metadata: &HashMap<String, Value>,
+    require_missing: bool,
+) -> ApiResult<()> {
+    for row in field_rows {
+        let key: String = row.try_get("key")?;
+        let required: bool = row.try_get("required")?;
+        let field_type = parse_field_type(&row.try_get::<String, _>("field_type")?)?;
+        match metadata.get(&key) {
+            Some(value) => validate_field_value(field_type, value)?,
+            None if require_missing && required => {
+                return Err(ApiError::BadRequest(format!(
+                    "metadata field '{key}' is required"
+                )));
+            }
+            None => {}
+        }
+    }
+
+    Ok(())
+}
+
+async fn upsert_node_metadata_values(
+    pool: &sqlx::PgPool,
+    node_id: Uuid,
+    field_rows: &[sqlx::postgres::PgRow],
+    metadata: &HashMap<String, Value>,
+) -> ApiResult<()> {
+    for row in field_rows {
+        let key: String = row.try_get("key")?;
+        if let Some(value) = metadata.get(&key) {
+            let field_definition_id: Uuid = row.try_get("id")?;
+            sqlx::query(
+                r#"
+                INSERT INTO node_metadata_values (node_id, field_definition_id, value)
+                VALUES ($1, $2, $3)
+                ON CONFLICT (node_id, field_definition_id)
+                DO UPDATE SET value = EXCLUDED.value
+                "#,
+            )
+            .bind(node_id)
+            .bind(field_definition_id)
+            .bind(value)
+            .execute(pool)
+            .await?;
+        }
+    }
+
+    Ok(())
 }
 
 pub(crate) fn parse_field_type(field_type: &str) -> ApiResult<FieldType> {

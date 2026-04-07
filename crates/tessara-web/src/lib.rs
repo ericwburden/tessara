@@ -35,6 +35,8 @@ mod tests {
         assert!(html.contains("/api/admin/node-type-relationships"));
         assert!(html.contains("/api/admin/node-metadata-fields"));
         assert!(html.contains("/api/admin/nodes"));
+        assert!(html.contains("/api/admin/nodes/${nodeId}"));
+        assert!(html.contains("Update Node"));
         assert!(html.contains("/api/admin/forms"));
         assert!(html.contains("Create Node Type"));
         assert!(html.contains("Create Relationship"));

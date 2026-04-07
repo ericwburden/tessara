@@ -530,17 +530,68 @@ async fn hierarchy_builder_rejects_required_metadata_after_nodes_exist() {
         app.clone(),
         authorized_request(
             "POST",
+            "/api/admin/node-metadata-fields",
+            &token,
+            Some(json!({
+                "node_type_id": node_type_id,
+                "key": "region",
+                "label": "Region",
+                "field_type": "text",
+                "required": false
+            })),
+        ),
+    )
+    .await;
+
+    let node = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
             "/api/admin/nodes",
             &token,
             Some(json!({
                 "node_type_id": node_type_id,
                 "parent_node_id": null,
                 "name": "Pilot Organization",
-                "metadata": {}
+                "metadata": {"region": "North"}
             })),
         ),
     )
     .await;
+    let node_id = id_from(&node);
+
+    request_json(
+        app.clone(),
+        authorized_request(
+            "PUT",
+            &format!("/api/admin/nodes/{node_id}"),
+            &token,
+            Some(json!({
+                "parent_node_id": null,
+                "name": "Updated Pilot Organization",
+                "metadata": {"region": "South"}
+            })),
+        ),
+    )
+    .await;
+    let nodes = request_json(
+        app.clone(),
+        Request::builder()
+            .method("GET")
+            .uri("/api/nodes?q=Updated")
+            .body(Body::empty())
+            .expect("valid nodes request"),
+    )
+    .await;
+    assert!(
+        nodes
+            .as_array()
+            .expect("nodes response should be an array")
+            .iter()
+            .any(|node| node["id"] == node_id.to_string()
+                && node["name"] == "Updated Pilot Organization"
+                && node["metadata"]["region"] == "South")
+    );
 
     let required_metadata = request_status_and_json(
         app,
@@ -550,8 +601,8 @@ async fn hierarchy_builder_rejects_required_metadata_after_nodes_exist() {
             &token,
             Some(json!({
                 "node_type_id": node_type_id,
-                "key": "region",
-                "label": "Region",
+                "key": "district",
+                "label": "District",
                 "field_type": "text",
                 "required": true
             })),

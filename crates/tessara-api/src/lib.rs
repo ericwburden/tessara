@@ -52,6 +52,7 @@ pub fn router(state: AppState) -> Router {
             get(hierarchy::list_node_metadata_fields).post(hierarchy::create_node_metadata_field),
         )
         .route("/api/admin/nodes", post(hierarchy::create_node))
+        .route("/api/admin/nodes/{node_id}", put(hierarchy::update_node))
         .route("/api/nodes", get(hierarchy::list_nodes))
         .route(
             "/api/admin/forms",

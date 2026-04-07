@@ -357,6 +357,28 @@ pub const SCRIPT: &str = r#"
         }
       }
 
+      async function updateNode() {
+        try {
+          if (!token) await login();
+          const nodeId = inputValue("node-id");
+          if (!nodeId) throw new Error("Select or enter a node ID first.");
+          const parentNodeId = inputValue("parent-node-id");
+          const payload = await request(`/api/admin/nodes/${nodeId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              parent_node_id: parentNodeId || null,
+              name: inputValue("node-name"),
+              metadata: jsonInputValue("node-metadata-json")
+            })
+          });
+          show(payload);
+          await loadNodes();
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
       async function loadForms() {
         try {
           if (!token) await login();
@@ -660,7 +682,8 @@ pub const SCRIPT: &str = r#"
 
       function useTargetNode(nodeId, nodeName = nodeId) {
         selectRecord("node", nodeName, nodeId, {
-          "node-id": nodeId
+          "node-id": nodeId,
+          "node-name": nodeName
         });
       }
 
