@@ -46,6 +46,11 @@ pub fn admin_shell_html() -> &'static str {
         gap: 12px;
         margin-top: 16px;
       }
+      .inputs {
+        display: grid;
+        gap: 12px;
+        margin-top: 16px;
+      }
       button {
         border: 0;
         border-radius: 999px;
@@ -54,6 +59,13 @@ pub fn admin_shell_html() -> &'static str {
         cursor: pointer;
         font-weight: 700;
         padding: 10px 16px;
+      }
+      input {
+        border: 1px solid #4b5563;
+        border-radius: 12px;
+        background: #111827;
+        color: #f9fafb;
+        padding: 10px 12px;
       }
       pre {
         overflow: auto;
@@ -83,6 +95,14 @@ pub fn admin_shell_html() -> &'static str {
           <button type="button" onclick="loadNodes()">Load Nodes</button>
           <button type="button" onclick="loadDashboard()">Load Demo Dashboard</button>
         </div>
+        <div class="inputs">
+          <input id="dashboard-id" placeholder="Dashboard ID from seed or import output">
+          <input id="report-id" placeholder="Report ID from seed or import output">
+          <div class="actions">
+            <button type="button" onclick="loadDashboardById()">Load Dashboard By ID</button>
+            <button type="button" onclick="loadReportById()">Load Report By ID</button>
+          </div>
+        </div>
       </section>
       <section class="panel">
         <h2>Output</h2>
@@ -92,10 +112,15 @@ pub fn admin_shell_html() -> &'static str {
     <script>
       let token = null;
       let demoDashboardId = null;
+      let demoReportId = null;
 
       function show(value) {
         document.getElementById("output").textContent =
           typeof value === "string" ? value : JSON.stringify(value, null, 2);
+      }
+
+      function inputValue(id) {
+        return document.getElementById(id).value.trim();
       }
 
       async function request(path, options = {}) {
@@ -130,6 +155,9 @@ pub fn admin_shell_html() -> &'static str {
           if (!token) await login();
           const payload = await request("/api/demo/seed", { method: "POST" });
           demoDashboardId = payload.dashboard_id;
+          demoReportId = payload.report_id;
+          document.getElementById("dashboard-id").value = demoDashboardId;
+          document.getElementById("report-id").value = demoReportId;
           show(payload);
         } catch (error) {
           show(error.message);
@@ -152,6 +180,27 @@ pub fn admin_shell_html() -> &'static str {
           show(error.message);
         }
       }
+
+      async function loadDashboardById() {
+        try {
+          const dashboardId = inputValue("dashboard-id");
+          if (!dashboardId) throw new Error("Enter a dashboard ID first.");
+          show(await request(`/api/dashboards/${dashboardId}`));
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function loadReportById() {
+        try {
+          if (!token) await login();
+          const reportId = inputValue("report-id");
+          if (!reportId) throw new Error("Enter a report ID first.");
+          show(await request(`/api/reports/${reportId}/table`));
+        } catch (error) {
+          show(error.message);
+        }
+      }
     </script>
   </body>
 </html>"#
@@ -169,5 +218,7 @@ mod tests {
         assert!(html.contains("/api/demo/seed"));
         assert!(html.contains("/api/nodes"));
         assert!(html.contains("/api/dashboards/"));
+        assert!(html.contains("/api/reports/"));
+        assert!(html.contains("Dashboard ID from seed or import output"));
     }
 }
