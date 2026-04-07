@@ -110,6 +110,23 @@ pub const SCRIPT: &str = r#"
         return values;
       }
 
+      function validateRenderedValues(values) {
+        const missing = renderedFields()
+          .filter((field) => field.required)
+          .filter((field) => {
+            const value = values[field.key];
+            return value === undefined
+              || value === null
+              || value === ""
+              || (Array.isArray(value) && value.length === 0);
+          })
+          .map((field) => field.label);
+
+        if (missing.length > 0) {
+          throw new Error(`Required fields missing: ${missing.join(", ")}`);
+        }
+      }
+
       async function request(path, options = {}) {
         const headers = { ...(options.headers || {}) };
         if (token) headers.Authorization = `Bearer ${token}`;
@@ -508,27 +525,31 @@ pub const SCRIPT: &str = r#"
           useFormVersion(payload.form_version_id, payload.form_id, `${payload.form_name} ${payload.version_label}`);
           show(payload);
           document.getElementById("screen").innerHTML = `
-            <article class="card">
-              <h3>Form ${escapeHtml(payload.version_label)}</h3>
+            <article class="card form-screen">
+              <h3>${escapeHtml(payload.form_name)} ${escapeHtml(payload.version_label)}</h3>
               <p>Status: ${escapeHtml(payload.status)}</p>
+              <p class="muted">Target node: ${escapeHtml(selections.node?.label || inputValue("node-id") || "Select a node before creating a draft.")}</p>
+              <p class="muted">Draft submission: ${escapeHtml(inputValue("submission-id") || "Create a draft after selecting a node.")}</p>
               ${payload.sections.map((section) => `
-                <section>
+                <section class="form-section">
                   <h4>${escapeHtml(section.title)}</h4>
-                  <ul>
+                  <div class="form-fields">
                     ${section.fields.map((field) => `
-                      <li>
+                      <div class="form-field">
                         <label for="${escapeHtml(fieldInputId(field))}">
-                          ${escapeHtml(field.label)} (${escapeHtml(field.field_type)})
+                          ${escapeHtml(field.label)} (${escapeHtml(field.field_type)}${field.required ? ", required" : ""})
                         </label>
                         ${renderFieldInput(field)}
-                      </li>
+                      </div>
                     `).join("")}
-                  </ul>
+                  </div>
                 </section>
               `).join("")}
-              <button type="button" onclick="createDraft()">Create Draft</button>
-              <button type="button" onclick="saveRenderedFormValues()">Save Values</button>
-              <button type="button" onclick="submitDraft()">Submit Draft</button>
+              <div class="actions form-actions">
+                <button type="button" onclick="createDraft()">Create Draft</button>
+                <button type="button" onclick="saveRenderedFormValues()">Save Values</button>
+                <button type="button" onclick="submitDraft()">Submit Draft</button>
+              </div>
             </article>
           `;
         } catch (error) {
@@ -679,10 +700,12 @@ pub const SCRIPT: &str = r#"
           if (!token) await login();
           const submissionId = inputValue("submission-id");
           if (!submissionId) throw new Error("Create or enter a draft submission first.");
+          const values = collectRenderedValues();
+          validateRenderedValues(values);
           const payload = await request(`/api/submissions/${submissionId}/values`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ values: collectRenderedValues() })
+            body: JSON.stringify({ values })
           });
           show(payload);
           await loadSubmissions();

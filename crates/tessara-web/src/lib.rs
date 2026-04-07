@@ -60,6 +60,7 @@ mod tests {
         assert!(html.contains("/api/submissions/${submissionId}"));
         assert!(html.contains("Save Rendered Values"));
         assert!(html.contains("saveRenderedFormValues"));
+        assert!(html.contains("Required fields missing"));
         assert!(html.contains("Load Submission By ID"));
         assert!(html.contains("/api/admin/analytics/refresh"));
         assert!(html.contains("/api/admin/legacy-fixtures/validate"));

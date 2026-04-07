@@ -72,6 +72,27 @@ pub const STYLE: &str = r#"
         background: #111827;
         padding: 16px;
       }
+      .form-screen {
+        display: grid;
+        gap: 16px;
+        grid-column: 1 / -1;
+      }
+      .form-section {
+        border-top: 1px solid #374151;
+        padding-top: 12px;
+      }
+      .form-fields {
+        display: grid;
+        gap: 12px;
+      }
+      .form-field {
+        display: grid;
+        gap: 6px;
+      }
+      .form-actions {
+        border-top: 1px solid #374151;
+        padding-top: 16px;
+      }
       .actions {
         display: flex;
         flex-wrap: wrap;
