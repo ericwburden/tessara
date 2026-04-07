@@ -523,8 +523,10 @@ fn FormAdminScreen() -> impl IntoView {
                 <button type="button" onclick="createFormVersion()">"Create Version"</button>
                 <button type="button" onclick="createSection()">"Create Section"</button>
                 <button type="button" onclick="updateSection()">"Update Section"</button>
+                <button type="button" onclick="deleteSection()">"Remove Section"</button>
                 <button type="button" onclick="createField()">"Create Field"</button>
                 <button type="button" onclick="updateField()">"Update Field"</button>
+                <button type="button" onclick="deleteField()">"Remove Field"</button>
                 <button type="button" onclick="publishVersion()">"Publish Version"</button>
             </div>
         </section>

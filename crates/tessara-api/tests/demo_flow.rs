@@ -494,6 +494,74 @@ async fn form_builder_guards_cross_version_sections_and_supersedes_previous_publ
         ),
     )
     .await;
+
+    let removable_section_id =
+        create_form_section(app.clone(), &token, version_one_id, "Removable").await;
+    let removable_field_id = create_number_field(
+        app.clone(),
+        &token,
+        version_one_id,
+        removable_section_id,
+        "temporary_count",
+    )
+    .await;
+    request_json(
+        app.clone(),
+        authorized_request(
+            "DELETE",
+            &format!("/api/admin/form-fields/{removable_field_id}"),
+            &token,
+            None,
+        ),
+    )
+    .await;
+    let after_field_delete = request_json(
+        app.clone(),
+        Request::builder()
+            .method("GET")
+            .uri(format!("/api/form-versions/{version_one_id}/render"))
+            .body(Body::empty())
+            .expect("valid render request"),
+    )
+    .await;
+    assert!(
+        !after_field_delete["sections"]
+            .as_array()
+            .expect("sections should be an array")
+            .iter()
+            .flat_map(|section| {
+                section["fields"]
+                    .as_array()
+                    .expect("section fields should be an array")
+            })
+            .any(|field| field["key"] == "temporary_count")
+    );
+    request_json(
+        app.clone(),
+        authorized_request(
+            "DELETE",
+            &format!("/api/admin/form-sections/{removable_section_id}"),
+            &token,
+            None,
+        ),
+    )
+    .await;
+    let after_section_delete = request_json(
+        app.clone(),
+        Request::builder()
+            .method("GET")
+            .uri(format!("/api/form-versions/{version_one_id}/render"))
+            .body(Body::empty())
+            .expect("valid render request"),
+    )
+    .await;
+    assert!(
+        !after_section_delete["sections"]
+            .as_array()
+            .expect("sections should be an array")
+            .iter()
+            .any(|section| section["id"] == removable_section_id.to_string())
+    );
     request_json(
         app.clone(),
         authorized_request(
@@ -504,6 +572,40 @@ async fn form_builder_guards_cross_version_sections_and_supersedes_previous_publ
         ),
     )
     .await;
+    let published_field_delete = request_status_and_json(
+        app.clone(),
+        authorized_request(
+            "DELETE",
+            &format!("/api/admin/form-fields/{field_one_id}"),
+            &token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(published_field_delete.0, StatusCode::BAD_REQUEST);
+    assert!(
+        published_field_delete.1["error"]
+            .as_str()
+            .expect("error body should include message")
+            .contains("cannot be modified")
+    );
+    let published_section_delete = request_status_and_json(
+        app.clone(),
+        authorized_request(
+            "DELETE",
+            &format!("/api/admin/form-sections/{section_one_id}"),
+            &token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(published_section_delete.0, StatusCode::BAD_REQUEST);
+    assert!(
+        published_section_delete.1["error"]
+            .as_str()
+            .expect("error body should include message")
+            .contains("cannot be modified")
+    );
     let published_field_update = request_status_and_json(
         app.clone(),
         authorized_request(

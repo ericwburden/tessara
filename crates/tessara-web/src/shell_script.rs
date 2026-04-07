@@ -554,6 +554,22 @@ pub const SCRIPT: &str = r#"
         }
       }
 
+      async function deleteSection() {
+        try {
+          if (!token) await login();
+          const sectionId = inputValue("section-id");
+          if (!sectionId) throw new Error("Select or enter a section ID first.");
+          const payload = await request(`/api/admin/form-sections/${sectionId}`, {
+            method: "DELETE"
+          });
+          setInput("section-id", "");
+          show(payload);
+          if (inputValue("form-version-id")) await renderForm(inputValue("form-version-id"));
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
       async function createField() {
         try {
           if (!token) await login();
@@ -601,6 +617,22 @@ pub const SCRIPT: &str = r#"
               position: Number(inputValue("field-position") || 0)
             })
           });
+          show(payload);
+          if (inputValue("form-version-id")) await renderForm(inputValue("form-version-id"));
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function deleteField() {
+        try {
+          if (!token) await login();
+          const fieldId = inputValue("field-id");
+          if (!fieldId) throw new Error("Select or enter a field ID first.");
+          const payload = await request(`/api/admin/form-fields/${fieldId}`, {
+            method: "DELETE"
+          });
+          setInput("field-id", "");
           show(payload);
           if (inputValue("form-version-id")) await renderForm(inputValue("form-version-id"));
         } catch (error) {

@@ -90,11 +90,11 @@ pub fn router(state: AppState) -> Router {
         )
         .route(
             "/api/admin/form-sections/{section_id}",
-            put(forms::update_form_section),
+            put(forms::update_form_section).delete(forms::delete_form_section),
         )
         .route(
             "/api/admin/form-fields/{field_id}",
-            put(forms::update_form_field),
+            put(forms::update_form_field).delete(forms::delete_form_field),
         )
         .route(
             "/api/admin/form-versions/{form_version_id}/publish",

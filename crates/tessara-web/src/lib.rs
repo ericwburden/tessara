@@ -109,8 +109,11 @@ mod tests {
         assert!(html.contains("Use Report Source"));
         assert!(html.contains("Update Section"));
         assert!(html.contains("Update Field"));
+        assert!(html.contains("Remove Section"));
+        assert!(html.contains("Remove Field"));
         assert!(html.contains("section-position"));
         assert!(html.contains("field-position"));
+        assert!(html.contains("/api/admin/form-sections/${sectionId}"));
         assert!(html.contains("/api/admin/form-fields/${fieldId}"));
         assert!(html.contains("Add Binding"));
         assert!(html.contains("report-missing-policy"));
@@ -189,7 +192,9 @@ mod tests {
         assert!(html.contains("Create Node Type"));
         assert!(html.contains("Update Node"));
         assert!(html.contains("Create Form"));
+        assert!(html.contains("Remove Section"));
         assert!(html.contains("Update Field"));
+        assert!(html.contains("Remove Field"));
         assert!(html.contains("Section position"));
         assert!(html.contains("Field position"));
         assert!(html.contains("Publish Version"));

@@ -456,6 +456,24 @@ pub async fn update_form_section(
     Ok(Json(IdResponse { id: section_id }))
 }
 
+/// Deletes an editable form section and its fields from a draft form version.
+pub async fn delete_form_section(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(section_id): Path<Uuid>,
+) -> ApiResult<Json<IdResponse>> {
+    auth::require_capability(&state.pool, &headers, "forms:write").await?;
+    let form_version_id = require_section_form_version(&state.pool, section_id).await?;
+    assert_form_version_draft(&state.pool, form_version_id).await?;
+
+    sqlx::query("DELETE FROM form_sections WHERE id = $1")
+        .bind(section_id)
+        .execute(&state.pool)
+        .await?;
+
+    Ok(Json(IdResponse { id: section_id }))
+}
+
 /// Updates an editable form field in a draft form version.
 pub async fn update_form_field(
     State(state): State<AppState>,
@@ -501,6 +519,24 @@ pub async fn update_form_field(
     .bind(field_id)
     .execute(&state.pool)
     .await?;
+
+    Ok(Json(IdResponse { id: field_id }))
+}
+
+/// Deletes an editable form field from a draft form version.
+pub async fn delete_form_field(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(field_id): Path<Uuid>,
+) -> ApiResult<Json<IdResponse>> {
+    auth::require_capability(&state.pool, &headers, "forms:write").await?;
+    let existing = require_form_field(&state.pool, field_id).await?;
+    assert_form_version_draft(&state.pool, existing.form_version_id).await?;
+
+    sqlx::query("DELETE FROM form_fields WHERE id = $1")
+        .bind(field_id)
+        .execute(&state.pool)
+        .await?;
 
     Ok(Json(IdResponse { id: field_id }))
 }

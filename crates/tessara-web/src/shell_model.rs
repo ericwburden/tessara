@@ -218,8 +218,10 @@ const FORM_ACTIONS: &[Action] = &[
     Action::new("createFormVersion()", "Create Version"),
     Action::new("createSection()", "Create Section"),
     Action::new("updateSection()", "Update Section"),
+    Action::new("deleteSection()", "Remove Section"),
     Action::new("createField()", "Create Field"),
     Action::new("updateField()", "Update Field"),
+    Action::new("deleteField()", "Remove Field"),
     Action::new("publishVersion()", "Publish Version"),
 ];
 
