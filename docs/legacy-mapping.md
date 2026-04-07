@@ -177,6 +177,12 @@ schemas and execution semantics exist for the target chart types.
 | Report | Imported as a single field binding from `participants` to `participants`. |
 | Dashboard | Imported with one table chart component linked to the imported report. |
 
+`fixtures/legacy-inactive-locked.json` extends fixture coverage to inactive and
+locked hierarchy records, an inactive choice list, an inactive choice item, and
+a table-compatible report/dashboard against a second legacy form. It verifies
+that these status flags remain queryable as Tessara metadata rather than being
+dropped during import.
+
 Validation currently catches duplicate legacy IDs, duplicate form keys,
 unsupported field types, unsupported missing-data policies, unknown submission
 fields, invalid submission value types, unknown report source fields, and
@@ -189,7 +195,7 @@ importer as migration-ready:
 
 | Needed fixture | Purpose |
 | --- | --- |
-| Inactive/locked hierarchy records | Confirm whether inactive data remains queryable and how locked records surface in admin screens. |
+| Inactive/locked hierarchy records | Initial fixture coverage exists; still needs final UI semantics for how inactive and locked records surface in admin screens. |
 | Partner-scoped choice lists | Decide whether choice-list scope belongs in ownership metadata, node scope, or a separate relationship. |
 | Public/unassigned form flow | Decide whether legacy public forms become anonymous links, assignment tokens, or scoped availability. |
 | Editable submitted records | Define import behavior for entries that remain editable or are locked after a deadline. |

@@ -1217,6 +1217,50 @@ async fn legacy_fixture_import_rehearsal_is_repeatable() {
     assert_eq!(dashboard_component_count, 1);
 }
 
+#[tokio::test]
+async fn legacy_inactive_locked_fixture_preserves_status_metadata() {
+    let _guard = TEST_DATABASE_LOCK.lock().await;
+    let Some(state) = test_state().await else {
+        return;
+    };
+    let fixture = include_str!("../../../fixtures/legacy-inactive-locked.json");
+
+    let report = legacy_import::validate_legacy_fixture_str(fixture)
+        .expect("inactive fixture should deserialize");
+    assert!(report.is_clean());
+
+    let summary = legacy_import::import_legacy_fixture_str(&state.pool, fixture)
+        .await
+        .expect("inactive fixture should import");
+    assert_eq!(summary.fixture_name, "legacy-inactive-locked");
+
+    assert_eq!(
+        node_metadata_value(&state.pool, summary.partner_node_id, "is_active").await,
+        json!(false)
+    );
+    assert_eq!(
+        node_metadata_value(&state.pool, summary.partner_node_id, "locked").await,
+        json!(true)
+    );
+    assert_eq!(
+        node_metadata_value(&state.pool, summary.session_node_id, "session_date").await,
+        json!("2026-03-15")
+    );
+
+    let inactive_choice_count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT COUNT(*)
+        FROM choice_list_items
+        WHERE value = 'legacy-inactive:cancelled'
+          AND label = 'inactive: Cancelled'
+        "#,
+    )
+    .fetch_one(&state.pool)
+    .await
+    .expect("inactive choice marker should query");
+    assert_eq!(inactive_choice_count, 1);
+}
+
 async fn test_app() -> Option<axum::Router> {
     Some(router(test_state().await?))
 }
@@ -1384,6 +1428,24 @@ async fn request_json(app: axum::Router, request: Request<Body>) -> Value {
     assert_eq!(status, StatusCode::OK, "unexpected response: {body}");
 
     body
+}
+
+async fn node_metadata_value(pool: &PgPool, node_id: Uuid, key: &str) -> Value {
+    sqlx::query_scalar(
+        r#"
+        SELECT node_metadata_values.value
+        FROM node_metadata_values
+        JOIN node_metadata_field_definitions
+            ON node_metadata_field_definitions.id = node_metadata_values.field_definition_id
+        WHERE node_metadata_values.node_id = $1
+          AND node_metadata_field_definitions.key = $2
+        "#,
+    )
+    .bind(node_id)
+    .bind(key)
+    .fetch_one(pool)
+    .await
+    .expect("metadata value should query")
 }
 
 async fn request_status_and_json(app: axum::Router, request: Request<Body>) -> (StatusCode, Value) {

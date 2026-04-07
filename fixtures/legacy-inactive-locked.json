@@ -1,0 +1,111 @@
+{
+  "name": "legacy-inactive-locked",
+  "partner": {
+    "legacy_id": "partner-inactive",
+    "name": "Inactive Partner",
+    "is_active": false,
+    "locked": true
+  },
+  "program": {
+    "legacy_id": "program-inactive",
+    "name": "Inactive Program",
+    "is_active": false,
+    "locked": true
+  },
+  "activity": {
+    "legacy_id": "activity-locked",
+    "name": "Locked Activity",
+    "is_active": true,
+    "locked": true
+  },
+  "session": {
+    "legacy_id": "session-inactive",
+    "name": "Inactive Session",
+    "date": "2026-03-15",
+    "is_active": false,
+    "locked": true
+  },
+  "choice_lists": [
+    {
+      "legacy_id": "choice-list-inactive",
+      "name": "Service Status",
+      "is_active": false,
+      "choices": [
+        {
+          "legacy_id": "delivered",
+          "label": "Delivered",
+          "description": "Service was delivered",
+          "ordering": 1,
+          "is_active": true
+        },
+        {
+          "legacy_id": "cancelled",
+          "label": "Cancelled",
+          "description": "Legacy inactive cancelled option",
+          "ordering": 2,
+          "is_active": false
+        }
+      ]
+    }
+  ],
+  "form": {
+    "legacy_id": "form-inactive",
+    "name": "Inactive Legacy Service Form",
+    "slug": "inactive-legacy-service-form",
+    "scope_node_type": "session",
+    "compatibility_group": "Inactive Legacy Compatible",
+    "version_label": "legacy-v1",
+    "sections": [
+      {
+        "legacy_id": "section-inactive",
+        "label": "Service",
+        "position": 1,
+        "fields": [
+          {
+            "legacy_id": "field-service-date",
+            "key": "service_date",
+            "label": "Service Date",
+            "field_type": "date",
+            "required": true,
+            "position": 1
+          },
+          {
+            "legacy_id": "field-service-count",
+            "key": "service_count",
+            "label": "Service Count",
+            "field_type": "number",
+            "required": true,
+            "position": 2
+          },
+          {
+            "legacy_id": "field-service-status",
+            "key": "service_status",
+            "label": "Service Status",
+            "field_type": "single_choice",
+            "required": true,
+            "position": 3
+          }
+        ]
+      }
+    ]
+  },
+  "submission": {
+    "legacy_id": "entry-inactive",
+    "node_type": "session",
+    "values": {
+      "service_date": "2026-03-15",
+      "service_count": 7,
+      "service_status": "cancelled"
+    }
+  },
+  "report": {
+    "name": "Inactive Service Count Report",
+    "logical_key": "service_count",
+    "source_field_key": "service_count",
+    "missing_policy": "null"
+  },
+  "dashboard": {
+    "name": "Inactive Service Dashboard",
+    "chart_name": "Inactive Service Count Table"
+  }
+}
