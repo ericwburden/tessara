@@ -608,6 +608,7 @@ fn ReportAdminScreen() -> impl IntoView {
             </div>
             <div class="actions">
                 <button type="button" onclick="addReportBinding()">"Add Binding"</button>
+                <button type="button" onclick="removeSelectedReportBinding()">"Remove Selected Binding"</button>
                 <button type="button" onclick="clearReportBindings()">"Clear Bindings"</button>
                 <button type="button" onclick="createReport()">"Create Report"</button>
                 <button type="button" onclick="updateReport()">"Update Report"</button>

@@ -1171,7 +1171,19 @@ pub const SCRIPT: &str = r#"
           reportBindings = reportBindings.filter((existing) => existing.logical_key !== binding.logical_key);
           reportBindings.push(binding);
           document.getElementById("report-fields-json").value = JSON.stringify(reportBindings);
-          show({ report_bindings: reportBindings });
+          renderReportBindings();
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      function removeSelectedReportBinding() {
+        try {
+          const logicalKey = inputValue("report-logical-key");
+          if (!logicalKey) throw new Error("Select or enter a report logical key first.");
+          reportBindings = reportBindings.filter((existing) => existing.logical_key !== logicalKey);
+          document.getElementById("report-fields-json").value = reportBindings.length ? JSON.stringify(reportBindings) : "";
+          renderReportBindings();
         } catch (error) {
           show(error.message);
         }
@@ -1180,7 +1192,19 @@ pub const SCRIPT: &str = r#"
       function clearReportBindings() {
         reportBindings = [];
         document.getElementById("report-fields-json").value = "";
+        renderReportBindings();
+      }
+
+      function renderReportBindings() {
         show({ report_bindings: reportBindings });
+        showCards(reportBindings, (binding) => `
+          <article class="card">
+            <h3>${escapeHtml(binding.logical_key)}</h3>
+            <p>${escapeHtml(binding.source_field_key)} with ${escapeHtml(binding.missing_policy)}</p>
+            <button type="button" onclick="useReportBinding('${escapeHtml(binding.logical_key)}', '${escapeHtml(binding.source_field_key)}', '${escapeHtml(binding.missing_policy)}')">Use Binding</button>
+            <button type="button" onclick="useReportBinding('${escapeHtml(binding.logical_key)}', '${escapeHtml(binding.source_field_key)}', '${escapeHtml(binding.missing_policy)}'); removeSelectedReportBinding()">Remove Binding</button>
+          </article>
+        `);
       }
 
       async function validateLegacyFixture() {
@@ -1559,6 +1583,7 @@ pub const SCRIPT: &str = r#"
             <h3>${escapeHtml(binding.logical_key)}</h3>
             <p>${escapeHtml(binding.source_field_key)} with ${escapeHtml(binding.missing_policy)}</p>
             <button type="button" onclick="useReportBinding('${escapeHtml(binding.logical_key)}', '${escapeHtml(binding.source_field_key)}', '${escapeHtml(binding.missing_policy)}')">Use Binding</button>
+            <button type="button" onclick="useReportBinding('${escapeHtml(binding.logical_key)}', '${escapeHtml(binding.source_field_key)}', '${escapeHtml(binding.missing_policy)}'); removeSelectedReportBinding()">Remove Binding</button>
           </article>
         `);
       }

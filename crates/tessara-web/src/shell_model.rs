@@ -356,6 +356,7 @@ const REPORTING_INPUTS: &[TextInput] = &[
 
 const REPORTING_ACTIONS: &[Action] = &[
     Action::new("addReportBinding()", "Add Binding"),
+    Action::new("removeSelectedReportBinding()", "Remove Selected Binding"),
     Action::new("clearReportBindings()", "Clear Bindings"),
     Action::new("createReport()", "Create Report"),
     Action::new("updateReport()", "Update Report"),

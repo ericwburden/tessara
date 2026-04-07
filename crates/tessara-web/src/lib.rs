@@ -157,6 +157,7 @@ mod tests {
         assert!(html.contains("/api/reports"));
         assert!(html.contains("report-fields-json"));
         assert!(html.contains("Use Binding"));
+        assert!(html.contains("Remove Selected Binding"));
         assert!(html.contains("Inspect Report By ID"));
         assert!(html.contains("Dashboard ID from seed or import output"));
         assert!(html.contains("dashboard-component-title"));
@@ -254,6 +255,7 @@ mod tests {
         assert!(html.contains("Use Chart Context"));
         assert!(html.contains("Use Component Context"));
         assert!(html.contains("Use Binding"));
+        assert!(html.contains("Remove Binding"));
         assert!(html.contains("Report Results"));
         assert!(html.contains("Open Submission Workspace"));
         assert!(html.contains("Open Migration Workbench"));
