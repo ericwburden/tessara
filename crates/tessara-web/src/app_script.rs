@@ -100,6 +100,28 @@ pub const APPLICATION_SCRIPT: &str = r#"
         `;
       }
 
+      function datasetRowSubmissionActions(row) {
+        if (!row?.submission_id) {
+          return '<span class="muted">None</span>';
+        }
+        if (row.source_alias === "join" && row.submission_id.includes("|")) {
+          const parts = row.submission_id
+            .split("|")
+            .map((part) => part.trim())
+            .filter(Boolean);
+          return parts.map((part) => {
+            const separator = part.indexOf(":");
+            if (separator <= 0) {
+              return `<span class="muted">${escapeHtml(part)}</span>`;
+            }
+            const sourceAlias = part.slice(0, separator);
+            const submissionId = part.slice(separator + 1);
+            return `<button type="button" onclick="loadSubmissionByValue('${escapeHtml(submissionId)}')">Open ${escapeHtml(sourceAlias)}</button>`;
+          }).join(" ");
+        }
+        return `<button type="button" onclick="loadSubmissionByValue('${escapeHtml(row.submission_id)}')">Open</button>`;
+      }
+
       function inputValue(id) {
         return document.getElementById(id)?.value.trim() ?? "";
       }
@@ -824,6 +846,7 @@ pub const APPLICATION_SCRIPT: &str = r#"
                       <th>Source</th>
                       <th>Submission</th>
                       <th>Values</th>
+                      <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -833,6 +856,7 @@ pub const APPLICATION_SCRIPT: &str = r#"
                         <td>${escapeHtml(row.source_alias || "Direct")}</td>
                         <td>${escapeHtml(row.submission_id || "")}</td>
                         <td>${escapeHtml(JSON.stringify(row.values || {}))}</td>
+                        <td>${datasetRowSubmissionActions(row)}</td>
                       </tr>
                     `).join("")}
                   </tbody>
