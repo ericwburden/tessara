@@ -247,6 +247,31 @@ pub const STYLE: &str = r#"
         gap: 10px;
         padding: 14px;
       }
+      .task-grid {
+        display: grid;
+        gap: 16px;
+        grid-template-columns: minmax(250px, 340px) minmax(0, 1fr);
+        margin-top: 16px;
+      }
+      .task-panel {
+        border: 1px solid var(--neutral);
+        border-radius: 16px;
+        background: linear-gradient(180deg, rgb(255 255 255 / 0.98), rgb(248 250 252 / 0.94));
+        display: grid;
+        gap: 14px;
+        padding: 16px;
+      }
+      .context-panel {
+        align-content: start;
+      }
+      .compact-inputs {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      }
+      .wide-field {
+        grid-column: 1 / -1;
+      }
       .submission-workspace-shell .app-screen {
         margin: 0;
       }
@@ -378,10 +403,9 @@ pub const STYLE: &str = r#"
         main {
           padding: 24px 16px;
         }
-        .app-layout {
-          grid-template-columns: 1fr;
-        }
-        .workspace-grid {
+        .app-layout,
+        .workspace-grid,
+        .task-grid {
           grid-template-columns: 1fr;
         }
       }

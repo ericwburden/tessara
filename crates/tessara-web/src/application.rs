@@ -1198,40 +1198,49 @@ fn ReportRunnerScreen() -> impl IntoView {
             <p class="muted">
                 "Choose a report, inspect its field bindings, and run the table output against refreshed analytics."
             </p>
-            <div class="inputs">
-                <label>
-                    <span>"Dataset ID"</span>
-                    <input id="dataset-id" placeholder="Selected dataset ID" value="" />
-                </label>
-                <label>
-                    <span>"Report ID"</span>
-                    <input id="report-id" placeholder="Selected report ID" value="" />
-                </label>
-                <label>
-                    <span>"Aggregation ID"</span>
-                    <input id="aggregation-id" placeholder="Selected aggregation ID" value="" />
-                </label>
-                <label>
-                    <span>"Form ID"</span>
-                    <input id="form-id" placeholder="Report form context" value="" />
-                </label>
-                <label>
-                    <span>"Report bindings JSON"</span>
-                    <input id="report-fields-json" placeholder="Loaded report bindings" value="" />
-                </label>
-            </div>
-            <div class="actions">
-                <button type="button" onclick="refreshAnalytics()">"Refresh Analytics"</button>
-                <button type="button" onclick="loadDatasets()">"Choose Dataset"</button>
-                <button type="button" onclick="loadDatasetDefinitionById()">"Inspect Dataset"</button>
-                <button type="button" onclick="loadDatasetTableById()">"Run Dataset"</button>
-                <button type="button" onclick="loadReports()">"Choose Report"</button>
-                <button type="button" onclick="loadReportDefinitionById()">"Inspect Report"</button>
-                <button type="button" onclick="refreshAnalyticsAndRunReport()">"Refresh and Run Report"</button>
-                <button type="button" onclick="loadReportById()">"Run Report"</button>
-                <button type="button" onclick="loadAggregations()">"Choose Aggregation"</button>
-                <button type="button" onclick="loadAggregationDefinitionById()">"Inspect Aggregation"</button>
-                <button type="button" onclick="loadAggregationById()">"Run Aggregation"</button>
+            <div class="task-grid">
+                <section class="task-panel">
+                    <h3>"Reporting Actions"</h3>
+                    <p class="muted">"Use the current selection context to inspect or run reporting assets."</p>
+                    <div class="actions">
+                        <button type="button" onclick="refreshAnalytics()">"Refresh Analytics"</button>
+                        <button type="button" onclick="loadDatasets()">"Choose Dataset"</button>
+                        <button type="button" onclick="loadDatasetDefinitionById()">"Inspect Dataset"</button>
+                        <button type="button" onclick="loadDatasetTableById()">"Run Dataset"</button>
+                        <button type="button" onclick="loadReports()">"Choose Report"</button>
+                        <button type="button" onclick="loadReportDefinitionById()">"Inspect Report"</button>
+                        <button type="button" onclick="refreshAnalyticsAndRunReport()">"Refresh and Run Report"</button>
+                        <button type="button" onclick="loadReportById()">"Run Report"</button>
+                        <button type="button" onclick="loadAggregations()">"Choose Aggregation"</button>
+                        <button type="button" onclick="loadAggregationDefinitionById()">"Inspect Aggregation"</button>
+                        <button type="button" onclick="loadAggregationById()">"Run Aggregation"</button>
+                    </div>
+                </section>
+                <section class="task-panel context-panel">
+                    <h3>"Current Reporting Context"</h3>
+                    <div class="inputs compact-inputs">
+                        <label>
+                            <span>"Dataset ID"</span>
+                            <input id="dataset-id" placeholder="Selected dataset ID" value="" />
+                        </label>
+                        <label>
+                            <span>"Report ID"</span>
+                            <input id="report-id" placeholder="Selected report ID" value="" />
+                        </label>
+                        <label>
+                            <span>"Aggregation ID"</span>
+                            <input id="aggregation-id" placeholder="Selected aggregation ID" value="" />
+                        </label>
+                        <label>
+                            <span>"Form ID"</span>
+                            <input id="form-id" placeholder="Report form context" value="" />
+                        </label>
+                        <label class="wide-field">
+                            <span>"Report bindings JSON"</span>
+                            <input id="report-fields-json" placeholder="Loaded report bindings" value="" />
+                        </label>
+                    </div>
+                </section>
             </div>
         </section>
     }
@@ -1246,27 +1255,35 @@ fn DashboardPreviewScreen() -> impl IntoView {
             <p class="muted">
                 "Choose a dashboard and preview each component with its current report rows."
             </p>
-            <div class="inputs">
-                <label>
-                    <span>"Dashboard ID"</span>
-                    <input id="dashboard-id" placeholder="Selected dashboard ID" value="" />
-                </label>
-                <label>
-                    <span>"Chart ID"</span>
-                    <input id="chart-id" placeholder="Selected chart ID" value="" />
-                </label>
-                <label>
-                    <span>"Aggregation ID"</span>
-                    <input id="aggregation-id" placeholder="Selected aggregation ID" value="" />
-                </label>
-            </div>
-            <div class="actions">
-                <button type="button" onclick="loadDashboards()">"Choose Dashboard"</button>
-                <button type="button" onclick="refreshAnalyticsAndOpenDashboard()">"Refresh and Open Dashboard"</button>
-                <button type="button" onclick="loadDashboardById()">"Open Dashboard"</button>
-                <button type="button" onclick="loadCharts()">"Choose Chart"</button>
-                <button type="button" onclick="loadChartDefinitionById()">"Inspect Chart"</button>
-                <button type="button" onclick="loadAggregations()">"Choose Aggregation"</button>
+            <div class="task-grid">
+                <section class="task-panel">
+                    <h3>"Preview Actions"</h3>
+                    <div class="actions">
+                        <button type="button" onclick="loadDashboards()">"Choose Dashboard"</button>
+                        <button type="button" onclick="refreshAnalyticsAndOpenDashboard()">"Refresh and Open Dashboard"</button>
+                        <button type="button" onclick="loadDashboardById()">"Open Dashboard"</button>
+                        <button type="button" onclick="loadCharts()">"Choose Chart"</button>
+                        <button type="button" onclick="loadChartDefinitionById()">"Inspect Chart"</button>
+                        <button type="button" onclick="loadAggregations()">"Choose Aggregation"</button>
+                    </div>
+                </section>
+                <section class="task-panel context-panel">
+                    <h3>"Current Preview Context"</h3>
+                    <div class="inputs compact-inputs">
+                        <label>
+                            <span>"Dashboard ID"</span>
+                            <input id="dashboard-id" placeholder="Selected dashboard ID" value="" />
+                        </label>
+                        <label>
+                            <span>"Chart ID"</span>
+                            <input id="chart-id" placeholder="Selected chart ID" value="" />
+                        </label>
+                        <label>
+                            <span>"Aggregation ID"</span>
+                            <input id="aggregation-id" placeholder="Selected aggregation ID" value="" />
+                        </label>
+                    </div>
+                </section>
             </div>
         </section>
     }
@@ -1281,39 +1298,47 @@ fn SubmissionScreen() -> impl IntoView {
             <p class="muted">
                 "Pick a published form and target node, render the form, create a draft, save values, and submit."
             </p>
-            <div class="inputs">
-                <label>
-                    <span>"Node search"</span>
-                    <input id="node-search" placeholder="Search target nodes" value="" />
-                </label>
-                <label>
-                    <span>"Target node ID"</span>
-                    <input id="node-id" placeholder="Selected node ID" value="" />
-                </label>
-                <label>
-                    <span>"Published form version ID"</span>
-                    <input id="form-version-id" placeholder="Selected form version ID" value="" />
-                </label>
-                <label>
-                    <span>"Form ID"</span>
-                    <input id="form-id" placeholder="Selected form ID" value="" />
-                </label>
-                <label>
-                    <span>"Draft submission ID"</span>
-                    <input id="submission-id" placeholder="Draft submission ID" value="" />
-                </label>
-            </div>
-            <div class="actions">
-                <button type="button" onclick="loadPublishedForms()">"Choose Published Form"</button>
-                <button type="button" onclick="loadNodes()">"Choose Target Node"</button>
-                <button type="button" onclick="useSelectedTargetNodeAndContinue()">"Use Selected Target"</button>
-                <button type="button" onclick="openSelectedFormVersion()">"Open Selected Form"</button>
-                <button type="button" onclick="renderForm(inputValue('form-version-id'))">"Open Form"</button>
-                <button type="button" onclick="createDraft()">"Create Draft"</button>
-                <button type="button" onclick="saveRenderedFormValues()">"Save Values"</button>
-                <button type="button" onclick="submitDraft()">"Submit"</button>
-                <button type="button" onclick="discardDraft()">"Discard Draft"</button>
-                <button type="button" onclick="clearResponseContext()">"Clear Response Context"</button>
+            <div class="task-grid">
+                <section class="task-panel">
+                    <h3>"Response Actions"</h3>
+                    <div class="actions">
+                        <button type="button" onclick="loadPublishedForms()">"Choose Published Form"</button>
+                        <button type="button" onclick="loadNodes()">"Choose Target Node"</button>
+                        <button type="button" onclick="useSelectedTargetNodeAndContinue()">"Use Selected Target"</button>
+                        <button type="button" onclick="openSelectedFormVersion()">"Open Selected Form"</button>
+                        <button type="button" onclick="renderForm(inputValue('form-version-id'))">"Open Form"</button>
+                        <button type="button" onclick="createDraft()">"Create Draft"</button>
+                        <button type="button" onclick="saveRenderedFormValues()">"Save Values"</button>
+                        <button type="button" onclick="submitDraft()">"Submit"</button>
+                        <button type="button" onclick="discardDraft()">"Discard Draft"</button>
+                        <button type="button" onclick="clearResponseContext()">"Clear Response Context"</button>
+                    </div>
+                </section>
+                <section class="task-panel context-panel">
+                    <h3>"Current Response Context"</h3>
+                    <div class="inputs compact-inputs">
+                        <label>
+                            <span>"Node search"</span>
+                            <input id="node-search" placeholder="Search target nodes" value="" />
+                        </label>
+                        <label>
+                            <span>"Target node ID"</span>
+                            <input id="node-id" placeholder="Selected node ID" value="" />
+                        </label>
+                        <label>
+                            <span>"Published form version ID"</span>
+                            <input id="form-version-id" placeholder="Selected form version ID" value="" />
+                        </label>
+                        <label>
+                            <span>"Form ID"</span>
+                            <input id="form-id" placeholder="Selected form ID" value="" />
+                        </label>
+                        <label>
+                            <span>"Draft submission ID"</span>
+                            <input id="submission-id" placeholder="Draft submission ID" value="" />
+                        </label>
+                    </div>
+                </section>
             </div>
         </section>
     }
@@ -1328,22 +1353,30 @@ fn ReviewScreen() -> impl IntoView {
             <p class="muted">
                 "Inspect saved and submitted responses with their audit trail."
             </p>
-            <div class="inputs">
-                <label>
-                    <span>"Submission search"</span>
-                    <input id="submission-search" placeholder="Search form, node, or version" value="" />
-                </label>
-                <label>
-                    <span>"Submission status filter"</span>
-                    <input id="submission-status-filter" placeholder="draft or submitted" value="" />
-                </label>
-            </div>
-            <div class="actions">
-                <button type="button" onclick="loadSubmissions()">"Load Submissions"</button>
-                <button type="button" onclick="showDraftSubmissions()">"Show Drafts"</button>
-                <button type="button" onclick="showSubmittedSubmissions()">"Show Submitted"</button>
-                <button type="button" onclick="clearSubmissionReviewFilters()">"Clear Review Filters"</button>
-                <button type="button" onclick="loadSubmissionById()">"Open Selected Submission"</button>
+            <div class="task-grid">
+                <section class="task-panel">
+                    <h3>"Review Actions"</h3>
+                    <div class="actions">
+                        <button type="button" onclick="loadSubmissions()">"Load Submissions"</button>
+                        <button type="button" onclick="showDraftSubmissions()">"Show Drafts"</button>
+                        <button type="button" onclick="showSubmittedSubmissions()">"Show Submitted"</button>
+                        <button type="button" onclick="clearSubmissionReviewFilters()">"Clear Review Filters"</button>
+                        <button type="button" onclick="loadSubmissionById()">"Open Selected Submission"</button>
+                    </div>
+                </section>
+                <section class="task-panel context-panel">
+                    <h3>"Review Filters"</h3>
+                    <div class="inputs compact-inputs">
+                        <label>
+                            <span>"Submission search"</span>
+                            <input id="submission-search" placeholder="Search form, node, or version" value="" />
+                        </label>
+                        <label>
+                            <span>"Submission status filter"</span>
+                            <input id="submission-status-filter" placeholder="draft or submitted" value="" />
+                        </label>
+                    </div>
+                </section>
             </div>
         </section>
     }
@@ -1358,17 +1391,25 @@ fn ReportScreen() -> impl IntoView {
             <p class="muted">
                 "Refresh analytics and run table reports against submitted data."
             </p>
-            <div class="inputs">
-                <label>
-                    <span>"Report ID"</span>
-                    <input id="report-id" placeholder="Selected report ID" value="" />
-                </label>
-            </div>
-            <div class="actions">
-                <button type="button" onclick="refreshAnalytics()">"Refresh Analytics"</button>
-                <button type="button" onclick="loadReports()">"Choose Report"</button>
-                <button type="button" onclick="refreshAnalyticsAndRunReport()">"Refresh and Run Report"</button>
-                <button type="button" onclick="loadReportById()">"Run Selected Report"</button>
+            <div class="task-grid">
+                <section class="task-panel">
+                    <h3>"Report Actions"</h3>
+                    <div class="actions">
+                        <button type="button" onclick="refreshAnalytics()">"Refresh Analytics"</button>
+                        <button type="button" onclick="loadReports()">"Choose Report"</button>
+                        <button type="button" onclick="refreshAnalyticsAndRunReport()">"Refresh and Run Report"</button>
+                        <button type="button" onclick="loadReportById()">"Run Selected Report"</button>
+                    </div>
+                </section>
+                <section class="task-panel context-panel">
+                    <h3>"Current Report Context"</h3>
+                    <div class="inputs compact-inputs">
+                        <label>
+                            <span>"Report ID"</span>
+                            <input id="report-id" placeholder="Selected report ID" value="" />
+                        </label>
+                    </div>
+                </section>
             </div>
         </section>
     }
@@ -1383,41 +1424,50 @@ fn HierarchyAdminScreen() -> impl IntoView {
             <p class="muted">
                 "Create and update node types, metadata definitions, and runtime nodes."
             </p>
-            <div class="inputs">
-                <label><span>"Node type name"</span><input id="node-type-name" placeholder="Organization" value="" /></label>
-                <label><span>"Node type slug"</span><input id="node-type-slug" placeholder="organization" value="" /></label>
-                <label><span>"Node type ID"</span><input id="node-type-id" placeholder="Selected node type ID" value="" /></label>
-                <label><span>"Parent node type ID"</span><input id="parent-node-type-id" placeholder="Relationship parent type ID" value="" /></label>
-                <label><span>"Child node type ID"</span><input id="child-node-type-id" placeholder="Relationship child type ID" value="" /></label>
-                <label><span>"Metadata node type ID"</span><input id="metadata-node-type-id" placeholder="Metadata node type ID" value="" /></label>
-                <label><span>"Metadata field ID"</span><input id="metadata-field-id" placeholder="Selected metadata field ID" value="" /></label>
-                <label><span>"Metadata key"</span><input id="metadata-key" placeholder="region" value="region" /></label>
-                <label><span>"Metadata label"</span><input id="metadata-label" placeholder="Region" value="Region" /></label>
-                <label><span>"Metadata field type"</span><input id="metadata-field-type" placeholder="text" value="text" /></label>
-                <label><span>"Metadata required"</span><input id="metadata-required" placeholder="true or false" value="false" /></label>
-                <label><span>"Parent node ID"</span><input id="parent-node-id" placeholder="Optional parent node ID" value="" /></label>
-                <label><span>"Node name"</span><input id="node-name" placeholder="Local Organization" value="Local Organization" /></label>
-                <label><span>"Node metadata JSON"</span><input id="node-metadata-json" placeholder="{\"region\":\"North\"}" value="{\"region\":\"North\"}" /></label>
-                <label><span>"Node search"</span><input id="node-search" placeholder="Search nodes" value="" /></label>
-                <label><span>"Node ID"</span><input id="node-id" placeholder="Selected node ID" value="" /></label>
-            </div>
-            <div class="actions">
-                <button type="button" onclick="loadNodeTypes()">"Load Node Types"</button>
-                <button type="button" onclick="loadNodeTypeById()">"Inspect Node Type"</button>
-                <button type="button" onclick="createNodeType()">"Create Node Type"</button>
-                <button type="button" onclick="updateNodeType()">"Update Node Type"</button>
-                <button type="button" onclick="useSelectedNodeTypeAsFormScope()">"Use Node Type As Form Scope"</button>
-                <button type="button" onclick="useSelectedNodeTypeAsMetadataTarget()">"Use Node Type As Metadata Target"</button>
-                <button type="button" onclick="loadRelationships()">"Load Relationships"</button>
-                <button type="button" onclick="createRelationship()">"Create Relationship"</button>
-                <button type="button" onclick="deleteRelationship()">"Remove Relationship"</button>
-                <button type="button" onclick="loadMetadataFields()">"Load Metadata Fields"</button>
-                <button type="button" onclick="createMetadataField()">"Create Metadata Field"</button>
-                <button type="button" onclick="updateMetadataField()">"Update Metadata Field"</button>
-                <button type="button" onclick="loadNodes()">"Load Nodes"</button>
-                <button type="button" onclick="createNode()">"Create Node"</button>
-                <button type="button" onclick="updateNode()">"Update Node"</button>
-                <button type="button" onclick="loadNodes()">"Choose Node To Edit"</button>
+            <div class="task-grid">
+                <section class="task-panel">
+                    <h3>"Hierarchy Actions"</h3>
+                    <p class="muted">"Inspect structure first, then create or update the selected type, relationship, metadata field, or node."</p>
+                    <div class="actions">
+                        <button type="button" onclick="loadNodeTypes()">"Load Node Types"</button>
+                        <button type="button" onclick="loadNodeTypeById()">"Inspect Node Type"</button>
+                        <button type="button" onclick="createNodeType()">"Create Node Type"</button>
+                        <button type="button" onclick="updateNodeType()">"Update Node Type"</button>
+                        <button type="button" onclick="useSelectedNodeTypeAsFormScope()">"Use Node Type As Form Scope"</button>
+                        <button type="button" onclick="useSelectedNodeTypeAsMetadataTarget()">"Use Node Type As Metadata Target"</button>
+                        <button type="button" onclick="loadRelationships()">"Load Relationships"</button>
+                        <button type="button" onclick="createRelationship()">"Create Relationship"</button>
+                        <button type="button" onclick="deleteRelationship()">"Remove Relationship"</button>
+                        <button type="button" onclick="loadMetadataFields()">"Load Metadata Fields"</button>
+                        <button type="button" onclick="createMetadataField()">"Create Metadata Field"</button>
+                        <button type="button" onclick="updateMetadataField()">"Update Metadata Field"</button>
+                        <button type="button" onclick="loadNodes()">"Load Nodes"</button>
+                        <button type="button" onclick="createNode()">"Create Node"</button>
+                        <button type="button" onclick="updateNode()">"Update Node"</button>
+                        <button type="button" onclick="loadNodes()">"Choose Node To Edit"</button>
+                    </div>
+                </section>
+                <section class="task-panel context-panel">
+                    <h3>"Current Hierarchy Context"</h3>
+                    <div class="inputs compact-inputs">
+                        <label><span>"Node type name"</span><input id="node-type-name" placeholder="Organization" value="" /></label>
+                        <label><span>"Node type slug"</span><input id="node-type-slug" placeholder="organization" value="" /></label>
+                        <label><span>"Node type ID"</span><input id="node-type-id" placeholder="Selected node type ID" value="" /></label>
+                        <label><span>"Parent node type ID"</span><input id="parent-node-type-id" placeholder="Relationship parent type ID" value="" /></label>
+                        <label><span>"Child node type ID"</span><input id="child-node-type-id" placeholder="Relationship child type ID" value="" /></label>
+                        <label><span>"Metadata node type ID"</span><input id="metadata-node-type-id" placeholder="Metadata node type ID" value="" /></label>
+                        <label><span>"Metadata field ID"</span><input id="metadata-field-id" placeholder="Selected metadata field ID" value="" /></label>
+                        <label><span>"Metadata key"</span><input id="metadata-key" placeholder="region" value="region" /></label>
+                        <label><span>"Metadata label"</span><input id="metadata-label" placeholder="Region" value="Region" /></label>
+                        <label><span>"Metadata field type"</span><input id="metadata-field-type" placeholder="text" value="text" /></label>
+                        <label><span>"Metadata required"</span><input id="metadata-required" placeholder="true or false" value="false" /></label>
+                        <label><span>"Parent node ID"</span><input id="parent-node-id" placeholder="Optional parent node ID" value="" /></label>
+                        <label><span>"Node name"</span><input id="node-name" placeholder="Local Organization" value="Local Organization" /></label>
+                        <label class="wide-field"><span>"Node metadata JSON"</span><input id="node-metadata-json" placeholder="{\"region\":\"North\"}" value="{\"region\":\"North\"}" /></label>
+                        <label><span>"Node search"</span><input id="node-search" placeholder="Search nodes" value="" /></label>
+                        <label><span>"Node ID"</span><input id="node-id" placeholder="Selected node ID" value="" /></label>
+                    </div>
+                </section>
             </div>
         </section>
     }
@@ -1432,39 +1482,48 @@ fn FormAdminScreen() -> impl IntoView {
             <p class="muted">
                 "Create draft form versions, edit sections and fields, and publish the version."
             </p>
-            <div class="inputs">
-                <label><span>"Form name"</span><input id="form-name" placeholder="Monthly Report" value="" /></label>
-                <label><span>"Form slug"</span><input id="form-slug" placeholder="monthly-report" value="" /></label>
-                <label><span>"Scope node type ID"</span><input id="form-scope-node-type-id" placeholder="Optional scope node type ID" value="" /></label>
-                <label><span>"Form ID"</span><input id="form-id" placeholder="Selected form ID" value="" /></label>
-                <label><span>"Version label"</span><input id="form-version-label" placeholder="v1" value="v1" /></label>
-                <label><span>"Compatibility group"</span><input id="compatibility-group-name" placeholder="Default compatibility" value="Default compatibility" /></label>
-                <label><span>"Form version ID"</span><input id="form-version-id" placeholder="Selected form version ID" value="" /></label>
-                <label><span>"Section ID"</span><input id="section-id" placeholder="Selected section ID" value="" /></label>
-                <label><span>"Section title"</span><input id="section-title" placeholder="Main" value="Main" /></label>
-                <label><span>"Section position"</span><input id="section-position" placeholder="0" value="0" /></label>
-                <label><span>"Field ID"</span><input id="field-id" placeholder="Selected field ID" value="" /></label>
-                <label><span>"Field key"</span><input id="field-key" placeholder="participants" value="participants" /></label>
-                <label><span>"Field label"</span><input id="field-label" placeholder="Participants" value="Participants" /></label>
-                <label><span>"Field type"</span><input id="field-type" placeholder="number" value="number" /></label>
-                <label><span>"Field required"</span><input id="field-required" placeholder="true or false" value="true" /></label>
-                <label><span>"Field position"</span><input id="field-position" placeholder="0" value="0" /></label>
-            </div>
-            <div class="actions">
-                <button type="button" onclick="loadForms()">"Load Forms"</button>
-                <button type="button" onclick="loadFormById()">"Inspect Form"</button>
-                <button type="button" onclick="createForm()">"Create Form"</button>
-                <button type="button" onclick="updateForm()">"Update Form"</button>
-                <button type="button" onclick="createFormVersion()">"Create Version"</button>
-                <button type="button" onclick="createBasicFormVersion()">"Create Basic Version"</button>
-                <button type="button" onclick="createSection()">"Create Section"</button>
-                <button type="button" onclick="updateSection()">"Update Section"</button>
-                <button type="button" onclick="deleteSection()">"Remove Section"</button>
-                <button type="button" onclick="createField()">"Create Field"</button>
-                <button type="button" onclick="updateField()">"Update Field"</button>
-                <button type="button" onclick="deleteField()">"Remove Field"</button>
-                <button type="button" onclick="publishVersion()">"Publish Version"</button>
-                <button type="button" onclick="publishAndPreviewVersion()">"Publish and Preview Version"</button>
+            <div class="task-grid">
+                <section class="task-panel">
+                    <h3>"Form Actions"</h3>
+                    <p class="muted">"Choose a form first, then use the selected version, section, and field context to shape the draft."</p>
+                    <div class="actions">
+                        <button type="button" onclick="loadForms()">"Load Forms"</button>
+                        <button type="button" onclick="loadFormById()">"Inspect Form"</button>
+                        <button type="button" onclick="createForm()">"Create Form"</button>
+                        <button type="button" onclick="updateForm()">"Update Form"</button>
+                        <button type="button" onclick="createFormVersion()">"Create Version"</button>
+                        <button type="button" onclick="createBasicFormVersion()">"Create Basic Version"</button>
+                        <button type="button" onclick="createSection()">"Create Section"</button>
+                        <button type="button" onclick="updateSection()">"Update Section"</button>
+                        <button type="button" onclick="deleteSection()">"Remove Section"</button>
+                        <button type="button" onclick="createField()">"Create Field"</button>
+                        <button type="button" onclick="updateField()">"Update Field"</button>
+                        <button type="button" onclick="deleteField()">"Remove Field"</button>
+                        <button type="button" onclick="publishVersion()">"Publish Version"</button>
+                        <button type="button" onclick="publishAndPreviewVersion()">"Publish and Preview Version"</button>
+                    </div>
+                </section>
+                <section class="task-panel context-panel">
+                    <h3>"Current Form Context"</h3>
+                    <div class="inputs compact-inputs">
+                        <label><span>"Form name"</span><input id="form-name" placeholder="Monthly Report" value="" /></label>
+                        <label><span>"Form slug"</span><input id="form-slug" placeholder="monthly-report" value="" /></label>
+                        <label><span>"Scope node type ID"</span><input id="form-scope-node-type-id" placeholder="Optional scope node type ID" value="" /></label>
+                        <label><span>"Form ID"</span><input id="form-id" placeholder="Selected form ID" value="" /></label>
+                        <label><span>"Version label"</span><input id="form-version-label" placeholder="v1" value="v1" /></label>
+                        <label><span>"Compatibility group"</span><input id="compatibility-group-name" placeholder="Default compatibility" value="Default compatibility" /></label>
+                        <label><span>"Form version ID"</span><input id="form-version-id" placeholder="Selected form version ID" value="" /></label>
+                        <label><span>"Section ID"</span><input id="section-id" placeholder="Selected section ID" value="" /></label>
+                        <label><span>"Section title"</span><input id="section-title" placeholder="Main" value="Main" /></label>
+                        <label><span>"Section position"</span><input id="section-position" placeholder="0" value="0" /></label>
+                        <label><span>"Field ID"</span><input id="field-id" placeholder="Selected field ID" value="" /></label>
+                        <label><span>"Field key"</span><input id="field-key" placeholder="participants" value="participants" /></label>
+                        <label><span>"Field label"</span><input id="field-label" placeholder="Participants" value="Participants" /></label>
+                        <label><span>"Field type"</span><input id="field-type" placeholder="number" value="number" /></label>
+                        <label><span>"Field required"</span><input id="field-required" placeholder="true or false" value="true" /></label>
+                        <label><span>"Field position"</span><input id="field-position" placeholder="0" value="0" /></label>
+                    </div>
+                </section>
             </div>
         </section>
     }
@@ -1479,7 +1538,57 @@ fn ReportAdminScreen() -> impl IntoView {
             <p class="muted">
                 "Build table report bindings from selected form fields and inspect report output."
             </p>
-            <div class="inputs">
+            <div class="task-grid">
+                <section class="task-panel">
+                    <h3>"Reporting Configuration Actions"</h3>
+                    <p class="muted">"Use the selected dataset, report, aggregation, chart, and dashboard context to build reporting assets in sequence."</p>
+                    <div class="actions">
+                        <button type="button" onclick="addDatasetSource()">"Add Dataset Source"</button>
+                        <button type="button" onclick="removeSelectedDatasetSource()">"Remove Dataset Source"</button>
+                        <button type="button" onclick="clearDatasetSources()">"Clear Dataset Sources"</button>
+                        <button type="button" onclick="addDatasetField()">"Add Dataset Field"</button>
+                        <button type="button" onclick="removeSelectedDatasetField()">"Remove Dataset Field"</button>
+                        <button type="button" onclick="clearDatasetFields()">"Clear Dataset Fields"</button>
+                        <button type="button" onclick="renderDatasetDraft()">"Review Dataset Draft"</button>
+                        <button type="button" onclick="createDataset()">"Create Dataset"</button>
+                        <button type="button" onclick="updateDataset()">"Update Dataset"</button>
+                        <button type="button" onclick="deleteDataset()">"Remove Dataset"</button>
+                        <button type="button" onclick="loadDatasets()">"Load Datasets"</button>
+                        <button type="button" onclick="loadDatasetById()">"Inspect Dataset"</button>
+                        <button type="button" onclick="loadDatasetTableById()">"Run Dataset"</button>
+                        <button type="button" onclick="addReportBinding()">"Add Binding"</button>
+                        <button type="button" onclick="removeSelectedReportBinding()">"Remove Selected Binding"</button>
+                        <button type="button" onclick="clearReportBindings()">"Clear Bindings"</button>
+                        <button type="button" onclick="createReport()">"Create Report"</button>
+                        <button type="button" onclick="updateReport()">"Update Report"</button>
+                        <button type="button" onclick="deleteReport()">"Remove Report"</button>
+                        <button type="button" onclick="loadReports()">"Load Reports"</button>
+                        <button type="button" onclick="loadReportDefinitionById()">"Inspect Report"</button>
+                        <button type="button" onclick="refreshAnalyticsAndRunReport()">"Refresh and Run Report"</button>
+                        <button type="button" onclick="loadReportById()">"Run Report"</button>
+                        <button type="button" onclick="createAggregation()">"Create Aggregation"</button>
+                        <button type="button" onclick="loadAggregations()">"Load Aggregations"</button>
+                        <button type="button" onclick="loadAggregationDefinitionById()">"Inspect Aggregation"</button>
+                        <button type="button" onclick="updateAggregation()">"Update Aggregation"</button>
+                        <button type="button" onclick="deleteAggregation()">"Remove Aggregation"</button>
+                        <button type="button" onclick="loadAggregationById()">"Run Aggregation"</button>
+                        <button type="button" onclick="createChart()">"Create Chart"</button>
+                        <button type="button" onclick="updateChart()">"Update Chart"</button>
+                        <button type="button" onclick="deleteChart()">"Remove Chart"</button>
+                        <button type="button" onclick="loadCharts()">"Load Charts"</button>
+                        <button type="button" onclick="createDashboard()">"Create Dashboard"</button>
+                        <button type="button" onclick="updateDashboard()">"Update Dashboard"</button>
+                        <button type="button" onclick="deleteDashboard()">"Remove Dashboard"</button>
+                        <button type="button" onclick="addDashboardComponent()">"Add Component"</button>
+                        <button type="button" onclick="updateDashboardComponent()">"Update Component"</button>
+                        <button type="button" onclick="deleteDashboardComponent()">"Remove Component"</button>
+                        <button type="button" onclick="refreshAnalyticsAndOpenDashboard()">"Refresh and Open Dashboard"</button>
+                        <button type="button" onclick="loadDashboardById()">"Load Dashboard"</button>
+                    </div>
+                </section>
+                <section class="task-panel context-panel">
+                    <h3>"Current Reporting Builder Context"</h3>
+                    <div class="inputs compact-inputs">
                 <label><span>"Dataset name"</span><input id="dataset-name" placeholder="Participant Dataset" value="Participant Dataset" /></label>
                 <label><span>"Dataset slug"</span><input id="dataset-slug" placeholder="participant-dataset" value="participant-dataset" /></label>
                 <label><span>"Dataset grain"</span><input id="dataset-grain" placeholder="submission" value="submission" /></label>
@@ -1514,50 +1623,9 @@ fn ReportAdminScreen() -> impl IntoView {
                 <label><span>"Dashboard component ID"</span><input id="dashboard-component-id" placeholder="Selected dashboard component ID" value="" /></label>
                 <label><span>"Dashboard component position"</span><input id="dashboard-component-position" placeholder="0" value="0" /></label>
                 <label><span>"Dashboard component title"</span><input id="dashboard-component-title" placeholder="Chart title" value="" /></label>
-                <label><span>"Dashboard component config JSON"</span><input id="dashboard-component-config-json" placeholder="{\"title\":\"Chart\"}" value="" /></label>
-            </div>
-            <div class="actions">
-                <button type="button" onclick="addDatasetSource()">"Add Dataset Source"</button>
-                <button type="button" onclick="removeSelectedDatasetSource()">"Remove Dataset Source"</button>
-                <button type="button" onclick="clearDatasetSources()">"Clear Dataset Sources"</button>
-                <button type="button" onclick="addDatasetField()">"Add Dataset Field"</button>
-                <button type="button" onclick="removeSelectedDatasetField()">"Remove Dataset Field"</button>
-                <button type="button" onclick="clearDatasetFields()">"Clear Dataset Fields"</button>
-                <button type="button" onclick="renderDatasetDraft()">"Review Dataset Draft"</button>
-                <button type="button" onclick="createDataset()">"Create Dataset"</button>
-                <button type="button" onclick="updateDataset()">"Update Dataset"</button>
-                <button type="button" onclick="deleteDataset()">"Remove Dataset"</button>
-                <button type="button" onclick="loadDatasets()">"Load Datasets"</button>
-                <button type="button" onclick="loadDatasetById()">"Inspect Dataset"</button>
-                <button type="button" onclick="loadDatasetTableById()">"Run Dataset"</button>
-                <button type="button" onclick="addReportBinding()">"Add Binding"</button>
-                <button type="button" onclick="removeSelectedReportBinding()">"Remove Selected Binding"</button>
-                <button type="button" onclick="clearReportBindings()">"Clear Bindings"</button>
-                <button type="button" onclick="createReport()">"Create Report"</button>
-                <button type="button" onclick="updateReport()">"Update Report"</button>
-                <button type="button" onclick="deleteReport()">"Remove Report"</button>
-                <button type="button" onclick="loadReports()">"Load Reports"</button>
-                <button type="button" onclick="loadReportDefinitionById()">"Inspect Report"</button>
-                <button type="button" onclick="refreshAnalyticsAndRunReport()">"Refresh and Run Report"</button>
-                <button type="button" onclick="loadReportById()">"Run Report"</button>
-                <button type="button" onclick="createAggregation()">"Create Aggregation"</button>
-                <button type="button" onclick="loadAggregations()">"Load Aggregations"</button>
-                <button type="button" onclick="loadAggregationDefinitionById()">"Inspect Aggregation"</button>
-                <button type="button" onclick="updateAggregation()">"Update Aggregation"</button>
-                <button type="button" onclick="deleteAggregation()">"Remove Aggregation"</button>
-                <button type="button" onclick="loadAggregationById()">"Run Aggregation"</button>
-                <button type="button" onclick="createChart()">"Create Chart"</button>
-                <button type="button" onclick="updateChart()">"Update Chart"</button>
-                <button type="button" onclick="deleteChart()">"Remove Chart"</button>
-                <button type="button" onclick="loadCharts()">"Load Charts"</button>
-                <button type="button" onclick="createDashboard()">"Create Dashboard"</button>
-                <button type="button" onclick="updateDashboard()">"Update Dashboard"</button>
-                <button type="button" onclick="deleteDashboard()">"Remove Dashboard"</button>
-                <button type="button" onclick="addDashboardComponent()">"Add Component"</button>
-                <button type="button" onclick="updateDashboardComponent()">"Update Component"</button>
-                <button type="button" onclick="deleteDashboardComponent()">"Remove Component"</button>
-                <button type="button" onclick="refreshAnalyticsAndOpenDashboard()">"Refresh and Open Dashboard"</button>
-                <button type="button" onclick="loadDashboardById()">"Load Dashboard"</button>
+                <label class="wide-field"><span>"Dashboard component config JSON"</span><input id="dashboard-component-config-json" placeholder="{\"title\":\"Chart\"}" value="" /></label>
+                    </div>
+                </section>
             </div>
         </section>
     }
