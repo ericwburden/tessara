@@ -311,6 +311,7 @@ fn ReportingApplicationShell() -> impl IntoView {
                     <SelectionContext/>
                 </aside>
                 <section class="panel app-main">
+                    <ReportingHomeScreen/>
                     <ReportRunnerScreen/>
                     <DashboardPreviewScreen/>
                     <OutputPanels/>
@@ -607,6 +608,120 @@ fn OutputPanels() -> impl IntoView {
             <div id="screen" class="cards"></div>
         </section>
         <RawOutputPanel/>
+    }
+}
+
+#[component]
+fn ReportingHomeScreen() -> impl IntoView {
+    let management_cards = [
+        (
+            "Datasets",
+            "Inspect dataset definitions and run source-aware dataset previews before binding reports.",
+            "#report-runner-screen",
+            "Open Dataset Workflows",
+            "loadDatasets()",
+            "Load Datasets",
+        ),
+        (
+            "Reports",
+            "Inspect report definitions, refresh analytics, and execute table-style outputs.",
+            "#report-runner-screen",
+            "Open Report Runner",
+            "loadReports()",
+            "Load Reports",
+        ),
+        (
+            "Aggregations",
+            "Review aggregation definitions and execute grouped metrics on current report outputs.",
+            "#report-runner-screen",
+            "Open Aggregations",
+            "loadAggregations()",
+            "Load Aggregations",
+        ),
+        (
+            "Dashboards",
+            "Preview charts and dashboards with current report or aggregation context.",
+            "#dashboard-preview-screen",
+            "Open Dashboard Preview",
+            "loadDashboards()",
+            "Load Dashboards",
+        ),
+    ];
+
+    let directory_cards = [
+        (
+            "Datasets",
+            "Browse dataset definitions",
+            "loadDatasets()",
+            "Open",
+        ),
+        (
+            "Reports",
+            "Browse report definitions",
+            "loadReports()",
+            "Open",
+        ),
+        (
+            "Aggregations",
+            "Browse aggregation definitions",
+            "loadAggregations()",
+            "Open",
+        ),
+        ("Charts", "Browse charts", "loadCharts()", "Open"),
+        (
+            "Dashboards",
+            "Browse dashboards",
+            "loadDashboards()",
+            "Open",
+        ),
+    ];
+
+    view! {
+        <section id="reporting-home-screen" class="app-screen">
+            <p class="eyebrow">"Reporting Home"</p>
+            <h2>"Reporting Areas"</h2>
+            <p class="muted">
+                "Use this reporting landing section to move between datasets, reports, aggregations, and dashboards without dropping immediately into builder-style controls."
+            </p>
+            <div class="management-grid">
+                {management_cards
+                    .into_iter()
+                    .map(|(title, description, href, href_label, action, action_label)| {
+                        view! {
+                            <article class="home-card">
+                                <h3>{title}</h3>
+                                <p>{description}</p>
+                                <div class="actions">
+                                    <a class="button-link" href=href>{href_label}</a>
+                                    <button type="button" onclick=action>{action_label}</button>
+                                </div>
+                            </article>
+                        }
+                    })
+                    .collect_view()}
+            </div>
+        </section>
+        <section class="app-screen">
+            <p class="eyebrow">"Reporting Home"</p>
+            <h2>"Reporting Directory"</h2>
+            <p class="muted">
+                "These entry points start to replace workbench-only reporting flows with clearer entity lists inside the application shell."
+            </p>
+            <div class="directory-grid">
+                {directory_cards
+                    .into_iter()
+                    .map(|(title, description, action, label)| {
+                        view! {
+                            <article class="directory-card">
+                                <h3>{title}</h3>
+                                <p>{description}</p>
+                                <button type="button" onclick=action>{label}</button>
+                            </article>
+                        }
+                    })
+                    .collect_view()}
+            </div>
+        </section>
     }
 }
 

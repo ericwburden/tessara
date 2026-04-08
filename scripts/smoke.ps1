@@ -143,7 +143,7 @@ try {
         throw "Expected admin application shell HTML to include setup workflow controls"
     }
     $reportingAppShell = Invoke-RestMethod -Uri "$baseUrl/app/reports" -TimeoutSec 30
-    if (-not ($reportingAppShell -like "*Reporting Workspace*") -or -not ($reportingAppShell -like "*Report Runner*") -or -not ($reportingAppShell -like "*Dashboard Preview*") -or -not ($reportingAppShell -like "*Open Demo Dashboard*")) {
+    if (-not ($reportingAppShell -like "*Reporting Workspace*") -or -not ($reportingAppShell -like "*Reporting Areas*") -or -not ($reportingAppShell -like "*Reporting Directory*") -or -not ($reportingAppShell -like "*Report Runner*") -or -not ($reportingAppShell -like "*Dashboard Preview*") -or -not ($reportingAppShell -like "*Open Demo Dashboard*")) {
         throw "Expected reporting application shell HTML to include report and dashboard workflow controls"
     }
     $migrationAppShell = Invoke-RestMethod -Uri "$baseUrl/app/migration" -TimeoutSec 30
