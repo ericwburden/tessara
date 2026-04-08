@@ -199,6 +199,7 @@ fn SubmissionApplicationShell() -> impl IntoView {
                     <SelectionContext/>
                 </aside>
                 <section class="panel app-main">
+                    <SubmissionHomeScreen/>
                     <SubmissionScreen/>
                     <ReviewScreen/>
                     <ReportScreen/>
@@ -582,6 +583,126 @@ fn AdminHomeScreen() -> impl IntoView {
             <h2>"Entity Directory"</h2>
             <p class="muted">
                 "These entry points mirror the original application's core management lists while keeping the current Tessara builder controls underneath."
+            </p>
+            <div class="directory-grid">
+                {directory_cards
+                    .into_iter()
+                    .map(|(title, description, action, label)| {
+                        view! {
+                            <article class="directory-card">
+                                <h3>{title}</h3>
+                                <p>{description}</p>
+                                <button type="button" onclick=action>{label}</button>
+                            </article>
+                        }
+                    })
+                    .collect_view()}
+            </div>
+        </section>
+    }
+}
+
+#[component]
+fn SubmissionHomeScreen() -> impl IntoView {
+    let management_cards = [
+        (
+            "Start a Response",
+            "Choose a published form and target node, then open the form for draft entry.",
+            "#submission-screen",
+            "Open Response Entry",
+            "loadPublishedForms()",
+            "Load Published Forms",
+        ),
+        (
+            "Choose a Target",
+            "Browse nodes and carry the selected target directly into the response flow.",
+            "#submission-screen",
+            "Open Target Selection",
+            "loadNodes()",
+            "Load Target Nodes",
+        ),
+        (
+            "Review Responses",
+            "Browse draft and submitted responses, then reopen the selected submission in context.",
+            "#review-screen",
+            "Open Response Review",
+            "loadSubmissions()",
+            "Load Submissions",
+        ),
+        (
+            "Open Related Reports",
+            "Jump from the submission route into supporting report output while reviewing responses.",
+            "#report-screen",
+            "Open Related Reports",
+            "loadReports()",
+            "Load Reports",
+        ),
+    ];
+
+    let directory_cards = [
+        (
+            "Published Forms",
+            "Browse current published forms",
+            "loadPublishedForms()",
+            "Open",
+        ),
+        (
+            "Target Nodes",
+            "Browse submission targets",
+            "loadNodes()",
+            "Open",
+        ),
+        (
+            "Draft Responses",
+            "Filter to draft submissions",
+            "showDraftSubmissions()",
+            "Open",
+        ),
+        (
+            "Submitted Responses",
+            "Filter to submitted responses",
+            "showSubmittedSubmissions()",
+            "Open",
+        ),
+        (
+            "All Responses",
+            "Browse the full response list",
+            "loadSubmissions()",
+            "Open",
+        ),
+        ("Reports", "Browse related reports", "loadReports()", "Open"),
+    ];
+
+    view! {
+        <section id="submission-home-screen" class="app-screen">
+            <p class="eyebrow">"Submission Home"</p>
+            <h2>"Submission Stages"</h2>
+            <p class="muted">
+                "Use this route-level landing section to move between response entry, target selection, review, and related reporting without relying on one long stacked screen."
+            </p>
+            <div class="management-grid">
+                {management_cards
+                    .into_iter()
+                    .map(|(title, description, href, href_label, action, action_label)| {
+                        view! {
+                            <article class="home-card">
+                                <h3>{title}</h3>
+                                <p>{description}</p>
+                                <div class="actions">
+                                    <a class="button-link" href=href>{href_label}</a>
+                                    <button type="button" onclick=action>{action_label}</button>
+                                </div>
+                            </article>
+                        }
+                    })
+                    .collect_view()}
+            </div>
+        </section>
+        <section class="app-screen">
+            <p class="eyebrow">"Submission Home"</p>
+            <h2>"Response Directory"</h2>
+            <p class="muted">
+                "These entry points keep submissions aligned with the application shell by emphasizing common lists and review paths over raw-ID entry."
             </p>
             <div class="directory-grid">
                 {directory_cards

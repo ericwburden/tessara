@@ -135,7 +135,7 @@ try {
         throw "Expected application home HTML to include overview, navigation, and create-menu controls"
     }
     $submissionAppShell = Invoke-RestMethod -Uri "$baseUrl/app/submissions" -TimeoutSec 30
-    if (-not ($submissionAppShell -like "*Submission Workspace*") -or -not ($submissionAppShell -like "*Choose Published Form*") -or -not ($submissionAppShell -like "*Review Submissions*") -or -not ($submissionAppShell -like "*Load App Summary*") -or -not ($submissionAppShell -like "*Start Demo Submission*") -or -not ($submissionAppShell -like "*Current User*") -or -not ($submissionAppShell -like "*Log Out*")) {
+    if (-not ($submissionAppShell -like "*Submission Workspace*") -or -not ($submissionAppShell -like "*Submission Stages*") -or -not ($submissionAppShell -like "*Response Directory*") -or -not ($submissionAppShell -like "*Choose Published Form*") -or -not ($submissionAppShell -like "*Review Submissions*") -or -not ($submissionAppShell -like "*Load App Summary*") -or -not ($submissionAppShell -like "*Start Demo Submission*") -or -not ($submissionAppShell -like "*Current User*") -or -not ($submissionAppShell -like "*Log Out*")) {
         throw "Expected submission application shell HTML to include submission workflow controls"
     }
     $adminAppShell = Invoke-RestMethod -Uri "$baseUrl/app/admin" -TimeoutSec 30
