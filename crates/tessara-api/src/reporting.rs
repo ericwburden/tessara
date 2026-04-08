@@ -586,6 +586,10 @@ pub async fn run_report(
               AND submission_fact.status = 'submitted'
               AND (
                 report_field_bindings.computed_expression IS NOT NULL
+                OR dataset_fields.id IS NOT NULL
+              )
+              AND (
+                report_field_bindings.computed_expression IS NOT NULL
                 OR
                 submission_value_fact.value_text IS NOT NULL
                 OR report_field_bindings.missing_policy::text <> 'exclude_row'
@@ -944,11 +948,11 @@ async fn assert_report_dataset_is_executable(
     .fetch_one(pool)
     .await?;
 
-    if source_count == 1 && executable_source_count == 1 {
+    if source_count > 0 && executable_source_count == source_count {
         Ok(())
     } else {
         Err(ApiError::BadRequest(
-            "dataset-backed reports currently require one form or compatibility-group source with all records".into(),
+            "dataset-backed reports currently require form or compatibility-group sources with all records".into(),
         ))
     }
 }

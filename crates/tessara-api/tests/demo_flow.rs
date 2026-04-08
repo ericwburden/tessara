@@ -464,6 +464,210 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
         compatibility_dataset_table["rows"][0]["values"]["participant_count"],
         "42"
     );
+
+    let follow_up_form = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/forms",
+            &token,
+            Some(json!({
+                "name": "Follow Up Report",
+                "slug": "follow-up-report",
+                "scope_node_type_id": null
+            })),
+        ),
+    )
+    .await;
+    let follow_up_form_id = id_from(&follow_up_form);
+    let follow_up_version_id =
+        create_form_version(app.clone(), &token, follow_up_form_id, "v1").await;
+    let follow_up_section_id =
+        create_form_section(app.clone(), &token, follow_up_version_id, "Main").await;
+    create_number_field(
+        app.clone(),
+        &token,
+        follow_up_version_id,
+        follow_up_section_id,
+        "attendees",
+    )
+    .await;
+    request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            &format!("/api/admin/form-versions/{follow_up_version_id}/publish"),
+            &token,
+            None,
+        ),
+    )
+    .await;
+    let follow_up_draft = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/submissions/drafts",
+            &token,
+            Some(json!({
+                "form_version_id": follow_up_version_id,
+                "node_id": seed["organization_node_id"]
+            })),
+        ),
+    )
+    .await;
+    let follow_up_submission_id = id_from(&follow_up_draft);
+    request_json(
+        app.clone(),
+        authorized_request(
+            "PUT",
+            &format!("/api/submissions/{follow_up_submission_id}/values"),
+            &token,
+            Some(json!({"values": {"attendees": 7}})),
+        ),
+    )
+    .await;
+    request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            &format!("/api/submissions/{follow_up_submission_id}/submit"),
+            &token,
+            None,
+        ),
+    )
+    .await;
+    request_json(
+        app.clone(),
+        authorized_request("POST", "/api/admin/analytics/refresh", &token, None),
+    )
+    .await;
+    let multi_source_dataset = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/datasets",
+            &token,
+            Some(json!({
+                "name": "Program Activity Dataset",
+                "slug": "program-activity-dataset",
+                "grain": "submission",
+                "sources": [
+                    {
+                        "source_alias": "check_in",
+                        "form_id": seed["form_id"],
+                        "compatibility_group_id": null,
+                        "selection_rule": "all"
+                    },
+                    {
+                        "source_alias": "follow_up",
+                        "form_id": follow_up_form_id,
+                        "compatibility_group_id": null,
+                        "selection_rule": "all"
+                    }
+                ],
+                "fields": [
+                    {
+                        "key": "participant_count",
+                        "label": "Participant Count",
+                        "source_alias": "check_in",
+                        "source_field_key": "participants",
+                        "position": 0
+                    },
+                    {
+                        "key": "attendee_count",
+                        "label": "Attendee Count",
+                        "source_alias": "follow_up",
+                        "source_field_key": "attendees",
+                        "position": 1
+                    }
+                ]
+            })),
+        ),
+    )
+    .await;
+    let multi_source_dataset_id = multi_source_dataset["id"]
+        .as_str()
+        .expect("multi-source dataset response should contain id");
+    let multi_source_dataset_table = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/datasets/{multi_source_dataset_id}/table"),
+            &token,
+            None,
+        ),
+    )
+    .await;
+    assert!(
+        multi_source_dataset_table["rows"]
+            .as_array()
+            .expect("multi-source dataset table should include rows")
+            .iter()
+            .any(|row| row["values"]["participant_count"] == "42")
+    );
+    assert!(
+        multi_source_dataset_table["rows"]
+            .as_array()
+            .expect("multi-source dataset table should include rows")
+            .iter()
+            .any(|row| row["values"]["attendee_count"] == "7")
+    );
+    let multi_source_report = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/reports",
+            &token,
+            Some(json!({
+                "name": "Program Activity Report",
+                "form_id": null,
+                "dataset_id": multi_source_dataset_id,
+                "fields": [
+                    {
+                        "logical_key": "participant_count",
+                        "source_field_key": "participant_count",
+                        "computed_expression": null,
+                        "missing_policy": "null"
+                    },
+                    {
+                        "logical_key": "attendee_count",
+                        "source_field_key": "attendee_count",
+                        "computed_expression": null,
+                        "missing_policy": "null"
+                    }
+                ]
+            })),
+        ),
+    )
+    .await;
+    let multi_source_report_id = multi_source_report["id"]
+        .as_str()
+        .expect("multi-source report response should contain id");
+    let multi_source_report_table = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/reports/{multi_source_report_id}/table"),
+            &token,
+            None,
+        ),
+    )
+    .await;
+    assert!(
+        multi_source_report_table["rows"]
+            .as_array()
+            .expect("multi-source report table should include rows")
+            .iter()
+            .any(|row| row["logical_key"] == "participant_count" && row["field_value"] == "42")
+    );
+    assert!(
+        multi_source_report_table["rows"]
+            .as_array()
+            .expect("multi-source report table should include rows")
+            .iter()
+            .any(|row| row["logical_key"] == "attendee_count" && row["field_value"] == "7")
+    );
+
     let dataset_report = request_json(
         app.clone(),
         authorized_request(

@@ -107,12 +107,6 @@ struct ValidatedDatasetSource {
     position: i32,
 }
 
-struct ExecutableDataset {
-    source_alias: String,
-    form_id: Option<Uuid>,
-    compatibility_group_id: Option<Uuid>,
-}
-
 struct ValidatedDatasetField {
     key: String,
     label: String,
@@ -291,14 +285,14 @@ pub async fn get_dataset(
     }))
 }
 
-/// Executes a single-form submission-grain dataset against refreshed analytics projections.
+/// Executes a submission-grain dataset as a union of form or compatibility-group sources.
 pub async fn run_dataset_table(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(dataset_id): Path<Uuid>,
 ) -> ApiResult<Json<DatasetTable>> {
     auth::require_capability(&state.pool, &headers, "datasets:read").await?;
-    let dataset = require_executable_single_form_dataset(&state.pool, dataset_id).await?;
+    require_executable_submission_dataset(&state.pool, dataset_id).await?;
 
     let rows = sqlx::query(
         r#"
@@ -307,29 +301,33 @@ pub async fn run_dataset_table(
             node_dim.node_name,
             dataset_fields.key,
             submission_value_fact.value_text
-        FROM analytics.submission_fact
+        FROM dataset_sources
+        JOIN dataset_fields
+            ON dataset_fields.dataset_id = dataset_sources.dataset_id
+           AND dataset_fields.source_alias = dataset_sources.source_alias
         JOIN analytics.form_version_dim
-            ON form_version_dim.form_version_id = submission_fact.form_version_id
+            ON (
+                dataset_sources.form_id IS NOT NULL
+                AND form_version_dim.form_id = dataset_sources.form_id
+            )
+            OR (
+                dataset_sources.compatibility_group_id IS NOT NULL
+                AND form_version_dim.compatibility_group_id = dataset_sources.compatibility_group_id
+            )
+        JOIN analytics.submission_fact
+            ON submission_fact.form_version_id = form_version_dim.form_version_id
         JOIN analytics.node_dim
             ON node_dim.node_id = submission_fact.node_id
-        JOIN dataset_fields
-            ON dataset_fields.dataset_id = $1
-           AND dataset_fields.source_alias = $2
         LEFT JOIN analytics.submission_value_fact
             ON submission_value_fact.submission_id = submission_fact.submission_id
            AND submission_value_fact.field_key = dataset_fields.source_field_key
-        WHERE (
-            ($3::uuid IS NOT NULL AND form_version_dim.form_id = $3)
-            OR ($4::uuid IS NOT NULL AND form_version_dim.compatibility_group_id = $4)
-        )
+        WHERE dataset_sources.dataset_id = $1
+          AND dataset_sources.selection_rule = 'all'
           AND submission_fact.status = 'submitted'
-        ORDER BY submission_fact.submission_id, dataset_fields.position, dataset_fields.key
+        ORDER BY submission_fact.submission_id, dataset_sources.position, dataset_fields.position, dataset_fields.key
         "#,
     )
     .bind(dataset_id)
-    .bind(&dataset.source_alias)
-    .bind(dataset.form_id)
-    .bind(dataset.compatibility_group_id)
     .fetch_all(&state.pool)
     .await?;
 
@@ -538,10 +536,10 @@ async fn require_source_field_exists(
         })
 }
 
-async fn require_executable_single_form_dataset(
+async fn require_executable_submission_dataset(
     pool: &sqlx::PgPool,
     dataset_id: Uuid,
-) -> ApiResult<ExecutableDataset> {
+) -> ApiResult<()> {
     let dataset_grain: String = sqlx::query_scalar("SELECT grain FROM datasets WHERE id = $1")
         .bind(dataset_id)
         .fetch_optional(pool)
@@ -566,28 +564,29 @@ async fn require_executable_single_form_dataset(
     .fetch_all(pool)
     .await?;
 
-    if source_rows.len() != 1 {
+    if source_rows.is_empty() {
         return Err(ApiError::BadRequest(
-            "dataset table execution currently supports exactly one source".into(),
+            "dataset table execution requires at least one source".into(),
         ));
     }
 
-    let source = &source_rows[0];
-    let form_id: Option<Uuid> = source.try_get("form_id")?;
-    let compatibility_group_id: Option<Uuid> = source.try_get("compatibility_group_id")?;
-    let selection_rule: String = source.try_get("selection_rule")?;
+    for source in source_rows {
+        let form_id: Option<Uuid> = source.try_get("form_id")?;
+        let compatibility_group_id: Option<Uuid> = source.try_get("compatibility_group_id")?;
+        let selection_rule: String = source.try_get("selection_rule")?;
 
-    if selection_rule != DatasetSelectionRule::All.as_str() {
-        return Err(ApiError::BadRequest(
-            "dataset table execution currently supports only sources with all records".into(),
-        ));
-    }
+        if selection_rule != DatasetSelectionRule::All.as_str() {
+            return Err(ApiError::BadRequest(
+                "dataset table execution currently supports only sources with all records".into(),
+            ));
+        }
 
-    if form_id.is_none() && compatibility_group_id.is_none() {
-        return Err(ApiError::BadRequest(
-            "dataset table execution currently requires a form or compatibility-group source"
-                .into(),
-        ));
+        if form_id.is_none() && compatibility_group_id.is_none() {
+            return Err(ApiError::BadRequest(
+                "dataset table execution currently requires form or compatibility-group sources"
+                    .into(),
+            ));
+        }
     }
 
     let field_count: i64 =
@@ -602,11 +601,7 @@ async fn require_executable_single_form_dataset(
         ));
     }
 
-    Ok(ExecutableDataset {
-        source_alias: source.try_get("source_alias")?,
-        form_id,
-        compatibility_group_id,
-    })
+    Ok(())
 }
 
 async fn require_dataset_slug_available(pool: &sqlx::PgPool, slug: &str) -> ApiResult<()> {
