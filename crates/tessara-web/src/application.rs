@@ -4,13 +4,14 @@ use leptos::prelude::*;
 
 use crate::brand::document_head_tags;
 
-/// Builds the application shell document used for human workflow testing.
-pub fn application_shell_html(style: &str, script: &str) -> String {
-    let shell = view! { <HomeApplicationShell/> }.to_html();
-    let brand = document_head_tags(
-        "Tessara Home",
-        "Tessara application home for local replacement workflow testing.",
-    );
+fn render_application_document(
+    title: &str,
+    description: &str,
+    style: &str,
+    script: &str,
+    shell: String,
+) -> String {
+    let brand = document_head_tags(title, description);
 
     format!(
         r#"<!doctype html>
@@ -18,7 +19,7 @@ pub fn application_shell_html(style: &str, script: &str) -> String {
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Tessara Home</title>
+    <title>{title}</title>
     {brand}
     <style>{style}</style>
   </head>
@@ -27,110 +28,104 @@ pub fn application_shell_html(style: &str, script: &str) -> String {
     <script>{script}</script>
   </body>
 </html>"#
+    )
+}
+
+/// Builds the application shell document used for human workflow testing.
+pub fn application_shell_html(style: &str, script: &str) -> String {
+    render_application_document(
+        "Tessara Home",
+        "Tessara application home for local replacement workflow testing.",
+        style,
+        script,
+        view! { <HomeApplicationShell/> }.to_html(),
+    )
+}
+
+/// Builds the organization application shell document.
+pub fn organization_application_shell_html(style: &str, script: &str) -> String {
+    render_application_document(
+        "Tessara Organization",
+        "Tessara organization area for browsing hierarchy and scoped operational records.",
+        style,
+        script,
+        view! { <OrganizationApplicationShell/> }.to_html(),
+    )
+}
+
+/// Builds the forms application shell document.
+pub fn forms_application_shell_html(style: &str, script: &str) -> String {
+    render_application_document(
+        "Tessara Forms",
+        "Tessara forms area for browsing published and configured forms.",
+        style,
+        script,
+        view! { <FormsApplicationShell/> }.to_html(),
+    )
+}
+
+/// Builds the responses application shell document.
+pub fn responses_application_shell_html(style: &str, script: &str) -> String {
+    render_application_document(
+        "Tessara Responses",
+        "Tessara responses area for draft, submitted, and reviewable form workflows.",
+        style,
+        script,
+        view! { <ResponsesApplicationShell/> }.to_html(),
     )
 }
 
 /// Builds the focused submission application shell document.
 pub fn submission_application_shell_html(style: &str, script: &str) -> String {
-    let shell = view! { <SubmissionApplicationShell/> }.to_html();
-    let brand = document_head_tags(
-        "Tessara Submissions",
-        "Tessara submission workspace for local replacement workflow testing.",
-    );
+    responses_application_shell_html(style, script)
+}
 
-    format!(
-        r#"<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Tessara Submissions</title>
-    {brand}
-    <style>{style}</style>
-  </head>
-  <body>
-    {shell}
-    <script>{script}</script>
-  </body>
-</html>"#
+/// Builds the dashboards application shell document.
+pub fn dashboards_application_shell_html(style: &str, script: &str) -> String {
+    render_application_document(
+        "Tessara Dashboards",
+        "Tessara dashboards area for previewing dashboard surfaces and chart-backed views.",
+        style,
+        script,
+        view! { <DashboardsApplicationShell/> }.to_html(),
+    )
+}
+
+/// Builds the focused administration application shell document.
+pub fn administration_application_shell_html(style: &str, script: &str) -> String {
+    render_application_document(
+        "Tessara Administration",
+        "Tessara administration area for internal hierarchy, form, and reporting configuration.",
+        style,
+        script,
+        view! { <AdministrationApplicationShell/> }.to_html(),
     )
 }
 
 /// Builds the focused admin application shell document.
 pub fn admin_application_shell_html(style: &str, script: &str) -> String {
-    let shell = view! { <AdminApplicationShell/> }.to_html();
-    let brand = document_head_tags(
-        "Tessara Admin",
-        "Tessara admin setup workspace for hierarchy, forms, reports, and dashboards.",
-    );
-
-    format!(
-        r#"<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Tessara Admin</title>
-    {brand}
-    <style>{style}</style>
-  </head>
-  <body>
-    {shell}
-    <script>{script}</script>
-  </body>
-</html>"#
-    )
+    administration_application_shell_html(style, script)
 }
 
 /// Builds the focused migration workbench application shell document.
 pub fn migration_application_shell_html(style: &str, script: &str) -> String {
-    let shell = view! { <MigrationApplicationShell/> }.to_html();
-    let brand = document_head_tags(
+    render_application_document(
         "Tessara Migration",
         "Tessara migration workbench for validating and rehearsing legacy imports.",
-    );
-
-    format!(
-        r#"<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Tessara Migration</title>
-    {brand}
-    <style>{style}</style>
-  </head>
-  <body>
-    {shell}
-    <script>{script}</script>
-  </body>
-</html>"#
+        style,
+        script,
+        view! { <MigrationApplicationShell/> }.to_html(),
     )
 }
 
 /// Builds the focused reporting application shell document.
 pub fn reporting_application_shell_html(style: &str, script: &str) -> String {
-    let shell = view! { <ReportingApplicationShell/> }.to_html();
-    let brand = document_head_tags(
-        "Tessara Reporting",
+    render_application_document(
+        "Tessara Reports",
         "Tessara reporting workspace for analytics, table reports, and dashboard previews.",
-    );
-
-    format!(
-        r#"<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Tessara Reporting</title>
-    {brand}
-    <style>{style}</style>
-  </head>
-  <body>
-    {shell}
-    <script>{script}</script>
-  </body>
-</html>"#
+        style,
+        script,
+        view! { <ReportsApplicationShell/> }.to_html(),
     )
 }
 
@@ -140,12 +135,14 @@ fn HomeApplicationShell() -> impl IntoView {
         <main class="shell app-shell">
             <section class="panel hero">
                 <BrandLockup/>
-                <p class="muted">"Tessara Home"</p>
+                <nav class="breadcrumb-trail" aria-label="Breadcrumb">
+                    <span>"Home"</span>
+                </nav>
+                <p class="muted">"Shared Home"</p>
                 <h1>"Application Overview"</h1>
                 <p>
-                    "This shell is the transition from a migration workbench to a real application. "
-                    "It keeps the replacement-oriented routes, but now organizes them around a home screen, "
-                    "persistent navigation, and clear entry points for the main workflows."
+                    "This shared home is the primary entry point for the migration UI catch-up. "
+                    "It exposes the target product areas while keeping the current backend-supported workflows intact."
                 </p>
                 <div class="actions">
                     <button type="button" onclick="login()">"Log In"</button>
@@ -171,30 +168,110 @@ fn HomeApplicationShell() -> impl IntoView {
 }
 
 #[component]
-fn SubmissionApplicationShell() -> impl IntoView {
+fn OrganizationApplicationShell() -> impl IntoView {
     view! {
         <main class="shell app-shell">
             <section class="panel hero">
                 <BrandLockup/>
-                <p class="muted">"Tessara Application"</p>
-                <h1>"Submission Workspace"</h1>
+                <nav class="breadcrumb-trail" aria-label="Breadcrumb">
+                    <a href="/app">"Home"</a>
+                    <span>"Organization"</span>
+                </nav>
+                <p class="muted">"Product Area"</p>
+                <h1>"Organization"</h1>
                 <p>
-                    "This screen is the first replacement-oriented application surface. "
-                    "It uses the same API contracts as the migration workbench, but presents "
-                    "the published-form, draft, save, and submit flow as an application task."
+                    "This area establishes the operational hierarchy surface. It currently bridges into the existing hierarchy and node workflows without introducing unsupported organization behavior."
+                </p>
+                <div class="actions">
+                    <button type="button" onclick="login()">"Log In"</button>
+                    <button type="button" onclick="loadCurrentUser()">"Current User"</button>
+                    <button type="button" onclick="seedDemo()">"Seed Demo"</button>
+                    <button type="button" onclick="loadNodes()">"Load Nodes"</button>
+                    <button type="button" onclick="loadAppSummary()">"Load App Summary"</button>
+                </div>
+            </section>
+            <section class="app-layout">
+                <aside class="panel app-sidebar">
+                    <ApplicationNav active_route="organization"/>
+                    <CreateMenu/>
+                    <SelectionContext/>
+                </aside>
+                <section class="panel app-main">
+                    <OrganizationHomeScreen/>
+                    <OrganizationWorkspaceShell/>
+                    <OutputPanels/>
+                </section>
+            </section>
+        </main>
+    }
+}
+
+#[component]
+fn FormsApplicationShell() -> impl IntoView {
+    view! {
+        <main class="shell app-shell">
+            <section class="panel hero">
+                <BrandLockup/>
+                <nav class="breadcrumb-trail" aria-label="Breadcrumb">
+                    <a href="/app">"Home"</a>
+                    <span>"Forms"</span>
+                </nav>
+                <p class="muted">"Product Area"</p>
+                <h1>"Forms"</h1>
+                <p>
+                    "This area is the canonical entry point for form discovery and lifecycle work. It currently bridges product-facing form access and internal form configuration using existing supported routes."
+                </p>
+                <div class="actions">
+                    <button type="button" onclick="login()">"Log In"</button>
+                    <button type="button" onclick="loadCurrentUser()">"Current User"</button>
+                    <button type="button" onclick="seedDemo()">"Seed Demo"</button>
+                    <button type="button" onclick="loadForms()">"Load Forms"</button>
+                    <button type="button" onclick="loadAppSummary()">"Load App Summary"</button>
+                </div>
+            </section>
+            <section class="app-layout">
+                <aside class="panel app-sidebar">
+                    <ApplicationNav active_route="forms"/>
+                    <CreateMenu/>
+                    <SelectionContext/>
+                </aside>
+                <section class="panel app-main">
+                    <FormsHomeScreen/>
+                    <FormsWorkspaceShell/>
+                    <OutputPanels/>
+                </section>
+            </section>
+        </main>
+    }
+}
+
+#[component]
+fn ResponsesApplicationShell() -> impl IntoView {
+    view! {
+        <main class="shell app-shell">
+            <section class="panel hero">
+                <BrandLockup/>
+                <nav class="breadcrumb-trail" aria-label="Breadcrumb">
+                    <a href="/app">"Home"</a>
+                    <span>"Responses"</span>
+                </nav>
+                <p class="muted">"Product Area"</p>
+                <h1>"Responses"</h1>
+                <p>
+                    "This area handles response entry, drafts, submission, and review. It uses the current backend-supported form-render and submission lifecycle without relying on utility-style navigation."
                 </p>
                 <div class="actions">
                     <button type="button" onclick="login()">"Log In"</button>
                     <button type="button" onclick="loadCurrentUser()">"Current User"</button>
                     <button type="button" onclick="logout()">"Log Out"</button>
                     <button type="button" onclick="seedDemo()">"Seed Demo"</button>
-                    <button type="button" onclick="startDemoSubmissionFlow()">"Start Demo Submission"</button>
+                    <button type="button" onclick="startDemoSubmissionFlow()">"Start Demo Response"</button>
                     <button type="button" onclick="loadAppSummary()">"Load App Summary"</button>
                 </div>
             </section>
             <section class="app-layout">
                 <aside class="panel app-sidebar">
-                    <ApplicationNav active_route="submissions"/>
+                    <ApplicationNav active_route="responses"/>
                     <CreateMenu/>
                     <SelectionContext/>
                 </aside>
@@ -209,16 +286,19 @@ fn SubmissionApplicationShell() -> impl IntoView {
 }
 
 #[component]
-fn AdminApplicationShell() -> impl IntoView {
+fn AdministrationApplicationShell() -> impl IntoView {
     view! {
         <main class="shell app-shell">
             <section class="panel hero">
                 <BrandLockup/>
-                <p class="muted">"Tessara Admin"</p>
-                <h1>"Setup Workspace"</h1>
+                <nav class="breadcrumb-trail" aria-label="Breadcrumb">
+                    <a href="/app">"Home"</a>
+                    <span>"Administration"</span>
+                </nav>
+                <p class="muted">"Internal Area"</p>
+                <h1>"Administration"</h1>
                 <p>
-                    "This screen starts the replacement-oriented admin workflow for configuring "
-                    "hierarchy and form definitions without navigating the full workbench."
+                    "This internal area is for hierarchy, form, and reporting configuration. It remains visible during the migration, but it is intentionally scoped as an operator surface."
                 </p>
                 <div class="actions">
                     <button type="button" onclick="login()">"Log In"</button>
@@ -228,7 +308,7 @@ fn AdminApplicationShell() -> impl IntoView {
             </section>
             <section class="app-layout">
                 <aside class="panel app-sidebar">
-                    <ApplicationNav active_route="admin"/>
+                    <ApplicationNav active_route="administration"/>
                     <CreateMenu/>
                     <SelectionContext/>
                 </aside>
@@ -248,7 +328,11 @@ fn MigrationApplicationShell() -> impl IntoView {
         <main class="shell app-shell">
             <section class="panel hero">
                 <BrandLockup/>
-                <p class="muted">"Tessara Migration"</p>
+                <nav class="breadcrumb-trail" aria-label="Breadcrumb">
+                    <a href="/app">"Home"</a>
+                    <span>"Migration"</span>
+                </nav>
+                <p class="muted">"Internal Area"</p>
                 <h1>"Migration Workbench"</h1>
                 <p>
                     "This operator screen validates and dry-runs representative legacy fixtures "
@@ -282,16 +366,19 @@ fn MigrationApplicationShell() -> impl IntoView {
 }
 
 #[component]
-fn ReportingApplicationShell() -> impl IntoView {
+fn ReportsApplicationShell() -> impl IntoView {
     view! {
         <main class="shell app-shell">
             <section class="panel hero">
                 <BrandLockup/>
-                <p class="muted">"Tessara Reporting"</p>
-                <h1>"Reporting Workspace"</h1>
+                <nav class="breadcrumb-trail" aria-label="Breadcrumb">
+                    <a href="/app">"Home"</a>
+                    <span>"Reports"</span>
+                </nav>
+                <p class="muted">"Product Area"</p>
+                <h1>"Reports"</h1>
                 <p>
-                    "This screen gives testers a focused place to refresh analytics, inspect "
-                    "table reports, and preview dashboards after submissions or import rehearsals."
+                    "This area is the canonical route for report browsing, report execution, and reporting detail traversal. Dashboard preview remains linked here until the dashboard area is split further."
                 </p>
                 <div class="actions">
                     <button type="button" onclick="login()">"Log In"</button>
@@ -311,6 +398,46 @@ fn ReportingApplicationShell() -> impl IntoView {
                 <section class="panel app-main">
                     <ReportingHomeScreen/>
                     <ReportingWorkspaceShell/>
+                    <OutputPanels/>
+                </section>
+            </section>
+        </main>
+    }
+}
+
+#[component]
+fn DashboardsApplicationShell() -> impl IntoView {
+    view! {
+        <main class="shell app-shell">
+            <section class="panel hero">
+                <BrandLockup/>
+                <nav class="breadcrumb-trail" aria-label="Breadcrumb">
+                    <a href="/app">"Home"</a>
+                    <span>"Dashboards"</span>
+                </nav>
+                <p class="muted">"Product Area"</p>
+                <h1>"Dashboards"</h1>
+                <p>
+                    "This area is the dashboard viewing destination. It currently uses the supported dashboard preview path while the broader dashboard product surface catches up."
+                </p>
+                <div class="actions">
+                    <button type="button" onclick="login()">"Log In"</button>
+                    <button type="button" onclick="loadCurrentUser()">"Current User"</button>
+                    <button type="button" onclick="logout()">"Log Out"</button>
+                    <button type="button" onclick="seedDemo()">"Seed Demo"</button>
+                    <button type="button" onclick="openDemoDashboard()">"Open Demo Dashboard"</button>
+                    <button type="button" onclick="loadAppSummary()">"Load App Summary"</button>
+                </div>
+            </section>
+            <section class="app-layout">
+                <aside class="panel app-sidebar">
+                    <ApplicationNav active_route="dashboards"/>
+                    <CreateMenu/>
+                    <SelectionContext/>
+                </aside>
+                <section class="panel app-main">
+                    <DashboardsHomeScreen/>
+                    <DashboardsWorkspaceShell/>
                     <OutputPanels/>
                 </section>
             </section>
@@ -346,48 +473,80 @@ fn SelectionContext() -> impl IntoView {
 
 #[component]
 fn ApplicationNav(active_route: &'static str) -> impl IntoView {
-    let route_links = [
+    let product_links = [
         ("home", "/app", "Home"),
-        ("submissions", "/app/submissions", "Submissions"),
-        ("admin", "/app/admin", "Administration"),
+        ("organization", "/app/organization", "Organization"),
+        ("forms", "/app/forms", "Forms"),
+        ("responses", "/app/responses", "Responses"),
         ("reports", "/app/reports", "Reports"),
+        ("dashboards", "/app/dashboards", "Dashboards"),
+    ];
+    let internal_links = [
+        ("administration", "/app/administration", "Administration"),
         ("migration", "/app/migration", "Migration"),
     ];
 
     view! {
-        <section class="nav-panel">
-            <h2>"Navigation"</h2>
-            <nav class="app-nav" aria-label="Application navigation">
-                {route_links
-                    .into_iter()
-                    .map(|(route_key, href, label)| {
-                        let class_name = if route_key == active_route {
-                            "active"
-                        } else {
-                            ""
-                        };
-                        view! { <a class=class_name href=href>{label}</a> }
-                    })
-                    .collect_view()}
-            </nav>
-        </section>
+        <>
+            <section class="nav-panel">
+                <h2>"Product Areas"</h2>
+                <nav class="app-nav" aria-label="Product navigation">
+                    {product_links
+                        .into_iter()
+                        .map(|(route_key, href, label)| {
+                            let class_name = if route_key == active_route {
+                                "active"
+                            } else {
+                                ""
+                            };
+                            view! { <a class=class_name href=href>{label}</a> }
+                        })
+                        .collect_view()}
+                </nav>
+            </section>
+            <section class="nav-panel nav-panel-secondary">
+                <h2>"Internal Areas"</h2>
+                <nav class="app-nav" aria-label="Internal navigation">
+                    {internal_links
+                        .into_iter()
+                        .map(|(route_key, href, label)| {
+                            let class_name = if route_key == active_route {
+                                "active"
+                            } else {
+                                ""
+                            };
+                            view! { <a class=class_name href=href>{label}</a> }
+                        })
+                        .collect_view()}
+                </nav>
+            </section>
+        </>
     }
 }
 
 #[component]
 fn CreateMenu() -> impl IntoView {
     let create_links = [
-        ("Create Node", "/app/admin#hierarchy-admin-screen"),
-        ("Create Form", "/app/admin#form-admin-screen"),
-        ("Create Dataset", "/app/admin#report-admin-screen"),
-        ("Create Report", "/app/admin#report-admin-screen"),
-        ("Create Aggregation", "/app/admin#report-admin-screen"),
-        ("Create Dashboard", "/app/admin#report-admin-screen"),
+        ("Create Node", "/app/administration#hierarchy-admin-screen"),
+        ("Create Form", "/app/forms#form-admin-screen"),
+        ("Create Dataset", "/app/administration#report-admin-screen"),
+        ("Create Report", "/app/administration#report-admin-screen"),
+        (
+            "Create Aggregation",
+            "/app/administration#report-admin-screen",
+        ),
+        (
+            "Create Dashboard",
+            "/app/administration#report-admin-screen",
+        ),
     ];
 
     view! {
         <section class="nav-panel">
-            <h2>"Create"</h2>
+            <h2>"Create Shortcuts"</h2>
+            <p class="muted">
+                "These links currently open supported creation flows in the internal configuration areas."
+            </p>
             <div class="create-menu">
                 {create_links
                     .into_iter()
@@ -400,24 +559,44 @@ fn CreateMenu() -> impl IntoView {
 
 #[component]
 fn HomeScreen() -> impl IntoView {
-    let workflow_cards = [
+    let product_cards = [
         (
-            "Submissions",
-            "Complete draft, save, submit, and review flows for published forms.",
-            "/app/submissions",
-            "Open Submission Workspace",
+            "Organization",
+            "Browse the configured hierarchy and move toward scoped forms, responses, and dashboards.",
+            "/app/organization",
+            "Open Organization",
         ),
         (
-            "Administration",
-            "Configure hierarchy, forms, datasets, reports, aggregations, charts, and dashboards.",
-            "/app/admin",
-            "Open Administration",
+            "Forms",
+            "Browse form definitions and move into the supported form lifecycle and publishing surfaces.",
+            "/app/forms",
+            "Open Forms",
+        ),
+        (
+            "Responses",
+            "Complete draft, save, submit, and review flows for published forms.",
+            "/app/responses",
+            "Open Responses",
         ),
         (
             "Reports",
-            "Inspect reports, run aggregations, and preview dashboards in one place.",
+            "Inspect reports, run aggregations, and traverse linked reporting assets.",
             "/app/reports",
-            "Open Reporting",
+            "Open Reports",
+        ),
+        (
+            "Dashboards",
+            "Open dashboard previews and chart-backed surfaces without dropping into reporting configuration first.",
+            "/app/dashboards",
+            "Open Dashboards",
+        ),
+    ];
+    let internal_cards = [
+        (
+            "Administration",
+            "Configure hierarchy, forms, datasets, reports, aggregations, charts, and dashboards.",
+            "/app/administration",
+            "Open Administration",
         ),
         (
             "Migration",
@@ -439,15 +618,15 @@ fn HomeScreen() -> impl IntoView {
             <div class="actions">
                 <button type="button" onclick="loadAppSummary()">"Refresh Overview"</button>
                 <button type="button" onclick="seedDemo()">"Seed Demo Data"</button>
-                <button type="button" onclick="startDemoSubmissionFlow()">"Start Demo Submission"</button>
+                <button type="button" onclick="startDemoSubmissionFlow()">"Start Demo Response"</button>
                 <button type="button" onclick="openDemoDashboard()">"Open Demo Dashboard"</button>
             </div>
         </section>
         <section class="app-screen">
             <p class="eyebrow">"Application Home"</p>
-            <h2>"Workflow Areas"</h2>
+            <h2>"Product Areas"</h2>
             <div class="home-grid">
-                {workflow_cards
+                {product_cards
                     .into_iter()
                     .map(|(title, description, href, label)| {
                         view! {
@@ -463,14 +642,163 @@ fn HomeScreen() -> impl IntoView {
         </section>
         <section class="app-screen">
             <p class="eyebrow">"Application Home"</p>
-            <h2>"Navigation Model"</h2>
+            <h2>"Internal Areas"</h2>
+            <div class="home-grid">
+                {internal_cards
+                    .into_iter()
+                    .map(|(title, description, href, label)| {
+                        view! {
+                            <article class="directory-card">
+                                <h3>{title}</h3>
+                                <p>{description}</p>
+                                <a class="button-link" href=href>{label}</a>
+                            </article>
+                        }
+                    })
+                    .collect_view()}
+            </div>
+        </section>
+        <section class="app-screen">
+            <p class="eyebrow">"Application Home"</p>
+            <h2>"Route Map"</h2>
             <ul class="app-list">
-                <li>"Home provides overview, quick starts, and the main creation entry points."</li>
-                <li>"Submissions focuses on published forms, drafts, and response review."</li>
-                <li>"Administration focuses on hierarchy, forms, datasets, reports, and dashboards."</li>
-                <li>"Reports focuses on table output, aggregations, and dashboard preview."</li>
-                <li>"Migration focuses on fixture validation, dry-run, and import rehearsal."</li>
+                <li>"Home provides overview, quick starts, and product-area entry points."</li>
+                <li>"Organization is the operational hierarchy surface."</li>
+                <li>"Forms is the product-facing form area, while configuration stays scoped."</li>
+                <li>"Responses is the current supported route for draft, submit, and review workflows."</li>
+                <li>"Reports and Dashboards are separate viewing destinations, even where they still share underlying reporting support."</li>
+                <li>"Administration and Migration remain visible internal/operator areas."</li>
             </ul>
+        </section>
+    }
+}
+
+#[component]
+fn OrganizationHomeScreen() -> impl IntoView {
+    let management_cards = [
+        (
+            "Browse Nodes",
+            "Load the current runtime nodes and move through the operational hierarchy.",
+            "#hierarchy-admin-screen",
+            "Open Organization Tasks",
+            "loadNodes()",
+            "Load Nodes",
+        ),
+        (
+            "Inspect Node Types",
+            "Review the configured hierarchy structure and labels behind the organization area.",
+            "#hierarchy-admin-screen",
+            "Open Structure",
+            "loadNodeTypes()",
+            "Load Node Types",
+        ),
+        (
+            "Open Forms",
+            "Move from organization browsing into the scoped forms area.",
+            "/app/forms",
+            "Open Forms",
+            "loadForms()",
+            "Load Forms",
+        ),
+        (
+            "Open Dashboards",
+            "Move from organization browsing into current dashboard viewing surfaces.",
+            "/app/dashboards",
+            "Open Dashboards",
+            "loadDashboards()",
+            "Load Dashboards",
+        ),
+    ];
+
+    view! {
+        <section id="organization-home-screen" class="app-screen">
+            <p class="eyebrow">"Organization Home"</p>
+            <h2>"Organization Areas"</h2>
+            <p class="muted">
+                "This route is the structural bridge from the legacy partner/program model into Tessara's configurable hierarchy."
+            </p>
+            <div class="management-grid">
+                {management_cards
+                    .into_iter()
+                    .map(|(title, description, href, href_label, action, action_label)| {
+                        view! {
+                            <article class="home-card">
+                                <h3>{title}</h3>
+                                <p>{description}</p>
+                                <div class="actions">
+                                    <a class="button-link" href=href>{href_label}</a>
+                                    <button type="button" onclick=action>{action_label}</button>
+                                </div>
+                            </article>
+                        }
+                    })
+                    .collect_view()}
+            </div>
+        </section>
+    }
+}
+
+#[component]
+fn FormsHomeScreen() -> impl IntoView {
+    let management_cards = [
+        (
+            "Browse Forms",
+            "Open the current forms directory and inspect configured forms and versions.",
+            "#form-admin-screen",
+            "Open Form Tasks",
+            "loadForms()",
+            "Load Forms",
+        ),
+        (
+            "Published Response Path",
+            "Move into the response workflow for published form completion and review.",
+            "/app/responses",
+            "Open Responses",
+            "loadForms()",
+            "Load Forms",
+        ),
+        (
+            "Open Organization",
+            "Return to the organization area for scoped navigation into forms.",
+            "/app/organization",
+            "Open Organization",
+            "loadNodeTypes()",
+            "Load Node Types",
+        ),
+        (
+            "Open Administration",
+            "Use the internal configuration surface for full hierarchy and reporting setup.",
+            "/app/administration",
+            "Open Administration",
+            "loadForms()",
+            "Load Forms",
+        ),
+    ];
+
+    view! {
+        <section id="forms-home-screen" class="app-screen">
+            <p class="eyebrow">"Forms Home"</p>
+            <h2>"Forms Areas"</h2>
+            <p class="muted">
+                "This route is the product-facing entry into form discovery, version awareness, and supported form lifecycle tasks."
+            </p>
+            <div class="management-grid">
+                {management_cards
+                    .into_iter()
+                    .map(|(title, description, href, href_label, action, action_label)| {
+                        view! {
+                            <article class="home-card">
+                                <h3>{title}</h3>
+                                <p>{description}</p>
+                                <div class="actions">
+                                    <a class="button-link" href=href>{href_label}</a>
+                                    <button type="button" onclick=action>{action_label}</button>
+                                </div>
+                            </article>
+                        }
+                    })
+                    .collect_view()}
+            </div>
         </section>
     }
 }
@@ -670,8 +998,8 @@ fn SubmissionHomeScreen() -> impl IntoView {
 
     view! {
         <section id="submission-home-screen" class="app-screen">
-            <p class="eyebrow">"Submission Home"</p>
-            <h2>"Submission Stages"</h2>
+            <p class="eyebrow">"Responses Home"</p>
+            <h2>"Response Stages"</h2>
             <p class="muted">
                 "Use this route-level landing section to move between response entry, target selection, review, and related reporting without relying on one long stacked screen."
             </p>
@@ -694,7 +1022,7 @@ fn SubmissionHomeScreen() -> impl IntoView {
             </div>
         </section>
         <section class="app-screen">
-            <p class="eyebrow">"Submission Home"</p>
+            <p class="eyebrow">"Responses Home"</p>
             <h2>"Response Directory"</h2>
             <p class="muted">
                 "These entry points keep submissions aligned with the application shell by emphasizing common lists and review paths over raw-ID entry."
@@ -712,6 +1040,162 @@ fn SubmissionHomeScreen() -> impl IntoView {
                         }
                     })
                     .collect_view()}
+            </div>
+        </section>
+    }
+}
+
+#[component]
+fn OrganizationWorkspaceShell() -> impl IntoView {
+    let queue_cards = [
+        (
+            "Runtime Nodes",
+            "Browse current nodes and inspect operational hierarchy records.",
+            "loadNodes()",
+            "Open Nodes",
+        ),
+        (
+            "Structure Types",
+            "Review node types, relationships, and metadata definitions.",
+            "loadNodeTypes()",
+            "Open Structure",
+        ),
+        (
+            "Forms Bridge",
+            "Move from organization structure into the current forms area.",
+            "",
+            "Open Forms",
+        ),
+        (
+            "Dashboards Bridge",
+            "Move from organization structure into the current dashboards area.",
+            "",
+            "Open Dashboards",
+        ),
+    ];
+
+    view! {
+        <section class="app-screen organization-workspace-shell">
+            <p class="eyebrow">"Organization Workspace"</p>
+            <h2>"Organization Console"</h2>
+            <p class="muted">
+                "This route is the first organization-area bridge. It keeps hierarchy work discoverable now while later sprints replace more of the internal builder feel with directory and detail flows."
+            </p>
+            <div class="workspace-grid">
+                <aside class="workspace-rail">
+                    <section class="workspace-panel">
+                        <h3>"Organization Queues"</h3>
+                        <div class="workspace-card-grid">
+                            {queue_cards
+                                .into_iter()
+                                .map(|(title, description, action, label)| {
+                                    let action_view = if action.is_empty() {
+                                        if label == "Open Forms" {
+                                            view! { <a class="button-link" href="/app/forms">{label}</a> }.into_any()
+                                        } else {
+                                            view! { <a class="button-link" href="/app/dashboards">{label}</a> }.into_any()
+                                        }
+                                    } else {
+                                        view! { <button type="button" onclick=action>{label}</button> }.into_any()
+                                    };
+                                    view! {
+                                        <article class="workspace-card">
+                                            <h4>{title}</h4>
+                                            <p>{description}</p>
+                                            {action_view}
+                                        </article>
+                                    }
+                                })
+                                .collect_view()}
+                        </div>
+                    </section>
+                    <section class="workspace-panel">
+                        <h3>"Organization Path"</h3>
+                        <ol class="app-list">
+                            <li>"Browse nodes and hierarchy structure."</li>
+                            <li>"Inspect the configured labels and relationships."</li>
+                            <li>"Move into forms, responses, or dashboards from the scoped structure."</li>
+                        </ol>
+                    </section>
+                </aside>
+                <div class="workspace-stack">
+                    <HierarchyAdminScreen/>
+                </div>
+            </div>
+        </section>
+    }
+}
+
+#[component]
+fn FormsWorkspaceShell() -> impl IntoView {
+    let queue_cards = [
+        (
+            "Forms Directory",
+            "Browse current form records and inspect definitions.",
+            "loadForms()",
+            "Open Forms",
+        ),
+        (
+            "Response Bridge",
+            "Move from form discovery into the supported responses area.",
+            "",
+            "Open Responses",
+        ),
+        (
+            "Organization Bridge",
+            "Return to the organization surface for scoped form navigation.",
+            "",
+            "Open Organization",
+        ),
+    ];
+
+    view! {
+        <section class="app-screen forms-workspace-shell">
+            <p class="eyebrow">"Forms Workspace"</p>
+            <h2>"Forms Console"</h2>
+            <p class="muted">
+                "This route is the current bridge between product-facing form discovery and the supported internal form lifecycle tasks."
+            </p>
+            <div class="workspace-grid">
+                <aside class="workspace-rail">
+                    <section class="workspace-panel">
+                        <h3>"Forms Queues"</h3>
+                        <div class="workspace-card-grid">
+                            {queue_cards
+                                .into_iter()
+                                .map(|(title, description, action, label)| {
+                                    let action_view = if action.is_empty() {
+                                        if label == "Open Responses" {
+                                            view! { <a class="button-link" href="/app/responses">{label}</a> }.into_any()
+                                        } else {
+                                            view! { <a class="button-link" href="/app/organization">{label}</a> }.into_any()
+                                        }
+                                    } else {
+                                        view! { <button type="button" onclick=action>{label}</button> }.into_any()
+                                    };
+                                    view! {
+                                        <article class="workspace-card">
+                                            <h4>{title}</h4>
+                                            <p>{description}</p>
+                                            {action_view}
+                                        </article>
+                                    }
+                                })
+                                .collect_view()}
+                        </div>
+                    </section>
+                    <section class="workspace-panel">
+                        <h3>"Forms Path"</h3>
+                        <ol class="app-list">
+                            <li>"Browse or inspect the form."</li>
+                            <li>"Choose the relevant version or draft."</li>
+                            <li>"Move into response entry or internal configuration as needed."</li>
+                        </ol>
+                    </section>
+                </aside>
+                <div class="workspace-stack">
+                    <FormAdminScreen/>
+                </div>
             </div>
         </section>
     }
@@ -748,7 +1232,7 @@ fn SubmissionWorkspaceShell() -> impl IntoView {
 
     view! {
         <section class="app-screen submission-workspace-shell">
-            <p class="eyebrow">"Submission Workspace"</p>
+            <p class="eyebrow">"Responses Workspace"</p>
             <h2>"Response Console"</h2>
             <p class="muted">
                 "This route now acts as an application workspace: the left side focuses on queues and entry points, while the right side carries the active response, review, and reporting surfaces."
@@ -945,8 +1429,8 @@ fn ReportingHomeScreen() -> impl IntoView {
 
     view! {
         <section id="reporting-home-screen" class="app-screen">
-            <p class="eyebrow">"Reporting Home"</p>
-            <h2>"Reporting Areas"</h2>
+            <p class="eyebrow">"Reports Home"</p>
+            <h2>"Report Areas"</h2>
             <p class="muted">
                 "Use this reporting landing section to move between datasets, reports, aggregations, and dashboards without dropping immediately into builder-style controls."
             </p>
@@ -969,7 +1453,7 @@ fn ReportingHomeScreen() -> impl IntoView {
             </div>
         </section>
         <section class="app-screen">
-            <p class="eyebrow">"Reporting Home"</p>
+            <p class="eyebrow">"Reports Home"</p>
             <h2>"Reporting Directory"</h2>
             <p class="muted">
                 "These entry points start to replace workbench-only reporting flows with clearer entity lists inside the application shell."
@@ -983,6 +1467,71 @@ fn ReportingHomeScreen() -> impl IntoView {
                                 <h3>{title}</h3>
                                 <p>{description}</p>
                                 <button type="button" onclick=action>{label}</button>
+                            </article>
+                        }
+                    })
+                    .collect_view()}
+            </div>
+        </section>
+    }
+}
+
+#[component]
+fn DashboardsHomeScreen() -> impl IntoView {
+    let management_cards = [
+        (
+            "Open Dashboards",
+            "Browse dashboard surfaces and inspect current component previews.",
+            "#dashboard-preview-screen",
+            "Open Dashboard Viewer",
+            "loadDashboards()",
+            "Load Dashboards",
+        ),
+        (
+            "Open Charts",
+            "Inspect chart definitions that drive dashboard components.",
+            "#dashboard-preview-screen",
+            "Open Charts",
+            "loadCharts()",
+            "Load Charts",
+        ),
+        (
+            "Open Reports",
+            "Move into the reports area for related report and aggregation detail.",
+            "/app/reports",
+            "Open Reports",
+            "loadReports()",
+            "Load Reports",
+        ),
+        (
+            "Open Demo Dashboard",
+            "Jump directly into the seeded dashboard preview path.",
+            "#dashboard-preview-screen",
+            "Open Demo Preview",
+            "openDemoDashboard()",
+            "Open Demo Dashboard",
+        ),
+    ];
+
+    view! {
+        <section id="dashboards-home-screen" class="app-screen">
+            <p class="eyebrow">"Dashboards Home"</p>
+            <h2>"Dashboard Areas"</h2>
+            <p class="muted">
+                "This route separates dashboard viewing from the broader reporting route while still using the current supported preview path."
+            </p>
+            <div class="management-grid">
+                {management_cards
+                    .into_iter()
+                    .map(|(title, description, href, href_label, action, action_label)| {
+                        view! {
+                            <article class="home-card">
+                                <h3>{title}</h3>
+                                <p>{description}</p>
+                                <div class="actions">
+                                    <a class="button-link" href=href>{href_label}</a>
+                                    <button type="button" onclick=action>{action_label}</button>
+                                </div>
                             </article>
                         }
                     })
@@ -1023,7 +1572,7 @@ fn ReportingWorkspaceShell() -> impl IntoView {
 
     view! {
         <section class="app-screen reporting-workspace-shell">
-            <p class="eyebrow">"Reporting Workspace"</p>
+            <p class="eyebrow">"Reports Workspace"</p>
             <h2>"Insight Console"</h2>
             <p class="muted">
                 "This route now acts more like a reporting workspace: the rail keeps the reporting queues visible while the main area focuses on report execution and dashboard preview."
@@ -1059,6 +1608,77 @@ fn ReportingWorkspaceShell() -> impl IntoView {
                 </aside>
                 <div class="workspace-stack">
                     <ReportRunnerScreen/>
+                    <DashboardPreviewScreen/>
+                </div>
+            </div>
+        </section>
+    }
+}
+
+#[component]
+fn DashboardsWorkspaceShell() -> impl IntoView {
+    let queue_cards = [
+        (
+            "Dashboards",
+            "Open dashboard previews and current component layouts.",
+            "loadDashboards()",
+            "Open Dashboards",
+        ),
+        (
+            "Charts",
+            "Inspect chart definitions used by current dashboard components.",
+            "loadCharts()",
+            "Open Charts",
+        ),
+        (
+            "Reports Bridge",
+            "Move to the reports area for report and aggregation detail.",
+            "",
+            "Open Reports",
+        ),
+    ];
+
+    view! {
+        <section class="app-screen dashboards-workspace-shell">
+            <p class="eyebrow">"Dashboards Workspace"</p>
+            <h2>"Dashboard Console"</h2>
+            <p class="muted">
+                "This route keeps dashboard viewing separate from the broader reports area while the dashboard product surface catches up."
+            </p>
+            <div class="workspace-grid">
+                <aside class="workspace-rail">
+                    <section class="workspace-panel">
+                        <h3>"Dashboard Queues"</h3>
+                        <div class="workspace-card-grid">
+                            {queue_cards
+                                .into_iter()
+                                .map(|(title, description, action, label)| {
+                                    let action_view = if action.is_empty() {
+                                        view! { <a class="button-link" href="/app/reports">{label}</a> }.into_any()
+                                    } else {
+                                        view! { <button type="button" onclick=action>{label}</button> }.into_any()
+                                    };
+                                    view! {
+                                        <article class="workspace-card">
+                                            <h4>{title}</h4>
+                                            <p>{description}</p>
+                                            {action_view}
+                                        </article>
+                                    }
+                                })
+                                .collect_view()}
+                        </div>
+                    </section>
+                    <section class="workspace-panel">
+                        <h3>"Dashboard Path"</h3>
+                        <ol class="app-list">
+                            <li>"Choose the dashboard."</li>
+                            <li>"Inspect the current chart-backed components."</li>
+                            <li>"Traverse into reports when deeper source detail is needed."</li>
+                        </ol>
+                    </section>
+                </aside>
+                <div class="workspace-stack">
                     <DashboardPreviewScreen/>
                 </div>
             </div>

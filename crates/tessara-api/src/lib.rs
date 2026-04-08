@@ -45,8 +45,24 @@ pub fn router(state: AppState) -> Router {
             get(|| async { Html(tessara_web::application_shell_html()) }),
         )
         .route(
+            "/app/organization",
+            get(|| async { Html(tessara_web::organization_application_shell_html()) }),
+        )
+        .route(
+            "/app/forms",
+            get(|| async { Html(tessara_web::forms_application_shell_html()) }),
+        )
+        .route(
+            "/app/responses",
+            get(|| async { Html(tessara_web::responses_application_shell_html()) }),
+        )
+        .route(
             "/app/submissions",
             get(|| async { Html(tessara_web::submission_application_shell_html()) }),
+        )
+        .route(
+            "/app/administration",
+            get(|| async { Html(tessara_web::administration_application_shell_html()) }),
         )
         .route(
             "/app/admin",
@@ -55,6 +71,10 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/app/reports",
             get(|| async { Html(tessara_web::reporting_application_shell_html()) }),
+        )
+        .route(
+            "/app/dashboards",
+            get(|| async { Html(tessara_web::dashboards_application_shell_html()) }),
         )
         .route(
             "/app/migration",

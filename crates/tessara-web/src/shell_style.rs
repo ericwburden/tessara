@@ -99,6 +99,10 @@ pub const STYLE: &str = r#"
         display: grid;
         gap: 10px;
       }
+      .nav-panel-secondary {
+        border-top: 1px solid var(--neutral);
+        padding-top: 14px;
+      }
       .app-nav {
         display: grid;
         gap: 8px;
@@ -135,6 +139,29 @@ pub const STYLE: &str = r#"
       .create-link:hover {
         border-color: var(--teal);
         background: var(--teal-soft);
+      }
+      .breadcrumb-trail {
+        align-items: center;
+        color: var(--slate-mid);
+        display: flex;
+        flex-wrap: wrap;
+        font-size: 0.9rem;
+        gap: 10px;
+        margin-bottom: 14px;
+      }
+      .breadcrumb-trail span + span::before,
+      .breadcrumb-trail a + span::before {
+        color: var(--slate-mid);
+        content: "/";
+        margin-right: 10px;
+      }
+      .breadcrumb-trail a {
+        color: #0F766E;
+        font-weight: 700;
+        text-decoration: none;
+      }
+      .breadcrumb-trail a:hover {
+        text-decoration: underline;
       }
       .selection-panel {
         display: grid;

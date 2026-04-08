@@ -30,12 +30,43 @@ pub fn application_shell_html() -> String {
     application::application_shell_html(shell_style::STYLE, app_script::APPLICATION_SCRIPT)
 }
 
+/// Returns the HTML used for the organization application shell.
+pub fn organization_application_shell_html() -> String {
+    application::organization_application_shell_html(shell_style::STYLE, shell_script::SCRIPT)
+}
+
+/// Returns the HTML used for the forms application shell.
+pub fn forms_application_shell_html() -> String {
+    application::forms_application_shell_html(shell_style::STYLE, shell_script::SCRIPT)
+}
+
+/// Returns the HTML used for the responses application shell.
+pub fn responses_application_shell_html() -> String {
+    application::responses_application_shell_html(
+        shell_style::STYLE,
+        app_script::APPLICATION_SCRIPT,
+    )
+}
+
 /// Returns the HTML used for the submission-focused application shell.
 pub fn submission_application_shell_html() -> String {
     application::submission_application_shell_html(
         shell_style::STYLE,
         app_script::APPLICATION_SCRIPT,
     )
+}
+
+/// Returns the HTML used for the dashboards application shell.
+pub fn dashboards_application_shell_html() -> String {
+    application::dashboards_application_shell_html(
+        shell_style::STYLE,
+        app_script::APPLICATION_SCRIPT,
+    )
+}
+
+/// Returns the HTML used for focused administration application screens.
+pub fn administration_application_shell_html() -> String {
+    application::administration_application_shell_html(shell_style::STYLE, shell_script::SCRIPT)
 }
 
 /// Returns the HTML used for focused admin application screens.
@@ -67,9 +98,10 @@ pub fn svg_asset(name: &str) -> Option<&'static str> {
 #[cfg(test)]
 mod tests {
     use super::{
-        admin_application_shell_html, admin_shell_html, application_shell_html,
-        migration_application_shell_html, reporting_application_shell_html,
-        submission_application_shell_html,
+        admin_shell_html, administration_application_shell_html, application_shell_html,
+        dashboards_application_shell_html, forms_application_shell_html,
+        migration_application_shell_html, organization_application_shell_html,
+        reporting_application_shell_html, submission_application_shell_html,
     };
 
     #[test]
@@ -199,19 +231,24 @@ mod tests {
         assert!(html.contains("Application Overview"));
         assert!(html.contains("Welcome to Tessara"));
         assert!(html.contains("Home"));
-        assert!(html.contains("/app/submissions"));
-        assert!(html.contains("/app/admin"));
+        assert!(html.contains("/app/organization"));
+        assert!(html.contains("/app/forms"));
+        assert!(html.contains("/app/responses"));
+        assert!(html.contains("/app/administration"));
         assert!(html.contains("/app/reports"));
+        assert!(html.contains("/app/dashboards"));
         assert!(html.contains("/app/migration"));
+        assert!(html.contains("Product Areas"));
+        assert!(html.contains("Internal Areas"));
         assert!(html.contains("Create Node"));
         assert!(html.contains("Create Form"));
         assert!(html.contains("Create Dataset"));
         assert!(html.contains("Create Report"));
         assert!(html.contains("Create Aggregation"));
         assert!(html.contains("Create Dashboard"));
-        assert!(html.contains("Workflow Areas"));
+        assert!(html.contains("Create Shortcuts"));
         assert!(html.contains("Refresh Overview"));
-        assert!(html.contains("Start Demo Submission"));
+        assert!(html.contains("Start Demo Response"));
         assert!(html.contains("Open Demo Dashboard"));
         assert!(html.contains("Selection Context"));
         assert!(html.contains("selection-state"));
@@ -223,13 +260,13 @@ mod tests {
     fn submission_application_shell_exposes_submission_workflow_screen() {
         let html = submission_application_shell_html();
 
-        assert!(html.contains("Submission Workspace"));
+        assert!(html.contains("Responses"));
         assert!(html.contains("/app"));
-        assert!(html.contains("/app/submissions"));
+        assert!(html.contains("/app/responses"));
         assert!(html.contains("Response Console"));
         assert!(html.contains("Response Queues"));
         assert!(html.contains("Guided Path"));
-        assert!(html.contains("Submission Stages"));
+        assert!(html.contains("Response Stages"));
         assert!(html.contains("Response Directory"));
         assert!(html.contains("Open Response Entry"));
         assert!(html.contains("Open Target Selection"));
@@ -254,7 +291,7 @@ mod tests {
         assert!(html.contains("Submit"));
         assert!(html.contains("Discard Draft"));
         assert!(html.contains("Clear Response Context"));
-        assert!(html.contains("Start Demo Submission"));
+        assert!(html.contains("Start Demo Response"));
         assert!(html.contains("startDemoSubmissionFlow"));
         assert!(html.contains("Review Submissions"));
         assert!(html.contains("Show Drafts"));
@@ -293,12 +330,35 @@ mod tests {
     }
 
     #[test]
-    fn admin_application_shell_exposes_setup_screens() {
-        let html = admin_application_shell_html();
+    fn organization_and_forms_shells_expose_product_area_routes() {
+        let organization = organization_application_shell_html();
+        let forms = forms_application_shell_html();
 
-        assert!(html.contains("Setup Workspace"));
+        assert!(organization.contains("Organization"));
+        assert!(organization.contains("/app/organization"));
+        assert!(organization.contains("Organization Areas"));
+        assert!(organization.contains("Organization Console"));
+        assert!(organization.contains("Load Nodes"));
+        assert!(organization.contains("Load Node Types"));
+        assert!(organization.contains("/app/forms"));
+        assert!(organization.contains("/app/dashboards"));
+
+        assert!(forms.contains("Forms"));
+        assert!(forms.contains("/app/forms"));
+        assert!(forms.contains("Forms Areas"));
+        assert!(forms.contains("Forms Console"));
+        assert!(forms.contains("Load Forms"));
+        assert!(forms.contains("/app/responses"));
+        assert!(forms.contains("/app/organization"));
+    }
+
+    #[test]
+    fn admin_application_shell_exposes_setup_screens() {
+        let html = administration_application_shell_html();
+
+        assert!(html.contains("Administration"));
         assert!(html.contains("/app"));
-        assert!(html.contains("/app/submissions"));
+        assert!(html.contains("/app/administration"));
         assert!(html.contains("Configuration Console"));
         assert!(html.contains("Management Queues"));
         assert!(html.contains("Admin Path"));
@@ -394,8 +454,8 @@ mod tests {
         assert!(html.contains("Refresh and Run Report"));
         assert!(html.contains("Refresh and Reopen Dashboard"));
         assert!(html.contains("Refresh and Open Dashboard"));
-        assert!(html.contains("Navigation"));
-        assert!(html.contains("Create"));
+        assert!(html.contains("Product Areas"));
+        assert!(html.contains("Create Shortcuts"));
         assert!(html.contains("Load App Summary"));
         assert!(html.contains("selection-state"));
     }
@@ -406,7 +466,7 @@ mod tests {
 
         assert!(html.contains("Migration Workbench"));
         assert!(html.contains("/app"));
-        assert!(html.contains("/app/submissions"));
+        assert!(html.contains("/app/responses"));
         assert!(html.contains("Migration Stages"));
         assert!(html.contains("Migration Directory"));
         assert!(html.contains("Open Fixture Intake"));
@@ -426,8 +486,8 @@ mod tests {
         assert!(html.contains("/api/admin/legacy-fixtures/validate"));
         assert!(html.contains("/api/admin/legacy-fixtures/dry-run"));
         assert!(html.contains("/api/admin/legacy-fixtures/import"));
-        assert!(html.contains("Navigation"));
-        assert!(html.contains("Create"));
+        assert!(html.contains("Product Areas"));
+        assert!(html.contains("Create Shortcuts"));
         assert!(html.contains("Load App Summary"));
         assert!(html.contains("Current User"));
         assert!(html.contains("Log Out"));
@@ -437,13 +497,14 @@ mod tests {
     fn reporting_application_shell_exposes_report_dashboard_workflow() {
         let html = reporting_application_shell_html();
 
-        assert!(html.contains("Reporting Workspace"));
+        assert!(html.contains("Reports"));
         assert!(html.contains("/app"));
-        assert!(html.contains("/app/submissions"));
+        assert!(html.contains("/app/reports"));
+        assert!(html.contains("/app/dashboards"));
         assert!(html.contains("Insight Console"));
         assert!(html.contains("Reporting Queues"));
         assert!(html.contains("Reporting Path"));
-        assert!(html.contains("Reporting Areas"));
+        assert!(html.contains("Report Areas"));
         assert!(html.contains("Reporting Directory"));
         assert!(html.contains("Open Dataset Workflows"));
         assert!(html.contains("Open Report Runner"));
@@ -493,7 +554,20 @@ mod tests {
         assert!(html.contains("Chart Definition"));
         assert!(html.contains("Open Linked Report"));
         assert!(html.contains("Open Linked Aggregation"));
-        assert!(html.contains("Navigation"));
-        assert!(html.contains("Create"));
+        assert!(html.contains("Product Areas"));
+        assert!(html.contains("Create Shortcuts"));
+    }
+
+    #[test]
+    fn dashboard_application_shell_exposes_dashboard_workflow() {
+        let html = dashboards_application_shell_html();
+
+        assert!(html.contains("Dashboards"));
+        assert!(html.contains("/app/dashboards"));
+        assert!(html.contains("Dashboard Areas"));
+        assert!(html.contains("Dashboard Console"));
+        assert!(html.contains("Dashboard Preview"));
+        assert!(html.contains("Open Demo Dashboard"));
+        assert!(html.contains("/app/reports"));
     }
 }
