@@ -1481,7 +1481,8 @@ pub const SCRIPT: &str = r#"
           "dataset-source-field-key": sourceFieldKey,
           "dataset-field-type": fieldType,
           "report-logical-key": key,
-          "report-source-field-key": sourceFieldKey
+          "report-source-field-key": sourceFieldKey,
+          "report-computed-expression": ""
         });
       }
 
@@ -1493,7 +1494,8 @@ pub const SCRIPT: &str = r#"
           const bindingsJson = inputValue("report-fields-json");
           const fields = bindingsJson ? JSON.parse(bindingsJson) : [{
             logical_key: inputValue("report-logical-key"),
-            source_field_key: inputValue("report-source-field-key"),
+            source_field_key: inputValue("report-computed-expression") ? null : inputValue("report-source-field-key"),
+            computed_expression: inputValue("report-computed-expression") || null,
             missing_policy: inputValue("report-missing-policy") || "null"
           }];
           const payload = await request("/api/admin/reports", {
@@ -1524,7 +1526,8 @@ pub const SCRIPT: &str = r#"
           const bindingsJson = inputValue("report-fields-json");
           const fields = bindingsJson ? JSON.parse(bindingsJson) : [{
             logical_key: inputValue("report-logical-key"),
-            source_field_key: inputValue("report-source-field-key"),
+            source_field_key: inputValue("report-computed-expression") ? null : inputValue("report-source-field-key"),
+            computed_expression: inputValue("report-computed-expression") || null,
             missing_policy: inputValue("report-missing-policy") || "null"
           }];
           const payload = await request(`/api/admin/reports/${reportId}`, {
@@ -1566,11 +1569,12 @@ pub const SCRIPT: &str = r#"
         try {
           const binding = {
             logical_key: inputValue("report-logical-key"),
-            source_field_key: inputValue("report-source-field-key"),
+            source_field_key: inputValue("report-computed-expression") ? null : inputValue("report-source-field-key"),
+            computed_expression: inputValue("report-computed-expression") || null,
             missing_policy: inputValue("report-missing-policy") || "null"
           };
-          if (!binding.logical_key || !binding.source_field_key) {
-            throw new Error("Select or enter a report logical key and source field key first.");
+          if (!binding.logical_key || (!binding.source_field_key && !binding.computed_expression)) {
+            throw new Error("Select or enter a report logical key plus a source field key or computed expression first.");
           }
           reportBindings = reportBindings.filter((existing) => existing.logical_key !== binding.logical_key);
           reportBindings.push(binding);
@@ -1602,13 +1606,13 @@ pub const SCRIPT: &str = r#"
       function renderReportBindings() {
         show({ report_bindings: reportBindings });
         showCards(reportBindings, (binding) => `
-          <article class="card">
-            <h3>${escapeHtml(binding.logical_key)}</h3>
-            <p>${escapeHtml(binding.source_field_key)} with ${escapeHtml(binding.missing_policy)}</p>
-            <button type="button" onclick="useReportBinding('${escapeHtml(binding.logical_key)}', '${escapeHtml(binding.source_field_key)}', '${escapeHtml(binding.missing_policy)}')">Use Binding</button>
-            <button type="button" onclick="useReportBinding('${escapeHtml(binding.logical_key)}', '${escapeHtml(binding.source_field_key)}', '${escapeHtml(binding.missing_policy)}'); removeSelectedReportBinding()">Remove Binding</button>
-          </article>
-        `);
+            <article class="card">
+              <h3>${escapeHtml(binding.logical_key)}</h3>
+              <p>${escapeHtml(binding.source_field_key || binding.computed_expression)} with ${escapeHtml(binding.missing_policy)}</p>
+              <button type="button" onclick="useReportBinding('${escapeHtml(binding.logical_key)}', '${escapeHtml(binding.source_field_key || "")}', '${escapeHtml(binding.missing_policy)}', '${escapeHtml(binding.computed_expression || "")}')">Use Binding</button>
+              <button type="button" onclick="useReportBinding('${escapeHtml(binding.logical_key)}', '${escapeHtml(binding.source_field_key || "")}', '${escapeHtml(binding.missing_policy)}', '${escapeHtml(binding.computed_expression || "")}'); removeSelectedReportBinding()">Remove Binding</button>
+            </article>
+          `);
       }
 
       async function validateLegacyFixture() {
@@ -1975,9 +1979,10 @@ pub const SCRIPT: &str = r#"
         if (payload.dataset_id) useDataset(payload.dataset_id, payload.dataset_name || payload.dataset_id);
         document.getElementById("report-fields-json").value = JSON.stringify(payload.bindings.map((binding) => ({
           logical_key: binding.logical_key,
-          source_field_key: binding.source_field_key,
-          missing_policy: binding.missing_policy
-        })));
+            source_field_key: binding.source_field_key,
+            computed_expression: binding.computed_expression,
+            missing_policy: binding.missing_policy
+          })));
         reportBindings = payload.bindings.map((binding) => ({
           logical_key: binding.logical_key,
           source_field_key: binding.source_field_key,
@@ -1995,18 +2000,19 @@ pub const SCRIPT: &str = r#"
           ${payload.bindings.map((binding) => `
             <article class="card">
               <h3>${escapeHtml(binding.logical_key)}</h3>
-              <p>${escapeHtml(binding.source_field_key)} with ${escapeHtml(binding.missing_policy)}</p>
-              <button type="button" onclick="useReportBinding('${escapeHtml(binding.logical_key)}', '${escapeHtml(binding.source_field_key)}', '${escapeHtml(binding.missing_policy)}')">Use Binding</button>
-              <button type="button" onclick="useReportBinding('${escapeHtml(binding.logical_key)}', '${escapeHtml(binding.source_field_key)}', '${escapeHtml(binding.missing_policy)}'); removeSelectedReportBinding()">Remove Binding</button>
+              <p>${escapeHtml(binding.source_field_key || binding.computed_expression)} with ${escapeHtml(binding.missing_policy)}</p>
+              <button type="button" onclick="useReportBinding('${escapeHtml(binding.logical_key)}', '${escapeHtml(binding.source_field_key || "")}', '${escapeHtml(binding.missing_policy)}', '${escapeHtml(binding.computed_expression || "")}')">Use Binding</button>
+              <button type="button" onclick="useReportBinding('${escapeHtml(binding.logical_key)}', '${escapeHtml(binding.source_field_key || "")}', '${escapeHtml(binding.missing_policy)}', '${escapeHtml(binding.computed_expression || "")}'); removeSelectedReportBinding()">Remove Binding</button>
             </article>
           `).join("") || '<p class="muted">No report bindings configured.</p>'}
         `;
       }
 
-      function useReportBinding(logicalKey, sourceFieldKey, missingPolicy) {
-        selectRecord("report binding", logicalKey, sourceFieldKey, {
+      function useReportBinding(logicalKey, sourceFieldKey, missingPolicy, computedExpression = "") {
+        selectRecord("report binding", logicalKey, sourceFieldKey || computedExpression, {
           "report-logical-key": logicalKey,
           "report-source-field-key": sourceFieldKey,
+          "report-computed-expression": computedExpression,
           "report-missing-policy": missingPolicy,
           "dataset-field-key": logicalKey,
           "dataset-field-label": logicalKey,

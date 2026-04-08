@@ -274,6 +274,7 @@ mod tests {
         assert!(html.contains("Publish Version"));
         assert!(html.contains("Publish and Preview Version"));
         assert!(html.contains("Add Binding"));
+        assert!(html.contains("Report computed expression"));
         assert!(html.contains("Update Report"));
         assert!(html.contains("Remove Report"));
         assert!(html.contains("Update Chart"));

@@ -621,6 +621,7 @@ fn ReportAdminScreen() -> impl IntoView {
                 <label><span>"Report name"</span><input id="report-name" placeholder="Participants Report" value="Participants Report" /></label>
                 <label><span>"Report logical key"</span><input id="report-logical-key" placeholder="participants" value="participants" /></label>
                 <label><span>"Report source field key"</span><input id="report-source-field-key" placeholder="participants" value="participants" /></label>
+                <label><span>"Report computed expression"</span><input id="report-computed-expression" placeholder="literal:Submitted" value="" /></label>
                 <label><span>"Report missing-data policy"</span><input id="report-missing-policy" placeholder="null" value="null" /></label>
                 <label><span>"Report bindings JSON"</span><input id="report-fields-json" placeholder="Optional bindings JSON" value="" /></label>
                 <label><span>"Report ID"</span><input id="report-id" placeholder="Selected report ID" value="" /></label>

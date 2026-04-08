@@ -423,11 +423,20 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
                 "name": "Dataset Participants Report",
                 "form_id": null,
                 "dataset_id": dataset_id,
-                "fields": [{
-                    "logical_key": "participant_count",
-                    "source_field_key": "participant_count",
-                    "missing_policy": "null"
-                }]
+                "fields": [
+                    {
+                        "logical_key": "participant_count",
+                        "source_field_key": "participant_count",
+                        "computed_expression": null,
+                        "missing_policy": "null"
+                    },
+                    {
+                        "logical_key": "response_label",
+                        "source_field_key": null,
+                        "computed_expression": "literal:Submitted",
+                        "missing_policy": "null"
+                    }
+                ]
             })),
         ),
     )
@@ -449,6 +458,14 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
         dataset_report_definition["dataset_name"],
         "Quarterly Check In Dataset"
     );
+    assert!(
+        dataset_report_definition["bindings"]
+            .as_array()
+            .expect("dataset report definition should include bindings")
+            .iter()
+            .any(|binding| binding["logical_key"] == "response_label"
+                && binding["computed_expression"] == "literal:Submitted")
+    );
     let dataset_report_table = request_json(
         app.clone(),
         authorized_request(
@@ -459,7 +476,20 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
         ),
     )
     .await;
-    assert_eq!(dataset_report_table["rows"][0]["field_value"], "42");
+    assert!(
+        dataset_report_table["rows"]
+            .as_array()
+            .expect("dataset report table should include rows")
+            .iter()
+            .any(|row| row["logical_key"] == "participant_count" && row["field_value"] == "42")
+    );
+    assert!(
+        dataset_report_table["rows"]
+            .as_array()
+            .expect("dataset report table should include rows")
+            .iter()
+            .any(|row| row["logical_key"] == "response_label" && row["field_value"] == "Submitted")
+    );
 
     let chart_id = seed["chart_id"]
         .as_str()

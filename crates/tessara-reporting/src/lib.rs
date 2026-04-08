@@ -65,7 +65,9 @@ pub struct ReportFieldBindingInput<'a> {
     /// Logical report field name exposed to users.
     pub logical_key: &'a str,
     /// Physical source field key on compatible form versions.
-    pub source_field_key: &'a str,
+    pub source_field_key: Option<&'a str>,
+    /// Optional row-level computed expression.
+    pub computed_expression: Option<&'a str>,
     /// Missing-data policy string, defaulting to [`MissingDataPolicy::Null`].
     pub missing_policy: Option<&'a str>,
 }
@@ -76,7 +78,9 @@ pub struct ReportFieldBindingDraft {
     /// Logical report field name exposed to users.
     pub logical_key: String,
     /// Physical source field key on compatible form versions.
-    pub source_field_key: String,
+    pub source_field_key: Option<String>,
+    /// Optional row-level computed expression.
+    pub computed_expression: Option<String>,
     /// Missing-data behavior for this binding.
     pub missing_policy: MissingDataPolicy,
 }
@@ -94,11 +98,30 @@ pub fn parse_report_field_bindings<'a>(
 
     for field in fields {
         validate_required_text("report logical key", field.logical_key)?;
-        validate_required_text("report source field key", field.source_field_key)?;
         if !logical_keys.insert(field.logical_key.to_string()) {
             return Err(ReportBindingError::DuplicateLogicalKey(
                 field.logical_key.to_string(),
             ));
+        }
+
+        let source_field_key = field
+            .source_field_key
+            .map(|value| value.trim())
+            .filter(|value| !value.is_empty());
+        let computed_expression = field
+            .computed_expression
+            .map(|value| value.trim())
+            .filter(|value| !value.is_empty());
+
+        match (source_field_key, computed_expression) {
+            (Some(_), Some(_)) => return Err(ReportBindingError::AmbiguousFieldSource),
+            (None, None) => return Err(ReportBindingError::MissingFieldSource),
+            (None, Some(expression)) if !expression.starts_with("literal:") => {
+                return Err(ReportBindingError::UnsupportedComputedExpression(
+                    expression.to_string(),
+                ));
+            }
+            _ => {}
         }
 
         let missing_policy = field
@@ -109,7 +132,8 @@ pub fn parse_report_field_bindings<'a>(
 
         parsed_fields.push(ReportFieldBindingDraft {
             logical_key: field.logical_key.to_string(),
-            source_field_key: field.source_field_key.to_string(),
+            source_field_key: source_field_key.map(ToOwned::to_owned),
+            computed_expression: computed_expression.map(ToOwned::to_owned),
             missing_policy,
         });
     }
@@ -129,6 +153,15 @@ pub enum ReportBindingError {
     /// The same logical key appeared more than once in the report definition.
     #[error("report logical field '{0}' is duplicated")]
     DuplicateLogicalKey(String),
+    /// A report binding did not name a source field or computed expression.
+    #[error("report bindings require either a source field key or computed expression")]
+    MissingFieldSource,
+    /// A report binding tried to mix source and computed modes.
+    #[error("report bindings cannot combine a source field key with a computed expression")]
+    AmbiguousFieldSource,
+    /// A computed expression used unsupported syntax.
+    #[error("unsupported report computed expression '{0}'")]
+    UnsupportedComputedExpression(String),
 }
 
 #[cfg(test)]
@@ -158,22 +191,39 @@ mod tests {
     fn parses_report_field_bindings() {
         let bindings = parse_report_field_bindings([ReportFieldBindingInput {
             logical_key: "participants",
-            source_field_key: "participants_count",
+            source_field_key: Some("participants_count"),
+            computed_expression: None,
             missing_policy: Some("bucket_unknown"),
         }])
         .expect("binding should parse");
 
         assert_eq!(bindings.len(), 1);
         assert_eq!(bindings[0].logical_key, "participants");
-        assert_eq!(bindings[0].source_field_key, "participants_count");
+        assert_eq!(
+            bindings[0].source_field_key.as_deref(),
+            Some("participants_count")
+        );
         assert_eq!(bindings[0].missing_policy, MissingDataPolicy::BucketUnknown);
+
+        let computed = parse_report_field_bindings([ReportFieldBindingInput {
+            logical_key: "label",
+            source_field_key: None,
+            computed_expression: Some("literal:Submitted"),
+            missing_policy: None,
+        }])
+        .expect("literal computed binding should parse");
+        assert_eq!(
+            computed[0].computed_expression.as_deref(),
+            Some("literal:Submitted")
+        );
     }
 
     #[test]
     fn rejects_invalid_report_field_bindings() {
         let blank = parse_report_field_bindings([ReportFieldBindingInput {
             logical_key: " ",
-            source_field_key: "participants",
+            source_field_key: Some("participants"),
+            computed_expression: None,
             missing_policy: None,
         }])
         .expect_err("blank logical key should fail");
@@ -182,12 +232,14 @@ mod tests {
         let duplicate = parse_report_field_bindings([
             ReportFieldBindingInput {
                 logical_key: "participants",
-                source_field_key: "participants",
+                source_field_key: Some("participants"),
+                computed_expression: None,
                 missing_policy: None,
             },
             ReportFieldBindingInput {
                 logical_key: "participants",
-                source_field_key: "renamed_participants",
+                source_field_key: Some("renamed_participants"),
+                computed_expression: None,
                 missing_policy: None,
             },
         ])
@@ -195,6 +247,18 @@ mod tests {
         assert_eq!(
             duplicate.to_string(),
             "report logical field 'participants' is duplicated"
+        );
+
+        let missing_source = parse_report_field_bindings([ReportFieldBindingInput {
+            logical_key: "status_label",
+            source_field_key: None,
+            computed_expression: None,
+            missing_policy: None,
+        }])
+        .expect_err("source or computed expression should be required");
+        assert_eq!(
+            missing_source.to_string(),
+            "report bindings require either a source field key or computed expression"
         );
     }
 }

@@ -377,6 +377,12 @@ const REPORTING_INPUTS: &[TextInput] = &[
         "participants",
     ),
     TextInput::new(
+        "report-computed-expression",
+        "Report computed expression",
+        "literal:Submitted",
+        "",
+    ),
+    TextInput::new(
         "report-missing-policy",
         "Report missing-data policy",
         "null, exclude_row, or bucket_unknown",

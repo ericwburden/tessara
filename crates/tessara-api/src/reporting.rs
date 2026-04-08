@@ -36,7 +36,8 @@ pub struct CreateReportRequest {
 #[derive(Deserialize)]
 pub struct CreateReportFieldBindingRequest {
     logical_key: String,
-    source_field_key: String,
+    source_field_key: Option<String>,
+    computed_expression: Option<String>,
     missing_policy: Option<String>,
 }
 
@@ -79,7 +80,8 @@ pub struct ReportDefinition {
 pub struct ReportFieldBindingSummary {
     id: Uuid,
     logical_key: String,
-    source_field_key: String,
+    source_field_key: Option<String>,
+    computed_expression: Option<String>,
     missing_policy: String,
     position: i32,
 }
@@ -255,7 +257,13 @@ pub async fn get_report(
 
     let rows = sqlx::query(
         r#"
-        SELECT id, logical_key, source_field_key, missing_policy::text AS missing_policy, position
+        SELECT
+            id,
+            logical_key,
+            source_field_key,
+            computed_expression,
+            missing_policy::text AS missing_policy,
+            position
         FROM report_field_bindings
         WHERE report_id = $1
         ORDER BY position, logical_key
@@ -272,6 +280,7 @@ pub async fn get_report(
                 id: row.try_get("id")?,
                 logical_key: row.try_get("logical_key")?,
                 source_field_key: row.try_get("source_field_key")?,
+                computed_expression: row.try_get("computed_expression")?,
                 missing_policy: row.try_get("missing_policy")?,
                 position: row.try_get("position")?,
             })
@@ -312,6 +321,8 @@ pub async fn run_report(
                 node_dim.node_name,
                 report_field_bindings.logical_key,
                 CASE
+                    WHEN report_field_bindings.computed_expression IS NOT NULL
+                        THEN substring(report_field_bindings.computed_expression from 9)
                     WHEN submission_value_fact.value_text IS NULL
                          AND report_field_bindings.missing_policy::text = 'bucket_unknown'
                         THEN 'Unknown'
@@ -322,7 +333,7 @@ pub async fn run_report(
                 ON dataset_sources.dataset_id = reports.dataset_id
             JOIN report_field_bindings
                 ON report_field_bindings.report_id = reports.id
-            JOIN dataset_fields
+            LEFT JOIN dataset_fields
                 ON dataset_fields.dataset_id = reports.dataset_id
                AND dataset_fields.key = report_field_bindings.source_field_key
                AND dataset_fields.source_alias = dataset_sources.source_alias
@@ -341,6 +352,8 @@ pub async fn run_report(
               AND dataset_sources.selection_rule = 'all'
               AND submission_fact.status = 'submitted'
               AND (
+                report_field_bindings.computed_expression IS NOT NULL
+                OR
                 submission_value_fact.value_text IS NOT NULL
                 OR report_field_bindings.missing_policy::text <> 'exclude_row'
               )
@@ -358,6 +371,8 @@ pub async fn run_report(
                 node_dim.node_name,
                 report_field_bindings.logical_key,
                 CASE
+                    WHEN report_field_bindings.computed_expression IS NOT NULL
+                        THEN substring(report_field_bindings.computed_expression from 9)
                     WHEN submission_value_fact.value_text IS NULL
                          AND report_field_bindings.missing_policy::text = 'bucket_unknown'
                         THEN 'Unknown'
@@ -378,6 +393,8 @@ pub async fn run_report(
             WHERE reports.id = $1
               AND submission_fact.status = 'submitted'
               AND (
+                report_field_bindings.computed_expression IS NOT NULL
+                OR
                 submission_value_fact.value_text IS NOT NULL
                 OR report_field_bindings.missing_policy::text <> 'exclude_row'
               )
@@ -476,7 +493,8 @@ async fn validate_report_field_bindings(
     let parsed_fields =
         parse_report_field_bindings(fields.iter().map(|field| ReportFieldBindingInput {
             logical_key: &field.logical_key,
-            source_field_key: &field.source_field_key,
+            source_field_key: field.source_field_key.as_deref(),
+            computed_expression: field.computed_expression.as_deref(),
             missing_policy: field.missing_policy.as_deref(),
         }))
         .map_err(|error| ApiError::BadRequest(error.to_string()))?;
@@ -502,13 +520,14 @@ async fn insert_report_field_bindings(
         sqlx::query(
             r#"
             INSERT INTO report_field_bindings
-                (report_id, logical_key, source_field_key, missing_policy, position)
-            VALUES ($1, $2, $3, $4::missing_data_policy, $5)
+                (report_id, logical_key, source_field_key, computed_expression, missing_policy, position)
+            VALUES ($1, $2, $3, $4, $5::missing_data_policy, $6)
             "#,
         )
         .bind(report_id)
         .bind(field.logical_key)
         .bind(field.source_field_key)
+        .bind(field.computed_expression)
         .bind(field.missing_policy.as_str())
         .bind(position as i32)
         .execute(&mut **tx)
@@ -602,6 +621,9 @@ async fn assert_report_source_fields_exist(
     fields: &[ReportFieldBindingDraft],
 ) -> ApiResult<()> {
     for field in fields {
+        let Some(source_field_key) = &field.source_field_key else {
+            continue;
+        };
         let exists: bool = sqlx::query_scalar(
             r#"
             SELECT EXISTS (
@@ -613,14 +635,14 @@ async fn assert_report_source_fields_exist(
             "#,
         )
         .bind(form_id)
-        .bind(&field.source_field_key)
+        .bind(source_field_key)
         .fetch_one(pool)
         .await?;
 
         if !exists {
             return Err(ApiError::BadRequest(format!(
                 "report source field '{}' is not available on form {form_id}",
-                field.source_field_key
+                source_field_key
             )));
         }
     }
@@ -634,6 +656,9 @@ async fn assert_report_dataset_fields_exist(
     fields: &[ReportFieldBindingDraft],
 ) -> ApiResult<()> {
     for field in fields {
+        let Some(source_field_key) = &field.source_field_key else {
+            continue;
+        };
         let exists: bool = sqlx::query_scalar(
             r#"
             SELECT EXISTS (
@@ -644,14 +669,14 @@ async fn assert_report_dataset_fields_exist(
             "#,
         )
         .bind(dataset_id)
-        .bind(&field.source_field_key)
+        .bind(source_field_key)
         .fetch_one(pool)
         .await?;
 
         if !exists {
             return Err(ApiError::BadRequest(format!(
                 "report dataset field '{}' is not available on dataset {dataset_id}",
-                field.source_field_key
+                source_field_key
             )));
         }
     }
