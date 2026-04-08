@@ -6,9 +6,35 @@ use crate::brand::document_head_tags;
 
 /// Builds the application shell document used for human workflow testing.
 pub fn application_shell_html(style: &str, script: &str) -> String {
-    let shell = view! { <ApplicationShell/> }.to_html();
+    let shell = view! { <HomeApplicationShell/> }.to_html();
     let brand = document_head_tags(
-        "Tessara App",
+        "Tessara Home",
+        "Tessara application home for local replacement workflow testing.",
+    );
+
+    format!(
+        r#"<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Tessara Home</title>
+    {brand}
+    <style>{style}</style>
+  </head>
+  <body>
+    {shell}
+    <script>{script}</script>
+  </body>
+</html>"#
+    )
+}
+
+/// Builds the focused submission application shell document.
+pub fn submission_application_shell_html(style: &str, script: &str) -> String {
+    let shell = view! { <SubmissionApplicationShell/> }.to_html();
+    let brand = document_head_tags(
+        "Tessara Submissions",
         "Tessara submission workspace for local replacement workflow testing.",
     );
 
@@ -18,7 +44,7 @@ pub fn application_shell_html(style: &str, script: &str) -> String {
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Tessara App</title>
+    <title>Tessara Submissions</title>
     {brand}
     <style>{style}</style>
   </head>
@@ -109,7 +135,43 @@ pub fn reporting_application_shell_html(style: &str, script: &str) -> String {
 }
 
 #[component]
-fn ApplicationShell() -> impl IntoView {
+fn HomeApplicationShell() -> impl IntoView {
+    view! {
+        <main class="shell app-shell">
+            <section class="panel hero">
+                <BrandLockup/>
+                <p class="muted">"Tessara Home"</p>
+                <h1>"Application Overview"</h1>
+                <p>
+                    "This shell is the transition from a migration workbench to a real application. "
+                    "It keeps the replacement-oriented routes, but now organizes them around a home screen, "
+                    "persistent navigation, and clear entry points for the main workflows."
+                </p>
+                <div class="actions">
+                    <button type="button" onclick="login()">"Log In"</button>
+                    <button type="button" onclick="loadCurrentUser()">"Current User"</button>
+                    <button type="button" onclick="logout()">"Log Out"</button>
+                    <button type="button" onclick="seedDemo()">"Seed Demo"</button>
+                    <button type="button" onclick="loadAppSummary()">"Load App Summary"</button>
+                </div>
+            </section>
+            <section class="app-layout">
+                <aside class="panel app-sidebar">
+                    <ApplicationNav active_route="home"/>
+                    <CreateMenu/>
+                    <SelectionContext/>
+                </aside>
+                <section class="panel app-main">
+                    <HomeScreen/>
+                    <OutputPanels/>
+                </section>
+            </section>
+        </main>
+    }
+}
+
+#[component]
+fn SubmissionApplicationShell() -> impl IntoView {
     view! {
         <main class="shell app-shell">
             <section class="panel hero">
@@ -128,34 +190,19 @@ fn ApplicationShell() -> impl IntoView {
                     <button type="button" onclick="seedDemo()">"Seed Demo"</button>
                     <button type="button" onclick="startDemoSubmissionFlow()">"Start Demo Submission"</button>
                     <button type="button" onclick="loadAppSummary()">"Load App Summary"</button>
-                    <a class="button-link" href="/app/admin">"Open Admin Setup"</a>
-                    <a class="button-link" href="/app/reports">"Open Reporting Workspace"</a>
-                    <a class="button-link" href="/app/migration">"Open Migration Workbench"</a>
-                    <a class="button-link" href="/">"Open Admin Workbench"</a>
                 </div>
             </section>
             <section class="app-layout">
                 <aside class="panel app-sidebar">
-                    <h2>"Workflow"</h2>
-                    <nav class="app-nav" aria-label="Application workflow">
-                        <a href="#submission-screen">"Submit Data"</a>
-                        <a href="#review-screen">"Review Submissions"</a>
-                        <a href="#report-screen">"View Reports"</a>
-                    </nav>
+                    <ApplicationNav active_route="submissions"/>
+                    <CreateMenu/>
                     <SelectionContext/>
                 </aside>
                 <section class="panel app-main">
                     <SubmissionScreen/>
                     <ReviewScreen/>
                     <ReportScreen/>
-                    <section class="app-screen">
-                        <h2>"Screen Output"</h2>
-                        <div id="screen" class="cards"></div>
-                    </section>
-                    <section class="app-screen">
-                        <h2>"Raw Output"</h2>
-                        <pre id="output">"No API calls yet."</pre>
-                    </section>
+                    <OutputPanels/>
                 </section>
             </section>
         </main>
@@ -178,34 +225,19 @@ fn AdminApplicationShell() -> impl IntoView {
                     <button type="button" onclick="login()">"Log In"</button>
                     <button type="button" onclick="seedDemo()">"Seed Demo"</button>
                     <button type="button" onclick="loadAppSummary()">"Load App Summary"</button>
-                    <a class="button-link" href="/app">"Open Submission Workspace"</a>
-                    <a class="button-link" href="/app/reports">"Open Reporting Workspace"</a>
-                    <a class="button-link" href="/app/migration">"Open Migration Workbench"</a>
-                    <a class="button-link" href="/">"Open Admin Workbench"</a>
                 </div>
             </section>
             <section class="app-layout">
                 <aside class="panel app-sidebar">
-                    <h2>"Admin Workflow"</h2>
-                    <nav class="app-nav" aria-label="Admin application workflow">
-                        <a href="#hierarchy-admin-screen">"Hierarchy"</a>
-                        <a href="#form-admin-screen">"Forms"</a>
-                        <a href="#report-admin-screen">"Reports"</a>
-                    </nav>
+                    <ApplicationNav active_route="admin"/>
+                    <CreateMenu/>
                     <SelectionContext/>
                 </aside>
                 <section class="panel app-main">
                     <HierarchyAdminScreen/>
                     <FormAdminScreen/>
                     <ReportAdminScreen/>
-                    <section class="app-screen">
-                        <h2>"Screen Output"</h2>
-                        <div id="screen" class="cards"></div>
-                    </section>
-                    <section class="app-screen">
-                        <h2>"Raw Output"</h2>
-                        <pre id="output">"No API calls yet."</pre>
-                    </section>
+                    <OutputPanels/>
                 </section>
             </section>
         </main>
@@ -229,19 +261,12 @@ fn MigrationApplicationShell() -> impl IntoView {
                     <button type="button" onclick="loadCurrentUser()">"Current User"</button>
                     <button type="button" onclick="logout()">"Log Out"</button>
                     <button type="button" onclick="loadAppSummary()">"Load App Summary"</button>
-                    <a class="button-link" href="/app">"Open Submission Workspace"</a>
-                    <a class="button-link" href="/app/admin">"Open Admin Setup"</a>
-                    <a class="button-link" href="/app/reports">"Open Reporting Workspace"</a>
-                    <a class="button-link" href="/">"Open Admin Workbench"</a>
                 </div>
             </section>
             <section class="app-layout">
                 <aside class="panel app-sidebar">
-                    <h2>"Migration Workflow"</h2>
-                    <nav class="app-nav" aria-label="Migration workflow">
-                        <a href="#fixture-screen">"Fixtures"</a>
-                        <a href="#result-screen">"Results"</a>
-                    </nav>
+                    <ApplicationNav active_route="migration"/>
+                    <CreateMenu/>
                     <SelectionContext/>
                 </aside>
                 <section class="panel app-main">
@@ -250,10 +275,7 @@ fn MigrationApplicationShell() -> impl IntoView {
                         <h2>"Validation Results"</h2>
                         <div id="screen" class="cards"></div>
                     </section>
-                    <section class="app-screen">
-                        <h2>"Raw Output"</h2>
-                        <pre id="output">"No API calls yet."</pre>
-                    </section>
+                    <RawOutputPanel/>
                 </section>
             </section>
         </main>
@@ -279,32 +301,18 @@ fn ReportingApplicationShell() -> impl IntoView {
                     <button type="button" onclick="seedDemo()">"Seed Demo"</button>
                     <button type="button" onclick="openDemoDashboard()">"Open Demo Dashboard"</button>
                     <button type="button" onclick="loadAppSummary()">"Load App Summary"</button>
-                    <a class="button-link" href="/app">"Open Submission Workspace"</a>
-                    <a class="button-link" href="/app/admin">"Open Admin Setup"</a>
-                    <a class="button-link" href="/app/migration">"Open Migration Workbench"</a>
-                    <a class="button-link" href="/">"Open Admin Workbench"</a>
                 </div>
             </section>
             <section class="app-layout">
                 <aside class="panel app-sidebar">
-                    <h2>"Reporting Workflow"</h2>
-                    <nav class="app-nav" aria-label="Reporting workflow">
-                        <a href="#report-runner-screen">"Reports"</a>
-                        <a href="#dashboard-preview-screen">"Dashboards"</a>
-                    </nav>
+                    <ApplicationNav active_route="reports"/>
+                    <CreateMenu/>
                     <SelectionContext/>
                 </aside>
                 <section class="panel app-main">
                     <ReportRunnerScreen/>
                     <DashboardPreviewScreen/>
-                    <section class="app-screen">
-                        <h2>"Screen Output"</h2>
-                        <div id="screen" class="cards"></div>
-                    </section>
-                    <section class="app-screen">
-                        <h2>"Raw Output"</h2>
-                        <pre id="output">"No API calls yet."</pre>
-                    </section>
+                    <OutputPanels/>
                 </section>
             </section>
         </main>
@@ -325,7 +333,7 @@ fn BrandLockup() -> impl IntoView {
 fn SelectionContext() -> impl IntoView {
     view! {
         <section class="selection-panel">
-            <h3>"Selected Context"</h3>
+            <h3>"Selection Context"</h3>
             <p class="muted">
                 "Selections from published forms, nodes, and submissions populate this workflow."
             </p>
@@ -333,6 +341,158 @@ fn SelectionContext() -> impl IntoView {
             <div id="selection-state" class="selection-grid">
                 <p class="muted">"No records selected yet."</p>
             </div>
+        </section>
+    }
+}
+
+#[component]
+fn ApplicationNav(active_route: &'static str) -> impl IntoView {
+    let route_links = [
+        ("home", "/app", "Home"),
+        ("submissions", "/app/submissions", "Submissions"),
+        ("admin", "/app/admin", "Administration"),
+        ("reports", "/app/reports", "Reports"),
+        ("migration", "/app/migration", "Migration"),
+    ];
+
+    view! {
+        <section class="nav-panel">
+            <h2>"Navigation"</h2>
+            <nav class="app-nav" aria-label="Application navigation">
+                {route_links
+                    .into_iter()
+                    .map(|(route_key, href, label)| {
+                        let class_name = if route_key == active_route {
+                            "active"
+                        } else {
+                            ""
+                        };
+                        view! { <a class=class_name href=href>{label}</a> }
+                    })
+                    .collect_view()}
+            </nav>
+        </section>
+    }
+}
+
+#[component]
+fn CreateMenu() -> impl IntoView {
+    let create_links = [
+        ("Create Node", "/app/admin#hierarchy-admin-screen"),
+        ("Create Form", "/app/admin#form-admin-screen"),
+        ("Create Dataset", "/app/admin#report-admin-screen"),
+        ("Create Report", "/app/admin#report-admin-screen"),
+        ("Create Aggregation", "/app/admin#report-admin-screen"),
+        ("Create Dashboard", "/app/admin#report-admin-screen"),
+    ];
+
+    view! {
+        <section class="nav-panel">
+            <h2>"Create"</h2>
+            <div class="create-menu">
+                {create_links
+                    .into_iter()
+                    .map(|(label, href)| view! { <a class="create-link" href=href>{label}</a> })
+                    .collect_view()}
+            </div>
+        </section>
+    }
+}
+
+#[component]
+fn HomeScreen() -> impl IntoView {
+    let workflow_cards = [
+        (
+            "Submissions",
+            "Complete draft, save, submit, and review flows for published forms.",
+            "/app/submissions",
+            "Open Submission Workspace",
+        ),
+        (
+            "Administration",
+            "Configure hierarchy, forms, datasets, reports, aggregations, charts, and dashboards.",
+            "/app/admin",
+            "Open Administration",
+        ),
+        (
+            "Reports",
+            "Inspect reports, run aggregations, and preview dashboards in one place.",
+            "/app/reports",
+            "Open Reporting",
+        ),
+        (
+            "Migration",
+            "Validate, dry-run, and rehearse legacy imports from one operator-focused route.",
+            "/app/migration",
+            "Open Migration",
+        ),
+    ];
+
+    view! {
+        <section id="home-screen" class="app-screen">
+            <p class="eyebrow">"Application Home"</p>
+            <h2>"Welcome to Tessara"</h2>
+            <p class="muted">
+                "Use this home screen as the entry point for the migrated application. "
+                "The structure reflects the original system's broad navigation model while "
+                "keeping cleaner, selection-driven entry points."
+            </p>
+            <div class="actions">
+                <button type="button" onclick="loadAppSummary()">"Refresh Overview"</button>
+                <button type="button" onclick="seedDemo()">"Seed Demo Data"</button>
+                <button type="button" onclick="startDemoSubmissionFlow()">"Start Demo Submission"</button>
+                <button type="button" onclick="openDemoDashboard()">"Open Demo Dashboard"</button>
+            </div>
+        </section>
+        <section class="app-screen">
+            <p class="eyebrow">"Application Home"</p>
+            <h2>"Workflow Areas"</h2>
+            <div class="home-grid">
+                {workflow_cards
+                    .into_iter()
+                    .map(|(title, description, href, label)| {
+                        view! {
+                            <article class="home-card">
+                                <h3>{title}</h3>
+                                <p>{description}</p>
+                                <a class="button-link" href=href>{label}</a>
+                            </article>
+                        }
+                    })
+                    .collect_view()}
+            </div>
+        </section>
+        <section class="app-screen">
+            <p class="eyebrow">"Application Home"</p>
+            <h2>"Navigation Model"</h2>
+            <ul class="app-list">
+                <li>"Home provides overview, quick starts, and the main creation entry points."</li>
+                <li>"Submissions focuses on published forms, drafts, and response review."</li>
+                <li>"Administration focuses on hierarchy, forms, datasets, reports, and dashboards."</li>
+                <li>"Reports focuses on table output, aggregations, and dashboard preview."</li>
+                <li>"Migration focuses on fixture validation, dry-run, and import rehearsal."</li>
+            </ul>
+        </section>
+    }
+}
+
+#[component]
+fn OutputPanels() -> impl IntoView {
+    view! {
+        <section class="app-screen">
+            <h2>"Screen Output"</h2>
+            <div id="screen" class="cards"></div>
+        </section>
+        <RawOutputPanel/>
+    }
+}
+
+#[component]
+fn RawOutputPanel() -> impl IntoView {
+    view! {
+        <section class="app-screen">
+            <h2>"Raw Output"</h2>
+            <pre id="output">"No API calls yet."</pre>
         </section>
     }
 }

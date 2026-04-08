@@ -131,8 +131,12 @@ try {
     }
 
     $appShell = Invoke-RestMethod -Uri "$baseUrl/app" -TimeoutSec 30
-    if (-not ($appShell -like "*Submission Workspace*") -or -not ($appShell -like "*Choose Published Form*") -or -not ($appShell -like "*Review Submissions*") -or -not ($appShell -like "*Load App Summary*") -or -not ($appShell -like "*Start Demo Submission*") -or -not ($appShell -like "*Current User*") -or -not ($appShell -like "*Log Out*")) {
-        throw "Expected application shell HTML to include submission workflow controls"
+    if (-not ($appShell -like "*Application Overview*") -or -not ($appShell -like "*Welcome to Tessara*") -or -not ($appShell -like "*Workflow Areas*") -or -not ($appShell -like "*Create Dataset*") -or -not ($appShell -like "*Start Demo Submission*")) {
+        throw "Expected application home HTML to include overview, navigation, and create-menu controls"
+    }
+    $submissionAppShell = Invoke-RestMethod -Uri "$baseUrl/app/submissions" -TimeoutSec 30
+    if (-not ($submissionAppShell -like "*Submission Workspace*") -or -not ($submissionAppShell -like "*Choose Published Form*") -or -not ($submissionAppShell -like "*Review Submissions*") -or -not ($submissionAppShell -like "*Load App Summary*") -or -not ($submissionAppShell -like "*Start Demo Submission*") -or -not ($submissionAppShell -like "*Current User*") -or -not ($submissionAppShell -like "*Log Out*")) {
+        throw "Expected submission application shell HTML to include submission workflow controls"
     }
     $adminAppShell = Invoke-RestMethod -Uri "$baseUrl/app/admin" -TimeoutSec 30
     if (-not ($adminAppShell -like "*Setup Workspace*") -or -not ($adminAppShell -like "*Hierarchy Setup*") -or -not ($adminAppShell -like "*Form Builder*")) {

@@ -24,12 +24,18 @@ pub fn admin_shell_html() -> String {
 
 /// Returns the HTML used for the first replacement-oriented application shell.
 ///
-/// The application shell keeps the existing JavaScript controller while the
-/// Leptos screen structure stabilizes. It is intentionally separate from the
-/// admin workbench so user testing can exercise application workflows without
-/// navigating the full builder surface.
+/// The application shell now acts as the real application home: a persistent
+/// navigation frame, overview screen, and entry point into the focused routes.
 pub fn application_shell_html() -> String {
     application::application_shell_html(shell_style::STYLE, app_script::APPLICATION_SCRIPT)
+}
+
+/// Returns the HTML used for the submission-focused application shell.
+pub fn submission_application_shell_html() -> String {
+    application::submission_application_shell_html(
+        shell_style::STYLE,
+        app_script::APPLICATION_SCRIPT,
+    )
 }
 
 /// Returns the HTML used for focused admin application screens.
@@ -63,6 +69,7 @@ mod tests {
     use super::{
         admin_application_shell_html, admin_shell_html, application_shell_html,
         migration_application_shell_html, reporting_application_shell_html,
+        submission_application_shell_html,
     };
 
     #[test]
@@ -186,10 +193,39 @@ mod tests {
     }
 
     #[test]
-    fn application_shell_exposes_submission_workflow_screen() {
+    fn application_shell_exposes_home_navigation() {
         let html = application_shell_html();
 
+        assert!(html.contains("Application Overview"));
+        assert!(html.contains("Welcome to Tessara"));
+        assert!(html.contains("Home"));
+        assert!(html.contains("/app/submissions"));
+        assert!(html.contains("/app/admin"));
+        assert!(html.contains("/app/reports"));
+        assert!(html.contains("/app/migration"));
+        assert!(html.contains("Create Node"));
+        assert!(html.contains("Create Form"));
+        assert!(html.contains("Create Dataset"));
+        assert!(html.contains("Create Report"));
+        assert!(html.contains("Create Aggregation"));
+        assert!(html.contains("Create Dashboard"));
+        assert!(html.contains("Workflow Areas"));
+        assert!(html.contains("Refresh Overview"));
+        assert!(html.contains("Start Demo Submission"));
+        assert!(html.contains("Open Demo Dashboard"));
+        assert!(html.contains("Selection Context"));
+        assert!(html.contains("selection-state"));
+        assert!(html.contains("tessara-icon-256.svg"));
+        assert!(html.contains("tessara-favicon-32.svg"));
+    }
+
+    #[test]
+    fn submission_application_shell_exposes_submission_workflow_screen() {
+        let html = submission_application_shell_html();
+
         assert!(html.contains("Submission Workspace"));
+        assert!(html.contains("/app"));
+        assert!(html.contains("/app/submissions"));
         assert!(html.contains("Submit Data"));
         assert!(html.contains("Choose Published Form"));
         assert!(html.contains("Choose Target Node"));
@@ -209,10 +245,6 @@ mod tests {
         assert!(html.contains("Show Submitted"));
         assert!(html.contains("Clear Review Filters"));
         assert!(html.contains("View Reports"));
-        assert!(html.contains("Open Admin Workbench"));
-        assert!(html.contains("Open Admin Setup"));
-        assert!(html.contains("Open Migration Workbench"));
-        assert!(html.contains("Open Reporting Workspace"));
         assert!(html.contains("Load App Summary"));
         assert!(html.contains("Current User"));
         assert!(html.contains("Log Out"));
@@ -238,6 +270,7 @@ mod tests {
         assert!(html.contains("/api/reports"));
         assert!(html.contains("sessionStorage"));
         assert!(html.contains("tessara.devToken"));
+        assert!(html.contains("Selection Context"));
         assert!(html.contains("selection-state"));
         assert!(html.contains("tessara-icon-256.svg"));
         assert!(html.contains("tessara-favicon-32.svg"));
@@ -248,6 +281,8 @@ mod tests {
         let html = admin_application_shell_html();
 
         assert!(html.contains("Setup Workspace"));
+        assert!(html.contains("/app"));
+        assert!(html.contains("/app/submissions"));
         assert!(html.contains("Hierarchy Setup"));
         assert!(html.contains("Form Builder"));
         assert!(html.contains("Report Builder"));
@@ -323,9 +358,8 @@ mod tests {
         assert!(html.contains("Refresh and Run Report"));
         assert!(html.contains("Refresh and Reopen Dashboard"));
         assert!(html.contains("Refresh and Open Dashboard"));
-        assert!(html.contains("Open Submission Workspace"));
-        assert!(html.contains("Open Migration Workbench"));
-        assert!(html.contains("Open Reporting Workspace"));
+        assert!(html.contains("Navigation"));
+        assert!(html.contains("Create"));
         assert!(html.contains("Load App Summary"));
         assert!(html.contains("selection-state"));
     }
@@ -335,6 +369,8 @@ mod tests {
         let html = migration_application_shell_html();
 
         assert!(html.contains("Migration Workbench"));
+        assert!(html.contains("/app"));
+        assert!(html.contains("/app/submissions"));
         assert!(html.contains("Legacy Fixture Validation"));
         assert!(html.contains("Load Fixture Examples"));
         assert!(html.contains("Validate Fixture"));
@@ -344,9 +380,8 @@ mod tests {
         assert!(html.contains("/api/admin/legacy-fixtures/validate"));
         assert!(html.contains("/api/admin/legacy-fixtures/dry-run"));
         assert!(html.contains("/api/admin/legacy-fixtures/import"));
-        assert!(html.contains("Open Submission Workspace"));
-        assert!(html.contains("Open Admin Setup"));
-        assert!(html.contains("Open Reporting Workspace"));
+        assert!(html.contains("Navigation"));
+        assert!(html.contains("Create"));
         assert!(html.contains("Load App Summary"));
         assert!(html.contains("Current User"));
         assert!(html.contains("Log Out"));
@@ -357,6 +392,8 @@ mod tests {
         let html = reporting_application_shell_html();
 
         assert!(html.contains("Reporting Workspace"));
+        assert!(html.contains("/app"));
+        assert!(html.contains("/app/submissions"));
         assert!(html.contains("Report Runner"));
         assert!(html.contains("Dashboard Preview"));
         assert!(html.contains("Open Demo Dashboard"));
@@ -381,8 +418,7 @@ mod tests {
         assert!(html.contains("/api/reports"));
         assert!(html.contains("/api/dashboards"));
         assert!(html.contains("/api/charts"));
-        assert!(html.contains("Open Submission Workspace"));
-        assert!(html.contains("Open Admin Setup"));
-        assert!(html.contains("Open Migration Workbench"));
+        assert!(html.contains("Navigation"));
+        assert!(html.contains("Create"));
     }
 }

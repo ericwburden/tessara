@@ -95,6 +95,10 @@ pub const STYLE: &str = r#"
         display: grid;
         gap: 16px;
       }
+      .nav-panel {
+        display: grid;
+        gap: 10px;
+      }
       .app-nav {
         display: grid;
         gap: 8px;
@@ -109,6 +113,27 @@ pub const STYLE: &str = r#"
         text-decoration: none;
       }
       .app-nav a:hover, .button-link:hover {
+        background: var(--teal-soft);
+      }
+      .app-nav a.active {
+        background: var(--teal-soft);
+        box-shadow: inset 0 0 0 1px rgb(15 118 110 / 0.12);
+      }
+      .create-menu {
+        display: grid;
+        gap: 8px;
+      }
+      .create-link {
+        border: 1px solid var(--neutral);
+        border-radius: 14px;
+        color: var(--ink);
+        display: block;
+        font-weight: 700;
+        padding: 10px 12px;
+        text-decoration: none;
+      }
+      .create-link:hover {
+        border-color: var(--teal);
         background: var(--teal-soft);
       }
       .selection-panel {
@@ -183,6 +208,25 @@ pub const STYLE: &str = r#"
         display: grid;
         gap: 12px;
         grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      }
+      .home-grid {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      }
+      .home-card {
+        border: 1px solid var(--neutral);
+        border-radius: 16px;
+        background: var(--surface);
+        display: grid;
+        gap: 12px;
+        padding: 16px;
+      }
+      .app-list {
+        display: grid;
+        gap: 10px;
+        margin: 0;
+        padding-left: 20px;
       }
       .card {
         border: 1px solid var(--neutral);
