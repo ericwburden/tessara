@@ -26,6 +26,13 @@ pub struct CreateFormRequest {
 }
 
 #[derive(Deserialize)]
+pub struct UpdateFormRequest {
+    name: String,
+    slug: String,
+    scope_node_type_id: Option<Uuid>,
+}
+
+#[derive(Deserialize)]
 pub struct CreateFormVersionRequest {
     version_label: String,
     compatibility_group_name: Option<String>,
@@ -137,6 +144,40 @@ pub async fn create_form(
     let id = sqlx::query_scalar(
         "INSERT INTO forms (name, slug, scope_node_type_id) VALUES ($1, $2, $3) RETURNING id",
     )
+    .bind(payload.name)
+    .bind(payload.slug)
+    .bind(payload.scope_node_type_id)
+    .fetch_one(&state.pool)
+    .await?;
+
+    Ok(Json(IdResponse { id }))
+}
+
+/// Updates form-level metadata used by the admin builder and report context.
+pub async fn update_form(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(form_id): Path<Uuid>,
+    Json(payload): Json<UpdateFormRequest>,
+) -> ApiResult<Json<IdResponse>> {
+    auth::require_capability(&state.pool, &headers, "forms:write").await?;
+    require_text("form name", &payload.name)?;
+    require_text("form slug", &payload.slug)?;
+    require_form_exists(&state.pool, form_id).await?;
+    require_form_slug_available_for_form(&state.pool, form_id, &payload.slug).await?;
+    if let Some(scope_node_type_id) = payload.scope_node_type_id {
+        require_node_type_exists(&state.pool, scope_node_type_id).await?;
+    }
+
+    let id = sqlx::query_scalar(
+        r#"
+        UPDATE forms
+        SET name = $2, slug = $3, scope_node_type_id = $4
+        WHERE id = $1
+        RETURNING id
+        "#,
+    )
+    .bind(form_id)
     .bind(payload.name)
     .bind(payload.slug)
     .bind(payload.scope_node_type_id)
@@ -344,6 +385,27 @@ async fn require_form_slug_available(pool: &sqlx::PgPool, slug: &str) -> ApiResu
         .bind(slug)
         .fetch_one(pool)
         .await?;
+
+    if exists {
+        Err(ApiError::BadRequest(format!(
+            "form slug '{slug}' is already in use"
+        )))
+    } else {
+        Ok(())
+    }
+}
+
+async fn require_form_slug_available_for_form(
+    pool: &sqlx::PgPool,
+    form_id: Uuid,
+    slug: &str,
+) -> ApiResult<()> {
+    let exists: bool =
+        sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM forms WHERE slug = $1 AND id <> $2)")
+            .bind(slug)
+            .bind(form_id)
+            .fetch_one(pool)
+            .await?;
 
     if exists {
         Err(ApiError::BadRequest(format!(

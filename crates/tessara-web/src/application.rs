@@ -579,6 +579,7 @@ fn FormAdminScreen() -> impl IntoView {
             <div class="actions">
                 <button type="button" onclick="loadForms()">"Load Forms"</button>
                 <button type="button" onclick="createForm()">"Create Form"</button>
+                <button type="button" onclick="updateForm()">"Update Form"</button>
                 <button type="button" onclick="createFormVersion()">"Create Version"</button>
                 <button type="button" onclick="createBasicFormVersion()">"Create Basic Version"</button>
                 <button type="button" onclick="createSection()">"Create Section"</button>

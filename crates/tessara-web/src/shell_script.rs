@@ -569,6 +569,7 @@ pub const SCRIPT: &str = r#"
               <p>Scope: ${escapeHtml(form.scope_node_type_name || "Global")}</p>
               <p>${form.versions.length} versions</p>
               <button type="button" onclick="useForm('${escapeHtml(form.id)}', '${escapeHtml(form.name)}')">Use Form</button>
+              <button type="button" onclick="useFormForEditing('${escapeHtml(form.id)}', '${escapeHtml(form.name)}', '${escapeHtml(form.slug)}', '${escapeHtml(form.scope_node_type_id || "")}', '${escapeHtml(form.scope_node_type_name || "")}')">Edit Form</button>
               <ul>
                 ${form.versions.map((version) => `
                   <li>
@@ -590,6 +591,18 @@ pub const SCRIPT: &str = r#"
         selectRecord("form", formName, formId, {
           "form-id": formId
         });
+      }
+
+      function useFormForEditing(formId, formName, formSlug, scopeNodeTypeId, scopeNodeTypeName = "") {
+        selectRecord("form for editing", formName, formId, {
+          "form-id": formId,
+          "form-name": formName,
+          "form-slug": formSlug,
+          "form-scope-node-type-id": scopeNodeTypeId
+        });
+        if (scopeNodeTypeId) {
+          useFormScopeNodeType(scopeNodeTypeId, scopeNodeTypeName || scopeNodeTypeId);
+        }
       }
 
       function useFormVersion(formVersionId, formId, label = formVersionId) {
@@ -641,6 +654,28 @@ pub const SCRIPT: &str = r#"
             })
           });
           document.getElementById("form-id").value = payload.id;
+          show(payload);
+          await loadForms();
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function updateForm() {
+        try {
+          if (!token) await login();
+          const formId = inputValue("form-id");
+          if (!formId) throw new Error("Create or select a form first.");
+          const scopeNodeTypeId = inputValue("form-scope-node-type-id");
+          const payload = await request(`/api/admin/forms/${formId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: inputValue("form-name"),
+              slug: inputValue("form-slug"),
+              scope_node_type_id: scopeNodeTypeId || null
+            })
+          });
           show(payload);
           await loadForms();
         } catch (error) {

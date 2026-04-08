@@ -447,6 +447,20 @@ async fn form_builder_guards_cross_version_sections_and_supersedes_previous_publ
     )
     .await;
     let form_id = id_from(&form);
+    request_json(
+        app.clone(),
+        authorized_request(
+            "PUT",
+            &format!("/api/admin/forms/{form_id}"),
+            &token,
+            Some(json!({
+                "name": "Monthly Services Report",
+                "slug": "monthly-services-report",
+                "scope_node_type_id": null
+            })),
+        ),
+    )
+    .await;
 
     let version_one_id = create_form_version(app.clone(), &token, form_id, "v1").await;
     let duplicate_version_label = request_status_and_json(
@@ -710,7 +724,7 @@ async fn form_builder_guards_cross_version_sections_and_supersedes_previous_publ
     )
     .await;
     assert_eq!(version_one["status"], "superseded");
-    assert_eq!(version_one["form_name"], "Monthly Service Report");
+    assert_eq!(version_one["form_name"], "Monthly Services Report");
     assert_eq!(version_one["sections"][0]["title"], "Updated Main");
     assert_eq!(
         version_one["sections"][0]["fields"][0]["key"],
@@ -722,7 +736,7 @@ async fn form_builder_guards_cross_version_sections_and_supersedes_previous_publ
     );
     assert_eq!(version_one["sections"][0]["fields"][0]["required"], false);
     assert_eq!(version_two["status"], "published");
-    assert_eq!(version_two["form_name"], "Monthly Service Report");
+    assert_eq!(version_two["form_name"], "Monthly Services Report");
 }
 
 #[tokio::test]
@@ -1350,6 +1364,19 @@ async fn admin_mutation_routes_require_authentication() {
                 .to_string(),
             ))
             .expect("valid form request"),
+        Request::builder()
+            .method("PUT")
+            .uri(format!("/api/admin/forms/{form_id}"))
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(
+                json!({
+                    "name": "Monthly Report",
+                    "slug": "monthly-report",
+                    "scope_node_type_id": null
+                })
+                .to_string(),
+            ))
+            .expect("valid form update request"),
         Request::builder()
             .method("POST")
             .uri(format!("/api/admin/forms/{form_id}/versions"))

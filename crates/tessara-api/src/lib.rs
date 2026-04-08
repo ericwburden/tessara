@@ -87,6 +87,7 @@ pub fn router(state: AppState) -> Router {
             "/api/admin/forms",
             get(forms::list_forms).post(forms::create_form),
         )
+        .route("/api/admin/forms/{form_id}", put(forms::update_form))
         .route(
             "/api/admin/forms/{form_id}/versions",
             post(forms::create_form_version),

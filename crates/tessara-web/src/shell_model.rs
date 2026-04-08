@@ -232,6 +232,7 @@ const FORM_INPUTS: &[TextInput] = &[
 
 const FORM_ACTIONS: &[Action] = &[
     Action::new("createForm()", "Create Form"),
+    Action::new("updateForm()", "Update Form"),
     Action::new("createFormVersion()", "Create Version"),
     Action::new("createBasicFormVersion()", "Create Basic Version"),
     Action::new("createSection()", "Create Section"),
