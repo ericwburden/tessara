@@ -352,6 +352,10 @@ fn ReportRunnerScreen() -> impl IntoView {
                     <input id="report-id" placeholder="Selected report ID" value="" />
                 </label>
                 <label>
+                    <span>"Aggregation ID"</span>
+                    <input id="aggregation-id" placeholder="Selected aggregation ID" value="" />
+                </label>
+                <label>
                     <span>"Form ID"</span>
                     <input id="form-id" placeholder="Report form context" value="" />
                 </label>
@@ -366,6 +370,8 @@ fn ReportRunnerScreen() -> impl IntoView {
                 <button type="button" onclick="loadReportDefinitionById()">"Inspect Report"</button>
                 <button type="button" onclick="refreshAnalyticsAndRunReport()">"Refresh and Run Report"</button>
                 <button type="button" onclick="loadReportById()">"Run Report"</button>
+                <button type="button" onclick="loadAggregations()">"Choose Aggregation"</button>
+                <button type="button" onclick="loadAggregationById()">"Run Aggregation"</button>
             </div>
         </section>
     }
@@ -389,12 +395,17 @@ fn DashboardPreviewScreen() -> impl IntoView {
                     <span>"Chart ID"</span>
                     <input id="chart-id" placeholder="Selected chart ID" value="" />
                 </label>
+                <label>
+                    <span>"Aggregation ID"</span>
+                    <input id="aggregation-id" placeholder="Selected aggregation ID" value="" />
+                </label>
             </div>
             <div class="actions">
                 <button type="button" onclick="loadDashboards()">"Choose Dashboard"</button>
                 <button type="button" onclick="refreshAnalyticsAndOpenDashboard()">"Refresh and Open Dashboard"</button>
                 <button type="button" onclick="loadDashboardById()">"Open Dashboard"</button>
                 <button type="button" onclick="loadCharts()">"Choose Chart"</button>
+                <button type="button" onclick="loadAggregations()">"Choose Aggregation"</button>
             </div>
         </section>
     }
@@ -625,6 +636,12 @@ fn ReportAdminScreen() -> impl IntoView {
                 <label><span>"Report missing-data policy"</span><input id="report-missing-policy" placeholder="null" value="null" /></label>
                 <label><span>"Report bindings JSON"</span><input id="report-fields-json" placeholder="Optional bindings JSON" value="" /></label>
                 <label><span>"Report ID"</span><input id="report-id" placeholder="Selected report ID" value="" /></label>
+                <label><span>"Aggregation ID"</span><input id="aggregation-id" placeholder="Selected aggregation ID" value="" /></label>
+                <label><span>"Aggregation name"</span><input id="aggregation-name" placeholder="Participants Totals" value="Participants Totals" /></label>
+                <label><span>"Aggregation group-by logical key"</span><input id="aggregation-group-by-logical-key" placeholder="Optional group logical key" value="" /></label>
+                <label><span>"Aggregation metric key"</span><input id="aggregation-metric-key" placeholder="participants_total" value="participants_total" /></label>
+                <label><span>"Aggregation source logical key"</span><input id="aggregation-source-logical-key" placeholder="participants" value="participants" /></label>
+                <label><span>"Aggregation metric kind"</span><input id="aggregation-metric-kind" placeholder="count or sum" value="sum" /></label>
                 <label><span>"Chart ID"</span><input id="chart-id" placeholder="Selected chart ID" value="" /></label>
                 <label><span>"Chart name"</span><input id="chart-name" placeholder="Participants Table" value="Participants Table" /></label>
                 <label><span>"Chart type"</span><input id="chart-type" placeholder="table" value="table" /></label>
@@ -650,6 +667,9 @@ fn ReportAdminScreen() -> impl IntoView {
                 <button type="button" onclick="loadReportDefinitionById()">"Inspect Report"</button>
                 <button type="button" onclick="refreshAnalyticsAndRunReport()">"Refresh and Run Report"</button>
                 <button type="button" onclick="loadReportById()">"Run Report"</button>
+                <button type="button" onclick="createAggregation()">"Create Aggregation"</button>
+                <button type="button" onclick="loadAggregations()">"Load Aggregations"</button>
+                <button type="button" onclick="loadAggregationById()">"Run Aggregation"</button>
                 <button type="button" onclick="createChart()">"Create Chart"</button>
                 <button type="button" onclick="updateChart()">"Update Chart"</button>
                 <button type="button" onclick="deleteChart()">"Remove Chart"</button>

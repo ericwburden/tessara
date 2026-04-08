@@ -96,6 +96,34 @@ pub const SCRIPT: &str = r#"
         `;
       }
 
+      function aggregationRowsView(rows) {
+        if (rows.length === 0) {
+          return '<p class="muted">No rows matched this aggregation.</p>';
+        }
+        return `
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Group</th>
+                  <th>Metric</th>
+                  <th>Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rows.flatMap((row) => Object.entries(row.metrics || {}).map(([metric, value]) => `
+                  <tr>
+                    <td>${escapeHtml(row.group_key || "All")}</td>
+                    <td>${escapeHtml(metric)}</td>
+                    <td>${escapeHtml(value)}</td>
+                  </tr>
+                `)).join("")}
+              </tbody>
+            </table>
+          </div>
+        `;
+      }
+
       function inputValue(id) {
         return document.getElementById(id).value.trim();
       }
@@ -1700,16 +1728,102 @@ pub const SCRIPT: &str = r#"
         show({ selected_fixture: name });
       }
 
+      async function createAggregation() {
+        try {
+          if (!token) await login();
+          const reportId = inputValue("report-id");
+          if (!reportId) throw new Error("Select or enter a report ID first.");
+          const metricKind = inputValue("aggregation-metric-kind") || "sum";
+          const sourceLogicalKey = inputValue("aggregation-source-logical-key");
+          const payload = await request("/api/admin/aggregations", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: inputValue("aggregation-name") || "Aggregation",
+              report_id: reportId,
+              group_by_logical_key: inputValue("aggregation-group-by-logical-key") || null,
+              metrics: [{
+                metric_key: inputValue("aggregation-metric-key") || "value",
+                source_logical_key: metricKind === "count" ? null : sourceLogicalKey || null,
+                metric_kind: metricKind
+              }]
+            })
+          });
+          setInput("aggregation-id", payload.id);
+          show(payload);
+          await loadAggregations();
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      function useAggregation(aggregationId, aggregationName = aggregationId, reportId = "", reportName = reportId) {
+        selectRecord("aggregation", aggregationName, aggregationId, {
+          "aggregation-id": aggregationId,
+          "aggregation-name": aggregationName,
+          ...(reportId ? { "report-id": reportId } : {})
+        });
+        if (reportId) {
+          useReport(reportId, reportName || reportId);
+        }
+      }
+
+      async function loadAggregations() {
+        try {
+          if (!token) await login();
+          const payload = await request("/api/aggregations");
+          show(payload);
+          showCards(payload, (aggregation) => `
+            <article class="card">
+              <h3>${escapeHtml(aggregation.name)}</h3>
+              <p>${aggregation.metric_count} metrics</p>
+              <p class="muted">Report ${escapeHtml(aggregation.report_name || aggregation.report_id)}${aggregation.group_by_logical_key ? ` grouped by ${escapeHtml(aggregation.group_by_logical_key)}` : ""}</p>
+              <button type="button" onclick="useAggregation('${escapeHtml(aggregation.id)}', '${escapeHtml(aggregation.name)}', '${escapeHtml(aggregation.report_id)}', '${escapeHtml(aggregation.report_name)}')">Use Aggregation</button>
+              <button type="button" onclick="loadAggregationByValue('${escapeHtml(aggregation.id)}')">Run Aggregation</button>
+              <code>${escapeHtml(aggregation.id)}</code>
+            </article>
+          `);
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function loadAggregationById() {
+        try {
+          const aggregationId = inputValue("aggregation-id");
+          if (!aggregationId) throw new Error("Enter or select an aggregation ID first.");
+          await loadAggregationByValue(aggregationId);
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function loadAggregationByValue(aggregationId) {
+        if (!token) await login();
+        const payload = await request(`/api/aggregations/${aggregationId}/table`);
+        useAggregation(aggregationId);
+        show(payload);
+        document.getElementById("screen").innerHTML = `
+          <article class="card">
+            <h3>Aggregation Results</h3>
+            <p>${payload.rows.length} rows returned.</p>
+            ${aggregationRowsView(payload.rows)}
+          </article>
+        `;
+      }
+
       async function createChart() {
         try {
           if (!token) await login();
           const reportId = inputValue("report-id");
+          const aggregationId = inputValue("aggregation-id");
           const payload = await request("/api/admin/charts", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               name: inputValue("chart-name"),
-              report_id: reportId || null,
+              report_id: aggregationId ? null : reportId || null,
+              aggregation_id: aggregationId || null,
               chart_type: inputValue("chart-type") || "table"
             })
           });
@@ -1727,12 +1841,14 @@ pub const SCRIPT: &str = r#"
           const chartId = inputValue("chart-id");
           if (!chartId) throw new Error("Select or enter a chart ID first.");
           const reportId = inputValue("report-id");
+          const aggregationId = inputValue("aggregation-id");
           const payload = await request(`/api/admin/charts/${chartId}`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               name: inputValue("chart-name"),
-              report_id: reportId || null,
+              report_id: aggregationId ? null : reportId || null,
+              aggregation_id: aggregationId || null,
               chart_type: inputValue("chart-type") || "table"
             })
           });
@@ -1768,9 +1884,10 @@ pub const SCRIPT: &str = r#"
             <article class="card">
               <h3>${escapeHtml(chart.name)}</h3>
               <p>${escapeHtml(chart.chart_type)} chart</p>
-              <p class="muted">Report ${escapeHtml(chart.report_name || "None")}${chart.report_form_name ? ` on ${escapeHtml(chart.report_form_name)}` : ""}</p>
-              <button type="button" onclick="useChart('${escapeHtml(chart.id)}', '${escapeHtml(chart.name)}', '${escapeHtml(chart.report_id || "")}', '${escapeHtml(chart.report_name || "")}', '${escapeHtml(chart.chart_type)}')">Use Chart Context</button>
+              <p class="muted">${chart.aggregation_id ? `Aggregation ${escapeHtml(chart.aggregation_name || chart.aggregation_id)}${chart.aggregation_report_name ? ` from ${escapeHtml(chart.aggregation_report_name)}` : ""}` : `Report ${escapeHtml(chart.report_name || "None")}${chart.report_form_name ? ` on ${escapeHtml(chart.report_form_name)}` : ""}`}</p>
+              <button type="button" onclick="useChart('${escapeHtml(chart.id)}', '${escapeHtml(chart.name)}', '${escapeHtml(chart.report_id || "")}', '${escapeHtml(chart.report_name || "")}', '${escapeHtml(chart.chart_type)}', '${escapeHtml(chart.aggregation_id || "")}', '${escapeHtml(chart.aggregation_name || "")}')">Use Chart Context</button>
               ${chart.report_id ? `<button type="button" onclick="loadReportByValue('${escapeHtml(chart.report_id)}')">Run Report</button>` : ""}
+              ${chart.aggregation_id ? `<button type="button" onclick="loadAggregationByValue('${escapeHtml(chart.aggregation_id)}')">Run Aggregation</button>` : ""}
               <code>${escapeHtml(chart.id)}</code>
             </article>
           `);
@@ -1779,17 +1896,21 @@ pub const SCRIPT: &str = r#"
         }
       }
 
-      function useChart(chartId, chartName = chartId, reportId = "", reportName = reportId, chartType = "table") {
+      function useChart(chartId, chartName = chartId, reportId = "", reportName = reportId, chartType = "table", aggregationId = "", aggregationName = aggregationId) {
         selectRecord("chart", chartName, chartId, {
           "chart-id": chartId,
           "chart-name": chartName,
           "chart-type": chartType,
-          ...(reportId ? { "report-id": reportId } : {})
+          ...(reportId ? { "report-id": reportId, "aggregation-id": "" } : {}),
+          ...(aggregationId ? { "aggregation-id": aggregationId, "report-id": "" } : {})
         });
         if (reportId) {
           selectRecord("report", reportName || reportId, reportId, {
             "report-id": reportId
           });
+        }
+        if (aggregationId) {
+          useAggregation(aggregationId, aggregationName || aggregationId);
         }
       }
 
@@ -2072,10 +2193,15 @@ pub const SCRIPT: &str = r#"
         `;
         const cards = await Promise.all(payload.components.map(async (component) => {
           let rows = [];
+          let aggregationRows = [];
           const componentTitle = component.config?.title || component.chart.name;
           if (component.chart.report_id) {
             const report = await request(`/api/reports/${component.chart.report_id}/table`);
             rows = report.rows;
+          }
+          if (component.chart.aggregation_id) {
+            const aggregation = await request(`/api/aggregations/${component.chart.aggregation_id}/table`);
+            aggregationRows = aggregation.rows;
           }
           return `
             <article class="card">
@@ -2083,10 +2209,11 @@ pub const SCRIPT: &str = r#"
               <p>${escapeHtml(component.chart.chart_type)} chart</p>
               <p class="muted">Chart ${escapeHtml(component.chart.name)}</p>
               <p>Position ${component.position}</p>
-              <p class="muted">Report ${escapeHtml(component.chart.report_name || component.chart.report_id || "None")}${component.chart.report_form_name ? ` on ${escapeHtml(component.chart.report_form_name)}` : ""}</p>
-              <button type="button" onclick="useDashboardComponent('${escapeHtml(component.id)}', '${escapeHtml(component.chart.id)}', ${component.position}, '${escapeHtml(jsStringArg(JSON.stringify(component.config)))}', '${escapeHtml(component.chart.name)}', '${escapeHtml(component.chart.chart_type)}', '${escapeHtml(component.chart.report_id || "")}', '${escapeHtml(component.chart.report_name || "")}')">Use Component Context</button>
+              <p class="muted">${component.chart.aggregation_id ? `Aggregation ${escapeHtml(component.chart.aggregation_name || component.chart.aggregation_id)}${component.chart.aggregation_report_name ? ` from ${escapeHtml(component.chart.aggregation_report_name)}` : ""}` : `Report ${escapeHtml(component.chart.report_name || component.chart.report_id || "None")}${component.chart.report_form_name ? ` on ${escapeHtml(component.chart.report_form_name)}` : ""}`}</p>
+              <button type="button" onclick="useDashboardComponent('${escapeHtml(component.id)}', '${escapeHtml(component.chart.id)}', ${component.position}, '${escapeHtml(jsStringArg(JSON.stringify(component.config)))}', '${escapeHtml(component.chart.name)}', '${escapeHtml(component.chart.chart_type)}', '${escapeHtml(component.chart.report_id || "")}', '${escapeHtml(component.chart.report_name || "")}', '${escapeHtml(component.chart.aggregation_id || "")}', '${escapeHtml(component.chart.aggregation_name || "")}')">Use Component Context</button>
               ${component.chart.report_id ? `<button type="button" onclick="loadReportByValue('${escapeHtml(component.chart.report_id)}')">Open Report</button>` : ""}
-              ${reportRowsView(rows)}
+              ${component.chart.aggregation_id ? `<button type="button" onclick="loadAggregationByValue('${escapeHtml(component.chart.aggregation_id)}')">Open Aggregation</button>` : ""}
+              ${component.chart.aggregation_id ? aggregationRowsView(aggregationRows) : reportRowsView(rows)}
             </article>
           `;
         }));
@@ -2095,7 +2222,7 @@ pub const SCRIPT: &str = r#"
           : header + '<p class="muted">No dashboard components found.</p>';
       }
 
-      function useDashboardComponent(componentId, chartId, position, configJson, chartName = chartId, chartType = "table", reportId = "", reportName = reportId) {
+      function useDashboardComponent(componentId, chartId, position, configJson, chartName = chartId, chartType = "table", reportId = "", reportName = reportId, aggregationId = "", aggregationName = aggregationId) {
         const config = JSON.parse(configJson || "{}");
         selectRecord("dashboard component", componentId, componentId, {
           "dashboard-component-id": componentId,
@@ -2105,10 +2232,14 @@ pub const SCRIPT: &str = r#"
           "dashboard-component-position": String(position),
           "dashboard-component-title": config.title || chartName,
           "dashboard-component-config-json": configJson,
-          ...(reportId ? { "report-id": reportId } : {})
+          ...(reportId ? { "report-id": reportId, "aggregation-id": "" } : {}),
+          ...(aggregationId ? { "aggregation-id": aggregationId, "report-id": "" } : {})
         });
         if (reportId) {
           useReport(reportId, reportName || reportId);
+        }
+        if (aggregationId) {
+          useAggregation(aggregationId, aggregationName || aggregationId);
         }
       }
 

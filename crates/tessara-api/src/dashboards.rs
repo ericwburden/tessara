@@ -22,6 +22,7 @@ use crate::{
 pub struct CreateChartRequest {
     name: String,
     report_id: Option<Uuid>,
+    aggregation_id: Option<Uuid>,
     chart_type: Option<String>,
 }
 
@@ -62,6 +63,10 @@ pub struct ChartResponse {
     report_name: Option<String>,
     report_form_name: Option<String>,
     report_url: Option<String>,
+    aggregation_id: Option<Uuid>,
+    aggregation_name: Option<String>,
+    aggregation_report_name: Option<String>,
+    aggregation_url: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -81,15 +86,24 @@ pub async fn create_chart(
 
     let chart_type = parse_chart_type(payload.chart_type.as_deref())?;
 
+    require_single_chart_data_source(payload.report_id, payload.aggregation_id)?;
     if let Some(report_id) = payload.report_id {
         require_report_exists(&state.pool, report_id).await?;
     }
+    if let Some(aggregation_id) = payload.aggregation_id {
+        require_aggregation_exists(&state.pool, aggregation_id).await?;
+    }
 
     let id = sqlx::query_scalar(
-        "INSERT INTO charts (name, report_id, chart_type) VALUES ($1, $2, $3) RETURNING id",
+        r#"
+        INSERT INTO charts (name, report_id, aggregation_id, chart_type)
+        VALUES ($1, $2, $3, $4)
+        RETURNING id
+        "#,
     )
     .bind(payload.name)
     .bind(payload.report_id)
+    .bind(payload.aggregation_id)
     .bind(chart_type.as_str())
     .fetch_one(&state.pool)
     .await?;
@@ -109,17 +123,28 @@ pub async fn update_chart(
     require_text("chart name", &payload.name)?;
     let chart_type = parse_chart_type(payload.chart_type.as_deref())?;
 
+    require_single_chart_data_source(payload.report_id, payload.aggregation_id)?;
     if let Some(report_id) = payload.report_id {
         require_report_exists(&state.pool, report_id).await?;
     }
+    if let Some(aggregation_id) = payload.aggregation_id {
+        require_aggregation_exists(&state.pool, aggregation_id).await?;
+    }
 
-    sqlx::query("UPDATE charts SET name = $1, report_id = $2, chart_type = $3 WHERE id = $4")
-        .bind(payload.name)
-        .bind(payload.report_id)
-        .bind(chart_type.as_str())
-        .bind(chart_id)
-        .execute(&state.pool)
-        .await?;
+    sqlx::query(
+        r#"
+        UPDATE charts
+        SET name = $1, report_id = $2, aggregation_id = $3, chart_type = $4
+        WHERE id = $5
+        "#,
+    )
+    .bind(payload.name)
+    .bind(payload.report_id)
+    .bind(payload.aggregation_id)
+    .bind(chart_type.as_str())
+    .bind(chart_id)
+    .execute(&state.pool)
+    .await?;
 
     Ok(Json(IdResponse { id: chart_id }))
 }
@@ -155,11 +180,17 @@ pub async fn list_charts(
             charts.name,
             charts.chart_type::text AS chart_type,
             charts.report_id,
+            charts.aggregation_id,
             reports.name AS report_name,
-            forms.name AS report_form_name
+            forms.name AS report_form_name,
+            aggregations.name AS aggregation_name,
+            aggregation_reports.name AS aggregation_report_name
         FROM charts
         LEFT JOIN reports ON reports.id = charts.report_id
         LEFT JOIN forms ON forms.id = reports.form_id
+        LEFT JOIN aggregations ON aggregations.id = charts.aggregation_id
+        LEFT JOIN reports AS aggregation_reports
+            ON aggregation_reports.id = aggregations.report_id
         ORDER BY charts.name, charts.id
         "#,
     )
@@ -170,6 +201,7 @@ pub async fn list_charts(
         .into_iter()
         .map(|row| {
             let report_id: Option<Uuid> = row.try_get("report_id")?;
+            let aggregation_id: Option<Uuid> = row.try_get("aggregation_id")?;
             Ok(ChartResponse {
                 id: row.try_get("id")?,
                 name: row.try_get("name")?,
@@ -178,6 +210,10 @@ pub async fn list_charts(
                 report_name: row.try_get("report_name")?,
                 report_form_name: row.try_get("report_form_name")?,
                 report_url: report_id.map(|id| format!("/api/reports/{id}/table")),
+                aggregation_id,
+                aggregation_name: row.try_get("aggregation_name")?,
+                aggregation_report_name: row.try_get("aggregation_report_name")?,
+                aggregation_url: aggregation_id.map(|id| format!("/api/aggregations/{id}/table")),
             })
         })
         .collect::<Result<Vec<_>, sqlx::Error>>()?;
@@ -360,12 +396,18 @@ pub async fn get_dashboard(
             charts.name AS chart_name,
             charts.chart_type,
             charts.report_id,
+            charts.aggregation_id,
             reports.name AS report_name,
-            forms.name AS report_form_name
+            forms.name AS report_form_name,
+            aggregations.name AS aggregation_name,
+            aggregation_reports.name AS aggregation_report_name
         FROM dashboard_components
         JOIN charts ON charts.id = dashboard_components.chart_id
         LEFT JOIN reports ON reports.id = charts.report_id
         LEFT JOIN forms ON forms.id = reports.form_id
+        LEFT JOIN aggregations ON aggregations.id = charts.aggregation_id
+        LEFT JOIN reports AS aggregation_reports
+            ON aggregation_reports.id = aggregations.report_id
         WHERE dashboard_components.dashboard_id = $1
         ORDER BY dashboard_components.position, charts.name
         "#,
@@ -377,6 +419,7 @@ pub async fn get_dashboard(
     let mut components = Vec::new();
     for row in rows {
         let report_id: Option<Uuid> = row.try_get("report_id")?;
+        let aggregation_id: Option<Uuid> = row.try_get("aggregation_id")?;
         components.push(DashboardComponentResponse {
             id: row.try_get("component_id")?,
             position: row.try_get("position")?,
@@ -389,6 +432,10 @@ pub async fn get_dashboard(
                 report_name: row.try_get("report_name")?,
                 report_form_name: row.try_get("report_form_name")?,
                 report_url: report_id.map(|id| format!("/api/reports/{id}/table")),
+                aggregation_id,
+                aggregation_name: row.try_get("aggregation_name")?,
+                aggregation_report_name: row.try_get("aggregation_report_name")?,
+                aggregation_url: aggregation_id.map(|id| format!("/api/aggregations/{id}/table")),
             },
         });
     }
@@ -416,6 +463,19 @@ fn normalize_component_config(config: Value) -> Value {
     }
 }
 
+fn require_single_chart_data_source(
+    report_id: Option<Uuid>,
+    aggregation_id: Option<Uuid>,
+) -> ApiResult<()> {
+    if report_id.is_some() && aggregation_id.is_some() {
+        Err(ApiError::BadRequest(
+            "a chart can target either a report or an aggregation, not both".into(),
+        ))
+    } else {
+        Ok(())
+    }
+}
+
 async fn require_report_exists(pool: &sqlx::PgPool, report_id: Uuid) -> ApiResult<()> {
     let exists: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM reports WHERE id = $1)")
         .bind(report_id)
@@ -425,6 +485,19 @@ async fn require_report_exists(pool: &sqlx::PgPool, report_id: Uuid) -> ApiResul
         Ok(())
     } else {
         Err(ApiError::NotFound(format!("report {report_id}")))
+    }
+}
+
+async fn require_aggregation_exists(pool: &sqlx::PgPool, aggregation_id: Uuid) -> ApiResult<()> {
+    let exists: bool =
+        sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM aggregations WHERE id = $1)")
+            .bind(aggregation_id)
+            .fetch_one(pool)
+            .await?;
+    if exists {
+        Ok(())
+    } else {
+        Err(ApiError::NotFound(format!("aggregation {aggregation_id}")))
     }
 }
 

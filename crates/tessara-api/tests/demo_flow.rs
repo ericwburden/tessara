@@ -805,6 +805,47 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
         42.0
     );
 
+    let aggregation_chart = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/charts",
+            &token,
+            Some(json!({
+                "name": "Participants Totals Chart",
+                "report_id": null,
+                "aggregation_id": aggregation_id,
+                "chart_type": "table"
+            })),
+        ),
+    )
+    .await;
+    let aggregation_chart_id = aggregation_chart["id"]
+        .as_str()
+        .expect("aggregation chart response should contain id");
+    let invalid_chart = request_status_and_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/charts",
+            &token,
+            Some(json!({
+                "name": "Invalid Mixed Source Chart",
+                "report_id": report_id,
+                "aggregation_id": aggregation_id,
+                "chart_type": "table"
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(invalid_chart.0, StatusCode::BAD_REQUEST);
+    assert!(
+        invalid_chart.1["error"]
+            .as_str()
+            .expect("invalid chart error should include message")
+            .contains("either a report or an aggregation")
+    );
+
     let chart_id = seed["chart_id"]
         .as_str()
         .expect("seed response should contain chart id");
@@ -824,10 +865,40 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
                 && chart["report_form_name"] == "Quarterly Check In"
                 && chart["report_id"] == report_id)
     );
+    assert!(
+        charts
+            .as_array()
+            .expect("charts response should be an array")
+            .iter()
+            .any(|chart| chart["id"] == aggregation_chart_id
+                && chart["aggregation_id"] == aggregation_id
+                && chart["aggregation_name"] == "Participants Aggregation"
+                && chart["aggregation_report_name"] == "Participants Report"
+                && chart["aggregation_url"]
+                    .as_str()
+                    .expect("aggregation chart should include execution url")
+                    .contains(aggregation_id))
+    );
 
     let dashboard_id = seed["dashboard_id"]
         .as_str()
         .expect("seed response should contain dashboard id");
+    request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            &format!("/api/admin/dashboards/{dashboard_id}/components"),
+            &token,
+            Some(json!({
+                "chart_id": aggregation_chart_id,
+                "position": 1,
+                "config": {
+                    "title": "Participant Totals"
+                }
+            })),
+        ),
+    )
+    .await;
     let dashboard = request_json(
         app.clone(),
         Request::builder()
@@ -845,6 +916,15 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
     assert_eq!(
         dashboard["components"][0]["chart"]["report_form_name"],
         "Quarterly Check In"
+    );
+    assert!(
+        dashboard["components"]
+            .as_array()
+            .expect("dashboard response should include components")
+            .iter()
+            .any(|component| component["chart"]["id"] == aggregation_chart_id
+                && component["chart"]["aggregation_id"] == aggregation_id
+                && component["chart"]["aggregation_name"] == "Participants Aggregation")
     );
     let dashboards = request_json(
         app,
