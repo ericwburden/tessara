@@ -129,287 +129,395 @@ pub fn reporting_application_shell_html(style: &str, script: &str) -> String {
     )
 }
 
+#[derive(Copy, Clone)]
+struct ActionSpec {
+    handler: &'static str,
+    label: &'static str,
+}
+
+const HOME_ACTIONS: &[ActionSpec] = &[
+    ActionSpec {
+        handler: "login()",
+        label: "Log In",
+    },
+    ActionSpec {
+        handler: "loadCurrentUser()",
+        label: "Current User",
+    },
+    ActionSpec {
+        handler: "logout()",
+        label: "Log Out",
+    },
+    ActionSpec {
+        handler: "seedDemo()",
+        label: "Seed Demo",
+    },
+    ActionSpec {
+        handler: "loadAppSummary()",
+        label: "Load App Summary",
+    },
+];
+
+const ORGANIZATION_ACTIONS: &[ActionSpec] = &[
+    ActionSpec {
+        handler: "login()",
+        label: "Log In",
+    },
+    ActionSpec {
+        handler: "loadCurrentUser()",
+        label: "Current User",
+    },
+    ActionSpec {
+        handler: "seedDemo()",
+        label: "Seed Demo",
+    },
+    ActionSpec {
+        handler: "loadNodes()",
+        label: "Load Nodes",
+    },
+    ActionSpec {
+        handler: "loadAppSummary()",
+        label: "Load App Summary",
+    },
+];
+
+const FORMS_ACTIONS: &[ActionSpec] = &[
+    ActionSpec {
+        handler: "login()",
+        label: "Log In",
+    },
+    ActionSpec {
+        handler: "loadCurrentUser()",
+        label: "Current User",
+    },
+    ActionSpec {
+        handler: "seedDemo()",
+        label: "Seed Demo",
+    },
+    ActionSpec {
+        handler: "loadForms()",
+        label: "Load Forms",
+    },
+    ActionSpec {
+        handler: "loadAppSummary()",
+        label: "Load App Summary",
+    },
+];
+
+const RESPONSES_ACTIONS: &[ActionSpec] = &[
+    ActionSpec {
+        handler: "login()",
+        label: "Log In",
+    },
+    ActionSpec {
+        handler: "loadCurrentUser()",
+        label: "Current User",
+    },
+    ActionSpec {
+        handler: "logout()",
+        label: "Log Out",
+    },
+    ActionSpec {
+        handler: "seedDemo()",
+        label: "Seed Demo",
+    },
+    ActionSpec {
+        handler: "startDemoSubmissionFlow()",
+        label: "Start Demo Response",
+    },
+    ActionSpec {
+        handler: "loadAppSummary()",
+        label: "Load App Summary",
+    },
+];
+
+const ADMINISTRATION_ACTIONS: &[ActionSpec] = &[
+    ActionSpec {
+        handler: "login()",
+        label: "Log In",
+    },
+    ActionSpec {
+        handler: "seedDemo()",
+        label: "Seed Demo",
+    },
+    ActionSpec {
+        handler: "loadAppSummary()",
+        label: "Load App Summary",
+    },
+];
+
+const MIGRATION_ACTIONS: &[ActionSpec] = &[
+    ActionSpec {
+        handler: "login()",
+        label: "Log In",
+    },
+    ActionSpec {
+        handler: "loadCurrentUser()",
+        label: "Current User",
+    },
+    ActionSpec {
+        handler: "logout()",
+        label: "Log Out",
+    },
+    ActionSpec {
+        handler: "loadAppSummary()",
+        label: "Load App Summary",
+    },
+];
+
+const REPORTS_ACTIONS: &[ActionSpec] = &[
+    ActionSpec {
+        handler: "login()",
+        label: "Log In",
+    },
+    ActionSpec {
+        handler: "loadCurrentUser()",
+        label: "Current User",
+    },
+    ActionSpec {
+        handler: "logout()",
+        label: "Log Out",
+    },
+    ActionSpec {
+        handler: "seedDemo()",
+        label: "Seed Demo",
+    },
+    ActionSpec {
+        handler: "openDemoDashboard()",
+        label: "Open Demo Dashboard",
+    },
+    ActionSpec {
+        handler: "loadAppSummary()",
+        label: "Load App Summary",
+    },
+];
+
+const DASHBOARDS_ACTIONS: &[ActionSpec] = &[
+    ActionSpec {
+        handler: "login()",
+        label: "Log In",
+    },
+    ActionSpec {
+        handler: "loadCurrentUser()",
+        label: "Current User",
+    },
+    ActionSpec {
+        handler: "logout()",
+        label: "Log Out",
+    },
+    ActionSpec {
+        handler: "seedDemo()",
+        label: "Seed Demo",
+    },
+    ActionSpec {
+        handler: "openDemoDashboard()",
+        label: "Open Demo Dashboard",
+    },
+    ActionSpec {
+        handler: "loadAppSummary()",
+        label: "Load App Summary",
+    },
+];
+
 #[component]
-fn HomeApplicationShell() -> impl IntoView {
+fn AppAreaShell(
+    active_route: &'static str,
+    area_kind: &'static str,
+    title: &'static str,
+    description: &'static str,
+    show_create_shortcuts: bool,
+    actions: &'static [ActionSpec],
+    children: Children,
+) -> impl IntoView {
+    let is_home = active_route == "home";
+    let breadcrumb = if is_home {
+        view! { <span>"Home"</span> }.into_any()
+    } else {
+        view! {
+            <>
+                <a href="/app">"Home"</a>
+                <span>{title}</span>
+            </>
+        }
+        .into_any()
+    };
+
     view! {
         <main class="shell app-shell">
             <section class="panel hero">
                 <BrandLockup/>
-                <nav class="breadcrumb-trail" aria-label="Breadcrumb">
-                    <span>"Home"</span>
-                </nav>
-                <p class="muted">"Shared Home"</p>
-                <h1>"Application Overview"</h1>
-                <p>
-                    "This shared home is the primary entry point for the migration UI catch-up. "
-                    "It exposes the target product areas while keeping the current backend-supported workflows intact."
-                </p>
+                <nav class="breadcrumb-trail" aria-label="Breadcrumb">{breadcrumb}</nav>
+                <p class="muted">{area_kind}</p>
+                <h1>{title}</h1>
+                <p>{description}</p>
                 <div class="actions">
-                    <button type="button" onclick="login()">"Log In"</button>
-                    <button type="button" onclick="loadCurrentUser()">"Current User"</button>
-                    <button type="button" onclick="logout()">"Log Out"</button>
-                    <button type="button" onclick="seedDemo()">"Seed Demo"</button>
-                    <button type="button" onclick="loadAppSummary()">"Load App Summary"</button>
+                    {actions
+                        .iter()
+                        .map(|action| {
+                            view! {
+                                <button type="button" onclick=action.handler>
+                                    {action.label}
+                                </button>
+                            }
+                        })
+                        .collect_view()}
                 </div>
             </section>
             <section class="app-layout">
-                <AreaSidebar active_route="home" show_create_shortcuts=false/>
-                <section class="panel app-main">
-                    <HomeScreen/>
-                    <OutputPanels/>
-                </section>
+                <AreaSidebar
+                    active_route=active_route
+                    show_create_shortcuts=show_create_shortcuts
+                />
+                <section class="panel app-main">{children()}</section>
             </section>
         </main>
+    }
+}
+
+#[component]
+fn HomeApplicationShell() -> impl IntoView {
+    view! {
+        <AppAreaShell
+            active_route="home"
+            area_kind="Shared Home"
+            title="Application Overview"
+            description="This shared home is the primary entry point for the migration UI catch-up. It exposes the target product areas while keeping the current backend-supported workflows intact."
+            show_create_shortcuts=false
+            actions=HOME_ACTIONS
+        >
+            <HomeScreen/>
+            <OutputPanels/>
+        </AppAreaShell>
     }
 }
 
 #[component]
 fn OrganizationApplicationShell() -> impl IntoView {
     view! {
-        <main class="shell app-shell">
-            <section class="panel hero">
-                <BrandLockup/>
-                <nav class="breadcrumb-trail" aria-label="Breadcrumb">
-                    <a href="/app">"Home"</a>
-                    <span>"Organization"</span>
-                </nav>
-                <p class="muted">"Product Area"</p>
-                <h1>"Organization"</h1>
-                <p>
-                    "This area establishes the operational hierarchy surface. It currently bridges into the existing hierarchy and node workflows without introducing unsupported organization behavior."
-                </p>
-                <div class="actions">
-                    <button type="button" onclick="login()">"Log In"</button>
-                    <button type="button" onclick="loadCurrentUser()">"Current User"</button>
-                    <button type="button" onclick="seedDemo()">"Seed Demo"</button>
-                    <button type="button" onclick="loadNodes()">"Load Nodes"</button>
-                    <button type="button" onclick="loadAppSummary()">"Load App Summary"</button>
-                </div>
-            </section>
-            <section class="app-layout">
-                <AreaSidebar active_route="organization" show_create_shortcuts=false/>
-                <section class="panel app-main">
-                    <OrganizationHomeScreen/>
-                    <OrganizationWorkspaceShell/>
-                    <OutputPanels/>
-                </section>
-            </section>
-        </main>
+        <AppAreaShell
+            active_route="organization"
+            area_kind="Product Area"
+            title="Organization"
+            description="This area establishes the operational hierarchy surface. It currently bridges into the existing hierarchy and node workflows without introducing unsupported organization behavior."
+            show_create_shortcuts=false
+            actions=ORGANIZATION_ACTIONS
+        >
+            <OrganizationHomeScreen/>
+            <OrganizationWorkspaceShell/>
+            <OutputPanels/>
+        </AppAreaShell>
     }
 }
 
 #[component]
 fn FormsApplicationShell() -> impl IntoView {
     view! {
-        <main class="shell app-shell">
-            <section class="panel hero">
-                <BrandLockup/>
-                <nav class="breadcrumb-trail" aria-label="Breadcrumb">
-                    <a href="/app">"Home"</a>
-                    <span>"Forms"</span>
-                </nav>
-                <p class="muted">"Product Area"</p>
-                <h1>"Forms"</h1>
-                <p>
-                    "This area is the canonical entry point for form discovery and lifecycle work. It currently bridges product-facing form access and internal form configuration using existing supported routes."
-                </p>
-                <div class="actions">
-                    <button type="button" onclick="login()">"Log In"</button>
-                    <button type="button" onclick="loadCurrentUser()">"Current User"</button>
-                    <button type="button" onclick="seedDemo()">"Seed Demo"</button>
-                    <button type="button" onclick="loadForms()">"Load Forms"</button>
-                    <button type="button" onclick="loadAppSummary()">"Load App Summary"</button>
-                </div>
-            </section>
-            <section class="app-layout">
-                <AreaSidebar active_route="forms" show_create_shortcuts=false/>
-                <section class="panel app-main">
-                    <FormsHomeScreen/>
-                    <FormsWorkspaceShell/>
-                    <OutputPanels/>
-                </section>
-            </section>
-        </main>
+        <AppAreaShell
+            active_route="forms"
+            area_kind="Product Area"
+            title="Forms"
+            description="This area is the canonical entry point for form discovery and lifecycle work. It currently bridges product-facing form access and internal form configuration using existing supported routes."
+            show_create_shortcuts=false
+            actions=FORMS_ACTIONS
+        >
+            <FormsHomeScreen/>
+            <FormsWorkspaceShell/>
+            <OutputPanels/>
+        </AppAreaShell>
     }
 }
 
 #[component]
 fn ResponsesApplicationShell() -> impl IntoView {
     view! {
-        <main class="shell app-shell">
-            <section class="panel hero">
-                <BrandLockup/>
-                <nav class="breadcrumb-trail" aria-label="Breadcrumb">
-                    <a href="/app">"Home"</a>
-                    <span>"Responses"</span>
-                </nav>
-                <p class="muted">"Product Area"</p>
-                <h1>"Responses"</h1>
-                <p>
-                    "This area handles response entry, drafts, submission, and review. It uses the current backend-supported form-render and submission lifecycle without relying on utility-style navigation."
-                </p>
-                <div class="actions">
-                    <button type="button" onclick="login()">"Log In"</button>
-                    <button type="button" onclick="loadCurrentUser()">"Current User"</button>
-                    <button type="button" onclick="logout()">"Log Out"</button>
-                    <button type="button" onclick="seedDemo()">"Seed Demo"</button>
-                    <button type="button" onclick="startDemoSubmissionFlow()">"Start Demo Response"</button>
-                    <button type="button" onclick="loadAppSummary()">"Load App Summary"</button>
-                </div>
-            </section>
-            <section class="app-layout">
-                <AreaSidebar active_route="responses" show_create_shortcuts=false/>
-                <section class="panel app-main">
-                    <SubmissionHomeScreen/>
-                    <SubmissionWorkspaceShell/>
-                    <OutputPanels/>
-                </section>
-            </section>
-        </main>
+        <AppAreaShell
+            active_route="responses"
+            area_kind="Product Area"
+            title="Responses"
+            description="This area handles response entry, drafts, submission, and review. It uses the current backend-supported form-render and submission lifecycle without relying on utility-style navigation."
+            show_create_shortcuts=false
+            actions=RESPONSES_ACTIONS
+        >
+            <SubmissionHomeScreen/>
+            <SubmissionWorkspaceShell/>
+            <OutputPanels/>
+        </AppAreaShell>
     }
 }
 
 #[component]
 fn AdministrationApplicationShell() -> impl IntoView {
     view! {
-        <main class="shell app-shell">
-            <section class="panel hero">
-                <BrandLockup/>
-                <nav class="breadcrumb-trail" aria-label="Breadcrumb">
-                    <a href="/app">"Home"</a>
-                    <span>"Administration"</span>
-                </nav>
-                <p class="muted">"Internal Area"</p>
-                <h1>"Administration"</h1>
-                <p>
-                    "This internal area is for hierarchy, form, and reporting configuration. It remains visible during the migration, but it is intentionally scoped as an operator surface."
-                </p>
-                <div class="actions">
-                    <button type="button" onclick="login()">"Log In"</button>
-                    <button type="button" onclick="seedDemo()">"Seed Demo"</button>
-                    <button type="button" onclick="loadAppSummary()">"Load App Summary"</button>
-                </div>
-            </section>
-            <section class="app-layout">
-                <AreaSidebar active_route="administration" show_create_shortcuts=true/>
-                <section class="panel app-main">
-                    <AdminHomeScreen/>
-                    <AdminWorkspaceShell/>
-                    <OutputPanels/>
-                </section>
-            </section>
-        </main>
+        <AppAreaShell
+            active_route="administration"
+            area_kind="Internal Area"
+            title="Administration"
+            description="This internal area is for hierarchy, form, and reporting configuration. It remains visible during the migration, but it is intentionally scoped as an operator surface."
+            show_create_shortcuts=true
+            actions=ADMINISTRATION_ACTIONS
+        >
+            <AdminHomeScreen/>
+            <AdminWorkspaceShell/>
+            <OutputPanels/>
+        </AppAreaShell>
     }
 }
 
 #[component]
 fn MigrationApplicationShell() -> impl IntoView {
     view! {
-        <main class="shell app-shell">
-            <section class="panel hero">
-                <BrandLockup/>
-                <nav class="breadcrumb-trail" aria-label="Breadcrumb">
-                    <a href="/app">"Home"</a>
-                    <span>"Migration"</span>
-                </nav>
-                <p class="muted">"Internal Area"</p>
-                <h1>"Migration Workbench"</h1>
-                <p>
-                    "This operator screen validates and dry-runs representative legacy fixtures "
-                    "before running import rehearsals."
-                </p>
-                <div class="actions">
-                    <button type="button" onclick="login()">"Log In"</button>
-                    <button type="button" onclick="loadCurrentUser()">"Current User"</button>
-                    <button type="button" onclick="logout()">"Log Out"</button>
-                    <button type="button" onclick="loadAppSummary()">"Load App Summary"</button>
-                </div>
+        <AppAreaShell
+            active_route="migration"
+            area_kind="Internal Area"
+            title="Migration Workbench"
+            description="This operator screen validates and dry-runs representative legacy fixtures before running import rehearsals."
+            show_create_shortcuts=false
+            actions=MIGRATION_ACTIONS
+        >
+            <MigrationHomeScreen/>
+            <FixtureScreen/>
+            <section id="result-screen" class="app-screen">
+                <h2>"Validation Results"</h2>
+                <div id="screen" class="cards"></div>
             </section>
-            <section class="app-layout">
-                <AreaSidebar active_route="migration" show_create_shortcuts=false/>
-                <section class="panel app-main">
-                    <MigrationHomeScreen/>
-                    <FixtureScreen/>
-                    <section id="result-screen" class="app-screen">
-                        <h2>"Validation Results"</h2>
-                        <div id="screen" class="cards"></div>
-                    </section>
-                    <RawOutputPanel/>
-                </section>
-            </section>
-        </main>
+            <RawOutputPanel/>
+        </AppAreaShell>
     }
 }
 
 #[component]
 fn ReportsApplicationShell() -> impl IntoView {
     view! {
-        <main class="shell app-shell">
-            <section class="panel hero">
-                <BrandLockup/>
-                <nav class="breadcrumb-trail" aria-label="Breadcrumb">
-                    <a href="/app">"Home"</a>
-                    <span>"Reports"</span>
-                </nav>
-                <p class="muted">"Product Area"</p>
-                <h1>"Reports"</h1>
-                <p>
-                    "This area is the canonical route for report browsing, report execution, and reporting detail traversal. Dashboard preview remains linked here until the dashboard area is split further."
-                </p>
-                <div class="actions">
-                    <button type="button" onclick="login()">"Log In"</button>
-                    <button type="button" onclick="loadCurrentUser()">"Current User"</button>
-                    <button type="button" onclick="logout()">"Log Out"</button>
-                    <button type="button" onclick="seedDemo()">"Seed Demo"</button>
-                    <button type="button" onclick="openDemoDashboard()">"Open Demo Dashboard"</button>
-                    <button type="button" onclick="loadAppSummary()">"Load App Summary"</button>
-                </div>
-            </section>
-            <section class="app-layout">
-                <AreaSidebar active_route="reports" show_create_shortcuts=false/>
-                <section class="panel app-main">
-                    <ReportingHomeScreen/>
-                    <ReportingWorkspaceShell/>
-                    <OutputPanels/>
-                </section>
-            </section>
-        </main>
+        <AppAreaShell
+            active_route="reports"
+            area_kind="Product Area"
+            title="Reports"
+            description="This area is the canonical route for report browsing, report execution, and reporting detail traversal. Dashboard preview remains linked here until the dashboard area is split further."
+            show_create_shortcuts=false
+            actions=REPORTS_ACTIONS
+        >
+            <ReportingHomeScreen/>
+            <ReportingWorkspaceShell/>
+            <OutputPanels/>
+        </AppAreaShell>
     }
 }
 
 #[component]
 fn DashboardsApplicationShell() -> impl IntoView {
     view! {
-        <main class="shell app-shell">
-            <section class="panel hero">
-                <BrandLockup/>
-                <nav class="breadcrumb-trail" aria-label="Breadcrumb">
-                    <a href="/app">"Home"</a>
-                    <span>"Dashboards"</span>
-                </nav>
-                <p class="muted">"Product Area"</p>
-                <h1>"Dashboards"</h1>
-                <p>
-                    "This area is the dashboard viewing destination. It currently uses the supported dashboard preview path while the broader dashboard product surface catches up."
-                </p>
-                <div class="actions">
-                    <button type="button" onclick="login()">"Log In"</button>
-                    <button type="button" onclick="loadCurrentUser()">"Current User"</button>
-                    <button type="button" onclick="logout()">"Log Out"</button>
-                    <button type="button" onclick="seedDemo()">"Seed Demo"</button>
-                    <button type="button" onclick="openDemoDashboard()">"Open Demo Dashboard"</button>
-                    <button type="button" onclick="loadAppSummary()">"Load App Summary"</button>
-                </div>
-            </section>
-            <section class="app-layout">
-                <AreaSidebar active_route="dashboards" show_create_shortcuts=false/>
-                <section class="panel app-main">
-                    <DashboardsHomeScreen/>
-                    <DashboardsWorkspaceShell/>
-                    <OutputPanels/>
-                </section>
-            </section>
-        </main>
+        <AppAreaShell
+            active_route="dashboards"
+            area_kind="Product Area"
+            title="Dashboards"
+            description="This area is the dashboard viewing destination. It currently uses the supported dashboard preview path while the broader dashboard product surface catches up."
+            show_create_shortcuts=false
+            actions=DASHBOARDS_ACTIONS
+        >
+            <DashboardsHomeScreen/>
+            <DashboardsWorkspaceShell/>
+            <OutputPanels/>
+        </AppAreaShell>
     }
 }
 

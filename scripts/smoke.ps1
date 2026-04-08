@@ -131,7 +131,7 @@ try {
     }
 
     $appShell = Invoke-RestMethod -Uri "$baseUrl/app" -TimeoutSec 30
-    if (-not ($appShell -like "*Application Overview*") -or -not ($appShell -like "*Welcome to Tessara*") -or -not ($appShell -like "*Product Areas*") -or -not ($appShell -like "*Internal Areas*") -or -not ($appShell -like "*Start Demo Response*") -or -not ($appShell -like "*/app/organization*") -or -not ($appShell -like "*/app/forms*") -or -not ($appShell -like "*/app/responses*") -or -not ($appShell -like "*/app/dashboards*")) {
+    if (-not ($appShell -like "*Application Overview*") -or -not ($appShell -like "*Welcome to Tessara*") -or -not ($appShell -like "*Product Areas*") -or -not ($appShell -like "*Internal Areas*") -or -not ($appShell -like "*Start Demo Response*") -or -not ($appShell -like "*Open Organization*") -or -not ($appShell -like "*Open Forms*") -or -not ($appShell -like "*Open Responses*") -or -not ($appShell -like "*Open Dashboards*")) {
         throw "Expected application home HTML to include overview and split-area navigation"
     }
     $organizationShell = Invoke-RestMethod -Uri "$baseUrl/app/organization" -TimeoutSec 30
