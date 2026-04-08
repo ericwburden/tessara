@@ -726,6 +726,123 @@ pub const APPLICATION_SCRIPT: &str = r#"
         });
       }
 
+      function useDataset(datasetId, datasetName = datasetId, datasetSlug = "", datasetGrain = "", compositionMode = "") {
+        selectRecord("dataset", datasetName, datasetId, {
+          "dataset-id": datasetId,
+          ...(datasetSlug ? { "dataset-slug": datasetSlug } : {}),
+          ...(datasetGrain ? { "dataset-grain": datasetGrain } : {}),
+          ...(compositionMode ? { "dataset-composition-mode": compositionMode } : {})
+        });
+      }
+
+      async function loadDatasets() {
+        try {
+          if (!token) await login();
+          const payload = await request("/api/datasets");
+          show(payload);
+          showCards(payload, (dataset) => `
+            <article class="card">
+              <h3>${escapeHtml(dataset.name)}</h3>
+              <p>${escapeHtml(dataset.grain)} dataset with ${escapeHtml(dataset.composition_mode)} composition</p>
+              <p class="muted">${dataset.source_count} sources and ${dataset.field_count} fields</p>
+              <button type="button" onclick="useDataset('${escapeHtml(dataset.id)}', '${escapeHtml(dataset.name)}', '${escapeHtml(dataset.slug)}', '${escapeHtml(dataset.grain)}', '${escapeHtml(dataset.composition_mode)}')">Use Dataset</button>
+              <button type="button" onclick="loadDatasetDefinitionByValue('${escapeHtml(dataset.id)}')">Inspect Dataset</button>
+              <button type="button" onclick="loadDatasetTableByValue('${escapeHtml(dataset.id)}')">Run Dataset</button>
+            </article>
+          `);
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function loadDatasetDefinitionById() {
+        try {
+          const datasetId = inputValue("dataset-id");
+          if (!datasetId) throw new Error("Enter or select a dataset ID first.");
+          await loadDatasetDefinitionByValue(datasetId);
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function loadDatasetDefinitionByValue(datasetId) {
+        if (!token) await login();
+        const payload = await request(`/api/datasets/${datasetId}`);
+        setInput("dataset-id", payload.id);
+        useDataset(payload.id, payload.name, payload.slug, payload.grain, payload.composition_mode);
+        show(payload);
+        setScreen(`
+          <article class="card">
+            <h3>Dataset Definition</h3>
+            <p>${escapeHtml(payload.name)}</p>
+            <p class="muted">${escapeHtml(payload.grain)} dataset with ${escapeHtml(payload.composition_mode)} composition</p>
+            <p>${payload.sources.length} sources and ${payload.fields.length} fields</p>
+            <button type="button" onclick="loadDatasetTableByValue('${escapeHtml(payload.id)}')">Run This Dataset</button>
+          </article>
+          ${payload.sources.map((source) => `
+            <article class="card">
+              <h3>${escapeHtml(source.source_alias)}</h3>
+              <p>${escapeHtml(source.form_name || source.compatibility_group_name || source.form_id || source.compatibility_group_id || "Unknown source")}</p>
+              <p class="muted">${escapeHtml(source.selection_rule)}</p>
+            </article>
+          `).join("")}
+          ${payload.fields.map((field) => `
+            <article class="card">
+              <h3>${escapeHtml(field.label)}</h3>
+              <p>${escapeHtml(field.key)} from ${escapeHtml(field.source_alias)}.${escapeHtml(field.source_field_key)}</p>
+              <p class="muted">${escapeHtml(field.field_type)}</p>
+            </article>
+          `).join("")}
+        `);
+      }
+
+      async function loadDatasetTableById() {
+        try {
+          const datasetId = inputValue("dataset-id");
+          if (!datasetId) throw new Error("Enter or select a dataset ID first.");
+          await loadDatasetTableByValue(datasetId);
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function loadDatasetTableByValue(datasetId) {
+        if (!token) await login();
+        const payload = await request(`/api/datasets/${datasetId}/table`);
+        useDataset(datasetId);
+        show(payload);
+        setScreen(`
+          <article class="card">
+            <h3>Dataset Results</h3>
+            <p>${payload.rows.length} rows returned.</p>
+            ${payload.rows.length === 0 ? '<p class="muted">No rows matched this dataset.</p>' : `
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Node</th>
+                      <th>Source</th>
+                      <th>Submission</th>
+                      <th>Values</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${payload.rows.map((row) => `
+                      <tr>
+                        <td>${escapeHtml(row.node_name || "Unknown node")}</td>
+                        <td>${escapeHtml(row.source_alias || "Direct")}</td>
+                        <td>${escapeHtml(row.submission_id || "")}</td>
+                        <td>${escapeHtml(JSON.stringify(row.values || {}))}</td>
+                      </tr>
+                    `).join("")}
+                  </tbody>
+                </table>
+              </div>
+            `}
+          </article>
+        `);
+      }
+
       async function loadReports() {
         try {
           if (!token) await login();
@@ -734,8 +851,8 @@ pub const APPLICATION_SCRIPT: &str = r#"
           showCards(payload, (report) => `
             <article class="card">
               <h3>${escapeHtml(report.name)}</h3>
-              <p class="muted">Form ${escapeHtml(report.form_name || report.form_id || "Any")}</p>
-              <button type="button" onclick="useReport('${escapeHtml(report.id)}', '${escapeHtml(report.name)}'); ${report.form_id ? `useForm('${escapeHtml(report.form_id)}', '${escapeHtml(report.form_name || report.form_id)}');` : ""}">Use Report Context</button>
+              <p class="muted">${report.dataset_id ? `Dataset ${escapeHtml(report.dataset_name || report.dataset_id)}` : `Form ${escapeHtml(report.form_name || report.form_id || "Any")}`}</p>
+              <button type="button" onclick="useReport('${escapeHtml(report.id)}', '${escapeHtml(report.name)}'); ${report.form_id ? `useForm('${escapeHtml(report.form_id)}', '${escapeHtml(report.form_name || report.form_id)}');` : ""} ${report.dataset_id ? `useDataset('${escapeHtml(report.dataset_id)}', '${escapeHtml(report.dataset_name || report.dataset_id)}');` : ""}">Use Report Context</button>
               <button type="button" onclick="loadReportDefinition('${escapeHtml(report.id)}')">Inspect</button>
               <button type="button" onclick="loadReportByValue('${escapeHtml(report.id)}')">Run</button>
             </article>
@@ -750,8 +867,10 @@ pub const APPLICATION_SCRIPT: &str = r#"
         const payload = await request(`/api/reports/${reportId}`);
         setInput("report-id", payload.id);
         if (payload.form_id) setInput("form-id", payload.form_id);
+        if (payload.dataset_id) setInput("dataset-id", payload.dataset_id);
         useReport(payload.id, payload.name);
         if (payload.form_id) useForm(payload.form_id, payload.form_name || payload.form_id);
+        if (payload.dataset_id) useDataset(payload.dataset_id, payload.dataset_name || payload.dataset_id);
         setInput("report-fields-json", JSON.stringify(payload.bindings.map((binding) => ({
           logical_key: binding.logical_key,
           source_field_key: binding.source_field_key,
@@ -762,7 +881,7 @@ pub const APPLICATION_SCRIPT: &str = r#"
           <article class="card">
             <h3>Report Definition</h3>
             <p>${escapeHtml(payload.name)}</p>
-            <p class="muted">${escapeHtml(payload.form_name || payload.form_id || "Any form")}</p>
+            <p class="muted">${escapeHtml(payload.dataset_name || payload.dataset_id || payload.form_name || payload.form_id || "Any form")}</p>
             <p>${payload.bindings.length} field bindings</p>
             <button type="button" onclick="loadReportByValue('${escapeHtml(payload.id)}')">Run This Report</button>
           </article>

@@ -981,6 +981,10 @@ fn ReportRunnerScreen() -> impl IntoView {
             </p>
             <div class="inputs">
                 <label>
+                    <span>"Dataset ID"</span>
+                    <input id="dataset-id" placeholder="Selected dataset ID" value="" />
+                </label>
+                <label>
                     <span>"Report ID"</span>
                     <input id="report-id" placeholder="Selected report ID" value="" />
                 </label>
@@ -999,6 +1003,9 @@ fn ReportRunnerScreen() -> impl IntoView {
             </div>
             <div class="actions">
                 <button type="button" onclick="refreshAnalytics()">"Refresh Analytics"</button>
+                <button type="button" onclick="loadDatasets()">"Choose Dataset"</button>
+                <button type="button" onclick="loadDatasetDefinitionById()">"Inspect Dataset"</button>
+                <button type="button" onclick="loadDatasetTableById()">"Run Dataset"</button>
                 <button type="button" onclick="loadReports()">"Choose Report"</button>
                 <button type="button" onclick="loadReportDefinitionById()">"Inspect Report"</button>
                 <button type="button" onclick="refreshAnalyticsAndRunReport()">"Refresh and Run Report"</button>

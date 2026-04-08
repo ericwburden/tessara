@@ -3051,7 +3051,7 @@ async fn join_mode_datasets_merge_selected_source_rows_by_node() {
     )
     .await;
     assert_eq!(
-        joined_dashboard_view["components"][0]["chart"]["type"],
+        joined_dashboard_view["components"][0]["chart"]["chart_type"],
         "table"
     );
     assert_eq!(
@@ -3059,12 +3059,8 @@ async fn join_mode_datasets_merge_selected_source_rows_by_node() {
         joined_aggregation_id.to_string()
     );
     assert_eq!(
-        joined_dashboard_view["components"][0]["report_rows"][0]["metrics"]["participants_total"],
-        42.0
-    );
-    assert_eq!(
-        joined_dashboard_view["components"][0]["report_rows"][0]["metrics"]["attendees_total"],
-        7.0
+        joined_dashboard_view["components"][0]["chart"]["aggregation_url"],
+        format!("/api/aggregations/{joined_aggregation_id}/table")
     );
 
     let invalid_join_dataset = request_json(

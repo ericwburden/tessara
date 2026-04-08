@@ -448,6 +448,9 @@ mod tests {
         assert!(html.contains("Open Demo Dashboard"));
         assert!(html.contains("openDemoDashboard"));
         assert!(html.contains("Refresh Analytics"));
+        assert!(html.contains("Choose Dataset"));
+        assert!(html.contains("Inspect Dataset"));
+        assert!(html.contains("Run Dataset"));
         assert!(html.contains("Choose Report"));
         assert!(html.contains("Inspect Report"));
         assert!(html.contains("Run Report"));
@@ -464,6 +467,11 @@ mod tests {
         assert!(html.contains("Log Out"));
         assert!(html.contains("/api/admin/analytics/refresh"));
         assert!(html.contains("/api/app/summary"));
+        assert!(html.contains("/api/datasets"));
+        assert!(html.contains("/api/datasets/${datasetId}"));
+        assert!(html.contains("/api/datasets/${datasetId}/table"));
+        assert!(html.contains("Dataset Definition"));
+        assert!(html.contains("Dataset Results"));
         assert!(html.contains("/api/reports"));
         assert!(html.contains("/api/dashboards"));
         assert!(html.contains("/api/charts"));
