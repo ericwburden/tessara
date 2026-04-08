@@ -413,6 +413,53 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
         dataset_table["rows"][0]["values"]["participant_count"],
         "42"
     );
+    let dataset_report = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/reports",
+            &token,
+            Some(json!({
+                "name": "Dataset Participants Report",
+                "form_id": null,
+                "dataset_id": dataset_id,
+                "fields": [{
+                    "logical_key": "participant_count",
+                    "source_field_key": "participant_count",
+                    "missing_policy": "null"
+                }]
+            })),
+        ),
+    )
+    .await;
+    let dataset_report_id = dataset_report["id"]
+        .as_str()
+        .expect("dataset report response should contain id");
+    let dataset_report_definition = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/reports/{dataset_report_id}"),
+            &token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(
+        dataset_report_definition["dataset_name"],
+        "Quarterly Check In Dataset"
+    );
+    let dataset_report_table = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/reports/{dataset_report_id}/table"),
+            &token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(dataset_report_table["rows"][0]["field_value"], "42");
 
     let chart_id = seed["chart_id"]
         .as_str()

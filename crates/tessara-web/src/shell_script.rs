@@ -1489,6 +1489,7 @@ pub const SCRIPT: &str = r#"
         try {
           if (!token) await login();
           const formId = inputValue("form-id");
+          const datasetId = inputValue("dataset-id");
           const bindingsJson = inputValue("report-fields-json");
           const fields = bindingsJson ? JSON.parse(bindingsJson) : [{
             logical_key: inputValue("report-logical-key"),
@@ -1500,7 +1501,8 @@ pub const SCRIPT: &str = r#"
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               name: inputValue("report-name"),
-              form_id: formId || null,
+              form_id: datasetId ? null : formId || null,
+              dataset_id: datasetId || null,
               fields
             })
           });
@@ -1518,6 +1520,7 @@ pub const SCRIPT: &str = r#"
           const reportId = inputValue("report-id");
           if (!reportId) throw new Error("Select or enter a report ID first.");
           const formId = inputValue("form-id");
+          const datasetId = inputValue("dataset-id");
           const bindingsJson = inputValue("report-fields-json");
           const fields = bindingsJson ? JSON.parse(bindingsJson) : [{
             logical_key: inputValue("report-logical-key"),
@@ -1529,7 +1532,8 @@ pub const SCRIPT: &str = r#"
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               name: inputValue("report-name"),
-              form_id: formId || null,
+              form_id: datasetId ? null : formId || null,
+              dataset_id: datasetId || null,
               fields
             })
           });
@@ -1949,8 +1953,8 @@ pub const SCRIPT: &str = r#"
           showCards(payload, (report) => `
             <article class="card">
               <h3>${escapeHtml(report.name)}</h3>
-              <p class="muted">Form ${escapeHtml(report.form_name || report.form_id || "Any")}</p>
-              <button type="button" onclick="useReport('${escapeHtml(report.id)}', '${escapeHtml(report.name)}'); ${report.form_id ? `useForm('${escapeHtml(report.form_id)}', '${escapeHtml(report.form_name || report.form_id)}');` : ""}">Use Report Context</button>
+              <p class="muted">${report.dataset_id ? `Dataset ${escapeHtml(report.dataset_name || report.dataset_id)}` : `Form ${escapeHtml(report.form_name || report.form_id || "Any")}`}</p>
+              <button type="button" onclick="useReport('${escapeHtml(report.id)}', '${escapeHtml(report.name)}'); ${report.form_id ? `useForm('${escapeHtml(report.form_id)}', '${escapeHtml(report.form_name || report.form_id)}');` : ""} ${report.dataset_id ? `useDataset('${escapeHtml(report.dataset_id)}', '${escapeHtml(report.dataset_name || report.dataset_id)}');` : ""}">Use Report Context</button>
               <button type="button" onclick="loadReportDefinition('${escapeHtml(report.id)}')">Inspect</button>
               <button type="button" onclick="loadReportByValue('${escapeHtml(report.id)}')">Run</button>
             </article>
@@ -1965,8 +1969,10 @@ pub const SCRIPT: &str = r#"
         const payload = await request(`/api/reports/${reportId}`);
         document.getElementById("report-id").value = payload.id;
         if (payload.form_id) document.getElementById("form-id").value = payload.form_id;
+        if (payload.dataset_id) document.getElementById("dataset-id").value = payload.dataset_id;
         useReport(payload.id, payload.name);
         if (payload.form_id) useForm(payload.form_id, payload.form_name || payload.form_id);
+        if (payload.dataset_id) useDataset(payload.dataset_id, payload.dataset_name || payload.dataset_id);
         document.getElementById("report-fields-json").value = JSON.stringify(payload.bindings.map((binding) => ({
           logical_key: binding.logical_key,
           source_field_key: binding.source_field_key,
@@ -1982,7 +1988,7 @@ pub const SCRIPT: &str = r#"
           <article class="card">
             <h3>Report Definition</h3>
             <p>${escapeHtml(payload.name)}</p>
-            <p class="muted">${escapeHtml(payload.form_name || payload.form_id || "Any form")}</p>
+            <p class="muted">${payload.dataset_id ? `Dataset ${escapeHtml(payload.dataset_name || payload.dataset_id)}` : `Form ${escapeHtml(payload.form_name || payload.form_id || "Any form")}`}</p>
             <p>${payload.bindings.length} field bindings</p>
             <button type="button" onclick="loadReportByValue('${escapeHtml(payload.id)}')">Run This Report</button>
           </article>
