@@ -2997,6 +2997,76 @@ async fn join_mode_datasets_merge_selected_source_rows_by_node() {
         7.0
     );
 
+    let joined_chart = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/charts",
+            &token,
+            Some(json!({
+                "name": "Joined Activity Chart",
+                "report_id": null,
+                "aggregation_id": joined_aggregation_id,
+                "chart_type": "table"
+            })),
+        ),
+    )
+    .await;
+    let joined_chart_id = id_from(&joined_chart);
+    let joined_dashboard = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/dashboards",
+            &token,
+            Some(json!({
+                "name": "Joined Activity Dashboard"
+            })),
+        ),
+    )
+    .await;
+    let joined_dashboard_id = id_from(&joined_dashboard);
+    request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            &format!("/api/admin/dashboards/{joined_dashboard_id}/components"),
+            &token,
+            Some(json!({
+                "chart_id": joined_chart_id,
+                "position": 0,
+                "config": { "title": "Joined Activity Summary" }
+            })),
+        ),
+    )
+    .await;
+    let joined_dashboard_view = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/dashboards/{joined_dashboard_id}"),
+            &token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(
+        joined_dashboard_view["components"][0]["chart"]["type"],
+        "table"
+    );
+    assert_eq!(
+        joined_dashboard_view["components"][0]["chart"]["aggregation_id"],
+        joined_aggregation_id.to_string()
+    );
+    assert_eq!(
+        joined_dashboard_view["components"][0]["report_rows"][0]["metrics"]["participants_total"],
+        42.0
+    );
+    assert_eq!(
+        joined_dashboard_view["components"][0]["report_rows"][0]["metrics"]["attendees_total"],
+        7.0
+    );
+
     let invalid_join_dataset = request_json(
         app.clone(),
         authorized_request(
