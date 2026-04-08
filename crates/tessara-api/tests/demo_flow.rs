@@ -605,14 +605,18 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
             .as_array()
             .expect("multi-source dataset table should include rows")
             .iter()
-            .any(|row| row["values"]["participant_count"] == "42")
+            .any(|row| {
+                row["source_alias"] == "check_in" && row["values"]["participant_count"] == "42"
+            })
     );
     assert!(
         multi_source_dataset_table["rows"]
             .as_array()
             .expect("multi-source dataset table should include rows")
             .iter()
-            .any(|row| row["values"]["attendee_count"] == "7")
+            .any(|row| {
+                row["source_alias"] == "follow_up" && row["values"]["attendee_count"] == "7"
+            })
     );
     let multi_source_report = request_json(
         app.clone(),
@@ -660,14 +664,22 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
             .as_array()
             .expect("multi-source report table should include rows")
             .iter()
-            .any(|row| row["logical_key"] == "participant_count" && row["field_value"] == "42")
+            .any(|row| {
+                row["source_alias"] == "check_in"
+                    && row["logical_key"] == "participant_count"
+                    && row["field_value"] == "42"
+            })
     );
     assert!(
         multi_source_report_table["rows"]
             .as_array()
             .expect("multi-source report table should include rows")
             .iter()
-            .any(|row| row["logical_key"] == "attendee_count" && row["field_value"] == "7")
+            .any(|row| {
+                row["source_alias"] == "follow_up"
+                    && row["logical_key"] == "attendee_count"
+                    && row["field_value"] == "7"
+            })
     );
 
     let dataset_report = request_json(

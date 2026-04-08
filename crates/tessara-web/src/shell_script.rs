@@ -78,6 +78,7 @@ pub const SCRIPT: &str = r#"
               <thead>
                 <tr>
                   <th>Node</th>
+                  <th>Source</th>
                   <th>Field</th>
                   <th>Value</th>
                   <th>Submission</th>
@@ -87,6 +88,7 @@ pub const SCRIPT: &str = r#"
                 ${rows.map((row) => `
                   <tr>
                     <td>${escapeHtml(row.node_name || "Unknown node")}</td>
+                    <td>${escapeHtml(row.source_alias || "Direct")}</td>
                     <td>${escapeHtml(row.logical_key || "")}</td>
                     <td>${escapeHtml(row.field_value ?? "")}</td>
                     <td>${row.submission_id ? `<button type="button" onclick="loadSubmissionByValue('${escapeHtml(row.submission_id)}')">Open</button>` : '<span class="muted">None</span>'}</td>

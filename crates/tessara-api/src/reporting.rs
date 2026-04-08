@@ -54,6 +54,7 @@ pub struct ReportTable {
 pub struct ReportTableRow {
     submission_id: Option<String>,
     node_name: Option<String>,
+    source_alias: Option<String>,
     logical_key: Option<String>,
     field_value: Option<String>,
 }
@@ -715,6 +716,7 @@ async fn load_report_source_rows(
             SELECT
                 ranked_submissions.submission_id::text AS submission_id,
                 ranked_submissions.node_name,
+                ranked_submissions.source_alias,
                 report_field_bindings.logical_key,
                 CASE
                     WHEN report_field_bindings.computed_expression IS NOT NULL
@@ -764,6 +766,7 @@ async fn load_report_source_rows(
             SELECT
                 submission_fact.submission_id::text AS submission_id,
                 node_dim.node_name,
+                NULL::text AS source_alias,
                 report_field_bindings.logical_key,
                 CASE
                     WHEN report_field_bindings.computed_expression IS NOT NULL
@@ -806,12 +809,14 @@ async fn load_report_source_rows(
 async fn finalize_report_rows(source_rows: Vec<PgRow>) -> ApiResult<Vec<ReportTableRow>> {
     let mut submission_ids = Vec::with_capacity(source_rows.len());
     let mut node_names = Vec::with_capacity(source_rows.len());
+    let mut source_aliases = Vec::with_capacity(source_rows.len());
     let mut logical_keys = Vec::with_capacity(source_rows.len());
     let mut field_values = Vec::with_capacity(source_rows.len());
 
     for row in source_rows {
         submission_ids.push(row.try_get::<String, _>("submission_id").ok());
         node_names.push(row.try_get::<String, _>("node_name").ok());
+        source_aliases.push(row.try_get::<Option<String>, _>("source_alias")?);
         logical_keys.push(row.try_get::<String, _>("logical_key").ok());
         field_values.push(row.try_get::<Option<String>, _>("field_value")?);
     }
@@ -819,6 +824,7 @@ async fn finalize_report_rows(source_rows: Vec<PgRow>) -> ApiResult<Vec<ReportTa
     let schema = Arc::new(Schema::new(vec![
         Field::new("submission_id", DataType::Utf8, true),
         Field::new("node_name", DataType::Utf8, true),
+        Field::new("source_alias", DataType::Utf8, true),
         Field::new("logical_key", DataType::Utf8, true),
         Field::new("field_value", DataType::Utf8, true),
     ]));
@@ -828,6 +834,7 @@ async fn finalize_report_rows(source_rows: Vec<PgRow>) -> ApiResult<Vec<ReportTa
         vec![
             Arc::new(StringArray::from(submission_ids)) as ArrayRef,
             Arc::new(StringArray::from(node_names)) as ArrayRef,
+            Arc::new(StringArray::from(source_aliases)) as ArrayRef,
             Arc::new(StringArray::from(logical_keys)) as ArrayRef,
             Arc::new(StringArray::from(field_values)) as ArrayRef,
         ],
@@ -844,9 +851,9 @@ async fn finalize_report_rows(source_rows: Vec<PgRow>) -> ApiResult<Vec<ReportTa
     let frame = context
         .sql(
             r#"
-            SELECT submission_id, node_name, logical_key, field_value
+            SELECT submission_id, node_name, source_alias, logical_key, field_value
             FROM report_values
-            ORDER BY submission_id, logical_key
+            ORDER BY submission_id, source_alias, logical_key
             "#,
         )
         .await
@@ -860,13 +867,15 @@ async fn finalize_report_rows(source_rows: Vec<PgRow>) -> ApiResult<Vec<ReportTa
     for batch in batches {
         let submission_ids = as_string_array(&batch, 0)?;
         let node_names = as_string_array(&batch, 1)?;
-        let logical_keys = as_string_array(&batch, 2)?;
-        let field_values = as_string_array(&batch, 3)?;
+        let source_aliases = as_string_array(&batch, 2)?;
+        let logical_keys = as_string_array(&batch, 3)?;
+        let field_values = as_string_array(&batch, 4)?;
 
         for index in 0..batch.num_rows() {
             rows.push(ReportTableRow {
                 submission_id: string_value(submission_ids, index),
                 node_name: string_value(node_names, index),
+                source_alias: string_value(source_aliases, index),
                 logical_key: string_value(logical_keys, index),
                 field_value: string_value(field_values, index),
             });

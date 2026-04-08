@@ -96,6 +96,7 @@ pub struct DatasetTable {
 pub struct DatasetTableRow {
     submission_id: String,
     node_name: String,
+    source_alias: String,
     values: BTreeMap<String, Option<String>>,
 }
 
@@ -400,6 +401,7 @@ pub async fn run_dataset_table(
         SELECT
             ranked_submissions.submission_id::text AS submission_id,
             ranked_submissions.node_name,
+            ranked_submissions.source_alias,
             dataset_fields.key,
             submission_value_fact.value_text
         FROM ranked_submissions
@@ -423,13 +425,15 @@ pub async fn run_dataset_table(
         let submission_id: String = row.try_get("submission_id")?;
         let node_name: String = row.try_get("node_name")?;
         let field_key: String = row.try_get("key")?;
+        let source_alias: String = row.try_get("source_alias")?;
         let value: Option<String> = row.try_get("value_text")?;
 
         table_rows
-            .entry(submission_id.clone())
+            .entry(format!("{source_alias}:{submission_id}"))
             .or_insert_with(|| DatasetTableRow {
                 submission_id,
                 node_name,
+                source_alias,
                 values: BTreeMap::new(),
             })
             .values
