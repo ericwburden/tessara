@@ -483,7 +483,16 @@ const REPORTING_INPUTS: &[TextInput] = &[
 ];
 
 const REPORTING_ACTIONS: &[Action] = &[
+    Action::new("addDatasetSource()", "Add Dataset Source"),
+    Action::new("removeSelectedDatasetSource()", "Remove Dataset Source"),
+    Action::new("clearDatasetSources()", "Clear Dataset Sources"),
+    Action::new("addDatasetField()", "Add Dataset Field"),
+    Action::new("removeSelectedDatasetField()", "Remove Dataset Field"),
+    Action::new("clearDatasetFields()", "Clear Dataset Fields"),
+    Action::new("renderDatasetDraft()", "Review Dataset Draft"),
     Action::new("createDataset()", "Create Dataset"),
+    Action::new("updateDataset()", "Update Dataset"),
+    Action::new("deleteDataset()", "Remove Dataset"),
     Action::new("loadDatasets()", "Load Datasets"),
     Action::new("loadDatasetById()", "Inspect Dataset"),
     Action::new("loadDatasetTableById()", "Run Dataset"),

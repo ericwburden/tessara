@@ -9,6 +9,8 @@ pub const SCRIPT: &str = r#"
       let selectedSubmissionFormVersionId = null;
       let selectedSubmissionStatus = null;
       let selectedSubmissionValues = {};
+      let datasetSources = [];
+      let datasetFields = [];
       let reportBindings = [];
       const selections = {};
 
@@ -1346,28 +1348,132 @@ pub const SCRIPT: &str = r#"
         await loadDashboardById();
       }
 
-      function datasetDefinitionFromInputs() {
+      function datasetSourceDraftFromInputs() {
         const formId = inputValue("dataset-form-id") || inputValue("form-id");
         const compatibilityGroupId = inputValue("dataset-compatibility-group-id");
-        const sourceAlias = inputValue("dataset-source-alias") || "service";
-        const sourceFieldKey = inputValue("dataset-source-field-key") || inputValue("report-source-field-key");
+        return {
+          source_alias: inputValue("dataset-source-alias") || "service",
+          form_id: formId || null,
+          compatibility_group_id: compatibilityGroupId || null,
+          selection_rule: inputValue("dataset-selection-rule") || "all"
+        };
+      }
+
+      function datasetFieldDraftFromInputs() {
+        return {
+          key: inputValue("dataset-field-key") || inputValue("report-logical-key"),
+          label: inputValue("dataset-field-label") || inputValue("report-logical-key"),
+          source_alias: inputValue("dataset-source-alias") || "service",
+          source_field_key: inputValue("dataset-source-field-key") || inputValue("report-source-field-key"),
+          position: datasetFields.length
+        };
+      }
+
+      function renderDatasetDraft() {
+        show({
+          dataset_sources: datasetSources,
+          dataset_fields: datasetFields
+        });
+        const sourceCards = datasetSources.map((source) => `
+          <article class="card">
+            <h3>Source ${escapeHtml(source.source_alias)}</h3>
+            <p class="muted">${escapeHtml(source.form_id || source.compatibility_group_id || "Unbound source")}</p>
+            <p>${escapeHtml(source.selection_rule)} records</p>
+            <button type="button" onclick="useDatasetSource('${escapeHtml(source.source_alias)}', '${escapeHtml(source.form_id || "")}', '${escapeHtml(source.compatibility_group_id || "")}', '${escapeHtml(source.selection_rule)}')">Use Source</button>
+            <button type="button" onclick="useDatasetSource('${escapeHtml(source.source_alias)}', '${escapeHtml(source.form_id || "")}', '${escapeHtml(source.compatibility_group_id || "")}', '${escapeHtml(source.selection_rule)}'); removeSelectedDatasetSource()">Remove Source</button>
+          </article>
+        `);
+        const fieldCards = datasetFields.map((field) => `
+          <article class="card">
+            <h3>${escapeHtml(field.label)}</h3>
+            <p>${escapeHtml(field.key)} from ${escapeHtml(field.source_alias)}.${escapeHtml(field.source_field_key)}</p>
+            <button type="button" onclick="useDatasetField('${escapeHtml(field.key)}', '${escapeHtml(field.label)}', '${escapeHtml(field.source_alias)}', '${escapeHtml(field.source_field_key)}', '${escapeHtml(field.field_type || inputValue("dataset-field-type") || "")}')">Use Dataset Field</button>
+            <button type="button" onclick="useDatasetField('${escapeHtml(field.key)}', '${escapeHtml(field.label)}', '${escapeHtml(field.source_alias)}', '${escapeHtml(field.source_field_key)}', '${escapeHtml(field.field_type || inputValue("dataset-field-type") || "")}'); removeSelectedDatasetField()">Remove Field</button>
+          </article>
+        `);
+        document.getElementById("screen").innerHTML = (sourceCards.join("") + fieldCards.join("")) || '<p class="muted">No dataset draft sources or fields staged yet.</p>';
+      }
+
+      function addDatasetSource() {
+        try {
+          const source = datasetSourceDraftFromInputs();
+          if (!source.source_alias) throw new Error("Enter a dataset source alias first.");
+          if (!source.form_id && !source.compatibility_group_id) {
+            throw new Error("Select a source form or compatibility group first.");
+          }
+          const index = datasetSources.findIndex((existing) => existing.source_alias === source.source_alias);
+          if (index >= 0) {
+            datasetSources[index] = source;
+          } else {
+            datasetSources.push(source);
+          }
+          renderDatasetDraft();
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      function removeSelectedDatasetSource() {
+        try {
+          const sourceAlias = inputValue("dataset-source-alias");
+          if (!sourceAlias) throw new Error("Select or enter a dataset source alias first.");
+          datasetSources.splice(0, datasetSources.length, ...datasetSources.filter((source) => source.source_alias !== sourceAlias));
+          datasetFields.splice(0, datasetFields.length, ...datasetFields.filter((field) => field.source_alias !== sourceAlias).map((field, position) => ({ ...field, position })));
+          renderDatasetDraft();
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      function clearDatasetSources() {
+        datasetSources.splice(0, datasetSources.length);
+        datasetFields.splice(0, datasetFields.length);
+        renderDatasetDraft();
+      }
+
+      function addDatasetField() {
+        try {
+          const field = datasetFieldDraftFromInputs();
+          if (!field.key) throw new Error("Enter a dataset field key first.");
+          if (!field.source_alias) throw new Error("Enter a dataset source alias first.");
+          const index = datasetFields.findIndex((existing) => existing.key === field.key);
+          if (index >= 0) {
+            datasetFields[index] = { ...field, position: index };
+          } else {
+            datasetFields.push(field);
+          }
+          datasetFields.forEach((existing, position) => { existing.position = position; });
+          renderDatasetDraft();
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      function removeSelectedDatasetField() {
+        try {
+          const key = inputValue("dataset-field-key");
+          if (!key) throw new Error("Select or enter a dataset field key first.");
+          datasetFields.splice(0, datasetFields.length, ...datasetFields.filter((field) => field.key !== key).map((field, position) => ({ ...field, position })));
+          renderDatasetDraft();
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      function clearDatasetFields() {
+        datasetFields.splice(0, datasetFields.length);
+        renderDatasetDraft();
+      }
+
+      function datasetDefinitionFromInputs() {
+        const sources = datasetSources.length ? datasetSources : [datasetSourceDraftFromInputs()];
+        const fields = datasetFields.length ? datasetFields : [datasetFieldDraftFromInputs()];
         return {
           name: inputValue("dataset-name"),
           slug: inputValue("dataset-slug"),
           grain: inputValue("dataset-grain") || "submission",
-          sources: [{
-            source_alias: sourceAlias,
-            form_id: formId || null,
-            compatibility_group_id: compatibilityGroupId || null,
-            selection_rule: inputValue("dataset-selection-rule") || "all"
-          }],
-          fields: [{
-            key: inputValue("dataset-field-key") || inputValue("report-logical-key"),
-            label: inputValue("dataset-field-label") || inputValue("report-logical-key"),
-            source_alias: sourceAlias,
-            source_field_key: sourceFieldKey,
-            position: 0
-          }]
+          sources,
+          fields
         };
       }
 
@@ -1380,6 +1486,39 @@ pub const SCRIPT: &str = r#"
             body: JSON.stringify(datasetDefinitionFromInputs())
           });
           setInput("dataset-id", payload.id);
+          show(payload);
+          await loadDatasets();
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function updateDataset() {
+        try {
+          if (!token) await login();
+          const datasetId = inputValue("dataset-id");
+          if (!datasetId) throw new Error("Select or enter a dataset ID first.");
+          const payload = await request(`/api/admin/datasets/${datasetId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(datasetDefinitionFromInputs())
+          });
+          show(payload);
+          await loadDatasetByValue(datasetId);
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function deleteDataset() {
+        try {
+          if (!token) await login();
+          const datasetId = inputValue("dataset-id");
+          if (!datasetId) throw new Error("Select or enter a dataset ID first.");
+          const payload = await request(`/api/admin/datasets/${datasetId}`, {
+            method: "DELETE"
+          });
+          setInput("dataset-id", "");
           show(payload);
           await loadDatasets();
         } catch (error) {
@@ -1417,6 +1556,17 @@ pub const SCRIPT: &str = r#"
         });
       }
 
+      function useDatasetSource(sourceAlias, formId = "", compatibilityGroupId = "", selectionRule = "all") {
+        selectRecord("dataset source", sourceAlias, sourceAlias, {
+          "dataset-source-alias": sourceAlias,
+          "dataset-form-id": formId,
+          "dataset-compatibility-group-id": compatibilityGroupId,
+          "dataset-selection-rule": selectionRule
+        });
+        if (formId) useForm(formId, formId);
+        if (compatibilityGroupId) useCompatibilityGroup(compatibilityGroupId, compatibilityGroupId);
+      }
+
       async function loadDatasetById() {
         try {
           const datasetId = inputValue("dataset-id");
@@ -1431,15 +1581,28 @@ pub const SCRIPT: &str = r#"
         if (!token) await login();
         const payload = await request(`/api/datasets/${datasetId}`);
         useDataset(payload.id, payload.name, payload.slug, payload.grain);
+        datasetSources.splice(0, datasetSources.length, ...payload.sources.map((source) => ({
+          source_alias: source.source_alias,
+          form_id: source.form_id,
+          compatibility_group_id: source.compatibility_group_id,
+          selection_rule: source.selection_rule
+        })));
+        datasetFields.splice(0, datasetFields.length, ...payload.fields.map((field, position) => ({
+          key: field.key,
+          label: field.label,
+          source_alias: field.source_alias,
+          source_field_key: field.source_field_key,
+          field_type: field.field_type,
+          position
+        })));
         const firstSource = payload.sources[0];
         if (firstSource) {
-          selectRecord("dataset source", firstSource.source_alias, firstSource.id, {
-            "dataset-source-alias": firstSource.source_alias,
-            "dataset-form-id": firstSource.form_id || "",
-            "dataset-compatibility-group-id": firstSource.compatibility_group_id || "",
-            "dataset-selection-rule": firstSource.selection_rule
-          });
-          if (firstSource.form_id) useForm(firstSource.form_id, firstSource.form_name || firstSource.form_id);
+          useDatasetSource(
+            firstSource.source_alias,
+            firstSource.form_id || "",
+            firstSource.compatibility_group_id || "",
+            firstSource.selection_rule
+          );
         }
         show(payload);
         document.getElementById("screen").innerHTML = `
@@ -1448,12 +1611,14 @@ pub const SCRIPT: &str = r#"
             <p>${escapeHtml(payload.name)}</p>
             <p class="muted">${escapeHtml(payload.slug)} · ${escapeHtml(payload.grain)} grain</p>
             <p>${payload.sources.length} sources, ${payload.fields.length} fields</p>
+            <button type="button" onclick="renderDatasetDraft()">Review Draft Inputs</button>
           </article>
           ${payload.sources.map((source) => `
             <article class="card">
               <h3>Source ${escapeHtml(source.source_alias)}</h3>
               <p class="muted">${escapeHtml(source.form_name || source.compatibility_group_name || "Unresolved source")}</p>
               <p>${escapeHtml(source.selection_rule)} records</p>
+              <button type="button" onclick="useDatasetSource('${escapeHtml(source.source_alias)}', '${escapeHtml(source.form_id || "")}', '${escapeHtml(source.compatibility_group_id || "")}', '${escapeHtml(source.selection_rule)}')">Use Source</button>
             </article>
           `).join("")}
           ${payload.fields.map((field) => `

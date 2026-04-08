@@ -156,6 +156,71 @@ pub async fn create_dataset(
     Ok(Json(IdResponse { id: dataset_id }))
 }
 
+/// Updates a dataset definition and replaces its sources and exposed fields.
+pub async fn update_dataset(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(dataset_id): Path<Uuid>,
+    Json(payload): Json<CreateDatasetRequest>,
+) -> ApiResult<Json<IdResponse>> {
+    auth::require_capability(&state.pool, &headers, "datasets:write").await?;
+    require_dataset_exists(&state.pool, dataset_id).await?;
+    require_text("dataset name", &payload.name)?;
+    require_text("dataset slug", &payload.slug)?;
+    require_dataset_slug_available_for_update(&state.pool, dataset_id, &payload.slug).await?;
+    let grain = DatasetGrain::parse(&payload.grain)
+        .map_err(|error| ApiError::BadRequest(error.to_string()))?;
+    validate_dataset_shape(
+        payload
+            .sources
+            .iter()
+            .map(|source| source.source_alias.as_str()),
+        payload.fields.iter().map(|field| field.key.as_str()),
+    )
+    .map_err(|error| ApiError::BadRequest(error.to_string()))?;
+    let sources = validate_dataset_sources(&state.pool, payload.sources).await?;
+    let fields = validate_dataset_fields(&state.pool, &sources, payload.fields).await?;
+
+    let mut tx = state.pool.begin().await?;
+    sqlx::query("UPDATE datasets SET name = $1, slug = $2, grain = $3 WHERE id = $4")
+        .bind(payload.name)
+        .bind(payload.slug)
+        .bind(grain.as_str())
+        .bind(dataset_id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM dataset_sources WHERE dataset_id = $1")
+        .bind(dataset_id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM dataset_fields WHERE dataset_id = $1")
+        .bind(dataset_id)
+        .execute(&mut *tx)
+        .await?;
+    insert_dataset_sources(&mut tx, dataset_id, &sources).await?;
+    insert_dataset_fields(&mut tx, dataset_id, &fields).await?;
+    tx.commit().await?;
+
+    Ok(Json(IdResponse { id: dataset_id }))
+}
+
+/// Deletes a dataset definition.
+pub async fn delete_dataset(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(dataset_id): Path<Uuid>,
+) -> ApiResult<Json<IdResponse>> {
+    auth::require_capability(&state.pool, &headers, "datasets:write").await?;
+    require_dataset_exists(&state.pool, dataset_id).await?;
+
+    sqlx::query("DELETE FROM datasets WHERE id = $1")
+        .bind(dataset_id)
+        .execute(&state.pool)
+        .await?;
+
+    Ok(Json(IdResponse { id: dataset_id }))
+}
+
 /// Lists dataset definitions for the admin reporting workbench.
 pub async fn list_datasets(
     State(state): State<AppState>,
@@ -616,6 +681,40 @@ async fn require_dataset_slug_available(pool: &sqlx::PgPool, slug: &str) -> ApiR
         )))
     } else {
         Ok(())
+    }
+}
+
+async fn require_dataset_slug_available_for_update(
+    pool: &sqlx::PgPool,
+    dataset_id: Uuid,
+    slug: &str,
+) -> ApiResult<()> {
+    let exists: bool =
+        sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM datasets WHERE slug = $1 AND id <> $2)")
+            .bind(slug)
+            .bind(dataset_id)
+            .fetch_one(pool)
+            .await?;
+
+    if exists {
+        Err(ApiError::BadRequest(format!(
+            "dataset slug '{slug}' is already in use"
+        )))
+    } else {
+        Ok(())
+    }
+}
+
+async fn require_dataset_exists(pool: &sqlx::PgPool, dataset_id: Uuid) -> ApiResult<()> {
+    let exists: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM datasets WHERE id = $1)")
+        .bind(dataset_id)
+        .fetch_one(pool)
+        .await?;
+
+    if exists {
+        Ok(())
+    } else {
+        Err(ApiError::NotFound(format!("dataset {dataset_id}")))
     }
 }
 

@@ -148,6 +148,10 @@ pub fn router(state: AppState) -> Router {
             get(analytics::analytics_status),
         )
         .route("/api/admin/datasets", post(datasets::create_dataset))
+        .route(
+            "/api/admin/datasets/{dataset_id}",
+            put(datasets::update_dataset).delete(datasets::delete_dataset),
+        )
         .route("/api/datasets", get(datasets::list_datasets))
         .route("/api/datasets/{dataset_id}", get(datasets::get_dataset))
         .route(

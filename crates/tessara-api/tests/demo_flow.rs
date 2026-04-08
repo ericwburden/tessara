@@ -2302,6 +2302,43 @@ async fn dataset_definitions_validate_sources_and_fields() {
     assert_eq!(definition["fields"][0]["source_field_key"], "participants");
     assert_eq!(definition["fields"][0]["field_type"], "number");
 
+    request_json(
+        app.clone(),
+        authorized_request(
+            "PUT",
+            &format!("/api/admin/datasets/{dataset_id}"),
+            &token,
+            Some(json!({
+                "name": "Updated Participant Dataset",
+                "slug": "updated-participant-dataset",
+                "grain": "submission",
+                "sources": [{
+                    "source_alias": "services",
+                    "form_id": form_id,
+                    "compatibility_group_id": null,
+                    "selection_rule": "all"
+                }],
+                "fields": [{
+                    "key": "participants_total",
+                    "label": "Participants Total",
+                    "source_alias": "services",
+                    "source_field_key": "participants",
+                    "position": 0
+                }]
+            })),
+        ),
+    )
+    .await;
+    let updated_definition = request_json(
+        app.clone(),
+        authorized_request("GET", &format!("/api/datasets/{dataset_id}"), &token, None),
+    )
+    .await;
+    assert_eq!(updated_definition["name"], "Updated Participant Dataset");
+    assert_eq!(updated_definition["slug"], "updated-participant-dataset");
+    assert_eq!(updated_definition["sources"][0]["source_alias"], "services");
+    assert_eq!(updated_definition["fields"][0]["key"], "participants_total");
+
     let duplicate_field = request_status_and_json(
         app.clone(),
         authorized_request(
@@ -2347,7 +2384,7 @@ async fn dataset_definitions_validate_sources_and_fields() {
     );
 
     let missing_source_field = request_status_and_json(
-        app,
+        app.clone(),
         authorized_request(
             "POST",
             "/api/admin/datasets",
@@ -2380,6 +2417,46 @@ async fn dataset_definitions_validate_sources_and_fields() {
             .expect("error body should include message")
             .contains("not available on source")
     );
+
+    let disposable_dataset = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/datasets",
+            &token,
+            Some(json!({
+                "name": "Disposable Dataset",
+                "slug": "disposable-dataset",
+                "grain": "submission",
+                "sources": [{
+                    "source_alias": "service",
+                    "form_id": form_id,
+                    "compatibility_group_id": null,
+                    "selection_rule": "all"
+                }],
+                "fields": [{
+                    "key": "participant_count",
+                    "label": "Participant Count",
+                    "source_alias": "service",
+                    "source_field_key": "participants",
+                    "position": 0
+                }]
+            })),
+        ),
+    )
+    .await;
+    let disposable_dataset_id = id_from(&disposable_dataset);
+    let deleted_dataset = request_json(
+        app,
+        authorized_request(
+            "DELETE",
+            &format!("/api/admin/datasets/{disposable_dataset_id}"),
+            &token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(deleted_dataset["id"], disposable_dataset_id.to_string());
 }
 
 #[tokio::test]

@@ -654,7 +654,16 @@ fn ReportAdminScreen() -> impl IntoView {
                 <label><span>"Dashboard component config JSON"</span><input id="dashboard-component-config-json" placeholder="{\"title\":\"Chart\"}" value="" /></label>
             </div>
             <div class="actions">
+                <button type="button" onclick="addDatasetSource()">"Add Dataset Source"</button>
+                <button type="button" onclick="removeSelectedDatasetSource()">"Remove Dataset Source"</button>
+                <button type="button" onclick="clearDatasetSources()">"Clear Dataset Sources"</button>
+                <button type="button" onclick="addDatasetField()">"Add Dataset Field"</button>
+                <button type="button" onclick="removeSelectedDatasetField()">"Remove Dataset Field"</button>
+                <button type="button" onclick="clearDatasetFields()">"Clear Dataset Fields"</button>
+                <button type="button" onclick="renderDatasetDraft()">"Review Dataset Draft"</button>
                 <button type="button" onclick="createDataset()">"Create Dataset"</button>
+                <button type="button" onclick="updateDataset()">"Update Dataset"</button>
+                <button type="button" onclick="deleteDataset()">"Remove Dataset"</button>
                 <button type="button" onclick="loadDatasets()">"Load Datasets"</button>
                 <button type="button" onclick="loadDatasetById()">"Inspect Dataset"</button>
                 <button type="button" onclick="loadDatasetTableById()">"Run Dataset"</button>
