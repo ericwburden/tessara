@@ -240,13 +240,6 @@ mod tests {
         assert!(html.contains("/app/migration"));
         assert!(html.contains("Product Areas"));
         assert!(html.contains("Internal Areas"));
-        assert!(html.contains("Create Node"));
-        assert!(html.contains("Create Form"));
-        assert!(html.contains("Create Dataset"));
-        assert!(html.contains("Create Report"));
-        assert!(html.contains("Create Aggregation"));
-        assert!(html.contains("Create Dashboard"));
-        assert!(html.contains("Create Shortcuts"));
         assert!(html.contains("Refresh Overview"));
         assert!(html.contains("Start Demo Response"));
         assert!(html.contains("Open Demo Dashboard"));
@@ -254,6 +247,7 @@ mod tests {
         assert!(html.contains("selection-state"));
         assert!(html.contains("tessara-icon-256.svg"));
         assert!(html.contains("tessara-favicon-32.svg"));
+        assert!(!html.contains("Create Shortcuts"));
     }
 
     #[test]
@@ -327,6 +321,7 @@ mod tests {
         assert!(html.contains("selection-state"));
         assert!(html.contains("tessara-icon-256.svg"));
         assert!(html.contains("tessara-favicon-32.svg"));
+        assert!(!html.contains("Create Shortcuts"));
     }
 
     #[test]
@@ -342,6 +337,7 @@ mod tests {
         assert!(organization.contains("Load Node Types"));
         assert!(organization.contains("/app/forms"));
         assert!(organization.contains("/app/dashboards"));
+        assert!(!organization.contains("Create Shortcuts"));
 
         assert!(forms.contains("Forms"));
         assert!(forms.contains("/app/forms"));
@@ -350,6 +346,7 @@ mod tests {
         assert!(forms.contains("Load Forms"));
         assert!(forms.contains("/app/responses"));
         assert!(forms.contains("/app/organization"));
+        assert!(!forms.contains("Create Shortcuts"));
     }
 
     #[test]
@@ -487,10 +484,10 @@ mod tests {
         assert!(html.contains("/api/admin/legacy-fixtures/dry-run"));
         assert!(html.contains("/api/admin/legacy-fixtures/import"));
         assert!(html.contains("Product Areas"));
-        assert!(html.contains("Create Shortcuts"));
         assert!(html.contains("Load App Summary"));
         assert!(html.contains("Current User"));
         assert!(html.contains("Log Out"));
+        assert!(!html.contains("Create Shortcuts"));
     }
 
     #[test]
@@ -555,7 +552,7 @@ mod tests {
         assert!(html.contains("Open Linked Report"));
         assert!(html.contains("Open Linked Aggregation"));
         assert!(html.contains("Product Areas"));
-        assert!(html.contains("Create Shortcuts"));
+        assert!(!html.contains("Create Shortcuts"));
     }
 
     #[test]
@@ -569,5 +566,6 @@ mod tests {
         assert!(html.contains("Dashboard Preview"));
         assert!(html.contains("Open Demo Dashboard"));
         assert!(html.contains("/app/reports"));
+        assert!(!html.contains("Create Shortcuts"));
     }
 }

@@ -153,11 +153,7 @@ fn HomeApplicationShell() -> impl IntoView {
                 </div>
             </section>
             <section class="app-layout">
-                <aside class="panel app-sidebar">
-                    <ApplicationNav active_route="home"/>
-                    <CreateMenu/>
-                    <SelectionContext/>
-                </aside>
+                <AreaSidebar active_route="home" show_create_shortcuts=false/>
                 <section class="panel app-main">
                     <HomeScreen/>
                     <OutputPanels/>
@@ -191,11 +187,7 @@ fn OrganizationApplicationShell() -> impl IntoView {
                 </div>
             </section>
             <section class="app-layout">
-                <aside class="panel app-sidebar">
-                    <ApplicationNav active_route="organization"/>
-                    <CreateMenu/>
-                    <SelectionContext/>
-                </aside>
+                <AreaSidebar active_route="organization" show_create_shortcuts=false/>
                 <section class="panel app-main">
                     <OrganizationHomeScreen/>
                     <OrganizationWorkspaceShell/>
@@ -230,11 +222,7 @@ fn FormsApplicationShell() -> impl IntoView {
                 </div>
             </section>
             <section class="app-layout">
-                <aside class="panel app-sidebar">
-                    <ApplicationNav active_route="forms"/>
-                    <CreateMenu/>
-                    <SelectionContext/>
-                </aside>
+                <AreaSidebar active_route="forms" show_create_shortcuts=false/>
                 <section class="panel app-main">
                     <FormsHomeScreen/>
                     <FormsWorkspaceShell/>
@@ -270,11 +258,7 @@ fn ResponsesApplicationShell() -> impl IntoView {
                 </div>
             </section>
             <section class="app-layout">
-                <aside class="panel app-sidebar">
-                    <ApplicationNav active_route="responses"/>
-                    <CreateMenu/>
-                    <SelectionContext/>
-                </aside>
+                <AreaSidebar active_route="responses" show_create_shortcuts=false/>
                 <section class="panel app-main">
                     <SubmissionHomeScreen/>
                     <SubmissionWorkspaceShell/>
@@ -307,11 +291,7 @@ fn AdministrationApplicationShell() -> impl IntoView {
                 </div>
             </section>
             <section class="app-layout">
-                <aside class="panel app-sidebar">
-                    <ApplicationNav active_route="administration"/>
-                    <CreateMenu/>
-                    <SelectionContext/>
-                </aside>
+                <AreaSidebar active_route="administration" show_create_shortcuts=true/>
                 <section class="panel app-main">
                     <AdminHomeScreen/>
                     <AdminWorkspaceShell/>
@@ -346,11 +326,7 @@ fn MigrationApplicationShell() -> impl IntoView {
                 </div>
             </section>
             <section class="app-layout">
-                <aside class="panel app-sidebar">
-                    <ApplicationNav active_route="migration"/>
-                    <CreateMenu/>
-                    <SelectionContext/>
-                </aside>
+                <AreaSidebar active_route="migration" show_create_shortcuts=false/>
                 <section class="panel app-main">
                     <MigrationHomeScreen/>
                     <FixtureScreen/>
@@ -390,11 +366,7 @@ fn ReportsApplicationShell() -> impl IntoView {
                 </div>
             </section>
             <section class="app-layout">
-                <aside class="panel app-sidebar">
-                    <ApplicationNav active_route="reports"/>
-                    <CreateMenu/>
-                    <SelectionContext/>
-                </aside>
+                <AreaSidebar active_route="reports" show_create_shortcuts=false/>
                 <section class="panel app-main">
                     <ReportingHomeScreen/>
                     <ReportingWorkspaceShell/>
@@ -430,11 +402,7 @@ fn DashboardsApplicationShell() -> impl IntoView {
                 </div>
             </section>
             <section class="app-layout">
-                <aside class="panel app-sidebar">
-                    <ApplicationNav active_route="dashboards"/>
-                    <CreateMenu/>
-                    <SelectionContext/>
-                </aside>
+                <AreaSidebar active_route="dashboards" show_create_shortcuts=false/>
                 <section class="panel app-main">
                     <DashboardsHomeScreen/>
                     <DashboardsWorkspaceShell/>
@@ -452,6 +420,19 @@ fn BrandLockup() -> impl IntoView {
             <img class="brand-mark" src="/assets/tessara-icon-256.svg" alt="" />
             <span>"Tessara"</span>
         </div>
+    }
+}
+
+#[component]
+fn AreaSidebar(active_route: &'static str, show_create_shortcuts: bool) -> impl IntoView {
+    view! {
+        <aside class="panel app-sidebar">
+            <ApplicationNav active_route=active_route/>
+            {show_create_shortcuts
+                .then(|| view! { <CreateMenu/> })
+                .into_any()}
+            <SelectionContext/>
+        </aside>
     }
 }
 
@@ -528,7 +509,7 @@ fn ApplicationNav(active_route: &'static str) -> impl IntoView {
 fn CreateMenu() -> impl IntoView {
     let create_links = [
         ("Create Node", "/app/administration#hierarchy-admin-screen"),
-        ("Create Form", "/app/forms#form-admin-screen"),
+        ("Create Form", "/app/administration#form-admin-screen"),
         ("Create Dataset", "/app/administration#report-admin-screen"),
         ("Create Report", "/app/administration#report-admin-screen"),
         (

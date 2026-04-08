@@ -131,8 +131,8 @@ try {
     }
 
     $appShell = Invoke-RestMethod -Uri "$baseUrl/app" -TimeoutSec 30
-    if (-not ($appShell -like "*Application Overview*") -or -not ($appShell -like "*Welcome to Tessara*") -or -not ($appShell -like "*Product Areas*") -or -not ($appShell -like "*Internal Areas*") -or -not ($appShell -like "*Create Dataset*") -or -not ($appShell -like "*Start Demo Response*") -or -not ($appShell -like "*/app/organization*") -or -not ($appShell -like "*/app/forms*") -or -not ($appShell -like "*/app/responses*") -or -not ($appShell -like "*/app/dashboards*")) {
-        throw "Expected application home HTML to include overview, navigation, and create-menu controls"
+    if (-not ($appShell -like "*Application Overview*") -or -not ($appShell -like "*Welcome to Tessara*") -or -not ($appShell -like "*Product Areas*") -or -not ($appShell -like "*Internal Areas*") -or -not ($appShell -like "*Start Demo Response*") -or -not ($appShell -like "*/app/organization*") -or -not ($appShell -like "*/app/forms*") -or -not ($appShell -like "*/app/responses*") -or -not ($appShell -like "*/app/dashboards*")) {
+        throw "Expected application home HTML to include overview and split-area navigation"
     }
     $organizationShell = Invoke-RestMethod -Uri "$baseUrl/app/organization" -TimeoutSec 30
     if (-not ($organizationShell -like "*Organization*") -or -not ($organizationShell -like "*Organization Areas*") -or -not ($organizationShell -like "*Organization Console*") -or -not ($organizationShell -like "*Load Nodes*")) {
@@ -162,6 +162,9 @@ try {
     if (-not ($reportingAppShell -like "*Reports*") -or -not ($reportingAppShell -like "*Report Areas*") -or -not ($reportingAppShell -like "*Reporting Directory*") -or -not ($reportingAppShell -like "*Report Runner*") -or -not ($reportingAppShell -like "*Choose Dataset*") -or -not ($reportingAppShell -like "*Inspect Dataset*") -or -not ($reportingAppShell -like "*Run Dataset*") -or -not ($reportingAppShell -like "*Dashboard Preview*") -or -not ($reportingAppShell -like "*Inspect Chart*") -or -not ($reportingAppShell -like "*Open Demo Dashboard*")) {
         throw "Expected reporting application shell HTML to include report and dashboard workflow controls"
     }
+    if ($reportingAppShell -like "*Create Shortcuts*") {
+        throw "Expected reports application shell HTML to keep create shortcuts in internal areas"
+    }
     $dashboardsShell = Invoke-RestMethod -Uri "$baseUrl/app/dashboards" -TimeoutSec 30
     if (-not ($dashboardsShell -like "*Dashboards*") -or -not ($dashboardsShell -like "*Dashboard Areas*") -or -not ($dashboardsShell -like "*Dashboard Console*") -or -not ($dashboardsShell -like "*Dashboard Preview*")) {
         throw "Expected dashboards application shell HTML to include dashboard route controls"
@@ -169,6 +172,9 @@ try {
     $migrationAppShell = Invoke-RestMethod -Uri "$baseUrl/app/migration" -TimeoutSec 30
     if (-not ($migrationAppShell -like "*Migration Workbench*") -or -not ($migrationAppShell -like "*Migration Stages*") -or -not ($migrationAppShell -like "*Migration Directory*") -or -not ($migrationAppShell -like "*Legacy Fixture Validation*") -or -not ($migrationAppShell -like "*Load Fixture Examples*") -or -not ($migrationAppShell -like "*Import Fixture*")) {
         throw "Expected migration application shell HTML to include fixture workflow controls"
+    }
+    if ($migrationAppShell -like "*Create Shortcuts*") {
+        throw "Expected migration application shell HTML to keep create shortcuts in internal areas"
     }
 
     $login = Invoke-Json `
