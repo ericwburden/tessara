@@ -491,6 +491,65 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
             .any(|row| row["logical_key"] == "response_label" && row["field_value"] == "Submitted")
     );
 
+    let aggregation = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/aggregations",
+            &token,
+            Some(json!({
+                "name": "Participants Aggregation",
+                "report_id": report_id,
+                "group_by_logical_key": null,
+                "metrics": [
+                    {
+                        "metric_key": "responses",
+                        "source_logical_key": null,
+                        "metric_kind": "count"
+                    },
+                    {
+                        "metric_key": "participants_total",
+                        "source_logical_key": "participants",
+                        "metric_kind": "sum"
+                    }
+                ]
+            })),
+        ),
+    )
+    .await;
+    let aggregation_id = aggregation["id"]
+        .as_str()
+        .expect("aggregation response should contain id");
+    let aggregations = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/aggregations", &token, None),
+    )
+    .await;
+    assert!(
+        aggregations
+            .as_array()
+            .expect("aggregation list should be an array")
+            .iter()
+            .any(|aggregation| aggregation["id"] == aggregation_id
+                && aggregation["metric_count"] == 2)
+    );
+    let aggregation_table = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/aggregations/{aggregation_id}/table"),
+            &token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(aggregation_table["rows"][0]["group_key"], "All");
+    assert_eq!(aggregation_table["rows"][0]["metrics"]["responses"], 1.0);
+    assert_eq!(
+        aggregation_table["rows"][0]["metrics"]["participants_total"],
+        42.0
+    );
+
     let chart_id = seed["chart_id"]
         .as_str()
         .expect("seed response should contain chart id");
@@ -1615,6 +1674,24 @@ async fn admin_mutation_routes_require_authentication() {
                 .to_string(),
             ))
             .expect("valid report request"),
+        Request::builder()
+            .method("POST")
+            .uri("/api/admin/aggregations")
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(
+                json!({
+                    "name": "Participants Aggregation",
+                    "report_id": Uuid::new_v4(),
+                    "group_by_logical_key": null,
+                    "metrics": [{
+                        "metric_key": "responses",
+                        "source_logical_key": null,
+                        "metric_kind": "count"
+                    }]
+                })
+                .to_string(),
+            ))
+            .expect("valid aggregation request"),
         Request::builder()
             .method("POST")
             .uri("/api/admin/charts")

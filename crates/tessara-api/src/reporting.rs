@@ -1,4 +1,7 @@
-use std::sync::Arc;
+use std::{
+    collections::{BTreeMap, HashMap},
+    sync::Arc,
+};
 
 use arrow::{
     array::{Array, ArrayRef, StringArray},
@@ -55,6 +58,43 @@ pub struct ReportTableRow {
     field_value: Option<String>,
 }
 
+#[derive(Deserialize)]
+pub struct CreateAggregationRequest {
+    name: String,
+    report_id: Uuid,
+    group_by_logical_key: Option<String>,
+    metrics: Vec<CreateAggregationMetricRequest>,
+}
+
+#[derive(Deserialize)]
+pub struct CreateAggregationMetricRequest {
+    metric_key: String,
+    source_logical_key: Option<String>,
+    metric_kind: String,
+}
+
+#[derive(Serialize)]
+pub struct AggregationSummary {
+    id: Uuid,
+    name: String,
+    report_id: Uuid,
+    report_name: String,
+    group_by_logical_key: Option<String>,
+    metric_count: i64,
+}
+
+#[derive(Serialize)]
+pub struct AggregationResult {
+    aggregation_id: Uuid,
+    rows: Vec<AggregationResultRow>,
+}
+
+#[derive(Serialize)]
+pub struct AggregationResultRow {
+    group_key: String,
+    metrics: BTreeMap<String, f64>,
+}
+
 #[derive(Serialize)]
 pub struct ReportSummary {
     id: Uuid,
@@ -84,6 +124,194 @@ pub struct ReportFieldBindingSummary {
     computed_expression: Option<String>,
     missing_policy: String,
     position: i32,
+}
+
+/// Creates an aggregation definition over an existing report.
+pub async fn create_aggregation(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<CreateAggregationRequest>,
+) -> ApiResult<Json<IdResponse>> {
+    auth::require_capability(&state.pool, &headers, "aggregations:write").await?;
+    require_text("aggregation name", &payload.name)?;
+    require_report_exists(&state.pool, payload.report_id).await?;
+    validate_aggregation_metrics(&payload.metrics)?;
+
+    let mut tx = state.pool.begin().await?;
+    let aggregation_id: Uuid = sqlx::query_scalar(
+        r#"
+        INSERT INTO aggregations (name, report_id, group_by_logical_key)
+        VALUES ($1, $2, $3)
+        RETURNING id
+        "#,
+    )
+    .bind(payload.name)
+    .bind(payload.report_id)
+    .bind(payload.group_by_logical_key)
+    .fetch_one(&mut *tx)
+    .await?;
+
+    for (position, metric) in payload.metrics.into_iter().enumerate() {
+        sqlx::query(
+            r#"
+            INSERT INTO aggregation_metrics
+                (aggregation_id, metric_key, source_logical_key, metric_kind, position)
+            VALUES ($1, $2, $3, $4, $5)
+            "#,
+        )
+        .bind(aggregation_id)
+        .bind(metric.metric_key)
+        .bind(metric.source_logical_key)
+        .bind(metric.metric_kind)
+        .bind(position as i32)
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    tx.commit().await?;
+
+    Ok(Json(IdResponse { id: aggregation_id }))
+}
+
+/// Lists aggregation definitions for the reporting workbench.
+pub async fn list_aggregations(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> ApiResult<Json<Vec<AggregationSummary>>> {
+    auth::require_capability(&state.pool, &headers, "aggregations:read").await?;
+
+    let rows = sqlx::query(
+        r#"
+        SELECT
+            aggregations.id,
+            aggregations.name,
+            aggregations.report_id,
+            reports.name AS report_name,
+            aggregations.group_by_logical_key,
+            COUNT(aggregation_metrics.id) AS metric_count
+        FROM aggregations
+        JOIN reports ON reports.id = aggregations.report_id
+        LEFT JOIN aggregation_metrics
+            ON aggregation_metrics.aggregation_id = aggregations.id
+        GROUP BY aggregations.id, reports.name
+        ORDER BY aggregations.created_at, aggregations.name
+        "#,
+    )
+    .fetch_all(&state.pool)
+    .await?;
+
+    let aggregations = rows
+        .into_iter()
+        .map(|row| {
+            Ok(AggregationSummary {
+                id: row.try_get("id")?,
+                name: row.try_get("name")?,
+                report_id: row.try_get("report_id")?,
+                report_name: row.try_get("report_name")?,
+                group_by_logical_key: row.try_get("group_by_logical_key")?,
+                metric_count: row.try_get("metric_count")?,
+            })
+        })
+        .collect::<Result<Vec<_>, sqlx::Error>>()?;
+
+    Ok(Json(aggregations))
+}
+
+/// Runs an aggregation over report result rows.
+pub async fn run_aggregation(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(aggregation_id): Path<Uuid>,
+) -> ApiResult<Json<AggregationResult>> {
+    auth::require_capability(&state.pool, &headers, "aggregations:read").await?;
+
+    let aggregation = sqlx::query(
+        r#"
+        SELECT id, report_id, group_by_logical_key
+        FROM aggregations
+        WHERE id = $1
+        "#,
+    )
+    .bind(aggregation_id)
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or_else(|| ApiError::NotFound(format!("aggregation {aggregation_id}")))?;
+    let report_id: Uuid = aggregation.try_get("report_id")?;
+    let group_by_logical_key: Option<String> = aggregation.try_get("group_by_logical_key")?;
+
+    let metric_rows = sqlx::query(
+        r#"
+        SELECT metric_key, source_logical_key, metric_kind
+        FROM aggregation_metrics
+        WHERE aggregation_id = $1
+        ORDER BY position, metric_key
+        "#,
+    )
+    .bind(aggregation_id)
+    .fetch_all(&state.pool)
+    .await?;
+
+    let report_rows = load_report_rows(&state.pool, report_id).await?;
+    let mut submissions = BTreeMap::<String, HashMap<String, String>>::new();
+    for row in report_rows {
+        let (Some(submission_id), Some(logical_key), Some(field_value)) =
+            (row.submission_id, row.logical_key, row.field_value)
+        else {
+            continue;
+        };
+        submissions
+            .entry(submission_id)
+            .or_default()
+            .insert(logical_key, field_value);
+    }
+
+    let mut groups = BTreeMap::<String, BTreeMap<String, f64>>::new();
+    for values in submissions.values() {
+        let group_key = group_by_logical_key
+            .as_ref()
+            .and_then(|key| values.get(key))
+            .cloned()
+            .unwrap_or_else(|| "All".to_string());
+        let metrics = groups.entry(group_key).or_default();
+
+        for metric in &metric_rows {
+            let metric_key: String = metric.try_get("metric_key")?;
+            let metric_kind: String = metric.try_get("metric_kind")?;
+            let source_logical_key: Option<String> = metric.try_get("source_logical_key")?;
+            let value = metrics.entry(metric_key).or_insert(0.0);
+
+            match metric_kind.as_str() {
+                "count" => *value += 1.0,
+                "sum" => {
+                    let Some(source_logical_key) = source_logical_key else {
+                        return Err(ApiError::BadRequest(
+                            "sum metrics require a source logical key".into(),
+                        ));
+                    };
+                    if let Some(raw) = values.get(&source_logical_key) {
+                        *value += raw.parse::<f64>().map_err(|_| {
+                            ApiError::BadRequest(format!(
+                                "aggregation metric '{source_logical_key}' expected numeric values"
+                            ))
+                        })?;
+                    }
+                }
+                _ => {
+                    return Err(ApiError::BadRequest(format!(
+                        "unsupported aggregation metric kind '{metric_kind}'"
+                    )));
+                }
+            }
+        }
+    }
+
+    Ok(Json(AggregationResult {
+        aggregation_id,
+        rows: groups
+            .into_iter()
+            .map(|(group_key, metrics)| AggregationResultRow { group_key, metrics })
+            .collect(),
+    }))
 }
 
 pub async fn create_report(
@@ -476,6 +704,109 @@ pub async fn run_report(
     }
 
     Ok(Json(ReportTable { report_id, rows }))
+}
+
+async fn load_report_rows(pool: &sqlx::PgPool, report_id: Uuid) -> ApiResult<Vec<ReportTableRow>> {
+    require_report_exists(pool, report_id).await?;
+    let report_dataset_id: Option<Uuid> =
+        sqlx::query_scalar("SELECT dataset_id FROM reports WHERE id = $1")
+            .bind(report_id)
+            .fetch_one(pool)
+            .await?;
+
+    if report_dataset_id.is_some() {
+        return Err(ApiError::BadRequest(
+            "aggregation execution for dataset-backed reports is not implemented yet".into(),
+        ));
+    }
+
+    let source_rows = sqlx::query(
+        r#"
+        SELECT
+            submission_fact.submission_id::text AS submission_id,
+            node_dim.node_name,
+            report_field_bindings.logical_key,
+            CASE
+                WHEN report_field_bindings.computed_expression IS NOT NULL
+                    THEN substring(report_field_bindings.computed_expression from 9)
+                WHEN submission_value_fact.value_text IS NULL
+                     AND report_field_bindings.missing_policy::text = 'bucket_unknown'
+                    THEN 'Unknown'
+                ELSE submission_value_fact.value_text
+            END AS field_value
+        FROM reports
+        JOIN report_field_bindings
+            ON report_field_bindings.report_id = reports.id
+        JOIN analytics.form_version_dim
+            ON reports.form_id IS NULL OR analytics.form_version_dim.form_id = reports.form_id
+        JOIN analytics.submission_fact
+            ON submission_fact.form_version_id = analytics.form_version_dim.form_version_id
+        JOIN analytics.node_dim
+            ON node_dim.node_id = submission_fact.node_id
+        LEFT JOIN analytics.submission_value_fact
+            ON submission_value_fact.submission_id = submission_fact.submission_id
+           AND submission_value_fact.field_key = report_field_bindings.source_field_key
+        WHERE reports.id = $1
+          AND submission_fact.status = 'submitted'
+          AND (
+            report_field_bindings.computed_expression IS NOT NULL
+            OR
+            submission_value_fact.value_text IS NOT NULL
+            OR report_field_bindings.missing_policy::text <> 'exclude_row'
+          )
+        ORDER BY submission_fact.submission_id, report_field_bindings.position
+        "#,
+    )
+    .bind(report_id)
+    .fetch_all(pool)
+    .await?;
+
+    let mut rows = Vec::with_capacity(source_rows.len());
+    for row in source_rows {
+        rows.push(ReportTableRow {
+            submission_id: row.try_get::<String, _>("submission_id").ok(),
+            node_name: row.try_get::<String, _>("node_name").ok(),
+            logical_key: row.try_get::<String, _>("logical_key").ok(),
+            field_value: row.try_get::<Option<String>, _>("field_value")?,
+        });
+    }
+
+    Ok(rows)
+}
+
+fn validate_aggregation_metrics(metrics: &[CreateAggregationMetricRequest]) -> ApiResult<()> {
+    if metrics.is_empty() {
+        return Err(ApiError::BadRequest(
+            "an aggregation requires at least one metric".into(),
+        ));
+    }
+
+    for metric in metrics {
+        require_text("aggregation metric key", &metric.metric_key)?;
+        match metric.metric_kind.as_str() {
+            "count" => {}
+            "sum" => {
+                if metric
+                    .source_logical_key
+                    .as_deref()
+                    .map(str::trim)
+                    .unwrap_or_default()
+                    .is_empty()
+                {
+                    return Err(ApiError::BadRequest(
+                        "sum metrics require a source logical key".into(),
+                    ));
+                }
+            }
+            other => {
+                return Err(ApiError::BadRequest(format!(
+                    "unsupported aggregation metric kind '{other}'"
+                )));
+            }
+        }
+    }
+
+    Ok(())
 }
 
 async fn validate_report_field_bindings(

@@ -70,6 +70,8 @@ async fn seed_dev_admin(pool: &PgPool, config: &Config) -> anyhow::Result<()> {
         ("datasets:read", "Inspect dataset definitions"),
         ("reports:write", "Manage report definitions"),
         ("reports:read", "Run report definitions"),
+        ("aggregations:write", "Manage aggregation definitions"),
+        ("aggregations:read", "Run aggregation definitions"),
     ];
 
     for (key, description) in capabilities {

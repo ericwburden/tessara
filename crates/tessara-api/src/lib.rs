@@ -178,6 +178,15 @@ pub fn router(state: AppState) -> Router {
         .route("/api/reports", get(reporting::list_reports))
         .route("/api/reports/{report_id}", get(reporting::get_report))
         .route("/api/reports/{report_id}/table", get(reporting::run_report))
+        .route(
+            "/api/admin/aggregations",
+            post(reporting::create_aggregation),
+        )
+        .route("/api/aggregations", get(reporting::list_aggregations))
+        .route(
+            "/api/aggregations/{aggregation_id}/table",
+            get(reporting::run_aggregation),
+        )
         .route("/api/admin/charts", post(dashboards::create_chart))
         .route(
             "/api/admin/charts/{chart_id}",
