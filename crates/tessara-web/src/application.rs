@@ -638,6 +638,7 @@ fn ReportAdminScreen() -> impl IntoView {
                 <button type="button" onclick="createDataset()">"Create Dataset"</button>
                 <button type="button" onclick="loadDatasets()">"Load Datasets"</button>
                 <button type="button" onclick="loadDatasetById()">"Inspect Dataset"</button>
+                <button type="button" onclick="loadDatasetTableById()">"Run Dataset"</button>
                 <button type="button" onclick="addReportBinding()">"Add Binding"</button>
                 <button type="button" onclick="removeSelectedReportBinding()">"Remove Selected Binding"</button>
                 <button type="button" onclick="clearReportBindings()">"Clear Bindings"</button>

@@ -151,6 +151,10 @@ pub fn router(state: AppState) -> Router {
         .route("/api/datasets", get(datasets::list_datasets))
         .route("/api/datasets/{dataset_id}", get(datasets::get_dataset))
         .route(
+            "/api/datasets/{dataset_id}/table",
+            get(datasets::run_dataset_table),
+        )
+        .route(
             "/api/admin/legacy-fixtures/validate",
             post(legacy_import::validate_legacy_fixture_endpoint),
         )

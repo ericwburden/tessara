@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use axum::{
     Json,
@@ -86,12 +86,30 @@ pub struct DatasetFieldDefinition {
     position: i32,
 }
 
+#[derive(Serialize)]
+pub struct DatasetTable {
+    dataset_id: Uuid,
+    rows: Vec<DatasetTableRow>,
+}
+
+#[derive(Serialize)]
+pub struct DatasetTableRow {
+    submission_id: String,
+    node_name: String,
+    values: BTreeMap<String, Option<String>>,
+}
+
 struct ValidatedDatasetSource {
     source_alias: String,
     form_id: Option<Uuid>,
     compatibility_group_id: Option<Uuid>,
     selection_rule: DatasetSelectionRule,
     position: i32,
+}
+
+struct ExecutableDataset {
+    source_alias: String,
+    form_id: Uuid,
 }
 
 struct ValidatedDatasetField {
@@ -269,6 +287,68 @@ pub async fn get_dataset(
                 })
             })
             .collect::<Result<Vec<_>, sqlx::Error>>()?,
+    }))
+}
+
+/// Executes a single-form submission-grain dataset against refreshed analytics projections.
+pub async fn run_dataset_table(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(dataset_id): Path<Uuid>,
+) -> ApiResult<Json<DatasetTable>> {
+    auth::require_capability(&state.pool, &headers, "datasets:read").await?;
+    let dataset = require_executable_single_form_dataset(&state.pool, dataset_id).await?;
+
+    let rows = sqlx::query(
+        r#"
+        SELECT
+            submission_fact.submission_id::text AS submission_id,
+            node_dim.node_name,
+            dataset_fields.key,
+            submission_value_fact.value_text
+        FROM analytics.submission_fact
+        JOIN analytics.form_version_dim
+            ON form_version_dim.form_version_id = submission_fact.form_version_id
+        JOIN analytics.node_dim
+            ON node_dim.node_id = submission_fact.node_id
+        JOIN dataset_fields
+            ON dataset_fields.dataset_id = $1
+           AND dataset_fields.source_alias = $2
+        LEFT JOIN analytics.submission_value_fact
+            ON submission_value_fact.submission_id = submission_fact.submission_id
+           AND submission_value_fact.field_key = dataset_fields.source_field_key
+        WHERE form_version_dim.form_id = $3
+          AND submission_fact.status = 'submitted'
+        ORDER BY submission_fact.submission_id, dataset_fields.position, dataset_fields.key
+        "#,
+    )
+    .bind(dataset_id)
+    .bind(&dataset.source_alias)
+    .bind(dataset.form_id)
+    .fetch_all(&state.pool)
+    .await?;
+
+    let mut table_rows = BTreeMap::<String, DatasetTableRow>::new();
+    for row in rows {
+        let submission_id: String = row.try_get("submission_id")?;
+        let node_name: String = row.try_get("node_name")?;
+        let field_key: String = row.try_get("key")?;
+        let value: Option<String> = row.try_get("value_text")?;
+
+        table_rows
+            .entry(submission_id.clone())
+            .or_insert_with(|| DatasetTableRow {
+                submission_id,
+                node_name,
+                values: BTreeMap::new(),
+            })
+            .values
+            .insert(field_key, value);
+    }
+
+    Ok(Json(DatasetTable {
+        dataset_id,
+        rows: table_rows.into_values().collect(),
     }))
 }
 
@@ -451,6 +531,75 @@ async fn require_source_field_exists(
                 source.source_alias
             ))
         })
+}
+
+async fn require_executable_single_form_dataset(
+    pool: &sqlx::PgPool,
+    dataset_id: Uuid,
+) -> ApiResult<ExecutableDataset> {
+    let dataset_grain: String = sqlx::query_scalar("SELECT grain FROM datasets WHERE id = $1")
+        .bind(dataset_id)
+        .fetch_optional(pool)
+        .await?
+        .ok_or_else(|| ApiError::NotFound(format!("dataset {dataset_id}")))?;
+
+    if dataset_grain != DatasetGrain::Submission.as_str() {
+        return Err(ApiError::BadRequest(
+            "dataset table execution currently supports only submission grain".into(),
+        ));
+    }
+
+    let source_rows = sqlx::query(
+        r#"
+        SELECT source_alias, form_id, compatibility_group_id, selection_rule
+        FROM dataset_sources
+        WHERE dataset_id = $1
+        ORDER BY position, source_alias
+        "#,
+    )
+    .bind(dataset_id)
+    .fetch_all(pool)
+    .await?;
+
+    if source_rows.len() != 1 {
+        return Err(ApiError::BadRequest(
+            "dataset table execution currently supports exactly one source".into(),
+        ));
+    }
+
+    let source = &source_rows[0];
+    let form_id: Option<Uuid> = source.try_get("form_id")?;
+    let compatibility_group_id: Option<Uuid> = source.try_get("compatibility_group_id")?;
+    let selection_rule: String = source.try_get("selection_rule")?;
+
+    if compatibility_group_id.is_some() || selection_rule != DatasetSelectionRule::All.as_str() {
+        return Err(ApiError::BadRequest(
+            "dataset table execution currently supports only form sources with all records".into(),
+        ));
+    }
+
+    let Some(form_id) = form_id else {
+        return Err(ApiError::BadRequest(
+            "dataset table execution currently requires a form source".into(),
+        ));
+    };
+
+    let field_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM dataset_fields WHERE dataset_id = $1")
+            .bind(dataset_id)
+            .fetch_one(pool)
+            .await?;
+
+    if field_count == 0 {
+        return Err(ApiError::BadRequest(
+            "dataset table execution requires at least one field".into(),
+        ));
+    }
+
+    Ok(ExecutableDataset {
+        source_alias: source.try_get("source_alias")?,
+        form_id,
+    })
 }
 
 async fn require_dataset_slug_available(pool: &sqlx::PgPool, slug: &str) -> ApiResult<()> {

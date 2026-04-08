@@ -367,6 +367,53 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
                 && binding["source_field_key"] == "participants")
     );
     assert_eq!(report_definition["form_name"], "Quarterly Check In");
+
+    let dataset = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/datasets",
+            &token,
+            Some(json!({
+                "name": "Quarterly Check In Dataset",
+                "slug": "quarterly-check-in-dataset",
+                "grain": "submission",
+                "sources": [{
+                    "source_alias": "check_in",
+                    "form_id": seed["form_id"],
+                    "compatibility_group_id": null,
+                    "selection_rule": "all"
+                }],
+                "fields": [{
+                    "key": "participant_count",
+                    "label": "Participant Count",
+                    "source_alias": "check_in",
+                    "source_field_key": "participants",
+                    "position": 0
+                }]
+            })),
+        ),
+    )
+    .await;
+    let dataset_id = dataset["id"]
+        .as_str()
+        .expect("dataset response should contain id");
+    let dataset_table = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/datasets/{dataset_id}/table"),
+            &token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(dataset_table["dataset_id"], dataset_id);
+    assert_eq!(
+        dataset_table["rows"][0]["values"]["participant_count"],
+        "42"
+    );
+
     let chart_id = seed["chart_id"]
         .as_str()
         .expect("seed response should contain chart id");

@@ -1361,6 +1361,7 @@ pub const SCRIPT: &str = r#"
               <p>${dataset.source_count} sources, ${dataset.field_count} fields</p>
               <button type="button" onclick="useDataset('${escapeHtml(dataset.id)}', '${escapeHtml(dataset.name)}', '${escapeHtml(dataset.slug)}', '${escapeHtml(dataset.grain)}')">Use Dataset</button>
               <button type="button" onclick="loadDatasetByValue('${escapeHtml(dataset.id)}')">Inspect Dataset</button>
+              <button type="button" onclick="loadDatasetTableByValue('${escapeHtml(dataset.id)}')">Run Dataset</button>
               <code>${escapeHtml(dataset.id)}</code>
             </article>
           `);
@@ -1425,6 +1426,50 @@ pub const SCRIPT: &str = r#"
               <button type="button" onclick="useDatasetField('${escapeHtml(field.key)}', '${escapeHtml(field.label)}', '${escapeHtml(field.source_alias)}', '${escapeHtml(field.source_field_key)}', '${escapeHtml(field.field_type)}')">Use Dataset Field</button>
             </article>
           `).join("")}
+        `;
+      }
+
+      async function loadDatasetTableById() {
+        try {
+          const datasetId = inputValue("dataset-id");
+          if (!datasetId) throw new Error("Enter or select a dataset ID first.");
+          await loadDatasetTableByValue(datasetId);
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function loadDatasetTableByValue(datasetId) {
+        if (!token) await login();
+        const payload = await request(`/api/datasets/${datasetId}/table`);
+        show(payload);
+        document.getElementById("screen").innerHTML = `
+          <article class="card">
+            <h3>Dataset Rows</h3>
+            <p>${payload.rows.length} rows returned.</p>
+          </article>
+          ${payload.rows.map((row) => `
+            <article class="card">
+              <h3>${escapeHtml(row.node_name)}</h3>
+              <p class="muted">${escapeHtml(row.submission_id)}</p>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr><th>Field</th><th>Value</th></tr>
+                  </thead>
+                  <tbody>
+                    ${Object.entries(row.values).map(([key, value]) => `
+                      <tr>
+                        <td>${escapeHtml(key)}</td>
+                        <td>${escapeHtml(value ?? "")}</td>
+                      </tr>
+                    `).join("")}
+                  </tbody>
+                </table>
+              </div>
+              <button type="button" onclick="loadSubmissionByValue('${escapeHtml(row.submission_id)}')">Open Submission</button>
+            </article>
+          `).join("") || '<p class="muted">No submitted rows matched this dataset.</p>'}
         `;
       }
 

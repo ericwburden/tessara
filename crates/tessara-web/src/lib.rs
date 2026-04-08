@@ -247,6 +247,7 @@ mod tests {
         assert!(html.contains("Create Dataset"));
         assert!(html.contains("Load Datasets"));
         assert!(html.contains("Inspect Dataset"));
+        assert!(html.contains("Run Dataset"));
         assert!(html.contains("/api/admin/datasets"));
         assert!(html.contains("/api/datasets"));
         assert!(html.contains("Create Node Type"));

@@ -444,6 +444,7 @@ const REPORTING_ACTIONS: &[Action] = &[
     Action::new("createDataset()", "Create Dataset"),
     Action::new("loadDatasets()", "Load Datasets"),
     Action::new("loadDatasetById()", "Inspect Dataset"),
+    Action::new("loadDatasetTableById()", "Run Dataset"),
     Action::new("addReportBinding()", "Add Binding"),
     Action::new("removeSelectedReportBinding()", "Remove Selected Binding"),
     Action::new("clearReportBindings()", "Clear Bindings"),
