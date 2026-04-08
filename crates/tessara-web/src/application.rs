@@ -543,7 +543,7 @@ fn DashboardsApplicationShell() -> impl IntoView {
 fn BrandLockup() -> impl IntoView {
     view! {
         <div class="brand-lockup">
-            <img class="brand-mark" src="/assets/tessara-icon-256.svg" alt="" />
+            <img class="brand-mark" src="/assets/tessara-icon-1024.svg" alt="" />
             <span>"Tessara"</span>
         </div>
     }

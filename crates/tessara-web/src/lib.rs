@@ -218,7 +218,7 @@ mod tests {
         assert!(html.contains("/app"));
         assert!(html.contains("Selected Context"));
         assert!(html.contains("selection-state"));
-        assert!(html.contains("tessara-icon-256.svg"));
+        assert!(html.contains("tessara-icon-1024.svg"));
         assert!(html.contains("tessara-favicon-32.svg"));
         assert!(html.contains("theme-color"));
         assert!(html.contains("brand-lockup"));
@@ -245,7 +245,7 @@ mod tests {
         assert!(html.contains("Open Demo Dashboard"));
         assert!(html.contains("Selection Context"));
         assert!(html.contains("selection-state"));
-        assert!(html.contains("tessara-icon-256.svg"));
+        assert!(html.contains("tessara-icon-1024.svg"));
         assert!(html.contains("tessara-favicon-32.svg"));
         assert!(!html.contains("Create Shortcuts"));
     }
@@ -319,7 +319,7 @@ mod tests {
         assert!(html.contains("tessara.devToken"));
         assert!(html.contains("Selection Context"));
         assert!(html.contains("selection-state"));
-        assert!(html.contains("tessara-icon-256.svg"));
+        assert!(html.contains("tessara-icon-1024.svg"));
         assert!(html.contains("tessara-favicon-32.svg"));
         assert!(!html.contains("Create Shortcuts"));
     }

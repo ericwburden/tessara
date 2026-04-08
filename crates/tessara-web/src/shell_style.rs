@@ -64,16 +64,17 @@ pub const STYLE: &str = r#"
         display: inline-flex;
         font-size: 1.15rem;
         font-weight: 800;
-        gap: 10px;
+        gap: 14px;
         letter-spacing: -0.02em;
         margin-bottom: 20px;
       }
       .brand-mark {
         border: 1px solid var(--neutral);
-        border-radius: 14px;
-        box-shadow: 0 8px 20px rgb(15 23 42 / 0.12);
-        height: 42px;
-        width: 42px;
+        border-radius: 24px;
+        box-shadow: 0 14px 30px rgb(15 23 42 / 0.16);
+        display: block;
+        height: 88px;
+        width: 88px;
       }
       .app-layout {
         display: grid;

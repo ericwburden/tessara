@@ -38,7 +38,7 @@ fn AdminShell() -> impl IntoView {
         <main class="shell">
             <section class="panel hero">
                 <div class="brand-lockup">
-                    <img class="brand-mark" src="/assets/tessara-icon-256.svg" alt="" />
+                    <img class="brand-mark" src="/assets/tessara-icon-1024.svg" alt="" />
                     <span>"Tessara"</span>
                 </div>
                 <p class="muted">"Tessara Core"</p>
