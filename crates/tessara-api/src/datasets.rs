@@ -100,10 +100,10 @@ pub struct DatasetTable {
 
 #[derive(Serialize)]
 pub struct DatasetTableRow {
-    submission_id: String,
-    node_name: String,
-    source_alias: String,
-    values: BTreeMap<String, Option<String>>,
+    pub(crate) submission_id: String,
+    pub(crate) node_name: String,
+    pub(crate) source_alias: String,
+    pub(crate) values: BTreeMap<String, Option<String>>,
 }
 
 struct ValidatedDatasetSource {
@@ -382,11 +382,7 @@ pub async fn run_dataset_table(
     Path(dataset_id): Path<Uuid>,
 ) -> ApiResult<Json<DatasetTable>> {
     auth::require_capability(&state.pool, &headers, "datasets:read").await?;
-    let composition_mode = require_executable_submission_dataset(&state.pool, dataset_id).await?;
-    let table_rows = match composition_mode {
-        DatasetCompositionMode::Union => run_union_dataset_table(&state.pool, dataset_id).await?,
-        DatasetCompositionMode::Join => run_join_dataset_table(&state.pool, dataset_id).await?,
-    };
+    let table_rows = load_dataset_table_rows(&state.pool, dataset_id).await?;
 
     Ok(Json(DatasetTable {
         dataset_id,
@@ -573,6 +569,17 @@ async fn require_source_field_exists(
                 source.source_alias
             ))
         })
+}
+
+pub(crate) async fn load_dataset_table_rows(
+    pool: &sqlx::PgPool,
+    dataset_id: Uuid,
+) -> ApiResult<Vec<DatasetTableRow>> {
+    let composition_mode = require_executable_submission_dataset(pool, dataset_id).await?;
+    match composition_mode {
+        DatasetCompositionMode::Union => run_union_dataset_table(pool, dataset_id).await,
+        DatasetCompositionMode::Join => run_join_dataset_table(pool, dataset_id).await,
+    }
 }
 
 async fn run_union_dataset_table(
@@ -770,7 +777,7 @@ async fn run_join_dataset_table(
     Ok(table_rows.into_values().collect())
 }
 
-async fn require_executable_submission_dataset(
+pub(crate) async fn require_executable_submission_dataset(
     pool: &sqlx::PgPool,
     dataset_id: Uuid,
 ) -> ApiResult<DatasetCompositionMode> {

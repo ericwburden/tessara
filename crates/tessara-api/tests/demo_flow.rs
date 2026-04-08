@@ -2438,7 +2438,7 @@ async fn dataset_definitions_validate_sources_and_fields() {
         join_report.1["error"]
             .as_str()
             .expect("join report create should include an error message")
-            .contains("union composition mode")
+            .contains("executable dataset sources")
     );
 
     let duplicate_field = request_status_and_json(
@@ -2861,6 +2861,86 @@ async fn join_mode_datasets_merge_selected_source_rows_by_node() {
         .expect("join dataset row should expose a composed submission id");
     assert!(joined_submission_id.contains("check_in:"));
     assert!(joined_submission_id.contains("follow_up:"));
+
+    let joined_report = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/reports",
+            &token,
+            Some(json!({
+                "name": "Joined Activity Report",
+                "form_id": null,
+                "dataset_id": joined_dataset_id,
+                "fields": [
+                    {
+                        "logical_key": "participant_count",
+                        "source_field_key": "participant_count",
+                        "computed_expression": null,
+                        "missing_policy": "null"
+                    },
+                    {
+                        "logical_key": "attendee_count",
+                        "source_field_key": "attendee_count",
+                        "computed_expression": null,
+                        "missing_policy": "null"
+                    },
+                    {
+                        "logical_key": "status",
+                        "source_field_key": null,
+                        "computed_expression": "literal:Submitted",
+                        "missing_policy": "null"
+                    }
+                ]
+            })),
+        ),
+    )
+    .await;
+    let joined_report_id = id_from(&joined_report);
+    let joined_report_rows = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/reports/{joined_report_id}/table"),
+            &token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(
+        joined_report_rows["rows"]
+            .as_array()
+            .expect("joined report should return row array")
+            .len(),
+        3
+    );
+    assert!(
+        joined_report_rows["rows"]
+            .as_array()
+            .expect("joined report should return row array")
+            .iter()
+            .any(|row| row["logical_key"] == "participant_count"
+                && row["field_value"] == "42"
+                && row["source_alias"] == "join")
+    );
+    assert!(
+        joined_report_rows["rows"]
+            .as_array()
+            .expect("joined report should return row array")
+            .iter()
+            .any(|row| row["logical_key"] == "attendee_count"
+                && row["field_value"] == "7"
+                && row["source_alias"] == "join")
+    );
+    assert!(
+        joined_report_rows["rows"]
+            .as_array()
+            .expect("joined report should return row array")
+            .iter()
+            .any(|row| row["logical_key"] == "status"
+                && row["field_value"] == "Submitted"
+                && row["source_alias"] == "join")
+    );
 
     let invalid_join_dataset = request_json(
         app.clone(),

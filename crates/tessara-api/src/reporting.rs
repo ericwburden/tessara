@@ -24,6 +24,7 @@ use uuid::Uuid;
 
 use crate::{
     auth,
+    datasets::{DatasetTableRow, load_dataset_table_rows, require_executable_submission_dataset},
     db::AppState,
     error::{ApiError, ApiResult},
     hierarchy::{IdResponse, require_text},
@@ -158,6 +159,13 @@ struct RuntimeAggregationMetric {
     metric_key: String,
     source_logical_key: Option<String>,
     metric_kind: String,
+}
+
+struct RuntimeReportBinding {
+    logical_key: String,
+    source_field_key: Option<String>,
+    computed_expression: Option<String>,
+    missing_policy: String,
 }
 
 #[derive(Serialize)]
@@ -736,6 +744,13 @@ async fn load_report_rows(pool: &sqlx::PgPool, report_id: Uuid) -> ApiResult<Vec
             .fetch_one(pool)
             .await?;
 
+    if let Some(dataset_id) = report_dataset_id {
+        let composition_mode = require_executable_submission_dataset(pool, dataset_id).await?;
+        if composition_mode == DatasetCompositionMode::Join {
+            return load_join_dataset_report_rows(pool, report_id, dataset_id).await;
+        }
+    }
+
     let source_rows = load_report_source_rows(pool, report_id, report_dataset_id).await?;
     finalize_report_rows(source_rows).await
 }
@@ -959,6 +974,91 @@ async fn finalize_report_rows(source_rows: Vec<PgRow>) -> ApiResult<Vec<ReportTa
     Ok(rows)
 }
 
+async fn load_join_dataset_report_rows(
+    pool: &sqlx::PgPool,
+    report_id: Uuid,
+    dataset_id: Uuid,
+) -> ApiResult<Vec<ReportTableRow>> {
+    let dataset_rows = load_dataset_table_rows(pool, dataset_id).await?;
+    let binding_rows = sqlx::query(
+        r#"
+        SELECT logical_key, source_field_key, computed_expression, missing_policy::text AS missing_policy
+        FROM report_field_bindings
+        WHERE report_id = $1
+        ORDER BY position, logical_key
+        "#,
+    )
+    .bind(report_id)
+    .fetch_all(pool)
+    .await?;
+
+    let bindings = binding_rows
+        .into_iter()
+        .map(|row| -> Result<RuntimeReportBinding, sqlx::Error> {
+            Ok(RuntimeReportBinding {
+                logical_key: row.try_get("logical_key")?,
+                source_field_key: row.try_get("source_field_key")?,
+                computed_expression: row.try_get("computed_expression")?,
+                missing_policy: row.try_get("missing_policy")?,
+            })
+        })
+        .collect::<Result<Vec<_>, sqlx::Error>>()?;
+
+    let mut rows = Vec::new();
+    for dataset_row in dataset_rows {
+        append_join_dataset_report_rows(&mut rows, &dataset_row, &bindings);
+    }
+
+    Ok(rows)
+}
+
+fn append_join_dataset_report_rows(
+    rows: &mut Vec<ReportTableRow>,
+    dataset_row: &DatasetTableRow,
+    bindings: &[RuntimeReportBinding],
+) {
+    for binding in bindings {
+        let field_value = resolve_join_dataset_binding_value(dataset_row, binding);
+        if field_value.is_none()
+            && binding.computed_expression.is_none()
+            && binding.missing_policy == "exclude_row"
+        {
+            continue;
+        }
+
+        rows.push(ReportTableRow {
+            submission_id: Some(dataset_row.submission_id.clone()),
+            node_name: Some(dataset_row.node_name.clone()),
+            source_alias: Some(dataset_row.source_alias.clone()),
+            logical_key: Some(binding.logical_key.clone()),
+            field_value,
+        });
+    }
+}
+
+fn resolve_join_dataset_binding_value(
+    dataset_row: &DatasetTableRow,
+    binding: &RuntimeReportBinding,
+) -> Option<String> {
+    if let Some(computed_expression) = &binding.computed_expression {
+        return literal_expression_value(computed_expression);
+    }
+
+    match binding
+        .source_field_key
+        .as_ref()
+        .and_then(|key| dataset_row.values.get(key).cloned().flatten())
+    {
+        Some(value) => Some(value),
+        None if binding.missing_policy == "bucket_unknown" => Some("Unknown".to_string()),
+        None => None,
+    }
+}
+
+fn literal_expression_value(expression: &str) -> Option<String> {
+    expression.strip_prefix("literal:").map(ToString::to_string)
+}
+
 async fn insert_aggregation_metrics(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     aggregation_id: Uuid,
@@ -1139,50 +1239,26 @@ async fn assert_report_dataset_is_executable(
     pool: &sqlx::PgPool,
     dataset_id: Uuid,
 ) -> ApiResult<()> {
-    let (grain, composition_mode): (String, String) =
-        sqlx::query_as("SELECT grain, composition_mode FROM datasets WHERE id = $1")
-            .bind(dataset_id)
-            .fetch_optional(pool)
-            .await?
-            .ok_or_else(|| ApiError::NotFound(format!("dataset {dataset_id}")))?;
-
-    if grain != "submission" {
-        return Err(ApiError::BadRequest(
-            "dataset-backed reports currently support only submission grain".into(),
-        ));
-    }
-    if composition_mode != DatasetCompositionMode::Union.as_str() {
-        return Err(ApiError::BadRequest(
-            "dataset-backed reports currently support only union composition mode".into(),
-        ));
-    }
-
-    let (source_count, executable_source_count): (i64, i64) = sqlx::query_as(
-        r#"
-        SELECT
-            COUNT(*) AS source_count,
-            COUNT(*) FILTER (
-                WHERE (
-                    (form_id IS NOT NULL AND compatibility_group_id IS NULL)
-                    OR (form_id IS NULL AND compatibility_group_id IS NOT NULL)
+    require_executable_submission_dataset(pool, dataset_id)
+        .await
+        .map(|_| ())
+        .map_err(|error| match error {
+            ApiError::BadRequest(message) if message.contains("submission grain") => {
+                ApiError::BadRequest(
+                    "dataset-backed reports currently support only submission grain".into(),
                 )
-                  AND selection_rule IN ('all', 'latest', 'earliest')
-            ) AS executable_source_count
-        FROM dataset_sources
-        WHERE dataset_id = $1
-        "#,
-    )
-    .bind(dataset_id)
-    .fetch_one(pool)
-    .await?;
-
-    if source_count > 0 && executable_source_count == source_count {
-        Ok(())
-    } else {
-        Err(ApiError::BadRequest(
-            "dataset-backed reports currently require form or compatibility-group sources with supported selection rules".into(),
-        ))
-    }
+            }
+            ApiError::BadRequest(message)
+                if message.contains("form or compatibility-group sources")
+                    || message.contains("selection rules")
+                    || message.contains("at least two sources") =>
+            {
+                ApiError::BadRequest(
+                    "dataset-backed reports currently require executable dataset sources with supported selection rules".into(),
+                )
+            }
+            other => other,
+        })
 }
 
 async fn assert_report_source_fields_exist(
@@ -1272,9 +1348,16 @@ fn string_value(array: &StringArray, index: usize) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use arrow::array::StringArray;
 
-    use super::string_value;
+    use crate::datasets::DatasetTableRow;
+
+    use super::{
+        RuntimeReportBinding, literal_expression_value, resolve_join_dataset_binding_value,
+        string_value,
+    };
 
     #[test]
     fn string_value_preserves_nulls_from_arrow_arrays() {
@@ -1282,5 +1365,59 @@ mod tests {
 
         assert_eq!(string_value(&values, 0), Some("North".to_string()));
         assert_eq!(string_value(&values, 1), None);
+    }
+
+    #[test]
+    fn literal_expression_value_extracts_literal_payloads() {
+        assert_eq!(
+            literal_expression_value("literal:Submitted"),
+            Some("Submitted".to_string())
+        );
+        assert_eq!(literal_expression_value("sum:value"), None);
+    }
+
+    #[test]
+    fn join_dataset_binding_value_uses_dataset_rows_and_missing_policies() {
+        let dataset_row = DatasetTableRow {
+            submission_id: "check_in:1 | follow_up:2".to_string(),
+            node_name: "Demo Organization".to_string(),
+            source_alias: "join".to_string(),
+            values: BTreeMap::from([
+                ("participant_count".to_string(), Some("42".to_string())),
+                ("attendee_count".to_string(), None),
+            ]),
+        };
+
+        let direct_binding = RuntimeReportBinding {
+            logical_key: "participants".to_string(),
+            source_field_key: Some("participant_count".to_string()),
+            computed_expression: None,
+            missing_policy: "null".to_string(),
+        };
+        let missing_binding = RuntimeReportBinding {
+            logical_key: "attendees".to_string(),
+            source_field_key: Some("attendee_count".to_string()),
+            computed_expression: None,
+            missing_policy: "bucket_unknown".to_string(),
+        };
+        let computed_binding = RuntimeReportBinding {
+            logical_key: "status".to_string(),
+            source_field_key: None,
+            computed_expression: Some("literal:Submitted".to_string()),
+            missing_policy: "null".to_string(),
+        };
+
+        assert_eq!(
+            resolve_join_dataset_binding_value(&dataset_row, &direct_binding),
+            Some("42".to_string())
+        );
+        assert_eq!(
+            resolve_join_dataset_binding_value(&dataset_row, &missing_binding),
+            Some("Unknown".to_string())
+        );
+        assert_eq!(
+            resolve_join_dataset_binding_value(&dataset_row, &computed_binding),
+            Some("Submitted".to_string())
+        );
     }
 }
