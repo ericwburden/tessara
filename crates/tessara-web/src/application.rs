@@ -234,6 +234,7 @@ fn AdminApplicationShell() -> impl IntoView {
                     <SelectionContext/>
                 </aside>
                 <section class="panel app-main">
+                    <AdminHomeScreen/>
                     <HierarchyAdminScreen/>
                     <FormAdminScreen/>
                     <ReportAdminScreen/>
@@ -472,6 +473,128 @@ fn HomeScreen() -> impl IntoView {
                 <li>"Reports focuses on table output, aggregations, and dashboard preview."</li>
                 <li>"Migration focuses on fixture validation, dry-run, and import rehearsal."</li>
             </ul>
+        </section>
+    }
+}
+
+#[component]
+fn AdminHomeScreen() -> impl IntoView {
+    let management_cards = [
+        (
+            "Hierarchy",
+            "Manage node types, relationships, metadata fields, and runtime nodes.",
+            "#hierarchy-admin-screen",
+            "Open Hierarchy Setup",
+            "loadNodeTypes()",
+            "Load Node Types",
+        ),
+        (
+            "Forms",
+            "Create forms, draft versions, edit sections and fields, and publish revisions.",
+            "#form-admin-screen",
+            "Open Form Builder",
+            "loadForms()",
+            "Load Forms",
+        ),
+        (
+            "Datasets and Reports",
+            "Manage datasets, reports, and aggregations inside the reporting stack.",
+            "#report-admin-screen",
+            "Open Reporting Builder",
+            "loadDatasets()",
+            "Load Datasets",
+        ),
+        (
+            "Dashboards",
+            "Inspect charts, dashboards, and current preview outputs from one admin route.",
+            "#report-admin-screen",
+            "Open Dashboard Builder",
+            "loadDashboards()",
+            "Load Dashboards",
+        ),
+    ];
+
+    let directory_cards = [
+        (
+            "Node Types",
+            "Browse hierarchy types",
+            "loadNodeTypes()",
+            "Open",
+        ),
+        ("Nodes", "Browse runtime nodes", "loadNodes()", "Open"),
+        ("Forms", "Browse forms and versions", "loadForms()", "Open"),
+        (
+            "Datasets",
+            "Browse dataset definitions",
+            "loadDatasets()",
+            "Open",
+        ),
+        (
+            "Reports",
+            "Browse report definitions",
+            "loadReports()",
+            "Open",
+        ),
+        (
+            "Aggregations",
+            "Browse aggregation definitions",
+            "loadAggregations()",
+            "Open",
+        ),
+        ("Charts", "Browse charts", "loadCharts()", "Open"),
+        (
+            "Dashboards",
+            "Browse dashboards",
+            "loadDashboards()",
+            "Open",
+        ),
+    ];
+
+    view! {
+        <section id="admin-home-screen" class="app-screen">
+            <p class="eyebrow">"Admin Home"</p>
+            <h2>"Management Areas"</h2>
+            <p class="muted">
+                "Use this admin landing section to jump into the main management areas before dropping into the detailed builder screens."
+            </p>
+            <div class="management-grid">
+                {management_cards
+                    .into_iter()
+                    .map(|(title, description, href, href_label, action, action_label)| {
+                        view! {
+                            <article class="home-card">
+                                <h3>{title}</h3>
+                                <p>{description}</p>
+                                <div class="actions">
+                                    <a class="button-link" href=href>{href_label}</a>
+                                    <button type="button" onclick=action>{action_label}</button>
+                                </div>
+                            </article>
+                        }
+                    })
+                    .collect_view()}
+            </div>
+        </section>
+        <section class="app-screen">
+            <p class="eyebrow">"Admin Home"</p>
+            <h2>"Entity Directory"</h2>
+            <p class="muted">
+                "These entry points mirror the original application's core management lists while keeping the current Tessara builder controls underneath."
+            </p>
+            <div class="directory-grid">
+                {directory_cards
+                    .into_iter()
+                    .map(|(title, description, action, label)| {
+                        view! {
+                            <article class="directory-card">
+                                <h3>{title}</h3>
+                                <p>{description}</p>
+                                <button type="button" onclick=action>{label}</button>
+                            </article>
+                        }
+                    })
+                    .collect_view()}
+            </div>
         </section>
     }
 }

@@ -214,10 +214,23 @@ pub const STYLE: &str = r#"
         gap: 12px;
         grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
       }
+      .management-grid, .directory-grid {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      }
       .home-card {
         border: 1px solid var(--neutral);
         border-radius: 16px;
         background: var(--surface);
+        display: grid;
+        gap: 12px;
+        padding: 16px;
+      }
+      .directory-card {
+        border: 1px solid var(--neutral);
+        border-radius: 16px;
+        background: linear-gradient(180deg, rgb(255 255 255 / 0.96), rgb(248 250 252 / 0.92));
         display: grid;
         gap: 12px;
         padding: 16px;
