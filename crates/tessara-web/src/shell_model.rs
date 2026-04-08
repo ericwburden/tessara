@@ -439,7 +439,7 @@ const REPORTING_INPUTS: &[TextInput] = &[
     TextInput::new(
         "aggregation-metric-kind",
         "Aggregation metric kind",
-        "count or sum",
+        "count, sum, avg, min, or max",
         "sum",
     ),
     TextInput::new("chart-id", "Chart ID", "Chart ID", ""),

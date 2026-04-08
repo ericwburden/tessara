@@ -115,6 +115,51 @@ pub struct AggregationResultRow {
     metrics: BTreeMap<String, f64>,
 }
 
+#[derive(Default)]
+struct AggregationMetricAccumulator {
+    count: f64,
+    total: f64,
+    numeric_count: f64,
+    min: Option<f64>,
+    max: Option<f64>,
+}
+
+impl AggregationMetricAccumulator {
+    fn increment_count(&mut self) {
+        self.count += 1.0;
+    }
+
+    fn add_numeric(&mut self, value: f64) {
+        self.total += value;
+        self.numeric_count += 1.0;
+        self.min = Some(self.min.map_or(value, |current| current.min(value)));
+        self.max = Some(self.max.map_or(value, |current| current.max(value)));
+    }
+
+    fn finalize(&self, metric_kind: &str) -> ApiResult<f64> {
+        match metric_kind {
+            "count" => Ok(self.count),
+            "sum" => Ok(self.total),
+            "avg" => Ok(if self.numeric_count > 0.0 {
+                self.total / self.numeric_count
+            } else {
+                0.0
+            }),
+            "min" => Ok(self.min.unwrap_or(0.0)),
+            "max" => Ok(self.max.unwrap_or(0.0)),
+            other => Err(ApiError::BadRequest(format!(
+                "unsupported aggregation metric kind '{other}'"
+            ))),
+        }
+    }
+}
+
+struct RuntimeAggregationMetric {
+    metric_key: String,
+    source_logical_key: Option<String>,
+    metric_kind: String,
+}
+
 #[derive(Serialize)]
 pub struct ReportSummary {
     id: Uuid,
@@ -384,7 +429,25 @@ pub async fn run_aggregation(
             .insert(logical_key, field_value);
     }
 
-    let mut groups = BTreeMap::<String, BTreeMap<String, f64>>::new();
+    let runtime_metrics = metric_rows
+        .into_iter()
+        .map(|metric| -> Result<RuntimeAggregationMetric, sqlx::Error> {
+            Ok(RuntimeAggregationMetric {
+                metric_key: metric.try_get("metric_key")?,
+                source_logical_key: metric.try_get("source_logical_key")?,
+                metric_kind: metric.try_get("metric_kind")?,
+            })
+        })
+        .collect::<Result<Vec<_>, sqlx::Error>>()?;
+
+    for metric in &runtime_metrics {
+        require_supported_aggregation_metric(
+            &metric.metric_kind,
+            metric.source_logical_key.as_deref(),
+        )?;
+    }
+
+    let mut groups = BTreeMap::<String, BTreeMap<String, AggregationMetricAccumulator>>::new();
     for values in submissions.values() {
         let group_key = group_by_logical_key
             .as_ref()
@@ -393,31 +456,30 @@ pub async fn run_aggregation(
             .unwrap_or_else(|| "All".to_string());
         let metrics = groups.entry(group_key).or_default();
 
-        for metric in &metric_rows {
-            let metric_key: String = metric.try_get("metric_key")?;
-            let metric_kind: String = metric.try_get("metric_kind")?;
-            let source_logical_key: Option<String> = metric.try_get("source_logical_key")?;
-            let value = metrics.entry(metric_key).or_insert(0.0);
+        for metric in &runtime_metrics {
+            let accumulator = metrics.entry(metric.metric_key.clone()).or_default();
 
-            match metric_kind.as_str() {
-                "count" => *value += 1.0,
-                "sum" => {
-                    let Some(source_logical_key) = source_logical_key else {
-                        return Err(ApiError::BadRequest(
-                            "sum metrics require a source logical key".into(),
-                        ));
-                    };
-                    if let Some(raw) = values.get(&source_logical_key) {
-                        *value += raw.parse::<f64>().map_err(|_| {
+            match metric.metric_kind.as_str() {
+                "count" => accumulator.increment_count(),
+                "sum" | "avg" | "min" | "max" => {
+                    let source_logical_key =
+                        metric.source_logical_key.as_deref().ok_or_else(|| {
+                            ApiError::BadRequest(format!(
+                                "{} metrics require a source logical key",
+                                metric.metric_kind
+                            ))
+                        })?;
+                    if let Some(raw) = values.get(source_logical_key) {
+                        accumulator.add_numeric(raw.parse::<f64>().map_err(|_| {
                             ApiError::BadRequest(format!(
                                 "aggregation metric '{source_logical_key}' expected numeric values"
                             ))
-                        })?;
+                        })?);
                     }
                 }
-                _ => {
+                other => {
                     return Err(ApiError::BadRequest(format!(
-                        "unsupported aggregation metric kind '{metric_kind}'"
+                        "unsupported aggregation metric kind '{other}'"
                     )));
                 }
             }
@@ -428,8 +490,19 @@ pub async fn run_aggregation(
         aggregation_id,
         rows: groups
             .into_iter()
-            .map(|(group_key, metrics)| AggregationResultRow { group_key, metrics })
-            .collect(),
+            .map(|(group_key, accumulators)| {
+                let mut metrics = BTreeMap::new();
+                for metric in &runtime_metrics {
+                    let value = if let Some(accumulator) = accumulators.get(&metric.metric_key) {
+                        accumulator.finalize(&metric.metric_kind)?
+                    } else {
+                        AggregationMetricAccumulator::default().finalize(&metric.metric_kind)?
+                    };
+                    metrics.insert(metric.metric_key.clone(), value);
+                }
+                Ok(AggregationResultRow { group_key, metrics })
+            })
+            .collect::<ApiResult<Vec<_>>>()?,
     }))
 }
 
@@ -933,30 +1006,38 @@ fn validate_aggregation_metrics(metrics: &[CreateAggregationMetricRequest]) -> A
 
     for metric in metrics {
         require_text("aggregation metric key", &metric.metric_key)?;
-        match metric.metric_kind.as_str() {
-            "count" => {}
-            "sum" => {
-                if metric
-                    .source_logical_key
-                    .as_deref()
-                    .map(str::trim)
-                    .unwrap_or_default()
-                    .is_empty()
-                {
-                    return Err(ApiError::BadRequest(
-                        "sum metrics require a source logical key".into(),
-                    ));
-                }
-            }
-            other => {
-                return Err(ApiError::BadRequest(format!(
-                    "unsupported aggregation metric kind '{other}'"
-                )));
-            }
-        }
+        require_supported_aggregation_metric(
+            &metric.metric_kind,
+            metric.source_logical_key.as_deref(),
+        )?;
     }
 
     Ok(())
+}
+
+fn require_supported_aggregation_metric(
+    metric_kind: &str,
+    source_logical_key: Option<&str>,
+) -> ApiResult<()> {
+    match metric_kind {
+        "count" => Ok(()),
+        "sum" | "avg" | "min" | "max" => {
+            if source_logical_key
+                .map(str::trim)
+                .unwrap_or_default()
+                .is_empty()
+            {
+                Err(ApiError::BadRequest(format!(
+                    "{metric_kind} metrics require a source logical key"
+                )))
+            } else {
+                Ok(())
+            }
+        }
+        other => Err(ApiError::BadRequest(format!(
+            "unsupported aggregation metric kind '{other}'"
+        ))),
+    }
 }
 
 async fn validate_report_field_bindings(

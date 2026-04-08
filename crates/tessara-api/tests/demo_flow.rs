@@ -2701,6 +2701,159 @@ async fn dataset_selection_rules_pick_latest_and_earliest_submissions() {
 }
 
 #[tokio::test]
+async fn aggregations_support_avg_min_and_max_metrics() {
+    let _guard = TEST_DATABASE_LOCK.lock().await;
+    let Some(app) = test_app().await else { return };
+    let token = login_token(app.clone()).await;
+
+    let seed = request_json(
+        app.clone(),
+        authorized_request("POST", "/api/demo/seed", &token, None),
+    )
+    .await;
+
+    let second_draft = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/submissions/drafts",
+            &token,
+            Some(json!({
+                "form_version_id": seed["form_version_id"],
+                "node_id": seed["organization_node_id"]
+            })),
+        ),
+    )
+    .await;
+    let second_submission_id = id_from(&second_draft);
+    request_json(
+        app.clone(),
+        authorized_request(
+            "PUT",
+            &format!("/api/submissions/{second_submission_id}/values"),
+            &token,
+            Some(json!({"values": {"participants": 10}})),
+        ),
+    )
+    .await;
+    request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            &format!("/api/submissions/{second_submission_id}/submit"),
+            &token,
+            None,
+        ),
+    )
+    .await;
+    request_json(
+        app.clone(),
+        authorized_request("POST", "/api/admin/analytics/refresh", &token, None),
+    )
+    .await;
+
+    let report_id = seed["report_id"]
+        .as_str()
+        .expect("seed should include a report id");
+    let aggregation = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/aggregations",
+            &token,
+            Some(json!({
+                "name": "Participants Statistics",
+                "report_id": report_id,
+                "group_by_logical_key": null,
+                "metrics": [
+                    {
+                        "metric_key": "responses",
+                        "source_logical_key": null,
+                        "metric_kind": "count"
+                    },
+                    {
+                        "metric_key": "participants_total",
+                        "source_logical_key": "participants",
+                        "metric_kind": "sum"
+                    },
+                    {
+                        "metric_key": "participants_average",
+                        "source_logical_key": "participants",
+                        "metric_kind": "avg"
+                    },
+                    {
+                        "metric_key": "participants_minimum",
+                        "source_logical_key": "participants",
+                        "metric_kind": "min"
+                    },
+                    {
+                        "metric_key": "participants_maximum",
+                        "source_logical_key": "participants",
+                        "metric_kind": "max"
+                    }
+                ]
+            })),
+        ),
+    )
+    .await;
+    let aggregation_id = id_from(&aggregation);
+    let aggregation_table = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/aggregations/{aggregation_id}/table"),
+            &token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(aggregation_table["rows"][0]["metrics"]["responses"], 2.0);
+    assert_eq!(
+        aggregation_table["rows"][0]["metrics"]["participants_total"],
+        52.0
+    );
+    assert_eq!(
+        aggregation_table["rows"][0]["metrics"]["participants_average"],
+        26.0
+    );
+    assert_eq!(
+        aggregation_table["rows"][0]["metrics"]["participants_minimum"],
+        10.0
+    );
+    assert_eq!(
+        aggregation_table["rows"][0]["metrics"]["participants_maximum"],
+        42.0
+    );
+
+    let invalid_avg = request_status_and_json(
+        app,
+        authorized_request(
+            "POST",
+            "/api/admin/aggregations",
+            &token,
+            Some(json!({
+                "name": "Broken Average",
+                "report_id": report_id,
+                "group_by_logical_key": null,
+                "metrics": [{
+                    "metric_key": "participants_average",
+                    "source_logical_key": null,
+                    "metric_kind": "avg"
+                }]
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(invalid_avg.0, StatusCode::BAD_REQUEST);
+    assert!(
+        invalid_avg.1["error"]
+            .as_str()
+            .expect("invalid avg aggregation should include an error message")
+            .contains("avg metrics require a source logical key")
+    );
+}
+
+#[tokio::test]
 async fn reporting_and_dashboard_builders_return_diagnostics_for_invalid_references() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
     let Some(app) = test_app().await else { return };

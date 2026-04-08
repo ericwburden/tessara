@@ -643,7 +643,7 @@ fn ReportAdminScreen() -> impl IntoView {
                 <label><span>"Aggregation group-by logical key"</span><input id="aggregation-group-by-logical-key" placeholder="Optional group logical key" value="" /></label>
                 <label><span>"Aggregation metric key"</span><input id="aggregation-metric-key" placeholder="participants_total" value="participants_total" /></label>
                 <label><span>"Aggregation source logical key"</span><input id="aggregation-source-logical-key" placeholder="participants" value="participants" /></label>
-                <label><span>"Aggregation metric kind"</span><input id="aggregation-metric-kind" placeholder="count or sum" value="sum" /></label>
+                <label><span>"Aggregation metric kind"</span><input id="aggregation-metric-kind" placeholder="count, sum, avg, min, or max" value="sum" /></label>
                 <label><span>"Chart ID"</span><input id="chart-id" placeholder="Selected chart ID" value="" /></label>
                 <label><span>"Chart name"</span><input id="chart-name" placeholder="Participants Table" value="Participants Table" /></label>
                 <label><span>"Chart type"</span><input id="chart-type" placeholder="table" value="table" /></label>
