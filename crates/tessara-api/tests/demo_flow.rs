@@ -2460,6 +2460,142 @@ async fn dataset_definitions_validate_sources_and_fields() {
 }
 
 #[tokio::test]
+async fn dataset_selection_rules_pick_latest_and_earliest_submissions() {
+    let _guard = TEST_DATABASE_LOCK.lock().await;
+    let Some(app) = test_app().await else { return };
+    let token = login_token(app.clone()).await;
+
+    let seed = request_json(
+        app.clone(),
+        authorized_request("POST", "/api/demo/seed", &token, None),
+    )
+    .await;
+
+    let follow_up_draft = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/submissions/drafts",
+            &token,
+            Some(json!({
+                "form_version_id": seed["form_version_id"],
+                "node_id": seed["organization_node_id"]
+            })),
+        ),
+    )
+    .await;
+    let follow_up_submission_id = id_from(&follow_up_draft);
+    request_json(
+        app.clone(),
+        authorized_request(
+            "PUT",
+            &format!("/api/submissions/{follow_up_submission_id}/values"),
+            &token,
+            Some(json!({"values": {"participants": 99}})),
+        ),
+    )
+    .await;
+    request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            &format!("/api/submissions/{follow_up_submission_id}/submit"),
+            &token,
+            None,
+        ),
+    )
+    .await;
+    request_json(
+        app.clone(),
+        authorized_request("POST", "/api/admin/analytics/refresh", &token, None),
+    )
+    .await;
+
+    let latest_dataset = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/datasets",
+            &token,
+            Some(json!({
+                "name": "Latest Participants Dataset",
+                "slug": "latest-participants-dataset",
+                "grain": "submission",
+                "sources": [{
+                    "source_alias": "service",
+                    "form_id": seed["form_id"],
+                    "compatibility_group_id": null,
+                    "selection_rule": "latest"
+                }],
+                "fields": [{
+                    "key": "participant_count",
+                    "label": "Participant Count",
+                    "source_alias": "service",
+                    "source_field_key": "participants",
+                    "position": 0
+                }]
+            })),
+        ),
+    )
+    .await;
+    let latest_dataset_id = id_from(&latest_dataset);
+    let latest_rows = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/datasets/{latest_dataset_id}/table"),
+            &token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(latest_rows["rows"][0]["values"]["participant_count"], "99");
+
+    let earliest_dataset = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/datasets",
+            &token,
+            Some(json!({
+                "name": "Earliest Participants Dataset",
+                "slug": "earliest-participants-dataset",
+                "grain": "submission",
+                "sources": [{
+                    "source_alias": "service",
+                    "form_id": seed["form_id"],
+                    "compatibility_group_id": null,
+                    "selection_rule": "earliest"
+                }],
+                "fields": [{
+                    "key": "participant_count",
+                    "label": "Participant Count",
+                    "source_alias": "service",
+                    "source_field_key": "participants",
+                    "position": 0
+                }]
+            })),
+        ),
+    )
+    .await;
+    let earliest_dataset_id = id_from(&earliest_dataset);
+    let earliest_rows = request_json(
+        app,
+        authorized_request(
+            "GET",
+            &format!("/api/datasets/{earliest_dataset_id}/table"),
+            &token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(
+        earliest_rows["rows"][0]["values"]["participant_count"],
+        "42"
+    );
+}
+
+#[tokio::test]
 async fn reporting_and_dashboard_builders_return_diagnostics_for_invalid_references() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
     let Some(app) = test_app().await else { return };

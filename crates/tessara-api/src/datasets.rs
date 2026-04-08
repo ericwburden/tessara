@@ -361,35 +361,57 @@ pub async fn run_dataset_table(
 
     let rows = sqlx::query(
         r#"
+        WITH ranked_submissions AS (
+            SELECT
+                dataset_sources.dataset_id,
+                dataset_sources.source_alias,
+                dataset_sources.selection_rule,
+                submission_fact.submission_id,
+                submission_fact.node_id,
+                node_dim.node_name,
+                ROW_NUMBER() OVER (
+                    PARTITION BY dataset_sources.dataset_id, dataset_sources.source_alias, submission_fact.node_id
+                    ORDER BY
+                        CASE
+                            WHEN dataset_sources.selection_rule = 'earliest' THEN submission_fact.submitted_at
+                        END ASC NULLS LAST,
+                        CASE
+                            WHEN dataset_sources.selection_rule <> 'earliest' THEN submission_fact.submitted_at
+                        END DESC NULLS LAST,
+                        submission_fact.submission_id
+                ) AS selection_rank
+            FROM dataset_sources
+            JOIN analytics.form_version_dim
+                ON (
+                    dataset_sources.form_id IS NOT NULL
+                    AND form_version_dim.form_id = dataset_sources.form_id
+                )
+                OR (
+                    dataset_sources.compatibility_group_id IS NOT NULL
+                    AND form_version_dim.compatibility_group_id = dataset_sources.compatibility_group_id
+                )
+            JOIN analytics.submission_fact
+                ON submission_fact.form_version_id = form_version_dim.form_version_id
+            JOIN analytics.node_dim
+                ON node_dim.node_id = submission_fact.node_id
+            WHERE dataset_sources.dataset_id = $1
+              AND submission_fact.status = 'submitted'
+        )
         SELECT
-            submission_fact.submission_id::text AS submission_id,
-            node_dim.node_name,
+            ranked_submissions.submission_id::text AS submission_id,
+            ranked_submissions.node_name,
             dataset_fields.key,
             submission_value_fact.value_text
-        FROM dataset_sources
+        FROM ranked_submissions
         JOIN dataset_fields
-            ON dataset_fields.dataset_id = dataset_sources.dataset_id
-           AND dataset_fields.source_alias = dataset_sources.source_alias
-        JOIN analytics.form_version_dim
-            ON (
-                dataset_sources.form_id IS NOT NULL
-                AND form_version_dim.form_id = dataset_sources.form_id
-            )
-            OR (
-                dataset_sources.compatibility_group_id IS NOT NULL
-                AND form_version_dim.compatibility_group_id = dataset_sources.compatibility_group_id
-            )
-        JOIN analytics.submission_fact
-            ON submission_fact.form_version_id = form_version_dim.form_version_id
-        JOIN analytics.node_dim
-            ON node_dim.node_id = submission_fact.node_id
+            ON dataset_fields.dataset_id = ranked_submissions.dataset_id
+           AND dataset_fields.source_alias = ranked_submissions.source_alias
         LEFT JOIN analytics.submission_value_fact
-            ON submission_value_fact.submission_id = submission_fact.submission_id
+            ON submission_value_fact.submission_id = ranked_submissions.submission_id
            AND submission_value_fact.field_key = dataset_fields.source_field_key
-        WHERE dataset_sources.dataset_id = $1
-          AND dataset_sources.selection_rule = 'all'
-          AND submission_fact.status = 'submitted'
-        ORDER BY submission_fact.submission_id, dataset_sources.position, dataset_fields.position, dataset_fields.key
+        WHERE ranked_submissions.selection_rule = 'all'
+           OR ranked_submissions.selection_rank = 1
+        ORDER BY ranked_submissions.submission_id, dataset_fields.position, dataset_fields.key
         "#,
     )
     .bind(dataset_id)
@@ -638,14 +660,6 @@ async fn require_executable_submission_dataset(
     for source in source_rows {
         let form_id: Option<Uuid> = source.try_get("form_id")?;
         let compatibility_group_id: Option<Uuid> = source.try_get("compatibility_group_id")?;
-        let selection_rule: String = source.try_get("selection_rule")?;
-
-        if selection_rule != DatasetSelectionRule::All.as_str() {
-            return Err(ApiError::BadRequest(
-                "dataset table execution currently supports only sources with all records".into(),
-            ));
-        }
-
         if form_id.is_none() && compatibility_group_id.is_none() {
             return Err(ApiError::BadRequest(
                 "dataset table execution currently requires form or compatibility-group sources"

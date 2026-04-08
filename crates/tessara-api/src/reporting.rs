@@ -674,9 +674,47 @@ async fn load_report_source_rows(
         assert_report_dataset_is_executable(pool, dataset_id).await?;
         sqlx::query(
             r#"
+            WITH ranked_submissions AS (
+                SELECT
+                    dataset_sources.dataset_id,
+                    dataset_sources.source_alias,
+                    dataset_sources.selection_rule,
+                    submission_fact.submission_id,
+                    submission_fact.node_id,
+                    node_dim.node_name,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY dataset_sources.dataset_id, dataset_sources.source_alias, submission_fact.node_id
+                        ORDER BY
+                            CASE
+                                WHEN dataset_sources.selection_rule = 'earliest' THEN submission_fact.submitted_at
+                            END ASC NULLS LAST,
+                            CASE
+                                WHEN dataset_sources.selection_rule <> 'earliest' THEN submission_fact.submitted_at
+                            END DESC NULLS LAST,
+                            submission_fact.submission_id
+                    ) AS selection_rank
+                FROM reports
+                JOIN dataset_sources
+                    ON dataset_sources.dataset_id = reports.dataset_id
+                JOIN analytics.form_version_dim
+                    ON (
+                        dataset_sources.form_id IS NOT NULL
+                        AND form_version_dim.form_id = dataset_sources.form_id
+                    )
+                    OR (
+                        dataset_sources.compatibility_group_id IS NOT NULL
+                        AND form_version_dim.compatibility_group_id = dataset_sources.compatibility_group_id
+                    )
+                JOIN analytics.submission_fact
+                    ON submission_fact.form_version_id = form_version_dim.form_version_id
+                JOIN analytics.node_dim
+                    ON node_dim.node_id = submission_fact.node_id
+                WHERE reports.id = $1
+                  AND submission_fact.status = 'submitted'
+            )
             SELECT
-                submission_fact.submission_id::text AS submission_id,
-                node_dim.node_name,
+                ranked_submissions.submission_id::text AS submission_id,
+                ranked_submissions.node_name,
                 report_field_bindings.logical_key,
                 CASE
                     WHEN report_field_bindings.computed_expression IS NOT NULL
@@ -687,33 +725,22 @@ async fn load_report_source_rows(
                     ELSE submission_value_fact.value_text
                 END AS field_value
             FROM reports
-            JOIN dataset_sources
-                ON dataset_sources.dataset_id = reports.dataset_id
+            JOIN ranked_submissions
+                ON ranked_submissions.dataset_id = reports.dataset_id
             JOIN report_field_bindings
                 ON report_field_bindings.report_id = reports.id
             LEFT JOIN dataset_fields
                 ON dataset_fields.dataset_id = reports.dataset_id
                AND dataset_fields.key = report_field_bindings.source_field_key
-               AND dataset_fields.source_alias = dataset_sources.source_alias
-            JOIN analytics.form_version_dim
-                ON (
-                    dataset_sources.form_id IS NOT NULL
-                    AND form_version_dim.form_id = dataset_sources.form_id
-                )
-                OR (
-                    dataset_sources.compatibility_group_id IS NOT NULL
-                    AND form_version_dim.compatibility_group_id = dataset_sources.compatibility_group_id
-                )
-            JOIN analytics.submission_fact
-                ON submission_fact.form_version_id = form_version_dim.form_version_id
-            JOIN analytics.node_dim
-                ON node_dim.node_id = submission_fact.node_id
+               AND dataset_fields.source_alias = ranked_submissions.source_alias
             LEFT JOIN analytics.submission_value_fact
-                ON submission_value_fact.submission_id = submission_fact.submission_id
+                ON submission_value_fact.submission_id = ranked_submissions.submission_id
                AND submission_value_fact.field_key = dataset_fields.source_field_key
             WHERE reports.id = $1
-              AND dataset_sources.selection_rule = 'all'
-              AND submission_fact.status = 'submitted'
+              AND (
+                ranked_submissions.selection_rule = 'all'
+                OR ranked_submissions.selection_rank = 1
+              )
               AND (
                 report_field_bindings.computed_expression IS NOT NULL
                 OR dataset_fields.id IS NOT NULL
@@ -724,7 +751,7 @@ async fn load_report_source_rows(
                 submission_value_fact.value_text IS NOT NULL
                 OR report_field_bindings.missing_policy::text <> 'exclude_row'
               )
-            ORDER BY submission_fact.submission_id, report_field_bindings.position
+            ORDER BY ranked_submissions.submission_id, report_field_bindings.position
             "#,
         )
         .bind(report_id)
@@ -1042,7 +1069,7 @@ async fn assert_report_dataset_is_executable(
                     (form_id IS NOT NULL AND compatibility_group_id IS NULL)
                     OR (form_id IS NULL AND compatibility_group_id IS NOT NULL)
                 )
-                  AND selection_rule = 'all'
+                  AND selection_rule IN ('all', 'latest', 'earliest')
             ) AS executable_source_count
         FROM dataset_sources
         WHERE dataset_id = $1
@@ -1056,7 +1083,7 @@ async fn assert_report_dataset_is_executable(
         Ok(())
     } else {
         Err(ApiError::BadRequest(
-            "dataset-backed reports currently require form or compatibility-group sources with all records".into(),
+            "dataset-backed reports currently require form or compatibility-group sources with supported selection rules".into(),
         ))
     }
 }
