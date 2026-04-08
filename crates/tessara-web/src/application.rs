@@ -234,9 +234,7 @@ fn AdminApplicationShell() -> impl IntoView {
                 </aside>
                 <section class="panel app-main">
                     <AdminHomeScreen/>
-                    <HierarchyAdminScreen/>
-                    <FormAdminScreen/>
-                    <ReportAdminScreen/>
+                    <AdminWorkspaceShell/>
                     <OutputPanels/>
                 </section>
             </section>
@@ -312,8 +310,7 @@ fn ReportingApplicationShell() -> impl IntoView {
                 </aside>
                 <section class="panel app-main">
                     <ReportingHomeScreen/>
-                    <ReportRunnerScreen/>
-                    <DashboardPreviewScreen/>
+                    <ReportingWorkspaceShell/>
                     <OutputPanels/>
                 </section>
             </section>
@@ -796,6 +793,81 @@ fn SubmissionWorkspaceShell() -> impl IntoView {
 }
 
 #[component]
+fn AdminWorkspaceShell() -> impl IntoView {
+    let queue_cards = [
+        (
+            "Hierarchy Types",
+            "Open node-type and relationship management for structural changes.",
+            "loadNodeTypes()",
+            "Open Hierarchy",
+        ),
+        (
+            "Forms Directory",
+            "Browse forms, versions, and publishing status from the main admin route.",
+            "loadForms()",
+            "Open Forms",
+        ),
+        (
+            "Reporting Assets",
+            "Open datasets, reports, aggregations, charts, and dashboards.",
+            "loadDatasets()",
+            "Open Reporting",
+        ),
+        (
+            "Runtime Nodes",
+            "Browse and update real nodes without leaving the admin workspace.",
+            "loadNodes()",
+            "Open Nodes",
+        ),
+    ];
+
+    view! {
+        <section class="app-screen admin-workspace-shell">
+            <p class="eyebrow">"Admin Workspace"</p>
+            <h2>"Configuration Console"</h2>
+            <p class="muted">
+                "This route is now shifting from a builder stack toward an admin workspace. The rail keeps high-level management queues visible while the main area holds hierarchy, form, and reporting configuration."
+            </p>
+            <div class="workspace-grid">
+                <aside class="workspace-rail">
+                    <section class="workspace-panel">
+                        <h3>"Management Queues"</h3>
+                        <div class="workspace-card-grid">
+                            {queue_cards
+                                .into_iter()
+                                .map(|(title, description, action, label)| {
+                                    view! {
+                                        <article class="workspace-card">
+                                            <h4>{title}</h4>
+                                            <p>{description}</p>
+                                            <button type="button" onclick=action>{label}</button>
+                                        </article>
+                                    }
+                                })
+                                .collect_view()}
+                        </div>
+                    </section>
+                    <section class="workspace-panel">
+                        <h3>"Admin Path"</h3>
+                        <ol class="app-list">
+                            <li>"Set or inspect hierarchy types and runtime nodes."</li>
+                            <li>"Open the correct form and version draft."</li>
+                            <li>"Publish or review reporting assets tied to that structure."</li>
+                            <li>"Confirm the resulting dashboards and reporting surfaces."</li>
+                        </ol>
+                    </section>
+                </aside>
+                <div class="workspace-stack">
+                    <HierarchyAdminScreen/>
+                    <FormAdminScreen/>
+                    <ReportAdminScreen/>
+                </div>
+            </div>
+        </section>
+    }
+}
+
+#[component]
 fn OutputPanels() -> impl IntoView {
     view! {
         <section class="app-screen">
@@ -915,6 +987,80 @@ fn ReportingHomeScreen() -> impl IntoView {
                         }
                     })
                     .collect_view()}
+            </div>
+        </section>
+    }
+}
+
+#[component]
+fn ReportingWorkspaceShell() -> impl IntoView {
+    let queue_cards = [
+        (
+            "Datasets",
+            "Inspect and run datasets before binding reports or aggregations.",
+            "loadDatasets()",
+            "Open Datasets",
+        ),
+        (
+            "Reports",
+            "Review report definitions, bindings, and current result sets.",
+            "loadReports()",
+            "Open Reports",
+        ),
+        (
+            "Aggregations",
+            "Check grouped metrics and the charts that depend on them.",
+            "loadAggregations()",
+            "Open Aggregations",
+        ),
+        (
+            "Dashboards",
+            "Open dashboard previews and chart context from one reporting route.",
+            "loadDashboards()",
+            "Open Dashboards",
+        ),
+    ];
+
+    view! {
+        <section class="app-screen reporting-workspace-shell">
+            <p class="eyebrow">"Reporting Workspace"</p>
+            <h2>"Insight Console"</h2>
+            <p class="muted">
+                "This route now acts more like a reporting workspace: the rail keeps the reporting queues visible while the main area focuses on report execution and dashboard preview."
+            </p>
+            <div class="workspace-grid">
+                <aside class="workspace-rail">
+                    <section class="workspace-panel">
+                        <h3>"Reporting Queues"</h3>
+                        <div class="workspace-card-grid">
+                            {queue_cards
+                                .into_iter()
+                                .map(|(title, description, action, label)| {
+                                    view! {
+                                        <article class="workspace-card">
+                                            <h4>{title}</h4>
+                                            <p>{description}</p>
+                                            <button type="button" onclick=action>{label}</button>
+                                        </article>
+                                    }
+                                })
+                                .collect_view()}
+                        </div>
+                    </section>
+                    <section class="workspace-panel">
+                        <h3>"Reporting Path"</h3>
+                        <ol class="app-list">
+                            <li>"Inspect the dataset or report you intend to use."</li>
+                            <li>"Refresh analytics if the source data changed."</li>
+                            <li>"Run the report or aggregation."</li>
+                            <li>"Open the dashboard preview to verify the final surface."</li>
+                        </ol>
+                    </section>
+                </aside>
+                <div class="workspace-stack">
+                    <ReportRunnerScreen/>
+                    <DashboardPreviewScreen/>
+                </div>
             </div>
         </section>
     }

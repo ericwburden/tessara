@@ -299,6 +299,9 @@ mod tests {
         assert!(html.contains("Setup Workspace"));
         assert!(html.contains("/app"));
         assert!(html.contains("/app/submissions"));
+        assert!(html.contains("Configuration Console"));
+        assert!(html.contains("Management Queues"));
+        assert!(html.contains("Admin Path"));
         assert!(html.contains("Management Areas"));
         assert!(html.contains("Entity Directory"));
         assert!(html.contains("Open Hierarchy Setup"));
@@ -437,6 +440,9 @@ mod tests {
         assert!(html.contains("Reporting Workspace"));
         assert!(html.contains("/app"));
         assert!(html.contains("/app/submissions"));
+        assert!(html.contains("Insight Console"));
+        assert!(html.contains("Reporting Queues"));
+        assert!(html.contains("Reporting Path"));
         assert!(html.contains("Reporting Areas"));
         assert!(html.contains("Reporting Directory"));
         assert!(html.contains("Open Dataset Workflows"));
