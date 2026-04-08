@@ -219,6 +219,37 @@ pub const STYLE: &str = r#"
         gap: 12px;
         grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
       }
+      .workspace-grid {
+        display: grid;
+        gap: 16px;
+        grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+        margin-top: 16px;
+      }
+      .workspace-rail, .workspace-stack {
+        display: grid;
+        gap: 16px;
+      }
+      .workspace-panel {
+        border: 1px solid var(--neutral);
+        border-radius: 16px;
+        background: linear-gradient(180deg, rgb(255 255 255 / 0.98), rgb(248 250 252 / 0.92));
+        padding: 16px;
+      }
+      .workspace-card-grid {
+        display: grid;
+        gap: 10px;
+      }
+      .workspace-card {
+        border: 1px solid var(--neutral);
+        border-radius: 14px;
+        background: var(--surface);
+        display: grid;
+        gap: 10px;
+        padding: 14px;
+      }
+      .submission-workspace-shell .app-screen {
+        margin: 0;
+      }
       .home-card {
         border: 1px solid var(--neutral);
         border-radius: 16px;
@@ -348,6 +379,9 @@ pub const STYLE: &str = r#"
           padding: 24px 16px;
         }
         .app-layout {
+          grid-template-columns: 1fr;
+        }
+        .workspace-grid {
           grid-template-columns: 1fr;
         }
       }

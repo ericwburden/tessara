@@ -200,9 +200,7 @@ fn SubmissionApplicationShell() -> impl IntoView {
                 </aside>
                 <section class="panel app-main">
                     <SubmissionHomeScreen/>
-                    <SubmissionScreen/>
-                    <ReviewScreen/>
-                    <ReportScreen/>
+                    <SubmissionWorkspaceShell/>
                     <OutputPanels/>
                 </section>
             </section>
@@ -717,6 +715,81 @@ fn SubmissionHomeScreen() -> impl IntoView {
                         }
                     })
                     .collect_view()}
+            </div>
+        </section>
+    }
+}
+
+#[component]
+fn SubmissionWorkspaceShell() -> impl IntoView {
+    let queue_cards = [
+        (
+            "Published Forms",
+            "Load the current published response options.",
+            "loadPublishedForms()",
+            "Open Forms",
+        ),
+        (
+            "Target Directory",
+            "Browse organizations, programs, and other submission targets.",
+            "loadNodes()",
+            "Open Targets",
+        ),
+        (
+            "Draft Queue",
+            "Review in-progress drafts that still need edits or submission.",
+            "showDraftSubmissions()",
+            "Open Drafts",
+        ),
+        (
+            "Submitted Queue",
+            "Review completed responses and continue into reporting.",
+            "showSubmittedSubmissions()",
+            "Open Submitted",
+        ),
+    ];
+
+    view! {
+        <section class="app-screen submission-workspace-shell">
+            <p class="eyebrow">"Submission Workspace"</p>
+            <h2>"Response Console"</h2>
+            <p class="muted">
+                "This route now acts as an application workspace: the left side focuses on queues and entry points, while the right side carries the active response, review, and reporting surfaces."
+            </p>
+            <div class="workspace-grid">
+                <aside class="workspace-rail">
+                    <section class="workspace-panel">
+                        <h3>"Response Queues"</h3>
+                        <div class="workspace-card-grid">
+                            {queue_cards
+                                .into_iter()
+                                .map(|(title, description, action, label)| {
+                                    view! {
+                                        <article class="workspace-card">
+                                            <h4>{title}</h4>
+                                            <p>{description}</p>
+                                            <button type="button" onclick=action>{label}</button>
+                                        </article>
+                                    }
+                                })
+                                .collect_view()}
+                        </div>
+                    </section>
+                    <section class="workspace-panel">
+                        <h3>"Guided Path"</h3>
+                        <ol class="app-list">
+                            <li>"Choose a published form."</li>
+                            <li>"Choose the target node."</li>
+                            <li>"Open the response form and create a draft."</li>
+                            <li>"Save values, submit, then review the resulting record."</li>
+                        </ol>
+                    </section>
+                </aside>
+                <div class="workspace-stack">
+                    <SubmissionScreen/>
+                    <ReviewScreen/>
+                    <ReportScreen/>
+                </div>
             </div>
         </section>
     }

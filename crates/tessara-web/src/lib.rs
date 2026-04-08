@@ -226,6 +226,9 @@ mod tests {
         assert!(html.contains("Submission Workspace"));
         assert!(html.contains("/app"));
         assert!(html.contains("/app/submissions"));
+        assert!(html.contains("Response Console"));
+        assert!(html.contains("Response Queues"));
+        assert!(html.contains("Guided Path"));
         assert!(html.contains("Submission Stages"));
         assert!(html.contains("Response Directory"));
         assert!(html.contains("Open Response Entry"));
