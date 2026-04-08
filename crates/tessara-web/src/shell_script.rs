@@ -298,7 +298,8 @@ pub const SCRIPT: &str = r#"
               <h3>${escapeHtml(nodeType.name)}</h3>
               <p class="muted">${escapeHtml(nodeType.slug)}</p>
               <p>${nodeType.node_count} nodes</p>
-              <button type="button" onclick="useNodeType('${escapeHtml(nodeType.id)}', '${escapeHtml(nodeType.name)}')">Use Node Type</button>
+              <button type="button" onclick="useNodeType('${escapeHtml(nodeType.id)}', '${escapeHtml(nodeType.name)}', '${escapeHtml(nodeType.slug)}')">Use Node Type</button>
+              <button type="button" onclick="useNodeType('${escapeHtml(nodeType.id)}', '${escapeHtml(nodeType.name)}', '${escapeHtml(nodeType.slug)}')">Edit Node Type</button>
               <button type="button" onclick="useFormScopeNodeType('${escapeHtml(nodeType.id)}', '${escapeHtml(nodeType.name)}')">Use Form Scope</button>
               <button type="button" onclick="useMetadataNodeType('${escapeHtml(nodeType.id)}', '${escapeHtml(nodeType.name)}')">Use Metadata Target</button>
               <button type="button" onclick="useParentNodeType('${escapeHtml(nodeType.id)}', '${escapeHtml(nodeType.name)}')">Use Parent Type</button>
@@ -331,11 +332,33 @@ pub const SCRIPT: &str = r#"
         }
       }
 
-      function useNodeType(nodeTypeId, nodeTypeName = nodeTypeId) {
+      async function updateNodeType() {
+        try {
+          if (!token) await login();
+          const nodeTypeId = inputValue("node-type-id");
+          if (!nodeTypeId) throw new Error("Select or enter a node type ID first.");
+          const payload = await request(`/api/admin/node-types/${nodeTypeId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: inputValue("node-type-name"),
+              slug: inputValue("node-type-slug")
+            })
+          });
+          show(payload);
+          await loadNodeTypes();
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      function useNodeType(nodeTypeId, nodeTypeName = nodeTypeId, nodeTypeSlug = "") {
         selectRecord("node type", nodeTypeName, nodeTypeId, {
           "node-type-id": nodeTypeId,
           "metadata-node-type-id": nodeTypeId,
-          "form-scope-node-type-id": nodeTypeId
+          "form-scope-node-type-id": nodeTypeId,
+          ...(nodeTypeName ? { "node-type-name": nodeTypeName } : {}),
+          ...(nodeTypeSlug ? { "node-type-slug": nodeTypeSlug } : {})
         });
       }
 

@@ -532,6 +532,7 @@ fn HierarchyAdminScreen() -> impl IntoView {
             <div class="actions">
                 <button type="button" onclick="loadNodeTypes()">"Load Node Types"</button>
                 <button type="button" onclick="createNodeType()">"Create Node Type"</button>
+                <button type="button" onclick="updateNodeType()">"Update Node Type"</button>
                 <button type="button" onclick="useSelectedNodeTypeAsFormScope()">"Use Node Type As Form Scope"</button>
                 <button type="button" onclick="useSelectedNodeTypeAsMetadataTarget()">"Use Node Type As Metadata Target"</button>
                 <button type="button" onclick="loadRelationships()">"Load Relationships"</button>

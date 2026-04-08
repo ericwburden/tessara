@@ -777,6 +777,19 @@ async fn hierarchy_builder_rejects_required_metadata_after_nodes_exist() {
     )
     .await;
     let node_type_id = id_from(&node_type);
+    request_json(
+        app.clone(),
+        authorized_request(
+            "PUT",
+            &format!("/api/admin/node-types/{node_type_id}"),
+            &token,
+            Some(json!({
+                "name": "Community Organization",
+                "slug": "community-organization"
+            })),
+        ),
+    )
+    .await;
 
     let metadata_field = request_json(
         app.clone(),
@@ -1310,6 +1323,14 @@ async fn admin_mutation_routes_require_authentication() {
                 json!({"name": "Organization", "slug": "organization"}).to_string(),
             ))
             .expect("valid node type request"),
+        Request::builder()
+            .method("PUT")
+            .uri(format!("/api/admin/node-types/{node_type_id}"))
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(
+                json!({"name": "Organization", "slug": "organization"}).to_string(),
+            ))
+            .expect("valid node type update request"),
         Request::builder()
             .method("POST")
             .uri("/api/admin/node-type-relationships")

@@ -64,6 +64,10 @@ pub fn router(state: AppState) -> Router {
             get(hierarchy::list_node_types).post(hierarchy::create_node_type),
         )
         .route(
+            "/api/admin/node-types/{node_type_id}",
+            put(hierarchy::update_node_type),
+        )
+        .route(
             "/api/admin/node-type-relationships",
             get(hierarchy::list_node_type_relationships)
                 .post(hierarchy::create_node_type_relationship),

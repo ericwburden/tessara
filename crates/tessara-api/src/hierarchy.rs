@@ -25,6 +25,12 @@ pub struct CreateNodeTypeRequest {
 }
 
 #[derive(Deserialize)]
+pub struct UpdateNodeTypeRequest {
+    name: String,
+    slug: String,
+}
+
+#[derive(Deserialize)]
 pub struct CreateNodeTypeRelationshipRequest {
     parent_node_type_id: Uuid,
     child_node_type_id: Uuid,
@@ -127,6 +133,36 @@ pub async fn create_node_type(
         .bind(payload.slug)
         .fetch_one(&state.pool)
         .await?;
+
+    Ok(Json(IdResponse { id }))
+}
+
+/// Updates node-type display metadata used by hierarchy and form-builder screens.
+pub async fn update_node_type(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(node_type_id): Path<Uuid>,
+    Json(payload): Json<UpdateNodeTypeRequest>,
+) -> ApiResult<Json<IdResponse>> {
+    auth::require_capability(&state.pool, &headers, "hierarchy:write").await?;
+    require_text("node type name", &payload.name)?;
+    require_text("node type slug", &payload.slug)?;
+    require_node_type_exists(&state.pool, node_type_id).await?;
+    require_node_type_slug_available_for_type(&state.pool, node_type_id, &payload.slug).await?;
+
+    let id = sqlx::query_scalar(
+        r#"
+        UPDATE node_types
+        SET name = $2, slug = $3
+        WHERE id = $1
+        RETURNING id
+        "#,
+    )
+    .bind(node_type_id)
+    .bind(payload.name)
+    .bind(payload.slug)
+    .fetch_one(&state.pool)
+    .await?;
 
     Ok(Json(IdResponse { id }))
 }
@@ -717,6 +753,27 @@ async fn require_node_type_slug_available(pool: &sqlx::PgPool, slug: &str) -> Ap
     let exists: bool =
         sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM node_types WHERE slug = $1)")
             .bind(slug)
+            .fetch_one(pool)
+            .await?;
+
+    if exists {
+        Err(ApiError::BadRequest(format!(
+            "node type slug '{slug}' is already in use"
+        )))
+    } else {
+        Ok(())
+    }
+}
+
+async fn require_node_type_slug_available_for_type(
+    pool: &sqlx::PgPool,
+    node_type_id: Uuid,
+    slug: &str,
+) -> ApiResult<()> {
+    let exists: bool =
+        sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM node_types WHERE slug = $1 AND id <> $2)")
+            .bind(slug)
+            .bind(node_type_id)
             .fetch_one(pool)
             .await?;
 
