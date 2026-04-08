@@ -375,98 +375,22 @@ pub async fn get_dataset(
     }))
 }
 
-/// Executes a submission-grain dataset as a union of form or compatibility-group sources.
+/// Executes a submission-grain dataset as either a union or a node-aligned join of sources.
 pub async fn run_dataset_table(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(dataset_id): Path<Uuid>,
 ) -> ApiResult<Json<DatasetTable>> {
     auth::require_capability(&state.pool, &headers, "datasets:read").await?;
-    require_executable_submission_dataset(&state.pool, dataset_id).await?;
-
-    let rows = sqlx::query(
-        r#"
-        WITH ranked_submissions AS (
-            SELECT
-                dataset_sources.dataset_id,
-                dataset_sources.source_alias,
-                dataset_sources.selection_rule,
-                submission_fact.submission_id,
-                submission_fact.node_id,
-                node_dim.node_name,
-                ROW_NUMBER() OVER (
-                    PARTITION BY dataset_sources.dataset_id, dataset_sources.source_alias, submission_fact.node_id
-                    ORDER BY
-                        CASE
-                            WHEN dataset_sources.selection_rule = 'earliest' THEN submission_fact.submitted_at
-                        END ASC NULLS LAST,
-                        CASE
-                            WHEN dataset_sources.selection_rule <> 'earliest' THEN submission_fact.submitted_at
-                        END DESC NULLS LAST,
-                        submission_fact.submission_id
-                ) AS selection_rank
-            FROM dataset_sources
-            JOIN analytics.form_version_dim
-                ON (
-                    dataset_sources.form_id IS NOT NULL
-                    AND form_version_dim.form_id = dataset_sources.form_id
-                )
-                OR (
-                    dataset_sources.compatibility_group_id IS NOT NULL
-                    AND form_version_dim.compatibility_group_id = dataset_sources.compatibility_group_id
-                )
-            JOIN analytics.submission_fact
-                ON submission_fact.form_version_id = form_version_dim.form_version_id
-            JOIN analytics.node_dim
-                ON node_dim.node_id = submission_fact.node_id
-            WHERE dataset_sources.dataset_id = $1
-              AND submission_fact.status = 'submitted'
-        )
-        SELECT
-            ranked_submissions.submission_id::text AS submission_id,
-            ranked_submissions.node_name,
-            ranked_submissions.source_alias,
-            dataset_fields.key,
-            submission_value_fact.value_text
-        FROM ranked_submissions
-        JOIN dataset_fields
-            ON dataset_fields.dataset_id = ranked_submissions.dataset_id
-           AND dataset_fields.source_alias = ranked_submissions.source_alias
-        LEFT JOIN analytics.submission_value_fact
-            ON submission_value_fact.submission_id = ranked_submissions.submission_id
-           AND submission_value_fact.field_key = dataset_fields.source_field_key
-        WHERE ranked_submissions.selection_rule = 'all'
-           OR ranked_submissions.selection_rank = 1
-        ORDER BY ranked_submissions.submission_id, dataset_fields.position, dataset_fields.key
-        "#,
-    )
-    .bind(dataset_id)
-    .fetch_all(&state.pool)
-    .await?;
-
-    let mut table_rows = BTreeMap::<String, DatasetTableRow>::new();
-    for row in rows {
-        let submission_id: String = row.try_get("submission_id")?;
-        let node_name: String = row.try_get("node_name")?;
-        let field_key: String = row.try_get("key")?;
-        let source_alias: String = row.try_get("source_alias")?;
-        let value: Option<String> = row.try_get("value_text")?;
-
-        table_rows
-            .entry(format!("{source_alias}:{submission_id}"))
-            .or_insert_with(|| DatasetTableRow {
-                submission_id,
-                node_name,
-                source_alias,
-                values: BTreeMap::new(),
-            })
-            .values
-            .insert(field_key, value);
-    }
+    let composition_mode = require_executable_submission_dataset(&state.pool, dataset_id).await?;
+    let table_rows = match composition_mode {
+        DatasetCompositionMode::Union => run_union_dataset_table(&state.pool, dataset_id).await?,
+        DatasetCompositionMode::Join => run_join_dataset_table(&state.pool, dataset_id).await?,
+    };
 
     Ok(Json(DatasetTable {
         dataset_id,
-        rows: table_rows.into_values().collect(),
+        rows: table_rows,
     }))
 }
 
@@ -651,10 +575,205 @@ async fn require_source_field_exists(
         })
 }
 
+async fn run_union_dataset_table(
+    pool: &sqlx::PgPool,
+    dataset_id: Uuid,
+) -> ApiResult<Vec<DatasetTableRow>> {
+    let rows = sqlx::query(
+        r#"
+        WITH ranked_submissions AS (
+            SELECT
+                dataset_sources.dataset_id,
+                dataset_sources.source_alias,
+                dataset_sources.selection_rule,
+                submission_fact.submission_id,
+                submission_fact.node_id,
+                node_dim.node_name,
+                ROW_NUMBER() OVER (
+                    PARTITION BY dataset_sources.dataset_id, dataset_sources.source_alias, submission_fact.node_id
+                    ORDER BY
+                        CASE
+                            WHEN dataset_sources.selection_rule = 'earliest' THEN submission_fact.submitted_at
+                        END ASC NULLS LAST,
+                        CASE
+                            WHEN dataset_sources.selection_rule <> 'earliest' THEN submission_fact.submitted_at
+                        END DESC NULLS LAST,
+                        submission_fact.submission_id
+                ) AS selection_rank
+            FROM dataset_sources
+            JOIN analytics.form_version_dim
+                ON (
+                    dataset_sources.form_id IS NOT NULL
+                    AND form_version_dim.form_id = dataset_sources.form_id
+                )
+                OR (
+                    dataset_sources.compatibility_group_id IS NOT NULL
+                    AND form_version_dim.compatibility_group_id = dataset_sources.compatibility_group_id
+                )
+            JOIN analytics.submission_fact
+                ON submission_fact.form_version_id = form_version_dim.form_version_id
+            JOIN analytics.node_dim
+                ON node_dim.node_id = submission_fact.node_id
+            WHERE dataset_sources.dataset_id = $1
+              AND submission_fact.status = 'submitted'
+        )
+        SELECT
+            ranked_submissions.submission_id::text AS submission_id,
+            ranked_submissions.node_name,
+            ranked_submissions.source_alias,
+            dataset_fields.key,
+            submission_value_fact.value_text
+        FROM ranked_submissions
+        JOIN dataset_fields
+            ON dataset_fields.dataset_id = ranked_submissions.dataset_id
+           AND dataset_fields.source_alias = ranked_submissions.source_alias
+        LEFT JOIN analytics.submission_value_fact
+            ON submission_value_fact.submission_id = ranked_submissions.submission_id
+           AND submission_value_fact.field_key = dataset_fields.source_field_key
+        WHERE ranked_submissions.selection_rule = 'all'
+           OR ranked_submissions.selection_rank = 1
+        ORDER BY ranked_submissions.submission_id, dataset_fields.position, dataset_fields.key
+        "#,
+    )
+    .bind(dataset_id)
+    .fetch_all(pool)
+    .await?;
+
+    let mut table_rows = BTreeMap::<String, DatasetTableRow>::new();
+    for row in rows {
+        let submission_id: String = row.try_get("submission_id")?;
+        let node_name: String = row.try_get("node_name")?;
+        let field_key: String = row.try_get("key")?;
+        let source_alias: String = row.try_get("source_alias")?;
+        let value: Option<String> = row.try_get("value_text")?;
+
+        table_rows
+            .entry(format!("{source_alias}:{submission_id}"))
+            .or_insert_with(|| DatasetTableRow {
+                submission_id,
+                node_name,
+                source_alias,
+                values: BTreeMap::new(),
+            })
+            .values
+            .insert(field_key, value);
+    }
+
+    Ok(table_rows.into_values().collect())
+}
+
+async fn run_join_dataset_table(
+    pool: &sqlx::PgPool,
+    dataset_id: Uuid,
+) -> ApiResult<Vec<DatasetTableRow>> {
+    let rows = sqlx::query(
+        r#"
+        WITH ranked_submissions AS (
+            SELECT
+                dataset_sources.dataset_id,
+                dataset_sources.source_alias,
+                dataset_sources.selection_rule,
+                submission_fact.submission_id,
+                submission_fact.node_id,
+                node_dim.node_name,
+                ROW_NUMBER() OVER (
+                    PARTITION BY dataset_sources.dataset_id, dataset_sources.source_alias, submission_fact.node_id
+                    ORDER BY
+                        CASE
+                            WHEN dataset_sources.selection_rule = 'earliest' THEN submission_fact.submitted_at
+                        END ASC NULLS LAST,
+                        CASE
+                            WHEN dataset_sources.selection_rule <> 'earliest' THEN submission_fact.submitted_at
+                        END DESC NULLS LAST,
+                        submission_fact.submission_id
+                ) AS selection_rank
+            FROM dataset_sources
+            JOIN analytics.form_version_dim
+                ON (
+                    dataset_sources.form_id IS NOT NULL
+                    AND form_version_dim.form_id = dataset_sources.form_id
+                )
+                OR (
+                    dataset_sources.compatibility_group_id IS NOT NULL
+                    AND form_version_dim.compatibility_group_id = dataset_sources.compatibility_group_id
+                )
+            JOIN analytics.submission_fact
+                ON submission_fact.form_version_id = form_version_dim.form_version_id
+            JOIN analytics.node_dim
+                ON node_dim.node_id = submission_fact.node_id
+            WHERE dataset_sources.dataset_id = $1
+              AND submission_fact.status = 'submitted'
+        ),
+        selected_submissions AS (
+            SELECT *
+            FROM ranked_submissions
+            WHERE selection_rank = 1
+        )
+        SELECT
+            selected_submissions.node_id::text AS node_id,
+            selected_submissions.submission_id::text AS submission_id,
+            selected_submissions.node_name,
+            selected_submissions.source_alias,
+            dataset_fields.key,
+            submission_value_fact.value_text
+        FROM selected_submissions
+        JOIN dataset_fields
+            ON dataset_fields.dataset_id = selected_submissions.dataset_id
+           AND dataset_fields.source_alias = selected_submissions.source_alias
+        LEFT JOIN analytics.submission_value_fact
+            ON submission_value_fact.submission_id = selected_submissions.submission_id
+           AND submission_value_fact.field_key = dataset_fields.source_field_key
+        ORDER BY selected_submissions.node_id, selected_submissions.source_alias, dataset_fields.position, dataset_fields.key
+        "#,
+    )
+    .bind(dataset_id)
+    .fetch_all(pool)
+    .await?;
+
+    let mut table_rows = BTreeMap::<String, DatasetTableRow>::new();
+    let mut joined_submissions = BTreeMap::<String, BTreeMap<String, String>>::new();
+    for row in rows {
+        let node_id: String = row.try_get("node_id")?;
+        let submission_id: String = row.try_get("submission_id")?;
+        let node_name: String = row.try_get("node_name")?;
+        let field_key: String = row.try_get("key")?;
+        let source_alias: String = row.try_get("source_alias")?;
+        let value: Option<String> = row.try_get("value_text")?;
+
+        joined_submissions
+            .entry(node_id.clone())
+            .or_default()
+            .insert(source_alias.clone(), submission_id);
+
+        table_rows
+            .entry(node_id)
+            .or_insert_with(|| DatasetTableRow {
+                submission_id: String::new(),
+                node_name,
+                source_alias: "join".into(),
+                values: BTreeMap::new(),
+            })
+            .values
+            .insert(field_key, value);
+    }
+
+    for (node_id, row) in &mut table_rows {
+        if let Some(submissions) = joined_submissions.get(node_id) {
+            row.submission_id = submissions
+                .iter()
+                .map(|(source_alias, submission_id)| format!("{source_alias}:{submission_id}"))
+                .collect::<Vec<_>>()
+                .join(" | ");
+        }
+    }
+
+    Ok(table_rows.into_values().collect())
+}
+
 async fn require_executable_submission_dataset(
     pool: &sqlx::PgPool,
     dataset_id: Uuid,
-) -> ApiResult<()> {
+) -> ApiResult<DatasetCompositionMode> {
     let (dataset_grain, composition_mode): (String, String) =
         sqlx::query_as("SELECT grain, composition_mode FROM datasets WHERE id = $1")
             .bind(dataset_id)
@@ -667,11 +786,8 @@ async fn require_executable_submission_dataset(
             "dataset table execution currently supports only submission grain".into(),
         ));
     }
-    if composition_mode != DatasetCompositionMode::Union.as_str() {
-        return Err(ApiError::BadRequest(
-            "dataset table execution currently supports only union composition mode".into(),
-        ));
-    }
+    let composition_mode = DatasetCompositionMode::parse(&composition_mode)
+        .map_err(|error| ApiError::BadRequest(error.to_string()))?;
 
     let source_rows = sqlx::query(
         r#"
@@ -691,15 +807,33 @@ async fn require_executable_submission_dataset(
         ));
     }
 
+    let mut source_count = 0usize;
+    let mut join_has_all_selection_rule = false;
     for source in source_rows {
+        source_count += 1;
         let form_id: Option<Uuid> = source.try_get("form_id")?;
         let compatibility_group_id: Option<Uuid> = source.try_get("compatibility_group_id")?;
+        let selection_rule: String = source.try_get("selection_rule")?;
         if form_id.is_none() && compatibility_group_id.is_none() {
             return Err(ApiError::BadRequest(
                 "dataset table execution currently requires form or compatibility-group sources"
                     .into(),
             ));
         }
+        if composition_mode == DatasetCompositionMode::Join && selection_rule == "all" {
+            join_has_all_selection_rule = true;
+        }
+    }
+    if composition_mode == DatasetCompositionMode::Join && source_count < 2 {
+        return Err(ApiError::BadRequest(
+            "join composition mode requires at least two sources".into(),
+        ));
+    }
+    if composition_mode == DatasetCompositionMode::Join && join_has_all_selection_rule {
+        return Err(ApiError::BadRequest(
+            "join composition mode requires latest or earliest selection rules for every source"
+                .into(),
+        ));
     }
 
     let field_count: i64 =
@@ -714,7 +848,7 @@ async fn require_executable_submission_dataset(
         ));
     }
 
-    Ok(())
+    Ok(composition_mode)
 }
 
 fn default_dataset_composition_mode() -> String {

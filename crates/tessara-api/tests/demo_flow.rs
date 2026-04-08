@@ -2411,7 +2411,7 @@ async fn dataset_definitions_validate_sources_and_fields() {
         join_dataset_run.1["error"]
             .as_str()
             .expect("join dataset run should include an error message")
-            .contains("union composition mode")
+            .contains("at least two sources")
     );
     let join_report = request_status_and_json(
         app.clone(),
@@ -2697,6 +2697,233 @@ async fn dataset_selection_rules_pick_latest_and_earliest_submissions() {
     assert_eq!(
         earliest_rows["rows"][0]["values"]["participant_count"],
         "42"
+    );
+}
+
+#[tokio::test]
+async fn join_mode_datasets_merge_selected_source_rows_by_node() {
+    let _guard = TEST_DATABASE_LOCK.lock().await;
+    let Some(app) = test_app().await else { return };
+    let token = login_token(app.clone()).await;
+
+    let seed = request_json(
+        app.clone(),
+        authorized_request("POST", "/api/demo/seed", &token, None),
+    )
+    .await;
+
+    let follow_up_form = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/forms",
+            &token,
+            Some(json!({
+                "name": "Join Follow Up",
+                "slug": "join-follow-up",
+                "scope_node_type_id": null
+            })),
+        ),
+    )
+    .await;
+    let follow_up_form_id = id_from(&follow_up_form);
+    let follow_up_version_id =
+        create_form_version(app.clone(), &token, follow_up_form_id, "v1").await;
+    let follow_up_section_id =
+        create_form_section(app.clone(), &token, follow_up_version_id, "Main").await;
+    create_number_field(
+        app.clone(),
+        &token,
+        follow_up_version_id,
+        follow_up_section_id,
+        "attendees",
+    )
+    .await;
+    request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            &format!("/api/admin/form-versions/{follow_up_version_id}/publish"),
+            &token,
+            None,
+        ),
+    )
+    .await;
+
+    let follow_up_draft = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/submissions/drafts",
+            &token,
+            Some(json!({
+                "form_version_id": follow_up_version_id,
+                "node_id": seed["organization_node_id"]
+            })),
+        ),
+    )
+    .await;
+    let follow_up_submission_id = id_from(&follow_up_draft);
+    request_json(
+        app.clone(),
+        authorized_request(
+            "PUT",
+            &format!("/api/submissions/{follow_up_submission_id}/values"),
+            &token,
+            Some(json!({"values": {"attendees": 7}})),
+        ),
+    )
+    .await;
+    request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            &format!("/api/submissions/{follow_up_submission_id}/submit"),
+            &token,
+            None,
+        ),
+    )
+    .await;
+    request_json(
+        app.clone(),
+        authorized_request("POST", "/api/admin/analytics/refresh", &token, None),
+    )
+    .await;
+
+    let joined_dataset = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/datasets",
+            &token,
+            Some(json!({
+                "name": "Joined Activity Dataset",
+                "slug": "joined-activity-dataset",
+                "grain": "submission",
+                "composition_mode": "join",
+                "sources": [
+                    {
+                        "source_alias": "check_in",
+                        "form_id": seed["form_id"],
+                        "compatibility_group_id": null,
+                        "selection_rule": "latest"
+                    },
+                    {
+                        "source_alias": "follow_up",
+                        "form_id": follow_up_form_id,
+                        "compatibility_group_id": null,
+                        "selection_rule": "latest"
+                    }
+                ],
+                "fields": [
+                    {
+                        "key": "participant_count",
+                        "label": "Participant Count",
+                        "source_alias": "check_in",
+                        "source_field_key": "participants",
+                        "position": 0
+                    },
+                    {
+                        "key": "attendee_count",
+                        "label": "Attendee Count",
+                        "source_alias": "follow_up",
+                        "source_field_key": "attendees",
+                        "position": 1
+                    }
+                ]
+            })),
+        ),
+    )
+    .await;
+    let joined_dataset_id = id_from(&joined_dataset);
+    let joined_rows = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/datasets/{joined_dataset_id}/table"),
+            &token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(
+        joined_rows["rows"]
+            .as_array()
+            .expect("join dataset should return row array")
+            .len(),
+        1
+    );
+    assert_eq!(joined_rows["rows"][0]["source_alias"], "join");
+    assert_eq!(joined_rows["rows"][0]["values"]["participant_count"], "42");
+    assert_eq!(joined_rows["rows"][0]["values"]["attendee_count"], "7");
+    let joined_submission_id = joined_rows["rows"][0]["submission_id"]
+        .as_str()
+        .expect("join dataset row should expose a composed submission id");
+    assert!(joined_submission_id.contains("check_in:"));
+    assert!(joined_submission_id.contains("follow_up:"));
+
+    let invalid_join_dataset = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/datasets",
+            &token,
+            Some(json!({
+                "name": "Invalid Joined Activity Dataset",
+                "slug": "invalid-joined-activity-dataset",
+                "grain": "submission",
+                "composition_mode": "join",
+                "sources": [
+                    {
+                        "source_alias": "check_in",
+                        "form_id": seed["form_id"],
+                        "compatibility_group_id": null,
+                        "selection_rule": "all"
+                    },
+                    {
+                        "source_alias": "follow_up",
+                        "form_id": follow_up_form_id,
+                        "compatibility_group_id": null,
+                        "selection_rule": "latest"
+                    }
+                ],
+                "fields": [
+                    {
+                        "key": "participant_count",
+                        "label": "Participant Count",
+                        "source_alias": "check_in",
+                        "source_field_key": "participants",
+                        "position": 0
+                    },
+                    {
+                        "key": "attendee_count",
+                        "label": "Attendee Count",
+                        "source_alias": "follow_up",
+                        "source_field_key": "attendees",
+                        "position": 1
+                    }
+                ]
+            })),
+        ),
+    )
+    .await;
+    let invalid_join_dataset_id = id_from(&invalid_join_dataset);
+    let invalid_join_run = request_status_and_json(
+        app,
+        authorized_request(
+            "GET",
+            &format!("/api/datasets/{invalid_join_dataset_id}/table"),
+            &token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(invalid_join_run.0, StatusCode::BAD_REQUEST);
+    assert!(
+        invalid_join_run.1["error"]
+            .as_str()
+            .expect("invalid join dataset run should include an error message")
+            .contains("latest or earliest")
     );
 }
 
