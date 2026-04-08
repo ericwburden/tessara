@@ -15,7 +15,7 @@ use axum::{
 };
 use datafusion::{datasource::MemTable, prelude::SessionContext};
 use serde::{Deserialize, Serialize};
-use sqlx::Row;
+use sqlx::{Row, postgres::PgRow};
 use tessara_reporting::{
     ReportFieldBindingDraft, ReportFieldBindingInput, parse_report_field_bindings,
 };
@@ -532,16 +532,29 @@ pub async fn run_report(
     Path(report_id): Path<Uuid>,
 ) -> ApiResult<Json<ReportTable>> {
     auth::require_capability(&state.pool, &headers, "reports:read").await?;
-    require_report_exists(&state.pool, report_id).await?;
+    let rows = load_report_rows(&state.pool, report_id).await?;
+    Ok(Json(ReportTable { report_id, rows }))
+}
 
+async fn load_report_rows(pool: &sqlx::PgPool, report_id: Uuid) -> ApiResult<Vec<ReportTableRow>> {
+    require_report_exists(pool, report_id).await?;
     let report_dataset_id: Option<Uuid> =
         sqlx::query_scalar("SELECT dataset_id FROM reports WHERE id = $1")
             .bind(report_id)
-            .fetch_one(&state.pool)
+            .fetch_one(pool)
             .await?;
 
-    let source_rows = if let Some(dataset_id) = report_dataset_id {
-        assert_report_dataset_is_executable(&state.pool, dataset_id).await?;
+    let source_rows = load_report_source_rows(pool, report_id, report_dataset_id).await?;
+    finalize_report_rows(source_rows).await
+}
+
+async fn load_report_source_rows(
+    pool: &sqlx::PgPool,
+    report_id: Uuid,
+    report_dataset_id: Option<Uuid>,
+) -> ApiResult<Vec<PgRow>> {
+    if let Some(dataset_id) = report_dataset_id {
+        assert_report_dataset_is_executable(pool, dataset_id).await?;
         sqlx::query(
             r#"
             SELECT
@@ -598,8 +611,9 @@ pub async fn run_report(
             "#,
         )
         .bind(report_id)
-        .fetch_all(&state.pool)
-        .await?
+        .fetch_all(pool)
+        .await
+        .map_err(ApiError::from)
     } else {
         sqlx::query(
             r#"
@@ -639,10 +653,13 @@ pub async fn run_report(
             "#,
         )
         .bind(report_id)
-        .fetch_all(&state.pool)
-        .await?
-    };
+        .fetch_all(pool)
+        .await
+        .map_err(ApiError::from)
+    }
+}
 
+async fn finalize_report_rows(source_rows: Vec<PgRow>) -> ApiResult<Vec<ReportTableRow>> {
     let mut submission_ids = Vec::with_capacity(source_rows.len());
     let mut node_names = Vec::with_capacity(source_rows.len());
     let mut logical_keys = Vec::with_capacity(source_rows.len());
@@ -710,74 +727,6 @@ pub async fn run_report(
                 field_value: string_value(field_values, index),
             });
         }
-    }
-
-    Ok(Json(ReportTable { report_id, rows }))
-}
-
-async fn load_report_rows(pool: &sqlx::PgPool, report_id: Uuid) -> ApiResult<Vec<ReportTableRow>> {
-    require_report_exists(pool, report_id).await?;
-    let report_dataset_id: Option<Uuid> =
-        sqlx::query_scalar("SELECT dataset_id FROM reports WHERE id = $1")
-            .bind(report_id)
-            .fetch_one(pool)
-            .await?;
-
-    if report_dataset_id.is_some() {
-        return Err(ApiError::BadRequest(
-            "aggregation execution for dataset-backed reports is not implemented yet".into(),
-        ));
-    }
-
-    let source_rows = sqlx::query(
-        r#"
-        SELECT
-            submission_fact.submission_id::text AS submission_id,
-            node_dim.node_name,
-            report_field_bindings.logical_key,
-            CASE
-                WHEN report_field_bindings.computed_expression IS NOT NULL
-                    THEN substring(report_field_bindings.computed_expression from 9)
-                WHEN submission_value_fact.value_text IS NULL
-                     AND report_field_bindings.missing_policy::text = 'bucket_unknown'
-                    THEN 'Unknown'
-                ELSE submission_value_fact.value_text
-            END AS field_value
-        FROM reports
-        JOIN report_field_bindings
-            ON report_field_bindings.report_id = reports.id
-        JOIN analytics.form_version_dim
-            ON reports.form_id IS NULL OR analytics.form_version_dim.form_id = reports.form_id
-        JOIN analytics.submission_fact
-            ON submission_fact.form_version_id = analytics.form_version_dim.form_version_id
-        JOIN analytics.node_dim
-            ON node_dim.node_id = submission_fact.node_id
-        LEFT JOIN analytics.submission_value_fact
-            ON submission_value_fact.submission_id = submission_fact.submission_id
-           AND submission_value_fact.field_key = report_field_bindings.source_field_key
-        WHERE reports.id = $1
-          AND submission_fact.status = 'submitted'
-          AND (
-            report_field_bindings.computed_expression IS NOT NULL
-            OR
-            submission_value_fact.value_text IS NOT NULL
-            OR report_field_bindings.missing_policy::text <> 'exclude_row'
-          )
-        ORDER BY submission_fact.submission_id, report_field_bindings.position
-        "#,
-    )
-    .bind(report_id)
-    .fetch_all(pool)
-    .await?;
-
-    let mut rows = Vec::with_capacity(source_rows.len());
-    for row in source_rows {
-        rows.push(ReportTableRow {
-            submission_id: row.try_get::<String, _>("submission_id").ok(),
-            node_name: row.try_get::<String, _>("node_name").ok(),
-            logical_key: row.try_get::<String, _>("logical_key").ok(),
-            field_value: row.try_get::<Option<String>, _>("field_value")?,
-        });
     }
 
     Ok(rows)

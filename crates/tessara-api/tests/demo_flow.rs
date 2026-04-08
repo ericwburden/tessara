@@ -745,6 +745,54 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
             .iter()
             .any(|row| row["logical_key"] == "response_label" && row["field_value"] == "Submitted")
     );
+    let dataset_aggregation = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/aggregations",
+            &token,
+            Some(json!({
+                "name": "Dataset Participants Aggregation",
+                "report_id": dataset_report_id,
+                "group_by_logical_key": null,
+                "metrics": [
+                    {
+                        "metric_key": "responses",
+                        "source_logical_key": null,
+                        "metric_kind": "count"
+                    },
+                    {
+                        "metric_key": "participants_total",
+                        "source_logical_key": "participant_count",
+                        "metric_kind": "sum"
+                    }
+                ]
+            })),
+        ),
+    )
+    .await;
+    let dataset_aggregation_id = dataset_aggregation["id"]
+        .as_str()
+        .expect("dataset aggregation response should contain id");
+    let dataset_aggregation_table = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/aggregations/{dataset_aggregation_id}/table"),
+            &token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(dataset_aggregation_table["rows"][0]["group_key"], "All");
+    assert_eq!(
+        dataset_aggregation_table["rows"][0]["metrics"]["responses"],
+        1.0
+    );
+    assert_eq!(
+        dataset_aggregation_table["rows"][0]["metrics"]["participants_total"],
+        42.0
+    );
 
     let aggregation = request_json(
         app.clone(),
