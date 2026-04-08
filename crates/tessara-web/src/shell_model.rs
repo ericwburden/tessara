@@ -292,6 +292,73 @@ const SUBMISSION_ACTIONS: &[Action] = &[
 
 const REPORTING_INPUTS: &[TextInput] = &[
     TextInput::new(
+        "dataset-name",
+        "Dataset name",
+        "Dataset name",
+        "Participant Dataset",
+    ),
+    TextInput::new(
+        "dataset-slug",
+        "Dataset slug",
+        "Dataset slug",
+        "participant-dataset",
+    ),
+    TextInput::new(
+        "dataset-grain",
+        "Dataset grain",
+        "submission or node",
+        "submission",
+    ),
+    TextInput::new("dataset-id", "Dataset ID", "Selected dataset ID", ""),
+    TextInput::new(
+        "dataset-source-alias",
+        "Dataset source alias",
+        "Dataset source alias",
+        "service",
+    ),
+    TextInput::new(
+        "dataset-form-id",
+        "Dataset form ID",
+        "Selected source form ID",
+        "",
+    ),
+    TextInput::new(
+        "dataset-compatibility-group-id",
+        "Dataset compatibility group ID",
+        "Optional compatibility group ID",
+        "",
+    ),
+    TextInput::new(
+        "dataset-selection-rule",
+        "Dataset selection rule",
+        "all, latest, or earliest",
+        "all",
+    ),
+    TextInput::new(
+        "dataset-field-key",
+        "Dataset field key",
+        "Dataset field key",
+        "participant_count",
+    ),
+    TextInput::new(
+        "dataset-field-label",
+        "Dataset field label",
+        "Dataset field label",
+        "Participant Count",
+    ),
+    TextInput::new(
+        "dataset-source-field-key",
+        "Dataset source field key",
+        "Dataset source field key",
+        "participants",
+    ),
+    TextInput::new(
+        "dataset-field-type",
+        "Dataset field type",
+        "Dataset field type",
+        "number",
+    ),
+    TextInput::new(
         "report-name",
         "Report name",
         "Report name",
@@ -374,6 +441,9 @@ const REPORTING_INPUTS: &[TextInput] = &[
 ];
 
 const REPORTING_ACTIONS: &[Action] = &[
+    Action::new("createDataset()", "Create Dataset"),
+    Action::new("loadDatasets()", "Load Datasets"),
+    Action::new("loadDatasetById()", "Inspect Dataset"),
     Action::new("addReportBinding()", "Add Binding"),
     Action::new("removeSelectedReportBinding()", "Remove Selected Binding"),
     Action::new("clearReportBindings()", "Clear Bindings"),

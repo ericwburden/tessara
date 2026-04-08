@@ -13,6 +13,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 sqlx = { workspace = true }
 tessara-core = { path = "../tessara-core" }
+tessara-datasets = { path = "../tessara-datasets" }
 tessara-dashboards = { path = "../tessara-dashboards" }
 tessara-forms = { path = "../tessara-forms" }
 tessara-hierarchy = { path = "../tessara-hierarchy" }

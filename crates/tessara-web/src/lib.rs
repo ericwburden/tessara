@@ -242,6 +242,13 @@ mod tests {
         assert!(html.contains("Hierarchy Setup"));
         assert!(html.contains("Form Builder"));
         assert!(html.contains("Report Builder"));
+        assert!(html.contains("Dataset name"));
+        assert!(html.contains("Dataset grain"));
+        assert!(html.contains("Create Dataset"));
+        assert!(html.contains("Load Datasets"));
+        assert!(html.contains("Inspect Dataset"));
+        assert!(html.contains("/api/admin/datasets"));
+        assert!(html.contains("/api/datasets"));
         assert!(html.contains("Create Node Type"));
         assert!(html.contains("Update Node Type"));
         assert!(html.contains("Edit Node Type"));

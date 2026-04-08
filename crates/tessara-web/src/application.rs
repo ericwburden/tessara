@@ -606,6 +606,18 @@ fn ReportAdminScreen() -> impl IntoView {
                 "Build table report bindings from selected form fields and inspect report output."
             </p>
             <div class="inputs">
+                <label><span>"Dataset name"</span><input id="dataset-name" placeholder="Participant Dataset" value="Participant Dataset" /></label>
+                <label><span>"Dataset slug"</span><input id="dataset-slug" placeholder="participant-dataset" value="participant-dataset" /></label>
+                <label><span>"Dataset grain"</span><input id="dataset-grain" placeholder="submission" value="submission" /></label>
+                <label><span>"Dataset ID"</span><input id="dataset-id" placeholder="Selected dataset ID" value="" /></label>
+                <label><span>"Dataset source alias"</span><input id="dataset-source-alias" placeholder="service" value="service" /></label>
+                <label><span>"Dataset form ID"</span><input id="dataset-form-id" placeholder="Selected source form ID" value="" /></label>
+                <label><span>"Dataset compatibility group ID"</span><input id="dataset-compatibility-group-id" placeholder="Optional compatibility group ID" value="" /></label>
+                <label><span>"Dataset selection rule"</span><input id="dataset-selection-rule" placeholder="all" value="all" /></label>
+                <label><span>"Dataset field key"</span><input id="dataset-field-key" placeholder="participant_count" value="participant_count" /></label>
+                <label><span>"Dataset field label"</span><input id="dataset-field-label" placeholder="Participant Count" value="Participant Count" /></label>
+                <label><span>"Dataset source field key"</span><input id="dataset-source-field-key" placeholder="participants" value="participants" /></label>
+                <label><span>"Dataset field type"</span><input id="dataset-field-type" placeholder="number" value="number" /></label>
                 <label><span>"Report name"</span><input id="report-name" placeholder="Participants Report" value="Participants Report" /></label>
                 <label><span>"Report logical key"</span><input id="report-logical-key" placeholder="participants" value="participants" /></label>
                 <label><span>"Report source field key"</span><input id="report-source-field-key" placeholder="participants" value="participants" /></label>
@@ -623,6 +635,9 @@ fn ReportAdminScreen() -> impl IntoView {
                 <label><span>"Dashboard component config JSON"</span><input id="dashboard-component-config-json" placeholder="{\"title\":\"Chart\"}" value="" /></label>
             </div>
             <div class="actions">
+                <button type="button" onclick="createDataset()">"Create Dataset"</button>
+                <button type="button" onclick="loadDatasets()">"Load Datasets"</button>
+                <button type="button" onclick="loadDatasetById()">"Inspect Dataset"</button>
                 <button type="button" onclick="addReportBinding()">"Add Binding"</button>
                 <button type="button" onclick="removeSelectedReportBinding()">"Remove Selected Binding"</button>
                 <button type="button" onclick="clearReportBindings()">"Clear Bindings"</button>

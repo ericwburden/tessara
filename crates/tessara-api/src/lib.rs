@@ -10,6 +10,7 @@ mod app_summary;
 mod auth;
 pub mod config;
 mod dashboards;
+mod datasets;
 pub mod db;
 pub mod demo;
 pub mod error;
@@ -146,6 +147,9 @@ pub fn router(state: AppState) -> Router {
             "/api/admin/analytics/status",
             get(analytics::analytics_status),
         )
+        .route("/api/admin/datasets", post(datasets::create_dataset))
+        .route("/api/datasets", get(datasets::list_datasets))
+        .route("/api/datasets/{dataset_id}", get(datasets::get_dataset))
         .route(
             "/api/admin/legacy-fixtures/validate",
             post(legacy_import::validate_legacy_fixture_endpoint),

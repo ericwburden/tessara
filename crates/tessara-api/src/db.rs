@@ -66,6 +66,8 @@ async fn seed_dev_admin(pool: &PgPool, config: &Config) -> anyhow::Result<()> {
         ("forms:write", "Manage form definitions and versions"),
         ("submissions:write", "Create and update submissions"),
         ("analytics:refresh", "Refresh analytics projections"),
+        ("datasets:write", "Manage dataset definitions"),
+        ("datasets:read", "Inspect dataset definitions"),
         ("reports:write", "Manage report definitions"),
         ("reports:read", "Run report definitions"),
     ];

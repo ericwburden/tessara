@@ -4,6 +4,7 @@ members = [
     "crates/tessara-api",
     "crates/tessara-auth",
     "crates/tessara-core",
+    "crates/tessara-datasets",
     "crates/tessara-dashboards",
     "crates/tessara-db",
     "crates/tessara-forms",

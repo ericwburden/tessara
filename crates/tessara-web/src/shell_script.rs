@@ -612,7 +612,8 @@ pub const SCRIPT: &str = r#"
 
       function useForm(formId, formName = formId) {
         selectRecord("form", formName, formId, {
-          "form-id": formId
+          "form-id": formId,
+          "dataset-form-id": formId
         });
       }
 
@@ -631,7 +632,8 @@ pub const SCRIPT: &str = r#"
       function useFormVersion(formVersionId, formId, label = formVersionId) {
         selectRecord("form version", label, formVersionId, {
           "form-version-id": formVersionId,
-          "form-id": formId
+          "form-id": formId,
+          "dataset-form-id": formId
         });
       }
 
@@ -1306,6 +1308,138 @@ pub const SCRIPT: &str = r#"
         await loadDashboardById();
       }
 
+      function datasetDefinitionFromInputs() {
+        const formId = inputValue("dataset-form-id") || inputValue("form-id");
+        const compatibilityGroupId = inputValue("dataset-compatibility-group-id");
+        const sourceAlias = inputValue("dataset-source-alias") || "service";
+        const sourceFieldKey = inputValue("dataset-source-field-key") || inputValue("report-source-field-key");
+        return {
+          name: inputValue("dataset-name"),
+          slug: inputValue("dataset-slug"),
+          grain: inputValue("dataset-grain") || "submission",
+          sources: [{
+            source_alias: sourceAlias,
+            form_id: formId || null,
+            compatibility_group_id: compatibilityGroupId || null,
+            selection_rule: inputValue("dataset-selection-rule") || "all"
+          }],
+          fields: [{
+            key: inputValue("dataset-field-key") || inputValue("report-logical-key"),
+            label: inputValue("dataset-field-label") || inputValue("report-logical-key"),
+            source_alias: sourceAlias,
+            source_field_key: sourceFieldKey,
+            position: 0
+          }]
+        };
+      }
+
+      async function createDataset() {
+        try {
+          if (!token) await login();
+          const payload = await request("/api/admin/datasets", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(datasetDefinitionFromInputs())
+          });
+          setInput("dataset-id", payload.id);
+          show(payload);
+          await loadDatasets();
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function loadDatasets() {
+        try {
+          if (!token) await login();
+          const payload = await request("/api/datasets");
+          show(payload);
+          showCards(payload, (dataset) => `
+            <article class="card">
+              <h3>${escapeHtml(dataset.name)}</h3>
+              <p class="muted">${escapeHtml(dataset.slug)} · ${escapeHtml(dataset.grain)} grain</p>
+              <p>${dataset.source_count} sources, ${dataset.field_count} fields</p>
+              <button type="button" onclick="useDataset('${escapeHtml(dataset.id)}', '${escapeHtml(dataset.name)}', '${escapeHtml(dataset.slug)}', '${escapeHtml(dataset.grain)}')">Use Dataset</button>
+              <button type="button" onclick="loadDatasetByValue('${escapeHtml(dataset.id)}')">Inspect Dataset</button>
+              <code>${escapeHtml(dataset.id)}</code>
+            </article>
+          `);
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      function useDataset(datasetId, datasetName = datasetId, datasetSlug = "", grain = "submission") {
+        selectRecord("dataset", datasetName, datasetId, {
+          "dataset-id": datasetId,
+          "dataset-name": datasetName,
+          "dataset-slug": datasetSlug,
+          "dataset-grain": grain
+        });
+      }
+
+      async function loadDatasetById() {
+        try {
+          const datasetId = inputValue("dataset-id");
+          if (!datasetId) throw new Error("Enter or select a dataset ID first.");
+          await loadDatasetByValue(datasetId);
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function loadDatasetByValue(datasetId) {
+        if (!token) await login();
+        const payload = await request(`/api/datasets/${datasetId}`);
+        useDataset(payload.id, payload.name, payload.slug, payload.grain);
+        const firstSource = payload.sources[0];
+        if (firstSource) {
+          selectRecord("dataset source", firstSource.source_alias, firstSource.id, {
+            "dataset-source-alias": firstSource.source_alias,
+            "dataset-form-id": firstSource.form_id || "",
+            "dataset-compatibility-group-id": firstSource.compatibility_group_id || "",
+            "dataset-selection-rule": firstSource.selection_rule
+          });
+          if (firstSource.form_id) useForm(firstSource.form_id, firstSource.form_name || firstSource.form_id);
+        }
+        show(payload);
+        document.getElementById("screen").innerHTML = `
+          <article class="card">
+            <h3>Dataset Definition</h3>
+            <p>${escapeHtml(payload.name)}</p>
+            <p class="muted">${escapeHtml(payload.slug)} · ${escapeHtml(payload.grain)} grain</p>
+            <p>${payload.sources.length} sources, ${payload.fields.length} fields</p>
+          </article>
+          ${payload.sources.map((source) => `
+            <article class="card">
+              <h3>Source ${escapeHtml(source.source_alias)}</h3>
+              <p class="muted">${escapeHtml(source.form_name || source.compatibility_group_name || "Unresolved source")}</p>
+              <p>${escapeHtml(source.selection_rule)} records</p>
+            </article>
+          `).join("")}
+          ${payload.fields.map((field) => `
+            <article class="card">
+              <h3>${escapeHtml(field.label)}</h3>
+              <p>${escapeHtml(field.key)} from ${escapeHtml(field.source_alias)}.${escapeHtml(field.source_field_key)}</p>
+              <p class="muted">${escapeHtml(field.field_type)}</p>
+              <button type="button" onclick="useDatasetField('${escapeHtml(field.key)}', '${escapeHtml(field.label)}', '${escapeHtml(field.source_alias)}', '${escapeHtml(field.source_field_key)}', '${escapeHtml(field.field_type)}')">Use Dataset Field</button>
+            </article>
+          `).join("")}
+        `;
+      }
+
+      function useDatasetField(key, label, sourceAlias, sourceFieldKey, fieldType) {
+        selectRecord("dataset field", label || key, key, {
+          "dataset-field-key": key,
+          "dataset-field-label": label,
+          "dataset-source-alias": sourceAlias,
+          "dataset-source-field-key": sourceFieldKey,
+          "dataset-field-type": fieldType,
+          "report-logical-key": key,
+          "report-source-field-key": sourceFieldKey
+        });
+      }
+
       async function createReport() {
         try {
           if (!token) await login();
@@ -1822,7 +1956,10 @@ pub const SCRIPT: &str = r#"
         selectRecord("report binding", logicalKey, sourceFieldKey, {
           "report-logical-key": logicalKey,
           "report-source-field-key": sourceFieldKey,
-          "report-missing-policy": missingPolicy
+          "report-missing-policy": missingPolicy,
+          "dataset-field-key": logicalKey,
+          "dataset-field-label": logicalKey,
+          "dataset-source-field-key": sourceFieldKey
         });
       }
 

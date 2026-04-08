@@ -4189,6 +4189,7 @@ dependencies = [
  "sqlx",
  "tessara-core",
  "tessara-dashboards",
+ "tessara-datasets",
  "tessara-forms",
  "tessara-hierarchy",
  "tessara-reporting",
@@ -4223,6 +4224,10 @@ dependencies = [
  "serde",
  "thiserror 2.0.18",
 ]
+
+[[package]]
+name = "tessara-datasets"
+version = "0.1.0"
 
 [[package]]
 name = "tessara-db"

@@ -1450,6 +1450,32 @@ async fn admin_mutation_routes_require_authentication() {
             .expect("valid analytics request"),
         Request::builder()
             .method("POST")
+            .uri("/api/admin/datasets")
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(
+                json!({
+                    "name": "Participant Dataset",
+                    "slug": "participant-dataset",
+                    "grain": "submission",
+                    "sources": [{
+                        "source_alias": "service",
+                        "form_id": form_id,
+                        "compatibility_group_id": null,
+                        "selection_rule": "all"
+                    }],
+                    "fields": [{
+                        "key": "participants",
+                        "label": "Participants",
+                        "source_alias": "service",
+                        "source_field_key": "participants",
+                        "position": 0
+                    }]
+                })
+                .to_string(),
+            ))
+            .expect("valid dataset request"),
+        Request::builder()
+            .method("POST")
             .uri("/api/admin/reports")
             .header(header::CONTENT_TYPE, "application/json")
             .body(Body::from(
@@ -1513,6 +1539,180 @@ async fn admin_mutation_routes_require_authentication() {
             "{uri} should require auth"
         );
     }
+}
+
+#[tokio::test]
+async fn dataset_definitions_validate_sources_and_fields() {
+    let _guard = TEST_DATABASE_LOCK.lock().await;
+    let Some(app) = test_app().await else { return };
+    let token = login_token(app.clone()).await;
+
+    let form = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/forms",
+            &token,
+            Some(json!({
+                "name": "Quarterly Service Dataset Form",
+                "slug": "quarterly-service-dataset-form",
+                "scope_node_type_id": null
+            })),
+        ),
+    )
+    .await;
+    let form_id = id_from(&form);
+    let form_version_id = create_form_version(app.clone(), &token, form_id, "v1").await;
+    let section_id = create_form_section(app.clone(), &token, form_version_id, "Main").await;
+    create_number_field(
+        app.clone(),
+        &token,
+        form_version_id,
+        section_id,
+        "participants",
+    )
+    .await;
+
+    let dataset = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/datasets",
+            &token,
+            Some(json!({
+                "name": "Participant Dataset",
+                "slug": "participant-dataset",
+                "grain": "submission",
+                "sources": [{
+                    "source_alias": "service",
+                    "form_id": form_id,
+                    "compatibility_group_id": null,
+                    "selection_rule": "all"
+                }],
+                "fields": [{
+                    "key": "participant_count",
+                    "label": "Participant Count",
+                    "source_alias": "service",
+                    "source_field_key": "participants",
+                    "position": 0
+                }]
+            })),
+        ),
+    )
+    .await;
+    let dataset_id = id_from(&dataset);
+
+    let datasets = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/datasets", &token, None),
+    )
+    .await;
+    assert!(
+        datasets
+            .as_array()
+            .expect("dataset list should be an array")
+            .iter()
+            .any(|dataset| dataset["id"] == dataset_id.to_string()
+                && dataset["slug"] == "participant-dataset"
+                && dataset["grain"] == "submission"
+                && dataset["source_count"] == 1
+                && dataset["field_count"] == 1)
+    );
+
+    let definition = request_json(
+        app.clone(),
+        authorized_request("GET", &format!("/api/datasets/{dataset_id}"), &token, None),
+    )
+    .await;
+    assert_eq!(definition["name"], "Participant Dataset");
+    assert_eq!(definition["sources"][0]["source_alias"], "service");
+    assert_eq!(definition["sources"][0]["form_id"], form_id.to_string());
+    assert_eq!(
+        definition["sources"][0]["form_name"],
+        "Quarterly Service Dataset Form"
+    );
+    assert_eq!(definition["fields"][0]["key"], "participant_count");
+    assert_eq!(definition["fields"][0]["source_field_key"], "participants");
+    assert_eq!(definition["fields"][0]["field_type"], "number");
+
+    let duplicate_field = request_status_and_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/datasets",
+            &token,
+            Some(json!({
+                "name": "Duplicate Dataset",
+                "slug": "duplicate-dataset",
+                "grain": "submission",
+                "sources": [{
+                    "source_alias": "service",
+                    "form_id": form_id,
+                    "compatibility_group_id": null,
+                    "selection_rule": "all"
+                }],
+                "fields": [
+                    {
+                        "key": "participant_count",
+                        "label": "Participant Count",
+                        "source_alias": "service",
+                        "source_field_key": "participants",
+                        "position": 0
+                    },
+                    {
+                        "key": "participant_count",
+                        "label": "Duplicate Participant Count",
+                        "source_alias": "service",
+                        "source_field_key": "participants",
+                        "position": 1
+                    }
+                ]
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(duplicate_field.0, StatusCode::BAD_REQUEST);
+    assert!(
+        duplicate_field.1["error"]
+            .as_str()
+            .expect("error body should include message")
+            .contains("duplicated")
+    );
+
+    let missing_source_field = request_status_and_json(
+        app,
+        authorized_request(
+            "POST",
+            "/api/admin/datasets",
+            &token,
+            Some(json!({
+                "name": "Missing Field Dataset",
+                "slug": "missing-field-dataset",
+                "grain": "submission",
+                "sources": [{
+                    "source_alias": "service",
+                    "form_id": form_id,
+                    "compatibility_group_id": null,
+                    "selection_rule": "all"
+                }],
+                "fields": [{
+                    "key": "missing_field",
+                    "label": "Missing Field",
+                    "source_alias": "service",
+                    "source_field_key": "missing_field",
+                    "position": 0
+                }]
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(missing_source_field.0, StatusCode::BAD_REQUEST);
+    assert!(
+        missing_source_field.1["error"]
+            .as_str()
+            .expect("error body should include message")
+            .contains("not available on source")
+    );
 }
 
 #[tokio::test]
