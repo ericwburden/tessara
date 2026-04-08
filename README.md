@@ -59,6 +59,29 @@ Start the local stack:
 docker compose up --build
 ```
 
+For the normal local rebuild/relaunch workflow, use the helper script:
+
+```powershell
+.\scripts\local-launch.ps1
+```
+
+That script:
+
+- stops the existing Compose stack
+- rebuilds the API image
+- recreates the Compose services
+- waits for `/health` and `/app` to return `200`
+
+Useful options:
+
+```powershell
+.\scripts\local-launch.ps1 -FreshData
+.\scripts\local-launch.ps1 -FollowLogs
+```
+
+`-FreshData` also removes the local Postgres volume before relaunching.
+`-FollowLogs` tails the Postgres and API container logs after startup.
+
 The API listens on:
 
 ```text
@@ -162,6 +185,12 @@ local test deployment with:
 
 ```powershell
 docker compose down -v
+```
+
+To rebuild and relaunch the user-testing stack with the latest UI/backend code:
+
+```powershell
+.\scripts\local-launch.ps1
 ```
 
 The local shell now covers the main demo workflow surfaces:
