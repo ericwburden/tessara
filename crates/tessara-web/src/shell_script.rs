@@ -299,6 +299,8 @@ pub const SCRIPT: &str = r#"
               <p class="muted">${escapeHtml(nodeType.slug)}</p>
               <p>${nodeType.node_count} nodes</p>
               <button type="button" onclick="useNodeType('${escapeHtml(nodeType.id)}', '${escapeHtml(nodeType.name)}')">Use Node Type</button>
+              <button type="button" onclick="useFormScopeNodeType('${escapeHtml(nodeType.id)}', '${escapeHtml(nodeType.name)}')">Use Form Scope</button>
+              <button type="button" onclick="useMetadataNodeType('${escapeHtml(nodeType.id)}', '${escapeHtml(nodeType.name)}')">Use Metadata Target</button>
               <button type="button" onclick="useParentNodeType('${escapeHtml(nodeType.id)}', '${escapeHtml(nodeType.name)}')">Use Parent Type</button>
               <button type="button" onclick="useChildNodeType('${escapeHtml(nodeType.id)}', '${escapeHtml(nodeType.name)}')">Use Child Type</button>
               <code>${escapeHtml(nodeType.id)}</code>
@@ -335,6 +337,30 @@ pub const SCRIPT: &str = r#"
           "metadata-node-type-id": nodeTypeId,
           "form-scope-node-type-id": nodeTypeId
         });
+      }
+
+      function useFormScopeNodeType(nodeTypeId, nodeTypeName = nodeTypeId) {
+        selectRecord("form scope node type", nodeTypeName, nodeTypeId, {
+          "form-scope-node-type-id": nodeTypeId
+        });
+      }
+
+      function useMetadataNodeType(nodeTypeId, nodeTypeName = nodeTypeId) {
+        selectRecord("metadata node type", nodeTypeName, nodeTypeId, {
+          "metadata-node-type-id": nodeTypeId
+        });
+      }
+
+      function useSelectedNodeTypeAsFormScope() {
+        const nodeTypeId = inputValue("node-type-id");
+        if (!nodeTypeId) throw new Error("Select or enter a node type ID first.");
+        useFormScopeNodeType(nodeTypeId, inputValue("node-type-name") || nodeTypeId);
+      }
+
+      function useSelectedNodeTypeAsMetadataTarget() {
+        const nodeTypeId = inputValue("node-type-id");
+        if (!nodeTypeId) throw new Error("Select or enter a node type ID first.");
+        useMetadataNodeType(nodeTypeId, inputValue("node-type-name") || nodeTypeId);
       }
 
       function useParentNodeType(nodeTypeId, nodeTypeName = nodeTypeId) {
@@ -422,7 +448,8 @@ pub const SCRIPT: &str = r#"
               <p>${escapeHtml(field.node_type_name)}.${escapeHtml(field.key)}</p>
               <p>${escapeHtml(field.field_type)}${field.required ? " required" : ""}</p>
               <button type="button" onclick="useMetadataField('${escapeHtml(field.id)}', '${escapeHtml(field.node_type_id)}', '${escapeHtml(field.node_type_name)}', '${escapeHtml(field.key)}', '${escapeHtml(field.label)}', '${escapeHtml(field.field_type)}', ${field.required ? "true" : "false"})">Use Metadata Field</button>
-              <button type="button" onclick="useNodeType('${escapeHtml(field.node_type_id)}', '${escapeHtml(field.node_type_name)}')">Use Node Type</button>
+              <button type="button" onclick="useMetadataNodeType('${escapeHtml(field.node_type_id)}', '${escapeHtml(field.node_type_name)}')">Use Metadata Target</button>
+              <button type="button" onclick="useFormScopeNodeType('${escapeHtml(field.node_type_id)}', '${escapeHtml(field.node_type_name)}')">Use Form Scope</button>
               <code>${escapeHtml(field.id)}</code>
             </article>
           `);
@@ -642,6 +669,49 @@ pub const SCRIPT: &str = r#"
         }
       }
 
+      async function createBasicFormVersion() {
+        try {
+          if (!token) await login();
+          const formId = inputValue("form-id");
+          if (!formId) throw new Error("Create or select a form first.");
+          const version = await request(`/api/admin/forms/${formId}/versions`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              version_label: inputValue("form-version-label"),
+              compatibility_group_name: inputValue("compatibility-group-name")
+            })
+          });
+          setInput("form-version-id", version.id);
+          const section = await request(`/api/admin/form-versions/${version.id}/sections`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              title: inputValue("section-title"),
+              position: Number(inputValue("section-position") || 0)
+            })
+          });
+          setInput("section-id", section.id);
+          const field = await request(`/api/admin/form-versions/${version.id}/fields`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              section_id: section.id,
+              key: inputValue("field-key"),
+              label: inputValue("field-label"),
+              field_type: inputValue("field-type"),
+              required: booleanInputValue("field-required"),
+              position: Number(inputValue("field-position") || 0)
+            })
+          });
+          setInput("field-id", field.id);
+          show({ version, section, field });
+          await renderForm(version.id);
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
       async function createSection() {
         try {
           if (!token) await login();
@@ -719,6 +789,7 @@ pub const SCRIPT: &str = r#"
               position: Number(inputValue("field-position") || 0)
             })
           });
+          setInput("field-id", payload.id);
           show(payload);
           await renderForm(formVersionId);
         } catch (error) {

@@ -167,6 +167,14 @@ const HIERARCHY_INPUTS: &[TextInput] = &[
 
 const HIERARCHY_ACTIONS: &[Action] = &[
     Action::new("createNodeType()", "Create Node Type"),
+    Action::new(
+        "useSelectedNodeTypeAsFormScope()",
+        "Use Node Type As Form Scope",
+    ),
+    Action::new(
+        "useSelectedNodeTypeAsMetadataTarget()",
+        "Use Node Type As Metadata Target",
+    ),
     Action::new("loadRelationships()", "Load Relationships"),
     Action::new("createRelationship()", "Create Relationship"),
     Action::new("deleteRelationship()", "Remove Relationship"),
@@ -224,6 +232,7 @@ const FORM_INPUTS: &[TextInput] = &[
 const FORM_ACTIONS: &[Action] = &[
     Action::new("createForm()", "Create Form"),
     Action::new("createFormVersion()", "Create Version"),
+    Action::new("createBasicFormVersion()", "Create Basic Version"),
     Action::new("createSection()", "Create Section"),
     Action::new("updateSection()", "Update Section"),
     Action::new("deleteSection()", "Remove Section"),

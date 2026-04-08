@@ -243,10 +243,15 @@ mod tests {
         assert!(html.contains("Form Builder"));
         assert!(html.contains("Report Builder"));
         assert!(html.contains("Create Node Type"));
+        assert!(html.contains("Use Form Scope"));
+        assert!(html.contains("Use Metadata Target"));
+        assert!(html.contains("Use Node Type As Form Scope"));
+        assert!(html.contains("Use Node Type As Metadata Target"));
         assert!(html.contains("Remove Relationship"));
         assert!(html.contains("Update Metadata Field"));
         assert!(html.contains("Update Node"));
         assert!(html.contains("Create Form"));
+        assert!(html.contains("Create Basic Version"));
         assert!(html.contains("Remove Section"));
         assert!(html.contains("Update Field"));
         assert!(html.contains("Remove Field"));

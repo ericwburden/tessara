@@ -532,6 +532,8 @@ fn HierarchyAdminScreen() -> impl IntoView {
             <div class="actions">
                 <button type="button" onclick="loadNodeTypes()">"Load Node Types"</button>
                 <button type="button" onclick="createNodeType()">"Create Node Type"</button>
+                <button type="button" onclick="useSelectedNodeTypeAsFormScope()">"Use Node Type As Form Scope"</button>
+                <button type="button" onclick="useSelectedNodeTypeAsMetadataTarget()">"Use Node Type As Metadata Target"</button>
                 <button type="button" onclick="loadRelationships()">"Load Relationships"</button>
                 <button type="button" onclick="createRelationship()">"Create Relationship"</button>
                 <button type="button" onclick="deleteRelationship()">"Remove Relationship"</button>
@@ -577,6 +579,7 @@ fn FormAdminScreen() -> impl IntoView {
                 <button type="button" onclick="loadForms()">"Load Forms"</button>
                 <button type="button" onclick="createForm()">"Create Form"</button>
                 <button type="button" onclick="createFormVersion()">"Create Version"</button>
+                <button type="button" onclick="createBasicFormVersion()">"Create Basic Version"</button>
                 <button type="button" onclick="createSection()">"Create Section"</button>
                 <button type="button" onclick="updateSection()">"Update Section"</button>
                 <button type="button" onclick="deleteSection()">"Remove Section"</button>
