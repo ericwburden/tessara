@@ -62,6 +62,36 @@ impl DatasetGrain {
     }
 }
 
+/// Dataset source composition mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DatasetCompositionMode {
+    /// Union rows from all configured sources into one dataset row stream.
+    Union,
+    /// Join rows from multiple sources into one semantic row.
+    Join,
+}
+
+impl DatasetCompositionMode {
+    /// Parses a dataset composition mode from the API/storage representation.
+    pub fn parse(value: &str) -> Result<Self, DatasetRuleError> {
+        match value.trim() {
+            "union" => Ok(Self::Union),
+            "join" => Ok(Self::Join),
+            other => Err(DatasetRuleError::new(format!(
+                "unsupported dataset composition mode '{other}'"
+            ))),
+        }
+    }
+
+    /// Returns the stable storage representation.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Union => "union",
+            Self::Join => "join",
+        }
+    }
+}
+
 /// Dataset source record-selection rule.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DatasetSelectionRule {
@@ -148,7 +178,9 @@ pub fn validate_dataset_shape<'a>(
 
 #[cfg(test)]
 mod tests {
-    use super::{DatasetGrain, DatasetSelectionRule, validate_dataset_shape};
+    use super::{
+        DatasetCompositionMode, DatasetGrain, DatasetSelectionRule, validate_dataset_shape,
+    };
 
     #[test]
     fn parses_supported_dataset_grains() {
@@ -181,6 +213,24 @@ mod tests {
         assert_eq!(
             DatasetSelectionRule::parse("earliest").expect("earliest should parse"),
             DatasetSelectionRule::Earliest
+        );
+    }
+
+    #[test]
+    fn parses_supported_composition_modes() {
+        assert_eq!(
+            DatasetCompositionMode::parse("union").expect("union should parse"),
+            DatasetCompositionMode::Union
+        );
+        assert_eq!(
+            DatasetCompositionMode::parse("join").expect("join should parse"),
+            DatasetCompositionMode::Join
+        );
+        assert_eq!(
+            DatasetCompositionMode::parse("merge")
+                .expect_err("unsupported composition modes should fail")
+                .message(),
+            "unsupported dataset composition mode 'merge'"
         );
     }
 

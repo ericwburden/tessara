@@ -2118,6 +2118,7 @@ async fn admin_mutation_routes_require_authentication() {
                     "name": "Participant Dataset",
                     "slug": "participant-dataset",
                     "grain": "submission",
+                    "composition_mode": "union",
                     "sources": [{
                         "source_alias": "service",
                         "form_id": form_id,
@@ -2294,6 +2295,7 @@ async fn dataset_definitions_validate_sources_and_fields() {
             .any(|dataset| dataset["id"] == dataset_id.to_string()
                 && dataset["slug"] == "participant-dataset"
                 && dataset["grain"] == "submission"
+                && dataset["composition_mode"] == "union"
                 && dataset["source_count"] == 1
                 && dataset["field_count"] == 1)
     );
@@ -2304,6 +2306,7 @@ async fn dataset_definitions_validate_sources_and_fields() {
     )
     .await;
     assert_eq!(definition["name"], "Participant Dataset");
+    assert_eq!(definition["composition_mode"], "union");
     assert_eq!(definition["sources"][0]["source_alias"], "service");
     assert_eq!(definition["sources"][0]["form_id"], form_id.to_string());
     assert_eq!(
@@ -2324,6 +2327,7 @@ async fn dataset_definitions_validate_sources_and_fields() {
                 "name": "Updated Participant Dataset",
                 "slug": "updated-participant-dataset",
                 "grain": "submission",
+                "composition_mode": "union",
                 "sources": [{
                     "source_alias": "services",
                     "form_id": form_id,
@@ -2348,8 +2352,94 @@ async fn dataset_definitions_validate_sources_and_fields() {
     .await;
     assert_eq!(updated_definition["name"], "Updated Participant Dataset");
     assert_eq!(updated_definition["slug"], "updated-participant-dataset");
+    assert_eq!(updated_definition["composition_mode"], "union");
     assert_eq!(updated_definition["sources"][0]["source_alias"], "services");
     assert_eq!(updated_definition["fields"][0]["key"], "participants_total");
+
+    let join_dataset = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/datasets",
+            &token,
+            Some(json!({
+                "name": "Joined Participant Dataset",
+                "slug": "joined-participant-dataset",
+                "grain": "submission",
+                "composition_mode": "join",
+                "sources": [{
+                    "source_alias": "service",
+                    "form_id": form_id,
+                    "compatibility_group_id": null,
+                    "selection_rule": "all"
+                }],
+                "fields": [{
+                    "key": "participant_count",
+                    "label": "Participant Count",
+                    "source_alias": "service",
+                    "source_field_key": "participants",
+                    "position": 0
+                }]
+            })),
+        ),
+    )
+    .await;
+    let join_dataset_id = id_from(&join_dataset);
+    let join_definition = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/datasets/{join_dataset_id}"),
+            &token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(join_definition["composition_mode"], "join");
+    let join_dataset_run = request_status_and_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/datasets/{join_dataset_id}/table"),
+            &token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(join_dataset_run.0, StatusCode::BAD_REQUEST);
+    assert!(
+        join_dataset_run.1["error"]
+            .as_str()
+            .expect("join dataset run should include an error message")
+            .contains("union composition mode")
+    );
+    let join_report = request_status_and_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/reports",
+            &token,
+            Some(json!({
+                "name": "Joined Participant Report",
+                "form_id": null,
+                "dataset_id": join_dataset_id,
+                "fields": [{
+                    "logical_key": "participant_count",
+                    "source_field_key": "participant_count",
+                    "computed_expression": null,
+                    "missing_policy": "null"
+                }]
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(join_report.0, StatusCode::BAD_REQUEST);
+    assert!(
+        join_report.1["error"]
+            .as_str()
+            .expect("join report create should include an error message")
+            .contains("union composition mode")
+    );
 
     let duplicate_field = request_status_and_json(
         app.clone(),
@@ -2361,6 +2451,7 @@ async fn dataset_definitions_validate_sources_and_fields() {
                 "name": "Duplicate Dataset",
                 "slug": "duplicate-dataset",
                 "grain": "submission",
+                "composition_mode": "union",
                 "sources": [{
                     "source_alias": "service",
                     "form_id": form_id,
@@ -2405,6 +2496,7 @@ async fn dataset_definitions_validate_sources_and_fields() {
                 "name": "Missing Field Dataset",
                 "slug": "missing-field-dataset",
                 "grain": "submission",
+                "composition_mode": "union",
                 "sources": [{
                     "source_alias": "service",
                     "form_id": form_id,
@@ -2440,6 +2532,7 @@ async fn dataset_definitions_validate_sources_and_fields() {
                 "name": "Disposable Dataset",
                 "slug": "disposable-dataset",
                 "grain": "submission",
+                "composition_mode": "union",
                 "sources": [{
                     "source_alias": "service",
                     "form_id": form_id,

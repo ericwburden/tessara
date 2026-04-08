@@ -309,6 +309,12 @@ const REPORTING_INPUTS: &[TextInput] = &[
         "submission or node",
         "submission",
     ),
+    TextInput::new(
+        "dataset-composition-mode",
+        "Dataset composition mode",
+        "union or join",
+        "union",
+    ),
     TextInput::new("dataset-id", "Dataset ID", "Selected dataset ID", ""),
     TextInput::new(
         "dataset-source-alias",

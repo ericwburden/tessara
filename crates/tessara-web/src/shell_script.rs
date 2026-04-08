@@ -1474,6 +1474,7 @@ pub const SCRIPT: &str = r#"
           name: inputValue("dataset-name"),
           slug: inputValue("dataset-slug"),
           grain: inputValue("dataset-grain") || "submission",
+          composition_mode: inputValue("dataset-composition-mode") || "union",
           sources,
           fields
         };
@@ -1536,9 +1537,9 @@ pub const SCRIPT: &str = r#"
           showCards(payload, (dataset) => `
             <article class="card">
               <h3>${escapeHtml(dataset.name)}</h3>
-              <p class="muted">${escapeHtml(dataset.slug)} · ${escapeHtml(dataset.grain)} grain</p>
+              <p class="muted">${escapeHtml(dataset.slug)} · ${escapeHtml(dataset.grain)} grain · ${escapeHtml(dataset.composition_mode)} composition</p>
               <p>${dataset.source_count} sources, ${dataset.field_count} fields</p>
-              <button type="button" onclick="useDataset('${escapeHtml(dataset.id)}', '${escapeHtml(dataset.name)}', '${escapeHtml(dataset.slug)}', '${escapeHtml(dataset.grain)}')">Use Dataset</button>
+              <button type="button" onclick="useDataset('${escapeHtml(dataset.id)}', '${escapeHtml(dataset.name)}', '${escapeHtml(dataset.slug)}', '${escapeHtml(dataset.grain)}', '${escapeHtml(dataset.composition_mode)}')">Use Dataset</button>
               <button type="button" onclick="loadDatasetByValue('${escapeHtml(dataset.id)}')">Inspect Dataset</button>
               <button type="button" onclick="loadDatasetTableByValue('${escapeHtml(dataset.id)}')">Run Dataset</button>
               <code>${escapeHtml(dataset.id)}</code>
@@ -1549,12 +1550,13 @@ pub const SCRIPT: &str = r#"
         }
       }
 
-      function useDataset(datasetId, datasetName = datasetId, datasetSlug = "", grain = "submission") {
+      function useDataset(datasetId, datasetName = datasetId, datasetSlug = "", grain = "submission", compositionMode = "union") {
         selectRecord("dataset", datasetName, datasetId, {
           "dataset-id": datasetId,
           "dataset-name": datasetName,
           "dataset-slug": datasetSlug,
-          "dataset-grain": grain
+          "dataset-grain": grain,
+          "dataset-composition-mode": compositionMode
         });
       }
 
@@ -1582,7 +1584,13 @@ pub const SCRIPT: &str = r#"
       async function loadDatasetByValue(datasetId) {
         if (!token) await login();
         const payload = await request(`/api/datasets/${datasetId}`);
-        useDataset(payload.id, payload.name, payload.slug, payload.grain);
+        useDataset(
+          payload.id,
+          payload.name,
+          payload.slug,
+          payload.grain,
+          payload.composition_mode
+        );
         datasetSources.splice(0, datasetSources.length, ...payload.sources.map((source) => ({
           source_alias: source.source_alias,
           form_id: source.form_id,
@@ -1611,7 +1619,7 @@ pub const SCRIPT: &str = r#"
           <article class="card">
             <h3>Dataset Definition</h3>
             <p>${escapeHtml(payload.name)}</p>
-            <p class="muted">${escapeHtml(payload.slug)} · ${escapeHtml(payload.grain)} grain</p>
+            <p class="muted">${escapeHtml(payload.slug)} · ${escapeHtml(payload.grain)} grain · ${escapeHtml(payload.composition_mode)} composition</p>
             <p>${payload.sources.length} sources, ${payload.fields.length} fields</p>
             <button type="button" onclick="renderDatasetDraft()">Review Draft Inputs</button>
           </article>
@@ -1656,7 +1664,7 @@ pub const SCRIPT: &str = r#"
           ${payload.rows.map((row) => `
             <article class="card">
               <h3>${escapeHtml(row.node_name)}</h3>
-              <p class="muted">${escapeHtml(row.submission_id)}</p>
+              <p class="muted">${escapeHtml(row.source_alias)} source · ${escapeHtml(row.submission_id)}</p>
               <div class="table-wrap">
                 <table>
                   <thead>

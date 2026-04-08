@@ -16,6 +16,7 @@ use axum::{
 use datafusion::{datasource::MemTable, prelude::SessionContext};
 use serde::{Deserialize, Serialize};
 use sqlx::{Row, postgres::PgRow};
+use tessara_datasets::DatasetCompositionMode;
 use tessara_reporting::{
     ReportFieldBindingDraft, ReportFieldBindingInput, parse_report_field_bindings,
 };
@@ -1057,15 +1058,21 @@ async fn assert_report_dataset_is_executable(
     pool: &sqlx::PgPool,
     dataset_id: Uuid,
 ) -> ApiResult<()> {
-    let grain: String = sqlx::query_scalar("SELECT grain FROM datasets WHERE id = $1")
-        .bind(dataset_id)
-        .fetch_optional(pool)
-        .await?
-        .ok_or_else(|| ApiError::NotFound(format!("dataset {dataset_id}")))?;
+    let (grain, composition_mode): (String, String) =
+        sqlx::query_as("SELECT grain, composition_mode FROM datasets WHERE id = $1")
+            .bind(dataset_id)
+            .fetch_optional(pool)
+            .await?
+            .ok_or_else(|| ApiError::NotFound(format!("dataset {dataset_id}")))?;
 
     if grain != "submission" {
         return Err(ApiError::BadRequest(
             "dataset-backed reports currently support only submission grain".into(),
+        ));
+    }
+    if composition_mode != DatasetCompositionMode::Union.as_str() {
+        return Err(ApiError::BadRequest(
+            "dataset-backed reports currently support only union composition mode".into(),
         ));
     }
 

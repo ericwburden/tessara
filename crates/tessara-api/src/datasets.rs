@@ -7,7 +7,9 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use sqlx::{Postgres, Row, Transaction};
-use tessara_datasets::{DatasetGrain, DatasetSelectionRule, validate_dataset_shape};
+use tessara_datasets::{
+    DatasetCompositionMode, DatasetGrain, DatasetSelectionRule, validate_dataset_shape,
+};
 use uuid::Uuid;
 
 use crate::{
@@ -22,6 +24,8 @@ pub struct CreateDatasetRequest {
     name: String,
     slug: String,
     grain: String,
+    #[serde(default = "default_dataset_composition_mode")]
+    composition_mode: String,
     sources: Vec<CreateDatasetSourceRequest>,
     fields: Vec<CreateDatasetFieldRequest>,
 }
@@ -49,6 +53,7 @@ pub struct DatasetSummary {
     name: String,
     slug: String,
     grain: String,
+    composition_mode: String,
     source_count: i64,
     field_count: i64,
 }
@@ -59,6 +64,7 @@ pub struct DatasetDefinition {
     name: String,
     slug: String,
     grain: String,
+    composition_mode: String,
     sources: Vec<DatasetSourceDefinition>,
     fields: Vec<DatasetFieldDefinition>,
 }
@@ -129,6 +135,8 @@ pub async fn create_dataset(
     require_dataset_slug_available(&state.pool, &payload.slug).await?;
     let grain = DatasetGrain::parse(&payload.grain)
         .map_err(|error| ApiError::BadRequest(error.to_string()))?;
+    let composition_mode = DatasetCompositionMode::parse(&payload.composition_mode)
+        .map_err(|error| ApiError::BadRequest(error.to_string()))?;
     validate_dataset_shape(
         payload
             .sources
@@ -142,11 +150,12 @@ pub async fn create_dataset(
 
     let mut tx = state.pool.begin().await?;
     let dataset_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO datasets (name, slug, grain) VALUES ($1, $2, $3) RETURNING id",
+        "INSERT INTO datasets (name, slug, grain, composition_mode) VALUES ($1, $2, $3, $4) RETURNING id",
     )
     .bind(payload.name)
     .bind(payload.slug)
     .bind(grain.as_str())
+    .bind(composition_mode.as_str())
     .fetch_one(&mut *tx)
     .await?;
 
@@ -171,6 +180,8 @@ pub async fn update_dataset(
     require_dataset_slug_available_for_update(&state.pool, dataset_id, &payload.slug).await?;
     let grain = DatasetGrain::parse(&payload.grain)
         .map_err(|error| ApiError::BadRequest(error.to_string()))?;
+    let composition_mode = DatasetCompositionMode::parse(&payload.composition_mode)
+        .map_err(|error| ApiError::BadRequest(error.to_string()))?;
     validate_dataset_shape(
         payload
             .sources
@@ -183,13 +194,16 @@ pub async fn update_dataset(
     let fields = validate_dataset_fields(&state.pool, &sources, payload.fields).await?;
 
     let mut tx = state.pool.begin().await?;
-    sqlx::query("UPDATE datasets SET name = $1, slug = $2, grain = $3 WHERE id = $4")
-        .bind(payload.name)
-        .bind(payload.slug)
-        .bind(grain.as_str())
-        .bind(dataset_id)
-        .execute(&mut *tx)
-        .await?;
+    sqlx::query(
+        "UPDATE datasets SET name = $1, slug = $2, grain = $3, composition_mode = $4 WHERE id = $5",
+    )
+    .bind(payload.name)
+    .bind(payload.slug)
+    .bind(grain.as_str())
+    .bind(composition_mode.as_str())
+    .bind(dataset_id)
+    .execute(&mut *tx)
+    .await?;
     sqlx::query("DELETE FROM dataset_sources WHERE dataset_id = $1")
         .bind(dataset_id)
         .execute(&mut *tx)
@@ -236,12 +250,19 @@ pub async fn list_datasets(
             datasets.name,
             datasets.slug,
             datasets.grain,
+            datasets.composition_mode,
             COUNT(DISTINCT dataset_sources.id) AS source_count,
             COUNT(DISTINCT dataset_fields.id) AS field_count
         FROM datasets
         LEFT JOIN dataset_sources ON dataset_sources.dataset_id = datasets.id
         LEFT JOIN dataset_fields ON dataset_fields.dataset_id = datasets.id
-        GROUP BY datasets.id, datasets.name, datasets.slug, datasets.grain, datasets.created_at
+        GROUP BY
+            datasets.id,
+            datasets.name,
+            datasets.slug,
+            datasets.grain,
+            datasets.composition_mode,
+            datasets.created_at
         ORDER BY datasets.created_at, datasets.name
         "#,
     )
@@ -256,6 +277,7 @@ pub async fn list_datasets(
                 name: row.try_get("name")?,
                 slug: row.try_get("slug")?,
                 grain: row.try_get("grain")?,
+                composition_mode: row.try_get("composition_mode")?,
                 source_count: row.try_get("source_count")?,
                 field_count: row.try_get("field_count")?,
             })
@@ -273,11 +295,12 @@ pub async fn get_dataset(
 ) -> ApiResult<Json<DatasetDefinition>> {
     auth::require_capability(&state.pool, &headers, "datasets:read").await?;
 
-    let dataset = sqlx::query("SELECT id, name, slug, grain FROM datasets WHERE id = $1")
-        .bind(dataset_id)
-        .fetch_optional(&state.pool)
-        .await?
-        .ok_or_else(|| ApiError::NotFound(format!("dataset {dataset_id}")))?;
+    let dataset =
+        sqlx::query("SELECT id, name, slug, grain, composition_mode FROM datasets WHERE id = $1")
+            .bind(dataset_id)
+            .fetch_optional(&state.pool)
+            .await?
+            .ok_or_else(|| ApiError::NotFound(format!("dataset {dataset_id}")))?;
 
     let source_rows = sqlx::query(
         r#"
@@ -319,6 +342,7 @@ pub async fn get_dataset(
         name: dataset.try_get("name")?,
         slug: dataset.try_get("slug")?,
         grain: dataset.try_get("grain")?,
+        composition_mode: dataset.try_get("composition_mode")?,
         sources: source_rows
             .into_iter()
             .map(|row| {
@@ -631,15 +655,21 @@ async fn require_executable_submission_dataset(
     pool: &sqlx::PgPool,
     dataset_id: Uuid,
 ) -> ApiResult<()> {
-    let dataset_grain: String = sqlx::query_scalar("SELECT grain FROM datasets WHERE id = $1")
-        .bind(dataset_id)
-        .fetch_optional(pool)
-        .await?
-        .ok_or_else(|| ApiError::NotFound(format!("dataset {dataset_id}")))?;
+    let (dataset_grain, composition_mode): (String, String) =
+        sqlx::query_as("SELECT grain, composition_mode FROM datasets WHERE id = $1")
+            .bind(dataset_id)
+            .fetch_optional(pool)
+            .await?
+            .ok_or_else(|| ApiError::NotFound(format!("dataset {dataset_id}")))?;
 
     if dataset_grain != DatasetGrain::Submission.as_str() {
         return Err(ApiError::BadRequest(
             "dataset table execution currently supports only submission grain".into(),
+        ));
+    }
+    if composition_mode != DatasetCompositionMode::Union.as_str() {
+        return Err(ApiError::BadRequest(
+            "dataset table execution currently supports only union composition mode".into(),
         ));
     }
 
@@ -685,6 +715,10 @@ async fn require_executable_submission_dataset(
     }
 
     Ok(())
+}
+
+fn default_dataset_composition_mode() -> String {
+    DatasetCompositionMode::Union.as_str().to_string()
 }
 
 async fn require_dataset_slug_available(pool: &sqlx::PgPool, slug: &str) -> ApiResult<()> {
