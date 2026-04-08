@@ -1046,6 +1046,7 @@ fn DashboardPreviewScreen() -> impl IntoView {
                 <button type="button" onclick="refreshAnalyticsAndOpenDashboard()">"Refresh and Open Dashboard"</button>
                 <button type="button" onclick="loadDashboardById()">"Open Dashboard"</button>
                 <button type="button" onclick="loadCharts()">"Choose Chart"</button>
+                <button type="button" onclick="loadChartDefinitionById()">"Inspect Chart"</button>
                 <button type="button" onclick="loadAggregations()">"Choose Aggregation"</button>
             </div>
         </section>

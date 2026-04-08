@@ -907,6 +907,7 @@ pub const APPLICATION_SCRIPT: &str = r#"
             <p>${escapeHtml(payload.name)}</p>
             <p class="muted">${escapeHtml(payload.dataset_name || payload.dataset_id || payload.form_name || payload.form_id || "Any form")}</p>
             <p>${payload.bindings.length} field bindings</p>
+            <p>${payload.aggregations.length} aggregations and ${payload.charts.length} charts depend on this report.</p>
             <button type="button" onclick="loadReportByValue('${escapeHtml(payload.id)}')">Run This Report</button>
           </article>
           ${payload.bindings.map((binding) => `
@@ -916,6 +917,22 @@ pub const APPLICATION_SCRIPT: &str = r#"
               <button type="button" onclick="useReportBinding('${escapeHtml(binding.logical_key)}', '${escapeHtml(binding.source_field_key)}', '${escapeHtml(binding.missing_policy)}')">Use Binding</button>
             </article>
           `).join("") || '<p class="muted">No report bindings configured.</p>'}
+          ${payload.aggregations.map((aggregation) => `
+            <article class="card">
+              <h3>${escapeHtml(aggregation.name)}</h3>
+              <p>${aggregation.metric_count} metrics</p>
+              <button type="button" onclick="useAggregation('${escapeHtml(aggregation.id)}', '${escapeHtml(aggregation.name)}', '${escapeHtml(payload.id)}', '${escapeHtml(payload.name)}')">Use Aggregation</button>
+              <button type="button" onclick="loadAggregationDefinitionByValue('${escapeHtml(aggregation.id)}')">Open Aggregation</button>
+            </article>
+          `).join("") || '<p class="muted">No aggregations depend on this report yet.</p>'}
+          ${payload.charts.map((chart) => `
+            <article class="card">
+              <h3>${escapeHtml(chart.name)}</h3>
+              <p>${escapeHtml(chart.chart_type)} chart${chart.aggregation_name ? ` via ${escapeHtml(chart.aggregation_name)}` : ""}</p>
+              <button type="button" onclick="useChart('${escapeHtml(chart.id)}', '${escapeHtml(chart.name)}', '${chart.aggregation_id ? "" : escapeHtml(payload.id)}', '${chart.aggregation_id ? "" : escapeHtml(payload.name)}', '${escapeHtml(chart.chart_type)}', '${escapeHtml(chart.aggregation_id || "")}', '${escapeHtml(chart.aggregation_name || "")}')">Use Chart Context</button>
+              <button type="button" onclick="loadChartDefinitionByValue('${escapeHtml(chart.id)}')">Open Chart</button>
+            </article>
+          `).join("") || '<p class="muted">No charts depend on this report yet.</p>'}
         `);
       }
 
@@ -1060,6 +1077,55 @@ pub const APPLICATION_SCRIPT: &str = r#"
         if (aggregationId) useAggregation(aggregationId, aggregationName || aggregationId);
       }
 
+      async function loadChartDefinitionById() {
+        try {
+          const chartId = inputValue("chart-id");
+          if (!chartId) throw new Error("Enter or select a chart ID first.");
+          await loadChartDefinitionByValue(chartId);
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function loadChartDefinitionByValue(chartId) {
+        if (!token) await login();
+        const payload = await request(`/api/charts/${chartId}`);
+        const chart = payload.chart;
+        useChart(
+          chart.id,
+          chart.name,
+          chart.report_id || "",
+          chart.report_name || "",
+          chart.chart_type,
+          chart.aggregation_id || "",
+          chart.aggregation_name || ""
+        );
+        show(payload);
+        setScreen(`
+          <article class="card">
+            <h3>Chart Definition</h3>
+            <p>${escapeHtml(chart.name)}</p>
+            <p class="muted">${escapeHtml(chart.chart_type)} chart</p>
+            <p class="muted">${chart.aggregation_id ? `Aggregation ${escapeHtml(chart.aggregation_name || chart.aggregation_id)}${chart.aggregation_report_name ? ` from ${escapeHtml(chart.aggregation_report_name)}` : ""}` : `Report ${escapeHtml(chart.report_name || chart.report_id || "None")}${chart.report_form_name ? ` on ${escapeHtml(chart.report_form_name)}` : ""}`}</p>
+            <p>${payload.dashboards.length} dashboards use this chart.</p>
+            <div class="actions">
+              ${chart.report_id ? `<button type="button" onclick="loadReportByValue('${escapeHtml(chart.report_id)}')">Open Linked Report</button>` : ""}
+              ${chart.aggregation_id ? `<button type="button" onclick="loadAggregationByValue('${escapeHtml(chart.aggregation_id)}')">Open Linked Aggregation</button>` : ""}
+            </div>
+          </article>
+          ${payload.dashboards.length
+            ? payload.dashboards.map((dashboard) => `
+                <article class="card">
+                  <h3>${escapeHtml(dashboard.name)}</h3>
+                  <p>${dashboard.component_count} components</p>
+                  <button type="button" onclick="useDashboard('${escapeHtml(dashboard.id)}', '${escapeHtml(dashboard.name)}')">Use Dashboard</button>
+                  <button type="button" onclick="loadDashboardByValue('${escapeHtml(dashboard.id)}')">Open Dashboard</button>
+                </article>
+              `).join("")
+            : '<p class="muted">No dashboards use this chart yet.</p>'}
+        `);
+      }
+
       async function loadCharts() {
         try {
           if (!token) await login();
@@ -1071,6 +1137,7 @@ pub const APPLICATION_SCRIPT: &str = r#"
               <p>${escapeHtml(chart.chart_type)} chart</p>
               <p class="muted">${chart.aggregation_id ? `Aggregation ${escapeHtml(chart.aggregation_name || chart.aggregation_id)}${chart.aggregation_report_name ? ` from ${escapeHtml(chart.aggregation_report_name)}` : ""}` : `Report ${escapeHtml(chart.report_name || "None")}${chart.report_form_name ? ` on ${escapeHtml(chart.report_form_name)}` : ""}`}</p>
               <button type="button" onclick="useChart('${escapeHtml(chart.id)}', '${escapeHtml(chart.name)}', '${escapeHtml(chart.report_id || "")}', '${escapeHtml(chart.report_name || "")}', '${escapeHtml(chart.chart_type)}', '${escapeHtml(chart.aggregation_id || "")}', '${escapeHtml(chart.aggregation_name || "")}')">Use Chart Context</button>
+              <button type="button" onclick="loadChartDefinitionByValue('${escapeHtml(chart.id)}')">Inspect Chart</button>
               ${chart.report_id ? `<button type="button" onclick="loadReportByValue('${escapeHtml(chart.report_id)}')">Run Report</button>` : ""}
               ${chart.aggregation_id ? `<button type="button" onclick="loadAggregationByValue('${escapeHtml(chart.aggregation_id)}')">Run Aggregation</button>` : ""}
               <code>${escapeHtml(chart.id)}</code>
@@ -1148,6 +1215,7 @@ pub const APPLICATION_SCRIPT: &str = r#"
               <p>Position ${component.position}</p>
               <p class="muted">${component.chart.aggregation_id ? `Aggregation ${escapeHtml(component.chart.aggregation_name || component.chart.aggregation_id)}${component.chart.aggregation_report_name ? ` from ${escapeHtml(component.chart.aggregation_report_name)}` : ""}` : `Report ${escapeHtml(component.chart.report_name || component.chart.report_id || "None")}${component.chart.report_form_name ? ` on ${escapeHtml(component.chart.report_form_name)}` : ""}`}</p>
               <button type="button" onclick="useChart('${escapeHtml(component.chart.id)}', '${escapeHtml(component.chart.name)}', '${escapeHtml(component.chart.report_id || "")}', '${escapeHtml(component.chart.report_name || "")}', '${escapeHtml(component.chart.chart_type)}', '${escapeHtml(component.chart.aggregation_id || "")}', '${escapeHtml(component.chart.aggregation_name || "")}')">Use Chart Context</button>
+              <button type="button" onclick="loadChartDefinitionByValue('${escapeHtml(component.chart.id)}')">Inspect Chart</button>
               ${component.chart.report_id ? `<button type="button" onclick="loadReportByValue('${escapeHtml(component.chart.report_id)}')">Open Report</button>` : ""}
               ${component.chart.aggregation_id ? `<button type="button" onclick="loadAggregationByValue('${escapeHtml(component.chart.aggregation_id)}')">Open Aggregation</button>` : ""}
               ${component.chart.aggregation_id ? aggregationRowsView(aggregationRows) : reportRowsView(rows)}

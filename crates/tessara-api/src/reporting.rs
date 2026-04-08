@@ -187,6 +187,8 @@ pub struct ReportDefinition {
     dataset_id: Option<Uuid>,
     dataset_name: Option<String>,
     bindings: Vec<ReportFieldBindingSummary>,
+    aggregations: Vec<ReportAggregationLink>,
+    charts: Vec<ReportChartLink>,
 }
 
 #[derive(Serialize)]
@@ -197,6 +199,22 @@ pub struct ReportFieldBindingSummary {
     computed_expression: Option<String>,
     missing_policy: String,
     position: i32,
+}
+
+#[derive(Serialize)]
+pub struct ReportAggregationLink {
+    id: Uuid,
+    name: String,
+    metric_count: i64,
+}
+
+#[derive(Serialize)]
+pub struct ReportChartLink {
+    id: Uuid,
+    name: String,
+    chart_type: String,
+    aggregation_id: Option<Uuid>,
+    aggregation_name: Option<String>,
 }
 
 /// Creates an aggregation definition over an existing report.
@@ -715,6 +733,65 @@ pub async fn get_report(
         })
         .collect::<Result<Vec<_>, sqlx::Error>>()?;
 
+    let aggregations = sqlx::query(
+        r#"
+        SELECT
+            aggregations.id,
+            aggregations.name,
+            COUNT(aggregation_metrics.id) AS metric_count
+        FROM aggregations
+        LEFT JOIN aggregation_metrics
+            ON aggregation_metrics.aggregation_id = aggregations.id
+        WHERE aggregations.report_id = $1
+        GROUP BY aggregations.id, aggregations.name
+        ORDER BY aggregations.name, aggregations.id
+        "#,
+    )
+    .bind(report_id)
+    .fetch_all(&state.pool)
+    .await?
+    .into_iter()
+    .map(|row| {
+        Ok(ReportAggregationLink {
+            id: row.try_get("id")?,
+            name: row.try_get("name")?,
+            metric_count: row.try_get("metric_count")?,
+        })
+    })
+    .collect::<Result<Vec<_>, sqlx::Error>>()?;
+
+    let charts = sqlx::query(
+        r#"
+        SELECT
+            charts.id,
+            charts.name,
+            charts.chart_type::text AS chart_type,
+            charts.aggregation_id,
+            aggregations.name AS aggregation_name
+        FROM charts
+        LEFT JOIN aggregations ON aggregations.id = charts.aggregation_id
+        WHERE charts.report_id = $1
+           OR charts.aggregation_id IN (
+                SELECT id FROM aggregations WHERE report_id = $1
+           )
+        ORDER BY charts.name, charts.id
+        "#,
+    )
+    .bind(report_id)
+    .fetch_all(&state.pool)
+    .await?
+    .into_iter()
+    .map(|row| {
+        Ok(ReportChartLink {
+            id: row.try_get("id")?,
+            name: row.try_get("name")?,
+            chart_type: row.try_get("chart_type")?,
+            aggregation_id: row.try_get("aggregation_id")?,
+            aggregation_name: row.try_get("aggregation_name")?,
+        })
+    })
+    .collect::<Result<Vec<_>, sqlx::Error>>()?;
+
     Ok(Json(ReportDefinition {
         id: report.try_get("id")?,
         name: report.try_get("name")?,
@@ -723,6 +800,8 @@ pub async fn get_report(
         dataset_id: report.try_get("dataset_id")?,
         dataset_name: report.try_get("dataset_name")?,
         bindings,
+        aggregations,
+        charts,
     }))
 }
 

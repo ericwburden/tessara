@@ -70,6 +70,12 @@ pub struct ChartResponse {
 }
 
 #[derive(Serialize)]
+pub struct ChartDefinition {
+    chart: ChartResponse,
+    dashboards: Vec<DashboardSummary>,
+}
+
+#[derive(Serialize)]
 pub struct DashboardSummary {
     id: Uuid,
     name: String,
@@ -219,6 +225,87 @@ pub async fn list_charts(
         .collect::<Result<Vec<_>, sqlx::Error>>()?;
 
     Ok(Json(charts))
+}
+
+/// Returns a single chart definition plus the dashboards that currently use it.
+pub async fn get_chart(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(chart_id): Path<Uuid>,
+) -> ApiResult<Json<ChartDefinition>> {
+    auth::require_capability(&state.pool, &headers, "reports:read").await?;
+
+    let chart = sqlx::query(
+        r#"
+        SELECT
+            charts.id,
+            charts.name,
+            charts.chart_type::text AS chart_type,
+            charts.report_id,
+            charts.aggregation_id,
+            reports.name AS report_name,
+            forms.name AS report_form_name,
+            aggregations.name AS aggregation_name,
+            aggregation_reports.name AS aggregation_report_name
+        FROM charts
+        LEFT JOIN reports ON reports.id = charts.report_id
+        LEFT JOIN forms ON forms.id = reports.form_id
+        LEFT JOIN aggregations ON aggregations.id = charts.aggregation_id
+        LEFT JOIN reports AS aggregation_reports
+            ON aggregation_reports.id = aggregations.report_id
+        WHERE charts.id = $1
+        "#,
+    )
+    .bind(chart_id)
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or_else(|| ApiError::NotFound(format!("chart {chart_id}")))?;
+
+    let report_id: Option<Uuid> = chart.try_get("report_id")?;
+    let aggregation_id: Option<Uuid> = chart.try_get("aggregation_id")?;
+
+    let dashboards = sqlx::query(
+        r#"
+        SELECT
+            dashboards.id,
+            dashboards.name,
+            COUNT(dashboard_components.id) AS component_count
+        FROM dashboards
+        JOIN dashboard_components ON dashboard_components.dashboard_id = dashboards.id
+        WHERE dashboard_components.chart_id = $1
+        GROUP BY dashboards.id, dashboards.name
+        ORDER BY dashboards.name, dashboards.id
+        "#,
+    )
+    .bind(chart_id)
+    .fetch_all(&state.pool)
+    .await?
+    .into_iter()
+    .map(|row| {
+        Ok(DashboardSummary {
+            id: row.try_get("id")?,
+            name: row.try_get("name")?,
+            component_count: row.try_get("component_count")?,
+        })
+    })
+    .collect::<Result<Vec<_>, sqlx::Error>>()?;
+
+    Ok(Json(ChartDefinition {
+        chart: ChartResponse {
+            id: chart.try_get("id")?,
+            name: chart.try_get("name")?,
+            chart_type: chart.try_get("chart_type")?,
+            report_id,
+            report_name: chart.try_get("report_name")?,
+            report_form_name: chart.try_get("report_form_name")?,
+            report_url: report_id.map(|id| format!("/api/reports/{id}/table")),
+            aggregation_id,
+            aggregation_name: chart.try_get("aggregation_name")?,
+            aggregation_report_name: chart.try_get("aggregation_report_name")?,
+            aggregation_url: aggregation_id.map(|id| format!("/api/aggregations/{id}/table")),
+        },
+        dashboards,
+    }))
 }
 
 pub async fn create_dashboard(

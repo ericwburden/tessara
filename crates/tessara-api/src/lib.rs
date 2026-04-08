@@ -209,6 +209,7 @@ pub fn router(state: AppState) -> Router {
             put(dashboards::update_chart).delete(dashboards::delete_chart),
         )
         .route("/api/charts", get(dashboards::list_charts))
+        .route("/api/charts/{chart_id}", get(dashboards::get_chart))
         .route("/api/admin/dashboards", post(dashboards::create_dashboard))
         .route(
             "/api/admin/dashboards/{dashboard_id}",

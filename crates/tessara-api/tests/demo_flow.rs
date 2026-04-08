@@ -986,6 +986,25 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
                     .expect("aggregation chart should include execution url")
                     .contains(aggregation_id))
     );
+    let report_definition = request_json(
+        app.clone(),
+        authorized_request("GET", &format!("/api/reports/{report_id}"), &token, None),
+    )
+    .await;
+    assert!(
+        report_definition["aggregations"]
+            .as_array()
+            .expect("report definition should include linked aggregations")
+            .iter()
+            .any(|aggregation| aggregation["id"] == aggregation_id)
+    );
+    assert!(
+        report_definition["charts"]
+            .as_array()
+            .expect("report definition should include linked charts")
+            .iter()
+            .any(|chart| chart["id"] == aggregation_chart_id)
+    );
 
     let dashboard_id = seed["dashboard_id"]
         .as_str()
@@ -1046,6 +1065,23 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
         dashboards
             .as_array()
             .expect("dashboards response should be an array")
+            .iter()
+            .any(|dashboard| dashboard["id"] == dashboard_id)
+    );
+    let chart_definition = request_json(
+        app.clone(),
+        authorized_request("GET", &format!("/api/charts/{chart_id}"), &token, None),
+    )
+    .await;
+    assert_eq!(chart_definition["chart"]["id"], chart_id);
+    assert!(
+        chart_definition["chart"]["report_id"].is_string()
+            || chart_definition["chart"]["aggregation_id"].is_string()
+    );
+    assert!(
+        chart_definition["dashboards"]
+            .as_array()
+            .expect("chart definition should include dashboards")
             .iter()
             .any(|dashboard| dashboard["id"] == dashboard_id)
     );

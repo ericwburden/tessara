@@ -462,6 +462,7 @@ mod tests {
         assert!(html.contains("Open Dashboard"));
         assert!(html.contains("Refresh and Open Dashboard"));
         assert!(html.contains("Choose Chart"));
+        assert!(html.contains("Inspect Chart"));
         assert!(html.contains("Load App Summary"));
         assert!(html.contains("Current User"));
         assert!(html.contains("Log Out"));
@@ -475,6 +476,10 @@ mod tests {
         assert!(html.contains("/api/reports"));
         assert!(html.contains("/api/dashboards"));
         assert!(html.contains("/api/charts"));
+        assert!(html.contains("/api/charts/${chartId}"));
+        assert!(html.contains("Chart Definition"));
+        assert!(html.contains("Open Linked Report"));
+        assert!(html.contains("Open Linked Aggregation"));
         assert!(html.contains("Navigation"));
         assert!(html.contains("Create"));
     }
