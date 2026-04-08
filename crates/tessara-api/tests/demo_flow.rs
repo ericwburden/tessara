@@ -728,6 +728,12 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
         "Quarterly Check In Dataset"
     );
     assert!(
+        dataset_report_definition["aggregations"]
+            .as_array()
+            .expect("dataset report definition should include linked aggregations")
+            .is_empty()
+    );
+    assert!(
         dataset_report_definition["bindings"]
             .as_array()
             .expect("dataset report definition should include bindings")
@@ -785,6 +791,19 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
         ),
     )
     .await;
+    let dataset_definition = request_json(
+        app.clone(),
+        authorized_request("GET", &format!("/api/datasets/{dataset_id}"), &token, None),
+    )
+    .await;
+    assert!(
+        dataset_definition["reports"]
+            .as_array()
+            .expect("dataset definition should include linked reports")
+            .iter()
+            .any(|report| report["id"] == dataset_report_id
+                && report["name"] == "Dataset Participants Report")
+    );
     let dataset_aggregation_id = dataset_aggregation["id"]
         .as_str()
         .expect("dataset aggregation response should contain id");

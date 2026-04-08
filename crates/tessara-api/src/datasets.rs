@@ -67,6 +67,7 @@ pub struct DatasetDefinition {
     composition_mode: String,
     sources: Vec<DatasetSourceDefinition>,
     fields: Vec<DatasetFieldDefinition>,
+    reports: Vec<DatasetReportLink>,
 }
 
 #[derive(Serialize)]
@@ -90,6 +91,12 @@ pub struct DatasetFieldDefinition {
     source_field_key: String,
     field_type: String,
     position: i32,
+}
+
+#[derive(Serialize)]
+pub struct DatasetReportLink {
+    id: Uuid,
+    name: String,
 }
 
 #[derive(Serialize)]
@@ -337,6 +344,18 @@ pub async fn get_dataset(
     .fetch_all(&state.pool)
     .await?;
 
+    let report_rows = sqlx::query(
+        r#"
+        SELECT id, name
+        FROM reports
+        WHERE dataset_id = $1
+        ORDER BY name, id
+        "#,
+    )
+    .bind(dataset_id)
+    .fetch_all(&state.pool)
+    .await?;
+
     Ok(Json(DatasetDefinition {
         id: dataset.try_get("id")?,
         name: dataset.try_get("name")?,
@@ -369,6 +388,15 @@ pub async fn get_dataset(
                     source_field_key: row.try_get("source_field_key")?,
                     field_type: row.try_get("field_type")?,
                     position: row.try_get("position")?,
+                })
+            })
+            .collect::<Result<Vec<_>, sqlx::Error>>()?,
+        reports: report_rows
+            .into_iter()
+            .map(|row| {
+                Ok(DatasetReportLink {
+                    id: row.try_get("id")?,
+                    name: row.try_get("name")?,
                 })
             })
             .collect::<Result<Vec<_>, sqlx::Error>>()?,

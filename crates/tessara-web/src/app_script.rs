@@ -799,6 +799,7 @@ pub const APPLICATION_SCRIPT: &str = r#"
             <p>${escapeHtml(payload.name)}</p>
             <p class="muted">${escapeHtml(payload.grain)} dataset with ${escapeHtml(payload.composition_mode)} composition</p>
             <p>${payload.sources.length} sources and ${payload.fields.length} fields</p>
+            <p>${payload.reports.length} reports use this dataset.</p>
             <button type="button" onclick="loadDatasetTableByValue('${escapeHtml(payload.id)}')">Run This Dataset</button>
           </article>
           ${payload.sources.map((source) => `
@@ -815,6 +816,14 @@ pub const APPLICATION_SCRIPT: &str = r#"
               <p class="muted">${escapeHtml(field.field_type)}</p>
             </article>
           `).join("")}
+          ${payload.reports.map((report) => `
+            <article class="card">
+              <h3>${escapeHtml(report.name)}</h3>
+              <p class="muted">Uses this dataset</p>
+              <button type="button" onclick="useReport('${escapeHtml(report.id)}', '${escapeHtml(report.name)}')">Use Report Context</button>
+              <button type="button" onclick="loadReportDefinition('${escapeHtml(report.id)}')">Open Linked Report</button>
+            </article>
+          `).join("") || '<p class="muted">No reports use this dataset yet.</p>'}
         `);
       }
 

@@ -1643,6 +1643,7 @@ pub const SCRIPT: &str = r#"
             <p>${escapeHtml(payload.name)}</p>
             <p class="muted">${escapeHtml(payload.slug)} · ${escapeHtml(payload.grain)} grain · ${escapeHtml(payload.composition_mode)} composition</p>
             <p>${payload.sources.length} sources, ${payload.fields.length} fields</p>
+            <p>${payload.reports.length} linked reports</p>
             <button type="button" onclick="renderDatasetDraft()">Review Draft Inputs</button>
           </article>
           ${payload.sources.map((source) => `
@@ -1661,6 +1662,14 @@ pub const SCRIPT: &str = r#"
               <button type="button" onclick="useDatasetField('${escapeHtml(field.key)}', '${escapeHtml(field.label)}', '${escapeHtml(field.source_alias)}', '${escapeHtml(field.source_field_key)}', '${escapeHtml(field.field_type)}')">Use Dataset Field</button>
             </article>
           `).join("")}
+          ${payload.reports.map((report) => `
+            <article class="card">
+              <h3>${escapeHtml(report.name)}</h3>
+              <p class="muted">Uses this dataset</p>
+              <button type="button" onclick="useReport('${escapeHtml(report.id)}', '${escapeHtml(report.name)}')">Use Report Context</button>
+              <button type="button" onclick="loadReportDefinition('${escapeHtml(report.id)}')">Open Linked Report</button>
+            </article>
+          `).join("") || '<p class="muted">No reports use this dataset yet.</p>'}
         `;
       }
 
