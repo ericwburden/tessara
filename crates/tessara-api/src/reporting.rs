@@ -84,6 +84,24 @@ pub struct AggregationSummary {
 }
 
 #[derive(Serialize)]
+pub struct AggregationDefinition {
+    id: Uuid,
+    name: String,
+    report_id: Uuid,
+    report_name: String,
+    group_by_logical_key: Option<String>,
+    metrics: Vec<AggregationMetricSummary>,
+}
+
+#[derive(Serialize)]
+pub struct AggregationMetricSummary {
+    metric_key: String,
+    source_logical_key: Option<String>,
+    metric_kind: String,
+    position: i32,
+}
+
+#[derive(Serialize)]
 pub struct AggregationResult {
     aggregation_id: Uuid,
     rows: Vec<AggregationResultRow>,
@@ -151,24 +169,63 @@ pub async fn create_aggregation(
     .fetch_one(&mut *tx)
     .await?;
 
-    for (position, metric) in payload.metrics.into_iter().enumerate() {
-        sqlx::query(
-            r#"
-            INSERT INTO aggregation_metrics
-                (aggregation_id, metric_key, source_logical_key, metric_kind, position)
-            VALUES ($1, $2, $3, $4, $5)
-            "#,
-        )
-        .bind(aggregation_id)
-        .bind(metric.metric_key)
-        .bind(metric.source_logical_key)
-        .bind(metric.metric_kind)
-        .bind(position as i32)
-        .execute(&mut *tx)
-        .await?;
-    }
+    insert_aggregation_metrics(&mut tx, aggregation_id, payload.metrics).await?;
 
     tx.commit().await?;
+
+    Ok(Json(IdResponse { id: aggregation_id }))
+}
+
+/// Updates an aggregation definition and replaces its metrics.
+pub async fn update_aggregation(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(aggregation_id): Path<Uuid>,
+    Json(payload): Json<CreateAggregationRequest>,
+) -> ApiResult<Json<IdResponse>> {
+    auth::require_capability(&state.pool, &headers, "aggregations:write").await?;
+    require_aggregation_exists(&state.pool, aggregation_id).await?;
+    require_text("aggregation name", &payload.name)?;
+    require_report_exists(&state.pool, payload.report_id).await?;
+    validate_aggregation_metrics(&payload.metrics)?;
+
+    let mut tx = state.pool.begin().await?;
+    sqlx::query(
+        r#"
+        UPDATE aggregations
+        SET name = $1, report_id = $2, group_by_logical_key = $3
+        WHERE id = $4
+        "#,
+    )
+    .bind(payload.name)
+    .bind(payload.report_id)
+    .bind(payload.group_by_logical_key)
+    .bind(aggregation_id)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query("DELETE FROM aggregation_metrics WHERE aggregation_id = $1")
+        .bind(aggregation_id)
+        .execute(&mut *tx)
+        .await?;
+    insert_aggregation_metrics(&mut tx, aggregation_id, payload.metrics).await?;
+    tx.commit().await?;
+
+    Ok(Json(IdResponse { id: aggregation_id }))
+}
+
+/// Deletes an aggregation definition.
+pub async fn delete_aggregation(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(aggregation_id): Path<Uuid>,
+) -> ApiResult<Json<IdResponse>> {
+    auth::require_capability(&state.pool, &headers, "aggregations:write").await?;
+    require_aggregation_exists(&state.pool, aggregation_id).await?;
+
+    sqlx::query("DELETE FROM aggregations WHERE id = $1")
+        .bind(aggregation_id)
+        .execute(&state.pool)
+        .await?;
 
     Ok(Json(IdResponse { id: aggregation_id }))
 }
@@ -215,6 +272,66 @@ pub async fn list_aggregations(
         .collect::<Result<Vec<_>, sqlx::Error>>()?;
 
     Ok(Json(aggregations))
+}
+
+/// Returns an aggregation definition with its configured metrics.
+pub async fn get_aggregation(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(aggregation_id): Path<Uuid>,
+) -> ApiResult<Json<AggregationDefinition>> {
+    auth::require_capability(&state.pool, &headers, "aggregations:read").await?;
+
+    let aggregation = sqlx::query(
+        r#"
+        SELECT
+            aggregations.id,
+            aggregations.name,
+            aggregations.report_id,
+            reports.name AS report_name,
+            aggregations.group_by_logical_key
+        FROM aggregations
+        JOIN reports ON reports.id = aggregations.report_id
+        WHERE aggregations.id = $1
+        "#,
+    )
+    .bind(aggregation_id)
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or_else(|| ApiError::NotFound(format!("aggregation {aggregation_id}")))?;
+
+    let metric_rows = sqlx::query(
+        r#"
+        SELECT metric_key, source_logical_key, metric_kind, position
+        FROM aggregation_metrics
+        WHERE aggregation_id = $1
+        ORDER BY position, metric_key
+        "#,
+    )
+    .bind(aggregation_id)
+    .fetch_all(&state.pool)
+    .await?;
+
+    let metrics = metric_rows
+        .into_iter()
+        .map(|row| {
+            Ok(AggregationMetricSummary {
+                metric_key: row.try_get("metric_key")?,
+                source_logical_key: row.try_get("source_logical_key")?,
+                metric_kind: row.try_get("metric_kind")?,
+                position: row.try_get("position")?,
+            })
+        })
+        .collect::<Result<Vec<_>, sqlx::Error>>()?;
+
+    Ok(Json(AggregationDefinition {
+        id: aggregation.try_get("id")?,
+        name: aggregation.try_get("name")?,
+        report_id: aggregation.try_get("report_id")?,
+        report_name: aggregation.try_get("report_name")?,
+        group_by_logical_key: aggregation.try_get("group_by_logical_key")?,
+        metrics,
+    }))
 }
 
 /// Runs an aggregation over report result rows.
@@ -730,6 +847,44 @@ async fn finalize_report_rows(source_rows: Vec<PgRow>) -> ApiResult<Vec<ReportTa
     }
 
     Ok(rows)
+}
+
+async fn insert_aggregation_metrics(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    aggregation_id: Uuid,
+    metrics: Vec<CreateAggregationMetricRequest>,
+) -> ApiResult<()> {
+    for (position, metric) in metrics.into_iter().enumerate() {
+        sqlx::query(
+            r#"
+            INSERT INTO aggregation_metrics
+                (aggregation_id, metric_key, source_logical_key, metric_kind, position)
+            VALUES ($1, $2, $3, $4, $5)
+            "#,
+        )
+        .bind(aggregation_id)
+        .bind(metric.metric_key)
+        .bind(metric.source_logical_key)
+        .bind(metric.metric_kind)
+        .bind(position as i32)
+        .execute(&mut **tx)
+        .await?;
+    }
+
+    Ok(())
+}
+
+async fn require_aggregation_exists(pool: &sqlx::PgPool, aggregation_id: Uuid) -> ApiResult<()> {
+    let exists: bool =
+        sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM aggregations WHERE id = $1)")
+            .bind(aggregation_id)
+            .fetch_one(pool)
+            .await?;
+    if exists {
+        Ok(())
+    } else {
+        Err(ApiError::NotFound(format!("aggregation {aggregation_id}")))
+    }
 }
 
 fn validate_aggregation_metrics(metrics: &[CreateAggregationMetricRequest]) -> ApiResult<()> {

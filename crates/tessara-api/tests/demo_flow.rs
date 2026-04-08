@@ -836,6 +836,51 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
             .any(|aggregation| aggregation["id"] == aggregation_id
                 && aggregation["metric_count"] == 2)
     );
+    let aggregation_definition = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/aggregations/{aggregation_id}"),
+            &token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(aggregation_definition["name"], "Participants Aggregation");
+    assert!(
+        aggregation_definition["metrics"]
+            .as_array()
+            .expect("aggregation definition should include metrics")
+            .iter()
+            .any(|metric| metric["metric_key"] == "participants_total"
+                && metric["metric_kind"] == "sum")
+    );
+    request_json(
+        app.clone(),
+        authorized_request(
+            "PUT",
+            &format!("/api/admin/aggregations/{aggregation_id}"),
+            &token,
+            Some(json!({
+                "name": "Updated Participants Aggregation",
+                "report_id": report_id,
+                "group_by_logical_key": null,
+                "metrics": [
+                    {
+                        "metric_key": "responses",
+                        "source_logical_key": null,
+                        "metric_kind": "count"
+                    },
+                    {
+                        "metric_key": "participants_total",
+                        "source_logical_key": "participants",
+                        "metric_kind": "sum"
+                    }
+                ]
+            })),
+        ),
+    )
+    .await;
     let aggregation_table = request_json(
         app.clone(),
         authorized_request(
@@ -920,7 +965,7 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
             .iter()
             .any(|chart| chart["id"] == aggregation_chart_id
                 && chart["aggregation_id"] == aggregation_id
-                && chart["aggregation_name"] == "Participants Aggregation"
+                && chart["aggregation_name"] == "Updated Participants Aggregation"
                 && chart["aggregation_report_name"] == "Participants Report"
                 && chart["aggregation_url"]
                     .as_str()
@@ -972,10 +1017,10 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
             .iter()
             .any(|component| component["chart"]["id"] == aggregation_chart_id
                 && component["chart"]["aggregation_id"] == aggregation_id
-                && component["chart"]["aggregation_name"] == "Participants Aggregation")
+                && component["chart"]["aggregation_name"] == "Updated Participants Aggregation")
     );
     let dashboards = request_json(
-        app,
+        app.clone(),
         Request::builder()
             .method("GET")
             .uri("/api/dashboards")
@@ -990,6 +1035,42 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
             .iter()
             .any(|dashboard| dashboard["id"] == dashboard_id)
     );
+
+    let disposable_aggregation = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/aggregations",
+            &token,
+            Some(json!({
+                "name": "Disposable Aggregation",
+                "report_id": dataset_report_id,
+                "group_by_logical_key": null,
+                "metrics": [
+                    {
+                        "metric_key": "responses",
+                        "source_logical_key": null,
+                        "metric_kind": "count"
+                    }
+                ]
+            })),
+        ),
+    )
+    .await;
+    let disposable_aggregation_id = disposable_aggregation["id"]
+        .as_str()
+        .expect("disposable aggregation response should contain id");
+    let deleted_aggregation = request_json(
+        app,
+        authorized_request(
+            "DELETE",
+            &format!("/api/admin/aggregations/{disposable_aggregation_id}"),
+            &token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(deleted_aggregation["id"], disposable_aggregation_id);
 }
 
 #[tokio::test]

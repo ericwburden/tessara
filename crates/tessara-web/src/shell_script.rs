@@ -1757,6 +1757,52 @@ pub const SCRIPT: &str = r#"
         }
       }
 
+      async function updateAggregation() {
+        try {
+          if (!token) await login();
+          const aggregationId = inputValue("aggregation-id");
+          const reportId = inputValue("report-id");
+          if (!aggregationId) throw new Error("Select or enter an aggregation ID first.");
+          if (!reportId) throw new Error("Select or enter a report ID first.");
+          const metricKind = inputValue("aggregation-metric-kind") || "sum";
+          const sourceLogicalKey = inputValue("aggregation-source-logical-key");
+          const payload = await request(`/api/admin/aggregations/${aggregationId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: inputValue("aggregation-name") || "Aggregation",
+              report_id: reportId,
+              group_by_logical_key: inputValue("aggregation-group-by-logical-key") || null,
+              metrics: [{
+                metric_key: inputValue("aggregation-metric-key") || "value",
+                source_logical_key: metricKind === "count" ? null : sourceLogicalKey || null,
+                metric_kind: metricKind
+              }]
+            })
+          });
+          show(payload);
+          await loadAggregationDefinitionByValue(aggregationId);
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function deleteAggregation() {
+        try {
+          if (!token) await login();
+          const aggregationId = inputValue("aggregation-id");
+          if (!aggregationId) throw new Error("Select or enter an aggregation ID first.");
+          const payload = await request(`/api/admin/aggregations/${aggregationId}`, {
+            method: "DELETE"
+          });
+          setInput("aggregation-id", "");
+          show(payload);
+          await loadAggregations();
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
       function useAggregation(aggregationId, aggregationName = aggregationId, reportId = "", reportName = reportId) {
         selectRecord("aggregation", aggregationName, aggregationId, {
           "aggregation-id": aggregationId,
@@ -1779,6 +1825,7 @@ pub const SCRIPT: &str = r#"
               <p>${aggregation.metric_count} metrics</p>
               <p class="muted">Report ${escapeHtml(aggregation.report_name || aggregation.report_id)}${aggregation.group_by_logical_key ? ` grouped by ${escapeHtml(aggregation.group_by_logical_key)}` : ""}</p>
               <button type="button" onclick="useAggregation('${escapeHtml(aggregation.id)}', '${escapeHtml(aggregation.name)}', '${escapeHtml(aggregation.report_id)}', '${escapeHtml(aggregation.report_name)}')">Use Aggregation</button>
+              <button type="button" onclick="loadAggregationDefinitionByValue('${escapeHtml(aggregation.id)}')">Inspect Aggregation</button>
               <button type="button" onclick="loadAggregationByValue('${escapeHtml(aggregation.id)}')">Run Aggregation</button>
               <code>${escapeHtml(aggregation.id)}</code>
             </article>
@@ -1786,6 +1833,48 @@ pub const SCRIPT: &str = r#"
         } catch (error) {
           show(error.message);
         }
+      }
+
+      async function loadAggregationDefinitionById() {
+        try {
+          const aggregationId = inputValue("aggregation-id");
+          if (!aggregationId) throw new Error("Enter or select an aggregation ID first.");
+          await loadAggregationDefinitionByValue(aggregationId);
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function loadAggregationDefinitionByValue(aggregationId) {
+        if (!token) await login();
+        const payload = await request(`/api/aggregations/${aggregationId}`);
+        setInput("aggregation-id", payload.id);
+        setInput("aggregation-name", payload.name);
+        setInput("report-id", payload.report_id);
+        setInput("aggregation-group-by-logical-key", payload.group_by_logical_key || "");
+        if (payload.metrics?.length) {
+          const metric = payload.metrics[0];
+          setInput("aggregation-metric-key", metric.metric_key || "");
+          setInput("aggregation-source-logical-key", metric.source_logical_key || "");
+          setInput("aggregation-metric-kind", metric.metric_kind || "");
+        }
+        useAggregation(payload.id, payload.name, payload.report_id, payload.report_name);
+        show(payload);
+        document.getElementById("screen").innerHTML = `
+          <article class="card">
+            <h3>Aggregation Definition</h3>
+            <p>${escapeHtml(payload.name)}</p>
+            <p class="muted">Report ${escapeHtml(payload.report_name)}</p>
+            <p>${payload.metrics.length} metrics</p>
+            <button type="button" onclick="loadAggregationByValue('${escapeHtml(payload.id)}')">Run This Aggregation</button>
+          </article>
+          ${payload.metrics.map((metric) => `
+            <article class="card">
+              <h3>${escapeHtml(metric.metric_key)}</h3>
+              <p>${escapeHtml(metric.metric_kind)}${metric.source_logical_key ? ` from ${escapeHtml(metric.source_logical_key)}` : ""}</p>
+            </article>
+          `).join("") || '<p class="muted">No aggregation metrics configured.</p>'}
+        `;
       }
 
       async function loadAggregationById() {

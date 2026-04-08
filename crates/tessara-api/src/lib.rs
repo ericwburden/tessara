@@ -184,6 +184,14 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/api/aggregations", get(reporting::list_aggregations))
         .route(
+            "/api/admin/aggregations/{aggregation_id}",
+            put(reporting::update_aggregation).delete(reporting::delete_aggregation),
+        )
+        .route(
+            "/api/aggregations/{aggregation_id}",
+            get(reporting::get_aggregation),
+        )
+        .route(
             "/api/aggregations/{aggregation_id}/table",
             get(reporting::run_aggregation),
         )

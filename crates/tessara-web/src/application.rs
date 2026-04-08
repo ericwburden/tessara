@@ -371,6 +371,7 @@ fn ReportRunnerScreen() -> impl IntoView {
                 <button type="button" onclick="refreshAnalyticsAndRunReport()">"Refresh and Run Report"</button>
                 <button type="button" onclick="loadReportById()">"Run Report"</button>
                 <button type="button" onclick="loadAggregations()">"Choose Aggregation"</button>
+                <button type="button" onclick="loadAggregationDefinitionById()">"Inspect Aggregation"</button>
                 <button type="button" onclick="loadAggregationById()">"Run Aggregation"</button>
             </div>
         </section>
@@ -669,6 +670,9 @@ fn ReportAdminScreen() -> impl IntoView {
                 <button type="button" onclick="loadReportById()">"Run Report"</button>
                 <button type="button" onclick="createAggregation()">"Create Aggregation"</button>
                 <button type="button" onclick="loadAggregations()">"Load Aggregations"</button>
+                <button type="button" onclick="loadAggregationDefinitionById()">"Inspect Aggregation"</button>
+                <button type="button" onclick="updateAggregation()">"Update Aggregation"</button>
+                <button type="button" onclick="deleteAggregation()">"Remove Aggregation"</button>
                 <button type="button" onclick="loadAggregationById()">"Run Aggregation"</button>
                 <button type="button" onclick="createChart()">"Create Chart"</button>
                 <button type="button" onclick="updateChart()">"Update Chart"</button>

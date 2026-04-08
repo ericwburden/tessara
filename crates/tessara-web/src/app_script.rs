@@ -834,12 +834,47 @@ pub const APPLICATION_SCRIPT: &str = r#"
               <p>${aggregation.metric_count} metrics</p>
               <p class="muted">Report ${escapeHtml(aggregation.report_name || aggregation.report_id)}${aggregation.group_by_logical_key ? ` grouped by ${escapeHtml(aggregation.group_by_logical_key)}` : ""}</p>
               <button type="button" onclick="useAggregation('${escapeHtml(aggregation.id)}', '${escapeHtml(aggregation.name)}', '${escapeHtml(aggregation.report_id)}', '${escapeHtml(aggregation.report_name)}')">Use Aggregation</button>
+              <button type="button" onclick="loadAggregationDefinitionByValue('${escapeHtml(aggregation.id)}')">Inspect Aggregation</button>
               <button type="button" onclick="loadAggregationByValue('${escapeHtml(aggregation.id)}')">Run Aggregation</button>
             </article>
           `);
         } catch (error) {
           show(error.message);
         }
+      }
+
+      async function loadAggregationDefinitionById() {
+        try {
+          const aggregationId = inputValue("aggregation-id");
+          if (!aggregationId) throw new Error("Enter or select an aggregation ID first.");
+          await loadAggregationDefinitionByValue(aggregationId);
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function loadAggregationDefinitionByValue(aggregationId) {
+        if (!token) await login();
+        const payload = await request(`/api/aggregations/${aggregationId}`);
+        setInput("aggregation-id", payload.id);
+        setInput("report-id", payload.report_id);
+        useAggregation(payload.id, payload.name, payload.report_id, payload.report_name);
+        show(payload);
+        setScreen(`
+          <article class="card">
+            <h3>Aggregation Definition</h3>
+            <p>${escapeHtml(payload.name)}</p>
+            <p class="muted">Report ${escapeHtml(payload.report_name)}</p>
+            <p>${payload.metrics.length} metrics</p>
+            <button type="button" onclick="loadAggregationByValue('${escapeHtml(payload.id)}')">Run This Aggregation</button>
+          </article>
+          ${payload.metrics.map((metric) => `
+            <article class="card">
+              <h3>${escapeHtml(metric.metric_key)}</h3>
+              <p>${escapeHtml(metric.metric_kind)}${metric.source_logical_key ? ` from ${escapeHtml(metric.source_logical_key)}` : ""}</p>
+            </article>
+          `).join("") || '<p class="muted">No aggregation metrics configured.</p>'}
+        `);
       }
 
       async function loadAggregationById() {

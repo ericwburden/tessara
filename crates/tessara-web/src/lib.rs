@@ -250,6 +250,16 @@ mod tests {
         assert!(html.contains("Run Dataset"));
         assert!(html.contains("/api/admin/datasets"));
         assert!(html.contains("/api/datasets"));
+        assert!(html.contains("Aggregation name"));
+        assert!(html.contains("Create Aggregation"));
+        assert!(html.contains("Load Aggregations"));
+        assert!(html.contains("Inspect Aggregation"));
+        assert!(html.contains("Update Aggregation"));
+        assert!(html.contains("Remove Aggregation"));
+        assert!(html.contains("/api/admin/aggregations"));
+        assert!(html.contains("/api/admin/aggregations/${aggregationId}"));
+        assert!(html.contains("/api/aggregations/${aggregationId}"));
+        assert!(html.contains("/api/aggregations/${aggregationId}/table"));
         assert!(html.contains("Create Node Type"));
         assert!(html.contains("Update Node Type"));
         assert!(html.contains("Edit Node Type"));
@@ -339,6 +349,9 @@ mod tests {
         assert!(html.contains("Inspect Report"));
         assert!(html.contains("Run Report"));
         assert!(html.contains("Refresh and Run Report"));
+        assert!(html.contains("Choose Aggregation"));
+        assert!(html.contains("Inspect Aggregation"));
+        assert!(html.contains("Run Aggregation"));
         assert!(html.contains("Choose Dashboard"));
         assert!(html.contains("Open Dashboard"));
         assert!(html.contains("Refresh and Open Dashboard"));
