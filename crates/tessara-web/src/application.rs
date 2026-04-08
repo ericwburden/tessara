@@ -271,6 +271,7 @@ fn MigrationApplicationShell() -> impl IntoView {
                     <SelectionContext/>
                 </aside>
                 <section class="panel app-main">
+                    <MigrationHomeScreen/>
                     <FixtureScreen/>
                     <section id="result-screen" class="app-screen">
                         <h2>"Validation Results"</h2>
@@ -706,6 +707,119 @@ fn ReportingHomeScreen() -> impl IntoView {
             <h2>"Reporting Directory"</h2>
             <p class="muted">
                 "These entry points start to replace workbench-only reporting flows with clearer entity lists inside the application shell."
+            </p>
+            <div class="directory-grid">
+                {directory_cards
+                    .into_iter()
+                    .map(|(title, description, action, label)| {
+                        view! {
+                            <article class="directory-card">
+                                <h3>{title}</h3>
+                                <p>{description}</p>
+                                <button type="button" onclick=action>{label}</button>
+                            </article>
+                        }
+                    })
+                    .collect_view()}
+            </div>
+        </section>
+    }
+}
+
+#[component]
+fn MigrationHomeScreen() -> impl IntoView {
+    let management_cards = [
+        (
+            "Fixture Intake",
+            "Load bundled fixtures or paste fixture JSON to start a migration rehearsal.",
+            "#fixture-screen",
+            "Open Fixture Intake",
+            "loadLegacyFixtureExamples()",
+            "Load Fixture Examples",
+        ),
+        (
+            "Validation",
+            "Run validation before import so mapping and value problems are visible early.",
+            "#fixture-screen",
+            "Open Validation",
+            "validateLegacyFixture()",
+            "Validate Fixture",
+        ),
+        (
+            "Dry Run",
+            "Preview what the import would create before mutating the local rehearsal database.",
+            "#fixture-screen",
+            "Open Dry Run",
+            "dryRunLegacyFixture()",
+            "Dry-Run Fixture",
+        ),
+        (
+            "Import",
+            "Run the import rehearsal and inspect the resulting entities through the app shell.",
+            "#result-screen",
+            "Open Import Results",
+            "importLegacyFixture()",
+            "Import Fixture",
+        ),
+    ];
+
+    let directory_cards = [
+        (
+            "Fixture Examples",
+            "Load bundled fixtures",
+            "loadLegacyFixtureExamples()",
+            "Open",
+        ),
+        (
+            "Validation Results",
+            "Run validation now",
+            "validateLegacyFixture()",
+            "Open",
+        ),
+        (
+            "Dry Runs",
+            "Run a dry-run rehearsal",
+            "dryRunLegacyFixture()",
+            "Open",
+        ),
+        (
+            "Imports",
+            "Run import rehearsal",
+            "importLegacyFixture()",
+            "Open",
+        ),
+    ];
+
+    view! {
+        <section id="migration-home-screen" class="app-screen">
+            <p class="eyebrow">"Migration Home"</p>
+            <h2>"Migration Stages"</h2>
+            <p class="muted">
+                "Use this operator landing section to move through fixture intake, validation, dry run, and import without relying on a single workbench panel."
+            </p>
+            <div class="management-grid">
+                {management_cards
+                    .into_iter()
+                    .map(|(title, description, href, href_label, action, action_label)| {
+                        view! {
+                            <article class="home-card">
+                                <h3>{title}</h3>
+                                <p>{description}</p>
+                                <div class="actions">
+                                    <a class="button-link" href=href>{href_label}</a>
+                                    <button type="button" onclick=action>{action_label}</button>
+                                </div>
+                            </article>
+                        }
+                    })
+                    .collect_view()}
+            </div>
+        </section>
+        <section class="app-screen">
+            <p class="eyebrow">"Migration Home"</p>
+            <h2>"Migration Directory"</h2>
+            <p class="muted">
+                "These entry points keep the migration workflow operator-focused while still fitting inside the shared application shell."
             </p>
             <div class="directory-grid">
                 {directory_cards

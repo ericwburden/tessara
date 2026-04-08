@@ -147,7 +147,7 @@ try {
         throw "Expected reporting application shell HTML to include report and dashboard workflow controls"
     }
     $migrationAppShell = Invoke-RestMethod -Uri "$baseUrl/app/migration" -TimeoutSec 30
-    if (-not ($migrationAppShell -like "*Migration Workbench*") -or -not ($migrationAppShell -like "*Legacy Fixture Validation*") -or -not ($migrationAppShell -like "*Load Fixture Examples*") -or -not ($migrationAppShell -like "*Import Fixture*")) {
+    if (-not ($migrationAppShell -like "*Migration Workbench*") -or -not ($migrationAppShell -like "*Migration Stages*") -or -not ($migrationAppShell -like "*Migration Directory*") -or -not ($migrationAppShell -like "*Legacy Fixture Validation*") -or -not ($migrationAppShell -like "*Load Fixture Examples*") -or -not ($migrationAppShell -like "*Import Fixture*")) {
         throw "Expected migration application shell HTML to include fixture workflow controls"
     }
 

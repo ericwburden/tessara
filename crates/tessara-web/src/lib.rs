@@ -384,6 +384,16 @@ mod tests {
         assert!(html.contains("Migration Workbench"));
         assert!(html.contains("/app"));
         assert!(html.contains("/app/submissions"));
+        assert!(html.contains("Migration Stages"));
+        assert!(html.contains("Migration Directory"));
+        assert!(html.contains("Open Fixture Intake"));
+        assert!(html.contains("Open Validation"));
+        assert!(html.contains("Open Dry Run"));
+        assert!(html.contains("Open Import Results"));
+        assert!(html.contains("Fixture Examples"));
+        assert!(html.contains("Validation Results"));
+        assert!(html.contains("Dry Runs"));
+        assert!(html.contains("Imports"));
         assert!(html.contains("Legacy Fixture Validation"));
         assert!(html.contains("Load Fixture Examples"));
         assert!(html.contains("Validate Fixture"));
