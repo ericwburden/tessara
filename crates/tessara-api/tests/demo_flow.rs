@@ -2942,6 +2942,61 @@ async fn join_mode_datasets_merge_selected_source_rows_by_node() {
                 && row["source_alias"] == "join")
     );
 
+    let joined_aggregation = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/aggregations",
+            &token,
+            Some(json!({
+                "name": "Joined Activity Aggregation",
+                "report_id": joined_report_id,
+                "group_by_logical_key": null,
+                "metrics": [
+                    {
+                        "metric_key": "responses",
+                        "source_logical_key": null,
+                        "metric_kind": "count"
+                    },
+                    {
+                        "metric_key": "participants_total",
+                        "source_logical_key": "participant_count",
+                        "metric_kind": "sum"
+                    },
+                    {
+                        "metric_key": "attendees_total",
+                        "source_logical_key": "attendee_count",
+                        "metric_kind": "sum"
+                    }
+                ]
+            })),
+        ),
+    )
+    .await;
+    let joined_aggregation_id = id_from(&joined_aggregation);
+    let joined_aggregation_rows = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/aggregations/{joined_aggregation_id}/table"),
+            &token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(
+        joined_aggregation_rows["rows"][0]["metrics"]["responses"],
+        1.0
+    );
+    assert_eq!(
+        joined_aggregation_rows["rows"][0]["metrics"]["participants_total"],
+        42.0
+    );
+    assert_eq!(
+        joined_aggregation_rows["rows"][0]["metrics"]["attendees_total"],
+        7.0
+    );
+
     let invalid_join_dataset = request_json(
         app.clone(),
         authorized_request(
