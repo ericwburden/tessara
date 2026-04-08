@@ -109,6 +109,18 @@ pub struct FormSummary {
 }
 
 #[derive(Serialize)]
+pub struct FormDefinition {
+    id: Uuid,
+    name: String,
+    slug: String,
+    scope_node_type_id: Option<Uuid>,
+    scope_node_type_name: Option<String>,
+    versions: Vec<FormVersionSummary>,
+    reports: Vec<FormReportLink>,
+    dataset_sources: Vec<FormDatasetSourceLink>,
+}
+
+#[derive(Serialize)]
 pub struct FormVersionSummary {
     id: Uuid,
     version_label: String,
@@ -117,6 +129,20 @@ pub struct FormVersionSummary {
     compatibility_group_name: Option<String>,
     published_at: Option<chrono::DateTime<chrono::Utc>>,
     field_count: i64,
+}
+
+#[derive(Serialize)]
+pub struct FormReportLink {
+    id: Uuid,
+    name: String,
+}
+
+#[derive(Serialize)]
+pub struct FormDatasetSourceLink {
+    dataset_id: Uuid,
+    dataset_name: String,
+    source_alias: String,
+    selection_rule: String,
 }
 
 #[derive(Serialize)]
@@ -267,6 +293,134 @@ pub async fn list_forms(
     }
 
     Ok(Json(forms))
+}
+
+/// Returns a form definition with versions plus downstream reporting links.
+pub async fn get_form(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(form_id): Path<Uuid>,
+) -> ApiResult<Json<FormDefinition>> {
+    auth::require_capability(&state.pool, &headers, "forms:write").await?;
+
+    let form = sqlx::query(
+        r#"
+        SELECT forms.id, forms.name, forms.slug, forms.scope_node_type_id, node_types.name AS scope_node_type_name
+        FROM forms
+        LEFT JOIN node_types ON node_types.id = forms.scope_node_type_id
+        WHERE forms.id = $1
+        "#,
+    )
+    .bind(form_id)
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or_else(|| ApiError::NotFound(format!("form {form_id}")))?;
+
+    let version_rows = sqlx::query(
+        r#"
+        SELECT
+            form_versions.id,
+            form_versions.version_label,
+            form_versions.status::text AS status,
+            form_versions.compatibility_group_id,
+            compatibility_groups.name AS compatibility_group_name,
+            form_versions.published_at,
+            COUNT(form_fields.id) AS field_count
+        FROM form_versions
+        LEFT JOIN compatibility_groups
+            ON compatibility_groups.id = form_versions.compatibility_group_id
+        LEFT JOIN form_fields ON form_fields.form_version_id = form_versions.id
+        WHERE form_versions.form_id = $1
+        GROUP BY
+            form_versions.id,
+            form_versions.version_label,
+            form_versions.status,
+            form_versions.compatibility_group_id,
+            compatibility_groups.name,
+            form_versions.published_at,
+            form_versions.created_at
+        ORDER BY form_versions.created_at, form_versions.version_label
+        "#,
+    )
+    .bind(form_id)
+    .fetch_all(&state.pool)
+    .await?;
+
+    let versions = version_rows
+        .into_iter()
+        .map(|version| {
+            Ok(FormVersionSummary {
+                id: version.try_get("id")?,
+                version_label: version.try_get("version_label")?,
+                status: version.try_get("status")?,
+                compatibility_group_id: version.try_get("compatibility_group_id")?,
+                compatibility_group_name: version.try_get("compatibility_group_name")?,
+                published_at: version.try_get("published_at")?,
+                field_count: version.try_get("field_count")?,
+            })
+        })
+        .collect::<Result<Vec<_>, sqlx::Error>>()?;
+
+    let reports = sqlx::query(
+        r#"
+        SELECT id, name
+        FROM reports
+        WHERE form_id = $1
+        ORDER BY name, id
+        "#,
+    )
+    .bind(form_id)
+    .fetch_all(&state.pool)
+    .await?
+    .into_iter()
+    .map(|row| {
+        Ok(FormReportLink {
+            id: row.try_get("id")?,
+            name: row.try_get("name")?,
+        })
+    })
+    .collect::<Result<Vec<_>, sqlx::Error>>()?;
+
+    let dataset_sources = sqlx::query(
+        r#"
+        SELECT
+            datasets.id AS dataset_id,
+            datasets.name AS dataset_name,
+            dataset_sources.source_alias,
+            dataset_sources.selection_rule::text AS selection_rule
+        FROM dataset_sources
+        JOIN datasets ON datasets.id = dataset_sources.dataset_id
+        LEFT JOIN compatibility_groups
+            ON compatibility_groups.id = dataset_sources.compatibility_group_id
+        WHERE dataset_sources.form_id = $1
+           OR compatibility_groups.form_id = $1
+        ORDER BY datasets.name, dataset_sources.position, dataset_sources.source_alias
+        "#,
+    )
+    .bind(form_id)
+    .fetch_all(&state.pool)
+    .await?
+    .into_iter()
+    .map(|row| {
+        Ok(FormDatasetSourceLink {
+            dataset_id: row.try_get("dataset_id")?,
+            dataset_name: row.try_get("dataset_name")?,
+            source_alias: row.try_get("source_alias")?,
+            selection_rule: row.try_get("selection_rule")?,
+        })
+    })
+    .collect::<Result<Vec<_>, sqlx::Error>>()?;
+
+    Ok(Json(FormDefinition {
+        id: form.try_get("id")?,
+        name: form.try_get("name")?,
+        slug: form.try_get("slug")?,
+        scope_node_type_id: form.try_get("scope_node_type_id")?,
+        scope_node_type_name: form.try_get("scope_node_type_name")?,
+        versions,
+        reports,
+        dataset_sources,
+    }))
 }
 
 /// Lists published form versions available for submission.

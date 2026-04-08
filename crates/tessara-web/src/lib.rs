@@ -353,7 +353,9 @@ mod tests {
         assert!(html.contains("Edit Node"));
         assert!(html.contains("Create Form"));
         assert!(html.contains("Update Form"));
+        assert!(html.contains("Inspect Form"));
         assert!(html.contains("Edit Form"));
+        assert!(html.contains("/api/admin/forms/${formId}"));
         assert!(html.contains("Create Basic Version"));
         assert!(html.contains("Remove Section"));
         assert!(html.contains("Update Field"));

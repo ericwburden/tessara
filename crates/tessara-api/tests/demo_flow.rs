@@ -186,6 +186,36 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
                 && form["versions"][0]["id"] == seed["form_version_id"]
                 && form["versions"][0]["status"] == "published")
     );
+    let form_definition = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!(
+                "/api/admin/forms/{}",
+                seed["form_id"]
+                    .as_str()
+                    .expect("seed should include form id")
+            ),
+            &token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(form_definition["name"], "Quarterly Check In");
+    assert!(
+        form_definition["versions"]
+            .as_array()
+            .expect("form definition should include versions")
+            .iter()
+            .any(|version| version["id"] == seed["form_version_id"])
+    );
+    assert!(
+        form_definition["reports"]
+            .as_array()
+            .expect("form definition should include linked reports")
+            .iter()
+            .any(|report| report["name"] == "Participants Report")
+    );
     let published_forms = request_json(
         app.clone(),
         Request::builder()

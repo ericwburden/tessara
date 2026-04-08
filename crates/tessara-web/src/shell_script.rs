@@ -648,6 +648,7 @@ pub const SCRIPT: &str = r#"
               <p>Scope: ${escapeHtml(form.scope_node_type_name || "Global")}</p>
               <p>${form.versions.length} versions</p>
               <button type="button" onclick="useForm('${escapeHtml(form.id)}', '${escapeHtml(form.name)}')">Use Form</button>
+              <button type="button" onclick="loadFormByValue('${escapeHtml(form.id)}')">Inspect Form</button>
               <button type="button" onclick="useFormForEditing('${escapeHtml(form.id)}', '${escapeHtml(form.name)}', '${escapeHtml(form.slug)}', '${escapeHtml(form.scope_node_type_id || "")}', '${escapeHtml(form.scope_node_type_name || "")}')">Edit Form</button>
               <ul>
                 ${form.versions.map((version) => `
@@ -665,6 +666,65 @@ pub const SCRIPT: &str = r#"
         } catch (error) {
           show(error.message);
         }
+      }
+
+      async function loadFormById() {
+        try {
+          const formId = inputValue("form-id");
+          if (!formId) throw new Error("Enter or select a form ID first.");
+          await loadFormByValue(formId);
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function loadFormByValue(formId) {
+        if (!token) await login();
+        const payload = await request(`/api/admin/forms/${formId}`);
+        useFormForEditing(
+          payload.id,
+          payload.name,
+          payload.slug,
+          payload.scope_node_type_id || "",
+          payload.scope_node_type_name || ""
+        );
+        show(payload);
+        document.getElementById("screen").innerHTML = `
+          <article class="card">
+            <h3>Form Definition</h3>
+            <p>${escapeHtml(payload.name)}</p>
+            <p class="muted">${escapeHtml(payload.slug)}</p>
+            <p>Scope: ${escapeHtml(payload.scope_node_type_name || "Global")}</p>
+            <p>${payload.versions.length} versions, ${payload.reports.length} linked reports, ${payload.dataset_sources.length} dataset sources</p>
+            <button type="button" onclick="useForm('${escapeHtml(payload.id)}', '${escapeHtml(payload.name)}')">Use Form</button>
+            <button type="button" onclick="useFormForEditing('${escapeHtml(payload.id)}', '${escapeHtml(payload.name)}', '${escapeHtml(payload.slug)}', '${escapeHtml(payload.scope_node_type_id || "")}', '${escapeHtml(payload.scope_node_type_name || "")}')">Edit Form</button>
+          </article>
+          ${payload.versions.map((version) => `
+            <article class="card">
+              <h3>${escapeHtml(version.version_label)}</h3>
+              <p>${escapeHtml(version.status)} with ${version.field_count} fields</p>
+              <button type="button" onclick="useFormVersion('${escapeHtml(version.id)}', '${escapeHtml(payload.id)}', '${escapeHtml(payload.name)} ${escapeHtml(version.version_label)}')">Use Version</button>
+              <button type="button" onclick="renderForm('${escapeHtml(version.id)}')">Preview Version</button>
+              ${version.compatibility_group_id ? `<button type="button" onclick="useCompatibilityGroup('${escapeHtml(version.compatibility_group_id)}', '${escapeHtml(version.compatibility_group_name || version.compatibility_group_id)}')">Use Compatibility Group</button>` : ""}
+            </article>
+          `).join("") || '<p class="muted">No versions exist yet.</p>'}
+          ${payload.reports.map((report) => `
+            <article class="card">
+              <h3>${escapeHtml(report.name)}</h3>
+              <p class="muted">Linked report</p>
+              <button type="button" onclick="useReport('${escapeHtml(report.id)}', '${escapeHtml(report.name)}')">Use Report Context</button>
+              <button type="button" onclick="loadReportDefinition('${escapeHtml(report.id)}')">Open Linked Report</button>
+            </article>
+          `).join("") || '<p class="muted">No reports use this form yet.</p>'}
+          ${payload.dataset_sources.map((datasetSource) => `
+            <article class="card">
+              <h3>${escapeHtml(datasetSource.dataset_name)}</h3>
+              <p>Source ${escapeHtml(datasetSource.source_alias)} with ${escapeHtml(datasetSource.selection_rule)}</p>
+              <button type="button" onclick="useDataset('${escapeHtml(datasetSource.dataset_id)}', '${escapeHtml(datasetSource.dataset_name)}')">Use Dataset</button>
+              <button type="button" onclick="loadDatasetByValue('${escapeHtml(datasetSource.dataset_id)}')">Open Linked Dataset</button>
+            </article>
+          `).join("") || '<p class="muted">No datasets source from this form yet.</p>'}
+        `;
       }
 
       function useForm(formId, formName = formId) {
