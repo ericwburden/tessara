@@ -566,7 +566,14 @@ pub async fn run_report(
                AND dataset_fields.key = report_field_bindings.source_field_key
                AND dataset_fields.source_alias = dataset_sources.source_alias
             JOIN analytics.form_version_dim
-                ON form_version_dim.form_id = dataset_sources.form_id
+                ON (
+                    dataset_sources.form_id IS NOT NULL
+                    AND form_version_dim.form_id = dataset_sources.form_id
+                )
+                OR (
+                    dataset_sources.compatibility_group_id IS NOT NULL
+                    AND form_version_dim.compatibility_group_id = dataset_sources.compatibility_group_id
+                )
             JOIN analytics.submission_fact
                 ON submission_fact.form_version_id = form_version_dim.form_version_id
             JOIN analytics.node_dim
@@ -575,8 +582,6 @@ pub async fn run_report(
                 ON submission_value_fact.submission_id = submission_fact.submission_id
                AND submission_value_fact.field_key = dataset_fields.source_field_key
             WHERE reports.id = $1
-              AND dataset_sources.form_id IS NOT NULL
-              AND dataset_sources.compatibility_group_id IS NULL
               AND dataset_sources.selection_rule = 'all'
               AND submission_fact.status = 'submitted'
               AND (
@@ -925,8 +930,10 @@ async fn assert_report_dataset_is_executable(
         SELECT
             COUNT(*) AS source_count,
             COUNT(*) FILTER (
-                WHERE form_id IS NOT NULL
-                  AND compatibility_group_id IS NULL
+                WHERE (
+                    (form_id IS NOT NULL AND compatibility_group_id IS NULL)
+                    OR (form_id IS NULL AND compatibility_group_id IS NOT NULL)
+                )
                   AND selection_rule = 'all'
             ) AS executable_source_count
         FROM dataset_sources
@@ -941,7 +948,7 @@ async fn assert_report_dataset_is_executable(
         Ok(())
     } else {
         Err(ApiError::BadRequest(
-            "dataset-backed reports currently require one form source with all records".into(),
+            "dataset-backed reports currently require one form or compatibility-group source with all records".into(),
         ))
     }
 }

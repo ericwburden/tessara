@@ -599,6 +599,7 @@ pub const SCRIPT: &str = r#"
                     ${escapeHtml(version.version_label)}:
                     ${escapeHtml(version.status)}
                     <button type="button" onclick="useFormVersion('${escapeHtml(version.id)}', '${escapeHtml(form.id)}', '${escapeHtml(form.name)} ${escapeHtml(version.version_label)}')">Use Version</button>
+                    ${version.compatibility_group_id ? `<button type="button" onclick="useCompatibilityGroup('${escapeHtml(version.compatibility_group_id)}', '${escapeHtml(version.compatibility_group_name || version.compatibility_group_id)}')">Use Compatibility Group</button>` : ""}
                     <button type="button" onclick="renderForm('${escapeHtml(version.id)}')">Render</button>
                   </li>
                 `).join("")}
@@ -634,6 +635,13 @@ pub const SCRIPT: &str = r#"
           "form-version-id": formVersionId,
           "form-id": formId,
           "dataset-form-id": formId
+        });
+      }
+
+      function useCompatibilityGroup(compatibilityGroupId, label = compatibilityGroupId) {
+        selectRecord("compatibility group", label, compatibilityGroupId, {
+          "dataset-form-id": "",
+          "dataset-compatibility-group-id": compatibilityGroupId
         });
       }
 

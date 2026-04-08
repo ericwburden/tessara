@@ -413,6 +413,57 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
         dataset_table["rows"][0]["values"]["participant_count"],
         "42"
     );
+    let compatibility_group_id = forms
+        .as_array()
+        .expect("forms response should be an array")
+        .iter()
+        .find(|form| form["id"] == seed["form_id"])
+        .and_then(|form| form["versions"][0]["compatibility_group_id"].as_str())
+        .expect("seeded form version should expose a compatibility group id");
+    let compatibility_dataset = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/datasets",
+            &token,
+            Some(json!({
+                "name": "Quarterly Compatibility Dataset",
+                "slug": "quarterly-compatibility-dataset",
+                "grain": "submission",
+                "sources": [{
+                    "source_alias": "check_in",
+                    "form_id": null,
+                    "compatibility_group_id": compatibility_group_id,
+                    "selection_rule": "all"
+                }],
+                "fields": [{
+                    "key": "participant_count",
+                    "label": "Participant Count",
+                    "source_alias": "check_in",
+                    "source_field_key": "participants",
+                    "position": 0
+                }]
+            })),
+        ),
+    )
+    .await;
+    let compatibility_dataset_id = compatibility_dataset["id"]
+        .as_str()
+        .expect("compatibility dataset response should contain id");
+    let compatibility_dataset_table = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/datasets/{compatibility_dataset_id}/table"),
+            &token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(
+        compatibility_dataset_table["rows"][0]["values"]["participant_count"],
+        "42"
+    );
     let dataset_report = request_json(
         app.clone(),
         authorized_request(

@@ -113,6 +113,8 @@ pub struct FormVersionSummary {
     id: Uuid,
     version_label: String,
     status: String,
+    compatibility_group_id: Option<Uuid>,
+    compatibility_group_name: Option<String>,
     published_at: Option<chrono::DateTime<chrono::Utc>>,
     field_count: i64,
 }
@@ -212,15 +214,21 @@ pub async fn list_forms(
             form_versions.form_id,
             form_versions.version_label,
             form_versions.status::text AS status,
+            form_versions.compatibility_group_id,
+            compatibility_groups.name AS compatibility_group_name,
             form_versions.published_at,
             COUNT(form_fields.id) AS field_count
         FROM form_versions
+        LEFT JOIN compatibility_groups
+            ON compatibility_groups.id = form_versions.compatibility_group_id
         LEFT JOIN form_fields ON form_fields.form_version_id = form_versions.id
         GROUP BY
             form_versions.id,
             form_versions.form_id,
             form_versions.version_label,
             form_versions.status,
+            form_versions.compatibility_group_id,
+            compatibility_groups.name,
             form_versions.published_at,
             form_versions.created_at
         ORDER BY form_versions.created_at, form_versions.version_label
@@ -240,6 +248,8 @@ pub async fn list_forms(
                     id: version.try_get("id")?,
                     version_label: version.try_get("version_label")?,
                     status: version.try_get("status")?,
+                    compatibility_group_id: version.try_get("compatibility_group_id")?,
+                    compatibility_group_name: version.try_get("compatibility_group_name")?,
                     published_at: version.try_get("published_at")?,
                     field_count: version.try_get("field_count")?,
                 });

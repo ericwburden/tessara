@@ -254,6 +254,7 @@ mod tests {
         assert!(html.contains("Update Node Type"));
         assert!(html.contains("Edit Node Type"));
         assert!(html.contains("Use Form Scope"));
+        assert!(html.contains("Use Compatibility Group"));
         assert!(html.contains("Use Metadata Target"));
         assert!(html.contains("Use Node Type As Form Scope"));
         assert!(html.contains("Use Node Type As Metadata Target"));

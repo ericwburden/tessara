@@ -109,7 +109,8 @@ struct ValidatedDatasetSource {
 
 struct ExecutableDataset {
     source_alias: String,
-    form_id: Uuid,
+    form_id: Option<Uuid>,
+    compatibility_group_id: Option<Uuid>,
 }
 
 struct ValidatedDatasetField {
@@ -317,7 +318,10 @@ pub async fn run_dataset_table(
         LEFT JOIN analytics.submission_value_fact
             ON submission_value_fact.submission_id = submission_fact.submission_id
            AND submission_value_fact.field_key = dataset_fields.source_field_key
-        WHERE form_version_dim.form_id = $3
+        WHERE (
+            ($3::uuid IS NOT NULL AND form_version_dim.form_id = $3)
+            OR ($4::uuid IS NOT NULL AND form_version_dim.compatibility_group_id = $4)
+        )
           AND submission_fact.status = 'submitted'
         ORDER BY submission_fact.submission_id, dataset_fields.position, dataset_fields.key
         "#,
@@ -325,6 +329,7 @@ pub async fn run_dataset_table(
     .bind(dataset_id)
     .bind(&dataset.source_alias)
     .bind(dataset.form_id)
+    .bind(dataset.compatibility_group_id)
     .fetch_all(&state.pool)
     .await?;
 
@@ -572,17 +577,18 @@ async fn require_executable_single_form_dataset(
     let compatibility_group_id: Option<Uuid> = source.try_get("compatibility_group_id")?;
     let selection_rule: String = source.try_get("selection_rule")?;
 
-    if compatibility_group_id.is_some() || selection_rule != DatasetSelectionRule::All.as_str() {
+    if selection_rule != DatasetSelectionRule::All.as_str() {
         return Err(ApiError::BadRequest(
-            "dataset table execution currently supports only form sources with all records".into(),
+            "dataset table execution currently supports only sources with all records".into(),
         ));
     }
 
-    let Some(form_id) = form_id else {
+    if form_id.is_none() && compatibility_group_id.is_none() {
         return Err(ApiError::BadRequest(
-            "dataset table execution currently requires a form source".into(),
+            "dataset table execution currently requires a form or compatibility-group source"
+                .into(),
         ));
-    };
+    }
 
     let field_count: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM dataset_fields WHERE dataset_id = $1")
@@ -599,6 +605,7 @@ async fn require_executable_single_form_dataset(
     Ok(ExecutableDataset {
         source_alias: source.try_get("source_alias")?,
         form_id,
+        compatibility_group_id,
     })
 }
 
