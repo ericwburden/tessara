@@ -973,6 +973,7 @@ pub const SCRIPT: &str = r#"
               <button type="button" onclick="useTargetNode('${escapeHtml(node.id)}', '${escapeHtml(node.name)}')">Use Target</button>
               <button type="button" onclick="useTargetNodeAndContinue('${escapeHtml(node.id)}', '${escapeHtml(node.name)}')">Use Target and Continue</button>
               <button type="button" onclick="useParentNode('${escapeHtml(node.id)}', '${escapeHtml(node.name)}')">Use Parent</button>
+              <button type="button" onclick="useNodeForEditing('${escapeHtml(node.id)}', '${escapeHtml(node.name)}', '${escapeHtml(node.parent_node_id || "")}', '${escapeHtml(node.node_type_id)}', '${escapeHtml(node.node_type_name)}', '${escapeHtml(jsStringArg(JSON.stringify(node.metadata)))}')">Edit Node</button>
               <button type="button" onclick="useNodeType('${escapeHtml(node.node_type_id)}', '${escapeHtml(node.node_type_name)}')">Use Node Type</button>
               <code>${escapeHtml(node.id)}</code>
             </article>
@@ -980,6 +981,17 @@ pub const SCRIPT: &str = r#"
         } catch (error) {
           show(error.message);
         }
+      }
+
+      function useNodeForEditing(nodeId, nodeName, parentNodeId, nodeTypeId, nodeTypeName, metadataJson) {
+        selectRecord("node for editing", nodeName, nodeId, {
+          "node-id": nodeId,
+          "node-name": nodeName,
+          "parent-node-id": parentNodeId,
+          "node-type-id": nodeTypeId,
+          "node-metadata-json": metadataJson
+        });
+        useNodeType(nodeTypeId, nodeTypeName);
       }
 
       function useTargetNode(nodeId, nodeName = nodeId) {

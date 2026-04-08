@@ -183,6 +183,7 @@ const HIERARCHY_ACTIONS: &[Action] = &[
     Action::new("updateMetadataField()", "Update Metadata Field"),
     Action::new("createNode()", "Create Node"),
     Action::new("updateNode()", "Update Node"),
+    Action::new("loadNodes()", "Choose Node To Edit"),
 ];
 
 const FORM_INPUTS: &[TextInput] = &[

@@ -250,6 +250,8 @@ mod tests {
         assert!(html.contains("Remove Relationship"));
         assert!(html.contains("Update Metadata Field"));
         assert!(html.contains("Update Node"));
+        assert!(html.contains("Choose Node To Edit"));
+        assert!(html.contains("Edit Node"));
         assert!(html.contains("Create Form"));
         assert!(html.contains("Create Basic Version"));
         assert!(html.contains("Remove Section"));

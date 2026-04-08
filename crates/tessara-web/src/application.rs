@@ -543,6 +543,7 @@ fn HierarchyAdminScreen() -> impl IntoView {
                 <button type="button" onclick="loadNodes()">"Load Nodes"</button>
                 <button type="button" onclick="createNode()">"Create Node"</button>
                 <button type="button" onclick="updateNode()">"Update Node"</button>
+                <button type="button" onclick="loadNodes()">"Choose Node To Edit"</button>
             </div>
         </section>
     }
