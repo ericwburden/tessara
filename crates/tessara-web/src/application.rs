@@ -135,6 +135,24 @@ struct ActionSpec {
     label: &'static str,
 }
 
+#[derive(Copy, Clone)]
+struct ManagementCardSpec {
+    title: &'static str,
+    description: &'static str,
+    href: &'static str,
+    href_label: &'static str,
+    action: &'static str,
+    action_label: &'static str,
+}
+
+#[derive(Copy, Clone)]
+struct DirectoryCardSpec {
+    title: &'static str,
+    description: &'static str,
+    action: &'static str,
+    label: &'static str,
+}
+
 const HOME_ACTIONS: &[ActionSpec] = &[
     ActionSpec {
         handler: "login()",
@@ -545,6 +563,82 @@ fn AreaSidebar(active_route: &'static str, show_create_shortcuts: bool) -> impl 
 }
 
 #[component]
+fn ScreenSection(
+    eyebrow: &'static str,
+    title: &'static str,
+    description: &'static str,
+    children: Children,
+) -> impl IntoView {
+    view! {
+        <section class="app-screen">
+            <p class="eyebrow">{eyebrow}</p>
+            <h2>{title}</h2>
+            <p class="muted">{description}</p>
+            {children()}
+        </section>
+    }
+}
+
+#[component]
+fn ManagementCardsSection(
+    eyebrow: &'static str,
+    title: &'static str,
+    description: &'static str,
+    cards: Vec<ManagementCardSpec>,
+) -> impl IntoView {
+    view! {
+        <ScreenSection eyebrow=eyebrow title=title description=description>
+            <div class="management-grid">
+                {cards
+                    .into_iter()
+                    .map(|card| {
+                        view! {
+                            <article class="home-card">
+                                <h3>{card.title}</h3>
+                                <p>{card.description}</p>
+                                <div class="actions">
+                                    <a class="button-link" href=card.href>{card.href_label}</a>
+                                    <button type="button" onclick=card.action>
+                                        {card.action_label}
+                                    </button>
+                                </div>
+                            </article>
+                        }
+                    })
+                    .collect_view()}
+            </div>
+        </ScreenSection>
+    }
+}
+
+#[component]
+fn DirectoryCardsSection(
+    eyebrow: &'static str,
+    title: &'static str,
+    description: &'static str,
+    cards: Vec<DirectoryCardSpec>,
+) -> impl IntoView {
+    view! {
+        <ScreenSection eyebrow=eyebrow title=title description=description>
+            <div class="directory-grid">
+                {cards
+                    .into_iter()
+                    .map(|card| {
+                        view! {
+                            <article class="directory-card">
+                                <h3>{card.title}</h3>
+                                <p>{card.description}</p>
+                                <button type="button" onclick=card.action>{card.label}</button>
+                            </article>
+                        }
+                    })
+                    .collect_view()}
+            </div>
+        </ScreenSection>
+    }
+}
+
+#[component]
 fn SelectionContext() -> impl IntoView {
     view! {
         <section class="selection-panel">
@@ -765,372 +859,290 @@ fn HomeScreen() -> impl IntoView {
 #[component]
 fn OrganizationHomeScreen() -> impl IntoView {
     let management_cards = [
-        (
-            "Browse Nodes",
-            "Load the current runtime nodes and move through the operational hierarchy.",
-            "#hierarchy-admin-screen",
-            "Open Organization Tasks",
-            "loadNodes()",
-            "Load Nodes",
-        ),
-        (
-            "Inspect Node Types",
-            "Review the configured hierarchy structure and labels behind the organization area.",
-            "#hierarchy-admin-screen",
-            "Open Structure",
-            "loadNodeTypes()",
-            "Load Node Types",
-        ),
-        (
-            "Open Forms",
-            "Move from organization browsing into the scoped forms area.",
-            "/app/forms",
-            "Open Forms",
-            "loadForms()",
-            "Load Forms",
-        ),
-        (
-            "Open Dashboards",
-            "Move from organization browsing into current dashboard viewing surfaces.",
-            "/app/dashboards",
-            "Open Dashboards",
-            "loadDashboards()",
-            "Load Dashboards",
-        ),
+        ManagementCardSpec {
+            title: "Browse Nodes",
+            description: "Load the current runtime nodes and move through the operational hierarchy.",
+            href: "#hierarchy-admin-screen",
+            href_label: "Open Organization Tasks",
+            action: "loadNodes()",
+            action_label: "Load Nodes",
+        },
+        ManagementCardSpec {
+            title: "Inspect Node Types",
+            description: "Review the configured hierarchy structure and labels behind the organization area.",
+            href: "#hierarchy-admin-screen",
+            href_label: "Open Structure",
+            action: "loadNodeTypes()",
+            action_label: "Load Node Types",
+        },
+        ManagementCardSpec {
+            title: "Open Forms",
+            description: "Move from organization browsing into the scoped forms area.",
+            href: "/app/forms",
+            href_label: "Open Forms",
+            action: "loadForms()",
+            action_label: "Load Forms",
+        },
+        ManagementCardSpec {
+            title: "Open Dashboards",
+            description: "Move from organization browsing into current dashboard viewing surfaces.",
+            href: "/app/dashboards",
+            href_label: "Open Dashboards",
+            action: "loadDashboards()",
+            action_label: "Load Dashboards",
+        },
     ];
 
     view! {
-        <section id="organization-home-screen" class="app-screen">
-            <p class="eyebrow">"Organization Home"</p>
-            <h2>"Organization Areas"</h2>
-            <p class="muted">
-                "This route is the structural bridge from the legacy partner/program model into Tessara's configurable hierarchy."
-            </p>
-            <div class="management-grid">
-                {management_cards
-                    .into_iter()
-                    .map(|(title, description, href, href_label, action, action_label)| {
-                        view! {
-                            <article class="home-card">
-                                <h3>{title}</h3>
-                                <p>{description}</p>
-                                <div class="actions">
-                                    <a class="button-link" href=href>{href_label}</a>
-                                    <button type="button" onclick=action>{action_label}</button>
-                                </div>
-                            </article>
-                        }
-                    })
-                    .collect_view()}
-            </div>
-        </section>
+        <ManagementCardsSection
+            eyebrow="Organization Home"
+            title="Organization Areas"
+            description="This route is the structural bridge from the legacy partner/program model into Tessara's configurable hierarchy."
+            cards=management_cards.to_vec()
+        />
     }
 }
 
 #[component]
 fn FormsHomeScreen() -> impl IntoView {
     let management_cards = [
-        (
-            "Browse Forms",
-            "Open the current forms directory and inspect configured forms and versions.",
-            "#form-admin-screen",
-            "Open Form Tasks",
-            "loadForms()",
-            "Load Forms",
-        ),
-        (
-            "Published Response Path",
-            "Move into the response workflow for published form completion and review.",
-            "/app/responses",
-            "Open Responses",
-            "loadForms()",
-            "Load Forms",
-        ),
-        (
-            "Open Organization",
-            "Return to the organization area for scoped navigation into forms.",
-            "/app/organization",
-            "Open Organization",
-            "loadNodeTypes()",
-            "Load Node Types",
-        ),
-        (
-            "Open Administration",
-            "Use the internal configuration surface for full hierarchy and reporting setup.",
-            "/app/administration",
-            "Open Administration",
-            "loadForms()",
-            "Load Forms",
-        ),
+        ManagementCardSpec {
+            title: "Browse Forms",
+            description: "Open the current forms directory and inspect configured forms and versions.",
+            href: "#form-admin-screen",
+            href_label: "Open Form Tasks",
+            action: "loadForms()",
+            action_label: "Load Forms",
+        },
+        ManagementCardSpec {
+            title: "Published Response Path",
+            description: "Move into the response workflow for published form completion and review.",
+            href: "/app/responses",
+            href_label: "Open Responses",
+            action: "loadForms()",
+            action_label: "Load Forms",
+        },
+        ManagementCardSpec {
+            title: "Open Organization",
+            description: "Return to the organization area for scoped navigation into forms.",
+            href: "/app/organization",
+            href_label: "Open Organization",
+            action: "loadNodeTypes()",
+            action_label: "Load Node Types",
+        },
+        ManagementCardSpec {
+            title: "Open Administration",
+            description: "Use the internal configuration surface for full hierarchy and reporting setup.",
+            href: "/app/administration",
+            href_label: "Open Administration",
+            action: "loadForms()",
+            action_label: "Load Forms",
+        },
     ];
 
     view! {
-        <section id="forms-home-screen" class="app-screen">
-            <p class="eyebrow">"Forms Home"</p>
-            <h2>"Forms Areas"</h2>
-            <p class="muted">
-                "This route is the product-facing entry into form discovery, version awareness, and supported form lifecycle tasks."
-            </p>
-            <div class="management-grid">
-                {management_cards
-                    .into_iter()
-                    .map(|(title, description, href, href_label, action, action_label)| {
-                        view! {
-                            <article class="home-card">
-                                <h3>{title}</h3>
-                                <p>{description}</p>
-                                <div class="actions">
-                                    <a class="button-link" href=href>{href_label}</a>
-                                    <button type="button" onclick=action>{action_label}</button>
-                                </div>
-                            </article>
-                        }
-                    })
-                    .collect_view()}
-            </div>
-        </section>
+        <ManagementCardsSection
+            eyebrow="Forms Home"
+            title="Forms Areas"
+            description="This route is the product-facing entry into form discovery, version awareness, and supported form lifecycle tasks."
+            cards=management_cards.to_vec()
+        />
     }
 }
 
 #[component]
 fn AdminHomeScreen() -> impl IntoView {
     let management_cards = [
-        (
-            "Hierarchy",
-            "Manage node types, relationships, metadata fields, and runtime nodes.",
-            "#hierarchy-admin-screen",
-            "Open Hierarchy Setup",
-            "loadNodeTypes()",
-            "Load Node Types",
-        ),
-        (
-            "Forms",
-            "Create forms, draft versions, edit sections and fields, and publish revisions.",
-            "#form-admin-screen",
-            "Open Form Builder",
-            "loadForms()",
-            "Load Forms",
-        ),
-        (
-            "Datasets and Reports",
-            "Manage datasets, reports, and aggregations inside the reporting stack.",
-            "#report-admin-screen",
-            "Open Reporting Builder",
-            "loadDatasets()",
-            "Load Datasets",
-        ),
-        (
-            "Dashboards",
-            "Inspect charts, dashboards, and current preview outputs from one admin route.",
-            "#report-admin-screen",
-            "Open Dashboard Builder",
-            "loadDashboards()",
-            "Load Dashboards",
-        ),
+        ManagementCardSpec {
+            title: "Hierarchy",
+            description: "Manage node types, relationships, metadata fields, and runtime nodes.",
+            href: "#hierarchy-admin-screen",
+            href_label: "Open Hierarchy Setup",
+            action: "loadNodeTypes()",
+            action_label: "Load Node Types",
+        },
+        ManagementCardSpec {
+            title: "Forms",
+            description: "Create forms, draft versions, edit sections and fields, and publish revisions.",
+            href: "#form-admin-screen",
+            href_label: "Open Form Builder",
+            action: "loadForms()",
+            action_label: "Load Forms",
+        },
+        ManagementCardSpec {
+            title: "Datasets and Reports",
+            description: "Manage datasets, reports, and aggregations inside the reporting stack.",
+            href: "#report-admin-screen",
+            href_label: "Open Reporting Builder",
+            action: "loadDatasets()",
+            action_label: "Load Datasets",
+        },
+        ManagementCardSpec {
+            title: "Dashboards",
+            description: "Inspect charts, dashboards, and current preview outputs from one admin route.",
+            href: "#report-admin-screen",
+            href_label: "Open Dashboard Builder",
+            action: "loadDashboards()",
+            action_label: "Load Dashboards",
+        },
     ];
 
     let directory_cards = [
-        (
-            "Node Types",
-            "Browse hierarchy types",
-            "loadNodeTypes()",
-            "Open",
-        ),
-        ("Nodes", "Browse runtime nodes", "loadNodes()", "Open"),
-        ("Forms", "Browse forms and versions", "loadForms()", "Open"),
-        (
-            "Datasets",
-            "Browse dataset definitions",
-            "loadDatasets()",
-            "Open",
-        ),
-        (
-            "Reports",
-            "Browse report definitions",
-            "loadReports()",
-            "Open",
-        ),
-        (
-            "Aggregations",
-            "Browse aggregation definitions",
-            "loadAggregations()",
-            "Open",
-        ),
-        ("Charts", "Browse charts", "loadCharts()", "Open"),
-        (
-            "Dashboards",
-            "Browse dashboards",
-            "loadDashboards()",
-            "Open",
-        ),
+        DirectoryCardSpec {
+            title: "Node Types",
+            description: "Browse hierarchy types",
+            action: "loadNodeTypes()",
+            label: "Open",
+        },
+        DirectoryCardSpec {
+            title: "Nodes",
+            description: "Browse runtime nodes",
+            action: "loadNodes()",
+            label: "Open",
+        },
+        DirectoryCardSpec {
+            title: "Forms",
+            description: "Browse forms and versions",
+            action: "loadForms()",
+            label: "Open",
+        },
+        DirectoryCardSpec {
+            title: "Datasets",
+            description: "Browse dataset definitions",
+            action: "loadDatasets()",
+            label: "Open",
+        },
+        DirectoryCardSpec {
+            title: "Reports",
+            description: "Browse report definitions",
+            action: "loadReports()",
+            label: "Open",
+        },
+        DirectoryCardSpec {
+            title: "Aggregations",
+            description: "Browse aggregation definitions",
+            action: "loadAggregations()",
+            label: "Open",
+        },
+        DirectoryCardSpec {
+            title: "Charts",
+            description: "Browse charts",
+            action: "loadCharts()",
+            label: "Open",
+        },
+        DirectoryCardSpec {
+            title: "Dashboards",
+            description: "Browse dashboards",
+            action: "loadDashboards()",
+            label: "Open",
+        },
     ];
 
     view! {
-        <section id="admin-home-screen" class="app-screen">
-            <p class="eyebrow">"Admin Home"</p>
-            <h2>"Management Areas"</h2>
-            <p class="muted">
-                "Use this admin landing section to jump into the main management areas before dropping into the detailed builder screens."
-            </p>
-            <div class="management-grid">
-                {management_cards
-                    .into_iter()
-                    .map(|(title, description, href, href_label, action, action_label)| {
-                        view! {
-                            <article class="home-card">
-                                <h3>{title}</h3>
-                                <p>{description}</p>
-                                <div class="actions">
-                                    <a class="button-link" href=href>{href_label}</a>
-                                    <button type="button" onclick=action>{action_label}</button>
-                                </div>
-                            </article>
-                        }
-                    })
-                    .collect_view()}
-            </div>
-        </section>
-        <section class="app-screen">
-            <p class="eyebrow">"Admin Home"</p>
-            <h2>"Entity Directory"</h2>
-            <p class="muted">
-                "These entry points mirror the original application's core management lists while keeping the current Tessara builder controls underneath."
-            </p>
-            <div class="directory-grid">
-                {directory_cards
-                    .into_iter()
-                    .map(|(title, description, action, label)| {
-                        view! {
-                            <article class="directory-card">
-                                <h3>{title}</h3>
-                                <p>{description}</p>
-                                <button type="button" onclick=action>{label}</button>
-                            </article>
-                        }
-                    })
-                    .collect_view()}
-            </div>
-        </section>
+        <ManagementCardsSection
+            eyebrow="Admin Home"
+            title="Management Areas"
+            description="Use this admin landing section to jump into the main management areas before dropping into the detailed builder screens."
+            cards=management_cards.to_vec()
+        />
+        <DirectoryCardsSection
+            eyebrow="Admin Home"
+            title="Entity Directory"
+            description="These entry points mirror the original application's core management lists while keeping the current Tessara builder controls underneath."
+            cards=directory_cards.to_vec()
+        />
     }
 }
 
 #[component]
 fn SubmissionHomeScreen() -> impl IntoView {
     let management_cards = [
-        (
-            "Start a Response",
-            "Choose a published form and target node, then open the form for draft entry.",
-            "#submission-screen",
-            "Open Response Entry",
-            "loadPublishedForms()",
-            "Load Published Forms",
-        ),
-        (
-            "Choose a Target",
-            "Browse nodes and carry the selected target directly into the response flow.",
-            "#submission-screen",
-            "Open Target Selection",
-            "loadNodes()",
-            "Load Target Nodes",
-        ),
-        (
-            "Review Responses",
-            "Browse draft and submitted responses, then reopen the selected submission in context.",
-            "#review-screen",
-            "Open Response Review",
-            "loadSubmissions()",
-            "Load Submissions",
-        ),
-        (
-            "Open Related Reports",
-            "Jump from the submission route into supporting report output while reviewing responses.",
-            "#report-screen",
-            "Open Related Reports",
-            "loadReports()",
-            "Load Reports",
-        ),
+        ManagementCardSpec {
+            title: "Start a Response",
+            description: "Choose a published form and target node, then open the form for draft entry.",
+            href: "#submission-screen",
+            href_label: "Open Response Entry",
+            action: "loadPublishedForms()",
+            action_label: "Load Published Forms",
+        },
+        ManagementCardSpec {
+            title: "Choose a Target",
+            description: "Browse nodes and carry the selected target directly into the response flow.",
+            href: "#submission-screen",
+            href_label: "Open Target Selection",
+            action: "loadNodes()",
+            action_label: "Load Target Nodes",
+        },
+        ManagementCardSpec {
+            title: "Review Responses",
+            description: "Browse draft and submitted responses, then reopen the selected submission in context.",
+            href: "#review-screen",
+            href_label: "Open Response Review",
+            action: "loadSubmissions()",
+            action_label: "Load Submissions",
+        },
+        ManagementCardSpec {
+            title: "Open Related Reports",
+            description: "Jump from the submission route into supporting report output while reviewing responses.",
+            href: "#report-screen",
+            href_label: "Open Related Reports",
+            action: "loadReports()",
+            action_label: "Load Reports",
+        },
     ];
 
     let directory_cards = [
-        (
-            "Published Forms",
-            "Browse current published forms",
-            "loadPublishedForms()",
-            "Open",
-        ),
-        (
-            "Target Nodes",
-            "Browse submission targets",
-            "loadNodes()",
-            "Open",
-        ),
-        (
-            "Draft Responses",
-            "Filter to draft submissions",
-            "showDraftSubmissions()",
-            "Open",
-        ),
-        (
-            "Submitted Responses",
-            "Filter to submitted responses",
-            "showSubmittedSubmissions()",
-            "Open",
-        ),
-        (
-            "All Responses",
-            "Browse the full response list",
-            "loadSubmissions()",
-            "Open",
-        ),
-        ("Reports", "Browse related reports", "loadReports()", "Open"),
+        DirectoryCardSpec {
+            title: "Published Forms",
+            description: "Browse current published forms",
+            action: "loadPublishedForms()",
+            label: "Open",
+        },
+        DirectoryCardSpec {
+            title: "Target Nodes",
+            description: "Browse submission targets",
+            action: "loadNodes()",
+            label: "Open",
+        },
+        DirectoryCardSpec {
+            title: "Draft Responses",
+            description: "Filter to draft submissions",
+            action: "showDraftSubmissions()",
+            label: "Open",
+        },
+        DirectoryCardSpec {
+            title: "Submitted Responses",
+            description: "Filter to submitted responses",
+            action: "showSubmittedSubmissions()",
+            label: "Open",
+        },
+        DirectoryCardSpec {
+            title: "All Responses",
+            description: "Browse the full response list",
+            action: "loadSubmissions()",
+            label: "Open",
+        },
+        DirectoryCardSpec {
+            title: "Reports",
+            description: "Browse related reports",
+            action: "loadReports()",
+            label: "Open",
+        },
     ];
 
     view! {
-        <section id="submission-home-screen" class="app-screen">
-            <p class="eyebrow">"Responses Home"</p>
-            <h2>"Response Stages"</h2>
-            <p class="muted">
-                "Use this route-level landing section to move between response entry, target selection, review, and related reporting without relying on one long stacked screen."
-            </p>
-            <div class="management-grid">
-                {management_cards
-                    .into_iter()
-                    .map(|(title, description, href, href_label, action, action_label)| {
-                        view! {
-                            <article class="home-card">
-                                <h3>{title}</h3>
-                                <p>{description}</p>
-                                <div class="actions">
-                                    <a class="button-link" href=href>{href_label}</a>
-                                    <button type="button" onclick=action>{action_label}</button>
-                                </div>
-                            </article>
-                        }
-                    })
-                    .collect_view()}
-            </div>
-        </section>
-        <section class="app-screen">
-            <p class="eyebrow">"Responses Home"</p>
-            <h2>"Response Directory"</h2>
-            <p class="muted">
-                "These entry points keep submissions aligned with the application shell by emphasizing common lists and review paths over raw-ID entry."
-            </p>
-            <div class="directory-grid">
-                {directory_cards
-                    .into_iter()
-                    .map(|(title, description, action, label)| {
-                        view! {
-                            <article class="directory-card">
-                                <h3>{title}</h3>
-                                <p>{description}</p>
-                                <button type="button" onclick=action>{label}</button>
-                            </article>
-                        }
-                    })
-                    .collect_view()}
-            </div>
-        </section>
+        <ManagementCardsSection
+            eyebrow="Responses Home"
+            title="Response Stages"
+            description="Use this route-level landing section to move between response entry, target selection, review, and related reporting without relying on one long stacked screen."
+            cards=management_cards.to_vec()
+        />
+        <DirectoryCardsSection
+            eyebrow="Responses Home"
+            title="Response Directory"
+            description="These entry points keep submissions aligned with the application shell by emphasizing common lists and review paths over raw-ID entry."
+            cards=directory_cards.to_vec()
+        />
     }
 }
 
@@ -1454,179 +1466,133 @@ fn OutputPanels() -> impl IntoView {
 #[component]
 fn ReportingHomeScreen() -> impl IntoView {
     let management_cards = [
-        (
-            "Datasets",
-            "Inspect dataset definitions and run source-aware dataset previews before binding reports.",
-            "#report-runner-screen",
-            "Open Dataset Workflows",
-            "loadDatasets()",
-            "Load Datasets",
-        ),
-        (
-            "Reports",
-            "Inspect report definitions, refresh analytics, and execute table-style outputs.",
-            "#report-runner-screen",
-            "Open Report Runner",
-            "loadReports()",
-            "Load Reports",
-        ),
-        (
-            "Aggregations",
-            "Review aggregation definitions and execute grouped metrics on current report outputs.",
-            "#report-runner-screen",
-            "Open Aggregations",
-            "loadAggregations()",
-            "Load Aggregations",
-        ),
-        (
-            "Dashboards",
-            "Preview charts and dashboards with current report or aggregation context.",
-            "#dashboard-preview-screen",
-            "Open Dashboard Preview",
-            "loadDashboards()",
-            "Load Dashboards",
-        ),
+        ManagementCardSpec {
+            title: "Datasets",
+            description: "Inspect dataset definitions and run source-aware dataset previews before binding reports.",
+            href: "#report-runner-screen",
+            href_label: "Open Dataset Workflows",
+            action: "loadDatasets()",
+            action_label: "Load Datasets",
+        },
+        ManagementCardSpec {
+            title: "Reports",
+            description: "Inspect report definitions, refresh analytics, and execute table-style outputs.",
+            href: "#report-runner-screen",
+            href_label: "Open Report Runner",
+            action: "loadReports()",
+            action_label: "Load Reports",
+        },
+        ManagementCardSpec {
+            title: "Aggregations",
+            description: "Review aggregation definitions and execute grouped metrics on current report outputs.",
+            href: "#report-runner-screen",
+            href_label: "Open Aggregations",
+            action: "loadAggregations()",
+            action_label: "Load Aggregations",
+        },
+        ManagementCardSpec {
+            title: "Dashboards",
+            description: "Preview charts and dashboards with current report or aggregation context.",
+            href: "#dashboard-preview-screen",
+            href_label: "Open Dashboard Preview",
+            action: "loadDashboards()",
+            action_label: "Load Dashboards",
+        },
     ];
 
     let directory_cards = [
-        (
-            "Datasets",
-            "Browse dataset definitions",
-            "loadDatasets()",
-            "Open",
-        ),
-        (
-            "Reports",
-            "Browse report definitions",
-            "loadReports()",
-            "Open",
-        ),
-        (
-            "Aggregations",
-            "Browse aggregation definitions",
-            "loadAggregations()",
-            "Open",
-        ),
-        ("Charts", "Browse charts", "loadCharts()", "Open"),
-        (
-            "Dashboards",
-            "Browse dashboards",
-            "loadDashboards()",
-            "Open",
-        ),
+        DirectoryCardSpec {
+            title: "Datasets",
+            description: "Browse dataset definitions",
+            action: "loadDatasets()",
+            label: "Open",
+        },
+        DirectoryCardSpec {
+            title: "Reports",
+            description: "Browse report definitions",
+            action: "loadReports()",
+            label: "Open",
+        },
+        DirectoryCardSpec {
+            title: "Aggregations",
+            description: "Browse aggregation definitions",
+            action: "loadAggregations()",
+            label: "Open",
+        },
+        DirectoryCardSpec {
+            title: "Charts",
+            description: "Browse charts",
+            action: "loadCharts()",
+            label: "Open",
+        },
+        DirectoryCardSpec {
+            title: "Dashboards",
+            description: "Browse dashboards",
+            action: "loadDashboards()",
+            label: "Open",
+        },
     ];
 
     view! {
-        <section id="reporting-home-screen" class="app-screen">
-            <p class="eyebrow">"Reports Home"</p>
-            <h2>"Report Areas"</h2>
-            <p class="muted">
-                "Use this reporting landing section to move between datasets, reports, aggregations, and dashboards without dropping immediately into builder-style controls."
-            </p>
-            <div class="management-grid">
-                {management_cards
-                    .into_iter()
-                    .map(|(title, description, href, href_label, action, action_label)| {
-                        view! {
-                            <article class="home-card">
-                                <h3>{title}</h3>
-                                <p>{description}</p>
-                                <div class="actions">
-                                    <a class="button-link" href=href>{href_label}</a>
-                                    <button type="button" onclick=action>{action_label}</button>
-                                </div>
-                            </article>
-                        }
-                    })
-                    .collect_view()}
-            </div>
-        </section>
-        <section class="app-screen">
-            <p class="eyebrow">"Reports Home"</p>
-            <h2>"Reporting Directory"</h2>
-            <p class="muted">
-                "These entry points start to replace workbench-only reporting flows with clearer entity lists inside the application shell."
-            </p>
-            <div class="directory-grid">
-                {directory_cards
-                    .into_iter()
-                    .map(|(title, description, action, label)| {
-                        view! {
-                            <article class="directory-card">
-                                <h3>{title}</h3>
-                                <p>{description}</p>
-                                <button type="button" onclick=action>{label}</button>
-                            </article>
-                        }
-                    })
-                    .collect_view()}
-            </div>
-        </section>
+        <ManagementCardsSection
+            eyebrow="Reports Home"
+            title="Report Areas"
+            description="Use this reporting landing section to move between datasets, reports, aggregations, and dashboards without dropping immediately into builder-style controls."
+            cards=management_cards.to_vec()
+        />
+        <DirectoryCardsSection
+            eyebrow="Reports Home"
+            title="Reporting Directory"
+            description="These entry points start to replace workbench-only reporting flows with clearer entity lists inside the application shell."
+            cards=directory_cards.to_vec()
+        />
     }
 }
 
 #[component]
 fn DashboardsHomeScreen() -> impl IntoView {
     let management_cards = [
-        (
-            "Open Dashboards",
-            "Browse dashboard surfaces and inspect current component previews.",
-            "#dashboard-preview-screen",
-            "Open Dashboard Viewer",
-            "loadDashboards()",
-            "Load Dashboards",
-        ),
-        (
-            "Open Charts",
-            "Inspect chart definitions that drive dashboard components.",
-            "#dashboard-preview-screen",
-            "Open Charts",
-            "loadCharts()",
-            "Load Charts",
-        ),
-        (
-            "Open Reports",
-            "Move into the reports area for related report and aggregation detail.",
-            "/app/reports",
-            "Open Reports",
-            "loadReports()",
-            "Load Reports",
-        ),
-        (
-            "Open Demo Dashboard",
-            "Jump directly into the seeded dashboard preview path.",
-            "#dashboard-preview-screen",
-            "Open Demo Preview",
-            "openDemoDashboard()",
-            "Open Demo Dashboard",
-        ),
+        ManagementCardSpec {
+            title: "Open Dashboards",
+            description: "Browse dashboard surfaces and inspect current component previews.",
+            href: "#dashboard-preview-screen",
+            href_label: "Open Dashboard Viewer",
+            action: "loadDashboards()",
+            action_label: "Load Dashboards",
+        },
+        ManagementCardSpec {
+            title: "Open Charts",
+            description: "Inspect chart definitions that drive dashboard components.",
+            href: "#dashboard-preview-screen",
+            href_label: "Open Charts",
+            action: "loadCharts()",
+            action_label: "Load Charts",
+        },
+        ManagementCardSpec {
+            title: "Open Reports",
+            description: "Move into the reports area for related report and aggregation detail.",
+            href: "/app/reports",
+            href_label: "Open Reports",
+            action: "loadReports()",
+            action_label: "Load Reports",
+        },
+        ManagementCardSpec {
+            title: "Open Demo Dashboard",
+            description: "Jump directly into the seeded dashboard preview path.",
+            href: "#dashboard-preview-screen",
+            href_label: "Open Demo Preview",
+            action: "openDemoDashboard()",
+            action_label: "Open Demo Dashboard",
+        },
     ];
 
     view! {
-        <section id="dashboards-home-screen" class="app-screen">
-            <p class="eyebrow">"Dashboards Home"</p>
-            <h2>"Dashboard Areas"</h2>
-            <p class="muted">
-                "This route separates dashboard viewing from the broader reporting route while still using the current supported preview path."
-            </p>
-            <div class="management-grid">
-                {management_cards
-                    .into_iter()
-                    .map(|(title, description, href, href_label, action, action_label)| {
-                        view! {
-                            <article class="home-card">
-                                <h3>{title}</h3>
-                                <p>{description}</p>
-                                <div class="actions">
-                                    <a class="button-link" href=href>{href_label}</a>
-                                    <button type="button" onclick=action>{action_label}</button>
-                                </div>
-                            </article>
-                        }
-                    })
-                    .collect_view()}
-            </div>
-        </section>
+        <ManagementCardsSection
+            eyebrow="Dashboards Home"
+            title="Dashboard Areas"
+            description="This route separates dashboard viewing from the broader reporting route while still using the current supported preview path."
+            cards=management_cards.to_vec()
+        />
     }
 }
 
@@ -1778,113 +1744,80 @@ fn DashboardsWorkspaceShell() -> impl IntoView {
 #[component]
 fn MigrationHomeScreen() -> impl IntoView {
     let management_cards = [
-        (
-            "Fixture Intake",
-            "Load bundled fixtures or paste fixture JSON to start a migration rehearsal.",
-            "#fixture-screen",
-            "Open Fixture Intake",
-            "loadLegacyFixtureExamples()",
-            "Load Fixture Examples",
-        ),
-        (
-            "Validation",
-            "Run validation before import so mapping and value problems are visible early.",
-            "#fixture-screen",
-            "Open Validation",
-            "validateLegacyFixture()",
-            "Validate Fixture",
-        ),
-        (
-            "Dry Run",
-            "Preview what the import would create before mutating the local rehearsal database.",
-            "#fixture-screen",
-            "Open Dry Run",
-            "dryRunLegacyFixture()",
-            "Dry-Run Fixture",
-        ),
-        (
-            "Import",
-            "Run the import rehearsal and inspect the resulting entities through the app shell.",
-            "#result-screen",
-            "Open Import Results",
-            "importLegacyFixture()",
-            "Import Fixture",
-        ),
+        ManagementCardSpec {
+            title: "Fixture Intake",
+            description: "Load bundled fixtures or paste fixture JSON to start a migration rehearsal.",
+            href: "#fixture-screen",
+            href_label: "Open Fixture Intake",
+            action: "loadLegacyFixtureExamples()",
+            action_label: "Load Fixture Examples",
+        },
+        ManagementCardSpec {
+            title: "Validation",
+            description: "Run validation before import so mapping and value problems are visible early.",
+            href: "#fixture-screen",
+            href_label: "Open Validation",
+            action: "validateLegacyFixture()",
+            action_label: "Validate Fixture",
+        },
+        ManagementCardSpec {
+            title: "Dry Run",
+            description: "Preview what the import would create before mutating the local rehearsal database.",
+            href: "#fixture-screen",
+            href_label: "Open Dry Run",
+            action: "dryRunLegacyFixture()",
+            action_label: "Dry-Run Fixture",
+        },
+        ManagementCardSpec {
+            title: "Import",
+            description: "Run the import rehearsal and inspect the resulting entities through the app shell.",
+            href: "#result-screen",
+            href_label: "Open Import Results",
+            action: "importLegacyFixture()",
+            action_label: "Import Fixture",
+        },
     ];
 
     let directory_cards = [
-        (
-            "Fixture Examples",
-            "Load bundled fixtures",
-            "loadLegacyFixtureExamples()",
-            "Open",
-        ),
-        (
-            "Validation Results",
-            "Run validation now",
-            "validateLegacyFixture()",
-            "Open",
-        ),
-        (
-            "Dry Runs",
-            "Run a dry-run rehearsal",
-            "dryRunLegacyFixture()",
-            "Open",
-        ),
-        (
-            "Imports",
-            "Run import rehearsal",
-            "importLegacyFixture()",
-            "Open",
-        ),
+        DirectoryCardSpec {
+            title: "Fixture Examples",
+            description: "Load bundled fixtures",
+            action: "loadLegacyFixtureExamples()",
+            label: "Open",
+        },
+        DirectoryCardSpec {
+            title: "Validation Results",
+            description: "Run validation now",
+            action: "validateLegacyFixture()",
+            label: "Open",
+        },
+        DirectoryCardSpec {
+            title: "Dry Runs",
+            description: "Run a dry-run rehearsal",
+            action: "dryRunLegacyFixture()",
+            label: "Open",
+        },
+        DirectoryCardSpec {
+            title: "Imports",
+            description: "Run import rehearsal",
+            action: "importLegacyFixture()",
+            label: "Open",
+        },
     ];
 
     view! {
-        <section id="migration-home-screen" class="app-screen">
-            <p class="eyebrow">"Migration Home"</p>
-            <h2>"Migration Stages"</h2>
-            <p class="muted">
-                "Use this operator landing section to move through fixture intake, validation, dry run, and import without relying on a single workbench panel."
-            </p>
-            <div class="management-grid">
-                {management_cards
-                    .into_iter()
-                    .map(|(title, description, href, href_label, action, action_label)| {
-                        view! {
-                            <article class="home-card">
-                                <h3>{title}</h3>
-                                <p>{description}</p>
-                                <div class="actions">
-                                    <a class="button-link" href=href>{href_label}</a>
-                                    <button type="button" onclick=action>{action_label}</button>
-                                </div>
-                            </article>
-                        }
-                    })
-                    .collect_view()}
-            </div>
-        </section>
-        <section class="app-screen">
-            <p class="eyebrow">"Migration Home"</p>
-            <h2>"Migration Directory"</h2>
-            <p class="muted">
-                "These entry points keep the migration workflow operator-focused while still fitting inside the shared application shell."
-            </p>
-            <div class="directory-grid">
-                {directory_cards
-                    .into_iter()
-                    .map(|(title, description, action, label)| {
-                        view! {
-                            <article class="directory-card">
-                                <h3>{title}</h3>
-                                <p>{description}</p>
-                                <button type="button" onclick=action>{label}</button>
-                            </article>
-                        }
-                    })
-                    .collect_view()}
-            </div>
-        </section>
+        <ManagementCardsSection
+            eyebrow="Migration Home"
+            title="Migration Stages"
+            description="Use this operator landing section to move through fixture intake, validation, dry run, and import without relying on a single workbench panel."
+            cards=management_cards.to_vec()
+        />
+        <DirectoryCardsSection
+            eyebrow="Migration Home"
+            title="Migration Directory"
+            description="These entry points keep the migration workflow operator-focused while still fitting inside the shared application shell."
+            cards=directory_cards.to_vec()
+        />
     }
 }
 
