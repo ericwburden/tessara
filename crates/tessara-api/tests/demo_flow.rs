@@ -44,7 +44,9 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
     .await;
     assert_eq!(app_summary["published_form_versions"], 1);
     assert_eq!(app_summary["submitted_submissions"], 1);
+    assert_eq!(app_summary["datasets"], 0);
     assert_eq!(app_summary["reports"], 1);
+    assert_eq!(app_summary["aggregations"], 0);
     assert_eq!(app_summary["dashboards"], 1);
     assert_eq!(app_summary["charts"], 1);
     let legacy_validation = request_json(

@@ -301,7 +301,9 @@ pub const SCRIPT: &str = r#"
             ["Published forms", payload.published_form_versions],
             ["Draft submissions", payload.draft_submissions],
             ["Submitted submissions", payload.submitted_submissions],
+            ["Datasets", payload.datasets],
             ["Reports", payload.reports],
+            ["Aggregations", payload.aggregations],
             ["Dashboards", payload.dashboards],
             ["Charts", payload.charts]
           ];

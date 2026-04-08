@@ -16,7 +16,9 @@ pub struct ApplicationSummary {
     published_form_versions: i64,
     draft_submissions: i64,
     submitted_submissions: i64,
+    datasets: i64,
     reports: i64,
+    aggregations: i64,
     dashboards: i64,
     charts: i64,
 }
@@ -34,7 +36,9 @@ pub async fn get_summary(
             (SELECT COUNT(*) FROM form_versions WHERE status = 'published') AS published_form_versions,
             (SELECT COUNT(*) FROM submissions WHERE status = 'draft') AS draft_submissions,
             (SELECT COUNT(*) FROM submissions WHERE status = 'submitted') AS submitted_submissions,
+            (SELECT COUNT(*) FROM datasets) AS datasets,
             (SELECT COUNT(*) FROM reports) AS reports,
+            (SELECT COUNT(*) FROM aggregations) AS aggregations,
             (SELECT COUNT(*) FROM dashboards) AS dashboards,
             (SELECT COUNT(*) FROM charts) AS charts
         "#,
@@ -46,7 +50,9 @@ pub async fn get_summary(
         published_form_versions: row.try_get("published_form_versions")?,
         draft_submissions: row.try_get("draft_submissions")?,
         submitted_submissions: row.try_get("submitted_submissions")?,
+        datasets: row.try_get("datasets")?,
         reports: row.try_get("reports")?,
+        aggregations: row.try_get("aggregations")?,
         dashboards: row.try_get("dashboards")?,
         charts: row.try_get("charts")?,
     }))
