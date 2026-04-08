@@ -260,6 +260,7 @@ mod tests {
         assert!(html.contains("Section position"));
         assert!(html.contains("Field position"));
         assert!(html.contains("Publish Version"));
+        assert!(html.contains("Publish and Preview Version"));
         assert!(html.contains("Add Binding"));
         assert!(html.contains("Update Report"));
         assert!(html.contains("Remove Report"));

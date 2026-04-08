@@ -588,6 +588,7 @@ fn FormAdminScreen() -> impl IntoView {
                 <button type="button" onclick="updateField()">"Update Field"</button>
                 <button type="button" onclick="deleteField()">"Remove Field"</button>
                 <button type="button" onclick="publishVersion()">"Publish Version"</button>
+                <button type="button" onclick="publishAndPreviewVersion()">"Publish and Preview Version"</button>
             </div>
         </section>
     }

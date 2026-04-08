@@ -855,6 +855,21 @@ pub const SCRIPT: &str = r#"
         }
       }
 
+      async function publishAndPreviewVersion() {
+        try {
+          if (!token) await login();
+          const formVersionId = inputValue("form-version-id");
+          if (!formVersionId) throw new Error("Create or select a form version first.");
+          const payload = await request(`/api/admin/form-versions/${formVersionId}/publish`, {
+            method: "POST"
+          });
+          show(payload);
+          await renderForm(formVersionId);
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
       async function renderForm(formVersionId) {
         try {
           if (!formVersionId) throw new Error("Choose a published form before opening the response form.");

@@ -241,6 +241,7 @@ const FORM_ACTIONS: &[Action] = &[
     Action::new("updateField()", "Update Field"),
     Action::new("deleteField()", "Remove Field"),
     Action::new("publishVersion()", "Publish Version"),
+    Action::new("publishAndPreviewVersion()", "Publish and Preview Version"),
 ];
 
 const SUBMISSION_INPUTS: &[TextInput] = &[
