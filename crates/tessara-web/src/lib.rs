@@ -339,8 +339,10 @@ mod tests {
         assert!(html.contains("/api/aggregations/${aggregationId}"));
         assert!(html.contains("/api/aggregations/${aggregationId}/table"));
         assert!(html.contains("Create Node Type"));
+        assert!(html.contains("Inspect Node Type"));
         assert!(html.contains("Update Node Type"));
         assert!(html.contains("Edit Node Type"));
+        assert!(html.contains("/api/admin/node-types/${nodeTypeId}"));
         assert!(html.contains("Use Form Scope"));
         assert!(html.contains("Use Compatibility Group"));
         assert!(html.contains("Use Metadata Target"));

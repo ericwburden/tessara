@@ -355,6 +355,7 @@ pub const SCRIPT: &str = r#"
               <p class="muted">${escapeHtml(nodeType.slug)}</p>
               <p>${nodeType.node_count} nodes</p>
               <button type="button" onclick="useNodeType('${escapeHtml(nodeType.id)}', '${escapeHtml(nodeType.name)}', '${escapeHtml(nodeType.slug)}')">Use Node Type</button>
+              <button type="button" onclick="loadNodeTypeByValue('${escapeHtml(nodeType.id)}')">Inspect Node Type</button>
               <button type="button" onclick="useNodeType('${escapeHtml(nodeType.id)}', '${escapeHtml(nodeType.name)}', '${escapeHtml(nodeType.slug)}')">Edit Node Type</button>
               <button type="button" onclick="useFormScopeNodeType('${escapeHtml(nodeType.id)}', '${escapeHtml(nodeType.name)}')">Use Form Scope</button>
               <button type="button" onclick="useMetadataNodeType('${escapeHtml(nodeType.id)}', '${escapeHtml(nodeType.name)}')">Use Metadata Target</button>
@@ -366,6 +367,61 @@ pub const SCRIPT: &str = r#"
         } catch (error) {
           show(error.message);
         }
+      }
+
+      async function loadNodeTypeById() {
+        try {
+          const nodeTypeId = inputValue("node-type-id");
+          if (!nodeTypeId) throw new Error("Enter or select a node type ID first.");
+          await loadNodeTypeByValue(nodeTypeId);
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function loadNodeTypeByValue(nodeTypeId) {
+        if (!token) await login();
+        const payload = await request(`/api/admin/node-types/${nodeTypeId}`);
+        useNodeType(payload.id, payload.name, payload.slug);
+        show(payload);
+        document.getElementById("screen").innerHTML = `
+          <article class="card">
+            <h3>Node Type Definition</h3>
+            <p>${escapeHtml(payload.name)}</p>
+            <p class="muted">${escapeHtml(payload.slug)}</p>
+            <p>${payload.node_count} nodes, ${payload.metadata_fields.length} metadata fields, ${payload.scoped_forms.length} scoped forms</p>
+            <button type="button" onclick="useNodeType('${escapeHtml(payload.id)}', '${escapeHtml(payload.name)}', '${escapeHtml(payload.slug)}')">Use Node Type</button>
+          </article>
+          ${payload.parent_relationships.map((parentType) => `
+            <article class="card">
+              <h3>Allowed Parent</h3>
+              <p>${escapeHtml(parentType.node_type_name)}</p>
+              <button type="button" onclick="useParentNodeType('${escapeHtml(parentType.node_type_id)}', '${escapeHtml(parentType.node_type_name)}')">Use Parent Type</button>
+            </article>
+          `).join("") || '<p class="muted">No parent node types configured.</p>'}
+          ${payload.child_relationships.map((childType) => `
+            <article class="card">
+              <h3>Allowed Child</h3>
+              <p>${escapeHtml(childType.node_type_name)}</p>
+              <button type="button" onclick="useChildNodeType('${escapeHtml(childType.node_type_id)}', '${escapeHtml(childType.node_type_name)}')">Use Child Type</button>
+            </article>
+          `).join("") || '<p class="muted">No child node types configured.</p>'}
+          ${payload.metadata_fields.map((field) => `
+            <article class="card">
+              <h3>${escapeHtml(field.label)}</h3>
+              <p>${escapeHtml(field.key)} (${escapeHtml(field.field_type)})${field.required ? " required" : ""}</p>
+              <button type="button" onclick="useMetadataField('${escapeHtml(field.id)}', '${escapeHtml(field.key)}', '${escapeHtml(field.label)}', '${escapeHtml(field.field_type)}', ${field.required ? "true" : "false"})">Use Metadata Field</button>
+            </article>
+          `).join("") || '<p class="muted">No metadata fields configured.</p>'}
+          ${payload.scoped_forms.map((form) => `
+            <article class="card">
+              <h3>${escapeHtml(form.form_name)}</h3>
+              <p class="muted">${escapeHtml(form.form_slug)}</p>
+              <button type="button" onclick="useFormScopeNodeType('${escapeHtml(payload.id)}', '${escapeHtml(payload.name)}')">Use As Form Scope</button>
+              <button type="button" onclick="loadFormByValue('${escapeHtml(form.form_id)}')">Open Scoped Form</button>
+            </article>
+          `).join("") || '<p class="muted">No forms are scoped to this node type yet.</p>'}
+        `;
       }
 
       async function createNodeType() {

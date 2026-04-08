@@ -100,6 +100,24 @@ pub struct NodeTypeSummary {
 }
 
 #[derive(Serialize)]
+pub struct NodeTypeDefinition {
+    id: Uuid,
+    name: String,
+    slug: String,
+    node_count: i64,
+    parent_relationships: Vec<NodeTypePeerLink>,
+    child_relationships: Vec<NodeTypePeerLink>,
+    metadata_fields: Vec<NodeMetadataFieldSummary>,
+    scoped_forms: Vec<NodeTypeFormLink>,
+}
+
+#[derive(Serialize)]
+pub struct NodeTypePeerLink {
+    node_type_id: Uuid,
+    node_type_name: String,
+}
+
+#[derive(Serialize)]
 pub struct NodeTypeRelationshipSummary {
     parent_node_type_id: Uuid,
     parent_name: String,
@@ -116,6 +134,13 @@ pub struct NodeMetadataFieldSummary {
     label: String,
     field_type: String,
     required: bool,
+}
+
+#[derive(Serialize)]
+pub struct NodeTypeFormLink {
+    form_id: Uuid,
+    form_name: String,
+    form_slug: String,
 }
 
 pub async fn create_node_type(
@@ -199,6 +224,138 @@ pub async fn list_node_types(
         .collect::<Result<Vec<_>, sqlx::Error>>()?;
 
     Ok(Json(node_types))
+}
+
+/// Returns one node type with linked relationships, metadata fields, and scoped forms.
+pub async fn get_node_type(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(node_type_id): Path<Uuid>,
+) -> ApiResult<Json<NodeTypeDefinition>> {
+    auth::require_capability(&state.pool, &headers, "hierarchy:write").await?;
+
+    let node_type = sqlx::query(
+        r#"
+        SELECT node_types.id, node_types.name, node_types.slug, COUNT(nodes.id) AS node_count
+        FROM node_types
+        LEFT JOIN nodes ON nodes.node_type_id = node_types.id
+        WHERE node_types.id = $1
+        GROUP BY node_types.id, node_types.name, node_types.slug
+        "#,
+    )
+    .bind(node_type_id)
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or_else(|| ApiError::NotFound(format!("node type {node_type_id}")))?;
+
+    let parent_relationships = sqlx::query(
+        r#"
+        SELECT parent_node_types.id AS node_type_id, parent_node_types.name AS node_type_name
+        FROM node_type_relationships
+        JOIN node_types AS parent_node_types
+            ON parent_node_types.id = node_type_relationships.parent_node_type_id
+        WHERE node_type_relationships.child_node_type_id = $1
+        ORDER BY parent_node_types.name, parent_node_types.id
+        "#,
+    )
+    .bind(node_type_id)
+    .fetch_all(&state.pool)
+    .await?
+    .into_iter()
+    .map(|row| {
+        Ok(NodeTypePeerLink {
+            node_type_id: row.try_get("node_type_id")?,
+            node_type_name: row.try_get("node_type_name")?,
+        })
+    })
+    .collect::<Result<Vec<_>, sqlx::Error>>()?;
+
+    let child_relationships = sqlx::query(
+        r#"
+        SELECT child_node_types.id AS node_type_id, child_node_types.name AS node_type_name
+        FROM node_type_relationships
+        JOIN node_types AS child_node_types
+            ON child_node_types.id = node_type_relationships.child_node_type_id
+        WHERE node_type_relationships.parent_node_type_id = $1
+        ORDER BY child_node_types.name, child_node_types.id
+        "#,
+    )
+    .bind(node_type_id)
+    .fetch_all(&state.pool)
+    .await?
+    .into_iter()
+    .map(|row| {
+        Ok(NodeTypePeerLink {
+            node_type_id: row.try_get("node_type_id")?,
+            node_type_name: row.try_get("node_type_name")?,
+        })
+    })
+    .collect::<Result<Vec<_>, sqlx::Error>>()?;
+
+    let metadata_fields = sqlx::query(
+        r#"
+        SELECT
+            node_metadata_field_definitions.id,
+            node_metadata_field_definitions.node_type_id,
+            node_types.name AS node_type_name,
+            node_metadata_field_definitions.key,
+            node_metadata_field_definitions.label,
+            node_metadata_field_definitions.field_type::text AS field_type,
+            node_metadata_field_definitions.required
+        FROM node_metadata_field_definitions
+        JOIN node_types ON node_types.id = node_metadata_field_definitions.node_type_id
+        WHERE node_metadata_field_definitions.node_type_id = $1
+        ORDER BY node_metadata_field_definitions.key
+        "#,
+    )
+    .bind(node_type_id)
+    .fetch_all(&state.pool)
+    .await?
+    .into_iter()
+    .map(|row| {
+        Ok(NodeMetadataFieldSummary {
+            id: row.try_get("id")?,
+            node_type_id: row.try_get("node_type_id")?,
+            node_type_name: row.try_get("node_type_name")?,
+            key: row.try_get("key")?,
+            label: row.try_get("label")?,
+            field_type: row.try_get("field_type")?,
+            required: row.try_get("required")?,
+        })
+    })
+    .collect::<Result<Vec<_>, sqlx::Error>>()?;
+
+    let scoped_forms = sqlx::query(
+        r#"
+        SELECT id AS form_id, name AS form_name, slug AS form_slug
+        FROM forms
+        WHERE scope_node_type_id = $1
+        ORDER BY name, id
+        "#,
+    )
+    .bind(node_type_id)
+    .fetch_all(&state.pool)
+    .await?
+    .into_iter()
+    .map(|row| {
+        Ok(NodeTypeFormLink {
+            form_id: row.try_get("form_id")?,
+            form_name: row.try_get("form_name")?,
+            form_slug: row.try_get("form_slug")?,
+        })
+    })
+    .collect::<Result<Vec<_>, sqlx::Error>>()?;
+
+    Ok(Json(NodeTypeDefinition {
+        id: node_type.try_get("id")?,
+        name: node_type.try_get("name")?,
+        slug: node_type.try_get("slug")?,
+        node_count: node_type.try_get("node_count")?,
+        parent_relationships,
+        child_relationships,
+        metadata_fields,
+        scoped_forms,
+    }))
 }
 
 /// Lists configured parent/child hierarchy relationships for admin screens.

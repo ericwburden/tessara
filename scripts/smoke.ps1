@@ -139,7 +139,7 @@ try {
         throw "Expected submission application shell HTML to include submission workflow controls"
     }
     $adminAppShell = Invoke-RestMethod -Uri "$baseUrl/app/admin" -TimeoutSec 30
-    if (-not ($adminAppShell -like "*Setup Workspace*") -or -not ($adminAppShell -like "*Management Areas*") -or -not ($adminAppShell -like "*Entity Directory*") -or -not ($adminAppShell -like "*Hierarchy Setup*") -or -not ($adminAppShell -like "*Form Builder*") -or -not ($adminAppShell -like "*Inspect Form*")) {
+    if (-not ($adminAppShell -like "*Setup Workspace*") -or -not ($adminAppShell -like "*Management Areas*") -or -not ($adminAppShell -like "*Entity Directory*") -or -not ($adminAppShell -like "*Hierarchy Setup*") -or -not ($adminAppShell -like "*Form Builder*") -or -not ($adminAppShell -like "*Inspect Form*") -or -not ($adminAppShell -like "*Inspect Node Type*")) {
         throw "Expected admin application shell HTML to include setup workflow controls"
     }
     $reportingAppShell = Invoke-RestMethod -Uri "$baseUrl/app/reports" -TimeoutSec 30

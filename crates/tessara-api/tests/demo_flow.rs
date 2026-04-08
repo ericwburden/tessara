@@ -126,6 +126,46 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
             .any(|node_type| node_type["slug"] == "organization"
                 && node_type["node_count"].as_i64().unwrap_or_default() >= 1)
     );
+    let organization_node_type_id = node_types
+        .as_array()
+        .expect("node type response should be an array")
+        .iter()
+        .find(|node_type| node_type["slug"] == "organization")
+        .and_then(|node_type| node_type["id"].as_str())
+        .expect("organization node type should be present");
+    let node_type_definition = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/admin/node-types/{organization_node_type_id}"),
+            &token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(node_type_definition["name"], "Organization");
+    assert!(
+        node_type_definition["metadata_fields"]
+            .as_array()
+            .expect("node type definition should include metadata fields")
+            .iter()
+            .any(|field| field["key"] == "region")
+    );
+    assert!(
+        node_type_definition["child_relationships"]
+            .as_array()
+            .expect("node type definition should include child relationships")
+            .iter()
+            .any(|child| child["node_type_name"] == "Program")
+    );
+    assert!(
+        node_type_definition["scoped_forms"]
+            .as_array()
+            .expect("node type definition should include scoped forms")
+            .iter()
+            .any(|form| form["name"] == "Quarterly Check In"
+                || form["form_name"] == "Quarterly Check In")
+    );
     let relationships = request_json(
         app.clone(),
         authorized_request("GET", "/api/admin/node-type-relationships", &token, None),
