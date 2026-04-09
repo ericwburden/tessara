@@ -1039,7 +1039,7 @@ fn AdminHomeScreen() -> impl IntoView {
             title: "Hierarchy",
             description: "Manage node types, relationships, metadata fields, and runtime nodes.",
             href: "#organization-setup-screen",
-            href_label: "Open Hierarchy Setup",
+            href_label: "Open Organization Setup",
             action: "loadNodeTypes()",
             action_label: "Load Node Types",
         },
@@ -1047,7 +1047,7 @@ fn AdminHomeScreen() -> impl IntoView {
             title: "Forms",
             description: "Create forms, draft versions, edit sections and fields, and publish revisions.",
             href: "#forms-configuration-screen",
-            href_label: "Open Form Builder",
+            href_label: "Open Forms Configuration",
             action: "loadForms()",
             action_label: "Load Forms",
         },
@@ -1055,7 +1055,7 @@ fn AdminHomeScreen() -> impl IntoView {
             title: "Datasets and Reports",
             description: "Manage datasets, reports, and aggregations inside the reporting stack.",
             href: "#reporting-configuration-screen",
-            href_label: "Open Reporting Builder",
+            href_label: "Open Reporting Configuration",
             action: "loadDatasets()",
             action_label: "Load Datasets",
         },
@@ -1063,7 +1063,7 @@ fn AdminHomeScreen() -> impl IntoView {
             title: "Dashboards",
             description: "Inspect charts, dashboards, and current preview outputs from one admin route.",
             href: "#reporting-configuration-screen",
-            href_label: "Open Dashboard Builder",
+            href_label: "Open Dashboard Configuration",
             action: "loadDashboards()",
             action_label: "Load Dashboards",
         },
@@ -1778,7 +1778,7 @@ fn RawOutputPanel() -> impl IntoView {
 fn ReportRunnerScreen() -> impl IntoView {
     view! {
         <section id="reports-runner-screen" class="app-screen">
-            <p class="eyebrow">"Reporting Screen"</p>
+            <p class="eyebrow">"Reports Screen"</p>
             <h2>"Report Runner"</h2>
             <p class="muted">
                 "Choose a report, inspect its field bindings, and run the table output against refreshed analytics."
@@ -1835,8 +1835,8 @@ fn ReportRunnerScreen() -> impl IntoView {
 fn DashboardPreviewScreen() -> impl IntoView {
     view! {
         <section id="dashboard-viewer-screen" class="app-screen">
-            <p class="eyebrow">"Reporting Screen"</p>
-            <h2>"Dashboard Preview"</h2>
+            <p class="eyebrow">"Dashboards Screen"</p>
+            <h2>"Dashboard Viewer"</h2>
             <p class="muted">
                 "Choose a dashboard and preview each component with its current report rows."
             </p>
@@ -1878,8 +1878,8 @@ fn DashboardPreviewScreen() -> impl IntoView {
 fn SubmissionScreen() -> impl IntoView {
     view! {
         <section id="response-entry-screen" class="app-screen">
-            <p class="eyebrow">"Application Screen"</p>
-            <h2>"Submit Data"</h2>
+            <p class="eyebrow">"Responses Screen"</p>
+            <h2>"Response Entry"</h2>
             <p class="muted">
                 "Pick a published form and target node, render the form, create a draft, save values, and submit."
             </p>
@@ -1933,8 +1933,8 @@ fn SubmissionScreen() -> impl IntoView {
 fn ReviewScreen() -> impl IntoView {
     view! {
         <section id="response-review-screen" class="app-screen">
-            <p class="eyebrow">"Application Screen"</p>
-            <h2>"Review Submissions"</h2>
+            <p class="eyebrow">"Responses Screen"</p>
+            <h2>"Response Review"</h2>
             <p class="muted">
                 "Inspect saved and submitted responses with their audit trail."
             </p>
@@ -1971,8 +1971,8 @@ fn ReviewScreen() -> impl IntoView {
 fn ReportScreen() -> impl IntoView {
     view! {
         <section id="response-report-screen" class="app-screen">
-            <p class="eyebrow">"Application Screen"</p>
-            <h2>"View Reports"</h2>
+            <p class="eyebrow">"Responses Screen"</p>
+            <h2>"Response Reports"</h2>
             <p class="muted">
                 "Refresh analytics and run table reports against submitted data."
             </p>
@@ -2004,14 +2004,14 @@ fn ReportScreen() -> impl IntoView {
 fn HierarchyAdminScreen() -> impl IntoView {
     view! {
         <section id="organization-setup-screen" class="app-screen">
-            <p class="eyebrow">"Admin Screen"</p>
-            <h2>"Hierarchy Setup"</h2>
+            <p class="eyebrow">"Administration Screen"</p>
+            <h2>"Organization Setup"</h2>
             <p class="muted">
                 "Create and update node types, metadata definitions, and runtime nodes."
             </p>
             <div class="task-grid">
                 <section class="task-panel">
-                    <h3>"Hierarchy Actions"</h3>
+                    <h3>"Organization Actions"</h3>
                     <p class="muted">"Inspect structure first, then create or update the selected type, relationship, metadata field, or node."</p>
                     <div class="actions">
                         <button type="button" onclick="loadNodeTypes()">"Load Node Types"</button>
@@ -2033,7 +2033,7 @@ fn HierarchyAdminScreen() -> impl IntoView {
                     </div>
                 </section>
                 <section class="task-panel context-panel">
-                    <h3>"Current Hierarchy Context"</h3>
+                    <h3>"Current Organization Context"</h3>
                     <div class="inputs compact-inputs">
                         <label><span>"Node type name"</span><input id="node-type-name" placeholder="Organization" value="" /></label>
                         <label><span>"Node type slug"</span><input id="node-type-slug" placeholder="organization" value="" /></label>
@@ -2062,14 +2062,14 @@ fn HierarchyAdminScreen() -> impl IntoView {
 fn FormAdminScreen() -> impl IntoView {
     view! {
         <section id="forms-configuration-screen" class="app-screen">
-            <p class="eyebrow">"Admin Screen"</p>
-            <h2>"Form Builder"</h2>
+            <p class="eyebrow">"Administration Screen"</p>
+            <h2>"Forms Configuration"</h2>
             <p class="muted">
                 "Create draft form versions, edit sections and fields, and publish the version."
             </p>
             <div class="task-grid">
                 <section class="task-panel">
-                    <h3>"Form Actions"</h3>
+                    <h3>"Forms Actions"</h3>
                     <p class="muted">"Choose a form first, then use the selected version, section, and field context to shape the draft."</p>
                     <div class="actions">
                         <button type="button" onclick="loadForms()">"Load Forms"</button>
@@ -2089,7 +2089,7 @@ fn FormAdminScreen() -> impl IntoView {
                     </div>
                 </section>
                 <section class="task-panel context-panel">
-                    <h3>"Current Form Context"</h3>
+                    <h3>"Current Forms Context"</h3>
                     <div class="inputs compact-inputs">
                         <label><span>"Form name"</span><input id="form-name" placeholder="Monthly Report" value="" /></label>
                         <label><span>"Form slug"</span><input id="form-slug" placeholder="monthly-report" value="" /></label>
@@ -2118,14 +2118,14 @@ fn FormAdminScreen() -> impl IntoView {
 fn ReportAdminScreen() -> impl IntoView {
     view! {
         <section id="reporting-configuration-screen" class="app-screen">
-            <p class="eyebrow">"Admin Screen"</p>
-            <h2>"Report Builder"</h2>
+            <p class="eyebrow">"Administration Screen"</p>
+            <h2>"Reporting Configuration"</h2>
             <p class="muted">
                 "Build table report bindings from selected form fields and inspect report output."
             </p>
             <div class="task-grid">
                 <section class="task-panel">
-                    <h3>"Reporting Configuration Actions"</h3>
+                    <h3>"Reporting Asset Actions"</h3>
                     <p class="muted">"Use the selected dataset, report, aggregation, chart, and dashboard context to build reporting assets in sequence."</p>
                     <div class="actions">
                         <button type="button" onclick="addDatasetSource()">"Add Dataset Source"</button>
@@ -2172,7 +2172,7 @@ fn ReportAdminScreen() -> impl IntoView {
                     </div>
                 </section>
                 <section class="task-panel context-panel">
-                    <h3>"Current Reporting Builder Context"</h3>
+                    <h3>"Current Reporting Configuration Context"</h3>
                     <div class="inputs compact-inputs">
                 <label><span>"Dataset name"</span><input id="dataset-name" placeholder="Participant Dataset" value="Participant Dataset" /></label>
                 <label><span>"Dataset slug"</span><input id="dataset-slug" placeholder="participant-dataset" value="participant-dataset" /></label>
@@ -2221,7 +2221,7 @@ fn FixtureScreen() -> impl IntoView {
     view! {
         <section id="migration-fixture-screen" class="app-screen">
             <p class="eyebrow">"Migration Screen"</p>
-            <h2>"Legacy Fixture Validation"</h2>
+            <h2>"Fixture Intake and Validation"</h2>
             <p class="muted">
                 "Load a bundled fixture or paste fixture JSON, then validate or dry-run before import rehearsal."
             </p>

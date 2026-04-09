@@ -147,7 +147,7 @@ try {
         throw "Expected responses application shell HTML to include responses route controls"
     }
     $submissionAppShell = Invoke-RestMethod -Uri "$baseUrl/app/submissions" -TimeoutSec 30
-    if (-not ($submissionAppShell -like "*Responses*") -or -not ($submissionAppShell -like "*Response Stages*") -or -not ($submissionAppShell -like "*Response Directory*") -or -not ($submissionAppShell -like "*Choose Published Form*") -or -not ($submissionAppShell -like "*Review Submissions*") -or -not ($submissionAppShell -like "*Load App Summary*") -or -not ($submissionAppShell -like "*Start Demo Response*") -or -not ($submissionAppShell -like "*Current User*") -or -not ($submissionAppShell -like "*Log Out*")) {
+    if (-not ($submissionAppShell -like "*Responses*") -or -not ($submissionAppShell -like "*Response Stages*") -or -not ($submissionAppShell -like "*Response Directory*") -or -not ($submissionAppShell -like "*Choose Published Form*") -or -not ($submissionAppShell -like "*Response Review*") -or -not ($submissionAppShell -like "*Load App Summary*") -or -not ($submissionAppShell -like "*Start Demo Response*") -or -not ($submissionAppShell -like "*Current User*") -or -not ($submissionAppShell -like "*Log Out*")) {
         throw "Expected responses compatibility shell HTML to include response workflow controls"
     }
     $administrationShell = Invoke-RestMethod -Uri "$baseUrl/app/administration" -TimeoutSec 30
@@ -155,7 +155,7 @@ try {
         throw "Expected administration application shell HTML to include setup workflow controls"
     }
     $adminAppShell = Invoke-RestMethod -Uri "$baseUrl/app/admin" -TimeoutSec 30
-    if (-not ($adminAppShell -like "*Administration*") -or -not ($adminAppShell -like "*Management Areas*") -or -not ($adminAppShell -like "*Entity Directory*") -or -not ($adminAppShell -like "*Hierarchy Setup*") -or -not ($adminAppShell -like "*Form Builder*") -or -not ($adminAppShell -like "*Inspect Form*") -or -not ($adminAppShell -like "*Inspect Node Type*")) {
+    if (-not ($adminAppShell -like "*Administration*") -or -not ($adminAppShell -like "*Management Areas*") -or -not ($adminAppShell -like "*Entity Directory*") -or -not ($adminAppShell -like "*Organization Setup*") -or -not ($adminAppShell -like "*Forms Configuration*") -or -not ($adminAppShell -like "*Inspect Form*") -or -not ($adminAppShell -like "*Inspect Node Type*")) {
         throw "Expected admin application shell HTML to include setup workflow controls"
     }
     $reportingAppShell = Invoke-RestMethod -Uri "$baseUrl/app/reports" -TimeoutSec 30
@@ -170,7 +170,7 @@ try {
         throw "Expected dashboards application shell HTML to include dashboard route controls"
     }
     $migrationAppShell = Invoke-RestMethod -Uri "$baseUrl/app/migration" -TimeoutSec 30
-    if (-not ($migrationAppShell -like "*Migration Workbench*") -or -not ($migrationAppShell -like "*Migration Stages*") -or -not ($migrationAppShell -like "*Migration Directory*") -or -not ($migrationAppShell -like "*Legacy Fixture Validation*") -or -not ($migrationAppShell -like "*Load Fixture Examples*") -or -not ($migrationAppShell -like "*Import Fixture*")) {
+    if (-not ($migrationAppShell -like "*Migration Workbench*") -or -not ($migrationAppShell -like "*Migration Stages*") -or -not ($migrationAppShell -like "*Migration Directory*") -or -not ($migrationAppShell -like "*Fixture Intake and Validation*") -or -not ($migrationAppShell -like "*Load Fixture Examples*") -or -not ($migrationAppShell -like "*Import Fixture*")) {
         throw "Expected migration application shell HTML to include fixture workflow controls"
     }
     if ($migrationAppShell -like "*Create Shortcuts*") {
