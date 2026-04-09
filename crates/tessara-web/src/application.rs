@@ -1277,11 +1277,11 @@ fn OrganizationWorkspaceShell() -> impl IntoView {
             path_steps=path_steps
         >
             <HierarchyAdminScreen
-                eyebrow="Organization Screen"
+                eyebrow="Organization Workspace"
                 title="Organization Directory"
                 description="Browse hierarchy structure, metadata definitions, and runtime nodes while the organization area still reuses the shared management surface."
-                action_title="Organization Actions"
-                context_title="Current Organization Context"
+                action_title="Browse and Inspect"
+                context_title="Current Organization Selection"
             />
         </WorkspaceShellSection>
     }
@@ -1329,11 +1329,11 @@ fn FormsWorkspaceShell() -> impl IntoView {
             path_steps=path_steps
         >
             <FormAdminScreen
-                eyebrow="Forms Screen"
+                eyebrow="Forms Workspace"
                 title="Forms Directory"
                 description="Browse current forms, versions, and publish state while the forms area still reuses the shared configuration surface."
-                action_title="Forms Actions"
-                context_title="Current Forms Context"
+                action_title="Browse and Inspect"
+                context_title="Current Form Selection"
             />
         </WorkspaceShellSection>
     }
@@ -1802,7 +1802,7 @@ fn RawOutputPanel() -> impl IntoView {
 fn ReportRunnerScreen() -> impl IntoView {
     view! {
         <section id="reports-runner-screen" class="app-screen">
-            <p class="eyebrow">"Reports Screen"</p>
+            <p class="eyebrow">"Reports Workspace"</p>
             <h2>"Report Runner"</h2>
             <p class="muted">
                 "Choose a report, inspect its field bindings, and run the table output against refreshed analytics."
@@ -1826,7 +1826,7 @@ fn ReportRunnerScreen() -> impl IntoView {
                     </div>
                 </section>
                 <section class="task-panel context-panel">
-                    <h3>"Current Reporting Context"</h3>
+                    <h3>"Current Reporting Selection"</h3>
                     <div class="inputs compact-inputs">
                         <label>
                             <span>"Dataset ID"</span>
@@ -1859,7 +1859,7 @@ fn ReportRunnerScreen() -> impl IntoView {
 fn DashboardPreviewScreen() -> impl IntoView {
     view! {
         <section id="dashboard-viewer-screen" class="app-screen">
-            <p class="eyebrow">"Dashboards Screen"</p>
+            <p class="eyebrow">"Dashboards Workspace"</p>
             <h2>"Dashboard Viewer"</h2>
             <p class="muted">
                 "Choose a dashboard and preview each component with its current report rows."
@@ -1877,7 +1877,7 @@ fn DashboardPreviewScreen() -> impl IntoView {
                     </div>
                 </section>
                 <section class="task-panel context-panel">
-                    <h3>"Current Preview Context"</h3>
+                    <h3>"Current Dashboard Selection"</h3>
                     <div class="inputs compact-inputs">
                         <label>
                             <span>"Dashboard ID"</span>
@@ -1902,7 +1902,7 @@ fn DashboardPreviewScreen() -> impl IntoView {
 fn SubmissionScreen() -> impl IntoView {
     view! {
         <section id="response-entry-screen" class="app-screen">
-            <p class="eyebrow">"Responses Screen"</p>
+            <p class="eyebrow">"Responses Workspace"</p>
             <h2>"Response Entry"</h2>
             <p class="muted">
                 "Pick a published form and target node, render the form, create a draft, save values, and submit."
@@ -1924,7 +1924,7 @@ fn SubmissionScreen() -> impl IntoView {
                     </div>
                 </section>
                 <section class="task-panel context-panel">
-                    <h3>"Current Response Context"</h3>
+                    <h3>"Current Response Selection"</h3>
                     <div class="inputs compact-inputs">
                         <label>
                             <span>"Node search"</span>
@@ -1957,7 +1957,7 @@ fn SubmissionScreen() -> impl IntoView {
 fn ReviewScreen() -> impl IntoView {
     view! {
         <section id="response-review-screen" class="app-screen">
-            <p class="eyebrow">"Responses Screen"</p>
+            <p class="eyebrow">"Responses Workspace"</p>
             <h2>"Response Review"</h2>
             <p class="muted">
                 "Inspect saved and submitted responses with their audit trail."
@@ -1995,7 +1995,7 @@ fn ReviewScreen() -> impl IntoView {
 fn ReportScreen() -> impl IntoView {
     view! {
         <section id="response-report-screen" class="app-screen">
-            <p class="eyebrow">"Responses Screen"</p>
+            <p class="eyebrow">"Responses Workspace"</p>
             <h2>"Response Reports"</h2>
             <p class="muted">
                 "Refresh analytics and run table reports against submitted data."
@@ -2011,7 +2011,7 @@ fn ReportScreen() -> impl IntoView {
                     </div>
                 </section>
                 <section class="task-panel context-panel">
-                    <h3>"Current Report Context"</h3>
+                    <h3>"Current Report Selection"</h3>
                     <div class="inputs compact-inputs">
                         <label>
                             <span>"Report ID"</span>

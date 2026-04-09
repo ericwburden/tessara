@@ -274,6 +274,7 @@ mod tests {
         assert!(html.contains("Submitted Responses"));
         assert!(html.contains("All Responses"));
         assert!(html.contains("Response Entry"));
+        assert!(html.contains("Current Response Selection"));
         assert!(html.contains("Browse Published Forms"));
         assert!(html.contains("Browse Target Nodes"));
         assert!(html.contains("Open Current Form"));
@@ -288,10 +289,12 @@ mod tests {
         assert!(html.contains("Start Demo Response"));
         assert!(html.contains("startDemoSubmissionFlow"));
         assert!(html.contains("Response Review"));
+        assert!(html.contains("Responses Workspace"));
         assert!(html.contains("Show Drafts"));
         assert!(html.contains("Show Submitted"));
         assert!(html.contains("Clear Review Filters"));
         assert!(html.contains("Response Reports"));
+        assert!(html.contains("Current Report Selection"));
         assert!(html.contains("Load App Summary"));
         assert!(html.contains("Current User"));
         assert!(html.contains("Log Out"));
@@ -336,7 +339,8 @@ mod tests {
         assert!(organization.contains("Organization Browse"));
         assert!(organization.contains("Organization Flow"));
         assert!(organization.contains("Organization Directory"));
-        assert!(organization.contains("Organization Screen"));
+        assert!(organization.contains("Current Organization Selection"));
+        assert!(organization.contains("Browse and Inspect"));
         assert!(organization.contains("Load Nodes"));
         assert!(organization.contains("Load Node Types"));
         assert!(organization.contains("Browse Nodes"));
@@ -353,7 +357,8 @@ mod tests {
         assert!(forms.contains("Forms Browse"));
         assert!(forms.contains("Forms Flow"));
         assert!(forms.contains("Forms Directory"));
-        assert!(forms.contains("Forms Screen"));
+        assert!(forms.contains("Current Form Selection"));
+        assert!(forms.contains("Browse and Inspect"));
         assert!(forms.contains("Load Forms"));
         assert!(forms.contains("Browse Forms"));
         assert!(forms.contains("Go to Responses"));
@@ -529,7 +534,9 @@ mod tests {
         assert!(html.contains("Aggregations"));
         assert!(html.contains("Charts"));
         assert!(html.contains("Report Runner"));
+        assert!(html.contains("Current Reporting Selection"));
         assert!(html.contains("Dashboard Preview"));
+        assert!(html.contains("Current Dashboard Selection"));
         assert!(html.contains("Open Demo Dashboard"));
         assert!(html.contains("openDemoDashboard"));
         assert!(html.contains("Refresh Analytics"));
