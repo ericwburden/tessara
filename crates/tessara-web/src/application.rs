@@ -322,15 +322,15 @@ const REPORTS_ACTIONS: &[ActionSpec] = &[
 const DASHBOARDS_ACTIONS: &[ActionSpec] = &[
     ActionSpec {
         handler: "login()",
-        label: "Log In",
+        label: "Sign In",
     },
     ActionSpec {
         handler: "loadCurrentUser()",
-        label: "Current User",
+        label: "Session Status",
     },
     ActionSpec {
         handler: "logout()",
-        label: "Log Out",
+        label: "Sign Out",
     },
     ActionSpec {
         handler: "seedDemo()",
@@ -342,7 +342,7 @@ const DASHBOARDS_ACTIONS: &[ActionSpec] = &[
     },
     ActionSpec {
         handler: "loadAppSummary()",
-        label: "Load App Summary",
+        label: "Refresh Summary",
     },
 ];
 

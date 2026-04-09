@@ -608,6 +608,9 @@ mod tests {
         assert!(html.contains("Go to Reports"));
         assert!(html.contains("View Demo Preview"));
         assert!(html.contains("Open Demo Dashboard"));
+        assert!(html.contains("Refresh Summary"));
+        assert!(html.contains("Session Status"));
+        assert!(html.contains("Sign Out"));
         assert!(html.contains("/app/reports"));
         assert!(!html.contains("Create Shortcuts"));
     }
