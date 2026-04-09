@@ -153,6 +153,15 @@ struct DirectoryCardSpec {
     label: &'static str,
 }
 
+#[derive(Copy, Clone)]
+struct QueueCardSpec {
+    title: &'static str,
+    description: &'static str,
+    action: &'static str,
+    href: &'static str,
+    label: &'static str,
+}
+
 const HOME_ACTIONS: &[ActionSpec] = &[
     ActionSpec {
         handler: "login()",
@@ -635,6 +644,67 @@ fn DirectoryCardsSection(
                     .collect_view()}
             </div>
         </ScreenSection>
+    }
+}
+
+#[component]
+fn WorkspaceShellSection(
+    eyebrow: &'static str,
+    title: &'static str,
+    description: &'static str,
+    queue_title: &'static str,
+    queue_cards: Vec<QueueCardSpec>,
+    path_title: &'static str,
+    path_steps: Vec<&'static str>,
+    children: Children,
+) -> impl IntoView {
+    view! {
+        <section class="app-screen">
+            <p class="eyebrow">{eyebrow}</p>
+            <h2>{title}</h2>
+            <p class="muted">{description}</p>
+            <div class="workspace-grid">
+                <aside class="workspace-rail">
+                    <section class="workspace-panel">
+                        <h3>{queue_title}</h3>
+                        <div class="workspace-card-grid">
+                            {queue_cards
+                                .into_iter()
+                                .map(|card| {
+                                    let action_view = if card.href.is_empty() {
+                                        view! {
+                                            <button type="button" onclick=card.action>{card.label}</button>
+                                        }
+                                        .into_any()
+                                    } else {
+                                        view! { <a class="button-link" href=card.href>{card.label}</a> }
+                                            .into_any()
+                                    };
+
+                                    view! {
+                                        <article class="workspace-card">
+                                            <h4>{card.title}</h4>
+                                            <p>{card.description}</p>
+                                            {action_view}
+                                        </article>
+                                    }
+                                })
+                                .collect_view()}
+                        </div>
+                    </section>
+                    <section class="workspace-panel">
+                        <h3>{path_title}</h3>
+                        <ol class="app-list">
+                            {path_steps
+                                .into_iter()
+                                .map(|step| view! { <li>{step}</li> })
+                                .collect_view()}
+                        </ol>
+                    </section>
+                </aside>
+                <div class="workspace-stack">{children()}</div>
+            </div>
+        </section>
     }
 }
 
@@ -1149,306 +1219,211 @@ fn SubmissionHomeScreen() -> impl IntoView {
 #[component]
 fn OrganizationWorkspaceShell() -> impl IntoView {
     let queue_cards = [
-        (
-            "Runtime Nodes",
-            "Browse current nodes and inspect operational hierarchy records.",
-            "loadNodes()",
-            "Open Nodes",
-        ),
-        (
-            "Structure Types",
-            "Review node types, relationships, and metadata definitions.",
-            "loadNodeTypes()",
-            "Open Structure",
-        ),
-        (
-            "Forms Bridge",
-            "Move from organization structure into the current forms area.",
-            "",
-            "Open Forms",
-        ),
-        (
-            "Dashboards Bridge",
-            "Move from organization structure into the current dashboards area.",
-            "",
-            "Open Dashboards",
-        ),
+        QueueCardSpec {
+            title: "Runtime Nodes",
+            description: "Browse current nodes and inspect operational hierarchy records.",
+            action: "loadNodes()",
+            href: "",
+            label: "Open Nodes",
+        },
+        QueueCardSpec {
+            title: "Structure Types",
+            description: "Review node types, relationships, and metadata definitions.",
+            action: "loadNodeTypes()",
+            href: "",
+            label: "Open Structure",
+        },
+        QueueCardSpec {
+            title: "Forms Bridge",
+            description: "Move from organization structure into the current forms area.",
+            action: "",
+            href: "/app/forms",
+            label: "Open Forms",
+        },
+        QueueCardSpec {
+            title: "Dashboards Bridge",
+            description: "Move from organization structure into the current dashboards area.",
+            action: "",
+            href: "/app/dashboards",
+            label: "Open Dashboards",
+        },
+    ];
+    let path_steps = vec![
+        "Browse nodes and hierarchy structure.",
+        "Inspect the configured labels and relationships.",
+        "Move into forms, responses, or dashboards from the scoped structure.",
     ];
 
     view! {
-        <section class="app-screen organization-workspace-shell">
-            <p class="eyebrow">"Organization Workspace"</p>
-            <h2>"Organization Console"</h2>
-            <p class="muted">
-                "This route is the first organization-area bridge. It keeps hierarchy work discoverable now while later sprints replace more of the internal builder feel with directory and detail flows."
-            </p>
-            <div class="workspace-grid">
-                <aside class="workspace-rail">
-                    <section class="workspace-panel">
-                        <h3>"Organization Queues"</h3>
-                        <div class="workspace-card-grid">
-                            {queue_cards
-                                .into_iter()
-                                .map(|(title, description, action, label)| {
-                                    let action_view = if action.is_empty() {
-                                        if label == "Open Forms" {
-                                            view! { <a class="button-link" href="/app/forms">{label}</a> }.into_any()
-                                        } else {
-                                            view! { <a class="button-link" href="/app/dashboards">{label}</a> }.into_any()
-                                        }
-                                    } else {
-                                        view! { <button type="button" onclick=action>{label}</button> }.into_any()
-                                    };
-                                    view! {
-                                        <article class="workspace-card">
-                                            <h4>{title}</h4>
-                                            <p>{description}</p>
-                                            {action_view}
-                                        </article>
-                                    }
-                                })
-                                .collect_view()}
-                        </div>
-                    </section>
-                    <section class="workspace-panel">
-                        <h3>"Organization Path"</h3>
-                        <ol class="app-list">
-                            <li>"Browse nodes and hierarchy structure."</li>
-                            <li>"Inspect the configured labels and relationships."</li>
-                            <li>"Move into forms, responses, or dashboards from the scoped structure."</li>
-                        </ol>
-                    </section>
-                </aside>
-                <div class="workspace-stack">
-                    <HierarchyAdminScreen/>
-                </div>
-            </div>
-        </section>
+        <WorkspaceShellSection
+            eyebrow="Organization Workspace"
+            title="Organization Console"
+            description="This route is the first organization-area bridge. It keeps hierarchy work discoverable now while later sprints replace more of the internal builder feel with directory and detail flows."
+            queue_title="Organization Queues"
+            queue_cards=queue_cards.to_vec()
+            path_title="Organization Path"
+            path_steps=path_steps
+        >
+            <HierarchyAdminScreen/>
+        </WorkspaceShellSection>
     }
 }
 
 #[component]
 fn FormsWorkspaceShell() -> impl IntoView {
     let queue_cards = [
-        (
-            "Forms Directory",
-            "Browse current form records and inspect definitions.",
-            "loadForms()",
-            "Open Forms",
-        ),
-        (
-            "Response Bridge",
-            "Move from form discovery into the supported responses area.",
-            "",
-            "Open Responses",
-        ),
-        (
-            "Organization Bridge",
-            "Return to the organization surface for scoped form navigation.",
-            "",
-            "Open Organization",
-        ),
+        QueueCardSpec {
+            title: "Forms Directory",
+            description: "Browse current form records and inspect definitions.",
+            action: "loadForms()",
+            href: "",
+            label: "Open Forms",
+        },
+        QueueCardSpec {
+            title: "Response Bridge",
+            description: "Move from form discovery into the supported responses area.",
+            action: "",
+            href: "/app/responses",
+            label: "Open Responses",
+        },
+        QueueCardSpec {
+            title: "Organization Bridge",
+            description: "Return to the organization surface for scoped form navigation.",
+            action: "",
+            href: "/app/organization",
+            label: "Open Organization",
+        },
+    ];
+    let path_steps = vec![
+        "Browse or inspect the form.",
+        "Choose the relevant version or draft.",
+        "Move into response entry or internal configuration as needed.",
     ];
 
     view! {
-        <section class="app-screen forms-workspace-shell">
-            <p class="eyebrow">"Forms Workspace"</p>
-            <h2>"Forms Console"</h2>
-            <p class="muted">
-                "This route is the current bridge between product-facing form discovery and the supported internal form lifecycle tasks."
-            </p>
-            <div class="workspace-grid">
-                <aside class="workspace-rail">
-                    <section class="workspace-panel">
-                        <h3>"Forms Queues"</h3>
-                        <div class="workspace-card-grid">
-                            {queue_cards
-                                .into_iter()
-                                .map(|(title, description, action, label)| {
-                                    let action_view = if action.is_empty() {
-                                        if label == "Open Responses" {
-                                            view! { <a class="button-link" href="/app/responses">{label}</a> }.into_any()
-                                        } else {
-                                            view! { <a class="button-link" href="/app/organization">{label}</a> }.into_any()
-                                        }
-                                    } else {
-                                        view! { <button type="button" onclick=action>{label}</button> }.into_any()
-                                    };
-                                    view! {
-                                        <article class="workspace-card">
-                                            <h4>{title}</h4>
-                                            <p>{description}</p>
-                                            {action_view}
-                                        </article>
-                                    }
-                                })
-                                .collect_view()}
-                        </div>
-                    </section>
-                    <section class="workspace-panel">
-                        <h3>"Forms Path"</h3>
-                        <ol class="app-list">
-                            <li>"Browse or inspect the form."</li>
-                            <li>"Choose the relevant version or draft."</li>
-                            <li>"Move into response entry or internal configuration as needed."</li>
-                        </ol>
-                    </section>
-                </aside>
-                <div class="workspace-stack">
-                    <FormAdminScreen/>
-                </div>
-            </div>
-        </section>
+        <WorkspaceShellSection
+            eyebrow="Forms Workspace"
+            title="Forms Console"
+            description="This route is the current bridge between product-facing form discovery and the supported internal form lifecycle tasks."
+            queue_title="Forms Queues"
+            queue_cards=queue_cards.to_vec()
+            path_title="Forms Path"
+            path_steps=path_steps
+        >
+            <FormAdminScreen/>
+        </WorkspaceShellSection>
     }
 }
 
 #[component]
 fn SubmissionWorkspaceShell() -> impl IntoView {
     let queue_cards = [
-        (
-            "Published Forms",
-            "Load the current published response options.",
-            "loadPublishedForms()",
-            "Open Forms",
-        ),
-        (
-            "Target Directory",
-            "Browse organizations, programs, and other submission targets.",
-            "loadNodes()",
-            "Open Targets",
-        ),
-        (
-            "Draft Queue",
-            "Review in-progress drafts that still need edits or submission.",
-            "showDraftSubmissions()",
-            "Open Drafts",
-        ),
-        (
-            "Submitted Queue",
-            "Review completed responses and continue into reporting.",
-            "showSubmittedSubmissions()",
-            "Open Submitted",
-        ),
+        QueueCardSpec {
+            title: "Published Forms",
+            description: "Load the current published response options.",
+            action: "loadPublishedForms()",
+            href: "",
+            label: "Open Forms",
+        },
+        QueueCardSpec {
+            title: "Target Directory",
+            description: "Browse organizations, programs, and other submission targets.",
+            action: "loadNodes()",
+            href: "",
+            label: "Open Targets",
+        },
+        QueueCardSpec {
+            title: "Draft Queue",
+            description: "Review in-progress drafts that still need edits or submission.",
+            action: "showDraftSubmissions()",
+            href: "",
+            label: "Open Drafts",
+        },
+        QueueCardSpec {
+            title: "Submitted Queue",
+            description: "Review completed responses and continue into reporting.",
+            action: "showSubmittedSubmissions()",
+            href: "",
+            label: "Open Submitted",
+        },
+    ];
+    let path_steps = vec![
+        "Choose a published form.",
+        "Choose the target node.",
+        "Open the response form and create a draft.",
+        "Save values, submit, then review the resulting record.",
     ];
 
     view! {
-        <section class="app-screen submission-workspace-shell">
-            <p class="eyebrow">"Responses Workspace"</p>
-            <h2>"Response Console"</h2>
-            <p class="muted">
-                "This route now acts as an application workspace: the left side focuses on queues and entry points, while the right side carries the active response, review, and reporting surfaces."
-            </p>
-            <div class="workspace-grid">
-                <aside class="workspace-rail">
-                    <section class="workspace-panel">
-                        <h3>"Response Queues"</h3>
-                        <div class="workspace-card-grid">
-                            {queue_cards
-                                .into_iter()
-                                .map(|(title, description, action, label)| {
-                                    view! {
-                                        <article class="workspace-card">
-                                            <h4>{title}</h4>
-                                            <p>{description}</p>
-                                            <button type="button" onclick=action>{label}</button>
-                                        </article>
-                                    }
-                                })
-                                .collect_view()}
-                        </div>
-                    </section>
-                    <section class="workspace-panel">
-                        <h3>"Guided Path"</h3>
-                        <ol class="app-list">
-                            <li>"Choose a published form."</li>
-                            <li>"Choose the target node."</li>
-                            <li>"Open the response form and create a draft."</li>
-                            <li>"Save values, submit, then review the resulting record."</li>
-                        </ol>
-                    </section>
-                </aside>
-                <div class="workspace-stack">
-                    <SubmissionScreen/>
-                    <ReviewScreen/>
-                    <ReportScreen/>
-                </div>
-            </div>
-        </section>
+        <WorkspaceShellSection
+            eyebrow="Responses Workspace"
+            title="Response Console"
+            description="This route now acts as an application workspace: the left side focuses on queues and entry points, while the right side carries the active response, review, and reporting surfaces."
+            queue_title="Response Queues"
+            queue_cards=queue_cards.to_vec()
+            path_title="Guided Path"
+            path_steps=path_steps
+        >
+            <SubmissionScreen/>
+            <ReviewScreen/>
+            <ReportScreen/>
+        </WorkspaceShellSection>
     }
 }
 
 #[component]
 fn AdminWorkspaceShell() -> impl IntoView {
     let queue_cards = [
-        (
-            "Hierarchy Types",
-            "Open node-type and relationship management for structural changes.",
-            "loadNodeTypes()",
-            "Open Hierarchy",
-        ),
-        (
-            "Forms Directory",
-            "Browse forms, versions, and publishing status from the main admin route.",
-            "loadForms()",
-            "Open Forms",
-        ),
-        (
-            "Reporting Assets",
-            "Open datasets, reports, aggregations, charts, and dashboards.",
-            "loadDatasets()",
-            "Open Reporting",
-        ),
-        (
-            "Runtime Nodes",
-            "Browse and update real nodes without leaving the admin workspace.",
-            "loadNodes()",
-            "Open Nodes",
-        ),
+        QueueCardSpec {
+            title: "Hierarchy Types",
+            description: "Open node-type and relationship management for structural changes.",
+            action: "loadNodeTypes()",
+            href: "",
+            label: "Open Hierarchy",
+        },
+        QueueCardSpec {
+            title: "Forms Directory",
+            description: "Browse forms, versions, and publishing status from the main admin route.",
+            action: "loadForms()",
+            href: "",
+            label: "Open Forms",
+        },
+        QueueCardSpec {
+            title: "Reporting Assets",
+            description: "Open datasets, reports, aggregations, charts, and dashboards.",
+            action: "loadDatasets()",
+            href: "",
+            label: "Open Reporting",
+        },
+        QueueCardSpec {
+            title: "Runtime Nodes",
+            description: "Browse and update real nodes without leaving the admin workspace.",
+            action: "loadNodes()",
+            href: "",
+            label: "Open Nodes",
+        },
+    ];
+    let path_steps = vec![
+        "Set or inspect hierarchy types and runtime nodes.",
+        "Open the correct form and version draft.",
+        "Publish or review reporting assets tied to that structure.",
+        "Confirm the resulting dashboards and reporting surfaces.",
     ];
 
     view! {
-        <section class="app-screen admin-workspace-shell">
-            <p class="eyebrow">"Admin Workspace"</p>
-            <h2>"Configuration Console"</h2>
-            <p class="muted">
-                "This route is now shifting from a builder stack toward an admin workspace. The rail keeps high-level management queues visible while the main area holds hierarchy, form, and reporting configuration."
-            </p>
-            <div class="workspace-grid">
-                <aside class="workspace-rail">
-                    <section class="workspace-panel">
-                        <h3>"Management Queues"</h3>
-                        <div class="workspace-card-grid">
-                            {queue_cards
-                                .into_iter()
-                                .map(|(title, description, action, label)| {
-                                    view! {
-                                        <article class="workspace-card">
-                                            <h4>{title}</h4>
-                                            <p>{description}</p>
-                                            <button type="button" onclick=action>{label}</button>
-                                        </article>
-                                    }
-                                })
-                                .collect_view()}
-                        </div>
-                    </section>
-                    <section class="workspace-panel">
-                        <h3>"Admin Path"</h3>
-                        <ol class="app-list">
-                            <li>"Set or inspect hierarchy types and runtime nodes."</li>
-                            <li>"Open the correct form and version draft."</li>
-                            <li>"Publish or review reporting assets tied to that structure."</li>
-                            <li>"Confirm the resulting dashboards and reporting surfaces."</li>
-                        </ol>
-                    </section>
-                </aside>
-                <div class="workspace-stack">
-                    <HierarchyAdminScreen/>
-                    <FormAdminScreen/>
-                    <ReportAdminScreen/>
-                </div>
-            </div>
-        </section>
+        <WorkspaceShellSection
+            eyebrow="Admin Workspace"
+            title="Configuration Console"
+            description="This route is now shifting from a builder stack toward an admin workspace. The rail keeps high-level management queues visible while the main area holds hierarchy, form, and reporting configuration."
+            queue_title="Management Queues"
+            queue_cards=queue_cards.to_vec()
+            path_title="Admin Path"
+            path_steps=path_steps
+        >
+            <HierarchyAdminScreen/>
+            <FormAdminScreen/>
+            <ReportAdminScreen/>
+        </WorkspaceShellSection>
     }
 }
 
@@ -1599,145 +1574,101 @@ fn DashboardsHomeScreen() -> impl IntoView {
 #[component]
 fn ReportingWorkspaceShell() -> impl IntoView {
     let queue_cards = [
-        (
-            "Datasets",
-            "Inspect and run datasets before binding reports or aggregations.",
-            "loadDatasets()",
-            "Open Datasets",
-        ),
-        (
-            "Reports",
-            "Review report definitions, bindings, and current result sets.",
-            "loadReports()",
-            "Open Reports",
-        ),
-        (
-            "Aggregations",
-            "Check grouped metrics and the charts that depend on them.",
-            "loadAggregations()",
-            "Open Aggregations",
-        ),
-        (
-            "Dashboards",
-            "Open dashboard previews and chart context from one reporting route.",
-            "loadDashboards()",
-            "Open Dashboards",
-        ),
+        QueueCardSpec {
+            title: "Datasets",
+            description: "Inspect and run datasets before binding reports or aggregations.",
+            action: "loadDatasets()",
+            href: "",
+            label: "Open Datasets",
+        },
+        QueueCardSpec {
+            title: "Reports",
+            description: "Review report definitions, bindings, and current result sets.",
+            action: "loadReports()",
+            href: "",
+            label: "Open Reports",
+        },
+        QueueCardSpec {
+            title: "Aggregations",
+            description: "Check grouped metrics and the charts that depend on them.",
+            action: "loadAggregations()",
+            href: "",
+            label: "Open Aggregations",
+        },
+        QueueCardSpec {
+            title: "Dashboards",
+            description: "Open dashboard previews and chart context from one reporting route.",
+            action: "loadDashboards()",
+            href: "",
+            label: "Open Dashboards",
+        },
+    ];
+    let path_steps = vec![
+        "Inspect the dataset or report you intend to use.",
+        "Refresh analytics if the source data changed.",
+        "Run the report or aggregation.",
+        "Open the dashboard preview to verify the final surface.",
     ];
 
     view! {
-        <section class="app-screen reporting-workspace-shell">
-            <p class="eyebrow">"Reports Workspace"</p>
-            <h2>"Insight Console"</h2>
-            <p class="muted">
-                "This route now acts more like a reporting workspace: the rail keeps the reporting queues visible while the main area focuses on report execution and dashboard preview."
-            </p>
-            <div class="workspace-grid">
-                <aside class="workspace-rail">
-                    <section class="workspace-panel">
-                        <h3>"Reporting Queues"</h3>
-                        <div class="workspace-card-grid">
-                            {queue_cards
-                                .into_iter()
-                                .map(|(title, description, action, label)| {
-                                    view! {
-                                        <article class="workspace-card">
-                                            <h4>{title}</h4>
-                                            <p>{description}</p>
-                                            <button type="button" onclick=action>{label}</button>
-                                        </article>
-                                    }
-                                })
-                                .collect_view()}
-                        </div>
-                    </section>
-                    <section class="workspace-panel">
-                        <h3>"Reporting Path"</h3>
-                        <ol class="app-list">
-                            <li>"Inspect the dataset or report you intend to use."</li>
-                            <li>"Refresh analytics if the source data changed."</li>
-                            <li>"Run the report or aggregation."</li>
-                            <li>"Open the dashboard preview to verify the final surface."</li>
-                        </ol>
-                    </section>
-                </aside>
-                <div class="workspace-stack">
-                    <ReportRunnerScreen/>
-                    <DashboardPreviewScreen/>
-                </div>
-            </div>
-        </section>
+        <WorkspaceShellSection
+            eyebrow="Reports Workspace"
+            title="Insight Console"
+            description="This route now acts more like a reporting workspace: the rail keeps the reporting queues visible while the main area focuses on report execution and dashboard preview."
+            queue_title="Reporting Queues"
+            queue_cards=queue_cards.to_vec()
+            path_title="Reporting Path"
+            path_steps=path_steps
+        >
+            <ReportRunnerScreen/>
+            <DashboardPreviewScreen/>
+        </WorkspaceShellSection>
     }
 }
 
 #[component]
 fn DashboardsWorkspaceShell() -> impl IntoView {
     let queue_cards = [
-        (
-            "Dashboards",
-            "Open dashboard previews and current component layouts.",
-            "loadDashboards()",
-            "Open Dashboards",
-        ),
-        (
-            "Charts",
-            "Inspect chart definitions used by current dashboard components.",
-            "loadCharts()",
-            "Open Charts",
-        ),
-        (
-            "Reports Bridge",
-            "Move to the reports area for report and aggregation detail.",
-            "",
-            "Open Reports",
-        ),
+        QueueCardSpec {
+            title: "Dashboards",
+            description: "Open dashboard previews and current component layouts.",
+            action: "loadDashboards()",
+            href: "",
+            label: "Open Dashboards",
+        },
+        QueueCardSpec {
+            title: "Charts",
+            description: "Inspect chart definitions used by current dashboard components.",
+            action: "loadCharts()",
+            href: "",
+            label: "Open Charts",
+        },
+        QueueCardSpec {
+            title: "Reports Bridge",
+            description: "Move to the reports area for report and aggregation detail.",
+            action: "",
+            href: "/app/reports",
+            label: "Open Reports",
+        },
+    ];
+    let path_steps = vec![
+        "Choose the dashboard.",
+        "Inspect the current chart-backed components.",
+        "Traverse into reports when deeper source detail is needed.",
     ];
 
     view! {
-        <section class="app-screen dashboards-workspace-shell">
-            <p class="eyebrow">"Dashboards Workspace"</p>
-            <h2>"Dashboard Console"</h2>
-            <p class="muted">
-                "This route keeps dashboard viewing separate from the broader reports area while the dashboard product surface catches up."
-            </p>
-            <div class="workspace-grid">
-                <aside class="workspace-rail">
-                    <section class="workspace-panel">
-                        <h3>"Dashboard Queues"</h3>
-                        <div class="workspace-card-grid">
-                            {queue_cards
-                                .into_iter()
-                                .map(|(title, description, action, label)| {
-                                    let action_view = if action.is_empty() {
-                                        view! { <a class="button-link" href="/app/reports">{label}</a> }.into_any()
-                                    } else {
-                                        view! { <button type="button" onclick=action>{label}</button> }.into_any()
-                                    };
-                                    view! {
-                                        <article class="workspace-card">
-                                            <h4>{title}</h4>
-                                            <p>{description}</p>
-                                            {action_view}
-                                        </article>
-                                    }
-                                })
-                                .collect_view()}
-                        </div>
-                    </section>
-                    <section class="workspace-panel">
-                        <h3>"Dashboard Path"</h3>
-                        <ol class="app-list">
-                            <li>"Choose the dashboard."</li>
-                            <li>"Inspect the current chart-backed components."</li>
-                            <li>"Traverse into reports when deeper source detail is needed."</li>
-                        </ol>
-                    </section>
-                </aside>
-                <div class="workspace-stack">
-                    <DashboardPreviewScreen/>
-                </div>
-            </div>
-        </section>
+        <WorkspaceShellSection
+            eyebrow="Dashboards Workspace"
+            title="Dashboard Console"
+            description="This route keeps dashboard viewing separate from the broader reports area while the dashboard product surface catches up."
+            queue_title="Dashboard Queues"
+            queue_cards=queue_cards.to_vec()
+            path_title="Dashboard Path"
+            path_steps=path_steps
+        >
+            <DashboardPreviewScreen/>
+        </WorkspaceShellSection>
     }
 }
 
