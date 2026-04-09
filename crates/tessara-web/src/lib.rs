@@ -333,6 +333,8 @@ mod tests {
         assert!(organization.contains("/app/organization"));
         assert!(organization.contains("Organization Areas"));
         assert!(organization.contains("Organization Console"));
+        assert!(organization.contains("Organization Directory"));
+        assert!(organization.contains("Organization Screen"));
         assert!(organization.contains("Load Nodes"));
         assert!(organization.contains("Load Node Types"));
         assert!(organization.contains("/app/forms"));
@@ -343,6 +345,8 @@ mod tests {
         assert!(forms.contains("/app/forms"));
         assert!(forms.contains("Forms Areas"));
         assert!(forms.contains("Forms Console"));
+        assert!(forms.contains("Forms Directory"));
+        assert!(forms.contains("Forms Screen"));
         assert!(forms.contains("Load Forms"));
         assert!(forms.contains("/app/responses"));
         assert!(forms.contains("/app/organization"));
@@ -375,6 +379,7 @@ mod tests {
         assert!(html.contains("Organization Setup"));
         assert!(html.contains("Forms Configuration"));
         assert!(html.contains("Reporting Configuration"));
+        assert!(html.contains("Administration Screen"));
         assert!(html.contains("Dataset name"));
         assert!(html.contains("Dataset grain"));
         assert!(html.contains("Create Dataset"));

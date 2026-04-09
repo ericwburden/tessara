@@ -1276,7 +1276,13 @@ fn OrganizationWorkspaceShell() -> impl IntoView {
             path_title="Organization Path"
             path_steps=path_steps
         >
-            <HierarchyAdminScreen/>
+            <HierarchyAdminScreen
+                eyebrow="Organization Screen"
+                title="Organization Directory"
+                description="Browse hierarchy structure, metadata definitions, and runtime nodes while the organization area still reuses the shared management surface."
+                action_title="Organization Actions"
+                context_title="Current Organization Context"
+            />
         </WorkspaceShellSection>
     }
 }
@@ -1322,7 +1328,13 @@ fn FormsWorkspaceShell() -> impl IntoView {
             path_title="Forms Path"
             path_steps=path_steps
         >
-            <FormAdminScreen/>
+            <FormAdminScreen
+                eyebrow="Forms Screen"
+                title="Forms Directory"
+                description="Browse current forms, versions, and publish state while the forms area still reuses the shared configuration surface."
+                action_title="Forms Actions"
+                context_title="Current Forms Context"
+            />
         </WorkspaceShellSection>
     }
 }
@@ -1432,8 +1444,20 @@ fn AdminWorkspaceShell() -> impl IntoView {
             path_title="Admin Path"
             path_steps=path_steps
         >
-            <HierarchyAdminScreen/>
-            <FormAdminScreen/>
+            <HierarchyAdminScreen
+                eyebrow="Administration Screen"
+                title="Organization Setup"
+                description="Create and update node types, metadata definitions, and runtime nodes."
+                action_title="Organization Actions"
+                context_title="Current Organization Context"
+            />
+            <FormAdminScreen
+                eyebrow="Administration Screen"
+                title="Forms Configuration"
+                description="Create draft form versions, edit sections and fields, and publish the version."
+                action_title="Forms Actions"
+                context_title="Current Forms Context"
+            />
             <ReportAdminScreen/>
         </WorkspaceShellSection>
     }
@@ -2001,17 +2025,21 @@ fn ReportScreen() -> impl IntoView {
 }
 
 #[component]
-fn HierarchyAdminScreen() -> impl IntoView {
+fn HierarchyAdminScreen(
+    eyebrow: &'static str,
+    title: &'static str,
+    description: &'static str,
+    action_title: &'static str,
+    context_title: &'static str,
+) -> impl IntoView {
     view! {
         <section id="organization-setup-screen" class="app-screen">
-            <p class="eyebrow">"Administration Screen"</p>
-            <h2>"Organization Setup"</h2>
-            <p class="muted">
-                "Create and update node types, metadata definitions, and runtime nodes."
-            </p>
+            <p class="eyebrow">{eyebrow}</p>
+            <h2>{title}</h2>
+            <p class="muted">{description}</p>
             <div class="task-grid">
                 <section class="task-panel">
-                    <h3>"Organization Actions"</h3>
+                    <h3>{action_title}</h3>
                     <p class="muted">"Inspect structure first, then create or update the selected type, relationship, metadata field, or node."</p>
                     <div class="actions">
                         <button type="button" onclick="loadNodeTypes()">"Load Node Types"</button>
@@ -2033,7 +2061,7 @@ fn HierarchyAdminScreen() -> impl IntoView {
                     </div>
                 </section>
                 <section class="task-panel context-panel">
-                    <h3>"Current Organization Context"</h3>
+                    <h3>{context_title}</h3>
                     <div class="inputs compact-inputs">
                         <label><span>"Node type name"</span><input id="node-type-name" placeholder="Organization" value="" /></label>
                         <label><span>"Node type slug"</span><input id="node-type-slug" placeholder="organization" value="" /></label>
@@ -2059,17 +2087,21 @@ fn HierarchyAdminScreen() -> impl IntoView {
 }
 
 #[component]
-fn FormAdminScreen() -> impl IntoView {
+fn FormAdminScreen(
+    eyebrow: &'static str,
+    title: &'static str,
+    description: &'static str,
+    action_title: &'static str,
+    context_title: &'static str,
+) -> impl IntoView {
     view! {
         <section id="forms-configuration-screen" class="app-screen">
-            <p class="eyebrow">"Administration Screen"</p>
-            <h2>"Forms Configuration"</h2>
-            <p class="muted">
-                "Create draft form versions, edit sections and fields, and publish the version."
-            </p>
+            <p class="eyebrow">{eyebrow}</p>
+            <h2>{title}</h2>
+            <p class="muted">{description}</p>
             <div class="task-grid">
                 <section class="task-panel">
-                    <h3>"Forms Actions"</h3>
+                    <h3>{action_title}</h3>
                     <p class="muted">"Choose a form first, then use the selected version, section, and field context to shape the draft."</p>
                     <div class="actions">
                         <button type="button" onclick="loadForms()">"Load Forms"</button>
@@ -2089,7 +2121,7 @@ fn FormAdminScreen() -> impl IntoView {
                     </div>
                 </section>
                 <section class="task-panel context-panel">
-                    <h3>"Current Forms Context"</h3>
+                    <h3>{context_title}</h3>
                     <div class="inputs compact-inputs">
                         <label><span>"Form name"</span><input id="form-name" placeholder="Monthly Report" value="" /></label>
                         <label><span>"Form slug"</span><input id="form-slug" placeholder="monthly-report" value="" /></label>
