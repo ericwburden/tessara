@@ -829,13 +829,13 @@ fn HomeScreen() -> impl IntoView {
             "Organization",
             "Browse the configured hierarchy and move toward scoped forms, responses, and dashboards.",
             "/app/organization",
-            "Open Organization",
+            "Browse Organization",
         ),
         (
             "Forms",
             "Browse form definitions and move into the supported form lifecycle and publishing surfaces.",
             "/app/forms",
-            "Open Forms",
+            "Browse Forms",
         ),
         (
             "Responses",
@@ -945,7 +945,7 @@ fn OrganizationHomeScreen() -> impl IntoView {
             title: "Browse Nodes",
             description: "Load the current runtime nodes and move through the operational hierarchy.",
             href: "#organization-setup-screen",
-            href_label: "Open Organization Tasks",
+            href_label: "Browse Organization",
             action: "loadNodes()",
             action_label: "Load Nodes",
         },
@@ -958,18 +958,18 @@ fn OrganizationHomeScreen() -> impl IntoView {
             action_label: "Load Node Types",
         },
         ManagementCardSpec {
-            title: "Open Forms",
+            title: "Browse Forms",
             description: "Move from organization browsing into the scoped forms area.",
             href: "/app/forms",
-            href_label: "Open Forms",
+            href_label: "Go to Forms",
             action: "loadForms()",
             action_label: "Load Forms",
         },
         ManagementCardSpec {
-            title: "Open Dashboards",
+            title: "View Dashboards",
             description: "Move from organization browsing into current dashboard viewing surfaces.",
             href: "/app/dashboards",
-            href_label: "Open Dashboards",
+            href_label: "Go to Dashboards",
             action: "loadDashboards()",
             action_label: "Load Dashboards",
         },
@@ -992,31 +992,31 @@ fn FormsHomeScreen() -> impl IntoView {
             title: "Browse Forms",
             description: "Open the current forms directory and inspect configured forms and versions.",
             href: "#forms-configuration-screen",
-            href_label: "Open Form Tasks",
+            href_label: "Browse Forms",
             action: "loadForms()",
             action_label: "Load Forms",
         },
         ManagementCardSpec {
-            title: "Published Response Path",
+            title: "Go to Responses",
             description: "Move into the response workflow for published form completion and review.",
             href: "/app/responses",
-            href_label: "Open Responses",
+            href_label: "Go to Responses",
             action: "loadForms()",
             action_label: "Load Forms",
         },
         ManagementCardSpec {
-            title: "Open Organization",
+            title: "Go to Organization",
             description: "Return to the organization area for scoped navigation into forms.",
             href: "/app/organization",
-            href_label: "Open Organization",
+            href_label: "Go to Organization",
             action: "loadNodeTypes()",
             action_label: "Load Node Types",
         },
         ManagementCardSpec {
-            title: "Open Administration",
+            title: "Go to Administration",
             description: "Use the internal configuration surface for full hierarchy and reporting setup.",
             href: "/app/administration",
-            href_label: "Open Administration",
+            href_label: "Go to Administration",
             action: "loadForms()",
             action_label: "Load Forms",
         },
@@ -1143,15 +1143,15 @@ fn SubmissionHomeScreen() -> impl IntoView {
             title: "Start a Response",
             description: "Choose a published form and target node, then open the form for draft entry.",
             href: "#response-entry-screen",
-            href_label: "Open Response Entry",
+            href_label: "Start Response Entry",
             action: "loadPublishedForms()",
             action_label: "Load Published Forms",
         },
         ManagementCardSpec {
-            title: "Choose a Target",
+            title: "Browse Targets",
             description: "Browse nodes and carry the selected target directly into the response flow.",
             href: "#response-entry-screen",
-            href_label: "Open Target Selection",
+            href_label: "Browse Targets",
             action: "loadNodes()",
             action_label: "Load Target Nodes",
         },
@@ -1159,15 +1159,15 @@ fn SubmissionHomeScreen() -> impl IntoView {
             title: "Review Responses",
             description: "Browse draft and submitted responses, then reopen the selected submission in context.",
             href: "#response-review-screen",
-            href_label: "Open Response Review",
+            href_label: "Review Responses",
             action: "loadSubmissions()",
             action_label: "Load Submissions",
         },
         ManagementCardSpec {
-            title: "Open Related Reports",
+            title: "View Related Reports",
             description: "Jump from the submission route into supporting report output while reviewing responses.",
             href: "#response-report-screen",
-            href_label: "Open Related Reports",
+            href_label: "View Related Reports",
             action: "loadReports()",
             action_label: "Load Reports",
         },
@@ -1178,37 +1178,37 @@ fn SubmissionHomeScreen() -> impl IntoView {
             title: "Published Forms",
             description: "Browse current published forms",
             action: "loadPublishedForms()",
-            label: "Open",
+            label: "Browse",
         },
         DirectoryCardSpec {
             title: "Target Nodes",
             description: "Browse submission targets",
             action: "loadNodes()",
-            label: "Open",
+            label: "Browse",
         },
         DirectoryCardSpec {
             title: "Draft Responses",
             description: "Filter to draft submissions",
             action: "showDraftSubmissions()",
-            label: "Open",
+            label: "Review",
         },
         DirectoryCardSpec {
             title: "Submitted Responses",
             description: "Filter to submitted responses",
             action: "showSubmittedSubmissions()",
-            label: "Open",
+            label: "Review",
         },
         DirectoryCardSpec {
             title: "All Responses",
             description: "Browse the full response list",
             action: "loadSubmissions()",
-            label: "Open",
+            label: "Review",
         },
         DirectoryCardSpec {
             title: "Reports",
             description: "Browse related reports",
             action: "loadReports()",
-            label: "Open",
+            label: "View",
         },
     ];
 
@@ -1236,28 +1236,28 @@ fn OrganizationWorkspaceShell() -> impl IntoView {
             description: "Browse current nodes and inspect operational hierarchy records.",
             action: "loadNodes()",
             href: "",
-            label: "Open Nodes",
+            label: "Browse Nodes",
         },
         QueueCardSpec {
             title: "Structure Types",
             description: "Review node types, relationships, and metadata definitions.",
             action: "loadNodeTypes()",
             href: "",
-            label: "Open Structure",
+            label: "Browse Structure",
         },
         QueueCardSpec {
             title: "Forms Bridge",
             description: "Move from organization structure into the current forms area.",
             action: "",
             href: "/app/forms",
-            label: "Open Forms",
+            label: "Go to Forms",
         },
         QueueCardSpec {
             title: "Dashboards Bridge",
             description: "Move from organization structure into the current dashboards area.",
             action: "",
             href: "/app/dashboards",
-            label: "Open Dashboards",
+            label: "Go to Dashboards",
         },
     ];
     let path_steps = vec![
@@ -1295,21 +1295,21 @@ fn FormsWorkspaceShell() -> impl IntoView {
             description: "Browse current form records and inspect definitions.",
             action: "loadForms()",
             href: "",
-            label: "Open Forms",
+            label: "Browse Forms",
         },
         QueueCardSpec {
             title: "Response Bridge",
             description: "Move from form discovery into the supported responses area.",
             action: "",
             href: "/app/responses",
-            label: "Open Responses",
+            label: "Go to Responses",
         },
         QueueCardSpec {
             title: "Organization Bridge",
             description: "Return to the organization surface for scoped form navigation.",
             action: "",
             href: "/app/organization",
-            label: "Open Organization",
+            label: "Go to Organization",
         },
     ];
     let path_steps = vec![
@@ -1347,28 +1347,28 @@ fn SubmissionWorkspaceShell() -> impl IntoView {
             description: "Load the current published response options.",
             action: "loadPublishedForms()",
             href: "",
-            label: "Open Forms",
+            label: "Browse Forms",
         },
         QueueCardSpec {
             title: "Target Directory",
             description: "Browse organizations, programs, and other submission targets.",
             action: "loadNodes()",
             href: "",
-            label: "Open Targets",
+            label: "Browse Targets",
         },
         QueueCardSpec {
             title: "Draft Queue",
             description: "Review in-progress drafts that still need edits or submission.",
             action: "showDraftSubmissions()",
             href: "",
-            label: "Open Drafts",
+            label: "Review Drafts",
         },
         QueueCardSpec {
             title: "Submitted Queue",
             description: "Review completed responses and continue into reporting.",
             action: "showSubmittedSubmissions()",
             href: "",
-            label: "Open Submitted",
+            label: "Review Submitted",
         },
     ];
     let path_steps = vec![
@@ -1478,34 +1478,34 @@ fn OutputPanels() -> impl IntoView {
 fn ReportingHomeScreen() -> impl IntoView {
     let management_cards = [
         ManagementCardSpec {
-            title: "Datasets",
+            title: "Browse Datasets",
             description: "Inspect dataset definitions and run source-aware dataset previews before binding reports.",
             href: "#reports-runner-screen",
-            href_label: "Open Dataset Workflows",
+            href_label: "Open Dataset Workspace",
             action: "loadDatasets()",
             action_label: "Load Datasets",
         },
         ManagementCardSpec {
-            title: "Reports",
+            title: "Review Reports",
             description: "Inspect report definitions, refresh analytics, and execute table-style outputs.",
             href: "#reports-runner-screen",
-            href_label: "Open Report Runner",
+            href_label: "Open Reports Workspace",
             action: "loadReports()",
             action_label: "Load Reports",
         },
         ManagementCardSpec {
-            title: "Aggregations",
+            title: "Review Aggregations",
             description: "Review aggregation definitions and execute grouped metrics on current report outputs.",
             href: "#reports-runner-screen",
-            href_label: "Open Aggregations",
+            href_label: "Open Aggregations Workspace",
             action: "loadAggregations()",
             action_label: "Load Aggregations",
         },
         ManagementCardSpec {
-            title: "Dashboards",
+            title: "View Dashboards",
             description: "Preview charts and dashboards with current report or aggregation context.",
             href: "#dashboard-viewer-screen",
-            href_label: "Open Dashboard Preview",
+            href_label: "Open Dashboard Viewer",
             action: "loadDashboards()",
             action_label: "Load Dashboards",
         },
@@ -1516,31 +1516,31 @@ fn ReportingHomeScreen() -> impl IntoView {
             title: "Datasets",
             description: "Browse dataset definitions",
             action: "loadDatasets()",
-            label: "Open",
+            label: "Browse",
         },
         DirectoryCardSpec {
             title: "Reports",
             description: "Browse report definitions",
             action: "loadReports()",
-            label: "Open",
+            label: "Review",
         },
         DirectoryCardSpec {
             title: "Aggregations",
             description: "Browse aggregation definitions",
             action: "loadAggregations()",
-            label: "Open",
+            label: "Review",
         },
         DirectoryCardSpec {
             title: "Charts",
             description: "Browse charts",
             action: "loadCharts()",
-            label: "Open",
+            label: "Browse",
         },
         DirectoryCardSpec {
             title: "Dashboards",
             description: "Browse dashboards",
             action: "loadDashboards()",
-            label: "Open",
+            label: "View",
         },
     ];
 
@@ -1564,26 +1564,26 @@ fn ReportingHomeScreen() -> impl IntoView {
 fn DashboardsHomeScreen() -> impl IntoView {
     let management_cards = [
         ManagementCardSpec {
-            title: "Open Dashboards",
+            title: "Browse Dashboards",
             description: "Browse dashboard surfaces and inspect current component previews.",
             href: "#dashboard-viewer-screen",
-            href_label: "Open Dashboard Viewer",
+            href_label: "Browse Dashboards",
             action: "loadDashboards()",
             action_label: "Load Dashboards",
         },
         ManagementCardSpec {
-            title: "Open Charts",
+            title: "Browse Charts",
             description: "Inspect chart definitions that drive dashboard components.",
             href: "#dashboard-viewer-screen",
-            href_label: "Open Charts",
+            href_label: "Browse Charts",
             action: "loadCharts()",
             action_label: "Load Charts",
         },
         ManagementCardSpec {
-            title: "Open Reports",
+            title: "View Reports",
             description: "Move into the reports area for related report and aggregation detail.",
             href: "/app/reports",
-            href_label: "Open Reports",
+            href_label: "Go to Reports",
             action: "loadReports()",
             action_label: "Load Reports",
         },
@@ -1615,28 +1615,28 @@ fn ReportingWorkspaceShell() -> impl IntoView {
             description: "Inspect and run datasets before binding reports or aggregations.",
             action: "loadDatasets()",
             href: "",
-            label: "Open Datasets",
+            label: "Browse Datasets",
         },
         QueueCardSpec {
             title: "Reports",
             description: "Review report definitions, bindings, and current result sets.",
             action: "loadReports()",
             href: "",
-            label: "Open Reports",
+            label: "Review Reports",
         },
         QueueCardSpec {
             title: "Aggregations",
             description: "Check grouped metrics and the charts that depend on them.",
             action: "loadAggregations()",
             href: "",
-            label: "Open Aggregations",
+            label: "Review Aggregations",
         },
         QueueCardSpec {
             title: "Dashboards",
             description: "Open dashboard previews and chart context from one reporting route.",
             action: "loadDashboards()",
             href: "",
-            label: "Open Dashboards",
+            label: "View Dashboards",
         },
     ];
     let path_steps = vec![
@@ -1670,21 +1670,21 @@ fn DashboardsWorkspaceShell() -> impl IntoView {
             description: "Open dashboard previews and current component layouts.",
             action: "loadDashboards()",
             href: "",
-            label: "Open Dashboards",
+            label: "View Dashboards",
         },
         QueueCardSpec {
             title: "Charts",
             description: "Inspect chart definitions used by current dashboard components.",
             action: "loadCharts()",
             href: "",
-            label: "Open Charts",
+            label: "Browse Charts",
         },
         QueueCardSpec {
             title: "Reports Bridge",
             description: "Move to the reports area for report and aggregation detail.",
             action: "",
             href: "/app/reports",
-            label: "Open Reports",
+            label: "Go to Reports",
         },
     ];
     let path_steps = vec![
@@ -1813,16 +1813,16 @@ fn ReportRunnerScreen() -> impl IntoView {
                     <p class="muted">"Use the current selection context to inspect or run reporting assets."</p>
                     <div class="actions">
                         <button type="button" onclick="refreshAnalytics()">"Refresh Analytics"</button>
-                        <button type="button" onclick="loadDatasets()">"Choose Dataset"</button>
+                        <button type="button" onclick="loadDatasets()">"Browse Datasets"</button>
                         <button type="button" onclick="loadDatasetDefinitionById()">"Inspect Dataset"</button>
-                        <button type="button" onclick="loadDatasetTableById()">"Run Dataset"</button>
-                        <button type="button" onclick="loadReports()">"Choose Report"</button>
+                        <button type="button" onclick="loadDatasetTableById()">"View Dataset Rows"</button>
+                        <button type="button" onclick="loadReports()">"Browse Reports"</button>
                         <button type="button" onclick="loadReportDefinitionById()">"Inspect Report"</button>
                         <button type="button" onclick="refreshAnalyticsAndRunReport()">"Refresh and Run Report"</button>
-                        <button type="button" onclick="loadReportById()">"Run Report"</button>
-                        <button type="button" onclick="loadAggregations()">"Choose Aggregation"</button>
+                        <button type="button" onclick="loadReportById()">"View Report"</button>
+                        <button type="button" onclick="loadAggregations()">"Browse Aggregations"</button>
                         <button type="button" onclick="loadAggregationDefinitionById()">"Inspect Aggregation"</button>
-                        <button type="button" onclick="loadAggregationById()">"Run Aggregation"</button>
+                        <button type="button" onclick="loadAggregationById()">"View Aggregation"</button>
                     </div>
                 </section>
                 <section class="task-panel context-panel">
@@ -1868,12 +1868,12 @@ fn DashboardPreviewScreen() -> impl IntoView {
                 <section class="task-panel">
                     <h3>"Preview Actions"</h3>
                     <div class="actions">
-                        <button type="button" onclick="loadDashboards()">"Choose Dashboard"</button>
+                        <button type="button" onclick="loadDashboards()">"Browse Dashboards"</button>
                         <button type="button" onclick="refreshAnalyticsAndOpenDashboard()">"Refresh and Open Dashboard"</button>
-                        <button type="button" onclick="loadDashboardById()">"Open Dashboard"</button>
-                        <button type="button" onclick="loadCharts()">"Choose Chart"</button>
+                        <button type="button" onclick="loadDashboardById()">"View Dashboard"</button>
+                        <button type="button" onclick="loadCharts()">"Browse Charts"</button>
                         <button type="button" onclick="loadChartDefinitionById()">"Inspect Chart"</button>
-                        <button type="button" onclick="loadAggregations()">"Choose Aggregation"</button>
+                        <button type="button" onclick="loadAggregations()">"Browse Aggregations"</button>
                     </div>
                 </section>
                 <section class="task-panel context-panel">
@@ -1911,11 +1911,11 @@ fn SubmissionScreen() -> impl IntoView {
                 <section class="task-panel">
                     <h3>"Response Actions"</h3>
                     <div class="actions">
-                        <button type="button" onclick="loadPublishedForms()">"Choose Published Form"</button>
-                        <button type="button" onclick="loadNodes()">"Choose Target Node"</button>
-                        <button type="button" onclick="useSelectedTargetNodeAndContinue()">"Use Selected Target"</button>
-                        <button type="button" onclick="openSelectedFormVersion()">"Open Selected Form"</button>
-                        <button type="button" onclick="renderForm(inputValue('form-version-id'))">"Open Form"</button>
+                        <button type="button" onclick="loadPublishedForms()">"Browse Published Forms"</button>
+                        <button type="button" onclick="loadNodes()">"Browse Target Nodes"</button>
+                        <button type="button" onclick="useSelectedTargetNodeAndContinue()">"Use Current Target"</button>
+                        <button type="button" onclick="openSelectedFormVersion()">"Open Current Form"</button>
+                        <button type="button" onclick="renderForm(inputValue('form-version-id'))">"View Form"</button>
                         <button type="button" onclick="createDraft()">"Create Draft"</button>
                         <button type="button" onclick="saveRenderedFormValues()">"Save Values"</button>
                         <button type="button" onclick="submitDraft()">"Submit"</button>
@@ -1970,7 +1970,7 @@ fn ReviewScreen() -> impl IntoView {
                         <button type="button" onclick="showDraftSubmissions()">"Show Drafts"</button>
                         <button type="button" onclick="showSubmittedSubmissions()">"Show Submitted"</button>
                         <button type="button" onclick="clearSubmissionReviewFilters()">"Clear Review Filters"</button>
-                        <button type="button" onclick="loadSubmissionById()">"Open Selected Submission"</button>
+                        <button type="button" onclick="loadSubmissionById()">"Review Selected Response"</button>
                     </div>
                 </section>
                 <section class="task-panel context-panel">
@@ -2005,7 +2005,7 @@ fn ReportScreen() -> impl IntoView {
                     <h3>"Report Actions"</h3>
                     <div class="actions">
                         <button type="button" onclick="refreshAnalytics()">"Refresh Analytics"</button>
-                        <button type="button" onclick="loadReports()">"Choose Report"</button>
+                        <button type="button" onclick="loadReports()">"Browse Reports"</button>
                         <button type="button" onclick="refreshAnalyticsAndRunReport()">"Refresh and Run Report"</button>
                         <button type="button" onclick="loadReportById()">"Run Selected Report"</button>
                     </div>
