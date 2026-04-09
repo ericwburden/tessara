@@ -248,7 +248,7 @@ mod tests {
         assert!(html.contains("Go to Responses"));
         assert!(html.contains("Go to Reports"));
         assert!(html.contains("Go to Dashboards"));
-        assert!(html.contains("Selection Context"));
+        assert!(html.contains("Current Selections"));
         assert!(html.contains("selection-state"));
         assert!(html.contains("tessara-icon-1024.svg"));
         assert!(html.contains("tessara-favicon-32.svg"));
@@ -302,9 +302,9 @@ mod tests {
         assert!(html.contains("Response Details"));
         assert!(html.contains("Raw API Activity"));
         assert!(html.contains("Current Report Selection"));
-        assert!(html.contains("Load App Summary"));
-        assert!(html.contains("Current User"));
-        assert!(html.contains("Log Out"));
+        assert!(html.contains("Refresh Summary"));
+        assert!(html.contains("Session Status"));
+        assert!(html.contains("Sign Out"));
         assert!(html.contains("/api/me"));
         assert!(html.contains("/api/app/summary"));
         assert!(html.contains("/api/forms/published"));
@@ -327,7 +327,7 @@ mod tests {
         assert!(html.contains("/api/reports"));
         assert!(html.contains("sessionStorage"));
         assert!(html.contains("tessara.devToken"));
-        assert!(html.contains("Selection Context"));
+        assert!(html.contains("Current Selections"));
         assert!(html.contains("selection-state"));
         assert!(html.contains("tessara-icon-1024.svg"));
         assert!(html.contains("tessara-favicon-32.svg"));
@@ -483,7 +483,7 @@ mod tests {
         assert!(html.contains("Refresh and Open Dashboard"));
         assert!(html.contains("Product Areas"));
         assert!(html.contains("Create Shortcuts"));
-        assert!(html.contains("Load App Summary"));
+        assert!(html.contains("Refresh Summary"));
         assert!(html.contains("selection-state"));
     }
 
@@ -515,9 +515,9 @@ mod tests {
         assert!(html.contains("/api/admin/legacy-fixtures/dry-run"));
         assert!(html.contains("/api/admin/legacy-fixtures/import"));
         assert!(html.contains("Product Areas"));
-        assert!(html.contains("Load App Summary"));
-        assert!(html.contains("Current User"));
-        assert!(html.contains("Log Out"));
+        assert!(html.contains("Refresh Summary"));
+        assert!(html.contains("Session Status"));
+        assert!(html.contains("Sign Out"));
         assert!(!html.contains("Create Shortcuts"));
     }
 
@@ -569,9 +569,9 @@ mod tests {
         assert!(html.contains("Refresh and Open Dashboard"));
         assert!(html.contains("Browse Charts"));
         assert!(html.contains("Inspect Chart"));
-        assert!(html.contains("Load App Summary"));
-        assert!(html.contains("Current User"));
-        assert!(html.contains("Log Out"));
+        assert!(html.contains("Refresh Summary"));
+        assert!(html.contains("Session Status"));
+        assert!(html.contains("Sign Out"));
         assert!(html.contains("/api/admin/analytics/refresh"));
         assert!(html.contains("/api/app/summary"));
         assert!(html.contains("/api/datasets"));

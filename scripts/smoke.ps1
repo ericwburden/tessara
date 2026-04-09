@@ -147,7 +147,7 @@ try {
         throw "Expected responses application shell HTML to include responses route controls"
     }
     $submissionAppShell = Invoke-RestMethod -Uri "$baseUrl/app/submissions" -TimeoutSec 30
-    if (-not ($submissionAppShell -like "*Responses*") -or -not ($submissionAppShell -like "*Response Stages*") -or -not ($submissionAppShell -like "*Response Directory*") -or -not ($submissionAppShell -like "*Browse Published Forms*") -or -not ($submissionAppShell -like "*Response Review*") -or -not ($submissionAppShell -like "*Load App Summary*") -or -not ($submissionAppShell -like "*Start Demo Response*") -or -not ($submissionAppShell -like "*Current User*") -or -not ($submissionAppShell -like "*Log Out*")) {
+    if (-not ($submissionAppShell -like "*Responses*") -or -not ($submissionAppShell -like "*Response Stages*") -or -not ($submissionAppShell -like "*Response Directory*") -or -not ($submissionAppShell -like "*Browse Published Forms*") -or -not ($submissionAppShell -like "*Response Review*") -or -not ($submissionAppShell -like "*Refresh Summary*") -or -not ($submissionAppShell -like "*Start Demo Response*") -or -not ($submissionAppShell -like "*Session Status*") -or -not ($submissionAppShell -like "*Sign Out*")) {
         throw "Expected responses compatibility shell HTML to include response workflow controls"
     }
     $administrationShell = Invoke-RestMethod -Uri "$baseUrl/app/administration" -TimeoutSec 30

@@ -165,15 +165,15 @@ struct QueueCardSpec {
 const HOME_ACTIONS: &[ActionSpec] = &[
     ActionSpec {
         handler: "login()",
-        label: "Log In",
+        label: "Sign In",
     },
     ActionSpec {
         handler: "loadCurrentUser()",
-        label: "Current User",
+        label: "Session Status",
     },
     ActionSpec {
         handler: "logout()",
-        label: "Log Out",
+        label: "Sign Out",
     },
     ActionSpec {
         handler: "seedDemo()",
@@ -181,18 +181,18 @@ const HOME_ACTIONS: &[ActionSpec] = &[
     },
     ActionSpec {
         handler: "loadAppSummary()",
-        label: "Load App Summary",
+        label: "Refresh Summary",
     },
 ];
 
 const ORGANIZATION_ACTIONS: &[ActionSpec] = &[
     ActionSpec {
         handler: "login()",
-        label: "Log In",
+        label: "Sign In",
     },
     ActionSpec {
         handler: "loadCurrentUser()",
-        label: "Current User",
+        label: "Session Status",
     },
     ActionSpec {
         handler: "seedDemo()",
@@ -204,18 +204,18 @@ const ORGANIZATION_ACTIONS: &[ActionSpec] = &[
     },
     ActionSpec {
         handler: "loadAppSummary()",
-        label: "Load App Summary",
+        label: "Refresh Summary",
     },
 ];
 
 const FORMS_ACTIONS: &[ActionSpec] = &[
     ActionSpec {
         handler: "login()",
-        label: "Log In",
+        label: "Sign In",
     },
     ActionSpec {
         handler: "loadCurrentUser()",
-        label: "Current User",
+        label: "Session Status",
     },
     ActionSpec {
         handler: "seedDemo()",
@@ -227,22 +227,22 @@ const FORMS_ACTIONS: &[ActionSpec] = &[
     },
     ActionSpec {
         handler: "loadAppSummary()",
-        label: "Load App Summary",
+        label: "Refresh Summary",
     },
 ];
 
 const RESPONSES_ACTIONS: &[ActionSpec] = &[
     ActionSpec {
         handler: "login()",
-        label: "Log In",
+        label: "Sign In",
     },
     ActionSpec {
         handler: "loadCurrentUser()",
-        label: "Current User",
+        label: "Session Status",
     },
     ActionSpec {
         handler: "logout()",
-        label: "Log Out",
+        label: "Sign Out",
     },
     ActionSpec {
         handler: "seedDemo()",
@@ -254,14 +254,14 @@ const RESPONSES_ACTIONS: &[ActionSpec] = &[
     },
     ActionSpec {
         handler: "loadAppSummary()",
-        label: "Load App Summary",
+        label: "Refresh Summary",
     },
 ];
 
 const ADMINISTRATION_ACTIONS: &[ActionSpec] = &[
     ActionSpec {
         handler: "login()",
-        label: "Log In",
+        label: "Sign In",
     },
     ActionSpec {
         handler: "seedDemo()",
@@ -269,41 +269,41 @@ const ADMINISTRATION_ACTIONS: &[ActionSpec] = &[
     },
     ActionSpec {
         handler: "loadAppSummary()",
-        label: "Load App Summary",
+        label: "Refresh Summary",
     },
 ];
 
 const MIGRATION_ACTIONS: &[ActionSpec] = &[
     ActionSpec {
         handler: "login()",
-        label: "Log In",
+        label: "Sign In",
     },
     ActionSpec {
         handler: "loadCurrentUser()",
-        label: "Current User",
+        label: "Session Status",
     },
     ActionSpec {
         handler: "logout()",
-        label: "Log Out",
+        label: "Sign Out",
     },
     ActionSpec {
         handler: "loadAppSummary()",
-        label: "Load App Summary",
+        label: "Refresh Summary",
     },
 ];
 
 const REPORTS_ACTIONS: &[ActionSpec] = &[
     ActionSpec {
         handler: "login()",
-        label: "Log In",
+        label: "Sign In",
     },
     ActionSpec {
         handler: "loadCurrentUser()",
-        label: "Current User",
+        label: "Session Status",
     },
     ActionSpec {
         handler: "logout()",
-        label: "Log Out",
+        label: "Sign Out",
     },
     ActionSpec {
         handler: "seedDemo()",
@@ -315,7 +315,7 @@ const REPORTS_ACTIONS: &[ActionSpec] = &[
     },
     ActionSpec {
         handler: "loadAppSummary()",
-        label: "Load App Summary",
+        label: "Refresh Summary",
     },
 ];
 
@@ -740,11 +740,11 @@ fn WorkspaceShellSection(
 fn SelectionContext() -> impl IntoView {
     view! {
         <section class="selection-panel">
-            <h3>"Selection Context"</h3>
+            <h3>"Current Selections"</h3>
             <p class="muted">
-                "Selections from published forms, nodes, and submissions populate this workflow."
+                "Selected records from forms, nodes, reports, and submissions appear here as you move through the application."
             </p>
-            <p id="session-status" class="muted">"Not signed in."</p>
+            <p id="session-status" class="muted">"No active session."</p>
             <div id="selection-state" class="selection-grid">
                 <p class="muted">"No records selected yet."</p>
             </div>
