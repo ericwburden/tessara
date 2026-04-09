@@ -131,7 +131,7 @@ try {
     }
 
     $appShell = Invoke-RestMethod -Uri "$baseUrl/app" -TimeoutSec 30
-    if (-not ($appShell -like "*Application Overview*") -or -not ($appShell -like "*Welcome to Tessara*") -or -not ($appShell -like "*Product Areas*") -or -not ($appShell -like "*Internal Areas*") -or -not ($appShell -like "*Start Demo Response*") -or -not ($appShell -like "*Browse Organization*") -or -not ($appShell -like "*Browse Forms*") -or -not ($appShell -like "*Open Responses*") -or -not ($appShell -like "*Open Dashboards*")) {
+    if (-not ($appShell -like "*Application Overview*") -or -not ($appShell -like "*Welcome to Tessara*") -or -not ($appShell -like "*Product Areas*") -or -not ($appShell -like "*Internal Areas*") -or -not ($appShell -like "*Start Demo Response*") -or -not ($appShell -like "*Browse Organization*") -or -not ($appShell -like "*Browse Forms*") -or -not ($appShell -like "*Go to Responses*") -or -not ($appShell -like "*Go to Dashboards*")) {
         throw "Expected application home HTML to include overview and split-area navigation"
     }
     $organizationShell = Invoke-RestMethod -Uri "$baseUrl/app/organization" -TimeoutSec 30
@@ -159,7 +159,7 @@ try {
         throw "Expected admin application shell HTML to include setup workflow controls"
     }
     $reportingAppShell = Invoke-RestMethod -Uri "$baseUrl/app/reports" -TimeoutSec 30
-    if (-not ($reportingAppShell -like "*Reports*") -or -not ($reportingAppShell -like "*Report Areas*") -or -not ($reportingAppShell -like "*Reporting Directory*") -or -not ($reportingAppShell -like "*Reports Workspace*") -or -not ($reportingAppShell -like "*Browse Datasets*") -or -not ($reportingAppShell -like "*Inspect Dataset*") -or -not ($reportingAppShell -like "*View Dataset Rows*") -or -not ($reportingAppShell -like "*Dashboard Preview*") -or -not ($reportingAppShell -like "*Inspect Chart*") -or -not ($reportingAppShell -like "*Open Demo Dashboard*")) {
+    if (-not ($reportingAppShell -like "*Reports*") -or -not ($reportingAppShell -like "*Report Areas*") -or -not ($reportingAppShell -like "*Reporting Directory*") -or -not ($reportingAppShell -like "*Reports Workspace*") -or -not ($reportingAppShell -like "*Browse Datasets*") -or -not ($reportingAppShell -like "*Inspect Dataset*") -or -not ($reportingAppShell -like "*View Dataset Rows*") -or -not ($reportingAppShell -like "*Dashboard Preview*") -or -not ($reportingAppShell -like "*Inspect Chart*") -or -not ($reportingAppShell -like "*Open Demo Dashboard*") -or -not ($reportingAppShell -like "*Review Reports*")) {
         throw "Expected reporting application shell HTML to include report and dashboard workflow controls"
     }
     if ($reportingAppShell -like "*Create Shortcuts*") {

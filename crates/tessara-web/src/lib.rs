@@ -245,6 +245,9 @@ mod tests {
         assert!(html.contains("Refresh Overview"));
         assert!(html.contains("Start Demo Response"));
         assert!(html.contains("Open Demo Dashboard"));
+        assert!(html.contains("Go to Responses"));
+        assert!(html.contains("Go to Reports"));
+        assert!(html.contains("Go to Dashboards"));
         assert!(html.contains("Selection Context"));
         assert!(html.contains("selection-state"));
         assert!(html.contains("tessara-icon-1024.svg"));
@@ -533,10 +536,10 @@ mod tests {
         assert!(html.contains("Reporting Directory"));
         assert!(html.contains("Report Details"));
         assert!(html.contains("Raw API Activity"));
-        assert!(html.contains("Open Dataset Workspace"));
-        assert!(html.contains("Open Reports Workspace"));
-        assert!(html.contains("Open Aggregations Workspace"));
-        assert!(html.contains("Open Dashboard Viewer"));
+        assert!(html.contains("Browse Datasets"));
+        assert!(html.contains("Review Reports"));
+        assert!(html.contains("Review Aggregations"));
+        assert!(html.contains("View Dashboards"));
         assert!(html.contains("Load Datasets"));
         assert!(html.contains("Load Reports"));
         assert!(html.contains("Load Aggregations"));
@@ -603,6 +606,7 @@ mod tests {
         assert!(html.contains("Browse Dashboards"));
         assert!(html.contains("Browse Charts"));
         assert!(html.contains("Go to Reports"));
+        assert!(html.contains("View Demo Preview"));
         assert!(html.contains("Open Demo Dashboard"));
         assert!(html.contains("/app/reports"));
         assert!(!html.contains("Create Shortcuts"));
