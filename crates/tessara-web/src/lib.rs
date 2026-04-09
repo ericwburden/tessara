@@ -291,7 +291,7 @@ mod tests {
         assert!(html.contains("Submit"));
         assert!(html.contains("Discard Draft"));
         assert!(html.contains("Clear Response Context"));
-        assert!(html.contains("Start Demo Response"));
+        assert!(html.contains("Refresh Responses"));
         assert!(html.contains("startDemoSubmissionFlow"));
         assert!(html.contains("Response Review"));
         assert!(html.contains("Responses Workspace"));
@@ -349,7 +349,7 @@ mod tests {
         assert!(organization.contains("Organization Details"));
         assert!(organization.contains("Current Organization Selection"));
         assert!(organization.contains("Browse and Inspect"));
-        assert!(organization.contains("Load Nodes"));
+        assert!(organization.contains("Refresh Organization"));
         assert!(organization.contains("Load Node Types"));
         assert!(organization.contains("Browse Nodes"));
         assert!(organization.contains("Browse Structure"));
@@ -368,7 +368,7 @@ mod tests {
         assert!(forms.contains("Form Details"));
         assert!(forms.contains("Current Form Selection"));
         assert!(forms.contains("Browse and Inspect"));
-        assert!(forms.contains("Load Forms"));
+        assert!(forms.contains("Refresh Forms"));
         assert!(forms.contains("Browse Forms"));
         assert!(forms.contains("Go to Responses"));
         assert!(forms.contains("/app/responses"));
@@ -551,8 +551,7 @@ mod tests {
         assert!(html.contains("Current Reporting Selection"));
         assert!(html.contains("Dashboard Preview"));
         assert!(html.contains("Current Dashboard Selection"));
-        assert!(html.contains("Open Demo Dashboard"));
-        assert!(html.contains("openDemoDashboard"));
+        assert!(html.contains("Refresh Reports"));
         assert!(html.contains("Refresh Analytics"));
         assert!(html.contains("Browse Datasets"));
         assert!(html.contains("Inspect Dataset"));
@@ -608,6 +607,7 @@ mod tests {
         assert!(html.contains("Go to Reports"));
         assert!(html.contains("View Demo Preview"));
         assert!(html.contains("Open Demo Dashboard"));
+        assert!(html.contains("Refresh Dashboards"));
         assert!(html.contains("Refresh Summary"));
         assert!(html.contains("Session Status"));
         assert!(html.contains("Sign Out"));

@@ -195,12 +195,8 @@ const ORGANIZATION_ACTIONS: &[ActionSpec] = &[
         label: "Session Status",
     },
     ActionSpec {
-        handler: "seedDemo()",
-        label: "Seed Demo",
-    },
-    ActionSpec {
         handler: "loadNodes()",
-        label: "Load Nodes",
+        label: "Refresh Organization",
     },
     ActionSpec {
         handler: "loadAppSummary()",
@@ -218,12 +214,8 @@ const FORMS_ACTIONS: &[ActionSpec] = &[
         label: "Session Status",
     },
     ActionSpec {
-        handler: "seedDemo()",
-        label: "Seed Demo",
-    },
-    ActionSpec {
         handler: "loadForms()",
-        label: "Load Forms",
+        label: "Refresh Forms",
     },
     ActionSpec {
         handler: "loadAppSummary()",
@@ -245,12 +237,8 @@ const RESPONSES_ACTIONS: &[ActionSpec] = &[
         label: "Sign Out",
     },
     ActionSpec {
-        handler: "seedDemo()",
-        label: "Seed Demo",
-    },
-    ActionSpec {
-        handler: "startDemoSubmissionFlow()",
-        label: "Start Demo Response",
+        handler: "loadPublishedForms()",
+        label: "Refresh Responses",
     },
     ActionSpec {
         handler: "loadAppSummary()",
@@ -306,12 +294,8 @@ const REPORTS_ACTIONS: &[ActionSpec] = &[
         label: "Sign Out",
     },
     ActionSpec {
-        handler: "seedDemo()",
-        label: "Seed Demo",
-    },
-    ActionSpec {
-        handler: "openDemoDashboard()",
-        label: "Open Demo Dashboard",
+        handler: "loadReports()",
+        label: "Refresh Reports",
     },
     ActionSpec {
         handler: "loadAppSummary()",
@@ -333,12 +317,8 @@ const DASHBOARDS_ACTIONS: &[ActionSpec] = &[
         label: "Sign Out",
     },
     ActionSpec {
-        handler: "seedDemo()",
-        label: "Seed Demo",
-    },
-    ActionSpec {
-        handler: "openDemoDashboard()",
-        label: "Open Demo Dashboard",
+        handler: "loadDashboards()",
+        label: "Refresh Dashboards",
     },
     ActionSpec {
         handler: "loadAppSummary()",

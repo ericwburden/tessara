@@ -143,11 +143,11 @@ try {
         throw "Expected forms application shell HTML to include forms route controls"
     }
     $responsesShell = Invoke-RestMethod -Uri "$baseUrl/app/responses" -TimeoutSec 30
-    if (-not ($responsesShell -like "*Responses*") -or -not ($responsesShell -like "*Responses Workspace*") -or -not ($responsesShell -like "*Response Directory*") -or -not ($responsesShell -like "*Start Demo Response*")) {
+    if (-not ($responsesShell -like "*Responses*") -or -not ($responsesShell -like "*Responses Workspace*") -or -not ($responsesShell -like "*Response Directory*") -or -not ($responsesShell -like "*Refresh Responses*")) {
         throw "Expected responses application shell HTML to include responses route controls"
     }
     $submissionAppShell = Invoke-RestMethod -Uri "$baseUrl/app/submissions" -TimeoutSec 30
-    if (-not ($submissionAppShell -like "*Responses*") -or -not ($submissionAppShell -like "*Response Stages*") -or -not ($submissionAppShell -like "*Response Directory*") -or -not ($submissionAppShell -like "*Browse Published Forms*") -or -not ($submissionAppShell -like "*Response Review*") -or -not ($submissionAppShell -like "*Refresh Summary*") -or -not ($submissionAppShell -like "*Start Demo Response*") -or -not ($submissionAppShell -like "*Session Status*") -or -not ($submissionAppShell -like "*Sign Out*")) {
+    if (-not ($submissionAppShell -like "*Responses*") -or -not ($submissionAppShell -like "*Response Stages*") -or -not ($submissionAppShell -like "*Response Directory*") -or -not ($submissionAppShell -like "*Browse Published Forms*") -or -not ($submissionAppShell -like "*Response Review*") -or -not ($submissionAppShell -like "*Refresh Summary*") -or -not ($submissionAppShell -like "*Refresh Responses*") -or -not ($submissionAppShell -like "*Session Status*") -or -not ($submissionAppShell -like "*Sign Out*")) {
         throw "Expected responses compatibility shell HTML to include response workflow controls"
     }
     $administrationShell = Invoke-RestMethod -Uri "$baseUrl/app/administration" -TimeoutSec 30
@@ -159,7 +159,7 @@ try {
         throw "Expected admin application shell HTML to include setup workflow controls"
     }
     $reportingAppShell = Invoke-RestMethod -Uri "$baseUrl/app/reports" -TimeoutSec 30
-    if (-not ($reportingAppShell -like "*Reports*") -or -not ($reportingAppShell -like "*Report Areas*") -or -not ($reportingAppShell -like "*Reporting Directory*") -or -not ($reportingAppShell -like "*Reports Workspace*") -or -not ($reportingAppShell -like "*Browse Datasets*") -or -not ($reportingAppShell -like "*Inspect Dataset*") -or -not ($reportingAppShell -like "*View Dataset Rows*") -or -not ($reportingAppShell -like "*Dashboard Preview*") -or -not ($reportingAppShell -like "*Inspect Chart*") -or -not ($reportingAppShell -like "*Open Demo Dashboard*") -or -not ($reportingAppShell -like "*Review Reports*")) {
+    if (-not ($reportingAppShell -like "*Reports*") -or -not ($reportingAppShell -like "*Report Areas*") -or -not ($reportingAppShell -like "*Reporting Directory*") -or -not ($reportingAppShell -like "*Reports Workspace*") -or -not ($reportingAppShell -like "*Browse Datasets*") -or -not ($reportingAppShell -like "*Inspect Dataset*") -or -not ($reportingAppShell -like "*View Dataset Rows*") -or -not ($reportingAppShell -like "*Dashboard Preview*") -or -not ($reportingAppShell -like "*Inspect Chart*") -or -not ($reportingAppShell -like "*Review Reports*") -or -not ($reportingAppShell -like "*Refresh Reports*")) {
         throw "Expected reporting application shell HTML to include report and dashboard workflow controls"
     }
     if ($reportingAppShell -like "*Create Shortcuts*") {
