@@ -257,9 +257,9 @@ mod tests {
         assert!(html.contains("Responses"));
         assert!(html.contains("/app"));
         assert!(html.contains("/app/responses"));
-        assert!(html.contains("Response Console"));
-        assert!(html.contains("Response Queues"));
-        assert!(html.contains("Guided Path"));
+        assert!(html.contains("Responses Workspace"));
+        assert!(html.contains("Response Browse"));
+        assert!(html.contains("Response Flow"));
         assert!(html.contains("Response Stages"));
         assert!(html.contains("Response Directory"));
         assert!(html.contains("Start Response Entry"));
@@ -332,7 +332,9 @@ mod tests {
         assert!(organization.contains("Organization"));
         assert!(organization.contains("/app/organization"));
         assert!(organization.contains("Organization Areas"));
-        assert!(organization.contains("Organization Console"));
+        assert!(organization.contains("Organization Workspace"));
+        assert!(organization.contains("Organization Browse"));
+        assert!(organization.contains("Organization Flow"));
         assert!(organization.contains("Organization Directory"));
         assert!(organization.contains("Organization Screen"));
         assert!(organization.contains("Load Nodes"));
@@ -347,7 +349,9 @@ mod tests {
         assert!(forms.contains("Forms"));
         assert!(forms.contains("/app/forms"));
         assert!(forms.contains("Forms Areas"));
-        assert!(forms.contains("Forms Console"));
+        assert!(forms.contains("Forms Workspace"));
+        assert!(forms.contains("Forms Browse"));
+        assert!(forms.contains("Forms Flow"));
         assert!(forms.contains("Forms Directory"));
         assert!(forms.contains("Forms Screen"));
         assert!(forms.contains("Load Forms"));
@@ -508,9 +512,9 @@ mod tests {
         assert!(html.contains("/app"));
         assert!(html.contains("/app/reports"));
         assert!(html.contains("/app/dashboards"));
-        assert!(html.contains("Insight Console"));
-        assert!(html.contains("Reporting Queues"));
-        assert!(html.contains("Reporting Path"));
+        assert!(html.contains("Reports Workspace"));
+        assert!(html.contains("Reporting Browse"));
+        assert!(html.contains("Reporting Flow"));
         assert!(html.contains("Report Areas"));
         assert!(html.contains("Reporting Directory"));
         assert!(html.contains("Open Dataset Workspace"));
@@ -572,7 +576,9 @@ mod tests {
         assert!(html.contains("Dashboards"));
         assert!(html.contains("/app/dashboards"));
         assert!(html.contains("Dashboard Areas"));
-        assert!(html.contains("Dashboard Console"));
+        assert!(html.contains("Dashboards Workspace"));
+        assert!(html.contains("Dashboards Browse"));
+        assert!(html.contains("Dashboard Flow"));
         assert!(html.contains("Dashboard Preview"));
         assert!(html.contains("Browse Dashboards"));
         assert!(html.contains("Browse Charts"));

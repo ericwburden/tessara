@@ -1269,11 +1269,11 @@ fn OrganizationWorkspaceShell() -> impl IntoView {
     view! {
         <WorkspaceShellSection
             eyebrow="Organization Workspace"
-            title="Organization Console"
+            title="Organization Workspace"
             description="This route is the first organization-area bridge. It keeps hierarchy work discoverable now while later sprints replace more of the internal builder feel with directory and detail flows."
-            queue_title="Organization Queues"
+            queue_title="Organization Browse"
             queue_cards=queue_cards.to_vec()
-            path_title="Organization Path"
+            path_title="Organization Flow"
             path_steps=path_steps
         >
             <HierarchyAdminScreen
@@ -1321,11 +1321,11 @@ fn FormsWorkspaceShell() -> impl IntoView {
     view! {
         <WorkspaceShellSection
             eyebrow="Forms Workspace"
-            title="Forms Console"
+            title="Forms Workspace"
             description="This route is the current bridge between product-facing form discovery and the supported internal form lifecycle tasks."
-            queue_title="Forms Queues"
+            queue_title="Forms Browse"
             queue_cards=queue_cards.to_vec()
-            path_title="Forms Path"
+            path_title="Forms Flow"
             path_steps=path_steps
         >
             <FormAdminScreen
@@ -1381,11 +1381,11 @@ fn SubmissionWorkspaceShell() -> impl IntoView {
     view! {
         <WorkspaceShellSection
             eyebrow="Responses Workspace"
-            title="Response Console"
+            title="Responses Workspace"
             description="This route now acts as an application workspace: the left side focuses on queues and entry points, while the right side carries the active response, review, and reporting surfaces."
-            queue_title="Response Queues"
+            queue_title="Response Browse"
             queue_cards=queue_cards.to_vec()
-            path_title="Guided Path"
+            path_title="Response Flow"
             path_steps=path_steps
         >
             <SubmissionScreen/>
@@ -1649,11 +1649,11 @@ fn ReportingWorkspaceShell() -> impl IntoView {
     view! {
         <WorkspaceShellSection
             eyebrow="Reports Workspace"
-            title="Insight Console"
+            title="Reports Workspace"
             description="This route now acts more like a reporting workspace: the rail keeps the reporting queues visible while the main area focuses on report execution and dashboard preview."
-            queue_title="Reporting Queues"
+            queue_title="Reporting Browse"
             queue_cards=queue_cards.to_vec()
-            path_title="Reporting Path"
+            path_title="Reporting Flow"
             path_steps=path_steps
         >
             <ReportRunnerScreen/>
@@ -1696,11 +1696,11 @@ fn DashboardsWorkspaceShell() -> impl IntoView {
     view! {
         <WorkspaceShellSection
             eyebrow="Dashboards Workspace"
-            title="Dashboard Console"
+            title="Dashboards Workspace"
             description="This route keeps dashboard viewing separate from the broader reports area while the dashboard product surface catches up."
-            queue_title="Dashboard Queues"
+            queue_title="Dashboards Browse"
             queue_cards=queue_cards.to_vec()
-            path_title="Dashboard Path"
+            path_title="Dashboard Flow"
             path_steps=path_steps
         >
             <DashboardPreviewScreen/>

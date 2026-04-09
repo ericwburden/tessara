@@ -135,15 +135,15 @@ try {
         throw "Expected application home HTML to include overview and split-area navigation"
     }
     $organizationShell = Invoke-RestMethod -Uri "$baseUrl/app/organization" -TimeoutSec 30
-    if (-not ($organizationShell -like "*Organization*") -or -not ($organizationShell -like "*Organization Areas*") -or -not ($organizationShell -like "*Organization Console*") -or -not ($organizationShell -like "*Load Nodes*")) {
+    if (-not ($organizationShell -like "*Organization*") -or -not ($organizationShell -like "*Organization Areas*") -or -not ($organizationShell -like "*Organization Workspace*") -or -not ($organizationShell -like "*Load Nodes*")) {
         throw "Expected organization application shell HTML to include organization route controls"
     }
     $formsShell = Invoke-RestMethod -Uri "$baseUrl/app/forms" -TimeoutSec 30
-    if (-not ($formsShell -like "*Forms*") -or -not ($formsShell -like "*Forms Areas*") -or -not ($formsShell -like "*Forms Console*") -or -not ($formsShell -like "*Load Forms*")) {
+    if (-not ($formsShell -like "*Forms*") -or -not ($formsShell -like "*Forms Areas*") -or -not ($formsShell -like "*Forms Workspace*") -or -not ($formsShell -like "*Load Forms*")) {
         throw "Expected forms application shell HTML to include forms route controls"
     }
     $responsesShell = Invoke-RestMethod -Uri "$baseUrl/app/responses" -TimeoutSec 30
-    if (-not ($responsesShell -like "*Responses*") -or -not ($responsesShell -like "*Response Console*") -or -not ($responsesShell -like "*Response Directory*") -or -not ($responsesShell -like "*Start Demo Response*")) {
+    if (-not ($responsesShell -like "*Responses*") -or -not ($responsesShell -like "*Responses Workspace*") -or -not ($responsesShell -like "*Response Directory*") -or -not ($responsesShell -like "*Start Demo Response*")) {
         throw "Expected responses application shell HTML to include responses route controls"
     }
     $submissionAppShell = Invoke-RestMethod -Uri "$baseUrl/app/submissions" -TimeoutSec 30
@@ -159,14 +159,14 @@ try {
         throw "Expected admin application shell HTML to include setup workflow controls"
     }
     $reportingAppShell = Invoke-RestMethod -Uri "$baseUrl/app/reports" -TimeoutSec 30
-    if (-not ($reportingAppShell -like "*Reports*") -or -not ($reportingAppShell -like "*Report Areas*") -or -not ($reportingAppShell -like "*Reporting Directory*") -or -not ($reportingAppShell -like "*Report Runner*") -or -not ($reportingAppShell -like "*Browse Datasets*") -or -not ($reportingAppShell -like "*Inspect Dataset*") -or -not ($reportingAppShell -like "*View Dataset Rows*") -or -not ($reportingAppShell -like "*Dashboard Preview*") -or -not ($reportingAppShell -like "*Inspect Chart*") -or -not ($reportingAppShell -like "*Open Demo Dashboard*")) {
+    if (-not ($reportingAppShell -like "*Reports*") -or -not ($reportingAppShell -like "*Report Areas*") -or -not ($reportingAppShell -like "*Reporting Directory*") -or -not ($reportingAppShell -like "*Reports Workspace*") -or -not ($reportingAppShell -like "*Browse Datasets*") -or -not ($reportingAppShell -like "*Inspect Dataset*") -or -not ($reportingAppShell -like "*View Dataset Rows*") -or -not ($reportingAppShell -like "*Dashboard Preview*") -or -not ($reportingAppShell -like "*Inspect Chart*") -or -not ($reportingAppShell -like "*Open Demo Dashboard*")) {
         throw "Expected reporting application shell HTML to include report and dashboard workflow controls"
     }
     if ($reportingAppShell -like "*Create Shortcuts*") {
         throw "Expected reports application shell HTML to keep create shortcuts in internal areas"
     }
     $dashboardsShell = Invoke-RestMethod -Uri "$baseUrl/app/dashboards" -TimeoutSec 30
-    if (-not ($dashboardsShell -like "*Dashboards*") -or -not ($dashboardsShell -like "*Dashboard Areas*") -or -not ($dashboardsShell -like "*Dashboard Console*") -or -not ($dashboardsShell -like "*Dashboard Preview*")) {
+    if (-not ($dashboardsShell -like "*Dashboards*") -or -not ($dashboardsShell -like "*Dashboard Areas*") -or -not ($dashboardsShell -like "*Dashboards Workspace*") -or -not ($dashboardsShell -like "*Dashboard Preview*")) {
         throw "Expected dashboards application shell HTML to include dashboard route controls"
     }
     $migrationAppShell = Invoke-RestMethod -Uri "$baseUrl/app/migration" -TimeoutSec 30
