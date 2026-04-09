@@ -503,7 +503,7 @@ fn MigrationApplicationShell() -> impl IntoView {
         >
             <MigrationHomeScreen/>
             <FixtureScreen/>
-            <section id="result-screen" class="app-screen">
+            <section id="migration-results-screen" class="app-screen">
                 <h2>"Validation Results"</h2>
                 <div id="screen" class="cards"></div>
             </section>
@@ -780,17 +780,29 @@ fn ApplicationNav(active_route: &'static str) -> impl IntoView {
 #[component]
 fn CreateMenu() -> impl IntoView {
     let create_links = [
-        ("Create Node", "/app/administration#hierarchy-admin-screen"),
-        ("Create Form", "/app/administration#form-admin-screen"),
-        ("Create Dataset", "/app/administration#report-admin-screen"),
-        ("Create Report", "/app/administration#report-admin-screen"),
+        (
+            "Create Node",
+            "/app/administration#organization-setup-screen",
+        ),
+        (
+            "Create Form",
+            "/app/administration#forms-configuration-screen",
+        ),
+        (
+            "Create Dataset",
+            "/app/administration#reporting-configuration-screen",
+        ),
+        (
+            "Create Report",
+            "/app/administration#reporting-configuration-screen",
+        ),
         (
             "Create Aggregation",
-            "/app/administration#report-admin-screen",
+            "/app/administration#reporting-configuration-screen",
         ),
         (
             "Create Dashboard",
-            "/app/administration#report-admin-screen",
+            "/app/administration#reporting-configuration-screen",
         ),
     ];
 
@@ -932,7 +944,7 @@ fn OrganizationHomeScreen() -> impl IntoView {
         ManagementCardSpec {
             title: "Browse Nodes",
             description: "Load the current runtime nodes and move through the operational hierarchy.",
-            href: "#hierarchy-admin-screen",
+            href: "#organization-setup-screen",
             href_label: "Open Organization Tasks",
             action: "loadNodes()",
             action_label: "Load Nodes",
@@ -940,7 +952,7 @@ fn OrganizationHomeScreen() -> impl IntoView {
         ManagementCardSpec {
             title: "Inspect Node Types",
             description: "Review the configured hierarchy structure and labels behind the organization area.",
-            href: "#hierarchy-admin-screen",
+            href: "#organization-setup-screen",
             href_label: "Open Structure",
             action: "loadNodeTypes()",
             action_label: "Load Node Types",
@@ -979,7 +991,7 @@ fn FormsHomeScreen() -> impl IntoView {
         ManagementCardSpec {
             title: "Browse Forms",
             description: "Open the current forms directory and inspect configured forms and versions.",
-            href: "#form-admin-screen",
+            href: "#forms-configuration-screen",
             href_label: "Open Form Tasks",
             action: "loadForms()",
             action_label: "Load Forms",
@@ -1026,7 +1038,7 @@ fn AdminHomeScreen() -> impl IntoView {
         ManagementCardSpec {
             title: "Hierarchy",
             description: "Manage node types, relationships, metadata fields, and runtime nodes.",
-            href: "#hierarchy-admin-screen",
+            href: "#organization-setup-screen",
             href_label: "Open Hierarchy Setup",
             action: "loadNodeTypes()",
             action_label: "Load Node Types",
@@ -1034,7 +1046,7 @@ fn AdminHomeScreen() -> impl IntoView {
         ManagementCardSpec {
             title: "Forms",
             description: "Create forms, draft versions, edit sections and fields, and publish revisions.",
-            href: "#form-admin-screen",
+            href: "#forms-configuration-screen",
             href_label: "Open Form Builder",
             action: "loadForms()",
             action_label: "Load Forms",
@@ -1042,7 +1054,7 @@ fn AdminHomeScreen() -> impl IntoView {
         ManagementCardSpec {
             title: "Datasets and Reports",
             description: "Manage datasets, reports, and aggregations inside the reporting stack.",
-            href: "#report-admin-screen",
+            href: "#reporting-configuration-screen",
             href_label: "Open Reporting Builder",
             action: "loadDatasets()",
             action_label: "Load Datasets",
@@ -1050,7 +1062,7 @@ fn AdminHomeScreen() -> impl IntoView {
         ManagementCardSpec {
             title: "Dashboards",
             description: "Inspect charts, dashboards, and current preview outputs from one admin route.",
-            href: "#report-admin-screen",
+            href: "#reporting-configuration-screen",
             href_label: "Open Dashboard Builder",
             action: "loadDashboards()",
             action_label: "Load Dashboards",
@@ -1130,7 +1142,7 @@ fn SubmissionHomeScreen() -> impl IntoView {
         ManagementCardSpec {
             title: "Start a Response",
             description: "Choose a published form and target node, then open the form for draft entry.",
-            href: "#submission-screen",
+            href: "#response-entry-screen",
             href_label: "Open Response Entry",
             action: "loadPublishedForms()",
             action_label: "Load Published Forms",
@@ -1138,7 +1150,7 @@ fn SubmissionHomeScreen() -> impl IntoView {
         ManagementCardSpec {
             title: "Choose a Target",
             description: "Browse nodes and carry the selected target directly into the response flow.",
-            href: "#submission-screen",
+            href: "#response-entry-screen",
             href_label: "Open Target Selection",
             action: "loadNodes()",
             action_label: "Load Target Nodes",
@@ -1146,7 +1158,7 @@ fn SubmissionHomeScreen() -> impl IntoView {
         ManagementCardSpec {
             title: "Review Responses",
             description: "Browse draft and submitted responses, then reopen the selected submission in context.",
-            href: "#review-screen",
+            href: "#response-review-screen",
             href_label: "Open Response Review",
             action: "loadSubmissions()",
             action_label: "Load Submissions",
@@ -1154,7 +1166,7 @@ fn SubmissionHomeScreen() -> impl IntoView {
         ManagementCardSpec {
             title: "Open Related Reports",
             description: "Jump from the submission route into supporting report output while reviewing responses.",
-            href: "#report-screen",
+            href: "#response-report-screen",
             href_label: "Open Related Reports",
             action: "loadReports()",
             action_label: "Load Reports",
@@ -1444,7 +1456,7 @@ fn ReportingHomeScreen() -> impl IntoView {
         ManagementCardSpec {
             title: "Datasets",
             description: "Inspect dataset definitions and run source-aware dataset previews before binding reports.",
-            href: "#report-runner-screen",
+            href: "#reports-runner-screen",
             href_label: "Open Dataset Workflows",
             action: "loadDatasets()",
             action_label: "Load Datasets",
@@ -1452,7 +1464,7 @@ fn ReportingHomeScreen() -> impl IntoView {
         ManagementCardSpec {
             title: "Reports",
             description: "Inspect report definitions, refresh analytics, and execute table-style outputs.",
-            href: "#report-runner-screen",
+            href: "#reports-runner-screen",
             href_label: "Open Report Runner",
             action: "loadReports()",
             action_label: "Load Reports",
@@ -1460,7 +1472,7 @@ fn ReportingHomeScreen() -> impl IntoView {
         ManagementCardSpec {
             title: "Aggregations",
             description: "Review aggregation definitions and execute grouped metrics on current report outputs.",
-            href: "#report-runner-screen",
+            href: "#reports-runner-screen",
             href_label: "Open Aggregations",
             action: "loadAggregations()",
             action_label: "Load Aggregations",
@@ -1468,7 +1480,7 @@ fn ReportingHomeScreen() -> impl IntoView {
         ManagementCardSpec {
             title: "Dashboards",
             description: "Preview charts and dashboards with current report or aggregation context.",
-            href: "#dashboard-preview-screen",
+            href: "#dashboard-viewer-screen",
             href_label: "Open Dashboard Preview",
             action: "loadDashboards()",
             action_label: "Load Dashboards",
@@ -1530,7 +1542,7 @@ fn DashboardsHomeScreen() -> impl IntoView {
         ManagementCardSpec {
             title: "Open Dashboards",
             description: "Browse dashboard surfaces and inspect current component previews.",
-            href: "#dashboard-preview-screen",
+            href: "#dashboard-viewer-screen",
             href_label: "Open Dashboard Viewer",
             action: "loadDashboards()",
             action_label: "Load Dashboards",
@@ -1538,7 +1550,7 @@ fn DashboardsHomeScreen() -> impl IntoView {
         ManagementCardSpec {
             title: "Open Charts",
             description: "Inspect chart definitions that drive dashboard components.",
-            href: "#dashboard-preview-screen",
+            href: "#dashboard-viewer-screen",
             href_label: "Open Charts",
             action: "loadCharts()",
             action_label: "Load Charts",
@@ -1554,7 +1566,7 @@ fn DashboardsHomeScreen() -> impl IntoView {
         ManagementCardSpec {
             title: "Open Demo Dashboard",
             description: "Jump directly into the seeded dashboard preview path.",
-            href: "#dashboard-preview-screen",
+            href: "#dashboard-viewer-screen",
             href_label: "Open Demo Preview",
             action: "openDemoDashboard()",
             action_label: "Open Demo Dashboard",
@@ -1678,7 +1690,7 @@ fn MigrationHomeScreen() -> impl IntoView {
         ManagementCardSpec {
             title: "Fixture Intake",
             description: "Load bundled fixtures or paste fixture JSON to start a migration rehearsal.",
-            href: "#fixture-screen",
+            href: "#migration-fixture-screen",
             href_label: "Open Fixture Intake",
             action: "loadLegacyFixtureExamples()",
             action_label: "Load Fixture Examples",
@@ -1686,7 +1698,7 @@ fn MigrationHomeScreen() -> impl IntoView {
         ManagementCardSpec {
             title: "Validation",
             description: "Run validation before import so mapping and value problems are visible early.",
-            href: "#fixture-screen",
+            href: "#migration-fixture-screen",
             href_label: "Open Validation",
             action: "validateLegacyFixture()",
             action_label: "Validate Fixture",
@@ -1694,7 +1706,7 @@ fn MigrationHomeScreen() -> impl IntoView {
         ManagementCardSpec {
             title: "Dry Run",
             description: "Preview what the import would create before mutating the local rehearsal database.",
-            href: "#fixture-screen",
+            href: "#migration-fixture-screen",
             href_label: "Open Dry Run",
             action: "dryRunLegacyFixture()",
             action_label: "Dry-Run Fixture",
@@ -1702,7 +1714,7 @@ fn MigrationHomeScreen() -> impl IntoView {
         ManagementCardSpec {
             title: "Import",
             description: "Run the import rehearsal and inspect the resulting entities through the app shell.",
-            href: "#result-screen",
+            href: "#migration-results-screen",
             href_label: "Open Import Results",
             action: "importLegacyFixture()",
             action_label: "Import Fixture",
@@ -1765,7 +1777,7 @@ fn RawOutputPanel() -> impl IntoView {
 #[component]
 fn ReportRunnerScreen() -> impl IntoView {
     view! {
-        <section id="report-runner-screen" class="app-screen">
+        <section id="reports-runner-screen" class="app-screen">
             <p class="eyebrow">"Reporting Screen"</p>
             <h2>"Report Runner"</h2>
             <p class="muted">
@@ -1822,7 +1834,7 @@ fn ReportRunnerScreen() -> impl IntoView {
 #[component]
 fn DashboardPreviewScreen() -> impl IntoView {
     view! {
-        <section id="dashboard-preview-screen" class="app-screen">
+        <section id="dashboard-viewer-screen" class="app-screen">
             <p class="eyebrow">"Reporting Screen"</p>
             <h2>"Dashboard Preview"</h2>
             <p class="muted">
@@ -1865,7 +1877,7 @@ fn DashboardPreviewScreen() -> impl IntoView {
 #[component]
 fn SubmissionScreen() -> impl IntoView {
     view! {
-        <section id="submission-screen" class="app-screen">
+        <section id="response-entry-screen" class="app-screen">
             <p class="eyebrow">"Application Screen"</p>
             <h2>"Submit Data"</h2>
             <p class="muted">
@@ -1920,7 +1932,7 @@ fn SubmissionScreen() -> impl IntoView {
 #[component]
 fn ReviewScreen() -> impl IntoView {
     view! {
-        <section id="review-screen" class="app-screen">
+        <section id="response-review-screen" class="app-screen">
             <p class="eyebrow">"Application Screen"</p>
             <h2>"Review Submissions"</h2>
             <p class="muted">
@@ -1958,7 +1970,7 @@ fn ReviewScreen() -> impl IntoView {
 #[component]
 fn ReportScreen() -> impl IntoView {
     view! {
-        <section id="report-screen" class="app-screen">
+        <section id="response-report-screen" class="app-screen">
             <p class="eyebrow">"Application Screen"</p>
             <h2>"View Reports"</h2>
             <p class="muted">
@@ -1991,7 +2003,7 @@ fn ReportScreen() -> impl IntoView {
 #[component]
 fn HierarchyAdminScreen() -> impl IntoView {
     view! {
-        <section id="hierarchy-admin-screen" class="app-screen">
+        <section id="organization-setup-screen" class="app-screen">
             <p class="eyebrow">"Admin Screen"</p>
             <h2>"Hierarchy Setup"</h2>
             <p class="muted">
@@ -2049,7 +2061,7 @@ fn HierarchyAdminScreen() -> impl IntoView {
 #[component]
 fn FormAdminScreen() -> impl IntoView {
     view! {
-        <section id="form-admin-screen" class="app-screen">
+        <section id="forms-configuration-screen" class="app-screen">
             <p class="eyebrow">"Admin Screen"</p>
             <h2>"Form Builder"</h2>
             <p class="muted">
@@ -2105,7 +2117,7 @@ fn FormAdminScreen() -> impl IntoView {
 #[component]
 fn ReportAdminScreen() -> impl IntoView {
     view! {
-        <section id="report-admin-screen" class="app-screen">
+        <section id="reporting-configuration-screen" class="app-screen">
             <p class="eyebrow">"Admin Screen"</p>
             <h2>"Report Builder"</h2>
             <p class="muted">
@@ -2207,7 +2219,7 @@ fn ReportAdminScreen() -> impl IntoView {
 #[component]
 fn FixtureScreen() -> impl IntoView {
     view! {
-        <section id="fixture-screen" class="app-screen">
+        <section id="migration-fixture-screen" class="app-screen">
             <p class="eyebrow">"Migration Screen"</p>
             <h2>"Legacy Fixture Validation"</h2>
             <p class="muted">
