@@ -413,7 +413,11 @@ fn HomeApplicationShell() -> impl IntoView {
             actions=HOME_ACTIONS
         >
             <HomeScreen/>
-            <OutputPanels/>
+            <OutputPanels
+                title="Overview Details"
+                description="Selection-driven details, summaries, and linked outputs appear here as you move through the application."
+                raw_title="Raw API Activity"
+            />
         </AppAreaShell>
     }
 }
@@ -431,7 +435,11 @@ fn OrganizationApplicationShell() -> impl IntoView {
         >
             <OrganizationHomeScreen/>
             <OrganizationWorkspaceShell/>
-            <OutputPanels/>
+            <OutputPanels
+                title="Organization Details"
+                description="Selected hierarchy records, linked entities, and supporting results appear here."
+                raw_title="Raw API Activity"
+            />
         </AppAreaShell>
     }
 }
@@ -449,7 +457,11 @@ fn FormsApplicationShell() -> impl IntoView {
         >
             <FormsHomeScreen/>
             <FormsWorkspaceShell/>
-            <OutputPanels/>
+            <OutputPanels
+                title="Form Details"
+                description="Selected form definitions, versions, and related results appear here."
+                raw_title="Raw API Activity"
+            />
         </AppAreaShell>
     }
 }
@@ -467,7 +479,11 @@ fn ResponsesApplicationShell() -> impl IntoView {
         >
             <SubmissionHomeScreen/>
             <SubmissionWorkspaceShell/>
-            <OutputPanels/>
+            <OutputPanels
+                title="Response Details"
+                description="Selected responses, review results, and linked reporting output appear here."
+                raw_title="Raw API Activity"
+            />
         </AppAreaShell>
     }
 }
@@ -485,7 +501,11 @@ fn AdministrationApplicationShell() -> impl IntoView {
         >
             <AdminHomeScreen/>
             <AdminWorkspaceShell/>
-            <OutputPanels/>
+            <OutputPanels
+                title="Management Output"
+                description="Configuration results and current entity payloads appear here while the admin workflows remain builder-backed."
+                raw_title="Raw API Output"
+            />
         </AppAreaShell>
     }
 }
@@ -507,7 +527,7 @@ fn MigrationApplicationShell() -> impl IntoView {
                 <h2>"Validation Results"</h2>
                 <div id="screen" class="cards"></div>
             </section>
-            <RawOutputPanel/>
+            <RawOutputPanel title="Raw API Output"/>
         </AppAreaShell>
     }
 }
@@ -525,7 +545,11 @@ fn ReportsApplicationShell() -> impl IntoView {
         >
             <ReportingHomeScreen/>
             <ReportingWorkspaceShell/>
-            <OutputPanels/>
+            <OutputPanels
+                title="Report Details"
+                description="Selected datasets, reports, aggregations, and linked results appear here."
+                raw_title="Raw API Activity"
+            />
         </AppAreaShell>
     }
 }
@@ -543,7 +567,11 @@ fn DashboardsApplicationShell() -> impl IntoView {
         >
             <DashboardsHomeScreen/>
             <DashboardsWorkspaceShell/>
-            <OutputPanels/>
+            <OutputPanels
+                title="Dashboard Details"
+                description="Selected dashboards, chart context, and supporting report results appear here."
+                raw_title="Raw API Activity"
+            />
         </AppAreaShell>
     }
 }
@@ -1464,13 +1492,18 @@ fn AdminWorkspaceShell() -> impl IntoView {
 }
 
 #[component]
-fn OutputPanels() -> impl IntoView {
+fn OutputPanels(
+    title: &'static str,
+    description: &'static str,
+    raw_title: &'static str,
+) -> impl IntoView {
     view! {
         <section class="app-screen">
-            <h2>"Screen Output"</h2>
+            <h2>{title}</h2>
+            <p class="muted">{description}</p>
             <div id="screen" class="cards"></div>
         </section>
-        <RawOutputPanel/>
+        <RawOutputPanel title=raw_title/>
     }
 }
 
@@ -1789,10 +1822,10 @@ fn MigrationHomeScreen() -> impl IntoView {
 }
 
 #[component]
-fn RawOutputPanel() -> impl IntoView {
+fn RawOutputPanel(title: &'static str) -> impl IntoView {
     view! {
         <section class="app-screen">
-            <h2>"Raw Output"</h2>
+            <h2>{title}</h2>
             <pre id="output">"No API calls yet."</pre>
         </section>
     }

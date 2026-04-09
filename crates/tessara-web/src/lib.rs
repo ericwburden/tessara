@@ -230,6 +230,8 @@ mod tests {
 
         assert!(html.contains("Application Overview"));
         assert!(html.contains("Welcome to Tessara"));
+        assert!(html.contains("Overview Details"));
+        assert!(html.contains("Raw API Activity"));
         assert!(html.contains("Home"));
         assert!(html.contains("/app/organization"));
         assert!(html.contains("/app/forms"));
@@ -294,6 +296,8 @@ mod tests {
         assert!(html.contains("Show Submitted"));
         assert!(html.contains("Clear Review Filters"));
         assert!(html.contains("Response Reports"));
+        assert!(html.contains("Response Details"));
+        assert!(html.contains("Raw API Activity"));
         assert!(html.contains("Current Report Selection"));
         assert!(html.contains("Load App Summary"));
         assert!(html.contains("Current User"));
@@ -339,6 +343,7 @@ mod tests {
         assert!(organization.contains("Organization Browse"));
         assert!(organization.contains("Organization Flow"));
         assert!(organization.contains("Organization Directory"));
+        assert!(organization.contains("Organization Details"));
         assert!(organization.contains("Current Organization Selection"));
         assert!(organization.contains("Browse and Inspect"));
         assert!(organization.contains("Load Nodes"));
@@ -357,6 +362,7 @@ mod tests {
         assert!(forms.contains("Forms Browse"));
         assert!(forms.contains("Forms Flow"));
         assert!(forms.contains("Forms Directory"));
+        assert!(forms.contains("Form Details"));
         assert!(forms.contains("Current Form Selection"));
         assert!(forms.contains("Browse and Inspect"));
         assert!(forms.contains("Load Forms"));
@@ -377,6 +383,8 @@ mod tests {
         assert!(html.contains("Configuration Console"));
         assert!(html.contains("Management Queues"));
         assert!(html.contains("Admin Path"));
+        assert!(html.contains("Management Output"));
+        assert!(html.contains("Raw API Output"));
         assert!(html.contains("Management Areas"));
         assert!(html.contains("Entity Directory"));
         assert!(html.contains("Open Organization Setup"));
@@ -485,6 +493,7 @@ mod tests {
         assert!(html.contains("/app/responses"));
         assert!(html.contains("Migration Stages"));
         assert!(html.contains("Migration Directory"));
+        assert!(html.contains("Raw API Output"));
         assert!(html.contains("Open Fixture Intake"));
         assert!(html.contains("Open Validation"));
         assert!(html.contains("Open Dry Run"));
@@ -522,6 +531,8 @@ mod tests {
         assert!(html.contains("Reporting Flow"));
         assert!(html.contains("Report Areas"));
         assert!(html.contains("Reporting Directory"));
+        assert!(html.contains("Report Details"));
+        assert!(html.contains("Raw API Activity"));
         assert!(html.contains("Open Dataset Workspace"));
         assert!(html.contains("Open Reports Workspace"));
         assert!(html.contains("Open Aggregations Workspace"));
@@ -587,6 +598,8 @@ mod tests {
         assert!(html.contains("Dashboards Browse"));
         assert!(html.contains("Dashboard Flow"));
         assert!(html.contains("Dashboard Preview"));
+        assert!(html.contains("Dashboard Details"));
+        assert!(html.contains("Raw API Activity"));
         assert!(html.contains("Browse Dashboards"));
         assert!(html.contains("Browse Charts"));
         assert!(html.contains("Go to Reports"));
