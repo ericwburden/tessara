@@ -408,7 +408,7 @@ fn HomeApplicationShell() -> impl IntoView {
             active_route="home"
             area_kind="Shared Home"
             title="Application Overview"
-            description="This shared home is the primary entry point for the migration UI catch-up. It exposes the target product areas while keeping the current backend-supported workflows intact."
+            description="This shared home is the primary entry point for Tessara. It exposes the core product areas while keeping the currently supported workflows easy to reach."
             show_create_shortcuts=false
             actions=HOME_ACTIONS
         >
@@ -429,7 +429,7 @@ fn OrganizationApplicationShell() -> impl IntoView {
             active_route="organization"
             area_kind="Product Area"
             title="Organization"
-            description="This area establishes the operational hierarchy surface. It currently bridges into the existing hierarchy and node workflows without introducing unsupported organization behavior."
+            description="This area is the operational hierarchy surface. It brings hierarchy records, scoped forms, and linked dashboards into one place without implying unsupported organization behavior."
             show_create_shortcuts=false
             actions=ORGANIZATION_ACTIONS
         >
@@ -451,7 +451,7 @@ fn FormsApplicationShell() -> impl IntoView {
             active_route="forms"
             area_kind="Product Area"
             title="Forms"
-            description="This area is the canonical entry point for form discovery and lifecycle work. It currently bridges product-facing form access and internal form configuration using existing supported routes."
+            description="This area is the canonical entry point for form discovery and lifecycle work. It keeps product-facing form access clear while leaving deeper configuration in Administration."
             show_create_shortcuts=false
             actions=FORMS_ACTIONS
         >
@@ -473,7 +473,7 @@ fn ResponsesApplicationShell() -> impl IntoView {
             active_route="responses"
             area_kind="Product Area"
             title="Responses"
-            description="This area handles response entry, drafts, submission, and review. It uses the current backend-supported form-render and submission lifecycle without relying on utility-style navigation."
+            description="This area handles response entry, drafts, submission, and review. It stays focused on the supported form-render and submission lifecycle without falling back to utility-style navigation."
             show_create_shortcuts=false
             actions=RESPONSES_ACTIONS
         >
@@ -539,7 +539,7 @@ fn ReportsApplicationShell() -> impl IntoView {
             active_route="reports"
             area_kind="Product Area"
             title="Reports"
-            description="This area is the canonical route for report browsing, report execution, and reporting detail traversal. Dashboard preview remains linked here until the dashboard area is split further."
+            description="This area is the canonical route for report browsing, report execution, and reporting detail traversal. Dashboard preview remains linked here while the dashboard area continues to mature."
             show_create_shortcuts=false
             actions=REPORTS_ACTIONS
         >
@@ -561,7 +561,7 @@ fn DashboardsApplicationShell() -> impl IntoView {
             active_route="dashboards"
             area_kind="Product Area"
             title="Dashboards"
-            description="This area is the dashboard viewing destination. It currently uses the supported dashboard preview path while the broader dashboard product surface catches up."
+            description="This area is the dashboard viewing destination. It uses the supported dashboard preview path while the broader dashboard surface continues to mature."
             show_create_shortcuts=false
             actions=DASHBOARDS_ACTIONS
         >
@@ -889,13 +889,13 @@ fn HomeScreen() -> impl IntoView {
             "Administration",
             "Configure hierarchy, forms, datasets, reports, aggregations, charts, and dashboards.",
             "/app/administration",
-            "Open Administration",
+            "Go to Administration",
         ),
         (
             "Migration",
             "Validate, dry-run, and rehearse legacy imports from one operator-focused route.",
             "/app/migration",
-            "Open Migration",
+            "Go to Migration",
         ),
     ];
 
@@ -1007,7 +1007,7 @@ fn OrganizationHomeScreen() -> impl IntoView {
         <ManagementCardsSection
             eyebrow="Organization Home"
             title="Organization Areas"
-            description="This route is the structural bridge from the legacy partner/program model into Tessara's configurable hierarchy."
+            description="This area translates legacy organization concepts into Tessara's configurable hierarchy and scoped records."
             cards=management_cards.to_vec()
         />
     }
@@ -1018,7 +1018,7 @@ fn FormsHomeScreen() -> impl IntoView {
     let management_cards = [
         ManagementCardSpec {
             title: "Browse Forms",
-            description: "Open the current forms directory and inspect configured forms and versions.",
+            description: "Browse the current forms directory and inspect configured forms and versions.",
             href: "#forms-configuration-screen",
             href_label: "Browse Forms",
             action: "loadForms()",
@@ -1054,7 +1054,7 @@ fn FormsHomeScreen() -> impl IntoView {
         <ManagementCardsSection
             eyebrow="Forms Home"
             title="Forms Areas"
-            description="This route is the product-facing entry into form discovery, version awareness, and supported form lifecycle tasks."
+            description="This area is the product-facing entry into form discovery, version awareness, and supported lifecycle tasks."
             cards=management_cards.to_vec()
         />
     }
@@ -1244,13 +1244,13 @@ fn SubmissionHomeScreen() -> impl IntoView {
         <ManagementCardsSection
             eyebrow="Responses Home"
             title="Response Stages"
-            description="Use this route-level landing section to move between response entry, target selection, review, and related reporting without relying on one long stacked screen."
+            description="Use this landing section to move between response entry, target selection, review, and related reporting without relying on one long stacked screen."
             cards=management_cards.to_vec()
         />
         <DirectoryCardsSection
             eyebrow="Responses Home"
             title="Response Directory"
-            description="These entry points keep submissions aligned with the application shell by emphasizing common lists and review paths over raw-ID entry."
+            description="These entry points keep responses aligned with the application shell by emphasizing common lists and review paths over raw-ID entry."
             cards=directory_cards.to_vec()
         />
     }
@@ -1298,7 +1298,7 @@ fn OrganizationWorkspaceShell() -> impl IntoView {
         <WorkspaceShellSection
             eyebrow="Organization Workspace"
             title="Organization Workspace"
-            description="This route is the first organization-area bridge. It keeps hierarchy work discoverable now while later sprints replace more of the internal builder feel with directory and detail flows."
+            description="This workspace keeps hierarchy records and structure browsing in one place while the product area continues shifting toward stronger directory and detail flows."
             queue_title="Organization Browse"
             queue_cards=queue_cards.to_vec()
             path_title="Organization Flow"
@@ -1350,7 +1350,7 @@ fn FormsWorkspaceShell() -> impl IntoView {
         <WorkspaceShellSection
             eyebrow="Forms Workspace"
             title="Forms Workspace"
-            description="This route is the current bridge between product-facing form discovery and the supported internal form lifecycle tasks."
+            description="This workspace keeps form discovery, version awareness, and supported lifecycle tasks in one place while deeper configuration remains internal."
             queue_title="Forms Browse"
             queue_cards=queue_cards.to_vec()
             path_title="Forms Flow"
@@ -1581,13 +1581,13 @@ fn ReportingHomeScreen() -> impl IntoView {
         <ManagementCardsSection
             eyebrow="Reports Home"
             title="Report Areas"
-            description="Use this reporting landing section to move between datasets, reports, aggregations, and dashboards without dropping immediately into builder-style controls."
+            description="Use this reporting landing section to move between datasets, reports, aggregations, and dashboards without dropping immediately into configuration-heavy screens."
             cards=management_cards.to_vec()
         />
         <DirectoryCardsSection
             eyebrow="Reports Home"
             title="Reporting Directory"
-            description="These entry points start to replace workbench-only reporting flows with clearer entity lists inside the application shell."
+            description="These entry points keep reporting centered on clearer entity lists and viewer flows inside the application shell."
             cards=directory_cards.to_vec()
         />
     }
@@ -1683,7 +1683,7 @@ fn ReportingWorkspaceShell() -> impl IntoView {
         <WorkspaceShellSection
             eyebrow="Reports Workspace"
             title="Reports Workspace"
-            description="This route now acts more like a reporting workspace: the rail keeps the reporting queues visible while the main area focuses on report execution and dashboard preview."
+            description="This workspace keeps reporting browse actions visible while the main area focuses on report execution and dashboard preview."
             queue_title="Reporting Browse"
             queue_cards=queue_cards.to_vec()
             path_title="Reporting Flow"
@@ -1730,7 +1730,7 @@ fn DashboardsWorkspaceShell() -> impl IntoView {
         <WorkspaceShellSection
             eyebrow="Dashboards Workspace"
             title="Dashboards Workspace"
-            description="This route keeps dashboard viewing separate from the broader reports area while the dashboard product surface catches up."
+            description="This workspace keeps dashboard viewing separate from the broader reports area while the dashboard surface continues to mature."
             queue_title="Dashboards Browse"
             queue_cards=queue_cards.to_vec()
             path_title="Dashboard Flow"
