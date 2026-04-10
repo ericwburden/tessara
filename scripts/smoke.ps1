@@ -131,7 +131,7 @@ try {
     }
 
     $appShell = Invoke-RestMethod -Uri "$baseUrl/app" -TimeoutSec 30
-    if (-not ($appShell -like "*Application Overview*") -or -not ($appShell -like "*Welcome to Tessara*") -or -not ($appShell -like "*Product Areas*") -or -not ($appShell -like "*Current Deployment Readiness*") -or -not ($appShell -like "*Current Workflow Context*") -or -not ($appShell -like "*Internal Areas*") -or -not ($appShell -like "*Browse Organization*") -or -not ($appShell -like "*Browse Forms*") -or -not ($appShell -like "*Go to Responses*") -or -not ($appShell -like "*Go to Dashboards*")) {
+    if (-not ($appShell -like "*Application Overview*") -or -not ($appShell -like "*Welcome to Tessara*") -or -not ($appShell -like "*Role-Ready Home Modules*") -or -not ($appShell -like "*Scoped Operations*") -or -not ($appShell -like "*Response Delivery*") -or -not ($appShell -like "*Oversight and Insight*") -or -not ($appShell -like "*Product Areas*") -or -not ($appShell -like "*Current Deployment Readiness*") -or -not ($appShell -like "*Current Workflow Context*") -or -not ($appShell -like "*Internal Areas*") -or -not ($appShell -like "*Browse Organization*") -or -not ($appShell -like "*Browse Forms*") -or -not ($appShell -like "*Go to Responses*") -or -not ($appShell -like "*Go to Dashboards*")) {
         throw "Expected application home HTML to include overview and split-area navigation"
     }
     $organizationShell = Invoke-RestMethod -Uri "$baseUrl/app/organization" -TimeoutSec 30

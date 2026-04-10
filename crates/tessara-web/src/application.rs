@@ -162,6 +162,13 @@ struct QueueCardSpec {
     label: &'static str,
 }
 
+#[derive(Copy, Clone)]
+struct HomeModuleSpec {
+    title: &'static str,
+    description: &'static str,
+    highlights: &'static [&'static str],
+}
+
 const HOME_ACTIONS: &[ActionSpec] = &[
     ActionSpec {
         handler: "login()",
@@ -523,7 +530,7 @@ fn ReportsApplicationShell() -> impl IntoView {
             active_route="reports"
             area_kind="Product Area"
             title="Reports"
-            description="This area is the canonical route for report browsing, report execution, and reporting detail traversal. Dashboard preview remains linked here while the dashboard area continues to mature."
+            description="This area is the canonical route for report browsing, report execution, and reporting detail traversal, with linked access into dashboards where needed."
             show_create_shortcuts=false
             actions=REPORTS_ACTIONS
         >
@@ -545,7 +552,7 @@ fn DashboardsApplicationShell() -> impl IntoView {
             active_route="dashboards"
             area_kind="Product Area"
             title="Dashboards"
-            description="This area is the dashboard viewing destination. It uses the supported dashboard preview path while the broader dashboard surface continues to mature."
+            description="This area is the dashboard viewing destination for chart-backed monitoring and linked report context."
             show_create_shortcuts=false
             actions=DASHBOARDS_ACTIONS
         >
@@ -650,6 +657,39 @@ fn DirectoryCardsSection(
                                 <h3>{card.title}</h3>
                                 <p>{card.description}</p>
                                 <button type="button" onclick=card.action>{card.label}</button>
+                            </article>
+                        }
+                    })
+                    .collect_view()}
+            </div>
+        </ScreenSection>
+    }
+}
+
+#[component]
+fn HomeModuleSection(
+    eyebrow: &'static str,
+    title: &'static str,
+    description: &'static str,
+    modules: Vec<HomeModuleSpec>,
+) -> impl IntoView {
+    view! {
+        <ScreenSection eyebrow=eyebrow title=title description=description>
+            <div class="home-grid">
+                {modules
+                    .into_iter()
+                    .map(|module| {
+                        view! {
+                            <article class="home-card">
+                                <h3>{module.title}</h3>
+                                <p>{module.description}</p>
+                                <ul class="app-list">
+                                    {module
+                                        .highlights
+                                        .iter()
+                                        .map(|highlight| view! { <li>{*highlight}</li> })
+                                        .collect_view()}
+                                </ul>
                             </article>
                         }
                     })
@@ -841,6 +881,35 @@ fn CreateMenu() -> impl IntoView {
 
 #[component]
 fn HomeScreen() -> impl IntoView {
+    let modules = [
+        HomeModuleSpec {
+            title: "Scoped Operations",
+            description: "This module zone supports partner, program, activity, and session-style operational work without hardwiring legacy labels into the shell.",
+            highlights: &[
+                "Organization browsing and scoped structure",
+                "Forms discovery for operational use",
+                "Responses entry and review",
+            ],
+        },
+        HomeModuleSpec {
+            title: "Response Delivery",
+            description: "This module zone supports respondent and client-facing completion flows while keeping draft and submitted states aligned to the current backend.",
+            highlights: &[
+                "Published form selection",
+                "Draft save and submit flow",
+                "Submitted response review",
+            ],
+        },
+        HomeModuleSpec {
+            title: "Oversight and Insight",
+            description: "This module zone supports report review, dashboard monitoring, and internal oversight work without collapsing product surfaces back into configuration screens.",
+            highlights: &[
+                "Reports and aggregations",
+                "Dashboard monitoring",
+                "Internal administration and migration access",
+            ],
+        },
+    ];
     let product_cards = [
         (
             "Organization",
@@ -896,6 +965,12 @@ fn HomeScreen() -> impl IntoView {
                 "Use this shared home as the application entry point. It is organized into stable module zones so future role-aware home variants can reuse the same structure without changing routes."
             </p>
         </section>
+        <HomeModuleSection
+            eyebrow="Shared Home"
+            title="Role-Ready Home Modules"
+            description="These modules define the shared home structure that future role-aware variants can compose without changing the route tree."
+            modules=modules.to_vec()
+        />
         <section class="app-screen">
             <p class="eyebrow">"Shared Home"</p>
             <h2>"Product Areas"</h2>
@@ -1301,7 +1376,7 @@ fn OrganizationWorkspaceShell() -> impl IntoView {
         <WorkspaceShellSection
             eyebrow="Organization Workspace"
             title="Organization Workspace"
-            description="This workspace keeps hierarchy records and structure browsing in one place while the product area continues shifting toward stronger directory and detail flows."
+            description="This workspace keeps hierarchy records and structure browsing in one place, with browse and detail tasks aligned to the Organization area."
             queue_title="Organization Browse"
             queue_cards=queue_cards.to_vec()
             path_title="Organization Flow"
@@ -1353,7 +1428,7 @@ fn FormsWorkspaceShell() -> impl IntoView {
         <WorkspaceShellSection
             eyebrow="Forms Workspace"
             title="Forms Workspace"
-            description="This workspace keeps form discovery, version awareness, and supported lifecycle tasks in one place while deeper configuration remains internal."
+            description="This workspace keeps form discovery, version awareness, and supported lifecycle tasks in one place while deeper configuration stays in Administration."
             queue_title="Forms Browse"
             queue_cards=queue_cards.to_vec()
             path_title="Forms Flow"
@@ -1469,7 +1544,7 @@ fn AdminWorkspaceShell() -> impl IntoView {
         <WorkspaceShellSection
             eyebrow="Admin Workspace"
             title="Configuration Console"
-            description="This route is now shifting from a builder stack toward an admin workspace. The rail keeps high-level management queues visible while the main area holds hierarchy, form, and reporting configuration."
+            description="This internal workspace keeps high-level management queues visible while the main area holds hierarchy, form, and reporting configuration."
             queue_title="Management Queues"
             queue_cards=queue_cards.to_vec()
             path_title="Admin Path"
@@ -1624,12 +1699,12 @@ fn DashboardsHomeScreen() -> impl IntoView {
             action_label: "Load Reports",
         },
         ManagementCardSpec {
-            title: "Open Demo Dashboard",
-            description: "Jump directly into the seeded dashboard preview path.",
-            href: "#dashboard-viewer-screen",
-            href_label: "View Demo Preview",
-            action: "openDemoDashboard()",
-            action_label: "Open Demo Dashboard",
+            title: "Review Aggregations",
+            description: "Move into grouped metrics that feed dashboard views.",
+            href: "/app/reports",
+            href_label: "Go to Reports",
+            action: "loadAggregations()",
+            action_label: "Load Aggregations",
         },
     ];
 
@@ -1637,7 +1712,7 @@ fn DashboardsHomeScreen() -> impl IntoView {
         <ManagementCardsSection
             eyebrow="Dashboards Home"
             title="Dashboard Areas"
-            description="This route separates dashboard viewing from the broader reporting route while still using the current supported preview path."
+            description="This route keeps dashboard viewing distinct while preserving direct traversal into related reporting detail."
             cards=management_cards.to_vec()
         />
     }
@@ -1733,7 +1808,7 @@ fn DashboardsWorkspaceShell() -> impl IntoView {
         <WorkspaceShellSection
             eyebrow="Dashboards Workspace"
             title="Dashboards Workspace"
-            description="This workspace keeps dashboard viewing separate from the broader reports area while the dashboard surface continues to mature."
+            description="This workspace keeps dashboard viewing separate from the broader reports area while preserving direct traversal into report detail when needed."
             queue_title="Dashboards Browse"
             queue_cards=queue_cards.to_vec()
             path_title="Dashboard Flow"

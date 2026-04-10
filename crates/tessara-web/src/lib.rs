@@ -241,6 +241,10 @@ mod tests {
         assert!(html.contains("/app/dashboards"));
         assert!(html.contains("/app/migration"));
         assert!(html.contains("Product Areas"));
+        assert!(html.contains("Role-Ready Home Modules"));
+        assert!(html.contains("Scoped Operations"));
+        assert!(html.contains("Response Delivery"));
+        assert!(html.contains("Oversight and Insight"));
         assert!(html.contains("Internal Areas"));
         assert!(html.contains("Current Deployment Readiness"));
         assert!(html.contains("Refresh Summary"));
@@ -623,8 +627,9 @@ mod tests {
         assert!(html.contains("Browse Dashboards"));
         assert!(html.contains("Browse Charts"));
         assert!(html.contains("Go to Reports"));
-        assert!(html.contains("View Demo Preview"));
-        assert!(html.contains("Open Demo Dashboard"));
+        assert!(html.contains("Review Aggregations"));
+        assert!(html.contains("Load Aggregations"));
+        assert!(!html.contains("Open Demo Dashboard"));
         assert!(html.contains("Refresh Dashboards"));
         assert!(html.contains("Refresh Summary"));
         assert!(html.contains("Session Status"));
