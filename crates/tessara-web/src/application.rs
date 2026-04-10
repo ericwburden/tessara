@@ -1,14 +1,38 @@
-//! Leptos components for the user-facing Tessara application shell.
-
-use leptos::prelude::*;
+//! Route-specific Tessara application pages.
 
 use crate::brand::document_head_tags;
+
+#[derive(Copy, Clone)]
+struct ActionSpec {
+    handler: &'static str,
+    label: &'static str,
+}
+
+const STANDARD_ACTIONS: &[ActionSpec] = &[
+    ActionSpec {
+        handler: "login()",
+        label: "Sign In",
+    },
+    ActionSpec {
+        handler: "loadCurrentUser()",
+        label: "Session Status",
+    },
+    ActionSpec {
+        handler: "logout()",
+        label: "Sign Out",
+    },
+    ActionSpec {
+        handler: "loadAppSummary()",
+        label: "Refresh Summary",
+    },
+];
 
 fn render_application_document(
     title: &str,
     description: &str,
     style: &str,
     script: &str,
+    body_attrs: &str,
     shell: String,
 ) -> String {
     let brand = document_head_tags(title, description);
@@ -23,7 +47,7 @@ fn render_application_document(
     {brand}
     <style>{style}</style>
   </head>
-  <body>
+  <body {body_attrs}>
     {shell}
     <script>{script}</script>
   </body>
@@ -31,813 +55,39 @@ fn render_application_document(
     )
 }
 
-/// Builds the application shell document used for human workflow testing.
-pub fn application_shell_html(style: &str, script: &str) -> String {
-    render_application_document(
-        "Tessara Home",
-        "Tessara application home for local replacement workflow testing.",
-        style,
-        script,
-        view! { <HomeApplicationShell/> }.to_html(),
-    )
+fn escape_attr(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('"', "&quot;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
 }
 
-/// Builds the organization application shell document.
-pub fn organization_application_shell_html(style: &str, script: &str) -> String {
-    render_application_document(
-        "Tessara Organization",
-        "Tessara organization area for browsing hierarchy and scoped operational records.",
-        style,
-        script,
-        view! { <OrganizationApplicationShell/> }.to_html(),
-    )
+fn breadcrumb(parts: &[(&str, Option<&str>)]) -> String {
+    parts
+        .iter()
+        .map(|(label, href)| match href {
+            Some(href) => format!(r#"<a href="{href}">{label}</a>"#),
+            None => format!(r#"<span>{label}</span>"#),
+        })
+        .collect::<Vec<_>>()
+        .join("")
 }
 
-/// Builds the forms application shell document.
-pub fn forms_application_shell_html(style: &str, script: &str) -> String {
-    render_application_document(
-        "Tessara Forms",
-        "Tessara forms area for browsing published and configured forms.",
-        style,
-        script,
-        view! { <FormsApplicationShell/> }.to_html(),
-    )
+fn action_buttons(actions: &[ActionSpec]) -> String {
+    actions
+        .iter()
+        .map(|action| {
+            format!(
+                r#"<button type="button" onclick="{}">{}</button>"#,
+                action.handler, action.label
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("")
 }
 
-/// Builds the responses application shell document.
-pub fn responses_application_shell_html(style: &str, script: &str) -> String {
-    render_application_document(
-        "Tessara Responses",
-        "Tessara responses area for draft, submitted, and reviewable form workflows.",
-        style,
-        script,
-        view! { <ResponsesApplicationShell/> }.to_html(),
-    )
-}
-
-/// Builds the focused submission application shell document.
-pub fn submission_application_shell_html(style: &str, script: &str) -> String {
-    responses_application_shell_html(style, script)
-}
-
-/// Builds the dashboards application shell document.
-pub fn dashboards_application_shell_html(style: &str, script: &str) -> String {
-    render_application_document(
-        "Tessara Dashboards",
-        "Tessara dashboards area for previewing dashboard surfaces and chart-backed views.",
-        style,
-        script,
-        view! { <DashboardsApplicationShell/> }.to_html(),
-    )
-}
-
-/// Builds the focused administration application shell document.
-pub fn administration_application_shell_html(style: &str, script: &str) -> String {
-    render_application_document(
-        "Tessara Administration",
-        "Tessara administration area for internal hierarchy, form, and reporting configuration.",
-        style,
-        script,
-        view! { <AdministrationApplicationShell/> }.to_html(),
-    )
-}
-
-/// Builds the focused admin application shell document.
-pub fn admin_application_shell_html(style: &str, script: &str) -> String {
-    administration_application_shell_html(style, script)
-}
-
-/// Builds the focused migration workbench application shell document.
-pub fn migration_application_shell_html(style: &str, script: &str) -> String {
-    render_application_document(
-        "Tessara Migration",
-        "Tessara migration workbench for validating and rehearsing legacy imports.",
-        style,
-        script,
-        view! { <MigrationApplicationShell/> }.to_html(),
-    )
-}
-
-/// Builds the focused reporting application shell document.
-pub fn reporting_application_shell_html(style: &str, script: &str) -> String {
-    render_application_document(
-        "Tessara Reports",
-        "Tessara reporting workspace for analytics, table reports, and dashboard previews.",
-        style,
-        script,
-        view! { <ReportsApplicationShell/> }.to_html(),
-    )
-}
-
-#[derive(Copy, Clone)]
-struct ActionSpec {
-    handler: &'static str,
-    label: &'static str,
-}
-
-#[derive(Copy, Clone)]
-struct ManagementCardSpec {
-    title: &'static str,
-    description: &'static str,
-    href: &'static str,
-    href_label: &'static str,
-    action: &'static str,
-    action_label: &'static str,
-}
-
-#[derive(Copy, Clone)]
-struct DirectoryCardSpec {
-    title: &'static str,
-    description: &'static str,
-    action: &'static str,
-    label: &'static str,
-}
-
-#[derive(Copy, Clone)]
-struct QueueCardSpec {
-    title: &'static str,
-    description: &'static str,
-    action: &'static str,
-    href: &'static str,
-    label: &'static str,
-}
-
-#[derive(Copy, Clone)]
-struct HomeModuleSpec {
-    title: &'static str,
-    description: &'static str,
-    highlights: &'static [&'static str],
-}
-
-const HOME_ACTIONS: &[ActionSpec] = &[
-    ActionSpec {
-        handler: "login()",
-        label: "Sign In",
-    },
-    ActionSpec {
-        handler: "loadCurrentUser()",
-        label: "Session Status",
-    },
-    ActionSpec {
-        handler: "logout()",
-        label: "Sign Out",
-    },
-    ActionSpec {
-        handler: "loadAppSummary()",
-        label: "Refresh Summary",
-    },
-];
-
-const ORGANIZATION_ACTIONS: &[ActionSpec] = &[
-    ActionSpec {
-        handler: "login()",
-        label: "Sign In",
-    },
-    ActionSpec {
-        handler: "loadCurrentUser()",
-        label: "Session Status",
-    },
-    ActionSpec {
-        handler: "loadNodes()",
-        label: "Refresh Organization",
-    },
-    ActionSpec {
-        handler: "loadAppSummary()",
-        label: "Refresh Summary",
-    },
-];
-
-const FORMS_ACTIONS: &[ActionSpec] = &[
-    ActionSpec {
-        handler: "login()",
-        label: "Sign In",
-    },
-    ActionSpec {
-        handler: "loadCurrentUser()",
-        label: "Session Status",
-    },
-    ActionSpec {
-        handler: "loadForms()",
-        label: "Refresh Forms",
-    },
-    ActionSpec {
-        handler: "loadAppSummary()",
-        label: "Refresh Summary",
-    },
-];
-
-const RESPONSES_ACTIONS: &[ActionSpec] = &[
-    ActionSpec {
-        handler: "login()",
-        label: "Sign In",
-    },
-    ActionSpec {
-        handler: "loadCurrentUser()",
-        label: "Session Status",
-    },
-    ActionSpec {
-        handler: "logout()",
-        label: "Sign Out",
-    },
-    ActionSpec {
-        handler: "loadPublishedForms()",
-        label: "Refresh Responses",
-    },
-    ActionSpec {
-        handler: "loadAppSummary()",
-        label: "Refresh Summary",
-    },
-];
-
-const ADMINISTRATION_ACTIONS: &[ActionSpec] = &[
-    ActionSpec {
-        handler: "login()",
-        label: "Sign In",
-    },
-    ActionSpec {
-        handler: "loadCurrentUser()",
-        label: "Session Status",
-    },
-    ActionSpec {
-        handler: "logout()",
-        label: "Sign Out",
-    },
-    ActionSpec {
-        handler: "seedDemo()",
-        label: "Seed Demo",
-    },
-    ActionSpec {
-        handler: "loadAppSummary()",
-        label: "Refresh Summary",
-    },
-];
-
-const MIGRATION_ACTIONS: &[ActionSpec] = &[
-    ActionSpec {
-        handler: "login()",
-        label: "Sign In",
-    },
-    ActionSpec {
-        handler: "loadCurrentUser()",
-        label: "Session Status",
-    },
-    ActionSpec {
-        handler: "logout()",
-        label: "Sign Out",
-    },
-    ActionSpec {
-        handler: "loadAppSummary()",
-        label: "Refresh Summary",
-    },
-];
-
-const REPORTS_ACTIONS: &[ActionSpec] = &[
-    ActionSpec {
-        handler: "login()",
-        label: "Sign In",
-    },
-    ActionSpec {
-        handler: "loadCurrentUser()",
-        label: "Session Status",
-    },
-    ActionSpec {
-        handler: "logout()",
-        label: "Sign Out",
-    },
-    ActionSpec {
-        handler: "loadReports()",
-        label: "Refresh Reports",
-    },
-    ActionSpec {
-        handler: "loadAppSummary()",
-        label: "Refresh Summary",
-    },
-];
-
-const DASHBOARDS_ACTIONS: &[ActionSpec] = &[
-    ActionSpec {
-        handler: "login()",
-        label: "Sign In",
-    },
-    ActionSpec {
-        handler: "loadCurrentUser()",
-        label: "Session Status",
-    },
-    ActionSpec {
-        handler: "logout()",
-        label: "Sign Out",
-    },
-    ActionSpec {
-        handler: "loadDashboards()",
-        label: "Refresh Dashboards",
-    },
-    ActionSpec {
-        handler: "loadAppSummary()",
-        label: "Refresh Summary",
-    },
-];
-
-#[component]
-fn AppAreaShell(
-    active_route: &'static str,
-    area_kind: &'static str,
-    title: &'static str,
-    description: &'static str,
-    show_create_shortcuts: bool,
-    actions: &'static [ActionSpec],
-    children: Children,
-) -> impl IntoView {
-    let is_home = active_route == "home";
-    let breadcrumb = if is_home {
-        view! { <span>"Home"</span> }.into_any()
-    } else {
-        view! {
-            <>
-                <a href="/app">"Home"</a>
-                <span>{title}</span>
-            </>
-        }
-        .into_any()
-    };
-
-    view! {
-        <main class="shell app-shell">
-            <section class="panel hero">
-                <BrandLockup/>
-                <nav class="breadcrumb-trail" aria-label="Breadcrumb">{breadcrumb}</nav>
-                <p class="muted">{area_kind}</p>
-                <h1>{title}</h1>
-                <p>{description}</p>
-                <div class="actions">
-                    {actions
-                        .iter()
-                        .map(|action| {
-                            view! {
-                                <button type="button" onclick=action.handler>
-                                    {action.label}
-                                </button>
-                            }
-                        })
-                        .collect_view()}
-                </div>
-            </section>
-            <section class="app-layout">
-                <AreaSidebar
-                    active_route=active_route
-                    show_create_shortcuts=show_create_shortcuts
-                />
-                <section class="panel app-main">{children()}</section>
-            </section>
-        </main>
-    }
-}
-
-#[component]
-fn HomeApplicationShell() -> impl IntoView {
-    view! {
-        <AppAreaShell
-            active_route="home"
-            area_kind="Shared Home"
-            title="Application Overview"
-            description="This shared home is the primary entry point for Tessara. It organizes product areas, current readiness, and current workflow context without exposing configuration-first controls."
-            show_create_shortcuts=false
-            actions=HOME_ACTIONS
-        >
-            <HomeScreen/>
-            <OutputPanels
-                directory_title="Home Activity"
-                directory_description="Shared-home summaries and linked activity appear here as you move through the application."
-                detail_title="Selected Detail"
-                detail_description="Selected records and linked detail appear here without turning Home into a control console."
-                raw_title="Raw API Activity"
-            />
-        </AppAreaShell>
-    }
-}
-
-#[component]
-fn OrganizationApplicationShell() -> impl IntoView {
-    view! {
-        <AppAreaShell
-            active_route="organization"
-            area_kind="Product Area"
-            title="Organization"
-            description="This area is the operational hierarchy surface. It brings hierarchy records, scoped forms, and linked dashboards into one place without implying unsupported organization behavior."
-            show_create_shortcuts=false
-            actions=ORGANIZATION_ACTIONS
-        >
-            <OrganizationHomeScreen/>
-            <OrganizationWorkspaceShell/>
-            <RawOutputPanel title="Raw API Activity"/>
-        </AppAreaShell>
-    }
-}
-
-#[component]
-fn FormsApplicationShell() -> impl IntoView {
-    view! {
-        <AppAreaShell
-            active_route="forms"
-            area_kind="Product Area"
-            title="Forms"
-            description="This area is the canonical entry point for form discovery and lifecycle work. It keeps product-facing form access clear while leaving deeper configuration in Administration."
-            show_create_shortcuts=false
-            actions=FORMS_ACTIONS
-        >
-            <FormsHomeScreen/>
-            <FormsWorkspaceShell/>
-            <RawOutputPanel title="Raw API Activity"/>
-        </AppAreaShell>
-    }
-}
-
-#[component]
-fn ResponsesApplicationShell() -> impl IntoView {
-    view! {
-        <AppAreaShell
-            active_route="responses"
-            area_kind="Product Area"
-            title="Responses"
-            description="This area handles response entry, drafts, submission, and review. It stays focused on the supported form-render and submission lifecycle without falling back to utility-style navigation."
-            show_create_shortcuts=false
-            actions=RESPONSES_ACTIONS
-        >
-            <SubmissionHomeScreen/>
-            <SubmissionWorkspaceShell/>
-            <RawOutputPanel title="Raw API Activity"/>
-        </AppAreaShell>
-    }
-}
-
-#[component]
-fn AdministrationApplicationShell() -> impl IntoView {
-    view! {
-        <AppAreaShell
-            active_route="administration"
-            area_kind="Internal Area"
-            title="Administration"
-            description="This internal area is for hierarchy, form, and reporting configuration. It remains visible during the migration, but it is intentionally scoped as an operator surface."
-            show_create_shortcuts=true
-            actions=ADMINISTRATION_ACTIONS
-        >
-            <AdminHomeScreen/>
-            <AdminWorkspaceShell/>
-            <OutputPanels
-                directory_title="Management Directory"
-                directory_description="Current management lists and configuration browse results appear here."
-                detail_title="Management Detail"
-                detail_description="Selected configuration entities and edit-ready detail appear here."
-                raw_title="Raw API Output"
-            />
-        </AppAreaShell>
-    }
-}
-
-#[component]
-fn MigrationApplicationShell() -> impl IntoView {
-    view! {
-        <AppAreaShell
-            active_route="migration"
-            area_kind="Internal Area"
-            title="Migration Workbench"
-            description="This operator screen validates and dry-runs representative legacy fixtures before running import rehearsals."
-            show_create_shortcuts=false
-            actions=MIGRATION_ACTIONS
-        >
-            <MigrationHomeScreen/>
-            <FixtureScreen/>
-            <section id="migration-results-screen" class="app-screen">
-                <h2>"Validation Results"</h2>
-                <div id="screen" class="cards"></div>
-            </section>
-            <RawOutputPanel title="Raw API Output"/>
-        </AppAreaShell>
-    }
-}
-
-#[component]
-fn ReportsApplicationShell() -> impl IntoView {
-    view! {
-        <AppAreaShell
-            active_route="reports"
-            area_kind="Product Area"
-            title="Reports"
-            description="This area is the canonical route for report browsing, report execution, and reporting detail traversal, with linked access into dashboards where needed."
-            show_create_shortcuts=false
-            actions=REPORTS_ACTIONS
-        >
-            <ReportingHomeScreen/>
-            <ReportingWorkspaceShell/>
-            <RawOutputPanel title="Raw API Activity"/>
-        </AppAreaShell>
-    }
-}
-
-#[component]
-fn DashboardsApplicationShell() -> impl IntoView {
-    view! {
-        <AppAreaShell
-            active_route="dashboards"
-            area_kind="Product Area"
-            title="Dashboards"
-            description="This area is the dashboard viewing destination for chart-backed monitoring and linked report context."
-            show_create_shortcuts=false
-            actions=DASHBOARDS_ACTIONS
-        >
-            <DashboardsHomeScreen/>
-            <DashboardsWorkspaceShell/>
-            <RawOutputPanel title="Raw API Activity"/>
-        </AppAreaShell>
-    }
-}
-
-#[component]
-fn BrandLockup() -> impl IntoView {
-    view! {
-        <div class="brand-lockup">
-            <img class="brand-mark" src="/assets/tessara-icon-1024.svg" alt="" />
-            <span>"Tessara"</span>
-        </div>
-    }
-}
-
-#[component]
-fn AreaSidebar(active_route: &'static str, show_create_shortcuts: bool) -> impl IntoView {
-    view! {
-        <aside class="panel app-sidebar">
-            <ApplicationNav active_route=active_route/>
-            {show_create_shortcuts
-                .then(|| view! { <CreateMenu/> })
-                .into_any()}
-            <SelectionContext/>
-        </aside>
-    }
-}
-
-#[component]
-fn ScreenSection(
-    eyebrow: &'static str,
-    title: &'static str,
-    description: &'static str,
-    children: Children,
-) -> impl IntoView {
-    view! {
-        <section class="app-screen">
-            <p class="eyebrow">{eyebrow}</p>
-            <h2>{title}</h2>
-            <p class="muted">{description}</p>
-            {children()}
-        </section>
-    }
-}
-
-#[component]
-fn ManagementCardsSection(
-    eyebrow: &'static str,
-    title: &'static str,
-    description: &'static str,
-    cards: Vec<ManagementCardSpec>,
-) -> impl IntoView {
-    view! {
-        <ScreenSection eyebrow=eyebrow title=title description=description>
-            <div class="management-grid">
-                {cards
-                    .into_iter()
-                    .map(|card| {
-                        view! {
-                            <article class="home-card">
-                                <h3>{card.title}</h3>
-                                <p>{card.description}</p>
-                                <div class="actions">
-                                    <a class="button-link" href=card.href>{card.href_label}</a>
-                                    <button type="button" onclick=card.action>
-                                        {card.action_label}
-                                    </button>
-                                </div>
-                            </article>
-                        }
-                    })
-                    .collect_view()}
-            </div>
-        </ScreenSection>
-    }
-}
-
-#[component]
-fn DirectoryCardsSection(
-    eyebrow: &'static str,
-    title: &'static str,
-    description: &'static str,
-    cards: Vec<DirectoryCardSpec>,
-) -> impl IntoView {
-    view! {
-        <ScreenSection eyebrow=eyebrow title=title description=description>
-            <div class="directory-grid">
-                {cards
-                    .into_iter()
-                    .map(|card| {
-                        view! {
-                            <article class="directory-card">
-                                <h3>{card.title}</h3>
-                                <p>{card.description}</p>
-                                <button type="button" onclick=card.action>{card.label}</button>
-                            </article>
-                        }
-                    })
-                    .collect_view()}
-            </div>
-        </ScreenSection>
-    }
-}
-
-#[component]
-fn EntitySurfaceSection(
-    eyebrow: &'static str,
-    title: &'static str,
-    description: &'static str,
-    directory_title: &'static str,
-    directory_description: &'static str,
-    directory_cards: Vec<DirectoryCardSpec>,
-    detail_title: &'static str,
-    detail_description: &'static str,
-    next_steps_title: &'static str,
-    next_steps_description: &'static str,
-    next_step_cards: Vec<DirectoryCardSpec>,
-) -> impl IntoView {
-    view! {
-        <section class="app-screen">
-            <p class="eyebrow">{eyebrow}</p>
-            <h2>{title}</h2>
-            <p class="muted">{description}</p>
-            <div class="entity-surface-grid">
-                <section class="workspace-panel entity-surface-panel">
-                    <h3>{directory_title}</h3>
-                    <p class="muted">{directory_description}</p>
-                    <div class="directory-grid">
-                        {directory_cards
-                            .into_iter()
-                            .map(|card| {
-                                view! {
-                                    <article class="directory-card">
-                                        <h4>{card.title}</h4>
-                                        <p>{card.description}</p>
-                                        <button type="button" onclick=card.action>{card.label}</button>
-                                    </article>
-                                }
-                            })
-                            .collect_view()}
-                    </div>
-                    <div id="screen" class="cards">
-                        <p class="muted">"Choose one of the directory actions to load current records."</p>
-                    </div>
-                </section>
-                <section class="workspace-panel entity-surface-panel">
-                    <h3>{detail_title}</h3>
-                    <p class="muted">{detail_description}</p>
-                    <div id="detail-screen" class="cards">
-                        <p class="muted">"Choose a record from the directory to inspect its detail view."</p>
-                    </div>
-                </section>
-            </div>
-            <section class="workspace-panel entity-next-steps">
-                <h3>{next_steps_title}</h3>
-                <p class="muted">{next_steps_description}</p>
-                <div class="directory-grid">
-                    {next_step_cards
-                        .into_iter()
-                        .map(|card| {
-                            view! {
-                                <article class="directory-card">
-                                    <h4>{card.title}</h4>
-                                    <p>{card.description}</p>
-                                    <button type="button" onclick=card.action>{card.label}</button>
-                                </article>
-                            }
-                        })
-                        .collect_view()}
-                </div>
-            </section>
-        </section>
-    }
-}
-
-#[component]
-fn HomeModuleSection(
-    eyebrow: &'static str,
-    title: &'static str,
-    description: &'static str,
-    modules: Vec<HomeModuleSpec>,
-) -> impl IntoView {
-    view! {
-        <ScreenSection eyebrow=eyebrow title=title description=description>
-            <div class="home-grid">
-                {modules
-                    .into_iter()
-                    .map(|module| {
-                        view! {
-                            <article class="home-card">
-                                <h3>{module.title}</h3>
-                                <p>{module.description}</p>
-                                <ul class="app-list">
-                                    {module
-                                        .highlights
-                                        .iter()
-                                        .map(|highlight| view! { <li>{*highlight}</li> })
-                                        .collect_view()}
-                                </ul>
-                            </article>
-                        }
-                    })
-                    .collect_view()}
-            </div>
-        </ScreenSection>
-    }
-}
-
-#[component]
-fn WorkspaceShellSection(
-    eyebrow: &'static str,
-    title: &'static str,
-    description: &'static str,
-    queue_title: &'static str,
-    queue_cards: Vec<QueueCardSpec>,
-    path_title: &'static str,
-    path_steps: Vec<&'static str>,
-    children: Children,
-) -> impl IntoView {
-    view! {
-        <section class="app-screen">
-            <p class="eyebrow">{eyebrow}</p>
-            <h2>{title}</h2>
-            <p class="muted">{description}</p>
-            <div class="workspace-grid">
-                <aside class="workspace-rail">
-                    <section class="workspace-panel">
-                        <h3>{queue_title}</h3>
-                        <div class="workspace-card-grid">
-                            {queue_cards
-                                .into_iter()
-                                .map(|card| {
-                                    let action_view = if card.href.is_empty() {
-                                        view! {
-                                            <button type="button" onclick=card.action>{card.label}</button>
-                                        }
-                                        .into_any()
-                                    } else {
-                                        view! { <a class="button-link" href=card.href>{card.label}</a> }
-                                            .into_any()
-                                    };
-
-                                    view! {
-                                        <article class="workspace-card">
-                                            <h4>{card.title}</h4>
-                                            <p>{card.description}</p>
-                                            {action_view}
-                                        </article>
-                                    }
-                                })
-                                .collect_view()}
-                        </div>
-                    </section>
-                    <section class="workspace-panel">
-                        <h3>{path_title}</h3>
-                        <ol class="app-list">
-                            {path_steps
-                                .into_iter()
-                                .map(|step| view! { <li>{step}</li> })
-                                .collect_view()}
-                        </ol>
-                    </section>
-                </aside>
-                <div class="workspace-stack">{children()}</div>
-            </div>
-        </section>
-    }
-}
-
-#[component]
-fn SelectionContext() -> impl IntoView {
-    view! {
-        <section class="selection-panel">
-            <h3>"Current Selections"</h3>
-            <p class="muted">
-                "Selected records from forms, nodes, reports, and submissions appear here as you move through the application."
-            </p>
-            <p id="session-status" class="muted">"No active session."</p>
-            <div id="selection-state" class="selection-grid">
-                <p class="muted">"No records selected yet."</p>
-            </div>
-        </section>
-    }
-}
-
-#[component]
-fn HiddenStateInput(id: &'static str) -> impl IntoView {
-    view! { <input type="hidden" id=id value="" /> }
-}
-
-#[component]
-fn ApplicationNav(active_route: &'static str) -> impl IntoView {
+fn sidebar(active_route: &str, include_internal_create: bool) -> String {
     let product_links = [
         ("home", "/app", "Home"),
         ("organization", "/app/organization", "Organization"),
@@ -851,148 +101,164 @@ fn ApplicationNav(active_route: &'static str) -> impl IntoView {
         ("migration", "/app/migration", "Migration"),
     ];
 
-    view! {
-        <>
+    let product_html = product_links
+        .into_iter()
+        .map(|(key, href, label)| {
+            let class_name = if key == active_route { "active" } else { "" };
+            format!(r#"<a class="{class_name}" href="{href}">{label}</a>"#)
+        })
+        .collect::<Vec<_>>()
+        .join("");
+    let internal_html = internal_links
+        .into_iter()
+        .map(|(key, href, label)| {
+            let class_name = if key == active_route { "active" } else { "" };
+            format!(r#"<a class="{class_name}" href="{href}">{label}</a>"#)
+        })
+        .collect::<Vec<_>>()
+        .join("");
+
+    let create_html = if include_internal_create {
+        r#"
             <section class="nav-panel">
-                <h2>"Product Areas"</h2>
-                <nav class="app-nav" aria-label="Product navigation">
-                    {product_links
-                        .into_iter()
-                        .map(|(route_key, href, label)| {
-                            let class_name = if route_key == active_route {
-                                "active"
-                            } else {
-                                ""
-                            };
-                            view! { <a class=class_name href=href>{label}</a> }
-                        })
-                        .collect_view()}
-                </nav>
+              <h2>Create Shortcuts</h2>
+              <p class="muted">These shortcuts stay internal while product routes own normal entity workflows.</p>
+              <div class="create-menu">
+                <a class="create-link" href="/app/admin">Open Legacy Builder</a>
+                <a class="create-link" href="/">Open Test Harness</a>
+              </div>
             </section>
-            <section class="nav-panel nav-panel-secondary">
-                <h2>"Internal Areas"</h2>
-                <nav class="app-nav" aria-label="Internal navigation">
-                    {internal_links
-                        .into_iter()
-                        .map(|(route_key, href, label)| {
-                            let class_name = if route_key == active_route {
-                                "active"
-                            } else {
-                                ""
-                            };
-                            view! { <a class=class_name href=href>{label}</a> }
-                        })
-                        .collect_view()}
-                </nav>
-            </section>
-        </>
-    }
-}
+        "#
+        .to_string()
+    } else {
+        String::new()
+    };
 
-#[component]
-fn CreateMenu() -> impl IntoView {
-    let create_links = [
-        (
-            "Create Node",
-            "/app/administration#organization-setup-screen",
-        ),
-        (
-            "Create Form",
-            "/app/administration#forms-configuration-screen",
-        ),
-        (
-            "Create Dataset",
-            "/app/administration#reporting-configuration-screen",
-        ),
-        (
-            "Create Report",
-            "/app/administration#reporting-configuration-screen",
-        ),
-        (
-            "Create Aggregation",
-            "/app/administration#reporting-configuration-screen",
-        ),
-        (
-            "Create Dashboard",
-            "/app/administration#reporting-configuration-screen",
-        ),
-    ];
-
-    view! {
-        <section class="nav-panel">
-            <h2>"Create Shortcuts"</h2>
-            <p class="muted">
-                "These links currently open supported creation flows in the internal configuration areas."
-            </p>
-            <div class="create-menu">
-                {create_links
-                    .into_iter()
-                    .map(|(label, href)| view! { <a class="create-link" href=href>{label}</a> })
-                    .collect_view()}
+    format!(
+        r#"
+        <aside class="panel app-sidebar">
+          <section class="nav-panel">
+            <h2>Product Areas</h2>
+            <nav class="app-nav" aria-label="Product navigation">{product_html}</nav>
+          </section>
+          <section class="nav-panel nav-panel-secondary">
+            <h2>Internal Areas</h2>
+            <nav class="app-nav" aria-label="Internal navigation">{internal_html}</nav>
+          </section>
+          {create_html}
+          <section class="selection-panel">
+            <h3>Current Selections</h3>
+            <p class="muted">Selections follow you between list, detail, and edit screens.</p>
+            <p id="session-status" class="muted">Not signed in.</p>
+            <div id="selection-state" class="selection-grid">
+              <p class="muted">No records selected yet.</p>
             </div>
-        </section>
-    }
+          </section>
+        </aside>
+        "#
+    )
 }
 
-#[component]
-fn HomeScreen() -> impl IntoView {
-    let modules = [
-        HomeModuleSpec {
-            title: "Scoped Operations",
-            description: "This module zone supports partner, program, activity, and session-style operational work without hardwiring legacy labels into the shell.",
-            highlights: &[
-                "Organization browsing and scoped structure",
-                "Forms discovery for operational use",
-                "Responses entry and review",
-            ],
-        },
-        HomeModuleSpec {
-            title: "Response Delivery",
-            description: "This module zone supports respondent and client-facing completion flows while keeping draft and submitted states aligned to the current backend.",
-            highlights: &[
-                "Published form selection",
-                "Draft save and submit flow",
-                "Submitted response review",
-            ],
-        },
-        HomeModuleSpec {
-            title: "Oversight and Insight",
-            description: "This module zone supports report review, dashboard monitoring, and internal oversight work without collapsing product surfaces back into configuration screens.",
-            highlights: &[
-                "Reports and aggregations",
-                "Dashboard monitoring",
-                "Internal administration and migration access",
-            ],
-        },
-    ];
+fn app_shell(
+    active_route: &str,
+    area_kind: &str,
+    title: &str,
+    description: &str,
+    breadcrumbs: &[(&str, Option<&str>)],
+    children: String,
+    include_internal_create: bool,
+) -> String {
+    format!(
+        r#"
+        <main class="shell app-shell">
+          <section class="panel hero">
+            <div class="brand-lockup">
+              <img class="brand-mark" src="/assets/tessara-icon-1024.svg" alt="" />
+              <span>Tessara</span>
+            </div>
+            <nav class="breadcrumb-trail" aria-label="Breadcrumb">{}</nav>
+            <p class="muted">{}</p>
+            <h1>{}</h1>
+            <p>{}</p>
+            <div class="actions">{}</div>
+          </section>
+          <section class="app-layout">
+            {}
+            <section class="panel app-main">
+              {}
+            </section>
+          </section>
+          <pre id="output" hidden></pre>
+        </main>
+        "#,
+        breadcrumb(breadcrumbs),
+        area_kind,
+        title,
+        description,
+        action_buttons(STANDARD_ACTIONS),
+        sidebar(active_route, include_internal_create),
+        children
+    )
+}
+
+fn page_header(eyebrow: &str, title: &str, description: &str, actions: String) -> String {
+    format!(
+        r#"
+        <section class="app-screen entity-page">
+          <p class="eyebrow">{eyebrow}</p>
+          <div class="page-title-row">
+            <div>
+              <h2>{title}</h2>
+              <p class="muted">{description}</p>
+            </div>
+            <div class="actions">{actions}</div>
+          </div>
+        </section>
+        "#
+    )
+}
+
+fn empty_panel(title: &str, description: &str, body: &str) -> String {
+    format!(
+        r#"
+        <section class="app-screen page-panel">
+          <h3>{title}</h3>
+          <p class="muted">{description}</p>
+          {body}
+        </section>
+        "#
+    )
+}
+
+fn home_body() -> String {
     let product_cards = [
         (
             "Organization",
-            "Browse the configured hierarchy and move toward scoped forms, responses, and dashboards.",
+            "Browse runtime organization records and move into related forms, responses, and dashboards.",
             "/app/organization",
-            "Browse Organization",
+            "Go to Organization",
         ),
         (
             "Forms",
-            "Browse form definitions and move into the supported form lifecycle and publishing surfaces.",
+            "Browse top-level forms and their current published and related-report summaries.",
             "/app/forms",
-            "Browse Forms",
+            "Go to Forms",
         ),
         (
             "Responses",
-            "Complete draft, save, submit, and review flows for published forms.",
+            "Start new responses, resume drafts, and review submitted responses.",
             "/app/responses",
             "Go to Responses",
         ),
         (
             "Reports",
-            "Inspect reports, run aggregations, and traverse linked reporting assets.",
+            "Browse reports, inspect definitions, and run supported report views.",
             "/app/reports",
             "Go to Reports",
         ),
         (
             "Dashboards",
-            "Open dashboard previews and chart-backed surfaces without dropping into reporting configuration first.",
+            "Browse dashboards, inspect component summaries, and open previews.",
             "/app/dashboards",
             "Go to Dashboards",
         ),
@@ -1000,1706 +266,1139 @@ fn HomeScreen() -> impl IntoView {
     let internal_cards = [
         (
             "Administration",
-            "Configure hierarchy, forms, datasets, reports, aggregations, charts, dashboards, and local test utilities.",
+            "Internal configuration and legacy builder access stay here, not on product routes.",
             "/app/administration",
             "Go to Administration",
         ),
         (
             "Migration",
-            "Validate, dry-run, and rehearse legacy imports from one operator-focused route.",
+            "Validate, dry-run, and import representative legacy fixtures from the operator workbench.",
             "/app/migration",
             "Go to Migration",
         ),
     ];
 
-    view! {
-        <section id="home-screen" class="app-screen">
-            <p class="eyebrow">"Shared Home"</p>
-            <h2>"Welcome to Tessara"</h2>
-            <p class="muted">
-                "Use this shared home as the application entry point. It is organized into stable module zones so future role-aware home variants can reuse the same structure without changing routes."
-            </p>
-        </section>
-        <HomeModuleSection
-            eyebrow="Shared Home"
-            title="Role-Ready Home Modules"
-            description="These modules define the shared home structure that future role-aware variants can compose without changing the route tree."
-            modules=modules.to_vec()
-        />
+    format!(
+        r#"
         <section class="app-screen">
-            <p class="eyebrow">"Shared Home"</p>
-            <h2>"Product Areas"</h2>
-            <p class="muted">
-                "Enter the main product surfaces from here. Each area keeps browse, review, and viewing workflows ahead of configuration."
-            </p>
-            <div class="home-grid">
-                {product_cards
-                    .into_iter()
-                    .map(|(title, description, href, label)| {
-                        view! {
-                            <article class="home-card">
-                                <h3>{title}</h3>
-                                <p>{description}</p>
-                                <a class="button-link" href=href>{label}</a>
-                            </article>
-                        }
-                    })
-                    .collect_view()}
-            </div>
+          <p class="eyebrow">Shared Home</p>
+          <h2>Welcome to Tessara</h2>
+          <p class="muted">Use this shared home as the application entry point. It is structured so future role-aware home variants can reuse the same modules without changing routes.</p>
         </section>
         <section class="app-screen">
-            <p class="eyebrow">"Shared Home"</p>
-            <h2>"Current Deployment Readiness"</h2>
-            <p class="muted">
-                "Use the summary action in the page header to confirm the current deployment has enough configured data for response, reporting, and dashboard workflows."
-            </p>
-            <div id="home-summary-cards" class="cards summary-grid">
-                <p class="muted">"Refresh Summary to load current counters."</p>
-            </div>
+          <p class="eyebrow">Shared Home</p>
+          <h2>Role-Ready Home Modules</h2>
+          <p class="muted">These modules define the shared home shape for future admin, scoped-operator, and respondent variants.</p>
+          <div class="home-grid">
+            <article class="home-card">
+              <h3>Scoped Operations</h3>
+              <p>Organization and form access for partner, program, activity, and session-style work.</p>
+            </article>
+            <article class="home-card">
+              <h3>Response Delivery</h3>
+              <p>Start, edit, submit, and review response work without exposing builder-first navigation.</p>
+            </article>
+            <article class="home-card">
+              <h3>Oversight and Insight</h3>
+              <p>Reports, dashboards, and internal oversight remain available without collapsing back into a control console.</p>
+            </article>
+          </div>
         </section>
         <section class="app-screen">
-            <p class="eyebrow">"Shared Home"</p>
-            <h2>"Current Workflow Context"</h2>
-            <p class="muted">
-                "Current selections from forms, nodes, responses, reports, and dashboards appear here and in the shared sidebar."
-            </p>
-            <div id="home-selection-state" class="selection-grid">
-                <p class="muted">"No records selected yet."</p>
-            </div>
+          <p class="eyebrow">Shared Home</p>
+          <h2>Product Areas</h2>
+          <p class="muted">These are the primary destinations for top-level entity browsing and normal workflow entry.</p>
+          <div class="home-grid">
+            {}
+          </div>
         </section>
         <section class="app-screen">
-            <p class="eyebrow">"Shared Home"</p>
-            <h2>"Internal Areas"</h2>
-            <p class="muted">
-                "Administration and Migration remain available from the home surface, but they stay scoped as internal and operator-focused areas."
-            </p>
-            <div class="home-grid">
-                {internal_cards
-                    .into_iter()
-                    .map(|(title, description, href, label)| {
-                        view! {
-                            <article class="directory-card">
-                                <h3>{title}</h3>
-                                <p>{description}</p>
-                                <a class="button-link" href=href>{label}</a>
-                            </article>
-                        }
-                    })
-                    .collect_view()}
-            </div>
-        </section>
-    }
-}
-
-#[component]
-fn OrganizationHomeScreen() -> impl IntoView {
-    let management_cards = [
-        ManagementCardSpec {
-            title: "Browse Nodes",
-            description: "Load the current runtime nodes and move through the operational hierarchy.",
-            href: "#organization-setup-screen",
-            href_label: "Browse Organization",
-            action: "loadNodes()",
-            action_label: "Load Nodes",
-        },
-        ManagementCardSpec {
-            title: "Inspect Node Types",
-            description: "Review the configured hierarchy structure and labels behind the organization area.",
-            href: "#organization-setup-screen",
-            href_label: "Browse Structure",
-            action: "loadNodeTypes()",
-            action_label: "Load Node Types",
-        },
-        ManagementCardSpec {
-            title: "Browse Forms",
-            description: "Move from organization browsing into the scoped forms area.",
-            href: "/app/forms",
-            href_label: "Go to Forms",
-            action: "loadForms()",
-            action_label: "Load Forms",
-        },
-        ManagementCardSpec {
-            title: "View Dashboards",
-            description: "Move from organization browsing into current dashboard viewing surfaces.",
-            href: "/app/dashboards",
-            href_label: "Go to Dashboards",
-            action: "loadDashboards()",
-            action_label: "Load Dashboards",
-        },
-    ];
-
-    view! {
-        <ManagementCardsSection
-            eyebrow="Organization Home"
-            title="Organization Areas"
-            description="This area translates legacy organization concepts into Tessara's configurable hierarchy and scoped records."
-            cards=management_cards.to_vec()
-        />
-    }
-}
-
-#[component]
-fn FormsHomeScreen() -> impl IntoView {
-    let management_cards = [
-        ManagementCardSpec {
-            title: "Browse Forms",
-            description: "Browse the current forms directory and inspect configured forms and versions.",
-            href: "#forms-configuration-screen",
-            href_label: "Browse Forms",
-            action: "loadForms()",
-            action_label: "Load Forms",
-        },
-        ManagementCardSpec {
-            title: "Go to Responses",
-            description: "Move into the response workflow for published form completion and review.",
-            href: "/app/responses",
-            href_label: "Go to Responses",
-            action: "loadForms()",
-            action_label: "Load Forms",
-        },
-        ManagementCardSpec {
-            title: "Go to Organization",
-            description: "Return to the organization area for scoped navigation into forms.",
-            href: "/app/organization",
-            href_label: "Go to Organization",
-            action: "loadNodeTypes()",
-            action_label: "Load Node Types",
-        },
-        ManagementCardSpec {
-            title: "Go to Administration",
-            description: "Use the internal configuration surface for full hierarchy and reporting setup.",
-            href: "/app/administration",
-            href_label: "Go to Administration",
-            action: "loadForms()",
-            action_label: "Load Forms",
-        },
-    ];
-
-    view! {
-        <ManagementCardsSection
-            eyebrow="Forms Home"
-            title="Forms Areas"
-            description="This area is the product-facing entry into form discovery, version awareness, and supported lifecycle tasks."
-            cards=management_cards.to_vec()
-        />
-    }
-}
-
-#[component]
-fn AdminHomeScreen() -> impl IntoView {
-    let management_cards = [
-        ManagementCardSpec {
-            title: "Hierarchy",
-            description: "Manage node types, relationships, metadata fields, and runtime nodes.",
-            href: "#organization-setup-screen",
-            href_label: "Open Organization Setup",
-            action: "loadNodeTypes()",
-            action_label: "Load Node Types",
-        },
-        ManagementCardSpec {
-            title: "Forms",
-            description: "Create forms, draft versions, edit sections and fields, and publish revisions.",
-            href: "#forms-configuration-screen",
-            href_label: "Open Forms Configuration",
-            action: "loadForms()",
-            action_label: "Load Forms",
-        },
-        ManagementCardSpec {
-            title: "Datasets and Reports",
-            description: "Manage datasets, reports, and aggregations inside the reporting stack.",
-            href: "#reporting-configuration-screen",
-            href_label: "Open Reporting Configuration",
-            action: "loadDatasets()",
-            action_label: "Load Datasets",
-        },
-        ManagementCardSpec {
-            title: "Dashboards",
-            description: "Inspect charts, dashboards, and current preview outputs from one admin route.",
-            href: "#reporting-configuration-screen",
-            href_label: "Open Dashboard Configuration",
-            action: "loadDashboards()",
-            action_label: "Load Dashboards",
-        },
-        ManagementCardSpec {
-            title: "Local Testing",
-            description: "Seed the local demo path and prepare the current stack for user testing without keeping demo utilities on the shared home.",
-            href: "#reporting-configuration-screen",
-            href_label: "Open Administration",
-            action: "seedDemo()",
-            action_label: "Seed Demo",
-        },
-    ];
-
-    let directory_cards = [
-        DirectoryCardSpec {
-            title: "Node Types",
-            description: "Browse hierarchy types",
-            action: "loadNodeTypes()",
-            label: "Open",
-        },
-        DirectoryCardSpec {
-            title: "Nodes",
-            description: "Browse runtime nodes",
-            action: "loadNodes()",
-            label: "Open",
-        },
-        DirectoryCardSpec {
-            title: "Forms",
-            description: "Browse forms and versions",
-            action: "loadForms()",
-            label: "Open",
-        },
-        DirectoryCardSpec {
-            title: "Datasets",
-            description: "Browse dataset definitions",
-            action: "loadDatasets()",
-            label: "Open",
-        },
-        DirectoryCardSpec {
-            title: "Reports",
-            description: "Browse report definitions",
-            action: "loadReports()",
-            label: "Open",
-        },
-        DirectoryCardSpec {
-            title: "Aggregations",
-            description: "Browse aggregation definitions",
-            action: "loadAggregations()",
-            label: "Open",
-        },
-        DirectoryCardSpec {
-            title: "Charts",
-            description: "Browse charts",
-            action: "loadCharts()",
-            label: "Open",
-        },
-        DirectoryCardSpec {
-            title: "Dashboards",
-            description: "Browse dashboards",
-            action: "loadDashboards()",
-            label: "Open",
-        },
-    ];
-
-    let entity_cards = [
-        ManagementCardSpec {
-            title: "Organization Records",
-            description: "Create runtime organization records and reopen the selected record for editing from the shared selection state.",
-            href: "#organization-setup-screen",
-            href_label: "Edit Selected Organization",
-            action: "createNode()",
-            action_label: "Create Organization",
-        },
-        ManagementCardSpec {
-            title: "Forms",
-            description: "Create top-level forms and reopen the selected form for editing without typing record IDs.",
-            href: "#forms-configuration-screen",
-            href_label: "Edit Selected Form",
-            action: "createForm()",
-            action_label: "Create Form",
-        },
-        ManagementCardSpec {
-            title: "Reports",
-            description: "Create top-level reports and reopen the selected report for editing from the current reporting context.",
-            href: "#reporting-configuration-screen",
-            href_label: "Edit Selected Report",
-            action: "createReport()",
-            action_label: "Create Report",
-        },
-        ManagementCardSpec {
-            title: "Dashboards",
-            description: "Create top-level dashboards and reopen the selected dashboard for editing from the current reporting context.",
-            href: "#reporting-configuration-screen",
-            href_label: "Edit Selected Dashboard",
-            action: "createDashboard()",
-            action_label: "Create Dashboard",
-        },
-    ];
-
-    view! {
-        <ManagementCardsSection
-            eyebrow="Admin Home"
-            title="Management Areas"
-            description="Use this admin landing section to jump into the main management areas before dropping into the detailed builder screens."
-            cards=management_cards.to_vec()
-        />
-        <DirectoryCardsSection
-            eyebrow="Admin Home"
-            title="Entity Directory"
-            description="These entry points mirror the original application's core management lists while keeping the current Tessara builder controls underneath."
-            cards=directory_cards.to_vec()
-        />
-        <ManagementCardsSection
-            eyebrow="Admin Home"
-            title="Entity Create and Edit"
-            description="These entry points keep top-level entity creation and editing visible in Administration while product routes stay browse, review, and viewer oriented."
-            cards=entity_cards.to_vec()
-        />
-    }
-}
-
-#[component]
-fn SubmissionHomeScreen() -> impl IntoView {
-    let management_cards = [
-        ManagementCardSpec {
-            title: "Start a Response",
-            description: "Choose a published form and target node, then open the form for draft entry.",
-            href: "#response-entry-screen",
-            href_label: "Start Response Entry",
-            action: "loadPublishedForms()",
-            action_label: "Load Published Forms",
-        },
-        ManagementCardSpec {
-            title: "Browse Targets",
-            description: "Browse nodes and carry the selected target directly into the response flow.",
-            href: "#response-entry-screen",
-            href_label: "Browse Targets",
-            action: "loadNodes()",
-            action_label: "Load Target Nodes",
-        },
-        ManagementCardSpec {
-            title: "Review Responses",
-            description: "Browse draft and submitted responses, then reopen the selected submission in context.",
-            href: "#response-review-screen",
-            href_label: "Review Responses",
-            action: "loadSubmissions()",
-            action_label: "Load Submissions",
-        },
-        ManagementCardSpec {
-            title: "View Related Reports",
-            description: "Jump from the submission route into supporting report output while reviewing responses.",
-            href: "#response-report-screen",
-            href_label: "View Related Reports",
-            action: "loadReports()",
-            action_label: "Load Reports",
-        },
-    ];
-
-    let directory_cards = [
-        DirectoryCardSpec {
-            title: "Published Forms",
-            description: "Browse current published forms",
-            action: "loadPublishedForms()",
-            label: "Browse",
-        },
-        DirectoryCardSpec {
-            title: "Target Nodes",
-            description: "Browse submission targets",
-            action: "loadNodes()",
-            label: "Browse",
-        },
-        DirectoryCardSpec {
-            title: "Draft Responses",
-            description: "Filter to draft submissions",
-            action: "showDraftSubmissions()",
-            label: "Review",
-        },
-        DirectoryCardSpec {
-            title: "Submitted Responses",
-            description: "Filter to submitted responses",
-            action: "showSubmittedSubmissions()",
-            label: "Review",
-        },
-        DirectoryCardSpec {
-            title: "All Responses",
-            description: "Browse the full response list",
-            action: "loadSubmissions()",
-            label: "Review",
-        },
-        DirectoryCardSpec {
-            title: "Reports",
-            description: "Browse related reports",
-            action: "loadReports()",
-            label: "View",
-        },
-    ];
-
-    view! {
-        <ManagementCardsSection
-            eyebrow="Responses Home"
-            title="Response Stages"
-            description="Use this landing section to move between response entry, target selection, review, and related reporting without relying on one long stacked screen."
-            cards=management_cards.to_vec()
-        />
-        <DirectoryCardsSection
-            eyebrow="Responses Home"
-            title="Response Directory"
-            description="These entry points keep responses aligned with the application shell by emphasizing common lists and review paths over raw-ID entry."
-            cards=directory_cards.to_vec()
-        />
-    }
-}
-
-#[component]
-fn OrganizationWorkspaceShell() -> impl IntoView {
-    let queue_cards = [
-        QueueCardSpec {
-            title: "Runtime Nodes",
-            description: "Browse current nodes and inspect operational hierarchy records.",
-            action: "loadNodes()",
-            href: "",
-            label: "Browse Nodes",
-        },
-        QueueCardSpec {
-            title: "Structure Types",
-            description: "Review node types, relationships, and metadata definitions.",
-            action: "loadNodeTypes()",
-            href: "",
-            label: "Browse Structure",
-        },
-        QueueCardSpec {
-            title: "Forms Bridge",
-            description: "Move from organization structure into the current forms area.",
-            action: "",
-            href: "/app/forms",
-            label: "Go to Forms",
-        },
-        QueueCardSpec {
-            title: "Dashboards Bridge",
-            description: "Move from organization structure into the current dashboards area.",
-            action: "",
-            href: "/app/dashboards",
-            label: "Go to Dashboards",
-        },
-    ];
-    let path_steps = vec![
-        "Browse nodes and hierarchy structure.",
-        "Inspect the selected organization record and its scoped links.",
-        "Move into forms, responses, or dashboards from the scoped structure.",
-    ];
-    let directory_cards = [
-        DirectoryCardSpec {
-            title: "Organizations",
-            description: "Load runtime organization records.",
-            action: "loadNodes()",
-            label: "Load Organizations",
-        },
-        DirectoryCardSpec {
-            title: "Structure",
-            description: "Load hierarchy types and relationships behind the organization records.",
-            action: "loadNodeTypes()",
-            label: "Load Structure",
-        },
-    ];
-    let next_step_cards = [
-        DirectoryCardSpec {
-            title: "Related Forms",
-            description: "Move from the selected organization record into related forms.",
-            action: "loadForms()",
-            label: "Browse Forms",
-        },
-        DirectoryCardSpec {
-            title: "Related Responses",
-            description: "Move from the selected organization record into related responses.",
-            action: "loadSubmissions()",
-            label: "Browse Responses",
-        },
-        DirectoryCardSpec {
-            title: "Related Dashboards",
-            description: "Move from the selected organization record into linked dashboards.",
-            action: "loadDashboards()",
-            label: "Browse Dashboards",
-        },
-    ];
-
-    view! {
-        <WorkspaceShellSection
-            eyebrow="Organization Workspace"
-            title="Organization Workspace"
-            description="This workspace keeps hierarchy records and structure browsing in one place, with browse and detail tasks aligned to the Organization area."
-            queue_title="Organization Browse"
-            queue_cards=queue_cards.to_vec()
-            path_title="Organization Flow"
-            path_steps=path_steps
-        >
-            <EntitySurfaceSection
-                eyebrow="Organization Workspace"
-                title="Organization List and Detail"
-                description="This area now centers on runtime organization records, with directory, detail, and next-step actions kept ahead of configuration concerns."
-                directory_title="Organization Directory"
-                directory_description="Load current organization records and supporting structure lists."
-                directory_cards=directory_cards.to_vec()
-                detail_title="Organization Detail"
-                detail_description="The selected organization record appears here with scoped forms, responses, and dashboards."
-                next_steps_title="Organization Next Steps"
-                next_steps_description="Use these actions after choosing an organization record."
-                next_step_cards=next_step_cards.to_vec()
-            />
-        </WorkspaceShellSection>
-    }
-}
-
-#[component]
-fn FormsWorkspaceShell() -> impl IntoView {
-    let queue_cards = [
-        QueueCardSpec {
-            title: "Forms Directory",
-            description: "Browse current form records and inspect definitions.",
-            action: "loadForms()",
-            href: "",
-            label: "Browse Forms",
-        },
-        QueueCardSpec {
-            title: "Response Bridge",
-            description: "Move from form discovery into the supported responses area.",
-            action: "",
-            href: "/app/responses",
-            label: "Go to Responses",
-        },
-        QueueCardSpec {
-            title: "Organization Bridge",
-            description: "Return to the organization surface for scoped form navigation.",
-            action: "",
-            href: "/app/organization",
-            label: "Go to Organization",
-        },
-    ];
-    let path_steps = vec![
-        "Browse or inspect the form.",
-        "Review the published status and version summary.",
-        "Move into response entry or internal configuration as needed.",
-    ];
-    let directory_cards = [
-        DirectoryCardSpec {
-            title: "Forms",
-            description: "Load top-level form records and version summaries.",
-            action: "loadForms()",
-            label: "Load Forms",
-        },
-        DirectoryCardSpec {
-            title: "Published Versions",
-            description: "Load current published form versions for runtime use.",
-            action: "loadPublishedForms()",
-            label: "Load Published Versions",
-        },
-    ];
-    let next_step_cards = [
-        DirectoryCardSpec {
-            title: "Related Responses",
-            description: "Move from the selected form into the response workflow.",
-            action: "loadSubmissions()",
-            label: "Browse Responses",
-        },
-        DirectoryCardSpec {
-            title: "Related Reports",
-            description: "Move from the selected form into related reporting surfaces.",
-            action: "loadReports()",
-            label: "Browse Reports",
-        },
-        DirectoryCardSpec {
-            title: "Edit in Administration",
-            description: "Use Administration for create and edit actions on the selected form.",
-            action: "loadForms()",
-            label: "Open Administration",
-        },
-    ];
-
-    view! {
-        <WorkspaceShellSection
-            eyebrow="Forms Workspace"
-            title="Forms Workspace"
-            description="This workspace keeps form discovery, version awareness, and supported lifecycle tasks in one place while deeper configuration stays in Administration."
-            queue_title="Forms Browse"
-            queue_cards=queue_cards.to_vec()
-            path_title="Forms Flow"
-            path_steps=path_steps
-        >
-            <EntitySurfaceSection
-                eyebrow="Forms Workspace"
-                title="Forms List and Detail"
-                description="This area now centers on top-level form records, version summaries, and related next-step actions."
-                directory_title="Forms Directory"
-                directory_description="Load form records and published version summaries."
-                directory_cards=directory_cards.to_vec()
-                detail_title="Form Detail"
-                detail_description="The selected form appears here with scope, versions, reports, and linked dataset sources."
-                next_steps_title="Form Next Steps"
-                next_steps_description="Use these actions after choosing a form."
-                next_step_cards=next_step_cards.to_vec()
-            />
-        </WorkspaceShellSection>
-    }
-}
-
-#[component]
-fn SubmissionWorkspaceShell() -> impl IntoView {
-    let queue_cards = [
-        QueueCardSpec {
-            title: "Published Forms",
-            description: "Load the current published response options.",
-            action: "loadPublishedForms()",
-            href: "",
-            label: "Browse Forms",
-        },
-        QueueCardSpec {
-            title: "Target Directory",
-            description: "Browse organizations, programs, and other submission targets.",
-            action: "loadNodes()",
-            href: "",
-            label: "Browse Targets",
-        },
-        QueueCardSpec {
-            title: "Draft Queue",
-            description: "Review in-progress drafts that still need edits or submission.",
-            action: "showDraftSubmissions()",
-            href: "",
-            label: "Review Drafts",
-        },
-        QueueCardSpec {
-            title: "Submitted Queue",
-            description: "Review completed responses and continue into reporting.",
-            action: "showSubmittedSubmissions()",
-            href: "",
-            label: "Review Submitted",
-        },
-    ];
-    let path_steps = vec![
-        "Choose a published form.",
-        "Choose the target node.",
-        "Open the response form and create a draft.",
-        "Save values, submit, then review the resulting record.",
-    ];
-    let directory_cards = [
-        DirectoryCardSpec {
-            title: "Published Forms",
-            description: "Load the current forms that can start a response.",
-            action: "loadPublishedForms()",
-            label: "Load Published Forms",
-        },
-        DirectoryCardSpec {
-            title: "Target Nodes",
-            description: "Load organization and program targets for the response.",
-            action: "loadNodes()",
-            label: "Load Targets",
-        },
-        DirectoryCardSpec {
-            title: "Draft Responses",
-            description: "Load draft responses that can still be edited.",
-            action: "showDraftSubmissions()",
-            label: "Load Drafts",
-        },
-        DirectoryCardSpec {
-            title: "Submitted Responses",
-            description: "Load submitted responses in read-only review mode.",
-            action: "showSubmittedSubmissions()",
-            label: "Load Submitted",
-        },
-    ];
-    let next_step_cards = [
-        DirectoryCardSpec {
-            title: "Start a Response",
-            description: "Open the selected published form and current target in the draft flow.",
-            action: "openSelectedFormVersion()",
-            label: "Open Current Form",
-        },
-        DirectoryCardSpec {
-            title: "Continue Draft",
-            description: "Open the selected draft response and continue editing it.",
-            action: "loadSubmissionById()",
-            label: "Open Selected Response",
-        },
-        DirectoryCardSpec {
-            title: "Related Reports",
-            description: "Move from the selected response into the related reporting surface.",
-            action: "loadReports()",
-            label: "Browse Reports",
-        },
-    ];
-
-    view! {
-        <WorkspaceShellSection
-            eyebrow="Responses Workspace"
-            title="Responses Workspace"
-            description="This route now acts as an application workspace: the left side focuses on queues and entry points, while the right side carries the active response, review, and reporting surfaces."
-            queue_title="Response Browse"
-            queue_cards=queue_cards.to_vec()
-            path_title="Response Flow"
-            path_steps=path_steps
-        >
-            <EntitySurfaceSection
-                eyebrow="Responses Workspace"
-                title="Responses List and Detail"
-                description="This area now centers on response queues, draft entry, and read-only submitted review."
-                directory_title="Responses Directory"
-                directory_description="Load published forms, targets, drafts, and submitted responses."
-                directory_cards=directory_cards.to_vec()
-                detail_title="Response Detail"
-                detail_description="The selected draft or submitted response appears here, with draft editing available only for in-progress records."
-                next_steps_title="Response Next Steps"
-                next_steps_description="Use these actions after choosing a form, target, or response."
-                next_step_cards=next_step_cards.to_vec()
-            />
-            <SubmissionScreen/>
-            <ReviewScreen/>
-            <ReportScreen/>
-        </WorkspaceShellSection>
-    }
-}
-
-#[component]
-fn AdminWorkspaceShell() -> impl IntoView {
-    let queue_cards = [
-        QueueCardSpec {
-            title: "Hierarchy Types",
-            description: "Open node-type and relationship management for structural changes.",
-            action: "loadNodeTypes()",
-            href: "",
-            label: "Open Hierarchy",
-        },
-        QueueCardSpec {
-            title: "Forms Directory",
-            description: "Browse forms, versions, and publishing status from the main admin route.",
-            action: "loadForms()",
-            href: "",
-            label: "Open Forms",
-        },
-        QueueCardSpec {
-            title: "Reporting Assets",
-            description: "Open datasets, reports, aggregations, charts, and dashboards.",
-            action: "loadDatasets()",
-            href: "",
-            label: "Open Reporting",
-        },
-        QueueCardSpec {
-            title: "Runtime Nodes",
-            description: "Browse and update real nodes without leaving the admin workspace.",
-            action: "loadNodes()",
-            href: "",
-            label: "Open Nodes",
-        },
-    ];
-    let path_steps = vec![
-        "Set or inspect hierarchy types and runtime nodes.",
-        "Open the correct form and version draft.",
-        "Publish or review reporting assets tied to that structure.",
-        "Confirm the resulting dashboards and reporting surfaces.",
-    ];
-
-    view! {
-        <WorkspaceShellSection
-            eyebrow="Admin Workspace"
-            title="Configuration Console"
-            description="This internal workspace keeps high-level management queues visible while the main area holds hierarchy, form, and reporting configuration."
-            queue_title="Management Queues"
-            queue_cards=queue_cards.to_vec()
-            path_title="Admin Path"
-            path_steps=path_steps
-        >
-            <HierarchyAdminScreen
-                eyebrow="Administration Screen"
-                title="Organization Setup"
-                description="Create and update node types, metadata definitions, and runtime nodes."
-                action_title="Organization Actions"
-                context_title="Current Organization Context"
-            />
-            <FormAdminScreen
-                eyebrow="Administration Screen"
-                title="Forms Configuration"
-                description="Create draft form versions, edit sections and fields, and publish the version."
-                action_title="Forms Actions"
-                context_title="Current Forms Context"
-            />
-            <ReportAdminScreen/>
-        </WorkspaceShellSection>
-    }
-}
-
-#[component]
-fn OutputPanels(
-    directory_title: &'static str,
-    directory_description: &'static str,
-    detail_title: &'static str,
-    detail_description: &'static str,
-    raw_title: &'static str,
-) -> impl IntoView {
-    view! {
-        <section class="app-screen">
-            <h2>{directory_title}</h2>
-            <p class="muted">{directory_description}</p>
-            <div id="screen" class="cards"></div>
+          <p class="eyebrow">Shared Home</p>
+          <h2>Current Deployment Readiness</h2>
+          <p class="muted">Refresh Summary to confirm the current stack has enough configured data for response, reporting, and dashboard workflows.</p>
+          <div id="home-summary-cards" class="cards summary-grid">
+            <p class="muted">Refresh Summary to load current counters.</p>
+          </div>
         </section>
         <section class="app-screen">
-            <h2>{detail_title}</h2>
-            <p class="muted">{detail_description}</p>
-            <div id="detail-screen" class="cards"></div>
+          <p class="eyebrow">Shared Home</p>
+          <h2>Current Workflow Context</h2>
+          <p class="muted">Current selections appear here and in the shared sidebar.</p>
+          <div id="home-selection-state" class="selection-grid">
+            <p class="muted">No records selected yet.</p>
+          </div>
         </section>
-        <RawOutputPanel title=raw_title/>
-    }
-}
-
-#[component]
-fn ReportingHomeScreen() -> impl IntoView {
-    let management_cards = [
-        ManagementCardSpec {
-            title: "Browse Datasets",
-            description: "Inspect dataset definitions and run source-aware dataset previews before binding reports.",
-            href: "#reports-runner-screen",
-            href_label: "Browse Datasets",
-            action: "loadDatasets()",
-            action_label: "Load Datasets",
-        },
-        ManagementCardSpec {
-            title: "Review Reports",
-            description: "Inspect report definitions, refresh analytics, and execute table-style outputs.",
-            href: "#reports-runner-screen",
-            href_label: "Review Reports",
-            action: "loadReports()",
-            action_label: "Load Reports",
-        },
-        ManagementCardSpec {
-            title: "Review Aggregations",
-            description: "Review aggregation definitions and execute grouped metrics on current report outputs.",
-            href: "#reports-runner-screen",
-            href_label: "Review Aggregations",
-            action: "loadAggregations()",
-            action_label: "Load Aggregations",
-        },
-        ManagementCardSpec {
-            title: "View Dashboards",
-            description: "Preview charts and dashboards with current report or aggregation context.",
-            href: "#dashboard-viewer-screen",
-            href_label: "View Dashboards",
-            action: "loadDashboards()",
-            action_label: "Load Dashboards",
-        },
-    ];
-
-    let directory_cards = [
-        DirectoryCardSpec {
-            title: "Datasets",
-            description: "Browse dataset definitions",
-            action: "loadDatasets()",
-            label: "Browse",
-        },
-        DirectoryCardSpec {
-            title: "Reports",
-            description: "Browse report definitions",
-            action: "loadReports()",
-            label: "Review",
-        },
-        DirectoryCardSpec {
-            title: "Aggregations",
-            description: "Browse aggregation definitions",
-            action: "loadAggregations()",
-            label: "Review",
-        },
-        DirectoryCardSpec {
-            title: "Charts",
-            description: "Browse charts",
-            action: "loadCharts()",
-            label: "Browse",
-        },
-        DirectoryCardSpec {
-            title: "Dashboards",
-            description: "Browse dashboards",
-            action: "loadDashboards()",
-            label: "View",
-        },
-    ];
-
-    view! {
-        <ManagementCardsSection
-            eyebrow="Reports Home"
-            title="Report Areas"
-            description="Use this reporting landing section to move between datasets, reports, aggregations, and dashboards without dropping immediately into configuration-heavy screens."
-            cards=management_cards.to_vec()
-        />
-        <DirectoryCardsSection
-            eyebrow="Reports Home"
-            title="Reporting Directory"
-            description="These entry points keep reporting centered on clearer entity lists and viewer flows inside the application shell."
-            cards=directory_cards.to_vec()
-        />
-    }
-}
-
-#[component]
-fn DashboardsHomeScreen() -> impl IntoView {
-    let management_cards = [
-        ManagementCardSpec {
-            title: "Browse Dashboards",
-            description: "Browse dashboard surfaces and inspect current component previews.",
-            href: "#dashboard-viewer-screen",
-            href_label: "Browse Dashboards",
-            action: "loadDashboards()",
-            action_label: "Load Dashboards",
-        },
-        ManagementCardSpec {
-            title: "Browse Charts",
-            description: "Inspect chart definitions that drive dashboard components.",
-            href: "#dashboard-viewer-screen",
-            href_label: "Browse Charts",
-            action: "loadCharts()",
-            action_label: "Load Charts",
-        },
-        ManagementCardSpec {
-            title: "View Reports",
-            description: "Move into the reports area for related report and aggregation detail.",
-            href: "/app/reports",
-            href_label: "Go to Reports",
-            action: "loadReports()",
-            action_label: "Load Reports",
-        },
-        ManagementCardSpec {
-            title: "Review Aggregations",
-            description: "Move into grouped metrics that feed dashboard views.",
-            href: "/app/reports",
-            href_label: "Go to Reports",
-            action: "loadAggregations()",
-            action_label: "Load Aggregations",
-        },
-    ];
-
-    view! {
-        <ManagementCardsSection
-            eyebrow="Dashboards Home"
-            title="Dashboard Areas"
-            description="This route keeps dashboard viewing distinct while preserving direct traversal into related reporting detail."
-            cards=management_cards.to_vec()
-        />
-    }
-}
-
-#[component]
-fn ReportingWorkspaceShell() -> impl IntoView {
-    let queue_cards = [
-        QueueCardSpec {
-            title: "Datasets",
-            description: "Inspect and run datasets before binding reports or aggregations.",
-            action: "loadDatasets()",
-            href: "",
-            label: "Browse Datasets",
-        },
-        QueueCardSpec {
-            title: "Reports",
-            description: "Review report definitions, bindings, and current result sets.",
-            action: "loadReports()",
-            href: "",
-            label: "Review Reports",
-        },
-        QueueCardSpec {
-            title: "Aggregations",
-            description: "Check grouped metrics and the charts that depend on them.",
-            action: "loadAggregations()",
-            href: "",
-            label: "Review Aggregations",
-        },
-        QueueCardSpec {
-            title: "Dashboards",
-            description: "Open dashboard previews and chart context from one reporting route.",
-            action: "loadDashboards()",
-            href: "",
-            label: "View Dashboards",
-        },
-    ];
-    let path_steps = vec![
-        "Inspect the dataset or report you intend to use.",
-        "Refresh analytics if the source data changed.",
-        "Run the report or aggregation.",
-        "Open the dashboard preview to verify the final surface.",
-    ];
-    let directory_cards = [
-        DirectoryCardSpec {
-            title: "Reports",
-            description: "Load top-level report records.",
-            action: "loadReports()",
-            label: "Load Reports",
-        },
-        DirectoryCardSpec {
-            title: "Datasets",
-            description: "Load dataset definitions that feed reports.",
-            action: "loadDatasets()",
-            label: "Load Datasets",
-        },
-        DirectoryCardSpec {
-            title: "Aggregations",
-            description: "Load aggregations that summarize report output.",
-            action: "loadAggregations()",
-            label: "Load Aggregations",
-        },
-    ];
-    let next_step_cards = [
-        DirectoryCardSpec {
-            title: "Run Selected Report",
-            description: "Execute the current report against the available data.",
-            action: "loadReportById()",
-            label: "Run Report",
-        },
-        DirectoryCardSpec {
-            title: "Run Selected Aggregation",
-            description: "Execute the current aggregation for grouped metrics.",
-            action: "loadAggregationById()",
-            label: "Run Aggregation",
-        },
-        DirectoryCardSpec {
-            title: "Browse Dashboards",
-            description: "Move into dashboards that depend on the selected reporting assets.",
-            action: "loadDashboards()",
-            label: "Browse Dashboards",
-        },
-    ];
-
-    view! {
-        <WorkspaceShellSection
-            eyebrow="Reports Workspace"
-            title="Reports Workspace"
-            description="This workspace keeps reporting browse actions visible while the main area focuses on report execution and dashboard preview."
-            queue_title="Reporting Browse"
-            queue_cards=queue_cards.to_vec()
-            path_title="Reporting Flow"
-            path_steps=path_steps
-        >
-            <EntitySurfaceSection
-                eyebrow="Reports Workspace"
-                title="Reports List and Detail"
-                description="This area now centers on top-level report records and their related reporting assets."
-                directory_title="Reports Directory"
-                directory_description="Load reports, datasets, and aggregations."
-                directory_cards=directory_cards.to_vec()
-                detail_title="Report Detail"
-                detail_description="The selected report or related reporting asset appears here."
-                next_steps_title="Report Next Steps"
-                next_steps_description="Use these actions after choosing a report or related reporting asset."
-                next_step_cards=next_step_cards.to_vec()
-            />
-            <ReportRunnerScreen/>
-            <DashboardPreviewScreen/>
-        </WorkspaceShellSection>
-    }
-}
-
-#[component]
-fn DashboardsWorkspaceShell() -> impl IntoView {
-    let queue_cards = [
-        QueueCardSpec {
-            title: "Dashboards",
-            description: "Open dashboard previews and current component layouts.",
-            action: "loadDashboards()",
-            href: "",
-            label: "View Dashboards",
-        },
-        QueueCardSpec {
-            title: "Charts",
-            description: "Inspect chart definitions used by current dashboard components.",
-            action: "loadCharts()",
-            href: "",
-            label: "Browse Charts",
-        },
-        QueueCardSpec {
-            title: "Reports Bridge",
-            description: "Move to the reports area for report and aggregation detail.",
-            action: "",
-            href: "/app/reports",
-            label: "Go to Reports",
-        },
-    ];
-    let path_steps = vec![
-        "Choose the dashboard.",
-        "Inspect the current chart-backed components.",
-        "Traverse into reports when deeper source detail is needed.",
-    ];
-    let directory_cards = [
-        DirectoryCardSpec {
-            title: "Dashboards",
-            description: "Load top-level dashboard records.",
-            action: "loadDashboards()",
-            label: "Load Dashboards",
-        },
-        DirectoryCardSpec {
-            title: "Charts",
-            description: "Load the charts that appear in dashboards.",
-            action: "loadCharts()",
-            label: "Load Charts",
-        },
-    ];
-    let next_step_cards = [
-        DirectoryCardSpec {
-            title: "Open Selected Dashboard",
-            description: "Preview the current dashboard with its report-backed components.",
-            action: "loadDashboardById()",
-            label: "Open Dashboard",
-        },
-        DirectoryCardSpec {
-            title: "Related Reports",
-            description: "Move into the reports area when the selected dashboard needs deeper source inspection.",
-            action: "loadReports()",
-            label: "Browse Reports",
-        },
-    ];
-
-    view! {
-        <WorkspaceShellSection
-            eyebrow="Dashboards Workspace"
-            title="Dashboards Workspace"
-            description="This workspace keeps dashboard viewing separate from the broader reports area while preserving direct traversal into report detail when needed."
-            queue_title="Dashboards Browse"
-            queue_cards=queue_cards.to_vec()
-            path_title="Dashboard Flow"
-            path_steps=path_steps
-        >
-            <EntitySurfaceSection
-                eyebrow="Dashboards Workspace"
-                title="Dashboards List and Detail"
-                description="This area now centers on top-level dashboard records and their linked chart-backed previews."
-                directory_title="Dashboards Directory"
-                directory_description="Load dashboard and chart records."
-                directory_cards=directory_cards.to_vec()
-                detail_title="Dashboard Detail"
-                detail_description="The selected dashboard appears here with its chart and report context."
-                next_steps_title="Dashboard Next Steps"
-                next_steps_description="Use these actions after choosing a dashboard."
-                next_step_cards=next_step_cards.to_vec()
-            />
-            <DashboardPreviewScreen/>
-        </WorkspaceShellSection>
-    }
-}
-
-#[component]
-fn MigrationHomeScreen() -> impl IntoView {
-    let management_cards = [
-        ManagementCardSpec {
-            title: "Fixture Intake",
-            description: "Load bundled fixtures or paste fixture JSON to start a migration rehearsal.",
-            href: "#migration-fixture-screen",
-            href_label: "Open Fixture Intake",
-            action: "loadLegacyFixtureExamples()",
-            action_label: "Load Fixture Examples",
-        },
-        ManagementCardSpec {
-            title: "Validation",
-            description: "Run validation before import so mapping and value problems are visible early.",
-            href: "#migration-fixture-screen",
-            href_label: "Open Validation",
-            action: "validateLegacyFixture()",
-            action_label: "Validate Fixture",
-        },
-        ManagementCardSpec {
-            title: "Dry Run",
-            description: "Preview what the import would create before mutating the local rehearsal database.",
-            href: "#migration-fixture-screen",
-            href_label: "Open Dry Run",
-            action: "dryRunLegacyFixture()",
-            action_label: "Dry-Run Fixture",
-        },
-        ManagementCardSpec {
-            title: "Import",
-            description: "Run the import rehearsal and inspect the resulting entities through the app shell.",
-            href: "#migration-results-screen",
-            href_label: "Open Import Results",
-            action: "importLegacyFixture()",
-            action_label: "Import Fixture",
-        },
-    ];
-
-    let directory_cards = [
-        DirectoryCardSpec {
-            title: "Fixture Examples",
-            description: "Load bundled fixtures",
-            action: "loadLegacyFixtureExamples()",
-            label: "Open",
-        },
-        DirectoryCardSpec {
-            title: "Validation Results",
-            description: "Run validation now",
-            action: "validateLegacyFixture()",
-            label: "Open",
-        },
-        DirectoryCardSpec {
-            title: "Dry Runs",
-            description: "Run a dry-run rehearsal",
-            action: "dryRunLegacyFixture()",
-            label: "Open",
-        },
-        DirectoryCardSpec {
-            title: "Imports",
-            description: "Run import rehearsal",
-            action: "importLegacyFixture()",
-            label: "Open",
-        },
-    ];
-
-    view! {
-        <ManagementCardsSection
-            eyebrow="Migration Home"
-            title="Migration Stages"
-            description="Use this operator landing section to move through fixture intake, validation, dry run, and import without relying on a single workbench panel."
-            cards=management_cards.to_vec()
-        />
-        <DirectoryCardsSection
-            eyebrow="Migration Home"
-            title="Migration Directory"
-            description="These entry points keep the migration workflow operator-focused while still fitting inside the shared application shell."
-            cards=directory_cards.to_vec()
-        />
-    }
-}
-
-#[component]
-fn RawOutputPanel(title: &'static str) -> impl IntoView {
-    view! {
         <section class="app-screen">
-            <h2>{title}</h2>
-            <pre id="output">"No API calls yet."</pre>
+          <p class="eyebrow">Shared Home</p>
+          <h2>Internal Areas</h2>
+          <p class="muted">Internal operator surfaces stay available, but they are clearly secondary to the main product areas.</p>
+          <div class="home-grid">
+            {}
+          </div>
         </section>
-    }
+        "#,
+        product_cards
+            .iter()
+            .map(|(title, description, href, label)| {
+                format!(
+                    r#"<article class="home-card"><h3>{title}</h3><p>{description}</p><a class="button-link" href="{href}">{label}</a></article>"#
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(""),
+        internal_cards
+            .iter()
+            .map(|(title, description, href, label)| {
+                format!(
+                    r#"<article class="directory-card"><h3>{title}</h3><p>{description}</p><a class="button-link" href="{href}">{label}</a></article>"#
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("")
+    )
 }
 
-#[component]
-fn ReportRunnerScreen() -> impl IntoView {
-    view! {
-        <section id="reports-runner-screen" class="app-screen">
-            <p class="eyebrow">"Reports Workspace"</p>
-            <h2>"Report Runner"</h2>
-            <p class="muted">
-                "Choose a report, inspect its field bindings, and run the table output against refreshed analytics."
-            </p>
-            <div class="task-grid">
-                <section class="task-panel">
-                    <h3>"Reporting Actions"</h3>
-                    <p class="muted">"Use the current selection context to inspect or run reporting assets."</p>
-                    <div class="actions">
-                        <button type="button" onclick="refreshAnalytics()">"Refresh Analytics"</button>
-                        <button type="button" onclick="loadDatasets()">"Browse Datasets"</button>
-                        <button type="button" onclick="loadDatasetDefinitionById()">"Inspect Dataset"</button>
-                        <button type="button" onclick="loadDatasetTableById()">"View Dataset Rows"</button>
-                        <button type="button" onclick="loadReports()">"Browse Reports"</button>
-                        <button type="button" onclick="loadReportDefinitionById()">"Inspect Report"</button>
-                        <button type="button" onclick="refreshAnalyticsAndRunReport()">"Refresh and Run Report"</button>
-                        <button type="button" onclick="loadReportById()">"View Report"</button>
-                        <button type="button" onclick="loadAggregations()">"Browse Aggregations"</button>
-                        <button type="button" onclick="loadAggregationDefinitionById()">"Inspect Aggregation"</button>
-                        <button type="button" onclick="loadAggregationById()">"View Aggregation"</button>
-                    </div>
-                </section>
-                <section class="task-panel context-panel">
-                    <h3>"Current Reporting Selection"</h3>
-                    <p class="muted">
-                        "Use browse and inspect actions to choose the active dataset, report, and aggregation. Current selections remain visible in the shared selection panel."
-                    </p>
-                    <HiddenStateInput id="dataset-id"/>
-                    <HiddenStateInput id="report-id"/>
-                    <HiddenStateInput id="aggregation-id"/>
-                    <HiddenStateInput id="form-id"/>
-                    <div class="inputs compact-inputs">
-                        <label class="wide-field">
-                            <span>"Report bindings JSON"</span>
-                            <input id="report-fields-json" placeholder="Loaded report bindings" value="" />
-                        </label>
-                    </div>
-                </section>
+fn administration_body() -> String {
+    format!(
+        r#"
+        {}
+        {}
+        {}
+        "#,
+        page_header(
+            "Internal Area",
+            "Administration",
+            "Administration stays internal. Use it for advanced configuration and legacy builder access, not for the normal top-level entity workflows now handled in product areas.",
+            String::new(),
+        ),
+        empty_panel(
+            "Advanced Configuration",
+            "The legacy configuration surfaces remain available here while product routes become the canonical home for top-level entity list, detail, create, and edit work.",
+            r#"
+            <div class="record-list">
+              <article class="record-card">
+                <h4>Legacy Builder</h4>
+                <p>Open the advanced builder route for node types, form versions, datasets, aggregations, charts, and dashboard components.</p>
+                <div class="actions">
+                  <a class="button-link" href="/app/admin">Open Legacy Builder</a>
+                  <a class="button-link" href="/">Open Test Harness</a>
+                </div>
+              </article>
             </div>
-        </section>
-    }
-}
-
-#[component]
-fn DashboardPreviewScreen() -> impl IntoView {
-    view! {
-        <section id="dashboard-viewer-screen" class="app-screen">
-            <p class="eyebrow">"Dashboards Workspace"</p>
-            <h2>"Dashboard Viewer"</h2>
-            <p class="muted">
-                "Choose a dashboard and preview each component with its current report rows."
-            </p>
-            <div class="task-grid">
-                <section class="task-panel">
-                    <h3>"Preview Actions"</h3>
-                    <div class="actions">
-                        <button type="button" onclick="loadDashboards()">"Browse Dashboards"</button>
-                        <button type="button" onclick="refreshAnalyticsAndOpenDashboard()">"Refresh and Open Dashboard"</button>
-                        <button type="button" onclick="loadDashboardById()">"View Dashboard"</button>
-                        <button type="button" onclick="loadCharts()">"Browse Charts"</button>
-                        <button type="button" onclick="loadChartDefinitionById()">"Inspect Chart"</button>
-                        <button type="button" onclick="loadAggregations()">"Browse Aggregations"</button>
-                    </div>
-                </section>
-                <section class="task-panel context-panel">
-                    <h3>"Current Dashboard Selection"</h3>
-                    <p class="muted">
-                        "Open a dashboard or chart from the browse cards to update the current dashboard context. Current selections remain visible in the shared selection panel."
-                    </p>
-                    <HiddenStateInput id="dashboard-id"/>
-                    <HiddenStateInput id="chart-id"/>
-                    <HiddenStateInput id="aggregation-id"/>
-                </section>
+            "#,
+        ),
+        empty_panel(
+            "Internal Links",
+            "Migration and older internal tooling remain available without taking over the product navigation model.",
+            r#"
+            <div class="record-list">
+              <article class="record-card">
+                <h4>Migration</h4>
+                <p>Validate, dry-run, and import representative legacy fixtures.</p>
+                <div class="actions"><a class="button-link" href="/app/migration">Open Migration</a></div>
+              </article>
             </div>
-        </section>
-    }
+            "#,
+        )
+    )
 }
 
-#[component]
-fn SubmissionScreen() -> impl IntoView {
-    view! {
-        <section id="response-entry-screen" class="app-screen">
-            <p class="eyebrow">"Responses Workspace"</p>
-            <h2>"Response Entry"</h2>
-            <p class="muted">
-                "Pick a published form and target node, render the form, create a draft, save values, and submit."
-            </p>
-            <div class="task-grid">
-                <section class="task-panel">
-                    <h3>"Response Actions"</h3>
-                    <div class="actions">
-                        <button type="button" onclick="loadPublishedForms()">"Browse Published Forms"</button>
-                        <button type="button" onclick="loadNodes()">"Browse Target Nodes"</button>
-                        <button type="button" onclick="useSelectedTargetNodeAndContinue()">"Use Current Target"</button>
-                        <button type="button" onclick="openSelectedFormVersion()">"Open Current Form"</button>
-                        <button type="button" onclick="renderForm(inputValue('form-version-id'))">"View Form"</button>
-                        <button type="button" onclick="createDraft()">"Create Draft"</button>
-                        <button type="button" onclick="saveRenderedFormValues()">"Save Values"</button>
-                        <button type="button" onclick="submitDraft()">"Submit"</button>
-                        <button type="button" onclick="discardDraft()">"Discard Draft"</button>
-                        <button type="button" onclick="clearResponseContext()">"Clear Response Context"</button>
-                    </div>
-                </section>
-                <section class="task-panel context-panel">
-                    <h3>"Current Response Selection"</h3>
-                    <p class="muted">
-                        "Choose the current target, published form, and draft from the browse and review surfaces. Current selections remain visible in the shared selection panel."
-                    </p>
-                    <HiddenStateInput id="node-id"/>
-                    <HiddenStateInput id="form-version-id"/>
-                    <HiddenStateInput id="form-id"/>
-                    <HiddenStateInput id="submission-id"/>
-                    <div class="inputs compact-inputs">
-                        <label>
-                            <span>"Node search"</span>
-                            <input id="node-search" placeholder="Search target nodes" value="" />
-                        </label>
-                    </div>
-                </section>
+fn migration_body() -> String {
+    format!(
+        r#"
+        {}
+        {}
+        {}
+        "#,
+        page_header(
+            "Internal Area",
+            "Migration Workbench",
+            "Use this operator surface to validate, dry-run, and import representative legacy fixtures.",
+            String::new(),
+        ),
+        empty_panel(
+            "Fixture Intake",
+            "Load bundled examples or paste fixture JSON directly.",
+            r#"
+            <div class="entity-form-shell">
+              <div class="actions">
+                <button type="button" onclick="loadLegacyFixtureExamples()">Load Fixture Examples</button>
+                <button type="button" onclick="validateLegacyFixture()">Validate Fixture</button>
+                <button type="button" onclick="dryRunLegacyFixture()">Dry-Run Fixture</button>
+                <button type="button" onclick="importLegacyFixture()">Import Fixture</button>
+              </div>
+              <label class="wide-field" for="legacy-fixture-json">Fixture JSON</label>
+              <textarea id="legacy-fixture-json" rows="18" placeholder="Paste legacy fixture JSON"></textarea>
             </div>
-        </section>
-    }
-}
-
-#[component]
-fn ReviewScreen() -> impl IntoView {
-    view! {
-        <section id="response-review-screen" class="app-screen">
-            <p class="eyebrow">"Responses Workspace"</p>
-            <h2>"Response Review"</h2>
-            <p class="muted">
-                "Inspect saved and submitted responses with their audit trail."
-            </p>
-            <div class="task-grid">
-                <section class="task-panel">
-                    <h3>"Review Actions"</h3>
-                    <div class="actions">
-                        <button type="button" onclick="loadSubmissions()">"Load Submissions"</button>
-                        <button type="button" onclick="showDraftSubmissions()">"Show Drafts"</button>
-                        <button type="button" onclick="showSubmittedSubmissions()">"Show Submitted"</button>
-                        <button type="button" onclick="clearSubmissionReviewFilters()">"Clear Review Filters"</button>
-                        <button type="button" onclick="loadSubmissionById()">"Review Selected Response"</button>
-                    </div>
-                </section>
-                <section class="task-panel context-panel">
-                    <h3>"Review Filters"</h3>
-                    <div class="inputs compact-inputs">
-                        <label>
-                            <span>"Submission search"</span>
-                            <input id="submission-search" placeholder="Search form, node, or version" value="" />
-                        </label>
-                        <label>
-                            <span>"Submission status filter"</span>
-                            <input id="submission-status-filter" placeholder="draft or submitted" value="" />
-                        </label>
-                    </div>
-                </section>
+            <div id="migration-list" class="record-list">
+              <p class="muted">Load fixture examples or validate a pasted fixture.</p>
             </div>
-        </section>
-    }
+            "#,
+        ),
+        empty_panel(
+            "Migration Results",
+            "Validation, dry-run, and import results appear here.",
+            r#"<div id="migration-results" class="record-detail"><p class="muted">No migration activity yet.</p></div>"#,
+        )
+    )
 }
 
-#[component]
-fn ReportScreen() -> impl IntoView {
-    view! {
-        <section id="response-report-screen" class="app-screen">
-            <p class="eyebrow">"Responses Workspace"</p>
-            <h2>"Response Reports"</h2>
-            <p class="muted">
-                "Refresh analytics and run table reports against submitted data."
-            </p>
-            <div class="task-grid">
-                <section class="task-panel">
-                    <h3>"Report Actions"</h3>
-                    <div class="actions">
-                        <button type="button" onclick="refreshAnalytics()">"Refresh Analytics"</button>
-                        <button type="button" onclick="loadReports()">"Browse Reports"</button>
-                        <button type="button" onclick="refreshAnalyticsAndRunReport()">"Refresh and Run Report"</button>
-                        <button type="button" onclick="loadReportById()">"Run Selected Report"</button>
-                    </div>
-                </section>
-                <section class="task-panel context-panel">
-                    <h3>"Current Report Selection"</h3>
-                    <p class="muted">
-                        "Select a report from the reporting surfaces to run it here. Current selections remain visible in the shared selection panel."
-                    </p>
-                    <HiddenStateInput id="report-id"/>
-                </section>
+fn list_screen(
+    eyebrow: &str,
+    title: &str,
+    description: &str,
+    create_label: &str,
+    create_href: &str,
+    list_id: &str,
+    item_label: &str,
+) -> String {
+    format!(
+        r#"
+        {}
+        {}
+        "#,
+        page_header(
+            eyebrow,
+            title,
+            description,
+            format!(r#"<a class="button-link" href="{create_href}">{create_label}</a>"#),
+        ),
+        empty_panel(
+            &format!("{item_label} List"),
+            &format!(
+                "This screen lists current {item_label} records and links to their detail and edit screens."
+            ),
+            &format!(
+                r#"<div id="{list_id}" class="record-list"><p class="muted">Loading {item_label} records...</p></div>"#
+            ),
+        )
+    )
+}
+
+fn detail_screen(
+    eyebrow: &str,
+    title: &str,
+    description: &str,
+    back_href: &str,
+    edit_href: &str,
+    detail_id: &str,
+    detail_title: &str,
+) -> String {
+    format!(
+        r#"
+        {}
+        {}
+        "#,
+        page_header(
+            eyebrow,
+            title,
+            description,
+            format!(
+                r#"<a class="button-link" href="{back_href}">Back to List</a><a class="button-link" href="{edit_href}">Edit</a>"#
+            ),
+        ),
+        empty_panel(
+            detail_title,
+            "This screen is read-only. Use Edit to make changes.",
+            &format!(
+                r#"<div id="{detail_id}" class="record-detail"><p class="muted">Loading record detail...</p></div>"#
+            ),
+        )
+    )
+}
+
+fn form_screen(
+    eyebrow: &str,
+    title: &str,
+    description: &str,
+    form_id: &str,
+    cancel_href: &str,
+    fields_html: &str,
+) -> String {
+    format!(
+        r#"
+        {}
+        <section class="app-screen page-panel">
+          <form id="{form_id}" class="entity-form">
+            {fields_html}
+            <div class="actions form-actions">
+              <button type="submit">Submit</button>
+              <a class="button-link" href="{cancel_href}">Cancel</a>
             </div>
+          </form>
         </section>
-    }
+        "#,
+        page_header(eyebrow, title, description, String::new())
+    )
 }
 
-#[component]
-fn HierarchyAdminScreen(
-    eyebrow: &'static str,
-    title: &'static str,
-    description: &'static str,
-    action_title: &'static str,
-    context_title: &'static str,
-) -> impl IntoView {
-    view! {
-        <section id="organization-setup-screen" class="app-screen">
-            <p class="eyebrow">{eyebrow}</p>
-            <h2>{title}</h2>
-            <p class="muted">{description}</p>
-            <div class="task-grid">
-                <section class="task-panel">
-                    <h3>{action_title}</h3>
-                    <p class="muted">"Inspect structure first, then create or update the selected type, relationship, metadata field, or node."</p>
-                    <div class="actions">
-                        <button type="button" onclick="loadNodeTypes()">"Load Node Types"</button>
-                        <button type="button" onclick="loadNodeTypeById()">"Inspect Node Type"</button>
-                        <button type="button" onclick="createNodeType()">"Create Node Type"</button>
-                        <button type="button" onclick="updateNodeType()">"Update Node Type"</button>
-                        <button type="button" onclick="useSelectedNodeTypeAsFormScope()">"Use Node Type As Form Scope"</button>
-                        <button type="button" onclick="useSelectedNodeTypeAsMetadataTarget()">"Use Node Type As Metadata Target"</button>
-                        <button type="button" onclick="loadRelationships()">"Load Relationships"</button>
-                        <button type="button" onclick="createRelationship()">"Create Relationship"</button>
-                        <button type="button" onclick="deleteRelationship()">"Remove Relationship"</button>
-                        <button type="button" onclick="loadMetadataFields()">"Load Metadata Fields"</button>
-                        <button type="button" onclick="createMetadataField()">"Create Metadata Field"</button>
-                        <button type="button" onclick="updateMetadataField()">"Update Metadata Field"</button>
-                        <button type="button" onclick="loadNodes()">"Load Nodes"</button>
-                        <button type="button" onclick="createNode()">"Create Node"</button>
-                        <button type="button" onclick="updateNode()">"Update Node"</button>
-                        <button type="button" onclick="loadNodes()">"Choose Node To Edit"</button>
-                    </div>
-                </section>
-                <section class="task-panel context-panel">
-                    <h3>{context_title}</h3>
-                    <p class="muted">
-                        "Create actions generate new records automatically. Update actions use the current selection from the shared selection panel and browse surfaces."
-                    </p>
-                    <HiddenStateInput id="node-type-id"/>
-                    <HiddenStateInput id="parent-node-type-id"/>
-                    <HiddenStateInput id="child-node-type-id"/>
-                    <HiddenStateInput id="metadata-node-type-id"/>
-                    <HiddenStateInput id="metadata-field-id"/>
-                    <HiddenStateInput id="parent-node-id"/>
-                    <HiddenStateInput id="node-id"/>
-                    <div class="inputs compact-inputs">
-                        <label><span>"Node type name"</span><input id="node-type-name" placeholder="Organization" value="" /></label>
-                        <label><span>"Node type slug"</span><input id="node-type-slug" placeholder="organization" value="" /></label>
-                        <label><span>"Metadata key"</span><input id="metadata-key" placeholder="region" value="region" /></label>
-                        <label><span>"Metadata label"</span><input id="metadata-label" placeholder="Region" value="Region" /></label>
-                        <label><span>"Metadata field type"</span><input id="metadata-field-type" placeholder="text" value="text" /></label>
-                        <label><span>"Metadata required"</span><input id="metadata-required" placeholder="true or false" value="false" /></label>
-                        <label><span>"Node name"</span><input id="node-name" placeholder="Local Organization" value="Local Organization" /></label>
-                        <label class="wide-field"><span>"Node metadata JSON"</span><input id="node-metadata-json" placeholder="{\"region\":\"North\"}" value="{\"region\":\"North\"}" /></label>
-                        <label><span>"Node search"</span><input id="node-search" placeholder="Search nodes" value="" /></label>
-                    </div>
-                </section>
-            </div>
+fn organization_form_fields(is_edit: bool) -> String {
+    let disabled = if is_edit { " disabled" } else { "" };
+    format!(
+        r#"
+        <div class="form-grid">
+          <div class="form-field">
+            <label for="organization-node-type">Node Type</label>
+            <select id="organization-node-type"{disabled}></select>
+          </div>
+          <div class="form-field">
+            <label for="organization-parent-node">Parent Organization</label>
+            <select id="organization-parent-node"></select>
+          </div>
+          <div class="form-field wide-field">
+            <label for="organization-name">Name</label>
+            <input id="organization-name" type="text" autocomplete="off" />
+          </div>
+        </div>
+        <section class="page-panel nested-form-panel">
+          <h3>Metadata</h3>
+          <p class="muted">Metadata inputs are generated from the selected node type.</p>
+          <div id="organization-metadata-fields" class="form-grid">
+            <p class="muted">Choose a node type to load metadata fields.</p>
+          </div>
         </section>
-    }
+        "#
+    )
 }
 
-#[component]
-fn FormAdminScreen(
-    eyebrow: &'static str,
-    title: &'static str,
-    description: &'static str,
-    action_title: &'static str,
-    context_title: &'static str,
-) -> impl IntoView {
-    view! {
-        <section id="forms-configuration-screen" class="app-screen">
-            <p class="eyebrow">{eyebrow}</p>
-            <h2>{title}</h2>
-            <p class="muted">{description}</p>
-            <div class="task-grid">
-                <section class="task-panel">
-                    <h3>{action_title}</h3>
-                    <p class="muted">"Choose a form first, then use the selected version, section, and field context to shape the draft."</p>
-                    <div class="actions">
-                        <button type="button" onclick="loadForms()">"Load Forms"</button>
-                        <button type="button" onclick="loadFormById()">"Inspect Form"</button>
-                        <button type="button" onclick="createForm()">"Create Form"</button>
-                        <button type="button" onclick="updateForm()">"Update Form"</button>
-                        <button type="button" onclick="createFormVersion()">"Create Version"</button>
-                        <button type="button" onclick="createBasicFormVersion()">"Create Basic Version"</button>
-                        <button type="button" onclick="createSection()">"Create Section"</button>
-                        <button type="button" onclick="updateSection()">"Update Section"</button>
-                        <button type="button" onclick="deleteSection()">"Remove Section"</button>
-                        <button type="button" onclick="createField()">"Create Field"</button>
-                        <button type="button" onclick="updateField()">"Update Field"</button>
-                        <button type="button" onclick="deleteField()">"Remove Field"</button>
-                        <button type="button" onclick="publishVersion()">"Publish Version"</button>
-                        <button type="button" onclick="publishAndPreviewVersion()">"Publish and Preview Version"</button>
-                    </div>
-                </section>
-                <section class="task-panel context-panel">
-                    <h3>{context_title}</h3>
-                    <p class="muted">
-                        "Create actions generate new records automatically. Update actions use the current selection from the shared selection panel and browse surfaces."
-                    </p>
-                    <HiddenStateInput id="form-scope-node-type-id"/>
-                    <HiddenStateInput id="form-id"/>
-                    <HiddenStateInput id="form-version-id"/>
-                    <HiddenStateInput id="section-id"/>
-                    <HiddenStateInput id="field-id"/>
-                    <div class="inputs compact-inputs">
-                        <label><span>"Form name"</span><input id="form-name" placeholder="Monthly Report" value="" /></label>
-                        <label><span>"Form slug"</span><input id="form-slug" placeholder="monthly-report" value="" /></label>
-                        <label><span>"Version label"</span><input id="form-version-label" placeholder="v1" value="v1" /></label>
-                        <label><span>"Compatibility group"</span><input id="compatibility-group-name" placeholder="Default compatibility" value="Default compatibility" /></label>
-                        <label><span>"Section title"</span><input id="section-title" placeholder="Main" value="Main" /></label>
-                        <label><span>"Section position"</span><input id="section-position" placeholder="0" value="0" /></label>
-                        <label><span>"Field key"</span><input id="field-key" placeholder="participants" value="participants" /></label>
-                        <label><span>"Field label"</span><input id="field-label" placeholder="Participants" value="Participants" /></label>
-                        <label><span>"Field type"</span><input id="field-type" placeholder="number" value="number" /></label>
-                        <label><span>"Field required"</span><input id="field-required" placeholder="true or false" value="true" /></label>
-                        <label><span>"Field position"</span><input id="field-position" placeholder="0" value="0" /></label>
-                    </div>
-                </section>
-            </div>
-        </section>
-    }
+fn form_entity_fields() -> String {
+    r#"
+        <div class="form-grid">
+          <div class="form-field wide-field">
+            <label for="form-name">Name</label>
+            <input id="form-name" type="text" autocomplete="off" />
+          </div>
+          <div class="form-field">
+            <label for="form-slug">Slug</label>
+            <input id="form-slug" type="text" autocomplete="off" />
+          </div>
+          <div class="form-field">
+            <label for="form-scope-node-type">Scope Node Type</label>
+            <select id="form-scope-node-type"></select>
+          </div>
+        </div>
+    "#
+    .to_string()
 }
 
-#[component]
-fn ReportAdminScreen() -> impl IntoView {
-    view! {
-        <section id="reporting-configuration-screen" class="app-screen">
-            <p class="eyebrow">"Administration Screen"</p>
-            <h2>"Reporting Configuration"</h2>
-            <p class="muted">
-                "Build table report bindings from selected form fields and inspect report output."
-            </p>
-            <div class="task-grid">
-                <section class="task-panel">
-                    <h3>"Reporting Asset Actions"</h3>
-                    <p class="muted">"Use the selected dataset, report, aggregation, chart, and dashboard context to build reporting assets in sequence."</p>
-                    <div class="actions">
-                        <button type="button" onclick="addDatasetSource()">"Add Dataset Source"</button>
-                        <button type="button" onclick="removeSelectedDatasetSource()">"Remove Dataset Source"</button>
-                        <button type="button" onclick="clearDatasetSources()">"Clear Dataset Sources"</button>
-                        <button type="button" onclick="addDatasetField()">"Add Dataset Field"</button>
-                        <button type="button" onclick="removeSelectedDatasetField()">"Remove Dataset Field"</button>
-                        <button type="button" onclick="clearDatasetFields()">"Clear Dataset Fields"</button>
-                        <button type="button" onclick="renderDatasetDraft()">"Review Dataset Draft"</button>
-                        <button type="button" onclick="createDataset()">"Create Dataset"</button>
-                        <button type="button" onclick="updateDataset()">"Update Dataset"</button>
-                        <button type="button" onclick="deleteDataset()">"Remove Dataset"</button>
-                        <button type="button" onclick="loadDatasets()">"Load Datasets"</button>
-                        <button type="button" onclick="loadDatasetById()">"Inspect Dataset"</button>
-                        <button type="button" onclick="loadDatasetTableById()">"Run Dataset"</button>
-                        <button type="button" onclick="addReportBinding()">"Add Binding"</button>
-                        <button type="button" onclick="removeSelectedReportBinding()">"Remove Selected Binding"</button>
-                        <button type="button" onclick="clearReportBindings()">"Clear Bindings"</button>
-                        <button type="button" onclick="createReport()">"Create Report"</button>
-                        <button type="button" onclick="updateReport()">"Update Report"</button>
-                        <button type="button" onclick="deleteReport()">"Remove Report"</button>
-                        <button type="button" onclick="loadReports()">"Load Reports"</button>
-                        <button type="button" onclick="loadReportDefinitionById()">"Inspect Report"</button>
-                        <button type="button" onclick="refreshAnalyticsAndRunReport()">"Refresh and Run Report"</button>
-                        <button type="button" onclick="loadReportById()">"Run Report"</button>
-                        <button type="button" onclick="createAggregation()">"Create Aggregation"</button>
-                        <button type="button" onclick="loadAggregations()">"Load Aggregations"</button>
-                        <button type="button" onclick="loadAggregationDefinitionById()">"Inspect Aggregation"</button>
-                        <button type="button" onclick="updateAggregation()">"Update Aggregation"</button>
-                        <button type="button" onclick="deleteAggregation()">"Remove Aggregation"</button>
-                        <button type="button" onclick="loadAggregationById()">"Run Aggregation"</button>
-                        <button type="button" onclick="createChart()">"Create Chart"</button>
-                        <button type="button" onclick="updateChart()">"Update Chart"</button>
-                        <button type="button" onclick="deleteChart()">"Remove Chart"</button>
-                        <button type="button" onclick="loadCharts()">"Load Charts"</button>
-                        <button type="button" onclick="createDashboard()">"Create Dashboard"</button>
-                        <button type="button" onclick="updateDashboard()">"Update Dashboard"</button>
-                        <button type="button" onclick="deleteDashboard()">"Remove Dashboard"</button>
-                        <button type="button" onclick="addDashboardComponent()">"Add Component"</button>
-                        <button type="button" onclick="updateDashboardComponent()">"Update Component"</button>
-                        <button type="button" onclick="deleteDashboardComponent()">"Remove Component"</button>
-                        <button type="button" onclick="refreshAnalyticsAndOpenDashboard()">"Refresh and Open Dashboard"</button>
-                        <button type="button" onclick="loadDashboardById()">"Load Dashboard"</button>
-                    </div>
-                </section>
-                <section class="task-panel context-panel">
-                    <h3>"Current Reporting Configuration Context"</h3>
-                    <p class="muted">
-                        "Create actions generate new records automatically. Update and run actions use the current dataset, report, aggregation, chart, and dashboard selections."
-                    </p>
-                    <HiddenStateInput id="dataset-id"/>
-                    <HiddenStateInput id="dataset-form-id"/>
-                    <HiddenStateInput id="dataset-compatibility-group-id"/>
-                    <HiddenStateInput id="report-id"/>
-                    <HiddenStateInput id="aggregation-id"/>
-                    <HiddenStateInput id="chart-id"/>
-                    <HiddenStateInput id="dashboard-id"/>
-                    <HiddenStateInput id="dashboard-component-id"/>
-                    <div class="inputs compact-inputs">
-                <label><span>"Dataset name"</span><input id="dataset-name" placeholder="Participant Dataset" value="Participant Dataset" /></label>
-                <label><span>"Dataset slug"</span><input id="dataset-slug" placeholder="participant-dataset" value="participant-dataset" /></label>
-                <label><span>"Dataset grain"</span><input id="dataset-grain" placeholder="submission" value="submission" /></label>
-                <label><span>"Dataset composition mode"</span><input id="dataset-composition-mode" placeholder="union" value="union" /></label>
-                <label><span>"Dataset source alias"</span><input id="dataset-source-alias" placeholder="service" value="service" /></label>
-                <label><span>"Dataset selection rule"</span><input id="dataset-selection-rule" placeholder="all" value="all" /></label>
-                <label><span>"Dataset field key"</span><input id="dataset-field-key" placeholder="participant_count" value="participant_count" /></label>
-                <label><span>"Dataset field label"</span><input id="dataset-field-label" placeholder="Participant Count" value="Participant Count" /></label>
-                <label><span>"Dataset source field key"</span><input id="dataset-source-field-key" placeholder="participants" value="participants" /></label>
-                <label><span>"Dataset field type"</span><input id="dataset-field-type" placeholder="number" value="number" /></label>
-                <label><span>"Report name"</span><input id="report-name" placeholder="Participants Report" value="Participants Report" /></label>
-                <label><span>"Report logical key"</span><input id="report-logical-key" placeholder="participants" value="participants" /></label>
-                <label><span>"Report source field key"</span><input id="report-source-field-key" placeholder="participants" value="participants" /></label>
-                <label><span>"Report computed expression"</span><input id="report-computed-expression" placeholder="literal:Submitted" value="" /></label>
-                <label><span>"Report missing-data policy"</span><input id="report-missing-policy" placeholder="null" value="null" /></label>
-                <label><span>"Report bindings JSON"</span><input id="report-fields-json" placeholder="Optional bindings JSON" value="" /></label>
-                <label><span>"Aggregation name"</span><input id="aggregation-name" placeholder="Participants Totals" value="Participants Totals" /></label>
-                <label><span>"Aggregation group-by logical key"</span><input id="aggregation-group-by-logical-key" placeholder="Optional group logical key" value="" /></label>
-                <label><span>"Aggregation metric key"</span><input id="aggregation-metric-key" placeholder="participants_total" value="participants_total" /></label>
-                <label><span>"Aggregation source logical key"</span><input id="aggregation-source-logical-key" placeholder="participants" value="participants" /></label>
-                <label><span>"Aggregation metric kind"</span><input id="aggregation-metric-kind" placeholder="count, sum, avg, min, or max" value="sum" /></label>
-                <label><span>"Chart name"</span><input id="chart-name" placeholder="Participants Table" value="Participants Table" /></label>
-                <label><span>"Chart type"</span><input id="chart-type" placeholder="table" value="table" /></label>
-                <label><span>"Dashboard name"</span><input id="dashboard-name" placeholder="Local Dashboard" value="Local Dashboard" /></label>
-                <label><span>"Dashboard component position"</span><input id="dashboard-component-position" placeholder="0" value="0" /></label>
-                <label><span>"Dashboard component title"</span><input id="dashboard-component-title" placeholder="Chart title" value="" /></label>
-                <label class="wide-field"><span>"Dashboard component config JSON"</span><input id="dashboard-component-config-json" placeholder="{\"title\":\"Chart\"}" value="" /></label>
-                    </div>
-                </section>
-            </div>
-        </section>
-    }
+fn response_new_fields() -> String {
+    r#"
+        <div class="form-grid">
+          <div class="form-field">
+            <label for="response-form-version">Published Form</label>
+            <select id="response-form-version"></select>
+          </div>
+          <div class="form-field">
+            <label for="response-node">Target Organization</label>
+            <select id="response-node"></select>
+          </div>
+        </div>
+    "#
+    .to_string()
 }
 
-#[component]
-fn FixtureScreen() -> impl IntoView {
-    view! {
-        <section id="migration-fixture-screen" class="app-screen">
-            <p class="eyebrow">"Migration Screen"</p>
-            <h2>"Fixture Intake and Validation"</h2>
-            <p class="muted">
-                "Load a bundled fixture or paste fixture JSON, then validate or dry-run before import rehearsal."
-            </p>
-            <div class="inputs">
-                <label>
-                    <span>"Legacy fixture JSON"</span>
-                    <textarea
-                        id="legacy-fixture-json"
-                        placeholder="Paste legacy fixture JSON"
-                    ></textarea>
-                </label>
+fn report_form_fields() -> String {
+    r#"
+        <div class="form-grid">
+          <div class="form-field wide-field">
+            <label for="report-name">Name</label>
+            <input id="report-name" type="text" autocomplete="off" />
+          </div>
+          <div class="form-field">
+            <label for="report-source-type">Source Type</label>
+            <select id="report-source-type">
+              <option value="form">Form</option>
+              <option value="dataset">Dataset</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label for="report-source-id">Source</label>
+            <select id="report-source-id"></select>
+          </div>
+        </div>
+        <section class="page-panel nested-form-panel">
+          <div class="page-title-row compact-title-row">
+            <div>
+              <h3>Bindings</h3>
+              <p class="muted">Each binding defines one logical field in the report output.</p>
             </div>
             <div class="actions">
-                <button type="button" onclick="loadLegacyFixtureExamples()">"Load Fixture Examples"</button>
-                <button type="button" onclick="validateLegacyFixture()">"Validate Fixture"</button>
-                <button type="button" onclick="dryRunLegacyFixture()">"Dry-Run Fixture"</button>
-                <button type="button" onclick="importLegacyFixture()">"Import Fixture"</button>
+              <button type="button" onclick="addReportBindingRow()">Add Binding</button>
             </div>
+          </div>
+          <div id="report-binding-rows" class="binding-list"></div>
         </section>
-    }
+    "#
+    .to_string()
+}
+
+fn dashboard_form_fields() -> String {
+    r#"
+        <div class="form-grid">
+          <div class="form-field wide-field">
+            <label for="dashboard-name">Name</label>
+            <input id="dashboard-name" type="text" autocomplete="off" />
+          </div>
+        </div>
+    "#
+    .to_string()
+}
+
+pub fn application_shell_html(style: &str, script: &str) -> String {
+    render_application_document(
+        "Tessara Home",
+        "Tessara application home for local replacement workflow testing.",
+        style,
+        script,
+        r#"data-page-key="home" data-active-route="home""#,
+        app_shell(
+            "home",
+            "Shared Home",
+            "Application Overview",
+            "This shared home is the primary entry point for Tessara. It organizes product areas, current readiness, and current workflow context without exposing configuration-first controls.",
+            &[("Home", None)],
+            home_body(),
+            false,
+        ),
+    )
+}
+
+pub fn administration_application_shell_html(style: &str, script: &str) -> String {
+    render_application_document(
+        "Tessara Administration",
+        "Tessara internal administration landing page.",
+        style,
+        script,
+        r#"data-page-key="administration" data-active-route="administration""#,
+        app_shell(
+            "administration",
+            "Internal Area",
+            "Administration",
+            "Use this internal area for advanced configuration and legacy builder access.",
+            &[("Home", Some("/app")), ("Administration", None)],
+            administration_body(),
+            true,
+        ),
+    )
+}
+
+pub fn migration_application_shell_html(style: &str, script: &str) -> String {
+    render_application_document(
+        "Tessara Migration",
+        "Tessara migration workbench.",
+        style,
+        script,
+        r#"data-page-key="migration" data-active-route="migration""#,
+        app_shell(
+            "migration",
+            "Internal Area",
+            "Migration Workbench",
+            "Validate, dry-run, and import representative legacy fixtures from this operator surface.",
+            &[("Home", Some("/app")), ("Migration", None)],
+            migration_body(),
+            false,
+        ),
+    )
+}
+
+pub fn organization_application_shell_html(style: &str, script: &str) -> String {
+    render_application_document(
+        "Tessara Organizations",
+        "Tessara organization list screen.",
+        style,
+        script,
+        r#"data-page-key="organization-list" data-active-route="organization""#,
+        app_shell(
+            "organization",
+            "Product Area",
+            "Organization",
+            "Browse runtime organization records and move into their related forms, responses, and dashboards.",
+            &[("Home", Some("/app")), ("Organization", None)],
+            list_screen(
+                "Organization",
+                "Organizations",
+                "This list screen contains the current runtime organization records.",
+                "Create Organization",
+                "/app/organization/new",
+                "organization-list",
+                "organization",
+            ),
+            false,
+        ),
+    )
+}
+
+pub fn organization_create_application_html(style: &str, script: &str) -> String {
+    render_application_document(
+        "Create Organization",
+        "Create a runtime organization record.",
+        style,
+        script,
+        r#"data-page-key="organization-create" data-active-route="organization""#,
+        app_shell(
+            "organization",
+            "Product Area",
+            "Organization",
+            "Create a new runtime organization record from a dedicated form screen.",
+            &[
+                ("Home", Some("/app")),
+                ("Organization", Some("/app/organization")),
+                ("New Organization", None),
+            ],
+            form_screen(
+                "Organization",
+                "Create Organization",
+                "Complete the fields below to create a new runtime organization record.",
+                "organization-form",
+                "/app/organization",
+                &organization_form_fields(false),
+            ),
+            false,
+        ),
+    )
+}
+
+pub fn organization_detail_application_html(style: &str, script: &str, node_id: &str) -> String {
+    let escaped = escape_attr(node_id);
+    render_application_document(
+        "Organization Detail",
+        "Organization detail screen.",
+        style,
+        script,
+        &format!(
+            r#"data-page-key="organization-detail" data-active-route="organization" data-record-id="{escaped}""#
+        ),
+        app_shell(
+            "organization",
+            "Product Area",
+            "Organization",
+            "Review the selected organization record and its related records.",
+            &[
+                ("Home", Some("/app")),
+                ("Organization", Some("/app/organization")),
+                ("Organization Detail", None),
+            ],
+            detail_screen(
+                "Organization",
+                "Organization Detail",
+                "This screen shows the selected runtime organization record in read-only form.",
+                "/app/organization",
+                &format!("/app/organization/{escaped}/edit"),
+                "organization-detail",
+                "Organization Record",
+            ),
+            false,
+        ),
+    )
+}
+
+pub fn organization_edit_application_html(style: &str, script: &str, node_id: &str) -> String {
+    let escaped = escape_attr(node_id);
+    render_application_document(
+        "Edit Organization",
+        "Edit a runtime organization record.",
+        style,
+        script,
+        &format!(
+            r#"data-page-key="organization-edit" data-active-route="organization" data-record-id="{escaped}""#
+        ),
+        app_shell(
+            "organization",
+            "Product Area",
+            "Organization",
+            "Edit the selected runtime organization record from a dedicated form screen.",
+            &[
+                ("Home", Some("/app")),
+                ("Organization", Some("/app/organization")),
+                (
+                    "Organization Detail",
+                    Some(&format!("/app/organization/{escaped}")),
+                ),
+                ("Edit Organization", None),
+            ],
+            form_screen(
+                "Organization",
+                "Edit Organization",
+                "Update the selected runtime organization record and submit to save changes.",
+                "organization-form",
+                &format!("/app/organization/{escaped}"),
+                &organization_form_fields(true),
+            ),
+            false,
+        ),
+    )
+}
+
+pub fn forms_application_shell_html(style: &str, script: &str) -> String {
+    render_application_document(
+        "Tessara Forms",
+        "Tessara forms list screen.",
+        style,
+        script,
+        r#"data-page-key="form-list" data-active-route="forms""#,
+        app_shell(
+            "forms",
+            "Product Area",
+            "Forms",
+            "Browse top-level forms and move into their dedicated detail and edit screens.",
+            &[("Home", Some("/app")), ("Forms", None)],
+            list_screen(
+                "Forms",
+                "Forms",
+                "This list screen contains the current top-level form records.",
+                "Create Form",
+                "/app/forms/new",
+                "form-list",
+                "form",
+            ),
+            false,
+        ),
+    )
+}
+
+pub fn form_create_application_html(style: &str, script: &str) -> String {
+    render_application_document(
+        "Create Form",
+        "Create a top-level form.",
+        style,
+        script,
+        r#"data-page-key="form-create" data-active-route="forms""#,
+        app_shell(
+            "forms",
+            "Product Area",
+            "Forms",
+            "Create a top-level form from a dedicated form screen.",
+            &[
+                ("Home", Some("/app")),
+                ("Forms", Some("/app/forms")),
+                ("New Form", None),
+            ],
+            form_screen(
+                "Forms",
+                "Create Form",
+                "Complete the fields below to create a top-level form.",
+                "form-entity-form",
+                "/app/forms",
+                &form_entity_fields(),
+            ),
+            false,
+        ),
+    )
+}
+
+pub fn form_detail_application_html(style: &str, script: &str, form_id: &str) -> String {
+    let escaped = escape_attr(form_id);
+    render_application_document(
+        "Form Detail",
+        "Form detail screen.",
+        style,
+        script,
+        &format!(
+            r#"data-page-key="form-detail" data-active-route="forms" data-record-id="{escaped}""#
+        ),
+        app_shell(
+            "forms",
+            "Product Area",
+            "Forms",
+            "Review the selected form, its scope, current version summary, and related records.",
+            &[
+                ("Home", Some("/app")),
+                ("Forms", Some("/app/forms")),
+                ("Form Detail", None),
+            ],
+            detail_screen(
+                "Forms",
+                "Form Detail",
+                "This screen shows the selected top-level form in read-only form.",
+                "/app/forms",
+                &format!("/app/forms/{escaped}/edit"),
+                "form-detail",
+                "Form Record",
+            ),
+            false,
+        ),
+    )
+}
+
+pub fn form_edit_application_html(style: &str, script: &str, form_id: &str) -> String {
+    let escaped = escape_attr(form_id);
+    render_application_document(
+        "Edit Form",
+        "Edit a top-level form.",
+        style,
+        script,
+        &format!(
+            r#"data-page-key="form-edit" data-active-route="forms" data-record-id="{escaped}""#
+        ),
+        app_shell(
+            "forms",
+            "Product Area",
+            "Forms",
+            "Edit the selected top-level form from a dedicated form screen.",
+            &[
+                ("Home", Some("/app")),
+                ("Forms", Some("/app/forms")),
+                ("Form Detail", Some(&format!("/app/forms/{escaped}"))),
+                ("Edit Form", None),
+            ],
+            form_screen(
+                "Forms",
+                "Edit Form",
+                "Update the selected top-level form and submit to save changes.",
+                "form-entity-form",
+                &format!("/app/forms/{escaped}"),
+                &form_entity_fields(),
+            ),
+            false,
+        ),
+    )
+}
+
+pub fn responses_application_shell_html(style: &str, script: &str) -> String {
+    render_application_document(
+        "Tessara Responses",
+        "Tessara responses list screen.",
+        style,
+        script,
+        r#"data-page-key="response-list" data-active-route="responses""#,
+        app_shell(
+            "responses",
+            "Product Area",
+            "Responses",
+            "Start new responses, resume drafts, and review submitted responses from dedicated screens.",
+            &[("Home", Some("/app")), ("Responses", None)],
+            format!(
+                r#"
+                {}
+                {}
+                {}
+                {}
+                "#,
+                page_header(
+                    "Responses",
+                    "Responses",
+                    "This list screen separates new work, drafts, and submitted responses.",
+                    r#"<a class="button-link" href="/app/responses/new">Start Response</a>"#
+                        .to_string(),
+                ),
+                empty_panel(
+                    "Start New Response",
+                    "Published forms ready to start a response appear here.",
+                    r#"<div id="response-pending-list" class="record-list"><p class="muted">Loading published forms...</p></div>"#,
+                ),
+                empty_panel(
+                    "Draft Responses",
+                    "Draft responses link to detail and edit screens.",
+                    r#"<div id="response-draft-list" class="record-list"><p class="muted">Loading draft responses...</p></div>"#,
+                ),
+                empty_panel(
+                    "Submitted Responses",
+                    "Submitted responses remain read-only and link to their detail screens.",
+                    r#"<div id="response-submitted-list" class="record-list"><p class="muted">Loading submitted responses...</p></div>"#,
+                ),
+            ),
+            false,
+        ),
+    )
+}
+
+pub fn submission_application_shell_html(style: &str, script: &str) -> String {
+    responses_application_shell_html(style, script)
+}
+
+pub fn response_create_application_html(style: &str, script: &str) -> String {
+    render_application_document(
+        "Start Response",
+        "Start a new response draft.",
+        style,
+        script,
+        r#"data-page-key="response-create" data-active-route="responses""#,
+        app_shell(
+            "responses",
+            "Product Area",
+            "Responses",
+            "Start a new response from a dedicated form screen.",
+            &[
+                ("Home", Some("/app")),
+                ("Responses", Some("/app/responses")),
+                ("New Response", None),
+            ],
+            form_screen(
+                "Responses",
+                "Start Response",
+                "Choose a published form and target organization to create a draft response.",
+                "response-start-form",
+                "/app/responses",
+                &response_new_fields(),
+            ),
+            false,
+        ),
+    )
+}
+
+pub fn response_detail_application_html(style: &str, script: &str, submission_id: &str) -> String {
+    let escaped = escape_attr(submission_id);
+    render_application_document(
+        "Response Detail",
+        "Response detail screen.",
+        style,
+        script,
+        &format!(
+            r#"data-page-key="response-detail" data-active-route="responses" data-record-id="{escaped}""#
+        ),
+        app_shell(
+            "responses",
+            "Product Area",
+            "Responses",
+            "Review the selected response and its audit history.",
+            &[
+                ("Home", Some("/app")),
+                ("Responses", Some("/app/responses")),
+                ("Response Detail", None),
+            ],
+            format!(
+                r#"
+                {}
+                {}
+                "#,
+                page_header(
+                    "Responses",
+                    "Response Detail",
+                    "This screen shows the selected response in read-only form. Drafts expose their edit action inside the detail content.",
+                    r#"<a class="button-link" href="/app/responses">Back to List</a>"#.to_string(),
+                ),
+                empty_panel(
+                    "Response Record",
+                    "Response values and audit trail appear here.",
+                    r#"<div id="response-detail" class="record-detail"><p class="muted">Loading record detail...</p></div>"#,
+                ),
+            ),
+            false,
+        ),
+    )
+}
+
+pub fn response_edit_application_html(style: &str, script: &str, submission_id: &str) -> String {
+    let escaped = escape_attr(submission_id);
+    render_application_document(
+        "Edit Response",
+        "Edit a draft response.",
+        style,
+        script,
+        &format!(
+            r#"data-page-key="response-edit" data-active-route="responses" data-record-id="{escaped}""#
+        ),
+        app_shell(
+            "responses",
+            "Product Area",
+            "Responses",
+            "Edit the selected draft response. Submitted responses remain read-only.",
+            &[
+                ("Home", Some("/app")),
+                ("Responses", Some("/app/responses")),
+                (
+                    "Response Detail",
+                    Some(&format!("/app/responses/{escaped}")),
+                ),
+                ("Edit Response", None),
+            ],
+            format!(
+                r#"
+                {}
+                {}
+                "#,
+                page_header(
+                    "Responses",
+                    "Edit Response",
+                    "Save changes to the current draft or submit it from this dedicated response form screen.",
+                    format!(r#"<a class="button-link" href="/app/responses/{escaped}">Cancel</a>"#),
+                ),
+                empty_panel(
+                    "Draft Response Form",
+                    "The current draft loads here. Submitted responses show a read-only guard instead of editable controls.",
+                    r#"<div id="response-edit-surface" class="record-detail"><p class="muted">Loading response form...</p></div>"#,
+                ),
+            ),
+            false,
+        ),
+    )
+}
+
+pub fn reporting_application_shell_html(style: &str, script: &str) -> String {
+    render_application_document(
+        "Tessara Reports",
+        "Tessara reports list screen.",
+        style,
+        script,
+        r#"data-page-key="report-list" data-active-route="reports""#,
+        app_shell(
+            "reports",
+            "Product Area",
+            "Reports",
+            "Browse reports and move into dedicated detail and edit screens.",
+            &[("Home", Some("/app")), ("Reports", None)],
+            list_screen(
+                "Reports",
+                "Reports",
+                "This list screen contains the current report records.",
+                "Create Report",
+                "/app/reports/new",
+                "report-list",
+                "report",
+            ),
+            false,
+        ),
+    )
+}
+
+pub fn report_create_application_html(style: &str, script: &str) -> String {
+    render_application_document(
+        "Create Report",
+        "Create a top-level report.",
+        style,
+        script,
+        r#"data-page-key="report-create" data-active-route="reports""#,
+        app_shell(
+            "reports",
+            "Product Area",
+            "Reports",
+            "Create a top-level report from a dedicated form screen.",
+            &[
+                ("Home", Some("/app")),
+                ("Reports", Some("/app/reports")),
+                ("New Report", None),
+            ],
+            form_screen(
+                "Reports",
+                "Create Report",
+                "Complete the fields below to create a report and its initial bindings.",
+                "report-form",
+                "/app/reports",
+                &report_form_fields(),
+            ),
+            false,
+        ),
+    )
+}
+
+pub fn report_detail_application_html(style: &str, script: &str, report_id: &str) -> String {
+    let escaped = escape_attr(report_id);
+    render_application_document(
+        "Report Detail",
+        "Report detail screen.",
+        style,
+        script,
+        &format!(
+            r#"data-page-key="report-detail" data-active-route="reports" data-record-id="{escaped}""#
+        ),
+        app_shell(
+            "reports",
+            "Product Area",
+            "Reports",
+            "Review the selected report, run it, and inspect related reporting assets.",
+            &[
+                ("Home", Some("/app")),
+                ("Reports", Some("/app/reports")),
+                ("Report Detail", None),
+            ],
+            format!(
+                r#"
+                {}
+                {}
+                {}
+                "#,
+                page_header(
+                    "Reports",
+                    "Report Detail",
+                    "This screen shows the selected report in read-only form and supports running it.",
+                    format!(
+                        r#"<a class="button-link" href="/app/reports">Back to List</a><a class="button-link" href="/app/reports/{escaped}/edit">Edit</a><button type="button" onclick="runCurrentReport()">Run</button>"#
+                    ),
+                ),
+                empty_panel(
+                    "Report Record",
+                    "Report metadata, binding summary, and related assets appear here.",
+                    r#"<div id="report-detail" class="record-detail"><p class="muted">Loading report detail...</p></div>"#,
+                ),
+                empty_panel(
+                    "Report Results",
+                    "Run the current report to see its table output.",
+                    r#"<div id="report-results" class="record-detail"><p class="muted">Run the report to load results.</p></div>"#,
+                ),
+            ),
+            false,
+        ),
+    )
+}
+
+pub fn report_edit_application_html(style: &str, script: &str, report_id: &str) -> String {
+    let escaped = escape_attr(report_id);
+    render_application_document(
+        "Edit Report",
+        "Edit a top-level report.",
+        style,
+        script,
+        &format!(
+            r#"data-page-key="report-edit" data-active-route="reports" data-record-id="{escaped}""#
+        ),
+        app_shell(
+            "reports",
+            "Product Area",
+            "Reports",
+            "Edit the selected report from a dedicated form screen.",
+            &[
+                ("Home", Some("/app")),
+                ("Reports", Some("/app/reports")),
+                ("Report Detail", Some(&format!("/app/reports/{escaped}"))),
+                ("Edit Report", None),
+            ],
+            form_screen(
+                "Reports",
+                "Edit Report",
+                "Update the selected report and its bindings.",
+                "report-form",
+                &format!("/app/reports/{escaped}"),
+                &report_form_fields(),
+            ),
+            false,
+        ),
+    )
+}
+
+pub fn dashboards_application_shell_html(style: &str, script: &str) -> String {
+    render_application_document(
+        "Tessara Dashboards",
+        "Tessara dashboards list screen.",
+        style,
+        script,
+        r#"data-page-key="dashboard-list" data-active-route="dashboards""#,
+        app_shell(
+            "dashboards",
+            "Product Area",
+            "Dashboards",
+            "Browse dashboards and move into dedicated detail and edit screens.",
+            &[("Home", Some("/app")), ("Dashboards", None)],
+            list_screen(
+                "Dashboards",
+                "Dashboards",
+                "This list screen contains the current dashboard records.",
+                "Create Dashboard",
+                "/app/dashboards/new",
+                "dashboard-list",
+                "dashboard",
+            ),
+            false,
+        ),
+    )
+}
+
+pub fn dashboard_create_application_html(style: &str, script: &str) -> String {
+    render_application_document(
+        "Create Dashboard",
+        "Create a top-level dashboard.",
+        style,
+        script,
+        r#"data-page-key="dashboard-create" data-active-route="dashboards""#,
+        app_shell(
+            "dashboards",
+            "Product Area",
+            "Dashboards",
+            "Create a top-level dashboard from a dedicated form screen.",
+            &[
+                ("Home", Some("/app")),
+                ("Dashboards", Some("/app/dashboards")),
+                ("New Dashboard", None),
+            ],
+            form_screen(
+                "Dashboards",
+                "Create Dashboard",
+                "Complete the fields below to create a dashboard.",
+                "dashboard-form",
+                "/app/dashboards",
+                &dashboard_form_fields(),
+            ),
+            false,
+        ),
+    )
+}
+
+pub fn dashboard_detail_application_html(style: &str, script: &str, dashboard_id: &str) -> String {
+    let escaped = escape_attr(dashboard_id);
+    render_application_document(
+        "Dashboard Detail",
+        "Dashboard detail screen.",
+        style,
+        script,
+        &format!(
+            r#"data-page-key="dashboard-detail" data-active-route="dashboards" data-record-id="{escaped}""#
+        ),
+        app_shell(
+            "dashboards",
+            "Product Area",
+            "Dashboards",
+            "Review the selected dashboard and its current component summary.",
+            &[
+                ("Home", Some("/app")),
+                ("Dashboards", Some("/app/dashboards")),
+                ("Dashboard Detail", None),
+            ],
+            format!(
+                r#"
+                {}
+                {}
+                "#,
+                page_header(
+                    "Dashboards",
+                    "Dashboard Detail",
+                    "This screen shows the selected dashboard in read-only form and supports previewing it.",
+                    format!(
+                        r#"<a class="button-link" href="/app/dashboards">Back to List</a><a class="button-link" href="/app/dashboards/{escaped}/edit">Edit</a><button type="button" onclick="viewCurrentDashboard()">View</button>"#
+                    ),
+                ),
+                empty_panel(
+                    "Dashboard Record",
+                    "Dashboard metadata, component summary, and linked chart context appear here.",
+                    r#"<div id="dashboard-detail" class="record-detail"><p class="muted">Loading dashboard detail...</p></div>"#,
+                ),
+            ),
+            false,
+        ),
+    )
+}
+
+pub fn dashboard_edit_application_html(style: &str, script: &str, dashboard_id: &str) -> String {
+    let escaped = escape_attr(dashboard_id);
+    render_application_document(
+        "Edit Dashboard",
+        "Edit a top-level dashboard.",
+        style,
+        script,
+        &format!(
+            r#"data-page-key="dashboard-edit" data-active-route="dashboards" data-record-id="{escaped}""#
+        ),
+        app_shell(
+            "dashboards",
+            "Product Area",
+            "Dashboards",
+            "Edit the selected dashboard from a dedicated form screen.",
+            &[
+                ("Home", Some("/app")),
+                ("Dashboards", Some("/app/dashboards")),
+                (
+                    "Dashboard Detail",
+                    Some(&format!("/app/dashboards/{escaped}")),
+                ),
+                ("Edit Dashboard", None),
+            ],
+            form_screen(
+                "Dashboards",
+                "Edit Dashboard",
+                "Update the selected dashboard and submit to save changes.",
+                "dashboard-form",
+                &format!("/app/dashboards/{escaped}"),
+                &dashboard_form_fields(),
+            ),
+            false,
+        ),
+    )
 }

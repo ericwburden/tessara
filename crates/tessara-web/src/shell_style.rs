@@ -237,6 +237,110 @@ pub const STYLE: &str = r#"
         gap: 12px;
         grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
       }
+      .record-list {
+        display: grid;
+        gap: 12px;
+      }
+      .record-detail {
+        display: grid;
+        gap: 16px;
+      }
+      .record-card, .detail-section {
+        border: 1px solid var(--neutral);
+        border-radius: 16px;
+        background: linear-gradient(180deg, rgb(255 255 255 / 0.98), rgb(248 250 252 / 0.94));
+        padding: 16px;
+      }
+      .compact-record-card {
+        padding: 14px;
+      }
+      .page-panel {
+        display: grid;
+        gap: 14px;
+      }
+      .page-title-row {
+        align-items: start;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        justify-content: space-between;
+      }
+      .compact-title-row {
+        align-items: center;
+      }
+      .entity-form, .entity-form-shell {
+        display: grid;
+        gap: 16px;
+      }
+      .form-grid {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      }
+      .form-field {
+        display: grid;
+        gap: 8px;
+      }
+      .form-field input,
+      .form-field select,
+      textarea {
+        border: 1px solid var(--neutral);
+        border-radius: 12px;
+        color: var(--ink);
+        font: inherit;
+        padding: 10px 12px;
+        width: 100%;
+      }
+      .form-field input:focus,
+      .form-field select:focus,
+      textarea:focus {
+        border-color: var(--orange);
+        box-shadow: 0 0 0 3px rgb(245 158 11 / 0.18);
+        outline: none;
+      }
+      textarea {
+        min-height: 180px;
+        resize: vertical;
+      }
+      .nested-form-panel {
+        border: 1px solid var(--neutral);
+        border-radius: 16px;
+        background: rgb(248 250 252 / 0.88);
+        padding: 16px;
+      }
+      .form-actions {
+        justify-content: flex-start;
+      }
+      .binding-list {
+        display: grid;
+        gap: 12px;
+      }
+      .binding-row {
+        border: 1px solid var(--neutral);
+        border-radius: 14px;
+        background: var(--surface);
+        display: grid;
+        gap: 12px;
+        padding: 14px;
+      }
+      .detail-list {
+        display: grid;
+        gap: 10px;
+        margin: 0;
+      }
+      .detail-list div {
+        border-bottom: 1px solid var(--neutral);
+        display: grid;
+        gap: 4px;
+        padding-bottom: 8px;
+      }
+      .detail-list dt {
+        color: var(--slate-mid);
+        font-weight: 700;
+      }
+      .detail-list dd {
+        margin: 0;
+      }
       .home-grid {
         display: grid;
         gap: 12px;
@@ -315,6 +419,9 @@ pub const STYLE: &str = r#"
       }
       .wide-field {
         grid-column: 1 / -1;
+      }
+      [hidden] {
+        display: none !important;
       }
       .submission-workspace-shell .app-screen {
         margin: 0;

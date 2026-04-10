@@ -49,12 +49,62 @@ pub fn router(state: AppState) -> Router {
             get(|| async { Html(tessara_web::organization_application_shell_html()) }),
         )
         .route(
+            "/app/organization/new",
+            get(|| async { Html(tessara_web::organization_create_application_html()) }),
+        )
+        .route(
+            "/app/organization/{node_id}/edit",
+            get(|Path(node_id): Path<String>| async move {
+                Html(tessara_web::organization_edit_application_html(&node_id))
+            }),
+        )
+        .route(
+            "/app/organization/{node_id}",
+            get(|Path(node_id): Path<String>| async move {
+                Html(tessara_web::organization_detail_application_html(&node_id))
+            }),
+        )
+        .route(
             "/app/forms",
             get(|| async { Html(tessara_web::forms_application_shell_html()) }),
         )
         .route(
+            "/app/forms/new",
+            get(|| async { Html(tessara_web::form_create_application_html()) }),
+        )
+        .route(
+            "/app/forms/{form_id}/edit",
+            get(|Path(form_id): Path<String>| async move {
+                Html(tessara_web::form_edit_application_html(&form_id))
+            }),
+        )
+        .route(
+            "/app/forms/{form_id}",
+            get(|Path(form_id): Path<String>| async move {
+                Html(tessara_web::form_detail_application_html(&form_id))
+            }),
+        )
+        .route(
             "/app/responses",
             get(|| async { Html(tessara_web::responses_application_shell_html()) }),
+        )
+        .route(
+            "/app/responses/new",
+            get(|| async { Html(tessara_web::response_create_application_html()) }),
+        )
+        .route(
+            "/app/responses/{submission_id}/edit",
+            get(|Path(submission_id): Path<String>| async move {
+                Html(tessara_web::response_edit_application_html(&submission_id))
+            }),
+        )
+        .route(
+            "/app/responses/{submission_id}",
+            get(|Path(submission_id): Path<String>| async move {
+                Html(tessara_web::response_detail_application_html(
+                    &submission_id,
+                ))
+            }),
         )
         .route(
             "/app/submissions",
@@ -73,8 +123,42 @@ pub fn router(state: AppState) -> Router {
             get(|| async { Html(tessara_web::reporting_application_shell_html()) }),
         )
         .route(
+            "/app/reports/new",
+            get(|| async { Html(tessara_web::report_create_application_html()) }),
+        )
+        .route(
+            "/app/reports/{report_id}/edit",
+            get(|Path(report_id): Path<String>| async move {
+                Html(tessara_web::report_edit_application_html(&report_id))
+            }),
+        )
+        .route(
+            "/app/reports/{report_id}",
+            get(|Path(report_id): Path<String>| async move {
+                Html(tessara_web::report_detail_application_html(&report_id))
+            }),
+        )
+        .route(
             "/app/dashboards",
             get(|| async { Html(tessara_web::dashboards_application_shell_html()) }),
+        )
+        .route(
+            "/app/dashboards/new",
+            get(|| async { Html(tessara_web::dashboard_create_application_html()) }),
+        )
+        .route(
+            "/app/dashboards/{dashboard_id}/edit",
+            get(|Path(dashboard_id): Path<String>| async move {
+                Html(tessara_web::dashboard_edit_application_html(&dashboard_id))
+            }),
+        )
+        .route(
+            "/app/dashboards/{dashboard_id}",
+            get(|Path(dashboard_id): Path<String>| async move {
+                Html(tessara_web::dashboard_detail_application_html(
+                    &dashboard_id,
+                ))
+            }),
         )
         .route(
             "/app/migration",

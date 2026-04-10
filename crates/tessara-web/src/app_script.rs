@@ -1,185 +1,117 @@
-//! Browser-side controller for focused application routes.
-//!
-//! The full admin workbench still uses `shell_script`; this controller keeps the
-//! replacement-oriented routes from depending on admin-builder-only functions
-//! while the Leptos screens are still server-rendered.
+//! Browser-side controller for route-specific Tessara application screens.
 
-/// Focused JavaScript controller for `/app`, `/app/reports`, and
-/// `/app/migration`.
+/// JavaScript controller for `/app` and the dedicated product-area routes.
 pub const APPLICATION_SCRIPT: &str = r#"
-      let token = window.sessionStorage.getItem("tessara.devToken");
-      let renderedForm = null;
-      let selectedSubmissionFormVersionId = null;
-      let selectedSubmissionStatus = null;
-      let selectedSubmissionValues = {};
+      let token = window.sessionStorage.getItem('tessara.devToken');
       const selections = {};
+      const page = {
+        key: document.body.dataset.pageKey || 'home',
+        recordId: document.body.dataset.recordId || '',
+        search: new URLSearchParams(window.location.search)
+      };
+      let organizationFormState = {
+        nodeTypes: [],
+        nodes: [],
+        metadataFields: [],
+        metadataValues: {},
+        editNodeId: null,
+        editNodeTypeId: null
+      };
+      let reportFormState = {
+        forms: [],
+        datasets: [],
+        bindings: []
+      };
+      let renderedResponseForm = null;
+      let currentResponseDetail = null;
+
+      function byId(id) {
+        return document.getElementById(id);
+      }
 
       function escapeHtml(value) {
-        return String(value ?? "")
-          .replaceAll("&", "&amp;")
-          .replaceAll("<", "&lt;")
-          .replaceAll(">", "&gt;")
-          .replaceAll('"', "&quot;")
-          .replaceAll("'", "&#39;");
+        return String(value ?? '')
+          .replaceAll('&', '&amp;')
+          .replaceAll('<', '&lt;')
+          .replaceAll('>', '&gt;')
+          .replaceAll('\"', '&quot;')
+          .replaceAll(\"'\", '&#39;');
       }
 
       function show(value) {
-        const output = document.getElementById("output");
+        const output = byId('output');
         if (!output) return;
-        output.textContent = typeof value === "string" ? value : JSON.stringify(value, null, 2);
-      }
-
-      function setDirectory(html) {
-        const screen = document.getElementById("screen");
-        if (screen) screen.innerHTML = html;
-      }
-
-      function setScreen(html) {
-        const screen = document.getElementById("detail-screen") || document.getElementById("screen");
-        if (screen) screen.innerHTML = html;
+        output.textContent = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
       }
 
       function setHtml(id, html) {
-        const element = document.getElementById(id);
+        const element = byId(id);
         if (element) element.innerHTML = html;
       }
 
-      function showCards(records, render) {
-        setDirectory(records.length
-          ? records.map(render).join("")
-          : '<p class="muted">No records found.</p>');
+      function currentPath() {
+        return window.location.pathname;
       }
 
-      function renderSummaryCards(payload) {
-        return summaryRecords(payload).map(([label, count]) => `
-          <article class="card">
-            <h3>${escapeHtml(label)}</h3>
-            <p>${escapeHtml(count)}</p>
+      function emptyState(message) {
+        return `<p class=\"muted\">${escapeHtml(message)}</p>`;
+      }
+
+      function recordCard(title, body, actions) {
+        return `
+          <article class=\"record-card\">
+            <h4>${escapeHtml(title)}</h4>
+            ${body}
+            <div class=\"actions\">${actions}</div>
           </article>
-        `).join("");
+        `;
+      }
+
+      function detailSection(title, body) {
+        return `
+          <section class=\"detail-section\">
+            <h4>${escapeHtml(title)}</h4>
+            ${body}
+          </section>
+        `;
       }
 
       function summaryRecords(payload) {
         return [
-          ["Published forms", payload.published_form_versions],
-          ["Draft submissions", payload.draft_submissions],
-          ["Submitted submissions", payload.submitted_submissions],
-          ["Datasets", payload.datasets],
-          ["Reports", payload.reports],
-          ["Aggregations", payload.aggregations],
-          ["Dashboards", payload.dashboards],
-          ["Charts", payload.charts]
+          ['Published forms', payload.published_form_versions],
+          ['Draft submissions', payload.draft_submissions],
+          ['Submitted submissions', payload.submitted_submissions],
+          ['Datasets', payload.datasets],
+          ['Reports', payload.reports],
+          ['Aggregations', payload.aggregations],
+          ['Dashboards', payload.dashboards],
+          ['Charts', payload.charts]
         ];
       }
 
-      function reportRowsView(rows) {
-        if (rows.length === 0) {
-          return '<p class="muted">No submitted rows matched this report.</p>';
-        }
-        return `
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Node</th>
-                  <th>Source</th>
-                  <th>Field</th>
-                  <th>Value</th>
-                  <th>Submission</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${rows.map((row) => `
-                  <tr>
-                    <td>${escapeHtml(row.node_name || "Unknown node")}</td>
-                    <td>${escapeHtml(row.source_alias || "Direct")}</td>
-                    <td>${escapeHtml(row.logical_key || "")}</td>
-                    <td>${escapeHtml(row.field_value ?? "")}</td>
-                    <td>${row.submission_id ? `<button type="button" onclick="loadSubmissionByValue('${escapeHtml(row.submission_id)}')">Open</button>` : '<span class="muted">None</span>'}</td>
-                  </tr>
-                `).join("")}
-              </tbody>
-            </table>
-          </div>
-        `;
-      }
-
-      function aggregationRowsView(rows) {
-        if (rows.length === 0) {
-          return '<p class="muted">No rows matched this aggregation.</p>';
-        }
-        return `
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Group</th>
-                  <th>Metric</th>
-                  <th>Value</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${rows.flatMap((row) => Object.entries(row.metrics || {}).map(([metric, value]) => `
-                  <tr>
-                    <td>${escapeHtml(row.group_key || "All")}</td>
-                    <td>${escapeHtml(metric)}</td>
-                    <td>${escapeHtml(value)}</td>
-                  </tr>
-                `)).join("")}
-              </tbody>
-            </table>
-          </div>
-        `;
-      }
-
-      function datasetRowSubmissionActions(row) {
-        if (!row?.submission_id) {
-          return '<span class="muted">None</span>';
-        }
-        if (row.source_alias === "join" && row.submission_id.includes("|")) {
-          const parts = row.submission_id
-            .split("|")
-            .map((part) => part.trim())
-            .filter(Boolean);
-          return parts.map((part) => {
-            const separator = part.indexOf(":");
-            if (separator <= 0) {
-              return `<span class="muted">${escapeHtml(part)}</span>`;
-            }
-            const sourceAlias = part.slice(0, separator);
-            const submissionId = part.slice(separator + 1);
-            return `<button type="button" onclick="loadSubmissionByValue('${escapeHtml(submissionId)}')">Open ${escapeHtml(sourceAlias)}</button>`;
-          }).join(" ");
-        }
-        return `<button type="button" onclick="loadSubmissionByValue('${escapeHtml(row.submission_id)}')">Open</button>`;
-      }
-
-      function inputValue(id) {
-        return document.getElementById(id)?.value.trim() ?? "";
-      }
-
-      function setInput(id, value) {
-        const element = document.getElementById(id);
-        if (element) element.value = value ?? "";
+      function renderSummaryCards(payload) {
+        return summaryRecords(payload).map(([label, count]) => `
+          <article class=\"card\">
+            <h3>${escapeHtml(label)}</h3>
+            <p>${escapeHtml(count)}</p>
+          </article>
+        `).join('');
       }
 
       function updateSessionStatus(account = null) {
-        const element = document.getElementById("session-status");
+        const element = byId('session-status');
         if (!element) return;
         if (!token) {
-          element.textContent = "Not signed in.";
+          element.textContent = 'Not signed in.';
           return;
         }
         element.textContent = account?.email
           ? `Signed in as ${account.email}.`
-          : "Authenticated for local testing.";
+          : 'Authenticated for local testing.';
       }
 
-      function selectRecord(kind, label, id, bindings = {}) {
+      function selectRecord(kind, label, id) {
         selections[kind] = { label, id };
-        for (const [inputId, value] of Object.entries(bindings)) {
-          setInput(inputId, value);
-        }
         renderSelections();
       }
 
@@ -187,1142 +119,923 @@ pub const APPLICATION_SCRIPT: &str = r#"
         const entries = Object.entries(selections);
         const html = entries.length
           ? entries.map(([kind, record]) => `
-              <article class="selection-item">
+              <article class=\"selection-item\">
                 <h3>${escapeHtml(kind)}</h3>
                 <p>${escapeHtml(record.label)}</p>
-                <code>${escapeHtml(record.id)}</code>
               </article>
-            `).join("")
-          : '<p class="muted">No records selected yet.</p>';
-        for (const id of ["selection-state", "home-selection-state"]) {
+            `).join('')
+          : '<p class=\"muted\">No records selected yet.</p>';
+        for (const id of ['selection-state', 'home-selection-state']) {
           setHtml(id, html);
         }
       }
 
       async function request(path, options = {}) {
         const headers = { ...(options.headers || {}) };
-        if (token) headers.Authorization = `Bearer ${token}`;
+        if (token) {
+          headers.Authorization = `Bearer ${token}`;
+        }
         const response = await fetch(path, { ...options, headers });
         const text = await response.text();
         const payload = text ? JSON.parse(text) : null;
-        if (!response.ok) throw new Error(JSON.stringify(payload, null, 2));
+        if (!response.ok) {
+          throw new Error((payload && payload.error) || text || `Request failed: ${response.status}`);
+        }
         return payload;
       }
 
-      async function login() {
-        try {
-          const payload = await request("/api/auth/login", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              email: "admin@tessara.local",
-              password: "tessara-dev-admin"
-            })
-          });
-          token = payload.token;
-          window.sessionStorage.setItem("tessara.devToken", token);
-          updateSessionStatus();
-          show({ authenticated: true });
-        } catch (error) {
-          show(error.message);
+      async function login(silent = false) {
+        const payload = await request('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: 'admin@tessara.local',
+            password: 'tessara-dev-admin'
+          })
+        });
+        token = payload.token;
+        window.sessionStorage.setItem('tessara.devToken', token);
+        updateSessionStatus();
+        if (!silent) show({ authenticated: true });
+        return payload;
+      }
+
+      async function ensureAuthenticated() {
+        if (!token) {
+          await login(true);
         }
       }
 
       function logout() {
         token = null;
-        window.sessionStorage.removeItem("tessara.devToken");
+        window.sessionStorage.removeItem('tessara.devToken');
         updateSessionStatus();
         show({ authenticated: false });
       }
 
       async function loadCurrentUser() {
         try {
-          if (!token) await login();
-          const payload = await request("/api/me");
+          await ensureAuthenticated();
+          const payload = await request('/api/me');
           updateSessionStatus(payload);
           show(payload);
-          setScreen(`
-            <article class="card">
-              <h3>${escapeHtml(payload.display_name)}</h3>
-              <p>${escapeHtml(payload.email)}</p>
-              <p class="muted">${escapeHtml(payload.capabilities.join(", "))}</p>
-            </article>
-          `);
         } catch (error) {
           show(error.message);
         }
-      }
-
-      async function seedDemo() {
-        try {
-          await seedDemoForRoute();
-        } catch (error) {
-          show(error.message);
-        }
-      }
-
-      async function startDemoSubmissionFlow() {
-        try {
-          const payload = await seedDemoForRoute();
-          await renderForm(payload.form_version_id);
-          await loadSubmissions();
-        } catch (error) {
-          show(error.message);
-        }
-      }
-
-      async function openDemoDashboard() {
-        try {
-          const payload = await seedDemoForRoute();
-          await refreshAnalytics();
-          await loadDashboardByValue(payload.dashboard_id);
-        } catch (error) {
-          show(error.message);
-        }
-      }
-
-      async function seedDemoForRoute() {
-        if (!token) await login();
-        const payload = await request("/api/demo/seed", { method: "POST" });
-        setInput("form-version-id", payload.form_version_id);
-        setInput("form-id", payload.form_id);
-        setInput("node-id", payload.organization_node_id);
-        setInput("submission-id", payload.submission_id);
-        setInput("dashboard-id", payload.dashboard_id);
-        setInput("report-id", payload.report_id);
-        setInput("chart-id", payload.chart_id);
-        selectRecord("form version", payload.form_version_id, payload.form_version_id, {
-          "form-version-id": payload.form_version_id,
-          "form-id": payload.form_id
-        });
-        selectRecord("node", payload.organization_node_id, payload.organization_node_id, {
-          "node-id": payload.organization_node_id
-        });
-        selectRecord("submission", payload.submission_id, payload.submission_id, {
-          "submission-id": payload.submission_id
-        });
-        selectRecord("report", payload.report_id, payload.report_id, {
-          "report-id": payload.report_id
-        });
-        selectRecord("chart", payload.chart_id, payload.chart_id, {
-          "chart-id": payload.chart_id
-        });
-        selectRecord("dashboard", payload.dashboard_id, payload.dashboard_id, {
-          "dashboard-id": payload.dashboard_id
-        });
-        show(payload);
-        return payload;
       }
 
       async function loadAppSummary() {
         try {
-          if (!token) await login();
-          const payload = await request("/api/app/summary");
+          await ensureAuthenticated();
+          const payload = await request('/api/app/summary');
+          setHtml('home-summary-cards', renderSummaryCards(payload));
           show(payload);
-          const summaryCards = renderSummaryCards(payload);
-          showCards(summaryRecords(payload), ([label, count]) => `
-            <article class="card">
-              <h3>${escapeHtml(label)}</h3>
-              <p>${escapeHtml(count)}</p>
-            </article>
-          `);
-          setHtml("home-summary-cards", summaryCards);
         } catch (error) {
           show(error.message);
         }
       }
 
-      function useForm(formId, formName = formId) {
-        selectRecord("form", formName, formId, { "form-id": formId });
+      function setSelectOptions(id, options, blankLabel = '') {
+        const element = byId(id);
+        if (!element) return;
+        const blank = blankLabel ? `<option value=\"\">${escapeHtml(blankLabel)}</option>` : '';
+        element.innerHTML = blank + options.map((option) => `
+          <option value=\"${escapeHtml(option.value)}\">${escapeHtml(option.label)}</option>
+        `).join('');
       }
 
-      function useFormVersion(formVersionId, formId, label = formVersionId) {
-        selectRecord("form version", label, formVersionId, {
-          "form-version-id": formVersionId,
-          "form-id": formId
-        });
-      }
-
-      async function loadPublishedForms() {
-        try {
-          const payload = await request("/api/forms/published");
-          show(payload);
-          showCards(payload, (formVersion) => `
-            <article class="card">
-              <h3>${escapeHtml(formVersion.form_name)}</h3>
-              <p class="muted">${escapeHtml(formVersion.form_slug)} ${escapeHtml(formVersion.version_label)}</p>
-              <p>${formVersion.field_count} fields</p>
-              <button type="button" onclick="useFormVersion('${escapeHtml(formVersion.form_version_id)}', '${escapeHtml(formVersion.form_id)}', '${escapeHtml(formVersion.form_name)} ${escapeHtml(formVersion.version_label)}')">Use Published Version</button>
-              <button type="button" onclick="openPublishedFormVersion('${escapeHtml(formVersion.form_version_id)}', '${escapeHtml(formVersion.form_id)}', '${escapeHtml(formVersion.form_name)} ${escapeHtml(formVersion.version_label)}')">Open This Form</button>
-              <button type="button" onclick="renderForm('${escapeHtml(formVersion.form_version_id)}')">Render Form</button>
-            </article>
-          `);
-        } catch (error) {
-          show(error.message);
-        }
-      }
-
-      async function openPublishedFormVersion(formVersionId, formId, label = formVersionId) {
-        useFormVersion(formVersionId, formId, label);
-        await renderForm(formVersionId);
-      }
-
-      async function openSelectedFormVersion() {
-        await openPublishedFormVersion(inputValue("form-version-id"), inputValue("form-id"), "Selected Form");
-      }
-
-      async function loadNodes() {
-        try {
-          const search = inputValue("node-search");
-          const payload = await request(search ? `/api/nodes?q=${encodeURIComponent(search)}` : "/api/nodes");
-          show(payload);
-          showCards(payload, (node) => `
-            <article class="card">
-              <h3>${escapeHtml(node.name)}</h3>
-              <p>${escapeHtml(node.node_type_name)}${node.parent_node_name ? ` under ${escapeHtml(node.parent_node_name)}` : ""}</p>
-              <p class="muted">${escapeHtml(JSON.stringify(node.metadata))}</p>
-              <button type="button" onclick="loadNodeByValue('${escapeHtml(node.id)}')">Inspect Organization</button>
-              <button type="button" onclick="useTargetNode('${escapeHtml(node.id)}', '${escapeHtml(node.name)}')">Use Target</button>
-              <button type="button" onclick="useTargetNodeAndContinue('${escapeHtml(node.id)}', '${escapeHtml(node.name)}')">Use Target and Continue</button>
-            </article>
-          `);
-        } catch (error) {
-          show(error.message);
-        }
-      }
-
-      async function loadNodeByValue(nodeId) {
-        try {
-          const payload = await request(`/api/nodes/${nodeId}`);
-          useTargetNode(payload.id, payload.name);
-          show(payload);
-          setScreen(`
-            <article class="card">
-              <h3>${escapeHtml(payload.name)}</h3>
-              <p>${escapeHtml(payload.node_type_name)}${payload.parent_node_name ? ` under ${escapeHtml(payload.parent_node_name)}` : ""}</p>
-              <p class="muted">${escapeHtml(JSON.stringify(payload.metadata))}</p>
-              <div class="actions">
-                <button type="button" onclick="useTargetNode('${escapeHtml(payload.id)}', '${escapeHtml(payload.name)}')">Use Target</button>
-                <button type="button" onclick="loadSubmissionsForNode('${escapeHtml(payload.id)}', '${escapeHtml(payload.name)}')">Browse Related Responses</button>
-                <button type="button" onclick="loadDashboards()">Browse Related Dashboards</button>
-              </div>
-            </article>
-            ${payload.related_forms.map((form) => `
-              <article class="card">
-                <h3>${escapeHtml(form.form_name)}</h3>
-                <p class="muted">${escapeHtml(form.form_slug)}</p>
-                <p>${form.published_version_count} published versions</p>
-                <button type="button" onclick="useForm('${escapeHtml(form.form_id)}', '${escapeHtml(form.form_name)}')">Use Related Form</button>
-              </article>
-            `).join("") || '<p class="muted">No scoped forms are linked to this organization record yet.</p>'}
-            ${payload.related_responses.map((submission) => `
-              <article class="card">
-                <h3>${escapeHtml(submission.form_name)} ${escapeHtml(submission.version_label)}</h3>
-                <p>${escapeHtml(submission.status)} response</p>
-                <button type="button" onclick="loadSubmissionByValue('${escapeHtml(submission.submission_id)}')">Open Response</button>
-              </article>
-            `).join("") || '<p class="muted">No responses are linked to this organization record yet.</p>'}
-            ${payload.related_dashboards.map((dashboard) => `
-              <article class="card">
-                <h3>${escapeHtml(dashboard.dashboard_name)}</h3>
-                <p>${dashboard.component_count} components</p>
-                <button type="button" onclick="loadDashboardByValue('${escapeHtml(dashboard.dashboard_id)}')">Open Dashboard</button>
-              </article>
-            `).join("") || '<p class="muted">No dashboards are linked to this organization record yet.</p>'}
-          `);
-        } catch (error) {
-          show(error.message);
-        }
-      }
-
-      async function loadSubmissionsForNode(nodeId, nodeName = nodeId) {
-        useTargetNode(nodeId, nodeName);
-        setInput("submission-status-filter", "");
-        await loadSubmissions();
-      }
-
-      function useTargetNode(nodeId, nodeName = nodeId) {
-        selectRecord("node", nodeName, nodeId, {
-          "node-id": nodeId,
-          "node-name": nodeName
-        });
-      }
-
-      async function useTargetNodeAndContinue(nodeId, nodeName = nodeId) {
-        useTargetNode(nodeId, nodeName);
-        if (renderedForm) {
-          await renderForm(renderedForm.form_version_id);
-        }
-      }
-
-      async function useSelectedTargetNodeAndContinue() {
-        const nodeId = inputValue("node-id");
-        if (!nodeId) throw new Error("Choose a target node before continuing.");
-        await useTargetNodeAndContinue(nodeId, inputValue("node-name") || nodeId);
+      function redirect(path) {
+        window.location.assign(path);
       }
 
       function fieldInputId(field) {
-        return `form-field-${field.id}`;
+        return `response-field-${field.id}`;
       }
 
       function renderFieldInput(field) {
-        const required = field.required ? " required" : "";
-        if (field.field_type === "boolean") {
-          return `<input id="${escapeHtml(fieldInputId(field))}" type="checkbox"${required}>`;
+        const required = field.required ? ' required' : '';
+        if (field.field_type === 'boolean') {
+          return `<input id=\"${escapeHtml(fieldInputId(field))}\" type=\"checkbox\"${required}>`;
         }
-        const inputType = field.field_type === "number"
-          ? "number"
-          : field.field_type === "date"
-            ? "date"
-            : "text";
-        const placeholder = field.field_type === "multi_choice"
-          ? "Comma-separated choices"
+        const inputType = field.field_type === 'number'
+          ? 'number'
+          : field.field_type === 'date'
+            ? 'date'
+            : 'text';
+        const placeholder = field.field_type === 'multi_choice'
+          ? 'Comma-separated choices'
           : field.label;
-        return `<input id="${escapeHtml(fieldInputId(field))}" type="${inputType}" placeholder="${escapeHtml(placeholder)}"${required}>`;
+        return `<input id=\"${escapeHtml(fieldInputId(field))}\" type=\"${inputType}\" placeholder=\"${escapeHtml(placeholder)}\"${required}>`;
       }
 
-      async function renderForm(formVersionId) {
-        try {
-          if (!formVersionId) throw new Error("Choose a published form before opening the response form.");
-          const payload = await request(`/api/form-versions/${formVersionId}/render`);
-          renderedForm = payload;
-          setInput("form-version-id", payload.form_version_id);
-          setInput("form-id", payload.form_id);
-          useFormVersion(payload.form_version_id, payload.form_id, `${payload.form_name} ${payload.version_label}`);
-          show(payload);
-          setScreen(`
-            <article class="card form-screen">
-              <h3>${escapeHtml(payload.form_name)} ${escapeHtml(payload.version_label)}</h3>
-              <p>Status: ${escapeHtml(payload.status)}</p>
-              <p class="muted">Target node: ${escapeHtml(selections.node?.label || inputValue("node-id") || "Select a node before creating a draft.")}</p>
-              <p class="muted">Draft submission: ${escapeHtml(inputValue("submission-id") || "Create a draft after selecting a node.")}</p>
-              ${payload.sections.map((section) => `
-                <section class="form-section">
-                  <h4>${escapeHtml(section.title)}</h4>
-                  <div class="form-fields">
-                    ${section.fields.map((field) => `
-                      <div class="form-field">
-                        <label for="${escapeHtml(fieldInputId(field))}">
-                          ${escapeHtml(field.label)} (${escapeHtml(field.field_type)}${field.required ? ", required" : ""})
-                        </label>
-                        ${renderFieldInput(field)}
-                      </div>
-                    `).join("")}
-                  </div>
-                </section>
-              `).join("")}
-              ${renderResponseFormActions()}
-            </article>
-          `);
-          prefillRenderedValues();
-        } catch (error) {
-          show(error.message);
-        }
-      }
-
-      function renderResponseFormActions() {
-        const hasMatchingSubmission = inputValue("submission-id")
-          && selectedSubmissionFormVersionId === renderedForm?.form_version_id;
-        if (hasMatchingSubmission && selectedSubmissionStatus === "submitted") {
-          return `
-            <div class="actions form-actions">
-              <p class="muted">This submitted response is read-only. Open a draft submission to edit values.</p>
-              <button type="button" onclick="clearResponseContext()">Clear Response Context</button>
-            </div>
-          `;
-        }
-        if (hasMatchingSubmission) {
-          return `
-            <div class="actions form-actions">
-              <button type="button" onclick="saveRenderedFormValues()">Save Values</button>
-              <button type="button" onclick="submitDraft()">Submit Draft</button>
-              <button type="button" onclick="discardDraft()">Discard Draft</button>
-              <button type="button" onclick="clearResponseContext()">Clear Response Context</button>
-            </div>
-          `;
-        }
-        return `
-          <div class="actions form-actions">
-            <button type="button" onclick="createDraft()">Create Draft</button>
-          </div>
-        `;
-      }
-
-      function clearResponseContext() {
-        setInput("submission-id", "");
-        selectedSubmissionFormVersionId = null;
-        selectedSubmissionStatus = null;
-        selectedSubmissionValues = {};
-        show({ response_context: "cleared" });
-        if (renderedForm) renderForm(renderedForm.form_version_id);
-      }
-
-      function renderedFields() {
-        if (!renderedForm) throw new Error("Render a form version first.");
-        return renderedForm.sections.flatMap((section) => section.fields);
-      }
-
-      function collectRenderedValues() {
+      function collectRenderedResponseValues() {
         const values = {};
-        for (const field of renderedFields()) {
-          const element = document.getElementById(fieldInputId(field));
-          if (!element) continue;
-          if (field.field_type === "boolean") {
-            values[field.key] = element.checked;
-            continue;
-          }
-          const raw = element.value.trim();
-          if (raw === "") continue;
-          if (field.field_type === "number") {
-            values[field.key] = Number(raw);
-          } else if (field.field_type === "multi_choice") {
-            values[field.key] = raw.split(",").map((item) => item.trim()).filter(Boolean);
-          } else {
-            values[field.key] = raw;
+        if (!renderedResponseForm) return values;
+        for (const section of renderedResponseForm.sections) {
+          for (const field of section.fields) {
+            const element = byId(fieldInputId(field));
+            if (!element) continue;
+            if (field.field_type === 'boolean') {
+              values[field.key] = element.checked;
+              continue;
+            }
+            const raw = element.value.trim();
+            if (raw === '') continue;
+            if (field.field_type === 'number') {
+              values[field.key] = Number(raw);
+            } else if (field.field_type === 'multi_choice') {
+              values[field.key] = raw.split(',').map((item) => item.trim()).filter(Boolean);
+            } else {
+              values[field.key] = raw;
+            }
           }
         }
         return values;
       }
 
-      function submissionValuesByKey(values) {
-        return Object.fromEntries(
-          values
-            .filter((value) => value.value !== null)
-            .map((value) => [value.key, value.value])
+      function prefillRenderedResponseValues(detail) {
+        if (!renderedResponseForm || !detail) return;
+        const valuesByKey = Object.fromEntries(
+          (detail.values || [])
+            .filter((item) => item.value !== null)
+            .map((item) => [item.key, item.value])
         );
-      }
-
-      function prefillRenderedValues() {
-        if (!renderedForm || selectedSubmissionFormVersionId !== renderedForm.form_version_id) return;
-        for (const field of renderedFields()) {
-          const value = selectedSubmissionValues[field.key];
-          if (value === undefined || value === null) continue;
-          const element = document.getElementById(fieldInputId(field));
-          if (!element) continue;
-          if (field.field_type === "boolean") {
-            element.checked = Boolean(value);
-          } else if (Array.isArray(value)) {
-            element.value = value.join(", ");
-          } else {
-            element.value = String(value);
+        for (const section of renderedResponseForm.sections) {
+          for (const field of section.fields) {
+            const element = byId(fieldInputId(field));
+            const value = valuesByKey[field.key];
+            if (!element || value === undefined || value === null) continue;
+            if (field.field_type === 'boolean') {
+              element.checked = Boolean(value);
+            } else if (Array.isArray(value)) {
+              element.value = value.join(', ');
+            } else {
+              element.value = String(value);
+            }
           }
         }
       }
 
-      function validateRenderedValues(values) {
-        const missing = renderedFields()
+      function validateRenderedResponseValues(values) {
+        if (!renderedResponseForm) return;
+        const missing = renderedResponseForm.sections
+          .flatMap((section) => section.fields)
           .filter((field) => field.required)
           .filter((field) => {
             const value = values[field.key];
             return value === undefined
               || value === null
-              || value === ""
+              || value === ''
               || (Array.isArray(value) && value.length === 0);
           })
           .map((field) => field.label);
-
         if (missing.length > 0) {
-          throw new Error(`Required fields missing: ${missing.join(", ")}`);
+          throw new Error(`Required fields missing: ${missing.join(', ')}`);
         }
       }
 
-      async function createDraft() {
+      async function initHomePage() {
+        updateSessionStatus();
+        renderSelections();
         try {
-          if (!token) await login();
-          const payload = await request("/api/submissions/drafts", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              form_version_id: inputValue("form-version-id"),
-              node_id: inputValue("node-id")
-            })
-          });
-          setInput("submission-id", payload.id);
-          selectedSubmissionFormVersionId = renderedForm?.form_version_id ?? inputValue("form-version-id");
-          selectedSubmissionStatus = "draft";
-          selectedSubmissionValues = {};
-          selectRecord("submission", payload.id, payload.id, { "submission-id": payload.id });
-          show(payload);
-          await loadSubmissionByValue(payload.id);
+          await ensureAuthenticated();
+          await Promise.all([loadCurrentUser(), loadAppSummary()]);
         } catch (error) {
           show(error.message);
         }
       }
 
-      async function saveRenderedFormValues() {
+      async function loadOrganizationsList() {
         try {
-          if (!token) await login();
-          const submissionId = inputValue("submission-id");
-          if (!submissionId) throw new Error("Create or choose a draft submission first.");
-          const values = collectRenderedValues();
-          validateRenderedValues(values);
-          const payload = await request(`/api/submissions/${submissionId}/values`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
+          await ensureAuthenticated();
+          const payload = await request('/api/nodes');
+          const html = payload.length
+            ? payload.map((node) => recordCard(
+                node.name,
+                `<p>${escapeHtml(node.node_type_name)}</p><p class=\"muted\">${escapeHtml(node.parent_node_name || 'No parent')}</p>`,
+                `<a class=\"button-link\" href=\"/app/organization/${node.id}\">View</a><a class=\"button-link\" href=\"/app/organization/${node.id}/edit\">Edit</a>`
+              )).join('')
+            : emptyState('No organization records found.');
+          setHtml('organization-list', html);
+          show(payload);
+        } catch (error) {
+          setHtml('organization-list', emptyState(error.message));
+        }
+      }
+
+      async function loadOrganizationDetail(id) {
+        try {
+          await ensureAuthenticated();
+          const payload = await request(`/api/nodes/${id}`);
+          selectRecord('organization', payload.name, payload.id);
+          const forms = payload.related_forms.length
+            ? payload.related_forms.map((form) => `<li><a href=\"/app/forms/${form.form_id}\">${escapeHtml(form.form_name)}</a></li>`).join('')
+            : '<li class=\"muted\">No related forms.</li>';
+          const responses = payload.related_responses.length
+            ? payload.related_responses.map((response) => `<li><a href=\"/app/responses/${response.submission_id}\">${escapeHtml(response.form_name)} ${escapeHtml(response.version_label)}</a></li>`).join('')
+            : '<li class=\"muted\">No related responses.</li>';
+          const dashboards = payload.related_dashboards.length
+            ? payload.related_dashboards.map((dashboard) => `<li><a href=\"/app/dashboards/${dashboard.dashboard_id}\">${escapeHtml(dashboard.dashboard_name)}</a></li>`).join('')
+            : '<li class=\"muted\">No related dashboards.</li>';
+          const metadata = Object.entries(payload.metadata || {});
+          setHtml('organization-detail', `
+            ${detailSection('Summary', `<p>${escapeHtml(payload.name)}</p><p class=\"muted\">${escapeHtml(payload.node_type_name)}</p><p class=\"muted\">Parent: ${escapeHtml(payload.parent_node_name || 'None')}</p>`)}
+            ${detailSection('Metadata', metadata.length ? `<dl class=\"detail-list\">${metadata.map(([key, value]) => `<div><dt>${escapeHtml(key)}</dt><dd>${escapeHtml(JSON.stringify(value))}</dd></div>`).join('')}</dl>` : '<p class=\"muted\">No metadata values.</p>')}
+            ${detailSection('Related Forms', `<ul class=\"app-list\">${forms}</ul>`)}
+            ${detailSection('Related Responses', `<ul class=\"app-list\">${responses}</ul>`)}
+            ${detailSection('Related Dashboards', `<ul class=\"app-list\">${dashboards}</ul>`)}
+          `);
+          show(payload);
+        } catch (error) {
+          setHtml('organization-detail', emptyState(error.message));
+        }
+      }
+
+      async function initOrganizationForm(mode, id) {
+        try {
+          await ensureAuthenticated();
+          const [nodeTypes, nodes, metadataFields] = await Promise.all([
+            request('/api/admin/node-types'),
+            request('/api/nodes'),
+            request('/api/admin/node-metadata-fields')
+          ]);
+          organizationFormState = {
+            nodeTypes,
+            nodes,
+            metadataFields,
+            metadataValues: {},
+            editNodeId: id || null,
+            editNodeTypeId: null
+          };
+          setSelectOptions(
+            'organization-node-type',
+            nodeTypes.map((item) => ({ value: item.id, label: item.name })),
+            'Choose node type'
+          );
+          setSelectOptions(
+            'organization-parent-node',
+            nodes
+              .filter((item) => item.id !== id)
+              .map((item) => ({ value: item.id, label: item.name })),
+            'No parent'
+          );
+          const nodeTypeSelect = byId('organization-node-type');
+          if (nodeTypeSelect) {
+            nodeTypeSelect.onchange = () => renderOrganizationMetadataFields(nodeTypeSelect.value);
+          }
+          if (mode === 'edit' && id) {
+            const payload = await request(`/api/nodes/${id}`);
+            organizationFormState.metadataValues = payload.metadata || {};
+            organizationFormState.editNodeTypeId = payload.node_type_id;
+            if (nodeTypeSelect) nodeTypeSelect.value = payload.node_type_id;
+            byId('organization-parent-node').value = payload.parent_node_id || '';
+            byId('organization-name').value = payload.name || '';
+            renderOrganizationMetadataFields(payload.node_type_id);
+          } else if (nodeTypeSelect && nodeTypeSelect.value) {
+            renderOrganizationMetadataFields(nodeTypeSelect.value);
+          }
+          const form = byId('organization-form');
+          if (form) {
+            form.onsubmit = async (event) => {
+              event.preventDefault();
+              await submitOrganizationForm(mode, id);
+            };
+          }
+        } catch (error) {
+          setHtml('organization-metadata-fields', emptyState(error.message));
+        }
+      }
+
+      function renderOrganizationMetadataFields(nodeTypeId) {
+        const fields = organizationFormState.metadataFields.filter((field) => field.node_type_id === nodeTypeId);
+        const html = fields.length
+          ? fields.map((field) => {
+              const value = organizationFormState.metadataValues[field.key];
+              const inputId = `organization-metadata-${field.key}`;
+              const hint = field.required ? 'required' : 'optional';
+              if (field.field_type === 'boolean') {
+                return `
+                  <div class=\"form-field\">
+                    <label for=\"${escapeHtml(inputId)}\">${escapeHtml(field.label)} (${escapeHtml(hint)})</label>
+                    <input id=\"${escapeHtml(inputId)}\" type=\"checkbox\" ${value ? 'checked' : ''}>
+                  </div>
+                `;
+              }
+              const inputType = field.field_type === 'number'
+                ? 'number'
+                : field.field_type === 'date'
+                  ? 'date'
+                  : 'text';
+              const renderedValue = Array.isArray(value) ? value.join(', ') : (value ?? '');
+              const placeholder = field.field_type === 'multi_choice' ? 'Comma-separated values' : field.label;
+              return `
+                <div class=\"form-field\">
+                  <label for=\"${escapeHtml(inputId)}\">${escapeHtml(field.label)} (${escapeHtml(hint)})</label>
+                  <input id=\"${escapeHtml(inputId)}\" type=\"${inputType}\" value=\"${escapeHtml(renderedValue)}\" placeholder=\"${escapeHtml(placeholder)}\">
+                </div>
+              `;
+            }).join('')
+          : '<p class=\"muted\">No metadata fields are defined for this node type.</p>';
+        setHtml('organization-metadata-fields', html);
+      }
+
+      function collectOrganizationMetadata(nodeTypeId) {
+        const metadata = {};
+        const fields = organizationFormState.metadataFields.filter((field) => field.node_type_id === nodeTypeId);
+        for (const field of fields) {
+          const element = byId(`organization-metadata-${field.key}`);
+          if (!element) continue;
+          if (field.field_type === 'boolean') {
+            metadata[field.key] = element.checked;
+            continue;
+          }
+          const raw = element.value.trim();
+          if (raw === '') continue;
+          if (field.field_type === 'number') {
+            metadata[field.key] = Number(raw);
+          } else if (field.field_type === 'multi_choice') {
+            metadata[field.key] = raw.split(',').map((item) => item.trim()).filter(Boolean);
+          } else {
+            metadata[field.key] = raw;
+          }
+        }
+        return metadata;
+      }
+
+      async function submitOrganizationForm(mode, id) {
+        const nodeTypeId = byId('organization-node-type').value;
+        const payload = {
+          parent_node_id: byId('organization-parent-node').value || null,
+          name: byId('organization-name').value.trim(),
+          metadata: collectOrganizationMetadata(nodeTypeId || organizationFormState.editNodeTypeId)
+        };
+        if (mode === 'create') {
+          payload.node_type_id = nodeTypeId;
+        }
+        const response = await request(
+          mode === 'create' ? '/api/admin/nodes' : `/api/admin/nodes/${id}`,
+          {
+            method: mode === 'create' ? 'POST' : 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          }
+        );
+        redirect(`/app/organization/${response.id}`);
+      }
+
+      async function loadFormsList() {
+        try {
+          await ensureAuthenticated();
+          const payload = await request('/api/admin/forms');
+          const html = payload.length
+            ? payload.map((form) => recordCard(
+                form.name,
+                `<p>${escapeHtml(form.slug)}</p><p class=\"muted\">${escapeHtml(form.scope_node_type_name || 'Unscoped')}</p>`,
+                `<a class=\"button-link\" href=\"/app/forms/${form.id}\">View</a><a class=\"button-link\" href=\"/app/forms/${form.id}/edit\">Edit</a>`
+              )).join('')
+            : emptyState('No form records found.');
+          setHtml('form-list', html);
+          show(payload);
+        } catch (error) {
+          setHtml('form-list', emptyState(error.message));
+        }
+      }
+
+      async function loadFormDetail(id) {
+        try {
+          await ensureAuthenticated();
+          const payload = await request(`/api/admin/forms/${id}`);
+          selectRecord('form', payload.name, payload.id);
+          const versions = payload.versions.length
+            ? payload.versions.map((version) => `<li>${escapeHtml(version.version_label)} (${escapeHtml(version.status)})</li>`).join('')
+            : '<li class=\"muted\">No versions.</li>';
+          const reports = payload.reports.length
+            ? payload.reports.map((report) => `<li><a href=\"/app/reports/${report.id}\">${escapeHtml(report.name)}</a></li>`).join('')
+            : '<li class=\"muted\">No related reports.</li>';
+          const datasets = payload.dataset_sources.length
+            ? payload.dataset_sources.map((dataset) => `<li>${escapeHtml(dataset.dataset_name)} (${escapeHtml(dataset.source_alias)})</li>`).join('')
+            : '<li class=\"muted\">No related dataset sources.</li>';
+          const publishedCount = payload.versions.filter((version) => version.status === 'published').length;
+          setHtml('form-detail', `
+            ${detailSection('Summary', `<p>${escapeHtml(payload.name)}</p><p>${escapeHtml(payload.slug)}</p><p class=\"muted\">Scope: ${escapeHtml(payload.scope_node_type_name || 'Unscoped')}</p><p class=\"muted\">Published versions: ${publishedCount}</p>`)}
+            ${detailSection('Versions', `<ul class=\"app-list\">${versions}</ul>`)}
+            ${detailSection('Related Reports', `<ul class=\"app-list\">${reports}</ul>`)}
+            ${detailSection('Related Dataset Sources', `<ul class=\"app-list\">${datasets}</ul>`)}
+          `);
+          show(payload);
+        } catch (error) {
+          setHtml('form-detail', emptyState(error.message));
+        }
+      }
+
+      async function initFormEntityForm(mode, id) {
+        try {
+          await ensureAuthenticated();
+          const nodeTypes = await request('/api/admin/node-types');
+          setSelectOptions(
+            'form-scope-node-type',
+            nodeTypes.map((item) => ({ value: item.id, label: item.name })),
+            'No scope'
+          );
+          if (mode === 'edit' && id) {
+            const payload = await request(`/api/admin/forms/${id}`);
+            byId('form-name').value = payload.name || '';
+            byId('form-slug').value = payload.slug || '';
+            byId('form-scope-node-type').value = payload.scope_node_type_id || '';
+          }
+          const form = byId('form-entity-form');
+          if (form) {
+            form.onsubmit = async (event) => {
+              event.preventDefault();
+              const response = await request(
+                mode === 'create' ? '/api/admin/forms' : `/api/admin/forms/${id}`,
+                {
+                  method: mode === 'create' ? 'POST' : 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    name: byId('form-name').value.trim(),
+                    slug: byId('form-slug').value.trim(),
+                    scope_node_type_id: byId('form-scope-node-type').value || null
+                  })
+                }
+              );
+              redirect(`/app/forms/${response.id}`);
+            };
+          }
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function loadResponsesList() {
+        try {
+          await ensureAuthenticated();
+          const [publishedForms, drafts, submitted] = await Promise.all([
+            request('/api/forms/published'),
+            request('/api/submissions?status=draft'),
+            request('/api/submissions?status=submitted')
+          ]);
+          setHtml(
+            'response-pending-list',
+            publishedForms.length
+              ? publishedForms.map((item) => recordCard(
+                  `${item.form_name} ${item.version_label}`,
+                  `<p class=\"muted\">Published form</p>`,
+                  `<a class=\"button-link\" href=\"/app/responses/new?formVersionId=${item.form_version_id}\">Start</a>`
+                )).join('')
+              : emptyState('No published forms are ready for new responses.')
+          );
+          setHtml(
+            'response-draft-list',
+            drafts.length
+              ? drafts.map((item) => recordCard(
+                  `${item.form_name} ${item.version_label}`,
+                  `<p>${escapeHtml(item.node_name)}</p><p class=\"muted\">Draft</p>`,
+                  `<a class=\"button-link\" href=\"/app/responses/${item.id}\">View</a><a class=\"button-link\" href=\"/app/responses/${item.id}/edit\">Edit</a>`
+                )).join('')
+              : emptyState('No draft responses found.')
+          );
+          setHtml(
+            'response-submitted-list',
+            submitted.length
+              ? submitted.map((item) => recordCard(
+                  `${item.form_name} ${item.version_label}`,
+                  `<p>${escapeHtml(item.node_name)}</p><p class=\"muted\">Submitted</p>`,
+                  `<a class=\"button-link\" href=\"/app/responses/${item.id}\">View</a>`
+                )).join('')
+              : emptyState('No submitted responses found.')
+          );
+          show({ publishedForms, drafts, submitted });
+        } catch (error) {
+          setHtml('response-pending-list', emptyState(error.message));
+          setHtml('response-draft-list', emptyState(error.message));
+          setHtml('response-submitted-list', emptyState(error.message));
+        }
+      }
+
+      async function initResponseCreateForm() {
+        try {
+          await ensureAuthenticated();
+          const [forms, nodes] = await Promise.all([
+            request('/api/forms/published'),
+            request('/api/nodes')
+          ]);
+          setSelectOptions(
+            'response-form-version',
+            forms.map((item) => ({ value: item.form_version_id, label: `${item.form_name} ${item.version_label}` })),
+            'Choose published form'
+          );
+          setSelectOptions(
+            'response-node',
+            nodes.map((item) => ({ value: item.id, label: item.name })),
+            'Choose target organization'
+          );
+          const queryFormVersion = page.search.get('formVersionId');
+          const queryNodeId = page.search.get('nodeId');
+          if (queryFormVersion) byId('response-form-version').value = queryFormVersion;
+          if (queryNodeId) byId('response-node').value = queryNodeId;
+          const form = byId('response-start-form');
+          if (form) {
+            form.onsubmit = async (event) => {
+              event.preventDefault();
+              const response = await request('/api/submissions/drafts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  form_version_id: byId('response-form-version').value,
+                  node_id: byId('response-node').value
+                })
+              });
+              redirect(`/app/responses/${response.id}/edit`);
+            };
+          }
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function loadResponseDetail(id) {
+        try {
+          await ensureAuthenticated();
+          const payload = await request(`/api/submissions/${id}`);
+          currentResponseDetail = payload;
+          selectRecord('response', `${payload.form_name} ${payload.version_label}`, payload.id);
+          const values = payload.values.length
+            ? payload.values.map((item) => `<li>${escapeHtml(item.label)}: ${item.value === null ? '<span class=\"muted\">missing</span>' : escapeHtml(JSON.stringify(item.value))}</li>`).join('')
+            : '<li class=\"muted\">No saved values.</li>';
+          const audit = payload.audit_events.length
+            ? payload.audit_events.map((item) => `<li>${escapeHtml(item.event_type)} by ${escapeHtml(item.account_email || 'system')} on ${escapeHtml(item.created_at)}</li>`).join('')
+            : '<li class=\"muted\">No audit events.</li>';
+          setHtml('response-detail', `
+            ${detailSection('Summary', `<p>${escapeHtml(payload.form_name)} ${escapeHtml(payload.version_label)}</p><p>${escapeHtml(payload.node_name)}</p><p class=\"muted\">Status: ${escapeHtml(payload.status)}</p>${payload.status === 'draft' ? `<p><a class=\"button-link\" href=\"/app/responses/${payload.id}/edit\">Edit Draft</a></p>` : ''}`)}
+            ${detailSection('Values', `<ul class=\"app-list\">${values}</ul>`)}
+            ${detailSection('Audit Trail', `<ul class=\"app-list\">${audit}</ul>`)}
+          `);
+          show(payload);
+        } catch (error) {
+          setHtml('response-detail', emptyState(error.message));
+        }
+      }
+
+      async function initResponseEditPage(id) {
+        try {
+          await ensureAuthenticated();
+          const detail = await request(`/api/submissions/${id}`);
+          currentResponseDetail = detail;
+          if (detail.status !== 'draft') {
+            setHtml('response-edit-surface', `
+              <p class=\"muted\">This response is submitted and cannot be edited.</p>
+              <div class=\"actions\"><a class=\"button-link\" href=\"/app/responses/${detail.id}\">Back to Detail</a></div>
+            `);
+            return;
+          }
+          const rendered = await request(`/api/form-versions/${detail.form_version_id}/render`);
+          renderedResponseForm = rendered;
+          selectRecord('response', `${detail.form_name} ${detail.version_label}`, detail.id);
+          setHtml('response-edit-surface', `
+            <form id=\"response-edit-form\" class=\"entity-form\">
+              ${rendered.sections.map((section) => `
+                <section class=\"page-panel nested-form-panel\">
+                  <h3>${escapeHtml(section.title)}</h3>
+                  <div class=\"form-grid\">
+                    ${section.fields.map((field) => `
+                      <div class=\"form-field\">
+                        <label for=\"${escapeHtml(fieldInputId(field))}\">${escapeHtml(field.label)}${field.required ? ' *' : ''}</label>
+                        ${renderFieldInput(field)}
+                      </div>
+                    `).join('')}
+                  </div>
+                </section>
+              `).join('')}
+              <div class=\"actions form-actions\">
+                <button type=\"button\" onclick=\"saveCurrentResponseDraft()\">Save</button>
+                <button type=\"button\" onclick=\"submitCurrentResponseDraft()\">Submit</button>
+                <a class=\"button-link\" href=\"/app/responses/${detail.id}\">Cancel</a>
+              </div>
+            </form>
+          `);
+          prefillRenderedResponseValues(detail);
+        } catch (error) {
+          setHtml('response-edit-surface', emptyState(error.message));
+        }
+      }
+
+      async function saveCurrentResponseDraft() {
+        try {
+          const values = collectRenderedResponseValues();
+          validateRenderedResponseValues(values);
+          await request(`/api/submissions/${page.recordId}/values`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ values })
           });
-          show(payload);
-          await loadSubmissionByValue(submissionId);
+          redirect(`/app/responses/${page.recordId}`);
         } catch (error) {
           show(error.message);
         }
       }
 
-      async function submitDraft() {
+      async function submitCurrentResponseDraft() {
         try {
-          if (!token) await login();
-          const submissionId = inputValue("submission-id");
-          if (!submissionId) throw new Error("Create or choose a draft submission first.");
-          const payload = await request(`/api/submissions/${submissionId}/submit`, { method: "POST" });
-          show(payload);
-          await loadSubmissionByValue(submissionId);
+          const values = collectRenderedResponseValues();
+          validateRenderedResponseValues(values);
+          await request(`/api/submissions/${page.recordId}/values`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ values })
+          });
+          await request(`/api/submissions/${page.recordId}/submit`, { method: 'POST' });
+          redirect(`/app/responses/${page.recordId}`);
         } catch (error) {
           show(error.message);
         }
       }
 
-      async function discardDraft() {
+      async function loadReportsList() {
         try {
-          if (!token) await login();
-          const submissionId = inputValue("submission-id");
-          if (!submissionId) throw new Error("Create or choose a draft submission first.");
-          const payload = await request(`/api/submissions/${submissionId}`, { method: "DELETE" });
-          setInput("submission-id", "");
-          selectedSubmissionFormVersionId = null;
-          selectedSubmissionStatus = null;
-          selectedSubmissionValues = {};
+          await ensureAuthenticated();
+          const payload = await request('/api/reports');
+          const html = payload.length
+            ? payload.map((report) => recordCard(
+                report.name,
+                `<p class=\"muted\">${escapeHtml(report.dataset_name || report.form_name || 'Unknown source')}</p>`,
+                `<a class=\"button-link\" href=\"/app/reports/${report.id}\">View</a><a class=\"button-link\" href=\"/app/reports/${report.id}/edit\">Edit</a>`
+              )).join('')
+            : emptyState('No report records found.');
+          setHtml('report-list', html);
           show(payload);
-          await loadSubmissions();
         } catch (error) {
-          show(error.message);
+          setHtml('report-list', emptyState(error.message));
         }
       }
 
-      async function loadSubmissions() {
+      async function loadReportDetail(id) {
         try {
-          if (!token) await login();
-          const payload = await request(submissionsUrl());
-          show(payload);
-          showCards(payload, (submission) => `
-            <article class="card">
-              <h3>${escapeHtml(submission.form_name)}</h3>
-              <p>${escapeHtml(submission.version_label)} on ${escapeHtml(submission.node_name)}</p>
-              <p>Status: ${escapeHtml(submission.status)}</p>
-              <p>${submission.value_count} saved values</p>
-              <p class="muted">Created ${escapeHtml(submission.created_at)}${submission.submitted_at ? `; submitted ${escapeHtml(submission.submitted_at)}` : ""}</p>
-              <button type="button" onclick="useSubmission('${escapeHtml(submission.id)}', '${escapeHtml(submission.form_name)} ${escapeHtml(submission.version_label)}')">Use Submission</button>
-              <button type="button" onclick="useFormVersion('${escapeHtml(submission.form_version_id)}', '${escapeHtml(submission.form_id)}', '${escapeHtml(submission.form_name)} ${escapeHtml(submission.version_label)}')">Use Form Version</button>
-              <button type="button" onclick="useTargetNode('${escapeHtml(submission.node_id)}', '${escapeHtml(submission.node_name)}')">Use Node</button>
-              <button type="button" onclick="loadSubmissionByValue('${escapeHtml(submission.id)}')">Open</button>
-            </article>
+          await ensureAuthenticated();
+          const payload = await request(`/api/reports/${id}`);
+          selectRecord('report', payload.name, payload.id);
+          const bindings = payload.bindings.length
+            ? payload.bindings.map((binding) => `<li>${escapeHtml(binding.logical_key)} -> ${escapeHtml(binding.source_field_key || binding.computed_expression || 'computed')} (${escapeHtml(binding.missing_policy)})</li>`).join('')
+            : '<li class=\"muted\">No bindings configured.</li>';
+          const aggregations = payload.aggregations.length
+            ? payload.aggregations.map((aggregation) => `<li>${escapeHtml(aggregation.name)}</li>`).join('')
+            : '<li class=\"muted\">No related aggregations.</li>';
+          const charts = payload.charts.length
+            ? payload.charts.map((chart) => `<li>${escapeHtml(chart.name)}</li>`).join('')
+            : '<li class=\"muted\">No related charts.</li>';
+          setHtml('report-detail', `
+            ${detailSection('Summary', `<p>${escapeHtml(payload.name)}</p><p class=\"muted\">Source: ${escapeHtml(payload.dataset_name || payload.form_name || 'Unknown')}</p>`)}
+            ${detailSection('Bindings', `<ul class=\"app-list\">${bindings}</ul>`)}
+            ${detailSection('Related Aggregations', `<ul class=\"app-list\">${aggregations}</ul>`)}
+            ${detailSection('Related Charts', `<ul class=\"app-list\">${charts}</ul>`)}
           `);
-        } catch (error) {
-          show(error.message);
-        }
-      }
-
-      function submissionsUrl() {
-        const params = new URLSearchParams();
-        if (inputValue("submission-search")) params.set("q", inputValue("submission-search"));
-        if (inputValue("submission-status-filter")) params.set("status", inputValue("submission-status-filter"));
-        if (inputValue("form-id")) params.set("form_id", inputValue("form-id"));
-        if (inputValue("node-id")) params.set("node_id", inputValue("node-id"));
-        const query = params.toString();
-        return query ? `/api/submissions?${query}` : "/api/submissions";
-      }
-
-      function filterSubmissionsByStatus(status) {
-        setInput("submission-status-filter", status);
-        loadSubmissions();
-      }
-
-      function showDraftSubmissions() {
-        filterSubmissionsByStatus("draft");
-      }
-
-      function showSubmittedSubmissions() {
-        filterSubmissionsByStatus("submitted");
-      }
-
-      function clearSubmissionReviewFilters() {
-        setInput("submission-search", "");
-        setInput("submission-status-filter", "");
-        loadSubmissions();
-      }
-
-      function useSubmission(submissionId, label = submissionId) {
-        selectRecord("submission", label, submissionId, { "submission-id": submissionId });
-      }
-
-      async function loadSubmissionById() {
-        try {
-          if (!token) await login();
-          const submissionId = inputValue("submission-id");
-          if (!submissionId) throw new Error("Choose a response first.");
-          await loadSubmissionByValue(submissionId);
-        } catch (error) {
-          show(error.message);
-        }
-      }
-
-      async function loadSubmissionByValue(submissionId) {
-        if (!token) await login();
-        const payload = await request(`/api/submissions/${submissionId}`);
-        setInput("submission-id", payload.id);
-        setInput("form-version-id", payload.form_version_id);
-        setInput("node-id", payload.node_id);
-        selectedSubmissionFormVersionId = payload.form_version_id;
-        selectedSubmissionStatus = payload.status;
-        selectedSubmissionValues = submissionValuesByKey(payload.values);
-        useSubmission(payload.id, `${payload.form_name} ${payload.version_label}`);
-        useFormVersion(payload.form_version_id, payload.form_id, `${payload.form_name} ${payload.version_label}`);
-        useTargetNode(payload.node_id, payload.node_name);
-        show(payload);
-        setScreen(`
-          <article class="card">
-            <h3>${escapeHtml(payload.form_name)} ${escapeHtml(payload.version_label)}</h3>
-            <p>${escapeHtml(payload.node_name)}: ${escapeHtml(payload.status)}</p>
-            <p class="muted">Created ${escapeHtml(payload.created_at)}${payload.submitted_at ? `; submitted ${escapeHtml(payload.submitted_at)}` : ""}</p>
-            <button type="button" onclick="renderForm('${escapeHtml(payload.form_version_id)}')">Open Response Form</button>
-            <h4>Values</h4>
-            <ul>
-              ${payload.values.map((value) => `<li>${escapeHtml(value.label)}${value.required ? " *" : ""}: ${value.value === null ? "<span class=\"muted\">missing</span>" : escapeHtml(JSON.stringify(value.value))}</li>`).join("")}
-            </ul>
-            <h4>Audit</h4>
-            <ul>
-              ${payload.audit_events.map((event) => `<li>${escapeHtml(event.event_type)} by ${escapeHtml(event.account_email || "system")}</li>`).join("")}
-            </ul>
-          </article>
-        `);
-      }
-
-      async function refreshAnalytics() {
-        try {
-          if (!token) await login();
-          show(await request("/api/admin/analytics/refresh", { method: "POST" }));
-          await loadAppSummary();
-        } catch (error) {
-          show(error.message);
-        }
-      }
-
-      async function refreshAnalyticsAndRunReport() {
-        await refreshAnalytics();
-        await loadReportById();
-      }
-
-      async function refreshAnalyticsAndOpenDashboard() {
-        await refreshAnalytics();
-        await loadDashboardById();
-      }
-
-      function useReport(reportId, reportName = reportId) {
-        selectRecord("report", reportName, reportId, {
-          "report-id": reportId,
-          "report-name": reportName
-        });
-      }
-
-      function useDataset(datasetId, datasetName = datasetId, datasetSlug = "", datasetGrain = "", compositionMode = "") {
-        selectRecord("dataset", datasetName, datasetId, {
-          "dataset-id": datasetId,
-          ...(datasetSlug ? { "dataset-slug": datasetSlug } : {}),
-          ...(datasetGrain ? { "dataset-grain": datasetGrain } : {}),
-          ...(compositionMode ? { "dataset-composition-mode": compositionMode } : {})
-        });
-      }
-
-      async function loadDatasets() {
-        try {
-          if (!token) await login();
-          const payload = await request("/api/datasets");
           show(payload);
-          showCards(payload, (dataset) => `
-            <article class="card">
-              <h3>${escapeHtml(dataset.name)}</h3>
-              <p>${escapeHtml(dataset.grain)} dataset with ${escapeHtml(dataset.composition_mode)} composition</p>
-              <p class="muted">${dataset.source_count} sources and ${dataset.field_count} fields</p>
-              <button type="button" onclick="useDataset('${escapeHtml(dataset.id)}', '${escapeHtml(dataset.name)}', '${escapeHtml(dataset.slug)}', '${escapeHtml(dataset.grain)}', '${escapeHtml(dataset.composition_mode)}')">Use Dataset</button>
-              <button type="button" onclick="loadDatasetDefinitionByValue('${escapeHtml(dataset.id)}')">Inspect Dataset</button>
-              <button type="button" onclick="loadDatasetTableByValue('${escapeHtml(dataset.id)}')">Run Dataset</button>
-            </article>
-          `);
         } catch (error) {
-          show(error.message);
+          setHtml('report-detail', emptyState(error.message));
         }
       }
 
-      async function loadDatasetDefinitionById() {
-        try {
-          const datasetId = inputValue("dataset-id");
-          if (!datasetId) throw new Error("Choose a dataset first.");
-          await loadDatasetDefinitionByValue(datasetId);
-        } catch (error) {
-          show(error.message);
-        }
+      function blankBinding() {
+        return {
+          logical_key: '',
+          source_field_key: '',
+          computed_expression: '',
+          missing_policy: 'null'
+        };
       }
 
-      async function loadDatasetDefinitionByValue(datasetId) {
-        if (!token) await login();
-        const payload = await request(`/api/datasets/${datasetId}`);
-        setInput("dataset-id", payload.id);
-        useDataset(payload.id, payload.name, payload.slug, payload.grain, payload.composition_mode);
-        show(payload);
-        setScreen(`
-          <article class="card">
-            <h3>Dataset Definition</h3>
-            <p>${escapeHtml(payload.name)}</p>
-            <p class="muted">${escapeHtml(payload.grain)} dataset with ${escapeHtml(payload.composition_mode)} composition</p>
-            <p>${payload.sources.length} sources and ${payload.fields.length} fields</p>
-            <p>${payload.reports.length} reports use this dataset.</p>
-            <button type="button" onclick="loadDatasetTableByValue('${escapeHtml(payload.id)}')">Run This Dataset</button>
-          </article>
-          ${payload.sources.map((source) => `
-            <article class="card">
-              <h3>${escapeHtml(source.source_alias)}</h3>
-              <p>${escapeHtml(source.form_name || source.compatibility_group_name || source.form_id || source.compatibility_group_id || "Unknown source")}</p>
-              <p class="muted">${escapeHtml(source.selection_rule)}</p>
-            </article>
-          `).join("")}
-          ${payload.fields.map((field) => `
-            <article class="card">
-              <h3>${escapeHtml(field.label)}</h3>
-              <p>${escapeHtml(field.key)} from ${escapeHtml(field.source_alias)}.${escapeHtml(field.source_field_key)}</p>
-              <p class="muted">${escapeHtml(field.field_type)}</p>
-            </article>
-          `).join("")}
-          ${payload.reports.map((report) => `
-            <article class="card">
-              <h3>${escapeHtml(report.name)}</h3>
-              <p class="muted">Uses this dataset</p>
-              <button type="button" onclick="useReport('${escapeHtml(report.id)}', '${escapeHtml(report.name)}')">Use Report Context</button>
-              <button type="button" onclick="loadReportDefinition('${escapeHtml(report.id)}')">Open Linked Report</button>
-            </article>
-          `).join("") || '<p class="muted">No reports use this dataset yet.</p>'}
-        `);
-      }
-
-      async function loadDatasetTableById() {
-        try {
-          const datasetId = inputValue("dataset-id");
-          if (!datasetId) throw new Error("Choose a dataset first.");
-          await loadDatasetTableByValue(datasetId);
-        } catch (error) {
-          show(error.message);
-        }
-      }
-
-      async function loadDatasetTableByValue(datasetId) {
-        if (!token) await login();
-        const payload = await request(`/api/datasets/${datasetId}/table`);
-        useDataset(datasetId);
-        show(payload);
-        setScreen(`
-          <article class="card">
-            <h3>Dataset Results</h3>
-            <p>${payload.rows.length} rows returned.</p>
-            ${payload.rows.length === 0 ? '<p class="muted">No rows matched this dataset.</p>' : `
-              <div class="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Node</th>
-                      <th>Source</th>
-                      <th>Submission</th>
-                      <th>Values</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${payload.rows.map((row) => `
-                      <tr>
-                        <td>${escapeHtml(row.node_name || "Unknown node")}</td>
-                        <td>${escapeHtml(row.source_alias || "Direct")}</td>
-                        <td>${escapeHtml(row.submission_id || "")}</td>
-                        <td>${escapeHtml(JSON.stringify(row.values || {}))}</td>
-                        <td>${datasetRowSubmissionActions(row)}</td>
-                      </tr>
-                    `).join("")}
-                  </tbody>
-                </table>
+      function renderReportBindingRows() {
+        setHtml(
+          'report-binding-rows',
+          reportFormState.bindings.map((binding, index) => `
+            <article class=\"binding-row\">
+              <div class=\"form-grid\">
+                <div class=\"form-field\">
+                  <label for=\"binding-logical-${index}\">Logical Key</label>
+                  <input id=\"binding-logical-${index}\" type=\"text\" value=\"${escapeHtml(binding.logical_key || '')}\">
+                </div>
+                <div class=\"form-field\">
+                  <label for=\"binding-source-${index}\">Source Field</label>
+                  <input id=\"binding-source-${index}\" type=\"text\" value=\"${escapeHtml(binding.source_field_key || '')}\">
+                </div>
+                <div class=\"form-field\">
+                  <label for=\"binding-computed-${index}\">Computed Expression</label>
+                  <input id=\"binding-computed-${index}\" type=\"text\" value=\"${escapeHtml(binding.computed_expression || '')}\">
+                </div>
+                <div class=\"form-field\">
+                  <label for=\"binding-policy-${index}\">Missing Policy</label>
+                  <select id=\"binding-policy-${index}\">
+                    <option value=\"null\" ${binding.missing_policy === 'null' ? 'selected' : ''}>null</option>
+                    <option value=\"exclude_row\" ${binding.missing_policy === 'exclude_row' ? 'selected' : ''}>exclude_row</option>
+                    <option value=\"bucket_unknown\" ${binding.missing_policy === 'bucket_unknown' ? 'selected' : ''}>bucket_unknown</option>
+                  </select>
+                </div>
               </div>
-            `}
-          </article>
-        `);
-      }
-
-      async function loadReports() {
-        try {
-          if (!token) await login();
-          const payload = await request("/api/reports");
-          show(payload);
-          showCards(payload, (report) => `
-            <article class="card">
-              <h3>${escapeHtml(report.name)}</h3>
-              <p class="muted">${report.dataset_id ? `Dataset ${escapeHtml(report.dataset_name || report.dataset_id)}` : `Form ${escapeHtml(report.form_name || report.form_id || "Any")}`}</p>
-              <button type="button" onclick="useReport('${escapeHtml(report.id)}', '${escapeHtml(report.name)}'); ${report.form_id ? `useForm('${escapeHtml(report.form_id)}', '${escapeHtml(report.form_name || report.form_id)}');` : ""} ${report.dataset_id ? `useDataset('${escapeHtml(report.dataset_id)}', '${escapeHtml(report.dataset_name || report.dataset_id)}');` : ""}">Use Report Context</button>
-              <button type="button" onclick="loadReportDefinition('${escapeHtml(report.id)}')">Inspect</button>
-              <button type="button" onclick="loadReportByValue('${escapeHtml(report.id)}')">Run</button>
+              <div class=\"actions\">
+                <button type=\"button\" onclick=\"removeReportBindingRow(${index})\">Remove</button>
+              </div>
             </article>
-          `);
-        } catch (error) {
-          show(error.message);
-        }
-      }
-
-      async function loadReportDefinition(reportId) {
-        if (!token) await login();
-        const payload = await request(`/api/reports/${reportId}`);
-        setInput("report-id", payload.id);
-        if (payload.form_id) setInput("form-id", payload.form_id);
-        if (payload.dataset_id) setInput("dataset-id", payload.dataset_id);
-        useReport(payload.id, payload.name);
-        if (payload.form_id) useForm(payload.form_id, payload.form_name || payload.form_id);
-        if (payload.dataset_id) useDataset(payload.dataset_id, payload.dataset_name || payload.dataset_id);
-        setInput("report-fields-json", JSON.stringify(payload.bindings.map((binding) => ({
-          logical_key: binding.logical_key,
-          source_field_key: binding.source_field_key,
-          missing_policy: binding.missing_policy
-        }))));
-        show(payload);
-        setScreen(`
-          <article class="card">
-            <h3>Report Definition</h3>
-            <p>${escapeHtml(payload.name)}</p>
-            <p class="muted">${escapeHtml(payload.dataset_name || payload.dataset_id || payload.form_name || payload.form_id || "Any form")}</p>
-            <p>${payload.bindings.length} field bindings</p>
-            <p>${payload.aggregations.length} aggregations and ${payload.charts.length} charts depend on this report.</p>
-            <button type="button" onclick="loadReportByValue('${escapeHtml(payload.id)}')">Run This Report</button>
-          </article>
-          ${payload.bindings.map((binding) => `
-            <article class="card">
-              <h3>${escapeHtml(binding.logical_key)}</h3>
-              <p>${escapeHtml(binding.source_field_key)} with ${escapeHtml(binding.missing_policy)}</p>
-              <button type="button" onclick="useReportBinding('${escapeHtml(binding.logical_key)}', '${escapeHtml(binding.source_field_key)}', '${escapeHtml(binding.missing_policy)}')">Use Binding</button>
-            </article>
-          `).join("") || '<p class="muted">No report bindings configured.</p>'}
-          ${payload.aggregations.map((aggregation) => `
-            <article class="card">
-              <h3>${escapeHtml(aggregation.name)}</h3>
-              <p>${aggregation.metric_count} metrics</p>
-              <button type="button" onclick="useAggregation('${escapeHtml(aggregation.id)}', '${escapeHtml(aggregation.name)}', '${escapeHtml(payload.id)}', '${escapeHtml(payload.name)}')">Use Aggregation</button>
-              <button type="button" onclick="loadAggregationDefinitionByValue('${escapeHtml(aggregation.id)}')">Open Aggregation</button>
-            </article>
-          `).join("") || '<p class="muted">No aggregations depend on this report yet.</p>'}
-          ${payload.charts.map((chart) => `
-            <article class="card">
-              <h3>${escapeHtml(chart.name)}</h3>
-              <p>${escapeHtml(chart.chart_type)} chart${chart.aggregation_name ? ` via ${escapeHtml(chart.aggregation_name)}` : ""}</p>
-              <button type="button" onclick="useChart('${escapeHtml(chart.id)}', '${escapeHtml(chart.name)}', '${chart.aggregation_id ? "" : escapeHtml(payload.id)}', '${chart.aggregation_id ? "" : escapeHtml(payload.name)}', '${escapeHtml(chart.chart_type)}', '${escapeHtml(chart.aggregation_id || "")}', '${escapeHtml(chart.aggregation_name || "")}')">Use Chart Context</button>
-              <button type="button" onclick="loadChartDefinitionByValue('${escapeHtml(chart.id)}')">Open Chart</button>
-            </article>
-          `).join("") || '<p class="muted">No charts depend on this report yet.</p>'}
-        `);
-      }
-
-      function useReportBinding(logicalKey, sourceFieldKey, missingPolicy) {
-        selectRecord("report binding", logicalKey, sourceFieldKey, {
-          "report-logical-key": logicalKey,
-          "report-source-field-key": sourceFieldKey,
-          "report-missing-policy": missingPolicy
-        });
-      }
-
-      async function loadReportDefinitionById() {
-        try {
-          const reportId = inputValue("report-id");
-          if (!reportId) throw new Error("Choose a report first.");
-          await loadReportDefinition(reportId);
-        } catch (error) {
-          show(error.message);
-        }
-      }
-
-      async function loadReportById() {
-        try {
-          if (!token) await login();
-          const reportId = inputValue("report-id");
-          if (!reportId) throw new Error("Choose a report first.");
-          await loadReportByValue(reportId);
-        } catch (error) {
-          show(error.message);
-        }
-      }
-
-      async function loadReportByValue(reportId) {
-        if (!token) await login();
-        const payload = await request(`/api/reports/${reportId}/table`);
-        useReport(reportId);
-        show(payload);
-        setScreen(`
-          <article class="card">
-            <h3>Report Results</h3>
-            <p>${payload.rows.length} rows returned.</p>
-            ${reportRowsView(payload.rows)}
-          </article>
-        `);
-      }
-
-      function useAggregation(aggregationId, aggregationName = aggregationId, reportId = "", reportName = reportId) {
-        selectRecord("aggregation", aggregationName, aggregationId, {
-          "aggregation-id": aggregationId,
-          ...(reportId ? { "report-id": reportId } : {})
-        });
-        if (reportId) useReport(reportId, reportName || reportId);
-      }
-
-      async function loadAggregations() {
-        try {
-          if (!token) await login();
-          const payload = await request("/api/aggregations");
-          show(payload);
-          showCards(payload, (aggregation) => `
-            <article class="card">
-              <h3>${escapeHtml(aggregation.name)}</h3>
-              <p>${aggregation.metric_count} metrics</p>
-              <p class="muted">Report ${escapeHtml(aggregation.report_name || aggregation.report_id)}${aggregation.group_by_logical_key ? ` grouped by ${escapeHtml(aggregation.group_by_logical_key)}` : ""}</p>
-              <button type="button" onclick="useAggregation('${escapeHtml(aggregation.id)}', '${escapeHtml(aggregation.name)}', '${escapeHtml(aggregation.report_id)}', '${escapeHtml(aggregation.report_name)}')">Use Aggregation</button>
-              <button type="button" onclick="loadAggregationDefinitionByValue('${escapeHtml(aggregation.id)}')">Inspect Aggregation</button>
-              <button type="button" onclick="loadAggregationByValue('${escapeHtml(aggregation.id)}')">Run Aggregation</button>
-            </article>
-          `);
-        } catch (error) {
-          show(error.message);
-        }
-      }
-
-      async function loadAggregationDefinitionById() {
-        try {
-          const aggregationId = inputValue("aggregation-id");
-          if (!aggregationId) throw new Error("Choose an aggregation first.");
-          await loadAggregationDefinitionByValue(aggregationId);
-        } catch (error) {
-          show(error.message);
-        }
-      }
-
-      async function loadAggregationDefinitionByValue(aggregationId) {
-        if (!token) await login();
-        const payload = await request(`/api/aggregations/${aggregationId}`);
-        setInput("aggregation-id", payload.id);
-        setInput("report-id", payload.report_id);
-        useAggregation(payload.id, payload.name, payload.report_id, payload.report_name);
-        show(payload);
-        setScreen(`
-          <article class="card">
-            <h3>Aggregation Definition</h3>
-            <p>${escapeHtml(payload.name)}</p>
-            <p class="muted">Report ${escapeHtml(payload.report_name)}</p>
-            <p>${payload.metrics.length} metrics</p>
-            <button type="button" onclick="loadAggregationByValue('${escapeHtml(payload.id)}')">Run This Aggregation</button>
-          </article>
-          ${payload.metrics.map((metric) => `
-            <article class="card">
-              <h3>${escapeHtml(metric.metric_key)}</h3>
-              <p>${escapeHtml(metric.metric_kind)}${metric.source_logical_key ? ` from ${escapeHtml(metric.source_logical_key)}` : ""}</p>
-            </article>
-          `).join("") || '<p class="muted">No aggregation metrics configured.</p>'}
-        `);
-      }
-
-      async function loadAggregationById() {
-        try {
-          const aggregationId = inputValue("aggregation-id");
-          if (!aggregationId) throw new Error("Choose an aggregation first.");
-          await loadAggregationByValue(aggregationId);
-        } catch (error) {
-          show(error.message);
-        }
-      }
-
-      async function loadAggregationByValue(aggregationId) {
-        if (!token) await login();
-        const payload = await request(`/api/aggregations/${aggregationId}/table`);
-        useAggregation(aggregationId);
-        show(payload);
-        setScreen(`
-          <article class="card">
-            <h3>Aggregation Results</h3>
-            <p>${payload.rows.length} rows returned.</p>
-            ${aggregationRowsView(payload.rows)}
-          </article>
-        `);
-      }
-
-      function useChart(chartId, chartName = chartId, reportId = "", reportName = reportId, chartType = "table", aggregationId = "", aggregationName = aggregationId) {
-        selectRecord("chart", chartName, chartId, {
-          "chart-id": chartId,
-          "chart-name": chartName,
-          "chart-type": chartType,
-          ...(reportId ? { "report-id": reportId, "aggregation-id": "" } : {}),
-          ...(aggregationId ? { "aggregation-id": aggregationId, "report-id": "" } : {})
-        });
-        if (reportId) useReport(reportId, reportName || reportId);
-        if (aggregationId) useAggregation(aggregationId, aggregationName || aggregationId);
-      }
-
-      async function loadChartDefinitionById() {
-        try {
-          const chartId = inputValue("chart-id");
-          if (!chartId) throw new Error("Choose a chart first.");
-          await loadChartDefinitionByValue(chartId);
-        } catch (error) {
-          show(error.message);
-        }
-      }
-
-      async function loadChartDefinitionByValue(chartId) {
-        if (!token) await login();
-        const payload = await request(`/api/charts/${chartId}`);
-        const chart = payload.chart;
-        useChart(
-          chart.id,
-          chart.name,
-          chart.report_id || "",
-          chart.report_name || "",
-          chart.chart_type,
-          chart.aggregation_id || "",
-          chart.aggregation_name || ""
+          `).join('')
         );
-        show(payload);
-        setScreen(`
-          <article class="card">
-            <h3>Chart Definition</h3>
-            <p>${escapeHtml(chart.name)}</p>
-            <p class="muted">${escapeHtml(chart.chart_type)} chart</p>
-            <p class="muted">${chart.aggregation_id ? `Aggregation ${escapeHtml(chart.aggregation_name || chart.aggregation_id)}${chart.aggregation_report_name ? ` from ${escapeHtml(chart.aggregation_report_name)}` : ""}` : `Report ${escapeHtml(chart.report_name || chart.report_id || "None")}${chart.report_form_name ? ` on ${escapeHtml(chart.report_form_name)}` : ""}`}</p>
-            <p>${payload.dashboards.length} dashboards use this chart.</p>
-            <div class="actions">
-              ${chart.report_id ? `<button type="button" onclick="loadReportByValue('${escapeHtml(chart.report_id)}')">Open Linked Report</button>` : ""}
-              ${chart.aggregation_id ? `<button type="button" onclick="loadAggregationByValue('${escapeHtml(chart.aggregation_id)}')">Open Linked Aggregation</button>` : ""}
-            </div>
-          </article>
-          ${payload.dashboards.length
-            ? payload.dashboards.map((dashboard) => `
-                <article class="card">
-                  <h3>${escapeHtml(dashboard.name)}</h3>
-                  <p>${dashboard.component_count} components</p>
-                  <button type="button" onclick="useDashboard('${escapeHtml(dashboard.id)}', '${escapeHtml(dashboard.name)}')">Use Dashboard</button>
-                  <button type="button" onclick="loadDashboardByValue('${escapeHtml(dashboard.id)}')">Open Dashboard</button>
-                </article>
-              `).join("")
-            : '<p class="muted">No dashboards use this chart yet.</p>'}
-        `);
       }
 
-      async function loadCharts() {
-        try {
-          if (!token) await login();
-          const payload = await request("/api/charts");
-          show(payload);
-          showCards(payload, (chart) => `
-            <article class="card">
-              <h3>${escapeHtml(chart.name)}</h3>
-              <p>${escapeHtml(chart.chart_type)} chart</p>
-              <p class="muted">${chart.aggregation_id ? `Aggregation ${escapeHtml(chart.aggregation_name || chart.aggregation_id)}${chart.aggregation_report_name ? ` from ${escapeHtml(chart.aggregation_report_name)}` : ""}` : `Report ${escapeHtml(chart.report_name || "None")}${chart.report_form_name ? ` on ${escapeHtml(chart.report_form_name)}` : ""}`}</p>
-              <button type="button" onclick="useChart('${escapeHtml(chart.id)}', '${escapeHtml(chart.name)}', '${escapeHtml(chart.report_id || "")}', '${escapeHtml(chart.report_name || "")}', '${escapeHtml(chart.chart_type)}', '${escapeHtml(chart.aggregation_id || "")}', '${escapeHtml(chart.aggregation_name || "")}')">Use Chart Context</button>
-              <button type="button" onclick="loadChartDefinitionByValue('${escapeHtml(chart.id)}')">Inspect Chart</button>
-              ${chart.report_id ? `<button type="button" onclick="loadReportByValue('${escapeHtml(chart.report_id)}')">Run Report</button>` : ""}
-              ${chart.aggregation_id ? `<button type="button" onclick="loadAggregationByValue('${escapeHtml(chart.aggregation_id)}')">Run Aggregation</button>` : ""}
-            </article>
-          `);
-        } catch (error) {
-          show(error.message);
+      function addReportBindingRow() {
+        reportFormState.bindings.push(blankBinding());
+        renderReportBindingRows();
+      }
+
+      function removeReportBindingRow(index) {
+        reportFormState.bindings.splice(index, 1);
+        if (reportFormState.bindings.length === 0) {
+          reportFormState.bindings.push(blankBinding());
         }
+        renderReportBindingRows();
       }
 
-      function useDashboard(dashboardId, dashboardName = dashboardId) {
-        selectRecord("dashboard", dashboardName, dashboardId, {
-          "dashboard-id": dashboardId,
-          "dashboard-name": dashboardName
-        });
-      }
-
-      async function loadDashboards() {
-        try {
-          const payload = await request("/api/dashboards");
-          show(payload);
-          showCards(payload, (dashboard) => `
-            <article class="card">
-              <h3>${escapeHtml(dashboard.name)}</h3>
-              <p>${dashboard.component_count} components</p>
-              <button type="button" onclick="useDashboard('${escapeHtml(dashboard.id)}', '${escapeHtml(dashboard.name)}')">Use Dashboard</button>
-              <button type="button" onclick="loadDashboardByValue('${escapeHtml(dashboard.id)}')">Open</button>
-            </article>
-          `);
-        } catch (error) {
-          show(error.message);
-        }
-      }
-
-      async function loadDashboardById() {
-        try {
-          const dashboardId = inputValue("dashboard-id");
-          if (!dashboardId) throw new Error("Choose a dashboard first.");
-          await loadDashboardByValue(dashboardId);
-        } catch (error) {
-          show(error.message);
-        }
-      }
-
-      async function loadDashboardByValue(dashboardId) {
-        if (!token) await login();
-        const payload = await request(`/api/dashboards/${dashboardId}`);
-        useDashboard(payload.id, payload.name);
-        show(payload);
-        const header = `
-          <article class="card">
-            <h3>Dashboard Preview</h3>
-            <p>${escapeHtml(payload.name)}</p>
-            <p>${payload.components.length} components</p>
-            <button type="button" onclick="refreshAnalyticsAndOpenDashboard()">Refresh and Reopen Dashboard</button>
-          </article>
-        `;
-        const cards = await Promise.all(payload.components.map(async (component) => {
-          let rows = [];
-          let aggregationRows = [];
-          const componentTitle = component.config?.title || component.chart.name;
-          if (component.chart.report_id) {
-            const report = await request(`/api/reports/${component.chart.report_id}/table`);
-            rows = report.rows;
-          }
-          if (component.chart.aggregation_id) {
-            const aggregation = await request(`/api/aggregations/${component.chart.aggregation_id}/table`);
-            aggregationRows = aggregation.rows;
-          }
-          return `
-            <article class="card">
-              <h3>${escapeHtml(componentTitle)}</h3>
-              <p>${escapeHtml(component.chart.chart_type)} chart</p>
-              <p class="muted">Chart ${escapeHtml(component.chart.name)}</p>
-              <p>Position ${component.position}</p>
-              <p class="muted">${component.chart.aggregation_id ? `Aggregation ${escapeHtml(component.chart.aggregation_name || component.chart.aggregation_id)}${component.chart.aggregation_report_name ? ` from ${escapeHtml(component.chart.aggregation_report_name)}` : ""}` : `Report ${escapeHtml(component.chart.report_name || component.chart.report_id || "None")}${component.chart.report_form_name ? ` on ${escapeHtml(component.chart.report_form_name)}` : ""}`}</p>
-              <button type="button" onclick="useChart('${escapeHtml(component.chart.id)}', '${escapeHtml(component.chart.name)}', '${escapeHtml(component.chart.report_id || "")}', '${escapeHtml(component.chart.report_name || "")}', '${escapeHtml(component.chart.chart_type)}', '${escapeHtml(component.chart.aggregation_id || "")}', '${escapeHtml(component.chart.aggregation_name || "")}')">Use Chart Context</button>
-              <button type="button" onclick="loadChartDefinitionByValue('${escapeHtml(component.chart.id)}')">Inspect Chart</button>
-              ${component.chart.report_id ? `<button type="button" onclick="loadReportByValue('${escapeHtml(component.chart.report_id)}')">Open Report</button>` : ""}
-              ${component.chart.aggregation_id ? `<button type="button" onclick="loadAggregationByValue('${escapeHtml(component.chart.aggregation_id)}')">Open Aggregation</button>` : ""}
-              ${component.chart.aggregation_id ? aggregationRowsView(aggregationRows) : reportRowsView(rows)}
-            </article>
-          `;
+      function collectReportBindings() {
+        return reportFormState.bindings.map((_, index) => ({
+          logical_key: byId(`binding-logical-${index}`).value.trim(),
+          source_field_key: byId(`binding-source-${index}`).value.trim() || null,
+          computed_expression: byId(`binding-computed-${index}`).value.trim() || null,
+          missing_policy: byId(`binding-policy-${index}`).value
         }));
-        setScreen(header + (cards.length ? cards.join("") : '<p class="muted">No dashboard components found.</p>'));
+      }
+
+      function renderReportSourceOptions() {
+        const sourceType = byId('report-source-type').value;
+        const options = (sourceType === 'dataset' ? reportFormState.datasets : reportFormState.forms)
+          .map((item) => ({
+            value: item.id,
+            label: sourceType === 'dataset'
+              ? item.name
+              : item.name
+          }));
+        setSelectOptions('report-source-id', options, `Choose ${sourceType}`);
+      }
+
+      async function initReportForm(mode, id) {
+        try {
+          await ensureAuthenticated();
+          const [forms, datasets] = await Promise.all([
+            request('/api/admin/forms'),
+            request('/api/datasets')
+          ]);
+          reportFormState = {
+            forms,
+            datasets,
+            bindings: [blankBinding()]
+          };
+          byId('report-source-type').onchange = renderReportSourceOptions;
+          renderReportSourceOptions();
+          if (mode === 'edit' && id) {
+            const payload = await request(`/api/reports/${id}`);
+            byId('report-name').value = payload.name || '';
+            if (payload.dataset_id) {
+              byId('report-source-type').value = 'dataset';
+            }
+            renderReportSourceOptions();
+            byId('report-source-id').value = payload.dataset_id || payload.form_id || '';
+            reportFormState.bindings = payload.bindings.map((binding) => ({
+              logical_key: binding.logical_key,
+              source_field_key: binding.source_field_key || '',
+              computed_expression: binding.computed_expression || '',
+              missing_policy: binding.missing_policy
+            }));
+          }
+          renderReportBindingRows();
+          const form = byId('report-form');
+          if (form) {
+            form.onsubmit = async (event) => {
+              event.preventDefault();
+              const sourceType = byId('report-source-type').value;
+              const sourceId = byId('report-source-id').value;
+              const payload = {
+                name: byId('report-name').value.trim(),
+                form_id: sourceType === 'form' ? sourceId : null,
+                dataset_id: sourceType === 'dataset' ? sourceId : null,
+                fields: collectReportBindings()
+              };
+              const response = await request(
+                mode === 'create' ? '/api/admin/reports' : `/api/admin/reports/${id}`,
+                {
+                  method: mode === 'create' ? 'POST' : 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(payload)
+                }
+              );
+              redirect(`/app/reports/${response.id}`);
+            };
+          }
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function runCurrentReport() {
+        try {
+          await ensureAuthenticated();
+          const payload = await request(`/api/reports/${page.recordId}/table`);
+          setHtml('report-results', payload.rows.length
+            ? `<div class=\"table-wrap\"><table><thead><tr><th>Node</th><th>Source</th><th>Field</th><th>Value</th><th>Response</th></tr></thead><tbody>${payload.rows.map((row) => `<tr><td>${escapeHtml(row.node_name || 'Unknown node')}</td><td>${escapeHtml(row.source_alias || 'Direct')}</td><td>${escapeHtml(row.logical_key || '')}</td><td>${escapeHtml(row.field_value ?? '')}</td><td>${row.submission_id ? `<a href=\"/app/responses/${row.submission_id}\">View</a>` : '<span class=\"muted\">None</span>'}</td></tr>`).join('')}</tbody></table></div>`
+            : emptyState('No submitted rows matched this report.'));
+          show(payload);
+        } catch (error) {
+          setHtml('report-results', emptyState(error.message));
+        }
+      }
+
+      async function loadDashboardsList() {
+        try {
+          await ensureAuthenticated();
+          const payload = await request('/api/dashboards');
+          const html = payload.length
+            ? payload.map((dashboard) => recordCard(
+                dashboard.name,
+                `<p class=\"muted\">${dashboard.component_count} components</p>`,
+                `<a class=\"button-link\" href=\"/app/dashboards/${dashboard.id}\">View</a><a class=\"button-link\" href=\"/app/dashboards/${dashboard.id}/edit\">Edit</a>`
+              )).join('')
+            : emptyState('No dashboard records found.');
+          setHtml('dashboard-list', html);
+          show(payload);
+        } catch (error) {
+          setHtml('dashboard-list', emptyState(error.message));
+        }
+      }
+
+      async function loadDashboardDetail(id) {
+        try {
+          await ensureAuthenticated();
+          const payload = await request(`/api/dashboards/${id}`);
+          selectRecord('dashboard', payload.name, payload.id);
+          const components = payload.components.length
+            ? payload.components.map((component) => `
+                <article class=\"record-card compact-record-card\">
+                  <h4>${escapeHtml(component.config?.title || component.chart.name)}</h4>
+                  <p>${escapeHtml(component.chart.chart_type)} chart</p>
+                  <p class=\"muted\">Chart: ${escapeHtml(component.chart.name)}</p>
+                  <p class=\"muted\">Source: ${escapeHtml(component.chart.report_name || component.chart.aggregation_name || 'Unknown')}</p>
+                </article>
+              `).join('')
+            : emptyState('No dashboard components found.');
+          setHtml('dashboard-detail', `
+            ${detailSection('Summary', `<p>${escapeHtml(payload.name)}</p><p class=\"muted\">${payload.components.length} components</p>`)}
+            ${detailSection('Component Summary', components)}
+          `);
+          show(payload);
+        } catch (error) {
+          setHtml('dashboard-detail', emptyState(error.message));
+        }
+      }
+
+      function viewCurrentDashboard() {
+        loadDashboardDetail(page.recordId);
+      }
+
+      async function initDashboardForm(mode, id) {
+        try {
+          await ensureAuthenticated();
+          if (mode === 'edit' && id) {
+            const payload = await request(`/api/dashboards/${id}`);
+            byId('dashboard-name').value = payload.name || '';
+          }
+          const form = byId('dashboard-form');
+          if (form) {
+            form.onsubmit = async (event) => {
+              event.preventDefault();
+              const response = await request(
+                mode === 'create' ? '/api/admin/dashboards' : `/api/admin/dashboards/${id}`,
+                {
+                  method: mode === 'create' ? 'POST' : 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ name: byId('dashboard-name').value.trim() })
+                }
+              );
+              redirect(`/app/dashboards/${response.id}`);
+            };
+          }
+        } catch (error) {
+          show(error.message);
+        }
       }
 
       async function loadLegacyFixtureExamples() {
         try {
-          if (!token) await login();
-          const payload = await request("/api/admin/legacy-fixtures/examples");
-          show(payload.map((fixture) => ({ name: fixture.name, bytes: fixture.fixture_json.length })));
-          showCards(payload, (fixture) => `
-            <article class="card">
-              <h3>${escapeHtml(fixture.name)}</h3>
-              <p>${fixture.fixture_json.length} bytes</p>
-              <button type="button" onclick="useLegacyFixture('${escapeHtml(fixture.name)}')">Use Fixture</button>
-            </article>
-          `);
+          await ensureAuthenticated();
+          const payload = await request('/api/admin/legacy-fixtures/examples');
           window.legacyFixtureExamples = Object.fromEntries(payload.map((fixture) => [fixture.name, fixture.fixture_json]));
+          setHtml(
+            'migration-list',
+            payload.length
+              ? payload.map((fixture) => recordCard(
+                  fixture.name,
+                  `<p class=\"muted\">${fixture.fixture_json.length} bytes</p>`,
+                  `<button type=\"button\" onclick=\"useLegacyFixture('${escapeHtml(fixture.name)}')\">Use Fixture</button>`
+                )).join('')
+              : emptyState('No fixture examples available.')
+          );
+          show(payload.map((fixture) => ({ name: fixture.name, bytes: fixture.fixture_json.length })));
         } catch (error) {
-          show(error.message);
+          setHtml('migration-list', emptyState(error.message));
         }
       }
 
@@ -1332,99 +1045,139 @@ pub const APPLICATION_SCRIPT: &str = r#"
           show(`Fixture example '${name}' has not been loaded.`);
           return;
         }
-        setInput("legacy-fixture-json", fixture);
+        byId('legacy-fixture-json').value = fixture;
         show({ selected_fixture: name });
       }
 
       async function validateLegacyFixture() {
         try {
-          if (!token) await login();
-          const fixtureJson = inputValue("legacy-fixture-json");
-          if (!fixtureJson) throw new Error("Paste legacy fixture JSON first.");
-          const payload = await request("/api/admin/legacy-fixtures/validate", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ fixture_json: fixtureJson })
+          await ensureAuthenticated();
+          const payload = await request('/api/admin/legacy-fixtures/validate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fixture_json: byId('legacy-fixture-json').value.trim() })
           });
+          setHtml(
+            'migration-results',
+            payload.issue_count
+              ? payload.issues.map((issue) => recordCard(issue.code, `<p>${escapeHtml(issue.path)}</p><p>${escapeHtml(issue.message)}</p>`, '')).join('')
+              : '<p class=\"muted\">Legacy fixture validation passed.</p>'
+          );
           show(payload);
-          showCards(payload.issues, (issue) => `
-            <article class="card">
-              <h3>${escapeHtml(issue.code)}</h3>
-              <p>${escapeHtml(issue.path)}</p>
-              <p>${escapeHtml(issue.message)}</p>
-            </article>
-          `);
-          if (payload.issue_count === 0) {
-            setScreen('<p class="muted">Legacy fixture validation passed.</p>');
-          }
         } catch (error) {
-          show(error.message);
+          setHtml('migration-results', emptyState(error.message));
         }
       }
 
       async function dryRunLegacyFixture() {
         try {
-          if (!token) await login();
-          const fixtureJson = inputValue("legacy-fixture-json");
-          if (!fixtureJson) throw new Error("Paste legacy fixture JSON first.");
-          const payload = await request("/api/admin/legacy-fixtures/dry-run", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ fixture_json: fixtureJson })
+          await ensureAuthenticated();
+          const payload = await request('/api/admin/legacy-fixtures/dry-run', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fixture_json: byId('legacy-fixture-json').value.trim() })
           });
+          setHtml('migration-results', `<article class=\"record-card\"><h4>${escapeHtml(payload.fixture_name)}</h4><p>Would import: ${payload.would_import ? 'yes' : 'no'}</p><p class=\"muted\">Validation issues: ${payload.validation.issue_count}</p></article>`);
           show(payload);
-          setScreen(`
-            <article class="card">
-              <h3>${escapeHtml(payload.fixture_name)}</h3>
-              <p>Would import: ${payload.would_import ? "yes" : "no"}</p>
-              <p>${payload.validation.issue_count} validation issues</p>
-            </article>
-          `);
         } catch (error) {
-          show(error.message);
+          setHtml('migration-results', emptyState(error.message));
         }
       }
 
       async function importLegacyFixture() {
         try {
-          if (!token) await login();
-          const fixtureJson = inputValue("legacy-fixture-json");
-          if (!fixtureJson) throw new Error("Paste legacy fixture JSON first.");
-          const payload = await request("/api/admin/legacy-fixtures/import", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ fixture_json: fixtureJson })
+          await ensureAuthenticated();
+          const payload = await request('/api/admin/legacy-fixtures/import', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fixture_json: byId('legacy-fixture-json').value.trim() })
           });
-          setInput("form-version-id", payload.form_version_id);
-          setInput("form-id", payload.form_id);
-          setInput("submission-id", payload.submission_id);
-          setInput("dashboard-id", payload.dashboard_id);
-          setInput("report-id", payload.report_id);
-          selectRecord("submission", payload.submission_id, payload.submission_id, {
-            "submission-id": payload.submission_id
-          });
-          selectRecord("report", payload.report_id, payload.report_id, {
-            "report-id": payload.report_id
-          });
-          selectRecord("dashboard", payload.dashboard_id, payload.dashboard_id, {
-            "dashboard-id": payload.dashboard_id
-          });
+          setHtml('migration-results', `<article class=\"record-card\"><h4>Import Complete</h4><p>Form version: ${escapeHtml(payload.form_version_id)}</p><p>Submission: ${escapeHtml(payload.submission_id)}</p><p class=\"muted\">Dashboard: ${escapeHtml(payload.dashboard_id)}</p></article>`);
           show(payload);
-          setScreen(`
-            <article class="card">
-              <h3>${escapeHtml(payload.fixture_name)}</h3>
-              <p>Imported submission ${escapeHtml(payload.submission_id)}</p>
-              <p>${escapeHtml(payload.analytics_values)} analytics values projected</p>
-              <button type="button" onclick="loadDashboardByValue('${escapeHtml(payload.dashboard_id)}')">Open Imported Dashboard</button>
-              <button type="button" onclick="loadReportByValue('${escapeHtml(payload.report_id)}')">Run Imported Report</button>
-            </article>
-          `);
-          await loadAppSummary();
         } catch (error) {
-          show(error.message);
+          setHtml('migration-results', emptyState(error.message));
         }
       }
 
-      updateSessionStatus();
-      renderSelections();
+      async function initPage() {
+        updateSessionStatus();
+        renderSelections();
+        switch (page.key) {
+          case 'home':
+            await initHomePage();
+            break;
+          case 'administration':
+            await ensureAuthenticated();
+            updateSessionStatus();
+            break;
+          case 'migration':
+            await ensureAuthenticated();
+            updateSessionStatus();
+            break;
+          case 'organization-list':
+            await loadOrganizationsList();
+            break;
+          case 'organization-detail':
+            await loadOrganizationDetail(page.recordId);
+            break;
+          case 'organization-create':
+            await initOrganizationForm('create');
+            break;
+          case 'organization-edit':
+            await initOrganizationForm('edit', page.recordId);
+            break;
+          case 'form-list':
+            await loadFormsList();
+            break;
+          case 'form-detail':
+            await loadFormDetail(page.recordId);
+            break;
+          case 'form-create':
+            await initFormEntityForm('create');
+            break;
+          case 'form-edit':
+            await initFormEntityForm('edit', page.recordId);
+            break;
+          case 'response-list':
+            await loadResponsesList();
+            break;
+          case 'response-create':
+            await initResponseCreateForm();
+            break;
+          case 'response-detail':
+            await loadResponseDetail(page.recordId);
+            break;
+          case 'response-edit':
+            await initResponseEditPage(page.recordId);
+            break;
+          case 'report-list':
+            await loadReportsList();
+            break;
+          case 'report-detail':
+            await loadReportDetail(page.recordId);
+            break;
+          case 'report-create':
+            await initReportForm('create');
+            break;
+          case 'report-edit':
+            await initReportForm('edit', page.recordId);
+            break;
+          case 'dashboard-list':
+            await loadDashboardsList();
+            break;
+          case 'dashboard-detail':
+            await loadDashboardDetail(page.recordId);
+            break;
+          case 'dashboard-create':
+            await initDashboardForm('create');
+            break;
+          case 'dashboard-edit':
+            await initDashboardForm('edit', page.recordId);
+            break;
+        }
+      }
+
+      document.addEventListener('DOMContentLoaded', () => {
+        initPage().catch((error) => show(error.message));
+      });
 "#;

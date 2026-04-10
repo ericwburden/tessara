@@ -1,9 +1,4 @@
 //! Local frontend shell for the API-first Tessara vertical slice.
-//!
-//! The current implementation uses Leptos SSR components for the shell
-//! structure and a browser-side JavaScript controller for workflow actions.
-//! That gives us a real Rust frontend layer while preserving the existing
-//! user-testable API workflows during the migration.
 
 mod app_script;
 mod application;
@@ -13,34 +8,68 @@ mod shell_model;
 mod shell_script;
 mod shell_style;
 
-/// Returns the HTML used for the current local admin shell.
-///
-/// The shell exercises the same API endpoints as the smoke test: development
-/// login, demo seeding, hierarchy/form builder screens, submission workflow,
-/// report execution, and dashboard inspection.
 pub fn admin_shell_html() -> String {
     shell::admin_shell_html(shell_style::STYLE, shell_script::SCRIPT)
 }
 
-/// Returns the HTML used for the first replacement-oriented application shell.
-///
-/// The application shell now acts as the real application home: a persistent
-/// navigation frame, overview screen, and entry point into the focused routes.
 pub fn application_shell_html() -> String {
     application::application_shell_html(shell_style::STYLE, app_script::APPLICATION_SCRIPT)
 }
 
-/// Returns the HTML used for the organization application shell.
 pub fn organization_application_shell_html() -> String {
-    application::organization_application_shell_html(shell_style::STYLE, shell_script::SCRIPT)
+    application::organization_application_shell_html(
+        shell_style::STYLE,
+        app_script::APPLICATION_SCRIPT,
+    )
 }
 
-/// Returns the HTML used for the forms application shell.
+pub fn organization_create_application_html() -> String {
+    application::organization_create_application_html(
+        shell_style::STYLE,
+        app_script::APPLICATION_SCRIPT,
+    )
+}
+
+pub fn organization_detail_application_html(node_id: &str) -> String {
+    application::organization_detail_application_html(
+        shell_style::STYLE,
+        app_script::APPLICATION_SCRIPT,
+        node_id,
+    )
+}
+
+pub fn organization_edit_application_html(node_id: &str) -> String {
+    application::organization_edit_application_html(
+        shell_style::STYLE,
+        app_script::APPLICATION_SCRIPT,
+        node_id,
+    )
+}
+
 pub fn forms_application_shell_html() -> String {
-    application::forms_application_shell_html(shell_style::STYLE, shell_script::SCRIPT)
+    application::forms_application_shell_html(shell_style::STYLE, app_script::APPLICATION_SCRIPT)
 }
 
-/// Returns the HTML used for the responses application shell.
+pub fn form_create_application_html() -> String {
+    application::form_create_application_html(shell_style::STYLE, app_script::APPLICATION_SCRIPT)
+}
+
+pub fn form_detail_application_html(form_id: &str) -> String {
+    application::form_detail_application_html(
+        shell_style::STYLE,
+        app_script::APPLICATION_SCRIPT,
+        form_id,
+    )
+}
+
+pub fn form_edit_application_html(form_id: &str) -> String {
+    application::form_edit_application_html(
+        shell_style::STYLE,
+        app_script::APPLICATION_SCRIPT,
+        form_id,
+    )
+}
+
 pub fn responses_application_shell_html() -> String {
     application::responses_application_shell_html(
         shell_style::STYLE,
@@ -48,7 +77,6 @@ pub fn responses_application_shell_html() -> String {
     )
 }
 
-/// Returns the HTML used for the submission-focused application shell.
 pub fn submission_application_shell_html() -> String {
     application::submission_application_shell_html(
         shell_style::STYLE,
@@ -56,7 +84,29 @@ pub fn submission_application_shell_html() -> String {
     )
 }
 
-/// Returns the HTML used for the dashboards application shell.
+pub fn response_create_application_html() -> String {
+    application::response_create_application_html(
+        shell_style::STYLE,
+        app_script::APPLICATION_SCRIPT,
+    )
+}
+
+pub fn response_detail_application_html(submission_id: &str) -> String {
+    application::response_detail_application_html(
+        shell_style::STYLE,
+        app_script::APPLICATION_SCRIPT,
+        submission_id,
+    )
+}
+
+pub fn response_edit_application_html(submission_id: &str) -> String {
+    application::response_edit_application_html(
+        shell_style::STYLE,
+        app_script::APPLICATION_SCRIPT,
+        submission_id,
+    )
+}
+
 pub fn dashboards_application_shell_html() -> String {
     application::dashboards_application_shell_html(
         shell_style::STYLE,
@@ -64,17 +114,40 @@ pub fn dashboards_application_shell_html() -> String {
     )
 }
 
-/// Returns the HTML used for focused administration application screens.
+pub fn dashboard_create_application_html() -> String {
+    application::dashboard_create_application_html(
+        shell_style::STYLE,
+        app_script::APPLICATION_SCRIPT,
+    )
+}
+
+pub fn dashboard_detail_application_html(dashboard_id: &str) -> String {
+    application::dashboard_detail_application_html(
+        shell_style::STYLE,
+        app_script::APPLICATION_SCRIPT,
+        dashboard_id,
+    )
+}
+
+pub fn dashboard_edit_application_html(dashboard_id: &str) -> String {
+    application::dashboard_edit_application_html(
+        shell_style::STYLE,
+        app_script::APPLICATION_SCRIPT,
+        dashboard_id,
+    )
+}
+
 pub fn administration_application_shell_html() -> String {
-    application::administration_application_shell_html(shell_style::STYLE, shell_script::SCRIPT)
+    application::administration_application_shell_html(
+        shell_style::STYLE,
+        app_script::APPLICATION_SCRIPT,
+    )
 }
 
-/// Returns the HTML used for focused admin application screens.
 pub fn admin_application_shell_html() -> String {
-    application::admin_application_shell_html(shell_style::STYLE, shell_script::SCRIPT)
+    shell::admin_shell_html(shell_style::STYLE, shell_script::SCRIPT)
 }
 
-/// Returns the HTML used for focused migration application screens.
 pub fn migration_application_shell_html() -> String {
     application::migration_application_shell_html(
         shell_style::STYLE,
@@ -82,7 +155,6 @@ pub fn migration_application_shell_html() -> String {
     )
 }
 
-/// Returns the HTML used for focused reporting application screens.
 pub fn reporting_application_shell_html() -> String {
     application::reporting_application_shell_html(
         shell_style::STYLE,
@@ -90,7 +162,26 @@ pub fn reporting_application_shell_html() -> String {
     )
 }
 
-/// Returns an embedded Tessara SVG asset by public asset filename.
+pub fn report_create_application_html() -> String {
+    application::report_create_application_html(shell_style::STYLE, app_script::APPLICATION_SCRIPT)
+}
+
+pub fn report_detail_application_html(report_id: &str) -> String {
+    application::report_detail_application_html(
+        shell_style::STYLE,
+        app_script::APPLICATION_SCRIPT,
+        report_id,
+    )
+}
+
+pub fn report_edit_application_html(report_id: &str) -> String {
+    application::report_edit_application_html(
+        shell_style::STYLE,
+        app_script::APPLICATION_SCRIPT,
+        report_id,
+    )
+}
+
 pub fn svg_asset(name: &str) -> Option<&'static str> {
     brand::svg_asset(name)
 }
@@ -99,560 +190,150 @@ pub fn svg_asset(name: &str) -> Option<&'static str> {
 mod tests {
     use super::{
         admin_shell_html, administration_application_shell_html, application_shell_html,
-        dashboards_application_shell_html, forms_application_shell_html,
-        migration_application_shell_html, organization_application_shell_html,
-        reporting_application_shell_html, submission_application_shell_html,
+        dashboard_create_application_html, dashboard_detail_application_html,
+        dashboard_edit_application_html, dashboards_application_shell_html,
+        form_create_application_html, form_detail_application_html, form_edit_application_html,
+        forms_application_shell_html, migration_application_shell_html,
+        organization_application_shell_html, organization_create_application_html,
+        organization_detail_application_html, organization_edit_application_html,
+        report_create_application_html, report_detail_application_html,
+        report_edit_application_html, reporting_application_shell_html,
+        response_create_application_html, response_detail_application_html,
+        response_edit_application_html, submission_application_shell_html,
     };
 
     #[test]
-    fn shell_links_to_current_demo_api_contract() {
+    fn admin_shell_still_exposes_legacy_builder_contract() {
         let html = admin_shell_html();
 
         assert!(html.contains("/api/auth/login"));
         assert!(html.contains("/api/demo/seed"));
-        assert!(html.contains("/api/nodes"));
-        assert!(html.contains("node-search"));
         assert!(html.contains("/api/admin/node-types"));
-        assert!(html.contains("/api/admin/node-type-relationships"));
-        assert!(html.contains("/api/admin/node-metadata-fields"));
-        assert!(html.contains("/api/admin/nodes"));
-        assert!(html.contains("/api/admin/nodes/${nodeId}"));
-        assert!(html.contains("Update Node"));
         assert!(html.contains("/api/admin/forms"));
-        assert!(html.contains("Create Node Type"));
-        assert!(html.contains("Create Relationship"));
-        assert!(html.contains("Remove Relationship"));
-        assert!(
-            html.contains(
-                "/api/admin/node-type-relationships/${parentNodeTypeId}/${childNodeTypeId}"
-            )
-        );
-        assert!(html.contains("Create Metadata Field"));
-        assert!(html.contains("Update Metadata Field"));
-        assert!(html.contains("metadata-field-id"));
-        assert!(html.contains("Create Node"));
-        assert!(html.contains("node-metadata-json"));
-        assert!(html.contains("Create Form"));
-        assert!(html.contains("Create Version"));
-        assert!(html.contains("Publish Version"));
-        assert!(html.contains("Create Report"));
-        assert!(html.contains("Create Chart"));
-        assert!(html.contains("Add Component"));
-        assert!(html.contains("/api/admin/form-versions/"));
         assert!(html.contains("/api/admin/reports"));
-        assert!(html.contains("/api/admin/reports/${reportId}"));
-        assert!(html.contains("/api/admin/datasets"));
-        assert!(html.contains("/api/admin/datasets/${datasetId}"));
-        assert!(html.contains("Add Dataset Source"));
-        assert!(html.contains("Remove Dataset Source"));
-        assert!(html.contains("Add Dataset Field"));
-        assert!(html.contains("Remove Dataset Field"));
-        assert!(html.contains("Review Dataset Draft"));
-        assert!(html.contains("Update Dataset"));
-        assert!(html.contains("Remove Dataset"));
-        assert!(html.contains("/api/admin/charts/${chartId}"));
-        assert!(html.contains("/api/admin/dashboards/${dashboardId}"));
-        assert!(html.contains("/api/admin/dashboard-components/${componentId}"));
-        assert!(html.contains("/api/admin/charts"));
-        assert!(html.contains("/api/charts"));
-        assert!(html.contains("Load Charts"));
         assert!(html.contains("/api/admin/dashboards"));
-        assert!(html.contains("Remove Report"));
-        assert!(html.contains("Remove Chart"));
-        assert!(html.contains("Remove Dashboard"));
-        assert!(html.contains("/api/form-versions/"));
-        assert!(html.contains("/api/forms/published"));
-        assert!(html.contains("/api/submissions"));
-        assert!(html.contains("submission-search"));
-        assert!(html.contains("submission-status-filter"));
-        assert!(html.contains("/api/submissions/drafts"));
-        assert!(html.contains("/api/submissions/${submissionId}"));
-        assert!(html.contains("Save Rendered Values"));
-        assert!(html.contains("saveRenderedFormValues"));
-        assert!(html.contains("Required fields missing"));
-        assert!(html.contains("prefillRenderedValues"));
-        assert!(html.contains("Open Response Form"));
-        assert!(html.contains("renderResponseFormActions"));
-        assert!(html.contains("This submitted response is read-only"));
-        assert!(html.contains("Use Section"));
-        assert!(html.contains("Use Field Settings"));
-        assert!(html.contains("Use Report Source"));
-        assert!(html.contains("Update Section"));
-        assert!(html.contains("Update Field"));
-        assert!(html.contains("Remove Section"));
-        assert!(html.contains("Remove Field"));
-        assert!(html.contains("section-position"));
-        assert!(html.contains("field-position"));
-        assert!(html.contains("/api/admin/form-sections/${sectionId}"));
-        assert!(html.contains("/api/admin/form-fields/${fieldId}"));
-        assert!(html.contains("Add Binding"));
-        assert!(html.contains("report-missing-policy"));
-        assert!(html.contains("Metadata required"));
-        assert!(html.contains("Field required"));
-        assert!(html.contains("/api/admin/node-metadata-fields/${fieldId}"));
-        assert!(html.contains("Load Submission By ID"));
-        assert!(html.contains("/api/admin/analytics/refresh"));
-        assert!(html.contains("/api/admin/legacy-fixtures/validate"));
-        assert!(html.contains("/api/admin/legacy-fixtures/dry-run"));
-        assert!(html.contains("/api/admin/legacy-fixtures/examples"));
-        assert!(html.contains("Load Fixture Examples"));
-        assert!(html.contains("Validate Legacy Fixture"));
-        assert!(html.contains("Dry-Run Legacy Fixture"));
-        assert!(html.contains("/api/dashboards/"));
-        assert!(html.contains("/api/dashboards"));
-        assert!(html.contains("/api/reports/"));
-        assert!(html.contains("/api/reports/${component.chart.report_id}/table"));
-        assert!(html.contains("/api/reports"));
-        assert!(html.contains("report-fields-json"));
-        assert!(html.contains("Use Binding"));
-        assert!(html.contains("Remove Selected Binding"));
-        assert!(html.contains("Inspect Report By ID"));
-        assert!(html.contains("Dashboard ID from seed or import output"));
-        assert!(html.contains("dashboard-component-title"));
-        assert!(html.contains("Hierarchy Screen"));
-        assert!(html.contains("Forms Screen"));
-        assert!(html.contains("Published Forms"));
-        assert!(html.contains("User Testing Guide"));
-        assert!(html.contains("Recommended path for the current Docker Compose test deployment."));
         assert!(html.contains("Open Application Shell"));
-        assert!(html.contains("/app"));
-        assert!(html.contains("Selected Context"));
-        assert!(html.contains("selection-state"));
-        assert!(html.contains("tessara-icon-1024.svg"));
-        assert!(html.contains("tessara-favicon-32.svg"));
-        assert!(html.contains("theme-color"));
-        assert!(html.contains("brand-lockup"));
     }
 
     #[test]
-    fn application_shell_exposes_home_navigation() {
+    fn home_shell_exposes_shared_navigation() {
         let html = application_shell_html();
 
         assert!(html.contains("Application Overview"));
         assert!(html.contains("Welcome to Tessara"));
-        assert!(html.contains("Home Activity"));
-        assert!(html.contains("Selected Detail"));
-        assert!(html.contains("Raw API Activity"));
-        assert!(html.contains("Home"));
+        assert!(html.contains("Role-Ready Home Modules"));
+        assert!(html.contains("Product Areas"));
+        assert!(html.contains("Current Deployment Readiness"));
+        assert!(html.contains("Current Workflow Context"));
+        assert!(html.contains("Internal Areas"));
         assert!(html.contains("/app/organization"));
         assert!(html.contains("/app/forms"));
         assert!(html.contains("/app/responses"));
-        assert!(html.contains("/app/administration"));
         assert!(html.contains("/app/reports"));
         assert!(html.contains("/app/dashboards"));
+        assert!(html.contains("/app/administration"));
         assert!(html.contains("/app/migration"));
-        assert!(html.contains("Product Areas"));
-        assert!(html.contains("Role-Ready Home Modules"));
-        assert!(html.contains("Scoped Operations"));
-        assert!(html.contains("Response Delivery"));
-        assert!(html.contains("Oversight and Insight"));
-        assert!(html.contains("Internal Areas"));
-        assert!(html.contains("Current Deployment Readiness"));
-        assert!(html.contains("Refresh Summary"));
-        assert!(html.contains("home-summary-cards"));
-        assert!(html.contains("Current Workflow Context"));
-        assert!(html.contains("home-selection-state"));
-        assert!(html.contains("Go to Responses"));
-        assert!(html.contains("Go to Reports"));
-        assert!(html.contains("Go to Dashboards"));
-        assert!(html.contains("Current Selections"));
-        assert!(html.contains("selection-state"));
-        assert!(html.contains("home-selection-state"));
-        assert!(html.contains("tessara-icon-1024.svg"));
-        assert!(html.contains("tessara-favicon-32.svg"));
-        assert!(!html.contains("Seed Demo Data"));
-        assert!(!html.contains("Start Demo Response"));
-        assert!(!html.contains("Open Demo Dashboard"));
         assert!(!html.contains("Create Shortcuts"));
     }
 
     #[test]
-    fn submission_application_shell_exposes_submission_workflow_screen() {
-        let html = submission_application_shell_html();
-
-        assert!(html.contains("Responses"));
-        assert!(html.contains("/app"));
-        assert!(html.contains("/app/responses"));
-        assert!(html.contains("Responses Workspace"));
-        assert!(html.contains("Response Browse"));
-        assert!(html.contains("Response Flow"));
-        assert!(html.contains("Response Stages"));
-        assert!(html.contains("Response Directory"));
-        assert!(html.contains("Start Response Entry"));
-        assert!(html.contains("Browse Targets"));
-        assert!(html.contains("Review Responses"));
-        assert!(html.contains("View Related Reports"));
-        assert!(html.contains("Load Published Forms"));
-        assert!(html.contains("Load Target Nodes"));
-        assert!(html.contains("Published Forms"));
-        assert!(html.contains("Target Nodes"));
-        assert!(html.contains("Draft Responses"));
-        assert!(html.contains("Submitted Responses"));
-        assert!(html.contains("All Responses"));
-        assert!(html.contains("Response Entry"));
-        assert!(html.contains("Current Response Selection"));
-        assert!(html.contains("Browse Published Forms"));
-        assert!(html.contains("Browse Target Nodes"));
-        assert!(html.contains("Open Current Form"));
-        assert!(html.contains("Use Current Target"));
-        assert!(html.contains("Open This Form"));
-        assert!(html.contains("Use Target and Continue"));
-        assert!(html.contains("Create Draft"));
-        assert!(html.contains("Save Values"));
-        assert!(html.contains("Submit"));
-        assert!(html.contains("Discard Draft"));
-        assert!(html.contains("Clear Response Context"));
-        assert!(html.contains("Refresh Responses"));
-        assert!(html.contains("startDemoSubmissionFlow"));
-        assert!(html.contains("Response Review"));
-        assert!(html.contains("Responses Workspace"));
-        assert!(html.contains("Show Drafts"));
-        assert!(html.contains("Show Submitted"));
-        assert!(html.contains("Clear Review Filters"));
-        assert!(html.contains("Response Reports"));
-        assert!(html.contains("Responses List and Detail"));
-        assert!(html.contains("Response Detail"));
-        assert!(html.contains("Raw API Activity"));
-        assert!(html.contains("Current Report Selection"));
-        assert!(html.contains("Refresh Summary"));
-        assert!(html.contains("Session Status"));
-        assert!(html.contains("Sign Out"));
-        assert!(html.contains("/api/me"));
-        assert!(html.contains("/api/app/summary"));
-        assert!(html.contains("/api/forms/published"));
-        assert!(html.contains("/api/submissions/drafts"));
-        assert!(html.contains("DELETE"));
-        assert!(html.contains("submission-status-filter"));
-        assert!(html.contains("Submission search"));
-        assert!(html.contains("Use Form Version"));
-        assert!(html.contains("Use Node"));
-        assert!(html.contains("Open Response Form"));
-        assert!(html.contains("Use Report Context"));
-        assert!(html.contains("Use Chart Context"));
-        assert!(html.contains("Use Binding"));
-        assert!(html.contains("Report Results"));
-        assert!(html.contains("Report Definition"));
-        assert!(html.contains("Run This Report"));
-        assert!(html.contains("Refresh and Run Report"));
-        assert!(html.contains("Refresh and Reopen Dashboard"));
-        assert!(html.contains("table-wrap"));
-        assert!(html.contains("/api/reports"));
-        assert!(html.contains("sessionStorage"));
-        assert!(html.contains("tessara.devToken"));
-        assert!(html.contains("Current Selections"));
-        assert!(html.contains("selection-state"));
-        assert!(html.contains("tessara-icon-1024.svg"));
-        assert!(html.contains("tessara-favicon-32.svg"));
-        assert!(!html.contains("Target node ID"));
-        assert!(!html.contains("Published form version ID"));
-        assert!(!html.contains("Draft submission ID"));
-        assert!(!html.contains("Report ID"));
-        assert!(!html.contains("Create Shortcuts"));
-    }
-
-    #[test]
-    fn organization_and_forms_shells_expose_product_area_routes() {
+    fn product_list_pages_expose_dedicated_list_screens() {
         let organization = organization_application_shell_html();
         let forms = forms_application_shell_html();
+        let responses = submission_application_shell_html();
+        let reports = reporting_application_shell_html();
+        let dashboards = dashboards_application_shell_html();
 
-        assert!(organization.contains("Organization"));
-        assert!(organization.contains("/app/organization"));
-        assert!(organization.contains("Organization Areas"));
-        assert!(organization.contains("Organization Workspace"));
-        assert!(organization.contains("Organization Browse"));
-        assert!(organization.contains("Organization Flow"));
-        assert!(organization.contains("Organization Directory"));
-        assert!(organization.contains("Organization List and Detail"));
-        assert!(organization.contains("Organization Detail"));
-        assert!(organization.contains("Organization Next Steps"));
-        assert!(organization.contains("Load Organizations"));
-        assert!(organization.contains("Inspect Organization"));
-        assert!(organization.contains("Refresh Organization"));
-        assert!(organization.contains("Load Node Types"));
-        assert!(organization.contains("Browse Nodes"));
-        assert!(organization.contains("Browse Structure"));
-        assert!(organization.contains("Go to Forms"));
-        assert!(organization.contains("/app/forms"));
-        assert!(organization.contains("/app/dashboards"));
-        assert!(!organization.contains("Node type ID"));
+        assert!(organization.contains("Organizations"));
+        assert!(organization.contains("Create Organization"));
+        assert!(organization.contains("organization-list"));
         assert!(!organization.contains("Node ID"));
-        assert!(!organization.contains("Create Shortcuts"));
 
         assert!(forms.contains("Forms"));
-        assert!(forms.contains("/app/forms"));
-        assert!(forms.contains("Forms Areas"));
-        assert!(forms.contains("Forms Workspace"));
-        assert!(forms.contains("Forms Browse"));
-        assert!(forms.contains("Forms Flow"));
-        assert!(forms.contains("Forms Directory"));
-        assert!(forms.contains("Forms List and Detail"));
-        assert!(forms.contains("Form Detail"));
-        assert!(forms.contains("Form Next Steps"));
-        assert!(forms.contains("Load Published Versions"));
+        assert!(forms.contains("Create Form"));
+        assert!(forms.contains("form-list"));
         assert!(!forms.contains("Form ID"));
-        assert!(!forms.contains("Form version ID"));
-        assert!(!forms.contains("Section ID"));
-        assert!(!forms.contains("Field ID"));
-        assert!(forms.contains("Refresh Forms"));
-        assert!(forms.contains("Browse Forms"));
-        assert!(forms.contains("Go to Responses"));
-        assert!(forms.contains("/app/responses"));
-        assert!(forms.contains("/app/organization"));
-        assert!(!forms.contains("Create Shortcuts"));
+
+        assert!(responses.contains("Responses"));
+        assert!(responses.contains("Start Response"));
+        assert!(responses.contains("Start New Response"));
+        assert!(responses.contains("Draft Responses"));
+        assert!(responses.contains("Submitted Responses"));
+        assert!(!responses.contains("Draft submission ID"));
+
+        assert!(reports.contains("Reports"));
+        assert!(reports.contains("Create Report"));
+        assert!(reports.contains("report-list"));
+
+        assert!(dashboards.contains("Dashboards"));
+        assert!(dashboards.contains("Create Dashboard"));
+        assert!(dashboards.contains("dashboard-list"));
     }
 
     #[test]
-    fn admin_application_shell_exposes_setup_screens() {
-        let html = administration_application_shell_html();
+    fn create_edit_and_detail_pages_are_dedicated() {
+        let organization_new = organization_create_application_html();
+        let organization_detail =
+            organization_detail_application_html("00000000-0000-0000-0000-000000000001");
+        let organization_edit =
+            organization_edit_application_html("00000000-0000-0000-0000-000000000001");
+        let form_new = form_create_application_html();
+        let form_detail = form_detail_application_html("00000000-0000-0000-0000-000000000002");
+        let form_edit = form_edit_application_html("00000000-0000-0000-0000-000000000002");
+        let response_new = response_create_application_html();
+        let response_detail =
+            response_detail_application_html("00000000-0000-0000-0000-000000000003");
+        let response_edit = response_edit_application_html("00000000-0000-0000-0000-000000000003");
+        let report_new = report_create_application_html();
+        let report_detail = report_detail_application_html("00000000-0000-0000-0000-000000000004");
+        let report_edit = report_edit_application_html("00000000-0000-0000-0000-000000000004");
+        let dashboard_new = dashboard_create_application_html();
+        let dashboard_detail =
+            dashboard_detail_application_html("00000000-0000-0000-0000-000000000005");
+        let dashboard_edit =
+            dashboard_edit_application_html("00000000-0000-0000-0000-000000000005");
 
-        assert!(html.contains("Administration"));
-        assert!(html.contains("/app"));
-        assert!(html.contains("/app/administration"));
-        assert!(html.contains("Configuration Console"));
-        assert!(html.contains("Management Queues"));
-        assert!(html.contains("Admin Path"));
-        assert!(html.contains("Management Directory"));
-        assert!(html.contains("Management Detail"));
-        assert!(html.contains("Raw API Output"));
-        assert!(html.contains("Management Areas"));
-        assert!(html.contains("Entity Directory"));
-        assert!(html.contains("Entity Create and Edit"));
-        assert!(html.contains("Create Organization"));
-        assert!(html.contains("Edit Selected Organization"));
-        assert!(html.contains("Create Form"));
-        assert!(html.contains("Edit Selected Form"));
-        assert!(html.contains("Create Report"));
-        assert!(html.contains("Edit Selected Report"));
-        assert!(html.contains("Create Dashboard"));
-        assert!(html.contains("Edit Selected Dashboard"));
-        assert!(html.contains("Open Organization Setup"));
-        assert!(html.contains("Open Forms Configuration"));
-        assert!(html.contains("Open Reporting Configuration"));
-        assert!(html.contains("Open Dashboard Configuration"));
-        assert!(html.contains("Load Node Types"));
-        assert!(html.contains("Load Forms"));
-        assert!(html.contains("Load Datasets"));
-        assert!(html.contains("Load Dashboards"));
-        assert!(html.contains("Node Types"));
-        assert!(html.contains("Datasets"));
-        assert!(html.contains("Aggregations"));
-        assert!(html.contains("Organization Setup"));
-        assert!(html.contains("Forms Configuration"));
-        assert!(html.contains("Reporting Configuration"));
-        assert!(html.contains("Administration Screen"));
-        assert!(html.contains("Dataset name"));
-        assert!(html.contains("Dataset grain"));
-        assert!(html.contains("Create Dataset"));
-        assert!(html.contains("Load Datasets"));
-        assert!(html.contains("Inspect Dataset"));
-        assert!(html.contains("Run Dataset"));
-        assert!(html.contains("/api/admin/datasets"));
-        assert!(html.contains("/api/admin/datasets/${datasetId}"));
-        assert!(html.contains("/api/datasets"));
-        assert!(html.contains("Add Dataset Source"));
-        assert!(html.contains("Remove Dataset Source"));
-        assert!(html.contains("Add Dataset Field"));
-        assert!(html.contains("Remove Dataset Field"));
-        assert!(html.contains("Review Dataset Draft"));
-        assert!(html.contains("Update Dataset"));
-        assert!(html.contains("Remove Dataset"));
-        assert!(html.contains("Aggregation name"));
-        assert!(html.contains("Create Aggregation"));
-        assert!(html.contains("Load Aggregations"));
-        assert!(html.contains("Inspect Aggregation"));
-        assert!(html.contains("Update Aggregation"));
-        assert!(html.contains("Remove Aggregation"));
-        assert!(html.contains("/api/admin/aggregations"));
-        assert!(html.contains("/api/admin/aggregations/${aggregationId}"));
-        assert!(html.contains("/api/aggregations/${aggregationId}"));
-        assert!(html.contains("/api/aggregations/${aggregationId}/table"));
-        assert!(html.contains("Create Node Type"));
-        assert!(html.contains("Inspect Node Type"));
-        assert!(html.contains("Update Node Type"));
-        assert!(html.contains("Edit Node Type"));
-        assert!(html.contains("/api/admin/node-types/${nodeTypeId}"));
-        assert!(html.contains("Use Form Scope"));
-        assert!(html.contains("Use Compatibility Group"));
-        assert!(html.contains("Use Metadata Target"));
-        assert!(html.contains("Use Node Type As Form Scope"));
-        assert!(html.contains("Use Node Type As Metadata Target"));
-        assert!(html.contains("Remove Relationship"));
-        assert!(html.contains("Update Metadata Field"));
-        assert!(html.contains("Update Node"));
-        assert!(html.contains("Choose Node To Edit"));
-        assert!(html.contains("Edit Node"));
-        assert!(html.contains("Create Form"));
-        assert!(html.contains("Update Form"));
-        assert!(html.contains("Inspect Form"));
-        assert!(html.contains("Edit Form"));
-        assert!(html.contains("/api/admin/forms/${formId}"));
-        assert!(html.contains("Create Basic Version"));
-        assert!(html.contains("Remove Section"));
-        assert!(html.contains("Update Field"));
-        assert!(html.contains("Remove Field"));
-        assert!(html.contains("Section position"));
-        assert!(html.contains("Field position"));
-        assert!(html.contains("Publish Version"));
-        assert!(html.contains("Publish and Preview Version"));
-        assert!(html.contains("Add Binding"));
-        assert!(html.contains("Report computed expression"));
-        assert!(html.contains("Update Report"));
-        assert!(html.contains("Remove Report"));
-        assert!(html.contains("Update Chart"));
-        assert!(html.contains("Remove Chart"));
-        assert!(html.contains("Update Dashboard"));
-        assert!(html.contains("Remove Dashboard"));
-        assert!(html.contains("Update Component"));
-        assert!(html.contains("Remove Component"));
-        assert!(html.contains("Dashboard component title"));
-        assert!(html.contains("Use Report Context"));
-        assert!(html.contains("Use Chart Context"));
-        assert!(html.contains("Use Component Context"));
-        assert!(html.contains("Use Binding"));
-        assert!(html.contains("Remove Binding"));
-        assert!(html.contains("Report Results"));
-        assert!(html.contains("Report Definition"));
-        assert!(html.contains("Run This Report"));
-        assert!(html.contains("Refresh and Run Report"));
-        assert!(html.contains("Refresh and Reopen Dashboard"));
-        assert!(html.contains("Refresh and Open Dashboard"));
-        assert!(html.contains("Product Areas"));
-        assert!(html.contains("Create Shortcuts"));
-        assert!(html.contains("Refresh Summary"));
-        assert!(html.contains("selection-state"));
+        for html in [
+            organization_new.as_str(),
+            organization_edit.as_str(),
+            form_new.as_str(),
+            form_edit.as_str(),
+            response_new.as_str(),
+            response_edit.as_str(),
+            report_new.as_str(),
+            report_edit.as_str(),
+            dashboard_new.as_str(),
+            dashboard_edit.as_str(),
+        ] {
+            assert!(html.contains("Submit"));
+            assert!(html.contains("Cancel"));
+            assert!(!html.contains(" ID"));
+        }
+
+        assert!(organization_detail.contains("Organization Detail"));
+        assert!(organization_detail.contains("Back to List"));
+        assert!(form_detail.contains("Form Detail"));
+        assert!(response_detail.contains("Response Detail"));
+        assert!(report_detail.contains("Report Detail"));
+        assert!(report_detail.contains("Run"));
+        assert!(dashboard_detail.contains("Dashboard Detail"));
+        assert!(dashboard_detail.contains("View"));
     }
 
     #[test]
-    fn migration_application_shell_exposes_fixture_workflow() {
-        let html = migration_application_shell_html();
+    fn administration_and_migration_stay_internal() {
+        let administration = administration_application_shell_html();
+        let migration = migration_application_shell_html();
 
-        assert!(html.contains("Migration Workbench"));
-        assert!(html.contains("/app"));
-        assert!(html.contains("/app/responses"));
-        assert!(html.contains("Migration Stages"));
-        assert!(html.contains("Migration Directory"));
-        assert!(html.contains("Raw API Output"));
-        assert!(html.contains("Open Fixture Intake"));
-        assert!(html.contains("Open Validation"));
-        assert!(html.contains("Open Dry Run"));
-        assert!(html.contains("Open Import Results"));
-        assert!(html.contains("Fixture Examples"));
-        assert!(html.contains("Validation Results"));
-        assert!(html.contains("Dry Runs"));
-        assert!(html.contains("Imports"));
-        assert!(html.contains("Fixture Intake and Validation"));
-        assert!(html.contains("Load Fixture Examples"));
-        assert!(html.contains("Validate Fixture"));
-        assert!(html.contains("Dry-Run Fixture"));
-        assert!(html.contains("Import Fixture"));
-        assert!(html.contains("/api/admin/legacy-fixtures/examples"));
-        assert!(html.contains("/api/admin/legacy-fixtures/validate"));
-        assert!(html.contains("/api/admin/legacy-fixtures/dry-run"));
-        assert!(html.contains("/api/admin/legacy-fixtures/import"));
-        assert!(html.contains("Product Areas"));
-        assert!(html.contains("Refresh Summary"));
-        assert!(html.contains("Session Status"));
-        assert!(html.contains("Sign Out"));
-        assert!(!html.contains("Create Shortcuts"));
-    }
+        assert!(administration.contains("Administration"));
+        assert!(administration.contains("Advanced Configuration"));
+        assert!(administration.contains("Open Legacy Builder"));
+        assert!(administration.contains("/app/admin"));
 
-    #[test]
-    fn reporting_application_shell_exposes_report_dashboard_workflow() {
-        let html = reporting_application_shell_html();
-
-        assert!(html.contains("Reports"));
-        assert!(html.contains("/app"));
-        assert!(html.contains("/app/reports"));
-        assert!(html.contains("/app/dashboards"));
-        assert!(html.contains("Reports Workspace"));
-        assert!(html.contains("Reporting Browse"));
-        assert!(html.contains("Reporting Flow"));
-        assert!(html.contains("Report Areas"));
-        assert!(html.contains("Reporting Directory"));
-        assert!(html.contains("Reports List and Detail"));
-        assert!(html.contains("Reports Directory"));
-        assert!(html.contains("Report Detail"));
-        assert!(html.contains("Report Next Steps"));
-        assert!(html.contains("Raw API Activity"));
-        assert!(html.contains("Browse Datasets"));
-        assert!(html.contains("Review Reports"));
-        assert!(html.contains("Review Aggregations"));
-        assert!(html.contains("View Dashboards"));
-        assert!(html.contains("Load Datasets"));
-        assert!(html.contains("Load Reports"));
-        assert!(html.contains("Load Aggregations"));
-        assert!(html.contains("Load Dashboards"));
-        assert!(html.contains("Datasets"));
-        assert!(html.contains("Aggregations"));
-        assert!(html.contains("Charts"));
-        assert!(html.contains("Report Runner"));
-        assert!(html.contains("Current Reporting Selection"));
-        assert!(html.contains("Dashboard Preview"));
-        assert!(html.contains("Current Dashboard Selection"));
-        assert!(html.contains("Refresh Reports"));
-        assert!(html.contains("Refresh Analytics"));
-        assert!(html.contains("Browse Datasets"));
-        assert!(html.contains("Inspect Dataset"));
-        assert!(html.contains("View Dataset Rows"));
-        assert!(html.contains("Browse Reports"));
-        assert!(html.contains("Inspect Report"));
-        assert!(html.contains("View Report"));
-        assert!(html.contains("Refresh and Run Report"));
-        assert!(html.contains("Browse Aggregations"));
-        assert!(html.contains("Inspect Aggregation"));
-        assert!(html.contains("View Aggregation"));
-        assert!(html.contains("Browse Dashboards"));
-        assert!(html.contains("View Dashboard"));
-        assert!(html.contains("Refresh and Open Dashboard"));
-        assert!(html.contains("Browse Charts"));
-        assert!(html.contains("Inspect Chart"));
-        assert!(html.contains("Refresh Summary"));
-        assert!(html.contains("Session Status"));
-        assert!(html.contains("Sign Out"));
-        assert!(html.contains("/api/admin/analytics/refresh"));
-        assert!(html.contains("/api/app/summary"));
-        assert!(html.contains("/api/datasets"));
-        assert!(html.contains("/api/datasets/${datasetId}"));
-        assert!(html.contains("/api/datasets/${datasetId}/table"));
-        assert!(html.contains("Dataset Definition"));
-        assert!(html.contains("Dataset Results"));
-        assert!(html.contains("/api/reports"));
-        assert!(html.contains("/api/dashboards"));
-        assert!(html.contains("/api/charts"));
-        assert!(html.contains("/api/charts/${chartId}"));
-        assert!(html.contains("Chart Definition"));
-        assert!(html.contains("Open Linked Report"));
-        assert!(html.contains("Open Linked Aggregation"));
-        assert!(html.contains("Product Areas"));
-        assert!(!html.contains("Create Shortcuts"));
-    }
-
-    #[test]
-    fn dashboard_application_shell_exposes_dashboard_workflow() {
-        let html = dashboards_application_shell_html();
-
-        assert!(html.contains("Dashboards"));
-        assert!(html.contains("/app/dashboards"));
-        assert!(html.contains("Dashboard Areas"));
-        assert!(html.contains("Dashboards Workspace"));
-        assert!(html.contains("Dashboards Browse"));
-        assert!(html.contains("Dashboard Flow"));
-        assert!(html.contains("Dashboards List and Detail"));
-        assert!(html.contains("Dashboards Directory"));
-        assert!(html.contains("Dashboard Detail"));
-        assert!(html.contains("Dashboard Preview"));
-        assert!(html.contains("Raw API Activity"));
-        assert!(html.contains("Browse Dashboards"));
-        assert!(html.contains("Browse Charts"));
-        assert!(html.contains("Go to Reports"));
-        assert!(html.contains("Review Aggregations"));
-        assert!(html.contains("Load Aggregations"));
-        assert!(!html.contains("Open Demo Dashboard"));
-        assert!(html.contains("Refresh Dashboards"));
-        assert!(html.contains("Refresh Summary"));
-        assert!(html.contains("Session Status"));
-        assert!(html.contains("Sign Out"));
-        assert!(html.contains("/app/reports"));
-        assert!(!html.contains("Create Shortcuts"));
+        assert!(migration.contains("Migration Workbench"));
+        assert!(migration.contains("Load Fixture Examples"));
+        assert!(migration.contains("Validate Fixture"));
+        assert!(migration.contains("Dry-Run Fixture"));
+        assert!(migration.contains("Import Fixture"));
     }
 }
