@@ -176,10 +176,6 @@ const HOME_ACTIONS: &[ActionSpec] = &[
         label: "Sign Out",
     },
     ActionSpec {
-        handler: "seedDemo()",
-        label: "Seed Demo",
-    },
-    ActionSpec {
         handler: "loadAppSummary()",
         label: "Refresh Summary",
     },
@@ -250,6 +246,14 @@ const ADMINISTRATION_ACTIONS: &[ActionSpec] = &[
     ActionSpec {
         handler: "login()",
         label: "Sign In",
+    },
+    ActionSpec {
+        handler: "loadCurrentUser()",
+        label: "Session Status",
+    },
+    ActionSpec {
+        handler: "logout()",
+        label: "Sign Out",
     },
     ActionSpec {
         handler: "seedDemo()",
@@ -388,7 +392,7 @@ fn HomeApplicationShell() -> impl IntoView {
             active_route="home"
             area_kind="Shared Home"
             title="Application Overview"
-            description="This shared home is the primary entry point for Tessara. It exposes the core product areas while keeping the currently supported workflows easy to reach."
+            description="This shared home is the primary entry point for Tessara. It organizes product areas, current readiness, and current workflow context without exposing configuration-first controls."
             show_create_shortcuts=false
             actions=HOME_ACTIONS
         >
@@ -867,7 +871,7 @@ fn HomeScreen() -> impl IntoView {
     let internal_cards = [
         (
             "Administration",
-            "Configure hierarchy, forms, datasets, reports, aggregations, charts, and dashboards.",
+            "Configure hierarchy, forms, datasets, reports, aggregations, charts, dashboards, and local test utilities.",
             "/app/administration",
             "Go to Administration",
         ),
@@ -881,23 +885,18 @@ fn HomeScreen() -> impl IntoView {
 
     view! {
         <section id="home-screen" class="app-screen">
-            <p class="eyebrow">"Application Home"</p>
+            <p class="eyebrow">"Shared Home"</p>
             <h2>"Welcome to Tessara"</h2>
             <p class="muted">
-                "Use this home screen as the entry point for the migrated application. "
-                "The structure reflects the original system's broad navigation model while "
-                "keeping cleaner, selection-driven entry points."
+                "Use this shared home as the application entry point. It is organized into stable module zones so future role-aware home variants can reuse the same structure without changing routes."
             </p>
-            <div class="actions">
-                <button type="button" onclick="loadAppSummary()">"Refresh Overview"</button>
-                <button type="button" onclick="seedDemo()">"Seed Demo Data"</button>
-                <button type="button" onclick="startDemoSubmissionFlow()">"Start Demo Response"</button>
-                <button type="button" onclick="openDemoDashboard()">"Open Demo Dashboard"</button>
-            </div>
         </section>
         <section class="app-screen">
-            <p class="eyebrow">"Application Home"</p>
+            <p class="eyebrow">"Shared Home"</p>
             <h2>"Product Areas"</h2>
+            <p class="muted">
+                "Enter the main product surfaces from here. Each area keeps browse, review, and viewing workflows ahead of configuration."
+            </p>
             <div class="home-grid">
                 {product_cards
                     .into_iter()
@@ -914,8 +913,31 @@ fn HomeScreen() -> impl IntoView {
             </div>
         </section>
         <section class="app-screen">
-            <p class="eyebrow">"Application Home"</p>
+            <p class="eyebrow">"Shared Home"</p>
+            <h2>"Current Deployment Readiness"</h2>
+            <p class="muted">
+                "Use the summary action in the page header to confirm the current deployment has enough configured data for response, reporting, and dashboard workflows."
+            </p>
+            <div id="home-summary-cards" class="cards summary-grid">
+                <p class="muted">"Refresh Summary to load current counters."</p>
+            </div>
+        </section>
+        <section class="app-screen">
+            <p class="eyebrow">"Shared Home"</p>
+            <h2>"Current Workflow Context"</h2>
+            <p class="muted">
+                "Current selections from forms, nodes, responses, reports, and dashboards appear here and in the shared sidebar."
+            </p>
+            <div id="home-selection-state" class="selection-grid">
+                <p class="muted">"No records selected yet."</p>
+            </div>
+        </section>
+        <section class="app-screen">
+            <p class="eyebrow">"Shared Home"</p>
             <h2>"Internal Areas"</h2>
+            <p class="muted">
+                "Administration and Migration remain available from the home surface, but they stay scoped as internal and operator-focused areas."
+            </p>
             <div class="home-grid">
                 {internal_cards
                     .into_iter()
@@ -930,18 +952,6 @@ fn HomeScreen() -> impl IntoView {
                     })
                     .collect_view()}
             </div>
-        </section>
-        <section class="app-screen">
-            <p class="eyebrow">"Application Home"</p>
-            <h2>"Route Map"</h2>
-            <ul class="app-list">
-                <li>"Home provides overview, quick starts, and product-area entry points."</li>
-                <li>"Organization is the operational hierarchy surface."</li>
-                <li>"Forms is the product-facing form area, while configuration stays scoped."</li>
-                <li>"Responses is the current supported route for draft, submit, and review workflows."</li>
-                <li>"Reports and Dashboards are separate viewing destinations, even where they still share underlying reporting support."</li>
-                <li>"Administration and Migration remain visible internal/operator areas."</li>
-            </ul>
         </section>
     }
 }
@@ -1074,6 +1084,14 @@ fn AdminHomeScreen() -> impl IntoView {
             href_label: "Open Dashboard Configuration",
             action: "loadDashboards()",
             action_label: "Load Dashboards",
+        },
+        ManagementCardSpec {
+            title: "Local Testing",
+            description: "Seed the local demo path and prepare the current stack for user testing without keeping demo utilities on the shared home.",
+            href: "#reporting-configuration-screen",
+            href_label: "Open Administration",
+            action: "seedDemo()",
+            action_label: "Seed Demo",
         },
     ];
 

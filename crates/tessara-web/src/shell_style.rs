@@ -291,6 +291,10 @@ pub const STYLE: &str = r#"
       }
       .context-panel {
         align-content: start;
+        grid-column: 1 / -1;
+      }
+      .summary-grid {
+        margin-top: 16px;
       }
       .compact-inputs {
         display: grid;
@@ -435,6 +439,9 @@ pub const STYLE: &str = r#"
         .workspace-grid,
         .task-grid {
           grid-template-columns: 1fr;
+        }
+        .context-panel {
+          grid-column: auto;
         }
       }
 "#;

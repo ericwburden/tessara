@@ -242,9 +242,11 @@ mod tests {
         assert!(html.contains("/app/migration"));
         assert!(html.contains("Product Areas"));
         assert!(html.contains("Internal Areas"));
-        assert!(html.contains("Refresh Overview"));
-        assert!(html.contains("Start Demo Response"));
-        assert!(html.contains("Open Demo Dashboard"));
+        assert!(html.contains("Current Deployment Readiness"));
+        assert!(html.contains("Refresh Summary"));
+        assert!(html.contains("home-summary-cards"));
+        assert!(html.contains("Current Workflow Context"));
+        assert!(html.contains("home-selection-state"));
         assert!(html.contains("Go to Responses"));
         assert!(html.contains("Go to Reports"));
         assert!(html.contains("Go to Dashboards"));
@@ -252,6 +254,9 @@ mod tests {
         assert!(html.contains("selection-state"));
         assert!(html.contains("tessara-icon-1024.svg"));
         assert!(html.contains("tessara-favicon-32.svg"));
+        assert!(!html.contains("Seed Demo Data"));
+        assert!(!html.contains("Start Demo Response"));
+        assert!(!html.contains("Open Demo Dashboard"));
         assert!(!html.contains("Create Shortcuts"));
     }
 
@@ -356,6 +361,7 @@ mod tests {
         assert!(organization.contains("Go to Forms"));
         assert!(organization.contains("/app/forms"));
         assert!(organization.contains("/app/dashboards"));
+        assert!(organization.contains("task-panel context-panel"));
         assert!(!organization.contains("Create Shortcuts"));
 
         assert!(forms.contains("Forms"));
@@ -368,6 +374,7 @@ mod tests {
         assert!(forms.contains("Form Details"));
         assert!(forms.contains("Current Form Selection"));
         assert!(forms.contains("Browse and Inspect"));
+        assert!(forms.contains("task-panel context-panel"));
         assert!(forms.contains("Refresh Forms"));
         assert!(forms.contains("Browse Forms"));
         assert!(forms.contains("Go to Responses"));

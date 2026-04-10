@@ -34,10 +34,37 @@ pub const APPLICATION_SCRIPT: &str = r#"
         if (screen) screen.innerHTML = html;
       }
 
+      function setHtml(id, html) {
+        const element = document.getElementById(id);
+        if (element) element.innerHTML = html;
+      }
+
       function showCards(records, render) {
         setScreen(records.length
           ? records.map(render).join("")
           : '<p class="muted">No records found.</p>');
+      }
+
+      function renderSummaryCards(payload) {
+        return summaryRecords(payload).map(([label, count]) => `
+          <article class="card">
+            <h3>${escapeHtml(label)}</h3>
+            <p>${escapeHtml(count)}</p>
+          </article>
+        `).join("");
+      }
+
+      function summaryRecords(payload) {
+        return [
+          ["Published forms", payload.published_form_versions],
+          ["Draft submissions", payload.draft_submissions],
+          ["Submitted submissions", payload.submitted_submissions],
+          ["Datasets", payload.datasets],
+          ["Reports", payload.reports],
+          ["Aggregations", payload.aggregations],
+          ["Dashboards", payload.dashboards],
+          ["Charts", payload.charts]
+        ];
       }
 
       function reportRowsView(rows) {
@@ -152,10 +179,8 @@ pub const APPLICATION_SCRIPT: &str = r#"
       }
 
       function renderSelections() {
-        const element = document.getElementById("selection-state");
-        if (!element) return;
         const entries = Object.entries(selections);
-        element.innerHTML = entries.length
+        const html = entries.length
           ? entries.map(([kind, record]) => `
               <article class="selection-item">
                 <h3>${escapeHtml(kind)}</h3>
@@ -164,6 +189,9 @@ pub const APPLICATION_SCRIPT: &str = r#"
               </article>
             `).join("")
           : '<p class="muted">No records selected yet.</p>';
+        for (const id of ["selection-state", "home-selection-state"]) {
+          setHtml(id, html);
+        }
       }
 
       async function request(path, options = {}) {
@@ -286,21 +314,14 @@ pub const APPLICATION_SCRIPT: &str = r#"
           if (!token) await login();
           const payload = await request("/api/app/summary");
           show(payload);
-          showCards([
-            ["Published forms", payload.published_form_versions],
-            ["Draft submissions", payload.draft_submissions],
-            ["Submitted submissions", payload.submitted_submissions],
-            ["Datasets", payload.datasets],
-            ["Reports", payload.reports],
-            ["Aggregations", payload.aggregations],
-            ["Dashboards", payload.dashboards],
-            ["Charts", payload.charts]
-          ], ([label, count]) => `
+          const summaryCards = renderSummaryCards(payload);
+          showCards(summaryRecords(payload), ([label, count]) => `
             <article class="card">
               <h3>${escapeHtml(label)}</h3>
               <p>${escapeHtml(count)}</p>
             </article>
           `);
+          setHtml("home-summary-cards", summaryCards);
         } catch (error) {
           show(error.message);
         }
