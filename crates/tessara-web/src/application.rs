@@ -737,6 +737,11 @@ fn SelectionContext() -> impl IntoView {
 }
 
 #[component]
+fn HiddenStateInput(id: &'static str) -> impl IntoView {
+    view! { <input type="hidden" id=id value="" /> }
+}
+
+#[component]
 fn ApplicationNav(active_route: &'static str) -> impl IntoView {
     let product_links = [
         ("home", "/app", "Home"),
@@ -1858,23 +1863,14 @@ fn ReportRunnerScreen() -> impl IntoView {
                 </section>
                 <section class="task-panel context-panel">
                     <h3>"Current Reporting Selection"</h3>
+                    <p class="muted">
+                        "Use browse and inspect actions to choose the active dataset, report, and aggregation. Current selections remain visible in the shared selection panel."
+                    </p>
+                    <HiddenStateInput id="dataset-id"/>
+                    <HiddenStateInput id="report-id"/>
+                    <HiddenStateInput id="aggregation-id"/>
+                    <HiddenStateInput id="form-id"/>
                     <div class="inputs compact-inputs">
-                        <label>
-                            <span>"Dataset ID"</span>
-                            <input id="dataset-id" placeholder="Selected dataset ID" value="" />
-                        </label>
-                        <label>
-                            <span>"Report ID"</span>
-                            <input id="report-id" placeholder="Selected report ID" value="" />
-                        </label>
-                        <label>
-                            <span>"Aggregation ID"</span>
-                            <input id="aggregation-id" placeholder="Selected aggregation ID" value="" />
-                        </label>
-                        <label>
-                            <span>"Form ID"</span>
-                            <input id="form-id" placeholder="Report form context" value="" />
-                        </label>
                         <label class="wide-field">
                             <span>"Report bindings JSON"</span>
                             <input id="report-fields-json" placeholder="Loaded report bindings" value="" />
@@ -1909,20 +1905,12 @@ fn DashboardPreviewScreen() -> impl IntoView {
                 </section>
                 <section class="task-panel context-panel">
                     <h3>"Current Dashboard Selection"</h3>
-                    <div class="inputs compact-inputs">
-                        <label>
-                            <span>"Dashboard ID"</span>
-                            <input id="dashboard-id" placeholder="Selected dashboard ID" value="" />
-                        </label>
-                        <label>
-                            <span>"Chart ID"</span>
-                            <input id="chart-id" placeholder="Selected chart ID" value="" />
-                        </label>
-                        <label>
-                            <span>"Aggregation ID"</span>
-                            <input id="aggregation-id" placeholder="Selected aggregation ID" value="" />
-                        </label>
-                    </div>
+                    <p class="muted">
+                        "Open a dashboard or chart from the browse cards to update the current dashboard context. Current selections remain visible in the shared selection panel."
+                    </p>
+                    <HiddenStateInput id="dashboard-id"/>
+                    <HiddenStateInput id="chart-id"/>
+                    <HiddenStateInput id="aggregation-id"/>
                 </section>
             </div>
         </section>
@@ -1956,26 +1944,17 @@ fn SubmissionScreen() -> impl IntoView {
                 </section>
                 <section class="task-panel context-panel">
                     <h3>"Current Response Selection"</h3>
+                    <p class="muted">
+                        "Choose the current target, published form, and draft from the browse and review surfaces. Current selections remain visible in the shared selection panel."
+                    </p>
+                    <HiddenStateInput id="node-id"/>
+                    <HiddenStateInput id="form-version-id"/>
+                    <HiddenStateInput id="form-id"/>
+                    <HiddenStateInput id="submission-id"/>
                     <div class="inputs compact-inputs">
                         <label>
                             <span>"Node search"</span>
                             <input id="node-search" placeholder="Search target nodes" value="" />
-                        </label>
-                        <label>
-                            <span>"Target node ID"</span>
-                            <input id="node-id" placeholder="Selected node ID" value="" />
-                        </label>
-                        <label>
-                            <span>"Published form version ID"</span>
-                            <input id="form-version-id" placeholder="Selected form version ID" value="" />
-                        </label>
-                        <label>
-                            <span>"Form ID"</span>
-                            <input id="form-id" placeholder="Selected form ID" value="" />
-                        </label>
-                        <label>
-                            <span>"Draft submission ID"</span>
-                            <input id="submission-id" placeholder="Draft submission ID" value="" />
                         </label>
                     </div>
                 </section>
@@ -2043,12 +2022,10 @@ fn ReportScreen() -> impl IntoView {
                 </section>
                 <section class="task-panel context-panel">
                     <h3>"Current Report Selection"</h3>
-                    <div class="inputs compact-inputs">
-                        <label>
-                            <span>"Report ID"</span>
-                            <input id="report-id" placeholder="Selected report ID" value="" />
-                        </label>
-                    </div>
+                    <p class="muted">
+                        "Select a report from the reporting surfaces to run it here. Current selections remain visible in the shared selection panel."
+                    </p>
+                    <HiddenStateInput id="report-id"/>
                 </section>
             </div>
         </section>
@@ -2093,23 +2070,26 @@ fn HierarchyAdminScreen(
                 </section>
                 <section class="task-panel context-panel">
                     <h3>{context_title}</h3>
+                    <p class="muted">
+                        "Create actions generate new records automatically. Update actions use the current selection from the shared selection panel and browse surfaces."
+                    </p>
+                    <HiddenStateInput id="node-type-id"/>
+                    <HiddenStateInput id="parent-node-type-id"/>
+                    <HiddenStateInput id="child-node-type-id"/>
+                    <HiddenStateInput id="metadata-node-type-id"/>
+                    <HiddenStateInput id="metadata-field-id"/>
+                    <HiddenStateInput id="parent-node-id"/>
+                    <HiddenStateInput id="node-id"/>
                     <div class="inputs compact-inputs">
                         <label><span>"Node type name"</span><input id="node-type-name" placeholder="Organization" value="" /></label>
                         <label><span>"Node type slug"</span><input id="node-type-slug" placeholder="organization" value="" /></label>
-                        <label><span>"Node type ID"</span><input id="node-type-id" placeholder="Selected node type ID" value="" /></label>
-                        <label><span>"Parent node type ID"</span><input id="parent-node-type-id" placeholder="Relationship parent type ID" value="" /></label>
-                        <label><span>"Child node type ID"</span><input id="child-node-type-id" placeholder="Relationship child type ID" value="" /></label>
-                        <label><span>"Metadata node type ID"</span><input id="metadata-node-type-id" placeholder="Metadata node type ID" value="" /></label>
-                        <label><span>"Metadata field ID"</span><input id="metadata-field-id" placeholder="Selected metadata field ID" value="" /></label>
                         <label><span>"Metadata key"</span><input id="metadata-key" placeholder="region" value="region" /></label>
                         <label><span>"Metadata label"</span><input id="metadata-label" placeholder="Region" value="Region" /></label>
                         <label><span>"Metadata field type"</span><input id="metadata-field-type" placeholder="text" value="text" /></label>
                         <label><span>"Metadata required"</span><input id="metadata-required" placeholder="true or false" value="false" /></label>
-                        <label><span>"Parent node ID"</span><input id="parent-node-id" placeholder="Optional parent node ID" value="" /></label>
                         <label><span>"Node name"</span><input id="node-name" placeholder="Local Organization" value="Local Organization" /></label>
                         <label class="wide-field"><span>"Node metadata JSON"</span><input id="node-metadata-json" placeholder="{\"region\":\"North\"}" value="{\"region\":\"North\"}" /></label>
                         <label><span>"Node search"</span><input id="node-search" placeholder="Search nodes" value="" /></label>
-                        <label><span>"Node ID"</span><input id="node-id" placeholder="Selected node ID" value="" /></label>
                     </div>
                 </section>
             </div>
@@ -2153,18 +2133,21 @@ fn FormAdminScreen(
                 </section>
                 <section class="task-panel context-panel">
                     <h3>{context_title}</h3>
+                    <p class="muted">
+                        "Create actions generate new records automatically. Update actions use the current selection from the shared selection panel and browse surfaces."
+                    </p>
+                    <HiddenStateInput id="form-scope-node-type-id"/>
+                    <HiddenStateInput id="form-id"/>
+                    <HiddenStateInput id="form-version-id"/>
+                    <HiddenStateInput id="section-id"/>
+                    <HiddenStateInput id="field-id"/>
                     <div class="inputs compact-inputs">
                         <label><span>"Form name"</span><input id="form-name" placeholder="Monthly Report" value="" /></label>
                         <label><span>"Form slug"</span><input id="form-slug" placeholder="monthly-report" value="" /></label>
-                        <label><span>"Scope node type ID"</span><input id="form-scope-node-type-id" placeholder="Optional scope node type ID" value="" /></label>
-                        <label><span>"Form ID"</span><input id="form-id" placeholder="Selected form ID" value="" /></label>
                         <label><span>"Version label"</span><input id="form-version-label" placeholder="v1" value="v1" /></label>
                         <label><span>"Compatibility group"</span><input id="compatibility-group-name" placeholder="Default compatibility" value="Default compatibility" /></label>
-                        <label><span>"Form version ID"</span><input id="form-version-id" placeholder="Selected form version ID" value="" /></label>
-                        <label><span>"Section ID"</span><input id="section-id" placeholder="Selected section ID" value="" /></label>
                         <label><span>"Section title"</span><input id="section-title" placeholder="Main" value="Main" /></label>
                         <label><span>"Section position"</span><input id="section-position" placeholder="0" value="0" /></label>
-                        <label><span>"Field ID"</span><input id="field-id" placeholder="Selected field ID" value="" /></label>
                         <label><span>"Field key"</span><input id="field-key" placeholder="participants" value="participants" /></label>
                         <label><span>"Field label"</span><input id="field-label" placeholder="Participants" value="Participants" /></label>
                         <label><span>"Field type"</span><input id="field-type" placeholder="number" value="number" /></label>
@@ -2236,15 +2219,23 @@ fn ReportAdminScreen() -> impl IntoView {
                 </section>
                 <section class="task-panel context-panel">
                     <h3>"Current Reporting Configuration Context"</h3>
+                    <p class="muted">
+                        "Create actions generate new records automatically. Update and run actions use the current dataset, report, aggregation, chart, and dashboard selections."
+                    </p>
+                    <HiddenStateInput id="dataset-id"/>
+                    <HiddenStateInput id="dataset-form-id"/>
+                    <HiddenStateInput id="dataset-compatibility-group-id"/>
+                    <HiddenStateInput id="report-id"/>
+                    <HiddenStateInput id="aggregation-id"/>
+                    <HiddenStateInput id="chart-id"/>
+                    <HiddenStateInput id="dashboard-id"/>
+                    <HiddenStateInput id="dashboard-component-id"/>
                     <div class="inputs compact-inputs">
                 <label><span>"Dataset name"</span><input id="dataset-name" placeholder="Participant Dataset" value="Participant Dataset" /></label>
                 <label><span>"Dataset slug"</span><input id="dataset-slug" placeholder="participant-dataset" value="participant-dataset" /></label>
                 <label><span>"Dataset grain"</span><input id="dataset-grain" placeholder="submission" value="submission" /></label>
                 <label><span>"Dataset composition mode"</span><input id="dataset-composition-mode" placeholder="union" value="union" /></label>
-                <label><span>"Dataset ID"</span><input id="dataset-id" placeholder="Selected dataset ID" value="" /></label>
                 <label><span>"Dataset source alias"</span><input id="dataset-source-alias" placeholder="service" value="service" /></label>
-                <label><span>"Dataset form ID"</span><input id="dataset-form-id" placeholder="Selected source form ID" value="" /></label>
-                <label><span>"Dataset compatibility group ID"</span><input id="dataset-compatibility-group-id" placeholder="Optional compatibility group ID" value="" /></label>
                 <label><span>"Dataset selection rule"</span><input id="dataset-selection-rule" placeholder="all" value="all" /></label>
                 <label><span>"Dataset field key"</span><input id="dataset-field-key" placeholder="participant_count" value="participant_count" /></label>
                 <label><span>"Dataset field label"</span><input id="dataset-field-label" placeholder="Participant Count" value="Participant Count" /></label>
@@ -2256,19 +2247,14 @@ fn ReportAdminScreen() -> impl IntoView {
                 <label><span>"Report computed expression"</span><input id="report-computed-expression" placeholder="literal:Submitted" value="" /></label>
                 <label><span>"Report missing-data policy"</span><input id="report-missing-policy" placeholder="null" value="null" /></label>
                 <label><span>"Report bindings JSON"</span><input id="report-fields-json" placeholder="Optional bindings JSON" value="" /></label>
-                <label><span>"Report ID"</span><input id="report-id" placeholder="Selected report ID" value="" /></label>
-                <label><span>"Aggregation ID"</span><input id="aggregation-id" placeholder="Selected aggregation ID" value="" /></label>
                 <label><span>"Aggregation name"</span><input id="aggregation-name" placeholder="Participants Totals" value="Participants Totals" /></label>
                 <label><span>"Aggregation group-by logical key"</span><input id="aggregation-group-by-logical-key" placeholder="Optional group logical key" value="" /></label>
                 <label><span>"Aggregation metric key"</span><input id="aggregation-metric-key" placeholder="participants_total" value="participants_total" /></label>
                 <label><span>"Aggregation source logical key"</span><input id="aggregation-source-logical-key" placeholder="participants" value="participants" /></label>
                 <label><span>"Aggregation metric kind"</span><input id="aggregation-metric-kind" placeholder="count, sum, avg, min, or max" value="sum" /></label>
-                <label><span>"Chart ID"</span><input id="chart-id" placeholder="Selected chart ID" value="" /></label>
                 <label><span>"Chart name"</span><input id="chart-name" placeholder="Participants Table" value="Participants Table" /></label>
                 <label><span>"Chart type"</span><input id="chart-type" placeholder="table" value="table" /></label>
-                <label><span>"Dashboard ID"</span><input id="dashboard-id" placeholder="Selected dashboard ID" value="" /></label>
                 <label><span>"Dashboard name"</span><input id="dashboard-name" placeholder="Local Dashboard" value="Local Dashboard" /></label>
-                <label><span>"Dashboard component ID"</span><input id="dashboard-component-id" placeholder="Selected dashboard component ID" value="" /></label>
                 <label><span>"Dashboard component position"</span><input id="dashboard-component-position" placeholder="0" value="0" /></label>
                 <label><span>"Dashboard component title"</span><input id="dashboard-component-title" placeholder="Chart title" value="" /></label>
                 <label class="wide-field"><span>"Dashboard component config JSON"</span><input id="dashboard-component-config-json" placeholder="{\"title\":\"Chart\"}" value="" /></label>

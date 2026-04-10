@@ -252,6 +252,7 @@ mod tests {
         assert!(html.contains("Go to Dashboards"));
         assert!(html.contains("Current Selections"));
         assert!(html.contains("selection-state"));
+        assert!(html.contains("home-selection-state"));
         assert!(html.contains("tessara-icon-1024.svg"));
         assert!(html.contains("tessara-favicon-32.svg"));
         assert!(!html.contains("Seed Demo Data"));
@@ -336,6 +337,10 @@ mod tests {
         assert!(html.contains("selection-state"));
         assert!(html.contains("tessara-icon-1024.svg"));
         assert!(html.contains("tessara-favicon-32.svg"));
+        assert!(!html.contains("Target node ID"));
+        assert!(!html.contains("Published form version ID"));
+        assert!(!html.contains("Draft submission ID"));
+        assert!(!html.contains("Report ID"));
         assert!(!html.contains("Create Shortcuts"));
     }
 
@@ -362,6 +367,8 @@ mod tests {
         assert!(organization.contains("/app/forms"));
         assert!(organization.contains("/app/dashboards"));
         assert!(organization.contains("task-panel context-panel"));
+        assert!(!organization.contains("Node type ID"));
+        assert!(!organization.contains("Node ID"));
         assert!(!organization.contains("Create Shortcuts"));
 
         assert!(forms.contains("Forms"));
@@ -375,6 +382,10 @@ mod tests {
         assert!(forms.contains("Current Form Selection"));
         assert!(forms.contains("Browse and Inspect"));
         assert!(forms.contains("task-panel context-panel"));
+        assert!(!forms.contains("Form ID"));
+        assert!(!forms.contains("Form version ID"));
+        assert!(!forms.contains("Section ID"));
+        assert!(!forms.contains("Field ID"));
         assert!(forms.contains("Refresh Forms"));
         assert!(forms.contains("Browse Forms"));
         assert!(forms.contains("Go to Responses"));
