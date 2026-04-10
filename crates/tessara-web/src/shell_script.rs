@@ -19,6 +19,16 @@ pub const SCRIPT: &str = r#"
           typeof value === "string" ? value : JSON.stringify(value, null, 2);
       }
 
+      function setDirectory(html) {
+        const screen = document.getElementById("screen");
+        if (screen) screen.innerHTML = html;
+      }
+
+      function setDetail(html) {
+        const screen = document.getElementById("detail-screen") || document.getElementById("screen");
+        if (screen) screen.innerHTML = html;
+      }
+
       function setInput(id, value) {
         const element = document.getElementById(id);
         if (element) element.value = value ?? "";
@@ -63,9 +73,9 @@ pub const SCRIPT: &str = r#"
       }
 
       function showCards(records, render) {
-        document.getElementById("screen").innerHTML = records.length
+        setDirectory(records.length
           ? records.map(render).join("")
-          : '<p class="muted">No records found.</p>';
+          : '<p class="muted">No records found.</p>');
       }
 
       function reportRowsView(rows) {
@@ -97,7 +107,7 @@ pub const SCRIPT: &str = r#"
               </tbody>
             </table>
           </div>
-        `;
+        `);
       }
 
       function aggregationRowsView(rows) {
@@ -125,7 +135,7 @@ pub const SCRIPT: &str = r#"
               </tbody>
             </table>
           </div>
-        `;
+        `);
       }
 
       function datasetRowSubmissionActions(row) {
@@ -372,7 +382,7 @@ pub const SCRIPT: &str = r#"
       async function loadNodeTypeById() {
         try {
           const nodeTypeId = inputValue("node-type-id");
-          if (!nodeTypeId) throw new Error("Enter or select a node type ID first.");
+          if (!nodeTypeId) throw new Error("Choose a node type first.");
           await loadNodeTypeByValue(nodeTypeId);
         } catch (error) {
           show(error.message);
@@ -384,7 +394,7 @@ pub const SCRIPT: &str = r#"
         const payload = await request(`/api/admin/node-types/${nodeTypeId}`);
         useNodeType(payload.id, payload.name, payload.slug);
         show(payload);
-        document.getElementById("screen").innerHTML = `
+        setDetail(`
           <article class="card">
             <h3>Node Type Definition</h3>
             <p>${escapeHtml(payload.name)}</p>
@@ -421,7 +431,7 @@ pub const SCRIPT: &str = r#"
               <button type="button" onclick="loadFormByValue('${escapeHtml(form.form_id)}')">Open Scoped Form</button>
             </article>
           `).join("") || '<p class="muted">No forms are scoped to this node type yet.</p>'}
-        `;
+        `);
       }
 
       async function createNodeType() {
@@ -630,7 +640,7 @@ pub const SCRIPT: &str = r#"
         try {
           if (!token) await login();
           const fieldId = inputValue("metadata-field-id");
-          if (!fieldId) throw new Error("Select or enter a metadata field ID first.");
+          if (!fieldId) throw new Error("Choose a metadata field first.");
           const payload = await request(`/api/admin/node-metadata-fields/${fieldId}`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
@@ -674,7 +684,7 @@ pub const SCRIPT: &str = r#"
         try {
           if (!token) await login();
           const nodeId = inputValue("node-id");
-          if (!nodeId) throw new Error("Select or enter a node ID first.");
+          if (!nodeId) throw new Error("Choose an organization record first.");
           const parentNodeId = inputValue("parent-node-id");
           const payload = await request(`/api/admin/nodes/${nodeId}`, {
             method: "PUT",
@@ -727,7 +737,7 @@ pub const SCRIPT: &str = r#"
       async function loadFormById() {
         try {
           const formId = inputValue("form-id");
-          if (!formId) throw new Error("Enter or select a form ID first.");
+          if (!formId) throw new Error("Choose a form first.");
           await loadFormByValue(formId);
         } catch (error) {
           show(error.message);
@@ -745,7 +755,7 @@ pub const SCRIPT: &str = r#"
           payload.scope_node_type_name || ""
         );
         show(payload);
-        document.getElementById("screen").innerHTML = `
+        setDetail(`
           <article class="card">
             <h3>Form Definition</h3>
             <p>${escapeHtml(payload.name)}</p>
@@ -780,7 +790,7 @@ pub const SCRIPT: &str = r#"
               <button type="button" onclick="loadDatasetByValue('${escapeHtml(datasetSource.dataset_id)}')">Open Linked Dataset</button>
             </article>
           `).join("") || '<p class="muted">No datasets source from this form yet.</p>'}
-        `;
+        `);
       }
 
       function useForm(formId, formName = formId) {
@@ -892,7 +902,7 @@ pub const SCRIPT: &str = r#"
         try {
           if (!token) await login();
           const formId = inputValue("form-id");
-          if (!formId) throw new Error("Create or enter a form ID first.");
+          if (!formId) throw new Error("Create or choose a form first.");
           const payload = await request(`/api/admin/forms/${formId}/versions`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -1119,7 +1129,7 @@ pub const SCRIPT: &str = r#"
           document.getElementById("form-id").value = payload.form_id;
           useFormVersion(payload.form_version_id, payload.form_id, `${payload.form_name} ${payload.version_label}`);
           show(payload);
-          document.getElementById("screen").innerHTML = `
+          setDetail(`
             <article class="card form-screen">
               <h3>${escapeHtml(payload.form_name)} ${escapeHtml(payload.version_label)}</h3>
               <p>Status: ${escapeHtml(payload.status)}</p>
@@ -1177,7 +1187,7 @@ pub const SCRIPT: &str = r#"
           <div class="actions form-actions">
             <button type="button" onclick="createDraft()">Create Draft</button>
           </div>
-        `;
+        `);
       }
 
       function clearResponseContext() {
@@ -1225,17 +1235,65 @@ pub const SCRIPT: &str = r#"
               <h3>${escapeHtml(node.name)}</h3>
               <p>${escapeHtml(node.node_type_name)}${node.parent_node_name ? ` under ${escapeHtml(node.parent_node_name)}` : ""}</p>
               <p class="muted">${escapeHtml(JSON.stringify(node.metadata))}</p>
+              <button type="button" onclick="loadNodeByValue('${escapeHtml(node.id)}')">Inspect Organization</button>
               <button type="button" onclick="useTargetNode('${escapeHtml(node.id)}', '${escapeHtml(node.name)}')">Use Target</button>
               <button type="button" onclick="useTargetNodeAndContinue('${escapeHtml(node.id)}', '${escapeHtml(node.name)}')">Use Target and Continue</button>
               <button type="button" onclick="useParentNode('${escapeHtml(node.id)}', '${escapeHtml(node.name)}')">Use Parent</button>
               <button type="button" onclick="useNodeForEditing('${escapeHtml(node.id)}', '${escapeHtml(node.name)}', '${escapeHtml(node.parent_node_id || "")}', '${escapeHtml(node.node_type_id)}', '${escapeHtml(node.node_type_name)}', '${escapeHtml(jsStringArg(JSON.stringify(node.metadata)))}')">Edit Node</button>
               <button type="button" onclick="useNodeType('${escapeHtml(node.node_type_id)}', '${escapeHtml(node.node_type_name)}')">Use Node Type</button>
-              <code>${escapeHtml(node.id)}</code>
             </article>
           `);
         } catch (error) {
           show(error.message);
         }
+      }
+
+      async function loadNodeByValue(nodeId) {
+        if (!token) await login();
+        const payload = await request(`/api/nodes/${nodeId}`);
+        useTargetNode(payload.id, payload.name);
+        show(payload);
+        setDetail(`
+          <article class="card">
+            <h3>${escapeHtml(payload.name)}</h3>
+            <p>${escapeHtml(payload.node_type_name)}${payload.parent_node_name ? ` under ${escapeHtml(payload.parent_node_name)}` : ""}</p>
+            <p class="muted">${escapeHtml(JSON.stringify(payload.metadata))}</p>
+            <div class="actions">
+              <button type="button" onclick="useTargetNode('${escapeHtml(payload.id)}', '${escapeHtml(payload.name)}')">Use Organization</button>
+              <button type="button" onclick="useNodeForEditing('${escapeHtml(payload.id)}', '${escapeHtml(payload.name)}', '${escapeHtml(payload.parent_node_id || "")}', '${escapeHtml(payload.node_type_id)}', '${escapeHtml(payload.node_type_name)}', '${escapeHtml(jsStringArg(JSON.stringify(payload.metadata)))}')">Edit Organization</button>
+              <button type="button" onclick="loadSubmissionsForNode('${escapeHtml(payload.id)}', '${escapeHtml(payload.name)}')">Browse Related Responses</button>
+            </div>
+          </article>
+          ${payload.related_forms.map((form) => `
+            <article class="card">
+              <h3>${escapeHtml(form.form_name)}</h3>
+              <p class="muted">${escapeHtml(form.form_slug)}</p>
+              <p>${form.published_version_count} published versions</p>
+              <button type="button" onclick="useForm('${escapeHtml(form.form_id)}', '${escapeHtml(form.form_name)}')">Use Related Form</button>
+              <button type="button" onclick="loadFormByValue('${escapeHtml(form.form_id)}')">Open Related Form</button>
+            </article>
+          `).join("") || '<p class="muted">No scoped forms are linked to this organization record yet.</p>'}
+          ${payload.related_responses.map((submission) => `
+            <article class="card">
+              <h3>${escapeHtml(submission.form_name)} ${escapeHtml(submission.version_label)}</h3>
+              <p>${escapeHtml(submission.status)} response</p>
+              <button type="button" onclick="loadSubmissionByValue('${escapeHtml(submission.submission_id)}')">Open Response</button>
+            </article>
+          `).join("") || '<p class="muted">No responses are linked to this organization record yet.</p>'}
+          ${payload.related_dashboards.map((dashboard) => `
+            <article class="card">
+              <h3>${escapeHtml(dashboard.dashboard_name)}</h3>
+              <p>${dashboard.component_count} components</p>
+              <button type="button" onclick="loadDashboardByValue('${escapeHtml(dashboard.dashboard_id)}')">Open Dashboard</button>
+            </article>
+          `).join("") || '<p class="muted">No dashboards are linked to this organization record yet.</p>'}
+        `);
+      }
+
+      async function loadSubmissionsForNode(nodeId, nodeName = nodeId) {
+        useTargetNode(nodeId, nodeName);
+        setInput("submission-status-filter", "");
+        await loadSubmissions();
       }
 
       function useNodeForEditing(nodeId, nodeName, parentNodeId, nodeTypeId, nodeTypeName, metadataJson) {
@@ -1291,7 +1349,6 @@ pub const SCRIPT: &str = r#"
               <button type="button" onclick="useFormVersion('${escapeHtml(submission.form_version_id)}', '${escapeHtml(submission.form_id)}', '${escapeHtml(submission.form_name)} ${escapeHtml(submission.version_label)}')">Use Form Version</button>
               <button type="button" onclick="useTargetNode('${escapeHtml(submission.node_id)}', '${escapeHtml(submission.node_name)}')">Use Node</button>
               <button type="button" onclick="loadSubmissionByValue('${escapeHtml(submission.id)}')">Open</button>
-              <code>${escapeHtml(submission.id)}</code>
             </article>
           `);
         } catch (error) {
@@ -1354,7 +1411,7 @@ pub const SCRIPT: &str = r#"
         try {
           if (!token) await login();
           const submissionId = inputValue("submission-id");
-          if (!submissionId) throw new Error("Enter a submission ID first.");
+          if (!submissionId) throw new Error("Choose a response first.");
           await loadSubmissionByValue(submissionId);
         } catch (error) {
           show(error.message);
@@ -1380,7 +1437,7 @@ pub const SCRIPT: &str = r#"
         useFormVersion(payload.form_version_id, payload.form_id, `${payload.form_name} ${payload.version_label}`);
         useTargetNode(payload.node_id, payload.node_name);
         show(payload);
-        document.getElementById("screen").innerHTML = `
+        setDetail(`
           <article class="card">
             <h3>${escapeHtml(payload.form_name)} ${escapeHtml(payload.version_label)}</h3>
             <p>${escapeHtml(payload.node_name)}: ${escapeHtml(payload.status)}</p>
@@ -1399,14 +1456,14 @@ pub const SCRIPT: &str = r#"
               `).join("")}
             </ul>
           </article>
-        `;
+        `);
       }
 
       async function saveParticipants() {
         try {
           if (!token) await login();
           const submissionId = inputValue("submission-id");
-          if (!submissionId) throw new Error("Create or enter a draft submission first.");
+          if (!submissionId) throw new Error("Create or choose a draft response first.");
           const value = Number(inputValue("participants-value"));
           const payload = await request(`/api/submissions/${submissionId}/values`, {
             method: "PUT",
@@ -1424,7 +1481,7 @@ pub const SCRIPT: &str = r#"
         try {
           if (!token) await login();
           const submissionId = inputValue("submission-id");
-          if (!submissionId) throw new Error("Create or enter a draft submission first.");
+          if (!submissionId) throw new Error("Create or choose a draft response first.");
           const values = collectRenderedValues();
           validateRenderedValues(values);
           const payload = await request(`/api/submissions/${submissionId}/values`, {
@@ -1443,7 +1500,7 @@ pub const SCRIPT: &str = r#"
         try {
           if (!token) await login();
           const submissionId = inputValue("submission-id");
-          if (!submissionId) throw new Error("Create or enter a draft submission first.");
+          if (!submissionId) throw new Error("Create or choose a draft response first.");
           const payload = await request(`/api/submissions/${submissionId}/submit`, { method: "POST" });
           show(payload);
           await loadSubmissionByValue(submissionId);
@@ -1456,7 +1513,7 @@ pub const SCRIPT: &str = r#"
         try {
           if (!token) await login();
           const submissionId = inputValue("submission-id");
-          if (!submissionId) throw new Error("Create or enter a draft submission first.");
+          if (!submissionId) throw new Error("Create or choose a draft response first.");
           const payload = await request(`/api/submissions/${submissionId}`, { method: "DELETE" });
           setInput("submission-id", "");
           selectedSubmissionFormVersionId = null;
@@ -1638,7 +1695,7 @@ pub const SCRIPT: &str = r#"
         try {
           if (!token) await login();
           const datasetId = inputValue("dataset-id");
-          if (!datasetId) throw new Error("Select or enter a dataset ID first.");
+          if (!datasetId) throw new Error("Choose a dataset first.");
           const payload = await request(`/api/admin/datasets/${datasetId}`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
@@ -1655,7 +1712,7 @@ pub const SCRIPT: &str = r#"
         try {
           if (!token) await login();
           const datasetId = inputValue("dataset-id");
-          if (!datasetId) throw new Error("Select or enter a dataset ID first.");
+          if (!datasetId) throw new Error("Choose a dataset first.");
           const payload = await request(`/api/admin/datasets/${datasetId}`, {
             method: "DELETE"
           });
@@ -1712,7 +1769,7 @@ pub const SCRIPT: &str = r#"
       async function loadDatasetById() {
         try {
           const datasetId = inputValue("dataset-id");
-          if (!datasetId) throw new Error("Enter or select a dataset ID first.");
+          if (!datasetId) throw new Error("Choose a dataset first.");
           await loadDatasetByValue(datasetId);
         } catch (error) {
           show(error.message);
@@ -1753,7 +1810,7 @@ pub const SCRIPT: &str = r#"
           );
         }
         show(payload);
-        document.getElementById("screen").innerHTML = `
+        setDetail(`
           <article class="card">
             <h3>Dataset Definition</h3>
             <p>${escapeHtml(payload.name)}</p>
@@ -1786,13 +1843,13 @@ pub const SCRIPT: &str = r#"
               <button type="button" onclick="loadReportDefinition('${escapeHtml(report.id)}')">Open Linked Report</button>
             </article>
           `).join("") || '<p class="muted">No reports use this dataset yet.</p>'}
-        `;
+        `);
       }
 
       async function loadDatasetTableById() {
         try {
           const datasetId = inputValue("dataset-id");
-          if (!datasetId) throw new Error("Enter or select a dataset ID first.");
+          if (!datasetId) throw new Error("Choose a dataset first.");
           await loadDatasetTableByValue(datasetId);
         } catch (error) {
           show(error.message);
@@ -1803,7 +1860,7 @@ pub const SCRIPT: &str = r#"
         if (!token) await login();
         const payload = await request(`/api/datasets/${datasetId}/table`);
         show(payload);
-        document.getElementById("screen").innerHTML = `
+        setDetail(`
           <article class="card">
             <h3>Dataset Rows</h3>
             <p>${payload.rows.length} rows returned.</p>
@@ -1832,7 +1889,7 @@ pub const SCRIPT: &str = r#"
               </div>
             </article>
           `).join("") || '<p class="muted">No submitted rows matched this dataset.</p>'}
-        `;
+        `);
       }
 
       function useDatasetField(key, label, sourceAlias, sourceFieldKey, fieldType) {
@@ -1882,7 +1939,7 @@ pub const SCRIPT: &str = r#"
         try {
           if (!token) await login();
           const reportId = inputValue("report-id");
-          if (!reportId) throw new Error("Select or enter a report ID first.");
+          if (!reportId) throw new Error("Choose a report first.");
           const formId = inputValue("form-id");
           const datasetId = inputValue("dataset-id");
           const bindingsJson = inputValue("report-fields-json");
@@ -1913,7 +1970,7 @@ pub const SCRIPT: &str = r#"
         try {
           if (!token) await login();
           const reportId = inputValue("report-id");
-          if (!reportId) throw new Error("Select or enter a report ID first.");
+          if (!reportId) throw new Error("Choose a report first.");
           const payload = await request(`/api/admin/reports/${reportId}`, {
             method: "DELETE"
           });
@@ -2014,13 +2071,13 @@ pub const SCRIPT: &str = r#"
             body: JSON.stringify({ fixture_json: fixtureJson })
           });
           show(payload);
-          document.getElementById("screen").innerHTML = `
+          setDetail(`
             <article class="card">
               <h3>${escapeHtml(payload.fixture_name)}</h3>
               <p>Would import: ${payload.would_import ? "yes" : "no"}</p>
               <p>${payload.validation.issue_count} validation issues</p>
             </article>
-          `;
+          `);
         } catch (error) {
           show(error.message);
         }
@@ -2088,7 +2145,7 @@ pub const SCRIPT: &str = r#"
           if (!token) await login();
           const aggregationId = inputValue("aggregation-id");
           const reportId = inputValue("report-id");
-          if (!aggregationId) throw new Error("Select or enter an aggregation ID first.");
+          if (!aggregationId) throw new Error("Choose an aggregation first.");
           if (!reportId) throw new Error("Select or enter a report ID first.");
           const metricKind = inputValue("aggregation-metric-kind") || "sum";
           const sourceLogicalKey = inputValue("aggregation-source-logical-key");
@@ -2117,7 +2174,7 @@ pub const SCRIPT: &str = r#"
         try {
           if (!token) await login();
           const aggregationId = inputValue("aggregation-id");
-          if (!aggregationId) throw new Error("Select or enter an aggregation ID first.");
+          if (!aggregationId) throw new Error("Choose an aggregation first.");
           const payload = await request(`/api/admin/aggregations/${aggregationId}`, {
             method: "DELETE"
           });
@@ -2164,7 +2221,7 @@ pub const SCRIPT: &str = r#"
       async function loadAggregationDefinitionById() {
         try {
           const aggregationId = inputValue("aggregation-id");
-          if (!aggregationId) throw new Error("Enter or select an aggregation ID first.");
+          if (!aggregationId) throw new Error("Choose an aggregation first.");
           await loadAggregationDefinitionByValue(aggregationId);
         } catch (error) {
           show(error.message);
@@ -2186,7 +2243,7 @@ pub const SCRIPT: &str = r#"
         }
         useAggregation(payload.id, payload.name, payload.report_id, payload.report_name);
         show(payload);
-        document.getElementById("screen").innerHTML = `
+        setDetail(`
           <article class="card">
             <h3>Aggregation Definition</h3>
             <p>${escapeHtml(payload.name)}</p>
@@ -2200,13 +2257,13 @@ pub const SCRIPT: &str = r#"
               <p>${escapeHtml(metric.metric_kind)}${metric.source_logical_key ? ` from ${escapeHtml(metric.source_logical_key)}` : ""}</p>
             </article>
           `).join("") || '<p class="muted">No aggregation metrics configured.</p>'}
-        `;
+        `);
       }
 
       async function loadAggregationById() {
         try {
           const aggregationId = inputValue("aggregation-id");
-          if (!aggregationId) throw new Error("Enter or select an aggregation ID first.");
+          if (!aggregationId) throw new Error("Choose an aggregation first.");
           await loadAggregationByValue(aggregationId);
         } catch (error) {
           show(error.message);
@@ -2218,13 +2275,13 @@ pub const SCRIPT: &str = r#"
         const payload = await request(`/api/aggregations/${aggregationId}/table`);
         useAggregation(aggregationId);
         show(payload);
-        document.getElementById("screen").innerHTML = `
+        setDetail(`
           <article class="card">
             <h3>Aggregation Results</h3>
             <p>${payload.rows.length} rows returned.</p>
             ${aggregationRowsView(payload.rows)}
           </article>
-        `;
+        `);
       }
 
       async function createChart() {
@@ -2254,7 +2311,7 @@ pub const SCRIPT: &str = r#"
         try {
           if (!token) await login();
           const chartId = inputValue("chart-id");
-          if (!chartId) throw new Error("Select or enter a chart ID first.");
+          if (!chartId) throw new Error("Choose a chart first.");
           const reportId = inputValue("report-id");
           const aggregationId = inputValue("aggregation-id");
           const payload = await request(`/api/admin/charts/${chartId}`, {
@@ -2278,7 +2335,7 @@ pub const SCRIPT: &str = r#"
         try {
           if (!token) await login();
           const chartId = inputValue("chart-id");
-          if (!chartId) throw new Error("Select or enter a chart ID first.");
+          if (!chartId) throw new Error("Choose a chart first.");
           const payload = await request(`/api/admin/charts/${chartId}`, {
             method: "DELETE"
           });
@@ -2349,7 +2406,7 @@ pub const SCRIPT: &str = r#"
         try {
           if (!token) await login();
           const dashboardId = inputValue("dashboard-id");
-          if (!dashboardId) throw new Error("Select or enter a dashboard ID first.");
+          if (!dashboardId) throw new Error("Choose a dashboard first.");
           const payload = await request(`/api/admin/dashboards/${dashboardId}`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
@@ -2366,7 +2423,7 @@ pub const SCRIPT: &str = r#"
         try {
           if (!token) await login();
           const dashboardId = inputValue("dashboard-id");
-          if (!dashboardId) throw new Error("Select or enter a dashboard ID first.");
+          if (!dashboardId) throw new Error("Choose a dashboard first.");
           const payload = await request(`/api/admin/dashboards/${dashboardId}`, {
             method: "DELETE"
           });
@@ -2533,7 +2590,7 @@ pub const SCRIPT: &str = r#"
           missing_policy: binding.missing_policy
         }));
         show(payload);
-        document.getElementById("screen").innerHTML = `
+        setDetail(`
           <article class="card">
             <h3>Report Definition</h3>
             <p>${escapeHtml(payload.name)}</p>
@@ -2549,7 +2606,7 @@ pub const SCRIPT: &str = r#"
               <button type="button" onclick="useReportBinding('${escapeHtml(binding.logical_key)}', '${escapeHtml(binding.source_field_key || "")}', '${escapeHtml(binding.missing_policy)}', '${escapeHtml(binding.computed_expression || "")}'); removeSelectedReportBinding()">Remove Binding</button>
             </article>
           `).join("") || '<p class="muted">No report bindings configured.</p>'}
-        `;
+        `);
       }
 
       function useReportBinding(logicalKey, sourceFieldKey, missingPolicy, computedExpression = "") {
@@ -2567,7 +2624,7 @@ pub const SCRIPT: &str = r#"
       async function loadReportDefinitionById() {
         try {
           const reportId = inputValue("report-id");
-          if (!reportId) throw new Error("Enter a report ID first.");
+          if (!reportId) throw new Error("Choose a report first.");
           await loadReportDefinition(reportId);
         } catch (error) {
           show(error.message);
@@ -2586,7 +2643,7 @@ pub const SCRIPT: &str = r#"
       async function loadDashboardById() {
         try {
           const dashboardId = inputValue("dashboard-id");
-          if (!dashboardId) throw new Error("Enter a dashboard ID first.");
+          if (!dashboardId) throw new Error("Choose a dashboard first.");
           await loadDashboardByValue(dashboardId);
         } catch (error) {
           show(error.message);
@@ -2632,9 +2689,9 @@ pub const SCRIPT: &str = r#"
             </article>
           `;
         }));
-        document.getElementById("screen").innerHTML = cards.length
+        setDetail(cards.length
           ? header + cards.join("")
-          : header + '<p class="muted">No dashboard components found.</p>';
+          : header + '<p class="muted">No dashboard components found.</p>');
       }
 
       function useDashboardComponent(componentId, chartId, position, configJson, chartName = chartId, chartType = "table", reportId = "", reportName = reportId, aggregationId = "", aggregationName = aggregationId) {
@@ -2662,7 +2719,7 @@ pub const SCRIPT: &str = r#"
         try {
           if (!token) await login();
           const reportId = inputValue("report-id");
-          if (!reportId) throw new Error("Enter a report ID first.");
+          if (!reportId) throw new Error("Choose a report first.");
           await loadReportByValue(reportId);
         } catch (error) {
           show(error.message);
@@ -2674,12 +2731,12 @@ pub const SCRIPT: &str = r#"
         const payload = await request(`/api/reports/${reportId}/table`);
         useReport(reportId);
         show(payload);
-        document.getElementById("screen").innerHTML = `
+        setDetail(`
           <article class="card">
             <h3>Report Results</h3>
             <p>${payload.rows.length} rows returned.</p>
             ${reportRowsView(payload.rows)}
           </article>
-        `;
+        `);
       }
 "#;

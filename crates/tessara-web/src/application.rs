@@ -405,8 +405,10 @@ fn HomeApplicationShell() -> impl IntoView {
         >
             <HomeScreen/>
             <OutputPanels
-                title="Overview Details"
-                description="Selection-driven details, summaries, and linked outputs appear here as you move through the application."
+                directory_title="Home Activity"
+                directory_description="Shared-home summaries and linked activity appear here as you move through the application."
+                detail_title="Selected Detail"
+                detail_description="Selected records and linked detail appear here without turning Home into a control console."
                 raw_title="Raw API Activity"
             />
         </AppAreaShell>
@@ -426,11 +428,7 @@ fn OrganizationApplicationShell() -> impl IntoView {
         >
             <OrganizationHomeScreen/>
             <OrganizationWorkspaceShell/>
-            <OutputPanels
-                title="Organization Details"
-                description="Selected hierarchy records, linked entities, and supporting results appear here."
-                raw_title="Raw API Activity"
-            />
+            <RawOutputPanel title="Raw API Activity"/>
         </AppAreaShell>
     }
 }
@@ -448,11 +446,7 @@ fn FormsApplicationShell() -> impl IntoView {
         >
             <FormsHomeScreen/>
             <FormsWorkspaceShell/>
-            <OutputPanels
-                title="Form Details"
-                description="Selected form definitions, versions, and related results appear here."
-                raw_title="Raw API Activity"
-            />
+            <RawOutputPanel title="Raw API Activity"/>
         </AppAreaShell>
     }
 }
@@ -470,11 +464,7 @@ fn ResponsesApplicationShell() -> impl IntoView {
         >
             <SubmissionHomeScreen/>
             <SubmissionWorkspaceShell/>
-            <OutputPanels
-                title="Response Details"
-                description="Selected responses, review results, and linked reporting output appear here."
-                raw_title="Raw API Activity"
-            />
+            <RawOutputPanel title="Raw API Activity"/>
         </AppAreaShell>
     }
 }
@@ -493,8 +483,10 @@ fn AdministrationApplicationShell() -> impl IntoView {
             <AdminHomeScreen/>
             <AdminWorkspaceShell/>
             <OutputPanels
-                title="Management Output"
-                description="Configuration results and current entity payloads appear here while the admin workflows remain builder-backed."
+                directory_title="Management Directory"
+                directory_description="Current management lists and configuration browse results appear here."
+                detail_title="Management Detail"
+                detail_description="Selected configuration entities and edit-ready detail appear here."
                 raw_title="Raw API Output"
             />
         </AppAreaShell>
@@ -536,11 +528,7 @@ fn ReportsApplicationShell() -> impl IntoView {
         >
             <ReportingHomeScreen/>
             <ReportingWorkspaceShell/>
-            <OutputPanels
-                title="Report Details"
-                description="Selected datasets, reports, aggregations, and linked results appear here."
-                raw_title="Raw API Activity"
-            />
+            <RawOutputPanel title="Raw API Activity"/>
         </AppAreaShell>
     }
 }
@@ -558,11 +546,7 @@ fn DashboardsApplicationShell() -> impl IntoView {
         >
             <DashboardsHomeScreen/>
             <DashboardsWorkspaceShell/>
-            <OutputPanels
-                title="Dashboard Details"
-                description="Selected dashboards, chart context, and supporting report results appear here."
-                raw_title="Raw API Activity"
-            />
+            <RawOutputPanel title="Raw API Activity"/>
         </AppAreaShell>
     }
 }
@@ -663,6 +647,77 @@ fn DirectoryCardsSection(
                     .collect_view()}
             </div>
         </ScreenSection>
+    }
+}
+
+#[component]
+fn EntitySurfaceSection(
+    eyebrow: &'static str,
+    title: &'static str,
+    description: &'static str,
+    directory_title: &'static str,
+    directory_description: &'static str,
+    directory_cards: Vec<DirectoryCardSpec>,
+    detail_title: &'static str,
+    detail_description: &'static str,
+    next_steps_title: &'static str,
+    next_steps_description: &'static str,
+    next_step_cards: Vec<DirectoryCardSpec>,
+) -> impl IntoView {
+    view! {
+        <section class="app-screen">
+            <p class="eyebrow">{eyebrow}</p>
+            <h2>{title}</h2>
+            <p class="muted">{description}</p>
+            <div class="entity-surface-grid">
+                <section class="workspace-panel entity-surface-panel">
+                    <h3>{directory_title}</h3>
+                    <p class="muted">{directory_description}</p>
+                    <div class="directory-grid">
+                        {directory_cards
+                            .into_iter()
+                            .map(|card| {
+                                view! {
+                                    <article class="directory-card">
+                                        <h4>{card.title}</h4>
+                                        <p>{card.description}</p>
+                                        <button type="button" onclick=card.action>{card.label}</button>
+                                    </article>
+                                }
+                            })
+                            .collect_view()}
+                    </div>
+                    <div id="screen" class="cards">
+                        <p class="muted">"Choose one of the directory actions to load current records."</p>
+                    </div>
+                </section>
+                <section class="workspace-panel entity-surface-panel">
+                    <h3>{detail_title}</h3>
+                    <p class="muted">{detail_description}</p>
+                    <div id="detail-screen" class="cards">
+                        <p class="muted">"Choose a record from the directory to inspect its detail view."</p>
+                    </div>
+                </section>
+            </div>
+            <section class="workspace-panel entity-next-steps">
+                <h3>{next_steps_title}</h3>
+                <p class="muted">{next_steps_description}</p>
+                <div class="directory-grid">
+                    {next_step_cards
+                        .into_iter()
+                        .map(|card| {
+                            view! {
+                                <article class="directory-card">
+                                    <h4>{card.title}</h4>
+                                    <p>{card.description}</p>
+                                    <button type="button" onclick=card.action>{card.label}</button>
+                                </article>
+                            }
+                        })
+                        .collect_view()}
+                </div>
+            </section>
+        </section>
     }
 }
 
@@ -1226,6 +1281,41 @@ fn AdminHomeScreen() -> impl IntoView {
         },
     ];
 
+    let entity_cards = [
+        ManagementCardSpec {
+            title: "Organization Records",
+            description: "Create runtime organization records and reopen the selected record for editing from the shared selection state.",
+            href: "#organization-setup-screen",
+            href_label: "Edit Selected Organization",
+            action: "createNode()",
+            action_label: "Create Organization",
+        },
+        ManagementCardSpec {
+            title: "Forms",
+            description: "Create top-level forms and reopen the selected form for editing without typing record IDs.",
+            href: "#forms-configuration-screen",
+            href_label: "Edit Selected Form",
+            action: "createForm()",
+            action_label: "Create Form",
+        },
+        ManagementCardSpec {
+            title: "Reports",
+            description: "Create top-level reports and reopen the selected report for editing from the current reporting context.",
+            href: "#reporting-configuration-screen",
+            href_label: "Edit Selected Report",
+            action: "createReport()",
+            action_label: "Create Report",
+        },
+        ManagementCardSpec {
+            title: "Dashboards",
+            description: "Create top-level dashboards and reopen the selected dashboard for editing from the current reporting context.",
+            href: "#reporting-configuration-screen",
+            href_label: "Edit Selected Dashboard",
+            action: "createDashboard()",
+            action_label: "Create Dashboard",
+        },
+    ];
+
     view! {
         <ManagementCardsSection
             eyebrow="Admin Home"
@@ -1238,6 +1328,12 @@ fn AdminHomeScreen() -> impl IntoView {
             title="Entity Directory"
             description="These entry points mirror the original application's core management lists while keeping the current Tessara builder controls underneath."
             cards=directory_cards.to_vec()
+        />
+        <ManagementCardsSection
+            eyebrow="Admin Home"
+            title="Entity Create and Edit"
+            description="These entry points keep top-level entity creation and editing visible in Administration while product routes stay browse, review, and viewer oriented."
+            cards=entity_cards.to_vec()
         />
     }
 }
@@ -1368,8 +1464,42 @@ fn OrganizationWorkspaceShell() -> impl IntoView {
     ];
     let path_steps = vec![
         "Browse nodes and hierarchy structure.",
-        "Inspect the configured labels and relationships.",
+        "Inspect the selected organization record and its scoped links.",
         "Move into forms, responses, or dashboards from the scoped structure.",
+    ];
+    let directory_cards = [
+        DirectoryCardSpec {
+            title: "Organizations",
+            description: "Load runtime organization records.",
+            action: "loadNodes()",
+            label: "Load Organizations",
+        },
+        DirectoryCardSpec {
+            title: "Structure",
+            description: "Load hierarchy types and relationships behind the organization records.",
+            action: "loadNodeTypes()",
+            label: "Load Structure",
+        },
+    ];
+    let next_step_cards = [
+        DirectoryCardSpec {
+            title: "Related Forms",
+            description: "Move from the selected organization record into related forms.",
+            action: "loadForms()",
+            label: "Browse Forms",
+        },
+        DirectoryCardSpec {
+            title: "Related Responses",
+            description: "Move from the selected organization record into related responses.",
+            action: "loadSubmissions()",
+            label: "Browse Responses",
+        },
+        DirectoryCardSpec {
+            title: "Related Dashboards",
+            description: "Move from the selected organization record into linked dashboards.",
+            action: "loadDashboards()",
+            label: "Browse Dashboards",
+        },
     ];
 
     view! {
@@ -1382,12 +1512,18 @@ fn OrganizationWorkspaceShell() -> impl IntoView {
             path_title="Organization Flow"
             path_steps=path_steps
         >
-            <HierarchyAdminScreen
+            <EntitySurfaceSection
                 eyebrow="Organization Workspace"
-                title="Organization Directory"
-                description="Browse hierarchy structure, metadata definitions, and runtime nodes while the organization area still reuses the shared management surface."
-                action_title="Browse and Inspect"
-                context_title="Current Organization Selection"
+                title="Organization List and Detail"
+                description="This area now centers on runtime organization records, with directory, detail, and next-step actions kept ahead of configuration concerns."
+                directory_title="Organization Directory"
+                directory_description="Load current organization records and supporting structure lists."
+                directory_cards=directory_cards.to_vec()
+                detail_title="Organization Detail"
+                detail_description="The selected organization record appears here with scoped forms, responses, and dashboards."
+                next_steps_title="Organization Next Steps"
+                next_steps_description="Use these actions after choosing an organization record."
+                next_step_cards=next_step_cards.to_vec()
             />
         </WorkspaceShellSection>
     }
@@ -1420,8 +1556,42 @@ fn FormsWorkspaceShell() -> impl IntoView {
     ];
     let path_steps = vec![
         "Browse or inspect the form.",
-        "Choose the relevant version or draft.",
+        "Review the published status and version summary.",
         "Move into response entry or internal configuration as needed.",
+    ];
+    let directory_cards = [
+        DirectoryCardSpec {
+            title: "Forms",
+            description: "Load top-level form records and version summaries.",
+            action: "loadForms()",
+            label: "Load Forms",
+        },
+        DirectoryCardSpec {
+            title: "Published Versions",
+            description: "Load current published form versions for runtime use.",
+            action: "loadPublishedForms()",
+            label: "Load Published Versions",
+        },
+    ];
+    let next_step_cards = [
+        DirectoryCardSpec {
+            title: "Related Responses",
+            description: "Move from the selected form into the response workflow.",
+            action: "loadSubmissions()",
+            label: "Browse Responses",
+        },
+        DirectoryCardSpec {
+            title: "Related Reports",
+            description: "Move from the selected form into related reporting surfaces.",
+            action: "loadReports()",
+            label: "Browse Reports",
+        },
+        DirectoryCardSpec {
+            title: "Edit in Administration",
+            description: "Use Administration for create and edit actions on the selected form.",
+            action: "loadForms()",
+            label: "Open Administration",
+        },
     ];
 
     view! {
@@ -1434,12 +1604,18 @@ fn FormsWorkspaceShell() -> impl IntoView {
             path_title="Forms Flow"
             path_steps=path_steps
         >
-            <FormAdminScreen
+            <EntitySurfaceSection
                 eyebrow="Forms Workspace"
-                title="Forms Directory"
-                description="Browse current forms, versions, and publish state while the forms area still reuses the shared configuration surface."
-                action_title="Browse and Inspect"
-                context_title="Current Form Selection"
+                title="Forms List and Detail"
+                description="This area now centers on top-level form records, version summaries, and related next-step actions."
+                directory_title="Forms Directory"
+                directory_description="Load form records and published version summaries."
+                directory_cards=directory_cards.to_vec()
+                detail_title="Form Detail"
+                detail_description="The selected form appears here with scope, versions, reports, and linked dataset sources."
+                next_steps_title="Form Next Steps"
+                next_steps_description="Use these actions after choosing a form."
+                next_step_cards=next_step_cards.to_vec()
             />
         </WorkspaceShellSection>
     }
@@ -1483,6 +1659,52 @@ fn SubmissionWorkspaceShell() -> impl IntoView {
         "Open the response form and create a draft.",
         "Save values, submit, then review the resulting record.",
     ];
+    let directory_cards = [
+        DirectoryCardSpec {
+            title: "Published Forms",
+            description: "Load the current forms that can start a response.",
+            action: "loadPublishedForms()",
+            label: "Load Published Forms",
+        },
+        DirectoryCardSpec {
+            title: "Target Nodes",
+            description: "Load organization and program targets for the response.",
+            action: "loadNodes()",
+            label: "Load Targets",
+        },
+        DirectoryCardSpec {
+            title: "Draft Responses",
+            description: "Load draft responses that can still be edited.",
+            action: "showDraftSubmissions()",
+            label: "Load Drafts",
+        },
+        DirectoryCardSpec {
+            title: "Submitted Responses",
+            description: "Load submitted responses in read-only review mode.",
+            action: "showSubmittedSubmissions()",
+            label: "Load Submitted",
+        },
+    ];
+    let next_step_cards = [
+        DirectoryCardSpec {
+            title: "Start a Response",
+            description: "Open the selected published form and current target in the draft flow.",
+            action: "openSelectedFormVersion()",
+            label: "Open Current Form",
+        },
+        DirectoryCardSpec {
+            title: "Continue Draft",
+            description: "Open the selected draft response and continue editing it.",
+            action: "loadSubmissionById()",
+            label: "Open Selected Response",
+        },
+        DirectoryCardSpec {
+            title: "Related Reports",
+            description: "Move from the selected response into the related reporting surface.",
+            action: "loadReports()",
+            label: "Browse Reports",
+        },
+    ];
 
     view! {
         <WorkspaceShellSection
@@ -1494,6 +1716,19 @@ fn SubmissionWorkspaceShell() -> impl IntoView {
             path_title="Response Flow"
             path_steps=path_steps
         >
+            <EntitySurfaceSection
+                eyebrow="Responses Workspace"
+                title="Responses List and Detail"
+                description="This area now centers on response queues, draft entry, and read-only submitted review."
+                directory_title="Responses Directory"
+                directory_description="Load published forms, targets, drafts, and submitted responses."
+                directory_cards=directory_cards.to_vec()
+                detail_title="Response Detail"
+                detail_description="The selected draft or submitted response appears here, with draft editing available only for in-progress records."
+                next_steps_title="Response Next Steps"
+                next_steps_description="Use these actions after choosing a form, target, or response."
+                next_step_cards=next_step_cards.to_vec()
+            />
             <SubmissionScreen/>
             <ReviewScreen/>
             <ReportScreen/>
@@ -1571,15 +1806,22 @@ fn AdminWorkspaceShell() -> impl IntoView {
 
 #[component]
 fn OutputPanels(
-    title: &'static str,
-    description: &'static str,
+    directory_title: &'static str,
+    directory_description: &'static str,
+    detail_title: &'static str,
+    detail_description: &'static str,
     raw_title: &'static str,
 ) -> impl IntoView {
     view! {
         <section class="app-screen">
-            <h2>{title}</h2>
-            <p class="muted">{description}</p>
+            <h2>{directory_title}</h2>
+            <p class="muted">{directory_description}</p>
             <div id="screen" class="cards"></div>
+        </section>
+        <section class="app-screen">
+            <h2>{detail_title}</h2>
+            <p class="muted">{detail_description}</p>
+            <div id="detail-screen" class="cards"></div>
         </section>
         <RawOutputPanel title=raw_title/>
     }
@@ -1756,6 +1998,46 @@ fn ReportingWorkspaceShell() -> impl IntoView {
         "Run the report or aggregation.",
         "Open the dashboard preview to verify the final surface.",
     ];
+    let directory_cards = [
+        DirectoryCardSpec {
+            title: "Reports",
+            description: "Load top-level report records.",
+            action: "loadReports()",
+            label: "Load Reports",
+        },
+        DirectoryCardSpec {
+            title: "Datasets",
+            description: "Load dataset definitions that feed reports.",
+            action: "loadDatasets()",
+            label: "Load Datasets",
+        },
+        DirectoryCardSpec {
+            title: "Aggregations",
+            description: "Load aggregations that summarize report output.",
+            action: "loadAggregations()",
+            label: "Load Aggregations",
+        },
+    ];
+    let next_step_cards = [
+        DirectoryCardSpec {
+            title: "Run Selected Report",
+            description: "Execute the current report against the available data.",
+            action: "loadReportById()",
+            label: "Run Report",
+        },
+        DirectoryCardSpec {
+            title: "Run Selected Aggregation",
+            description: "Execute the current aggregation for grouped metrics.",
+            action: "loadAggregationById()",
+            label: "Run Aggregation",
+        },
+        DirectoryCardSpec {
+            title: "Browse Dashboards",
+            description: "Move into dashboards that depend on the selected reporting assets.",
+            action: "loadDashboards()",
+            label: "Browse Dashboards",
+        },
+    ];
 
     view! {
         <WorkspaceShellSection
@@ -1767,6 +2049,19 @@ fn ReportingWorkspaceShell() -> impl IntoView {
             path_title="Reporting Flow"
             path_steps=path_steps
         >
+            <EntitySurfaceSection
+                eyebrow="Reports Workspace"
+                title="Reports List and Detail"
+                description="This area now centers on top-level report records and their related reporting assets."
+                directory_title="Reports Directory"
+                directory_description="Load reports, datasets, and aggregations."
+                directory_cards=directory_cards.to_vec()
+                detail_title="Report Detail"
+                detail_description="The selected report or related reporting asset appears here."
+                next_steps_title="Report Next Steps"
+                next_steps_description="Use these actions after choosing a report or related reporting asset."
+                next_step_cards=next_step_cards.to_vec()
+            />
             <ReportRunnerScreen/>
             <DashboardPreviewScreen/>
         </WorkspaceShellSection>
@@ -1803,6 +2098,34 @@ fn DashboardsWorkspaceShell() -> impl IntoView {
         "Inspect the current chart-backed components.",
         "Traverse into reports when deeper source detail is needed.",
     ];
+    let directory_cards = [
+        DirectoryCardSpec {
+            title: "Dashboards",
+            description: "Load top-level dashboard records.",
+            action: "loadDashboards()",
+            label: "Load Dashboards",
+        },
+        DirectoryCardSpec {
+            title: "Charts",
+            description: "Load the charts that appear in dashboards.",
+            action: "loadCharts()",
+            label: "Load Charts",
+        },
+    ];
+    let next_step_cards = [
+        DirectoryCardSpec {
+            title: "Open Selected Dashboard",
+            description: "Preview the current dashboard with its report-backed components.",
+            action: "loadDashboardById()",
+            label: "Open Dashboard",
+        },
+        DirectoryCardSpec {
+            title: "Related Reports",
+            description: "Move into the reports area when the selected dashboard needs deeper source inspection.",
+            action: "loadReports()",
+            label: "Browse Reports",
+        },
+    ];
 
     view! {
         <WorkspaceShellSection
@@ -1814,6 +2137,19 @@ fn DashboardsWorkspaceShell() -> impl IntoView {
             path_title="Dashboard Flow"
             path_steps=path_steps
         >
+            <EntitySurfaceSection
+                eyebrow="Dashboards Workspace"
+                title="Dashboards List and Detail"
+                description="This area now centers on top-level dashboard records and their linked chart-backed previews."
+                directory_title="Dashboards Directory"
+                directory_description="Load dashboard and chart records."
+                directory_cards=directory_cards.to_vec()
+                detail_title="Dashboard Detail"
+                detail_description="The selected dashboard appears here with its chart and report context."
+                next_steps_title="Dashboard Next Steps"
+                next_steps_description="Use these actions after choosing a dashboard."
+                next_step_cards=next_step_cards.to_vec()
+            />
             <DashboardPreviewScreen/>
         </WorkspaceShellSection>
     }

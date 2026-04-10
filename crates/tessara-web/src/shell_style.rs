@@ -247,6 +247,18 @@ pub const STYLE: &str = r#"
         gap: 12px;
         grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
       }
+      .entity-surface-grid {
+        display: grid;
+        gap: 16px;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        margin-top: 16px;
+      }
+      .entity-surface-panel {
+        align-content: start;
+      }
+      .entity-next-steps {
+        margin-top: 16px;
+      }
       .workspace-grid {
         display: grid;
         gap: 16px;
@@ -436,6 +448,7 @@ pub const STYLE: &str = r#"
           padding: 24px 16px;
         }
         .app-layout,
+        .entity-surface-grid,
         .workspace-grid,
         .task-grid {
           grid-template-columns: 1fr;

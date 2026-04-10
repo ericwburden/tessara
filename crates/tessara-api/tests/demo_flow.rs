@@ -211,6 +211,42 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
                 && node["node_type_name"] == "Organization"
                 && node["metadata"]["region"] == "North")
     );
+    let node_detail = request_json(
+        app.clone(),
+        Request::builder()
+            .method("GET")
+            .uri(format!(
+                "/api/nodes/{}",
+                seed["organization_node_id"]
+                    .as_str()
+                    .expect("seed should include organization node id")
+            ))
+            .body(Body::empty())
+            .expect("valid node detail request"),
+    )
+    .await;
+    assert_eq!(node_detail["name"], "Demo Organization");
+    assert!(
+        node_detail["related_forms"]
+            .as_array()
+            .expect("node detail should include related forms")
+            .iter()
+            .any(|form| form["form_name"] == "Quarterly Check In")
+    );
+    assert!(
+        node_detail["related_responses"]
+            .as_array()
+            .expect("node detail should include related responses")
+            .iter()
+            .any(|submission| submission["submission_id"] == seed["submission_id"])
+    );
+    assert!(
+        node_detail["related_dashboards"]
+            .as_array()
+            .expect("node detail should include related dashboards")
+            .iter()
+            .any(|dashboard| dashboard["dashboard_id"] == seed["dashboard_id"])
+    );
 
     let forms = request_json(
         app.clone(),

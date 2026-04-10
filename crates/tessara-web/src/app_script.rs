@@ -29,8 +29,13 @@ pub const APPLICATION_SCRIPT: &str = r#"
         output.textContent = typeof value === "string" ? value : JSON.stringify(value, null, 2);
       }
 
-      function setScreen(html) {
+      function setDirectory(html) {
         const screen = document.getElementById("screen");
+        if (screen) screen.innerHTML = html;
+      }
+
+      function setScreen(html) {
+        const screen = document.getElementById("detail-screen") || document.getElementById("screen");
         if (screen) screen.innerHTML = html;
       }
 
@@ -40,7 +45,7 @@ pub const APPLICATION_SCRIPT: &str = r#"
       }
 
       function showCards(records, render) {
-        setScreen(records.length
+        setDirectory(records.length
           ? records.map(render).join("")
           : '<p class="muted">No records found.</p>');
       }
@@ -376,14 +381,64 @@ pub const APPLICATION_SCRIPT: &str = r#"
               <h3>${escapeHtml(node.name)}</h3>
               <p>${escapeHtml(node.node_type_name)}${node.parent_node_name ? ` under ${escapeHtml(node.parent_node_name)}` : ""}</p>
               <p class="muted">${escapeHtml(JSON.stringify(node.metadata))}</p>
+              <button type="button" onclick="loadNodeByValue('${escapeHtml(node.id)}')">Inspect Organization</button>
               <button type="button" onclick="useTargetNode('${escapeHtml(node.id)}', '${escapeHtml(node.name)}')">Use Target</button>
               <button type="button" onclick="useTargetNodeAndContinue('${escapeHtml(node.id)}', '${escapeHtml(node.name)}')">Use Target and Continue</button>
-              <code>${escapeHtml(node.id)}</code>
             </article>
           `);
         } catch (error) {
           show(error.message);
         }
+      }
+
+      async function loadNodeByValue(nodeId) {
+        try {
+          const payload = await request(`/api/nodes/${nodeId}`);
+          useTargetNode(payload.id, payload.name);
+          show(payload);
+          setScreen(`
+            <article class="card">
+              <h3>${escapeHtml(payload.name)}</h3>
+              <p>${escapeHtml(payload.node_type_name)}${payload.parent_node_name ? ` under ${escapeHtml(payload.parent_node_name)}` : ""}</p>
+              <p class="muted">${escapeHtml(JSON.stringify(payload.metadata))}</p>
+              <div class="actions">
+                <button type="button" onclick="useTargetNode('${escapeHtml(payload.id)}', '${escapeHtml(payload.name)}')">Use Target</button>
+                <button type="button" onclick="loadSubmissionsForNode('${escapeHtml(payload.id)}', '${escapeHtml(payload.name)}')">Browse Related Responses</button>
+                <button type="button" onclick="loadDashboards()">Browse Related Dashboards</button>
+              </div>
+            </article>
+            ${payload.related_forms.map((form) => `
+              <article class="card">
+                <h3>${escapeHtml(form.form_name)}</h3>
+                <p class="muted">${escapeHtml(form.form_slug)}</p>
+                <p>${form.published_version_count} published versions</p>
+                <button type="button" onclick="useForm('${escapeHtml(form.form_id)}', '${escapeHtml(form.form_name)}')">Use Related Form</button>
+              </article>
+            `).join("") || '<p class="muted">No scoped forms are linked to this organization record yet.</p>'}
+            ${payload.related_responses.map((submission) => `
+              <article class="card">
+                <h3>${escapeHtml(submission.form_name)} ${escapeHtml(submission.version_label)}</h3>
+                <p>${escapeHtml(submission.status)} response</p>
+                <button type="button" onclick="loadSubmissionByValue('${escapeHtml(submission.submission_id)}')">Open Response</button>
+              </article>
+            `).join("") || '<p class="muted">No responses are linked to this organization record yet.</p>'}
+            ${payload.related_dashboards.map((dashboard) => `
+              <article class="card">
+                <h3>${escapeHtml(dashboard.dashboard_name)}</h3>
+                <p>${dashboard.component_count} components</p>
+                <button type="button" onclick="loadDashboardByValue('${escapeHtml(dashboard.dashboard_id)}')">Open Dashboard</button>
+              </article>
+            `).join("") || '<p class="muted">No dashboards are linked to this organization record yet.</p>'}
+          `);
+        } catch (error) {
+          show(error.message);
+        }
+      }
+
+      async function loadSubmissionsForNode(nodeId, nodeName = nodeId) {
+        useTargetNode(nodeId, nodeName);
+        setInput("submission-status-filter", "");
+        await loadSubmissions();
       }
 
       function useTargetNode(nodeId, nodeName = nodeId) {
@@ -598,7 +653,7 @@ pub const APPLICATION_SCRIPT: &str = r#"
         try {
           if (!token) await login();
           const submissionId = inputValue("submission-id");
-          if (!submissionId) throw new Error("Create or enter a draft submission first.");
+          if (!submissionId) throw new Error("Create or choose a draft submission first.");
           const values = collectRenderedValues();
           validateRenderedValues(values);
           const payload = await request(`/api/submissions/${submissionId}/values`, {
@@ -617,7 +672,7 @@ pub const APPLICATION_SCRIPT: &str = r#"
         try {
           if (!token) await login();
           const submissionId = inputValue("submission-id");
-          if (!submissionId) throw new Error("Create or enter a draft submission first.");
+          if (!submissionId) throw new Error("Create or choose a draft submission first.");
           const payload = await request(`/api/submissions/${submissionId}/submit`, { method: "POST" });
           show(payload);
           await loadSubmissionByValue(submissionId);
@@ -630,7 +685,7 @@ pub const APPLICATION_SCRIPT: &str = r#"
         try {
           if (!token) await login();
           const submissionId = inputValue("submission-id");
-          if (!submissionId) throw new Error("Create or enter a draft submission first.");
+          if (!submissionId) throw new Error("Create or choose a draft submission first.");
           const payload = await request(`/api/submissions/${submissionId}`, { method: "DELETE" });
           setInput("submission-id", "");
           selectedSubmissionFormVersionId = null;
@@ -659,7 +714,6 @@ pub const APPLICATION_SCRIPT: &str = r#"
               <button type="button" onclick="useFormVersion('${escapeHtml(submission.form_version_id)}', '${escapeHtml(submission.form_id)}', '${escapeHtml(submission.form_name)} ${escapeHtml(submission.version_label)}')">Use Form Version</button>
               <button type="button" onclick="useTargetNode('${escapeHtml(submission.node_id)}', '${escapeHtml(submission.node_name)}')">Use Node</button>
               <button type="button" onclick="loadSubmissionByValue('${escapeHtml(submission.id)}')">Open</button>
-              <code>${escapeHtml(submission.id)}</code>
             </article>
           `);
         } catch (error) {
@@ -704,7 +758,7 @@ pub const APPLICATION_SCRIPT: &str = r#"
         try {
           if (!token) await login();
           const submissionId = inputValue("submission-id");
-          if (!submissionId) throw new Error("Enter a submission ID first.");
+          if (!submissionId) throw new Error("Choose a response first.");
           await loadSubmissionByValue(submissionId);
         } catch (error) {
           show(error.message);
@@ -801,7 +855,7 @@ pub const APPLICATION_SCRIPT: &str = r#"
       async function loadDatasetDefinitionById() {
         try {
           const datasetId = inputValue("dataset-id");
-          if (!datasetId) throw new Error("Enter or select a dataset ID first.");
+          if (!datasetId) throw new Error("Choose a dataset first.");
           await loadDatasetDefinitionByValue(datasetId);
         } catch (error) {
           show(error.message);
@@ -851,7 +905,7 @@ pub const APPLICATION_SCRIPT: &str = r#"
       async function loadDatasetTableById() {
         try {
           const datasetId = inputValue("dataset-id");
-          if (!datasetId) throw new Error("Enter or select a dataset ID first.");
+          if (!datasetId) throw new Error("Choose a dataset first.");
           await loadDatasetTableByValue(datasetId);
         } catch (error) {
           show(error.message);
@@ -977,7 +1031,7 @@ pub const APPLICATION_SCRIPT: &str = r#"
       async function loadReportDefinitionById() {
         try {
           const reportId = inputValue("report-id");
-          if (!reportId) throw new Error("Enter a report ID first.");
+          if (!reportId) throw new Error("Choose a report first.");
           await loadReportDefinition(reportId);
         } catch (error) {
           show(error.message);
@@ -988,7 +1042,7 @@ pub const APPLICATION_SCRIPT: &str = r#"
         try {
           if (!token) await login();
           const reportId = inputValue("report-id");
-          if (!reportId) throw new Error("Enter a report ID first.");
+          if (!reportId) throw new Error("Choose a report first.");
           await loadReportByValue(reportId);
         } catch (error) {
           show(error.message);
@@ -1040,7 +1094,7 @@ pub const APPLICATION_SCRIPT: &str = r#"
       async function loadAggregationDefinitionById() {
         try {
           const aggregationId = inputValue("aggregation-id");
-          if (!aggregationId) throw new Error("Enter or select an aggregation ID first.");
+          if (!aggregationId) throw new Error("Choose an aggregation first.");
           await loadAggregationDefinitionByValue(aggregationId);
         } catch (error) {
           show(error.message);
@@ -1074,7 +1128,7 @@ pub const APPLICATION_SCRIPT: &str = r#"
       async function loadAggregationById() {
         try {
           const aggregationId = inputValue("aggregation-id");
-          if (!aggregationId) throw new Error("Enter or select an aggregation ID first.");
+          if (!aggregationId) throw new Error("Choose an aggregation first.");
           await loadAggregationByValue(aggregationId);
         } catch (error) {
           show(error.message);
@@ -1110,7 +1164,7 @@ pub const APPLICATION_SCRIPT: &str = r#"
       async function loadChartDefinitionById() {
         try {
           const chartId = inputValue("chart-id");
-          if (!chartId) throw new Error("Enter or select a chart ID first.");
+          if (!chartId) throw new Error("Choose a chart first.");
           await loadChartDefinitionByValue(chartId);
         } catch (error) {
           show(error.message);
@@ -1170,7 +1224,6 @@ pub const APPLICATION_SCRIPT: &str = r#"
               <button type="button" onclick="loadChartDefinitionByValue('${escapeHtml(chart.id)}')">Inspect Chart</button>
               ${chart.report_id ? `<button type="button" onclick="loadReportByValue('${escapeHtml(chart.report_id)}')">Run Report</button>` : ""}
               ${chart.aggregation_id ? `<button type="button" onclick="loadAggregationByValue('${escapeHtml(chart.aggregation_id)}')">Run Aggregation</button>` : ""}
-              <code>${escapeHtml(chart.id)}</code>
             </article>
           `);
         } catch (error) {
@@ -1205,7 +1258,7 @@ pub const APPLICATION_SCRIPT: &str = r#"
       async function loadDashboardById() {
         try {
           const dashboardId = inputValue("dashboard-id");
-          if (!dashboardId) throw new Error("Enter a dashboard ID first.");
+          if (!dashboardId) throw new Error("Choose a dashboard first.");
           await loadDashboardByValue(dashboardId);
         } catch (error) {
           show(error.message);

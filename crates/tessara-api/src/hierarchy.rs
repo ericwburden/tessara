@@ -92,6 +92,47 @@ pub struct NodeResponse {
 }
 
 #[derive(Serialize)]
+pub struct NodeDetail {
+    id: Uuid,
+    node_type_id: Uuid,
+    node_type_name: String,
+    parent_node_id: Option<Uuid>,
+    parent_node_name: Option<String>,
+    name: String,
+    metadata: Value,
+    related_forms: Vec<NodeFormLink>,
+    related_responses: Vec<NodeSubmissionLink>,
+    related_dashboards: Vec<NodeDashboardLink>,
+}
+
+#[derive(Serialize)]
+pub struct NodeFormLink {
+    form_id: Uuid,
+    form_name: String,
+    form_slug: String,
+    published_version_count: i64,
+}
+
+#[derive(Serialize)]
+pub struct NodeSubmissionLink {
+    submission_id: Uuid,
+    form_id: Uuid,
+    form_name: String,
+    form_version_id: Uuid,
+    version_label: String,
+    status: String,
+    created_at: chrono::DateTime<chrono::Utc>,
+    submitted_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+#[derive(Serialize)]
+pub struct NodeDashboardLink {
+    dashboard_id: Uuid,
+    dashboard_name: String,
+    component_count: i64,
+}
+
+#[derive(Serialize)]
 pub struct NodeTypeSummary {
     id: Uuid,
     name: String,
@@ -753,6 +794,172 @@ pub async fn list_nodes(
         .collect::<Result<Vec<_>, sqlx::Error>>()?;
 
     Ok(Json(nodes))
+}
+
+pub async fn get_node(
+    State(state): State<AppState>,
+    Path(node_id): Path<Uuid>,
+) -> ApiResult<Json<NodeDetail>> {
+    let node = sqlx::query(
+        r#"
+        SELECT
+            nodes.id,
+            nodes.node_type_id,
+            node_types.name AS node_type_name,
+            nodes.parent_node_id,
+            parent_nodes.name AS parent_node_name,
+            nodes.name,
+            COALESCE(
+                jsonb_object_agg(
+                    node_metadata_field_definitions.key,
+                    node_metadata_values.value
+                ) FILTER (WHERE node_metadata_field_definitions.key IS NOT NULL),
+                '{}'::jsonb
+            ) AS metadata
+        FROM nodes
+        JOIN node_types ON node_types.id = nodes.node_type_id
+        LEFT JOIN nodes AS parent_nodes ON parent_nodes.id = nodes.parent_node_id
+        LEFT JOIN node_metadata_values ON node_metadata_values.node_id = nodes.id
+        LEFT JOIN node_metadata_field_definitions
+            ON node_metadata_field_definitions.id = node_metadata_values.field_definition_id
+        WHERE nodes.id = $1
+        GROUP BY
+            nodes.id,
+            nodes.node_type_id,
+            node_types.name,
+            nodes.parent_node_id,
+            parent_nodes.name,
+            nodes.name
+        "#,
+    )
+    .bind(node_id)
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or_else(|| ApiError::NotFound(format!("node {node_id}")))?;
+
+    let node_type_id: Uuid = node.try_get("node_type_id")?;
+
+    let related_forms = sqlx::query(
+        r#"
+        SELECT
+            forms.id AS form_id,
+            forms.name AS form_name,
+            forms.slug AS form_slug,
+            COUNT(form_versions.id)
+                FILTER (WHERE form_versions.status = 'published') AS published_version_count
+        FROM forms
+        LEFT JOIN form_versions ON form_versions.form_id = forms.id
+        WHERE forms.scope_node_type_id = $1
+        GROUP BY forms.id, forms.name, forms.slug
+        ORDER BY forms.name, forms.id
+        "#,
+    )
+    .bind(node_type_id)
+    .fetch_all(&state.pool)
+    .await?
+    .into_iter()
+    .map(|row| {
+        Ok(NodeFormLink {
+            form_id: row.try_get("form_id")?,
+            form_name: row.try_get("form_name")?,
+            form_slug: row.try_get("form_slug")?,
+            published_version_count: row.try_get("published_version_count")?,
+        })
+    })
+    .collect::<Result<Vec<_>, sqlx::Error>>()?;
+
+    let related_responses = sqlx::query(
+        r#"
+        SELECT
+            submissions.id AS submission_id,
+            forms.id AS form_id,
+            forms.name AS form_name,
+            submissions.form_version_id,
+            form_versions.version_label,
+            submissions.status::text AS status,
+            submissions.created_at,
+            submissions.submitted_at
+        FROM submissions
+        JOIN form_versions ON form_versions.id = submissions.form_version_id
+        JOIN forms ON forms.id = form_versions.form_id
+        WHERE submissions.node_id = $1
+        ORDER BY submissions.created_at DESC, submissions.id DESC
+        LIMIT 10
+        "#,
+    )
+    .bind(node_id)
+    .fetch_all(&state.pool)
+    .await?
+    .into_iter()
+    .map(|row| {
+        Ok(NodeSubmissionLink {
+            submission_id: row.try_get("submission_id")?,
+            form_id: row.try_get("form_id")?,
+            form_name: row.try_get("form_name")?,
+            form_version_id: row.try_get("form_version_id")?,
+            version_label: row.try_get("version_label")?,
+            status: row.try_get("status")?,
+            created_at: row.try_get("created_at")?,
+            submitted_at: row.try_get("submitted_at")?,
+        })
+    })
+    .collect::<Result<Vec<_>, sqlx::Error>>()?;
+
+    let related_dashboards = sqlx::query(
+        r#"
+        SELECT
+            dashboards.id AS dashboard_id,
+            dashboards.name AS dashboard_name,
+            COUNT(all_components.id) AS component_count
+        FROM dashboards
+        LEFT JOIN dashboard_components AS all_components
+            ON all_components.dashboard_id = dashboards.id
+        WHERE EXISTS (
+            SELECT 1
+            FROM dashboard_components
+            JOIN charts ON charts.id = dashboard_components.chart_id
+            LEFT JOIN reports ON reports.id = charts.report_id
+            LEFT JOIN aggregations ON aggregations.id = charts.aggregation_id
+            LEFT JOIN reports AS aggregation_reports
+                ON aggregation_reports.id = aggregations.report_id
+            LEFT JOIN forms AS direct_forms ON direct_forms.id = reports.form_id
+            LEFT JOIN forms AS aggregation_forms
+                ON aggregation_forms.id = aggregation_reports.form_id
+            WHERE dashboard_components.dashboard_id = dashboards.id
+              AND (
+                  direct_forms.scope_node_type_id = $1
+                  OR aggregation_forms.scope_node_type_id = $1
+              )
+        )
+        GROUP BY dashboards.id, dashboards.name
+        ORDER BY dashboards.name, dashboards.id
+        "#,
+    )
+    .bind(node_type_id)
+    .fetch_all(&state.pool)
+    .await?
+    .into_iter()
+    .map(|row| {
+        Ok(NodeDashboardLink {
+            dashboard_id: row.try_get("dashboard_id")?,
+            dashboard_name: row.try_get("dashboard_name")?,
+            component_count: row.try_get("component_count")?,
+        })
+    })
+    .collect::<Result<Vec<_>, sqlx::Error>>()?;
+
+    Ok(Json(NodeDetail {
+        id: node.try_get("id")?,
+        node_type_id,
+        node_type_name: node.try_get("node_type_name")?,
+        parent_node_id: node.try_get("parent_node_id")?,
+        parent_node_name: node.try_get("parent_node_name")?,
+        name: node.try_get("name")?,
+        metadata: node.try_get("metadata")?,
+        related_forms,
+        related_responses,
+        related_dashboards,
+    }))
 }
 
 async fn require_node_type_for_node(pool: &sqlx::PgPool, node_id: Uuid) -> ApiResult<Uuid> {
