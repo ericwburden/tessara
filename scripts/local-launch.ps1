@@ -9,9 +9,14 @@ $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $composeFile = Join-Path $repoRoot "docker-compose.yml"
+$seedScript = Join-Path $PSScriptRoot "seed-demo-data.ps1"
 
 if (-not (Test-Path $composeFile)) {
     throw "Could not find docker-compose.yml at $composeFile"
+}
+
+if (-not (Test-Path $seedScript)) {
+    throw "Could not find seed helper at $seedScript"
 }
 
 function Invoke-CheckedStep {
@@ -80,6 +85,10 @@ try {
 
     Wait-ForHttpOk -Uri "http://127.0.0.1:8080/health"
     Wait-ForHttpOk -Uri "http://127.0.0.1:8080/app"
+
+    Invoke-CheckedStep -Label "Ensuring UAT demo data" -Command {
+        & $seedScript
+    }
 
     Write-Host "`nTessara is ready." -ForegroundColor Green
     Write-Host "Application shell: http://localhost:8080/app"

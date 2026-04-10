@@ -36,19 +36,35 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
         authorized_request("POST", "/api/demo/seed", &token, None),
     )
     .await;
-    assert_eq!(seed["analytics_values"], 1);
+    assert_eq!(seed["seed_version"], "uat-demo-v1");
+    assert_eq!(seed["node_counts"]["partners"], 2);
+    assert_eq!(seed["node_counts"]["programs"], 4);
+    assert_eq!(seed["node_counts"]["activities"], 6);
+    assert_eq!(seed["node_counts"]["sessions"], 8);
+    assert_eq!(seed["form_count"], 4);
+    assert_eq!(seed["draft_submission_count"], 4);
+    assert_eq!(seed["submitted_submission_count"], 8);
+    assert_eq!(seed["report_count"], 4);
+    assert_eq!(seed["dashboard_count"], 1);
+    assert!(
+        seed["analytics_values"]
+            .as_i64()
+            .expect("seed should report analytics value count")
+            >= 8
+    );
     let app_summary = request_json(
         app.clone(),
         authorized_request("GET", "/api/app/summary", &token, None),
     )
     .await;
-    assert_eq!(app_summary["published_form_versions"], 1);
-    assert_eq!(app_summary["submitted_submissions"], 1);
+    assert_eq!(app_summary["published_form_versions"], 4);
+    assert_eq!(app_summary["draft_submissions"], 4);
+    assert_eq!(app_summary["submitted_submissions"], 8);
     assert_eq!(app_summary["datasets"], 0);
-    assert_eq!(app_summary["reports"], 1);
+    assert_eq!(app_summary["reports"], 4);
     assert_eq!(app_summary["aggregations"], 0);
     assert_eq!(app_summary["dashboards"], 1);
-    assert_eq!(app_summary["charts"], 1);
+    assert_eq!(app_summary["charts"], 4);
     let legacy_validation = request_json(
         app.clone(),
         authorized_request(
@@ -123,27 +139,29 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
             .as_array()
             .expect("node type response should be an array")
             .iter()
-            .any(|node_type| node_type["slug"] == "organization"
-                && node_type["node_count"].as_i64().unwrap_or_default() >= 1)
+            .any(|node_type| {
+                node_type["slug"] == "partner"
+                    && node_type["node_count"].as_i64().unwrap_or_default() >= 2
+            })
     );
-    let organization_node_type_id = node_types
+    let partner_node_type_id = node_types
         .as_array()
         .expect("node type response should be an array")
         .iter()
-        .find(|node_type| node_type["slug"] == "organization")
+        .find(|node_type| node_type["slug"] == "partner")
         .and_then(|node_type| node_type["id"].as_str())
-        .expect("organization node type should be present");
+        .expect("partner node type should be present");
     let node_type_definition = request_json(
         app.clone(),
         authorized_request(
             "GET",
-            &format!("/api/admin/node-types/{organization_node_type_id}"),
+            &format!("/api/admin/node-types/{partner_node_type_id}"),
             &token,
             None,
         ),
     )
     .await;
-    assert_eq!(node_type_definition["name"], "Organization");
+    assert_eq!(node_type_definition["name"], "Partner");
     assert!(
         node_type_definition["metadata_fields"]
             .as_array()
@@ -163,8 +181,8 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
             .as_array()
             .expect("node type definition should include scoped forms")
             .iter()
-            .any(|form| form["name"] == "Quarterly Check In"
-                || form["form_name"] == "Quarterly Check In")
+            .any(|form| form["name"] == "Demo Partner Profile"
+                || form["form_name"] == "Demo Partner Profile")
     );
     let relationships = request_json(
         app.clone(),
@@ -176,7 +194,7 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
             .as_array()
             .expect("relationships response should be an array")
             .iter()
-            .any(|relationship| relationship["parent_name"] == "Organization"
+            .any(|relationship| relationship["parent_name"] == "Partner"
                 && relationship["child_name"] == "Program")
     );
     let metadata_fields = request_json(
@@ -190,7 +208,7 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
             .expect("metadata response should be an array")
             .iter()
             .any(|field| field["key"] == "region"
-                && field["node_type_name"] == "Organization"
+                && field["node_type_name"] == "Partner"
                 && field["required"] == true)
     );
     let nodes = request_json(
@@ -207,9 +225,9 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
             .as_array()
             .expect("nodes response should be an array")
             .iter()
-            .any(|node| node["name"] == "Demo Organization"
-                && node["node_type_name"] == "Organization"
-                && node["metadata"]["region"] == "North")
+            .any(|node| node["name"] == "Demo Partner North Star Services"
+                && node["node_type_name"] == "Partner"
+                && node["metadata"]["region"] == "north")
     );
     let node_detail = request_json(
         app.clone(),
@@ -225,13 +243,13 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
             .expect("valid node detail request"),
     )
     .await;
-    assert_eq!(node_detail["name"], "Demo Organization");
+    assert_eq!(node_detail["name"], "Demo Session April Orientation");
     assert!(
         node_detail["related_forms"]
             .as_array()
             .expect("node detail should include related forms")
             .iter()
-            .any(|form| form["form_name"] == "Quarterly Check In")
+            .any(|form| form["form_name"] == "Demo Session Log")
     );
     assert!(
         node_detail["related_responses"]
@@ -277,7 +295,7 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
         ),
     )
     .await;
-    assert_eq!(form_definition["name"], "Quarterly Check In");
+    assert_eq!(form_definition["name"], "Demo Session Log");
     assert!(
         form_definition["versions"]
             .as_array()
@@ -307,7 +325,7 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
             .expect("published forms response should be an array")
             .iter()
             .any(|form_version| form_version["form_id"] == seed["form_id"]
-                && form_version["form_name"] == "Quarterly Check In"
+                && form_version["form_name"] == "Demo Session Log"
                 && form_version["form_version_id"] == seed["form_version_id"]
                 && form_version["version_label"] == "v1")
     );
@@ -324,14 +342,14 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
             .iter()
             .any(|submission| submission["id"] == seed["submission_id"]
                 && submission["status"] == "submitted"
-                && submission["value_count"] == 1)
+                && submission["value_count"] == 5)
     );
     let filtered_submissions = request_json(
         app.clone(),
         authorized_request(
             "GET",
             &format!(
-                "/api/submissions?status=submitted&form_id={}&node_id={}&q=Quarterly",
+                "/api/submissions?status=submitted&form_id={}&node_id={}&q=Session",
                 seed["form_id"]
                     .as_str()
                     .expect("seed should include form id"),
@@ -389,7 +407,10 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
             .as_array()
             .expect("submission detail should include audit events")
             .iter()
-            .any(|event| event["event_type"] == "seed_demo")
+            .any(|event| event["event_type"]
+                .as_str()
+                .unwrap_or_default()
+                .starts_with("seed_demo:"))
     );
     let draft = request_json(
         app.clone(),
@@ -448,7 +469,13 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
         ),
     )
     .await;
-    assert_eq!(report["rows"][0]["field_value"], "42");
+    assert!(
+        report["rows"]
+            .as_array()
+            .expect("report should return row array")
+            .iter()
+            .any(|row| row["logical_key"] == "participants" && row["field_value"] == "42")
+    );
     let reports = request_json(
         app.clone(),
         authorized_request("GET", "/api/reports", &token, None),
@@ -459,7 +486,7 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
             .as_array()
             .expect("reports response should be an array")
             .iter()
-            .any(|report| report["id"] == report_id && report["form_name"] == "Quarterly Check In")
+            .any(|report| report["id"] == report_id && report["form_name"] == "Demo Session Log")
     );
     let report_definition = request_json(
         app.clone(),
@@ -474,7 +501,7 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
             .any(|binding| binding["logical_key"] == "participants"
                 && binding["source_field_key"] == "participants")
     );
-    assert_eq!(report_definition["form_name"], "Quarterly Check In");
+    assert_eq!(report_definition["form_name"], "Demo Session Log");
 
     let dataset = request_json(
         app.clone(),
@@ -517,9 +544,13 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
     )
     .await;
     assert_eq!(dataset_table["dataset_id"], dataset_id);
-    assert_eq!(
-        dataset_table["rows"][0]["values"]["participant_count"],
-        "42"
+    assert!(
+        dataset_table["rows"]
+            .as_array()
+            .expect("dataset table should return row array")
+            .iter()
+            .any(|row| row["submission_id"] == seed["submission_id"]
+                && row["values"]["participant_count"] == "42")
     );
     let compatibility_group_id = forms
         .as_array()
@@ -568,9 +599,13 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
         ),
     )
     .await;
-    assert_eq!(
-        compatibility_dataset_table["rows"][0]["values"]["participant_count"],
-        "42"
+    assert!(
+        compatibility_dataset_table["rows"]
+            .as_array()
+            .expect("compatibility dataset table should return row array")
+            .iter()
+            .any(|row| row["submission_id"] == seed["submission_id"]
+                && row["values"]["participant_count"] == "42")
     );
 
     let follow_up_form = request_json(
@@ -926,11 +961,11 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
     assert_eq!(dataset_aggregation_table["rows"][0]["group_key"], "All");
     assert_eq!(
         dataset_aggregation_table["rows"][0]["metrics"]["responses"],
-        1.0
+        2.0
     );
     assert_eq!(
         dataset_aggregation_table["rows"][0]["metrics"]["participants_total"],
-        42.0
+        60.0
     );
 
     let aggregation = request_json(
@@ -1031,10 +1066,10 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
     )
     .await;
     assert_eq!(aggregation_table["rows"][0]["group_key"], "All");
-    assert_eq!(aggregation_table["rows"][0]["metrics"]["responses"], 1.0);
+    assert_eq!(aggregation_table["rows"][0]["metrics"]["responses"], 2.0);
     assert_eq!(
         aggregation_table["rows"][0]["metrics"]["participants_total"],
-        42.0
+        60.0
     );
 
     let aggregation_chart = request_json(
@@ -1094,7 +1129,7 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
             .any(|chart| chart["id"] == chart_id
                 && chart["chart_type"] == "table"
                 && chart["report_name"] == "Participants Report"
-                && chart["report_form_name"] == "Quarterly Check In"
+                && chart["report_form_name"] == "Demo Session Log"
                 && chart["report_id"] == report_id)
     );
     assert!(
@@ -1159,14 +1194,14 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
             .expect("valid dashboard request"),
     )
     .await;
-    assert_eq!(dashboard["components"][0]["chart"]["report_id"], report_id);
-    assert_eq!(
-        dashboard["components"][0]["chart"]["report_name"],
-        "Participants Report"
-    );
-    assert_eq!(
-        dashboard["components"][0]["chart"]["report_form_name"],
-        "Quarterly Check In"
+    assert!(
+        dashboard["components"]
+            .as_array()
+            .expect("dashboard response should include components")
+            .iter()
+            .any(|component| component["chart"]["report_id"] == report_id
+                && component["chart"]["report_name"] == "Participants Report"
+                && component["chart"]["report_form_name"] == "Demo Session Log")
     );
     assert!(
         dashboard["components"]
@@ -1246,6 +1281,174 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
     )
     .await;
     assert_eq!(deleted_aggregation["id"], disposable_aggregation_id);
+}
+
+#[tokio::test]
+async fn demo_seed_creates_full_uat_dataset_and_is_repeatable() {
+    let _guard = TEST_DATABASE_LOCK.lock().await;
+    let Some(app) = test_app().await else { return };
+    let token = login_token(app.clone()).await;
+
+    let first_seed = request_json(
+        app.clone(),
+        authorized_request("POST", "/api/demo/seed", &token, None),
+    )
+    .await;
+    let second_seed = request_json(
+        app.clone(),
+        authorized_request("POST", "/api/demo/seed", &token, None),
+    )
+    .await;
+
+    assert_eq!(first_seed["seed_version"], "uat-demo-v1");
+    assert_eq!(first_seed["seed_version"], second_seed["seed_version"]);
+    assert_eq!(first_seed["dashboard_id"], second_seed["dashboard_id"]);
+    assert_eq!(first_seed["report_id"], second_seed["report_id"]);
+    assert_eq!(first_seed["submission_id"], second_seed["submission_id"]);
+    assert_eq!(first_seed["node_counts"]["partners"], 2);
+    assert_eq!(first_seed["node_counts"]["programs"], 4);
+    assert_eq!(first_seed["node_counts"]["activities"], 6);
+    assert_eq!(first_seed["node_counts"]["sessions"], 8);
+    assert_eq!(first_seed["form_count"], 4);
+    assert_eq!(first_seed["draft_submission_count"], 4);
+    assert_eq!(first_seed["submitted_submission_count"], 8);
+    assert_eq!(first_seed["report_count"], 4);
+    assert_eq!(first_seed["dashboard_count"], 1);
+
+    let node_types = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/admin/node-types", &token, None),
+    )
+    .await;
+    for (slug, count) in [
+        ("partner", 2),
+        ("program", 4),
+        ("activity", 6),
+        ("session", 8),
+    ] {
+        assert!(
+            node_types
+                .as_array()
+                .expect("node types should be an array")
+                .iter()
+                .any(|node_type| node_type["slug"] == slug && node_type["node_count"] == count)
+        );
+    }
+
+    let metadata_fields = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/admin/node-metadata-fields", &token, None),
+    )
+    .await;
+    for (node_type_name, key, field_type) in [
+        ("Partner", "legacy_id", "text"),
+        ("Partner", "region", "single_choice"),
+        ("Partner", "active_contract", "boolean"),
+        ("Partner", "partner_since", "date"),
+        ("Partner", "focus_areas", "multi_choice"),
+        ("Program", "annual_target", "number"),
+        ("Activity", "delivery_mode", "single_choice"),
+        ("Session", "topics", "multi_choice"),
+    ] {
+        assert!(
+            metadata_fields
+                .as_array()
+                .expect("metadata fields should be an array")
+                .iter()
+                .any(|field| field["node_type_name"] == node_type_name
+                    && field["key"] == key
+                    && field["field_type"] == field_type)
+        );
+    }
+
+    let forms = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/admin/forms", &token, None),
+    )
+    .await;
+    for name in [
+        "Demo Partner Profile",
+        "Demo Program Snapshot",
+        "Demo Activity Plan",
+        "Demo Session Log",
+    ] {
+        assert!(
+            forms
+                .as_array()
+                .expect("forms should be an array")
+                .iter()
+                .any(|form| form["name"] == name && form["versions"][0]["status"] == "published")
+        );
+    }
+
+    let all_submissions = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/submissions", &token, None),
+    )
+    .await;
+    let demo_drafts = all_submissions
+        .as_array()
+        .expect("submissions should be an array")
+        .iter()
+        .filter(|submission| {
+            submission["status"] == "draft"
+                && submission["form_name"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .starts_with("Demo ")
+        })
+        .count();
+    let demo_submitted = all_submissions
+        .as_array()
+        .expect("submissions should be an array")
+        .iter()
+        .filter(|submission| {
+            submission["status"] == "submitted"
+                && submission["form_name"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .starts_with("Demo ")
+        })
+        .count();
+    assert_eq!(demo_drafts, 4);
+    assert_eq!(demo_submitted, 8);
+
+    let reports = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/reports", &token, None),
+    )
+    .await;
+    for (name, form_name) in [
+        ("Demo Partner Profile Report", "Demo Partner Profile"),
+        ("Demo Program Snapshot Report", "Demo Program Snapshot"),
+        ("Demo Activity Plan Report", "Demo Activity Plan"),
+        ("Participants Report", "Demo Session Log"),
+    ] {
+        assert!(
+            reports
+                .as_array()
+                .expect("reports should be an array")
+                .iter()
+                .any(|report| report["name"] == name && report["form_name"] == form_name)
+        );
+    }
+
+    let dashboards = request_json(
+        app,
+        Request::builder()
+            .method("GET")
+            .uri("/api/dashboards")
+            .body(Body::empty())
+            .expect("valid dashboard list request"),
+    )
+    .await;
+    assert!(
+        dashboards
+            .as_array()
+            .expect("dashboards should be an array")
+            .iter()
+            .any(|dashboard| dashboard["name"] == "Demo Operations Dashboard")
+    );
 }
 
 #[tokio::test]
@@ -2757,7 +2960,11 @@ async fn dataset_selection_rules_pick_latest_and_earliest_submissions() {
             "PUT",
             &format!("/api/submissions/{follow_up_submission_id}/values"),
             &token,
-            Some(json!({"values": {"participants": 99}})),
+            Some(json!({"values": {
+                "session_date": "2026-07-01",
+                "participants": 99,
+                "completed_as_planned": true
+            }})),
         ),
     )
     .await;
@@ -2815,7 +3022,16 @@ async fn dataset_selection_rules_pick_latest_and_earliest_submissions() {
         ),
     )
     .await;
-    assert_eq!(latest_rows["rows"][0]["values"]["participant_count"], "99");
+    assert!(
+        latest_rows["rows"]
+            .as_array()
+            .expect("latest dataset should return row array")
+            .iter()
+            .any(
+                |row| row["submission_id"] == follow_up_submission_id.to_string()
+                    && row["values"]["participant_count"] == "99"
+            )
+    );
 
     let earliest_dataset = request_json(
         app.clone(),
@@ -2855,9 +3071,13 @@ async fn dataset_selection_rules_pick_latest_and_earliest_submissions() {
         ),
     )
     .await;
-    assert_eq!(
-        earliest_rows["rows"][0]["values"]["participant_count"],
-        "42"
+    assert!(
+        earliest_rows["rows"]
+            .as_array()
+            .expect("earliest dataset should return row array")
+            .iter()
+            .any(|row| row["submission_id"] == seed["submission_id"]
+                && row["values"]["participant_count"] == "42")
     );
 }
 
@@ -3012,12 +3232,18 @@ async fn join_mode_datasets_merge_selected_source_rows_by_node() {
             .as_array()
             .expect("join dataset should return row array")
             .len(),
-        1
+        2
     );
-    assert_eq!(joined_rows["rows"][0]["source_alias"], "join");
-    assert_eq!(joined_rows["rows"][0]["values"]["participant_count"], "42");
-    assert_eq!(joined_rows["rows"][0]["values"]["attendee_count"], "7");
-    let joined_submission_id = joined_rows["rows"][0]["submission_id"]
+    let primary_joined_row = joined_rows["rows"]
+        .as_array()
+        .expect("join dataset should return row array")
+        .iter()
+        .find(|row| row["values"]["attendee_count"] == "7")
+        .expect("joined dataset should include the follow-up row");
+    assert_eq!(primary_joined_row["source_alias"], "join");
+    assert_eq!(primary_joined_row["values"]["participant_count"], "42");
+    assert_eq!(primary_joined_row["values"]["attendee_count"], "7");
+    let joined_submission_id = primary_joined_row["submission_id"]
         .as_str()
         .expect("join dataset row should expose a composed submission id");
     assert!(joined_submission_id.contains("check_in:"));
@@ -3073,7 +3299,7 @@ async fn join_mode_datasets_merge_selected_source_rows_by_node() {
             .as_array()
             .expect("joined report should return row array")
             .len(),
-        3
+        6
     );
     assert!(
         joined_report_rows["rows"]
@@ -3147,11 +3373,11 @@ async fn join_mode_datasets_merge_selected_source_rows_by_node() {
     .await;
     assert_eq!(
         joined_aggregation_rows["rows"][0]["metrics"]["responses"],
-        1.0
+        2.0
     );
     assert_eq!(
         joined_aggregation_rows["rows"][0]["metrics"]["participants_total"],
-        42.0
+        60.0
     );
     assert_eq!(
         joined_aggregation_rows["rows"][0]["metrics"]["attendees_total"],
@@ -3321,7 +3547,11 @@ async fn aggregations_support_avg_min_and_max_metrics() {
             "PUT",
             &format!("/api/submissions/{second_submission_id}/values"),
             &token,
-            Some(json!({"values": {"participants": 10}})),
+            Some(json!({"values": {
+                "session_date": "2026-07-15",
+                "participants": 10,
+                "completed_as_planned": true
+            }})),
         ),
     )
     .await;
@@ -3396,15 +3626,15 @@ async fn aggregations_support_avg_min_and_max_metrics() {
         ),
     )
     .await;
-    assert_eq!(aggregation_table["rows"][0]["metrics"]["responses"], 2.0);
+    assert_eq!(aggregation_table["rows"][0]["metrics"]["responses"], 3.0);
     assert_eq!(
         aggregation_table["rows"][0]["metrics"]["participants_total"],
-        52.0
+        70.0
     );
-    assert_eq!(
-        aggregation_table["rows"][0]["metrics"]["participants_average"],
-        26.0
-    );
+    let average = aggregation_table["rows"][0]["metrics"]["participants_average"]
+        .as_f64()
+        .expect("participants average should be numeric");
+    assert!((average - (70.0 / 3.0)).abs() < 0.0001);
     assert_eq!(
         aggregation_table["rows"][0]["metrics"]["participants_minimum"],
         10.0

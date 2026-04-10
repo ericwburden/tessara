@@ -195,7 +195,7 @@ try {
     if ($dashboard.components.Count -lt 1) {
         throw "Expected at least one dashboard component, got $($dashboard.components.Count)"
     }
-    if ($report.rows.Count -lt 1 -or $report.rows[0].field_value -ne "42") {
+    if ($report.rows.Count -lt 1 -or -not ($report.rows | Where-Object { $_.logical_key -eq "participants" -and $_.field_value -eq "42" })) {
         throw "Expected report value 42, got: $($report | ConvertTo-Json -Depth 20)"
     }
 

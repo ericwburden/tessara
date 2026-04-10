@@ -71,6 +71,7 @@ That script:
 - rebuilds the API image
 - recreates the Compose services
 - waits for `/health` and `/app` to return `200`
+- ensures the UAT demo dataset is present in the local database
 
 Useful options:
 
@@ -132,7 +133,13 @@ through the CLI importer, starts the API locally, verifies the imported
 report/dashboard path, and then tears down the test volume unless
 `-KeepServices` is provided.
 
-Seed the deterministic demo dataset into a running database:
+Seed the deterministic demo dataset into a running Compose deployment:
+
+```powershell
+.\scripts\seed-demo-data.ps1
+```
+
+Or seed it directly through the CLI against a running database:
 
 ```powershell
 $env:DATABASE_URL='postgres://tessara:tessara@localhost:5432/tessara'
@@ -178,10 +185,10 @@ The focused migration workbench is available at:
 http://localhost:8080/app/migration
 ```
 
-For user testing, start the Compose stack and open that URL in a browser. Use
-the development login above, then click `Seed Demo` to populate the deterministic
-hierarchy, form, submission, report, and dashboard example. Stop and reset the
-local test deployment with:
+For user testing, start the Compose stack and open that URL in a browser. The
+local launch helper now ensures a near-realistic Partner/Program/Activity/Session
+demo hierarchy, published forms, sample responses, and a compact reporting path.
+Stop and reset the local test deployment with:
 
 ```powershell
 docker compose down -v
