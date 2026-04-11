@@ -16,6 +16,10 @@ pub fn application_shell_html() -> String {
     application::application_shell_html(shell_style::STYLE, app_script::APPLICATION_SCRIPT)
 }
 
+pub fn login_application_html() -> String {
+    application::login_application_html(shell_style::STYLE, app_script::APPLICATION_SCRIPT)
+}
+
 pub fn organization_application_shell_html() -> String {
     application::organization_application_shell_html(
         shell_style::STYLE,
@@ -193,7 +197,7 @@ mod tests {
         dashboard_create_application_html, dashboard_detail_application_html,
         dashboard_edit_application_html, dashboards_application_shell_html,
         form_create_application_html, form_detail_application_html, form_edit_application_html,
-        forms_application_shell_html, migration_application_shell_html,
+        forms_application_shell_html, login_application_html, migration_application_shell_html,
         organization_application_shell_html, organization_create_application_html,
         organization_detail_application_html, organization_edit_application_html,
         report_create_application_html, report_detail_application_html,
@@ -234,6 +238,17 @@ mod tests {
         assert!(html.contains("/app/administration"));
         assert!(html.contains("/app/migration"));
         assert!(!html.contains("Create Shortcuts"));
+    }
+
+    #[test]
+    fn login_shell_exposes_credentials_form() {
+        let html = login_application_html();
+
+        assert!(html.contains("Sign In"));
+        assert!(html.contains("login-form"));
+        assert!(html.contains("login-email"));
+        assert!(html.contains("login-password"));
+        assert!(html.contains("operator@tessara.local"));
     }
 
     #[test]

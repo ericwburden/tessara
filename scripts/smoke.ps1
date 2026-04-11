@@ -50,16 +50,15 @@ try {
     Remove-Item -LiteralPath $apiOut, $apiErr -ErrorAction SilentlyContinue
 
     if ($ComposeApi) {
+        docker compose down --remove-orphans | Out-Host
+        Assert-LastExitCode "docker compose down"
         docker compose up -d --build | Out-Host
         Assert-LastExitCode "docker compose up"
     } else {
+        docker compose down --remove-orphans | Out-Host
+        Assert-LastExitCode "docker compose down"
         docker compose up -d --wait postgres | Out-Host
         Assert-LastExitCode "docker compose up"
-        $composeApiContainer = docker compose ps -q api
-        if ($composeApiContainer) {
-            docker compose stop api | Out-Null
-            docker compose rm -f api | Out-Null
-        }
     }
 
     $postgresDeadline = (Get-Date).AddSeconds(120)
@@ -134,6 +133,10 @@ try {
     if (-not ($appShell -like "*Application Overview*") -or -not ($appShell -like "*Welcome to Tessara*") -or -not ($appShell -like "*Role-Ready Home Modules*") -or -not ($appShell -like "*Product Areas*") -or -not ($appShell -like "*Current Deployment Readiness*") -or -not ($appShell -like "*Current Workflow Context*") -or -not ($appShell -like "*Internal Areas*") -or -not ($appShell -like "*Go to Organization*") -or -not ($appShell -like "*Go to Forms*") -or -not ($appShell -like "*Go to Responses*")) {
         throw "Expected application home HTML to include overview and split-area navigation"
     }
+    $loginShell = Invoke-RestMethod -Uri "$baseUrl/app/login" -TimeoutSec 30
+    if (-not ($loginShell -like "*Sign In*") -or -not ($loginShell -like "*operator@tessara.local*") -or -not ($loginShell -like "*respondent@tessara.local*")) {
+        throw "Expected login HTML to include dedicated sign-in controls and demo credentials"
+    }
     $organizationShell = Invoke-RestMethod -Uri "$baseUrl/app/organization" -TimeoutSec 30
     if (-not ($organizationShell -like "*Organizations*") -or -not ($organizationShell -like "*Create Organization*") -or -not ($organizationShell -like "*organization-list*")) {
         throw "Expected organization application shell HTML to include organization route controls"
@@ -176,15 +179,41 @@ try {
         -Uri "$baseUrl/api/auth/login" `
         -Body @{ email = "admin@tessara.local"; password = "tessara-dev-admin" }
     $headers = @{ Authorization = "Bearer $($login.token)" }
-
     $seed = Invoke-Json -Method "Post" -Uri "$baseUrl/api/demo/seed" -Headers $headers
     $summary = Invoke-Json -Method "Get" -Uri "$baseUrl/api/app/summary" -Headers $headers
+    $operatorLogin = Invoke-Json `
+        -Method "Post" `
+        -Uri "$baseUrl/api/auth/login" `
+        -Body @{ email = "operator@tessara.local"; password = "tessara-dev-operator" }
+    $operatorHeaders = @{ Authorization = "Bearer $($operatorLogin.token)" }
+    $respondentLogin = Invoke-Json `
+        -Method "Post" `
+        -Uri "$baseUrl/api/auth/login" `
+        -Body @{ email = "respondent@tessara.local"; password = "tessara-dev-respondent" }
+    $respondentHeaders = @{ Authorization = "Bearer $($respondentLogin.token)" }
+    $parentLogin = Invoke-Json `
+        -Method "Post" `
+        -Uri "$baseUrl/api/auth/login" `
+        -Body @{ email = "parent@tessara.local"; password = "tessara-dev-parent" }
+    $parentHeaders = @{ Authorization = "Bearer $($parentLogin.token)" }
     if ($summary.published_form_versions -lt 1 -or $summary.submitted_submissions -lt 1 -or $summary.reports -lt 1 -or $summary.dashboards -lt 1) {
         throw "Expected application summary to include seeded published forms, submissions, reports, and dashboards"
     }
-    $nodes = Invoke-Json -Method "Get" -Uri "$baseUrl/api/nodes"
-    $dashboard = Invoke-Json -Method "Get" -Uri "$baseUrl/api/dashboards/$($seed.dashboard_id)"
+    $nodes = Invoke-Json -Method "Get" -Uri "$baseUrl/api/nodes" -Headers $headers
+    $dashboard = Invoke-Json -Method "Get" -Uri "$baseUrl/api/dashboards/$($seed.dashboard_id)" -Headers $headers
     $report = Invoke-Json -Method "Get" -Uri "$baseUrl/api/reports/$($seed.report_id)/table" -Headers $headers
+    $operatorMe = Invoke-Json -Method "Get" -Uri "$baseUrl/api/me" -Headers $operatorHeaders
+    $operatorNodes = Invoke-Json -Method "Get" -Uri "$baseUrl/api/nodes?q=Demo" -Headers $operatorHeaders
+    $respondentOptions = Invoke-Json -Method "Get" -Uri "$baseUrl/api/responses/options" -Headers $respondentHeaders
+    $parentMe = Invoke-Json -Method "Get" -Uri "$baseUrl/api/me" -Headers $parentHeaders
+    $childAccountId = $parentMe.subordinate_respondents[0].account_id
+    $parentChildOptions = Invoke-Json -Method "Get" -Uri "$baseUrl/api/responses/options?respondent_account_id=$childAccountId" -Headers $parentHeaders
+    $respondentFormsDenied = $false
+    try {
+        Invoke-Json -Method "Get" -Uri "$baseUrl/api/forms" -Headers $respondentHeaders | Out-Null
+    } catch {
+        $respondentFormsDenied = $_.Exception.Message -like "*403*"
+    }
 
     if ($seed.analytics_values -lt 1) {
         throw "Expected at least one analytics value, got $($seed.analytics_values)"
@@ -197,6 +226,21 @@ try {
     }
     if ($report.rows.Count -lt 1 -or -not ($report.rows | Where-Object { $_.logical_key -eq "participants" -and $_.field_value -eq "42" })) {
         throw "Expected report value 42, got: $($report | ConvertTo-Json -Depth 20)"
+    }
+    if ($operatorMe.role_family -ne "operator" -or $operatorMe.scope_nodes.Count -lt 1) {
+        throw "Expected operator account context to include operator role family and scoped nodes"
+    }
+    if (-not ($operatorNodes | Where-Object { $_.name -eq "Demo Program Family Outreach" }) -or ($operatorNodes | Where-Object { $_.name -eq "Demo Partner Community Bridge" })) {
+        throw "Expected operator node list to stay within assigned scope"
+    }
+    if ($respondentOptions.mode -ne "assignment" -or $respondentOptions.assignments.Count -lt 1) {
+        throw "Expected respondent response options to return assigned response starts"
+    }
+    if ($parentChildOptions.mode -ne "assignment" -or $parentChildOptions.assignments.Count -lt 1) {
+        throw "Expected parent response options to support subordinate respondent context"
+    }
+    if (-not $respondentFormsDenied) {
+        throw "Expected respondent access to /api/forms to be forbidden"
     }
 
     $organizationDetail = Invoke-RestMethod -Uri "$baseUrl/app/organization/$($seed.organization_node_id)" -TimeoutSec 30

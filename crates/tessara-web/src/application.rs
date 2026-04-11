@@ -10,7 +10,7 @@ struct ActionSpec {
 
 const STANDARD_ACTIONS: &[ActionSpec] = &[
     ActionSpec {
-        handler: "login()",
+        handler: "openLogin()",
         label: "Sign In",
     },
     ActionSpec {
@@ -358,6 +358,48 @@ fn home_body() -> String {
     )
 }
 
+fn login_body() -> String {
+    form_screen(
+        "Authentication",
+        "Sign In",
+        "Sign in with one of the seeded local accounts to load the routes and data available to that role.",
+        "login-form",
+        "/app",
+        r#"
+        <div class="form-grid">
+          <div class="form-field">
+            <label for="login-email">Email</label>
+            <input id="login-email" type="email" autocomplete="username" />
+          </div>
+          <div class="form-field">
+            <label for="login-password">Password</label>
+            <input id="login-password" type="password" autocomplete="current-password" />
+          </div>
+        </div>
+        <section class="app-screen page-panel compact-panel">
+          <h3>Demo Accounts</h3>
+          <div class="record-list">
+            <article class="record-card compact-record-card">
+              <h4>Admin</h4>
+              <p class="muted">admin@tessara.local</p>
+              <p class="muted">tessara-dev-admin</p>
+            </article>
+            <article class="record-card compact-record-card">
+              <h4>Operator</h4>
+              <p class="muted">operator@tessara.local</p>
+              <p class="muted">tessara-dev-operator</p>
+            </article>
+            <article class="record-card compact-record-card">
+              <h4>Parent / Respondent</h4>
+              <p class="muted">parent@tessara.local / respondent@tessara.local</p>
+              <p class="muted">tessara-dev-parent / tessara-dev-respondent</p>
+            </article>
+          </div>
+        </section>
+        "#,
+    )
+}
+
 fn administration_body() -> String {
     format!(
         r#"
@@ -658,6 +700,25 @@ pub fn application_shell_html(style: &str, script: &str) -> String {
             "This shared home is the primary entry point for Tessara. It organizes product areas, current readiness, and current workflow context without exposing configuration-first controls.",
             &[("Home", None)],
             home_body(),
+            false,
+        ),
+    )
+}
+
+pub fn login_application_html(style: &str, script: &str) -> String {
+    render_application_document(
+        "Tessara Sign In",
+        "Sign in to the Tessara application shell.",
+        style,
+        script,
+        r#"data-page-key="login" data-active-route="login""#,
+        app_shell(
+            "home",
+            "Shared Home",
+            "Sign In",
+            "Authenticate with a local demo account to load the application areas available to that role.",
+            &[("Home", Some("/app")), ("Sign In", None)],
+            login_body(),
             false,
         ),
     )
@@ -973,6 +1034,7 @@ pub fn responses_application_shell_html(style: &str, script: &str) -> String {
                 {}
                 {}
                 {}
+                {}
                 "#,
                 page_header(
                     "Responses",
@@ -981,6 +1043,7 @@ pub fn responses_application_shell_html(style: &str, script: &str) -> String {
                     r#"<a class="button-link" href="/app/responses/new">Start Response</a>"#
                         .to_string(),
                 ),
+                r#"<div id="response-context-switcher"></div>"#,
                 empty_panel(
                     "Start New Response",
                     "Published forms ready to start a response appear here.",
@@ -1029,7 +1092,10 @@ pub fn response_create_application_html(style: &str, script: &str) -> String {
                 "Choose a published form and target organization to create a draft response.",
                 "response-start-form",
                 "/app/responses",
-                &response_new_fields(),
+                &format!(
+                    r#"<div id="response-create-context-switcher"></div>{}"#,
+                    response_new_fields()
+                ),
             ),
             false,
         ),

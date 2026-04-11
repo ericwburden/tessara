@@ -436,18 +436,60 @@ pub async fn delete_dashboard_component(
 
 pub async fn list_dashboards(
     State(state): State<AppState>,
+    headers: HeaderMap,
 ) -> ApiResult<Json<Vec<DashboardSummary>>> {
-    let rows = sqlx::query(
-        r#"
-        SELECT dashboards.id, dashboards.name, COUNT(dashboard_components.id) AS component_count
-        FROM dashboards
-        LEFT JOIN dashboard_components ON dashboard_components.dashboard_id = dashboards.id
-        GROUP BY dashboards.id, dashboards.name
-        ORDER BY dashboards.name, dashboards.id
-        "#,
-    )
-    .fetch_all(&state.pool)
-    .await?;
+    let account = auth::require_capability(&state.pool, &headers, "reports:read").await?;
+    let rows = if account.is_operator() {
+        let scope_ids = auth::effective_scope_node_ids(&state.pool, account.account_id).await?;
+        sqlx::query(
+            r#"
+            SELECT DISTINCT dashboards.id, dashboards.name, COUNT(all_components.id) AS component_count
+            FROM dashboards
+            LEFT JOIN dashboard_components AS all_components ON all_components.dashboard_id = dashboards.id
+            WHERE EXISTS (
+                SELECT 1
+                FROM dashboard_components
+                JOIN charts ON charts.id = dashboard_components.chart_id
+                LEFT JOIN reports ON reports.id = charts.report_id
+                LEFT JOIN aggregations ON aggregations.id = charts.aggregation_id
+                LEFT JOIN reports AS aggregation_reports
+                    ON aggregation_reports.id = aggregations.report_id
+                LEFT JOIN forms AS direct_forms ON direct_forms.id = reports.form_id
+                LEFT JOIN form_versions AS direct_form_versions
+                    ON direct_form_versions.form_id = direct_forms.id
+                LEFT JOIN form_assignments AS direct_assignments
+                    ON direct_assignments.form_version_id = direct_form_versions.id
+                LEFT JOIN forms AS aggregation_forms ON aggregation_forms.id = aggregation_reports.form_id
+                LEFT JOIN form_versions AS aggregation_form_versions
+                    ON aggregation_form_versions.form_id = aggregation_forms.id
+                LEFT JOIN form_assignments AS aggregation_assignments
+                    ON aggregation_assignments.form_version_id = aggregation_form_versions.id
+                WHERE dashboard_components.dashboard_id = dashboards.id
+                  AND (
+                      direct_assignments.node_id = ANY($1)
+                      OR aggregation_assignments.node_id = ANY($1)
+                  )
+            )
+            GROUP BY dashboards.id, dashboards.name
+            ORDER BY dashboards.name, dashboards.id
+            "#,
+        )
+        .bind(scope_ids)
+        .fetch_all(&state.pool)
+        .await?
+    } else {
+        sqlx::query(
+            r#"
+            SELECT dashboards.id, dashboards.name, COUNT(dashboard_components.id) AS component_count
+            FROM dashboards
+            LEFT JOIN dashboard_components ON dashboard_components.dashboard_id = dashboards.id
+            GROUP BY dashboards.id, dashboards.name
+            ORDER BY dashboards.name, dashboards.id
+            "#,
+        )
+        .fetch_all(&state.pool)
+        .await?
+    };
 
     let dashboards = rows
         .into_iter()
@@ -465,8 +507,49 @@ pub async fn list_dashboards(
 
 pub async fn get_dashboard(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(dashboard_id): Path<Uuid>,
 ) -> ApiResult<Json<DashboardResponse>> {
+    let account = auth::require_capability(&state.pool, &headers, "reports:read").await?;
+    if account.is_operator() {
+        let scope_ids = auth::effective_scope_node_ids(&state.pool, account.account_id).await?;
+        let visible: bool = sqlx::query_scalar(
+            r#"
+            SELECT EXISTS (
+                SELECT 1
+                FROM dashboard_components
+                JOIN charts ON charts.id = dashboard_components.chart_id
+                LEFT JOIN reports ON reports.id = charts.report_id
+                LEFT JOIN aggregations ON aggregations.id = charts.aggregation_id
+                LEFT JOIN reports AS aggregation_reports
+                    ON aggregation_reports.id = aggregations.report_id
+                LEFT JOIN forms AS direct_forms ON direct_forms.id = reports.form_id
+                LEFT JOIN form_versions AS direct_form_versions
+                    ON direct_form_versions.form_id = direct_forms.id
+                LEFT JOIN form_assignments AS direct_assignments
+                    ON direct_assignments.form_version_id = direct_form_versions.id
+                LEFT JOIN forms AS aggregation_forms ON aggregation_forms.id = aggregation_reports.form_id
+                LEFT JOIN form_versions AS aggregation_form_versions
+                    ON aggregation_form_versions.form_id = aggregation_forms.id
+                LEFT JOIN form_assignments AS aggregation_assignments
+                    ON aggregation_assignments.form_version_id = aggregation_form_versions.id
+                WHERE dashboard_components.dashboard_id = $1
+                  AND (
+                      direct_assignments.node_id = ANY($2)
+                      OR aggregation_assignments.node_id = ANY($2)
+                  )
+            )
+            "#,
+        )
+        .bind(dashboard_id)
+        .bind(scope_ids)
+        .fetch_one(&state.pool)
+        .await?;
+        if !visible {
+            return Err(ApiError::Forbidden("reports:read".into()));
+        }
+    }
+
     let dashboard = sqlx::query("SELECT id, name FROM dashboards WHERE id = $1")
         .bind(dashboard_id)
         .fetch_optional(&state.pool)

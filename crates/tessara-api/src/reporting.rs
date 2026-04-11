@@ -636,25 +636,50 @@ pub async fn list_reports(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> ApiResult<Json<Vec<ReportSummary>>> {
-    auth::require_capability(&state.pool, &headers, "reports:read").await?;
+    let account = auth::require_capability(&state.pool, &headers, "reports:read").await?;
 
-    let rows = sqlx::query(
-        r#"
-        SELECT
-            reports.id,
-            reports.name,
-            reports.form_id,
-            forms.name AS form_name,
-            reports.dataset_id,
-            datasets.name AS dataset_name
-        FROM reports
-        LEFT JOIN forms ON forms.id = reports.form_id
-        LEFT JOIN datasets ON datasets.id = reports.dataset_id
-        ORDER BY reports.name, reports.created_at
-        "#,
-    )
-    .fetch_all(&state.pool)
-    .await?;
+    let rows = if account.is_operator() {
+        let scope_ids = auth::effective_scope_node_ids(&state.pool, account.account_id).await?;
+        sqlx::query(
+            r#"
+            SELECT DISTINCT
+                reports.id,
+                reports.name,
+                reports.form_id,
+                forms.name AS form_name,
+                reports.dataset_id,
+                datasets.name AS dataset_name
+            FROM reports
+            LEFT JOIN forms ON forms.id = reports.form_id
+            LEFT JOIN datasets ON datasets.id = reports.dataset_id
+            JOIN form_versions ON form_versions.form_id = forms.id
+            JOIN form_assignments ON form_assignments.form_version_id = form_versions.id
+            WHERE form_assignments.node_id = ANY($1)
+            ORDER BY reports.name, reports.created_at
+            "#,
+        )
+        .bind(scope_ids)
+        .fetch_all(&state.pool)
+        .await?
+    } else {
+        sqlx::query(
+            r#"
+            SELECT
+                reports.id,
+                reports.name,
+                reports.form_id,
+                forms.name AS form_name,
+                reports.dataset_id,
+                datasets.name AS dataset_name
+            FROM reports
+            LEFT JOIN forms ON forms.id = reports.form_id
+            LEFT JOIN datasets ON datasets.id = reports.dataset_id
+            ORDER BY reports.name, reports.created_at
+            "#,
+        )
+        .fetch_all(&state.pool)
+        .await?
+    };
 
     let reports = rows
         .into_iter()
@@ -679,7 +704,31 @@ pub async fn get_report(
     headers: HeaderMap,
     Path(report_id): Path<Uuid>,
 ) -> ApiResult<Json<ReportDefinition>> {
-    auth::require_capability(&state.pool, &headers, "reports:read").await?;
+    let account = auth::require_capability(&state.pool, &headers, "reports:read").await?;
+
+    if account.is_operator() {
+        let scope_ids = auth::effective_scope_node_ids(&state.pool, account.account_id).await?;
+        let visible: bool = sqlx::query_scalar(
+            r#"
+            SELECT EXISTS (
+                SELECT 1
+                FROM reports
+                JOIN forms ON forms.id = reports.form_id
+                JOIN form_versions ON form_versions.form_id = forms.id
+                JOIN form_assignments ON form_assignments.form_version_id = form_versions.id
+                WHERE reports.id = $1
+                  AND form_assignments.node_id = ANY($2)
+            )
+            "#,
+        )
+        .bind(report_id)
+        .bind(scope_ids)
+        .fetch_one(&state.pool)
+        .await?;
+        if !visible {
+            return Err(ApiError::Forbidden("reports:read".into()));
+        }
+    }
 
     let report = sqlx::query(
         r#"
@@ -810,7 +859,30 @@ pub async fn run_report(
     headers: HeaderMap,
     Path(report_id): Path<Uuid>,
 ) -> ApiResult<Json<ReportTable>> {
-    auth::require_capability(&state.pool, &headers, "reports:read").await?;
+    let account = auth::require_capability(&state.pool, &headers, "reports:read").await?;
+    if account.is_operator() {
+        let scope_ids = auth::effective_scope_node_ids(&state.pool, account.account_id).await?;
+        let visible: bool = sqlx::query_scalar(
+            r#"
+            SELECT EXISTS (
+                SELECT 1
+                FROM reports
+                JOIN forms ON forms.id = reports.form_id
+                JOIN form_versions ON form_versions.form_id = forms.id
+                JOIN form_assignments ON form_assignments.form_version_id = form_versions.id
+                WHERE reports.id = $1
+                  AND form_assignments.node_id = ANY($2)
+            )
+            "#,
+        )
+        .bind(report_id)
+        .bind(scope_ids)
+        .fetch_one(&state.pool)
+        .await?;
+        if !visible {
+            return Err(ApiError::Forbidden("reports:read".into()));
+        }
+    }
     let rows = load_report_rows(&state.pool, report_id).await?;
     Ok(Json(ReportTable { report_id, rows }))
 }

@@ -729,54 +729,103 @@ pub async fn update_node(
 
 pub async fn list_nodes(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Query(query): Query<ListNodesQuery>,
 ) -> ApiResult<Json<Vec<NodeResponse>>> {
+    let account = auth::require_capability(&state.pool, &headers, "hierarchy:read").await?;
     let search = query
         .q
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty());
-    let rows = sqlx::query(
-        r#"
-        SELECT
-            nodes.id,
-            nodes.node_type_id,
-            node_types.name AS node_type_name,
-            nodes.parent_node_id,
-            parent_nodes.name AS parent_node_name,
-            nodes.name,
-            COALESCE(
-                jsonb_object_agg(
-                    node_metadata_field_definitions.key,
-                    node_metadata_values.value
-                ) FILTER (WHERE node_metadata_field_definitions.key IS NOT NULL),
-                '{}'::jsonb
-            ) AS metadata
-        FROM nodes
-        JOIN node_types ON node_types.id = nodes.node_type_id
-        LEFT JOIN nodes AS parent_nodes ON parent_nodes.id = nodes.parent_node_id
-        LEFT JOIN node_metadata_values ON node_metadata_values.node_id = nodes.id
-        LEFT JOIN node_metadata_field_definitions
-            ON node_metadata_field_definitions.id = node_metadata_values.field_definition_id
-        WHERE (
-            $1::text IS NULL
-            OR nodes.name ILIKE '%' || $1 || '%'
-            OR node_types.name ILIKE '%' || $1 || '%'
+    let rows = if account.is_operator() {
+        let scope_ids = auth::effective_scope_node_ids(&state.pool, account.account_id).await?;
+        sqlx::query(
+            r#"
+            SELECT
+                nodes.id,
+                nodes.node_type_id,
+                node_types.name AS node_type_name,
+                nodes.parent_node_id,
+                parent_nodes.name AS parent_node_name,
+                nodes.name,
+                COALESCE(
+                    jsonb_object_agg(
+                        node_metadata_field_definitions.key,
+                        node_metadata_values.value
+                    ) FILTER (WHERE node_metadata_field_definitions.key IS NOT NULL),
+                    '{}'::jsonb
+                ) AS metadata
+            FROM nodes
+            JOIN node_types ON node_types.id = nodes.node_type_id
+            LEFT JOIN nodes AS parent_nodes ON parent_nodes.id = nodes.parent_node_id
+            LEFT JOIN node_metadata_values ON node_metadata_values.node_id = nodes.id
+            LEFT JOIN node_metadata_field_definitions
+                ON node_metadata_field_definitions.id = node_metadata_values.field_definition_id
+            WHERE nodes.id = ANY($1)
+              AND (
+                $2::text IS NULL
+                OR nodes.name ILIKE '%' || $2 || '%'
+                OR node_types.name ILIKE '%' || $2 || '%'
+              )
+            GROUP BY
+                nodes.id,
+                nodes.node_type_id,
+                node_types.name,
+                nodes.parent_node_id,
+                parent_nodes.name,
+                nodes.name,
+                nodes.created_at
+            ORDER BY nodes.created_at, nodes.name
+            "#,
         )
-        GROUP BY
-            nodes.id,
-            nodes.node_type_id,
-            node_types.name,
-            nodes.parent_node_id,
-            parent_nodes.name,
-            nodes.name,
-            nodes.created_at
-        ORDER BY nodes.created_at, nodes.name
-        "#,
-    )
-    .bind(search)
-    .fetch_all(&state.pool)
-    .await?;
+        .bind(scope_ids)
+        .bind(search)
+        .fetch_all(&state.pool)
+        .await?
+    } else {
+        sqlx::query(
+            r#"
+            SELECT
+                nodes.id,
+                nodes.node_type_id,
+                node_types.name AS node_type_name,
+                nodes.parent_node_id,
+                parent_nodes.name AS parent_node_name,
+                nodes.name,
+                COALESCE(
+                    jsonb_object_agg(
+                        node_metadata_field_definitions.key,
+                        node_metadata_values.value
+                    ) FILTER (WHERE node_metadata_field_definitions.key IS NOT NULL),
+                    '{}'::jsonb
+                ) AS metadata
+            FROM nodes
+            JOIN node_types ON node_types.id = nodes.node_type_id
+            LEFT JOIN nodes AS parent_nodes ON parent_nodes.id = nodes.parent_node_id
+            LEFT JOIN node_metadata_values ON node_metadata_values.node_id = nodes.id
+            LEFT JOIN node_metadata_field_definitions
+                ON node_metadata_field_definitions.id = node_metadata_values.field_definition_id
+            WHERE (
+                $1::text IS NULL
+                OR nodes.name ILIKE '%' || $1 || '%'
+                OR node_types.name ILIKE '%' || $1 || '%'
+            )
+            GROUP BY
+                nodes.id,
+                nodes.node_type_id,
+                node_types.name,
+                nodes.parent_node_id,
+                parent_nodes.name,
+                nodes.name,
+                nodes.created_at
+            ORDER BY nodes.created_at, nodes.name
+            "#,
+        )
+        .bind(search)
+        .fetch_all(&state.pool)
+        .await?
+    };
 
     let nodes = rows
         .into_iter()
@@ -798,8 +847,17 @@ pub async fn list_nodes(
 
 pub async fn get_node(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(node_id): Path<Uuid>,
 ) -> ApiResult<Json<NodeDetail>> {
+    let account = auth::require_capability(&state.pool, &headers, "hierarchy:read").await?;
+    if account.is_operator() {
+        let scope_ids = auth::effective_scope_node_ids(&state.pool, account.account_id).await?;
+        if !scope_ids.contains(&node_id) {
+            return Err(ApiError::Forbidden("hierarchy:read".into()));
+        }
+    }
+
     let node = sqlx::query(
         r#"
         SELECT
@@ -837,24 +895,23 @@ pub async fn get_node(
     .await?
     .ok_or_else(|| ApiError::NotFound(format!("node {node_id}")))?;
 
-    let node_type_id: Uuid = node.try_get("node_type_id")?;
-
     let related_forms = sqlx::query(
         r#"
         SELECT
             forms.id AS form_id,
             forms.name AS form_name,
             forms.slug AS form_slug,
-            COUNT(form_versions.id)
+            COUNT(DISTINCT form_versions.id)
                 FILTER (WHERE form_versions.status = 'published') AS published_version_count
         FROM forms
-        LEFT JOIN form_versions ON form_versions.form_id = forms.id
-        WHERE forms.scope_node_type_id = $1
+        JOIN form_versions ON form_versions.form_id = forms.id
+        JOIN form_assignments ON form_assignments.form_version_id = form_versions.id
+        WHERE form_assignments.node_id = $1
         GROUP BY forms.id, forms.name, forms.slug
         ORDER BY forms.name, forms.id
         "#,
     )
-    .bind(node_type_id)
+    .bind(node_id)
     .fetch_all(&state.pool)
     .await?
     .into_iter()
@@ -923,19 +980,29 @@ pub async fn get_node(
             LEFT JOIN reports AS aggregation_reports
                 ON aggregation_reports.id = aggregations.report_id
             LEFT JOIN forms AS direct_forms ON direct_forms.id = reports.form_id
+            LEFT JOIN form_versions AS direct_form_versions
+                ON direct_form_versions.form_id = direct_forms.id
+               AND direct_form_versions.status = 'published'::form_version_status
             LEFT JOIN forms AS aggregation_forms
                 ON aggregation_forms.id = aggregation_reports.form_id
+            LEFT JOIN form_versions AS aggregation_form_versions
+                ON aggregation_form_versions.form_id = aggregation_forms.id
+               AND aggregation_form_versions.status = 'published'::form_version_status
+            LEFT JOIN form_assignments AS direct_assignments
+                ON direct_assignments.form_version_id = direct_form_versions.id
+            LEFT JOIN form_assignments AS aggregation_assignments
+                ON aggregation_assignments.form_version_id = aggregation_form_versions.id
             WHERE dashboard_components.dashboard_id = dashboards.id
               AND (
-                  direct_forms.scope_node_type_id = $1
-                  OR aggregation_forms.scope_node_type_id = $1
+                  direct_assignments.node_id = $1
+                  OR aggregation_assignments.node_id = $1
               )
         )
         GROUP BY dashboards.id, dashboards.name
         ORDER BY dashboards.name, dashboards.id
         "#,
     )
-    .bind(node_type_id)
+    .bind(node_id)
     .fetch_all(&state.pool)
     .await?
     .into_iter()
@@ -950,7 +1017,7 @@ pub async fn get_node(
 
     Ok(Json(NodeDetail {
         id: node.try_get("id")?,
-        node_type_id,
+        node_type_id: node.try_get("node_type_id")?,
         node_type_name: node.try_get("node_type_name")?,
         parent_node_id: node.try_get("parent_node_id")?,
         parent_node_name: node.try_get("parent_node_name")?,

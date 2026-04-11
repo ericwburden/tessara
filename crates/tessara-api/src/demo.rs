@@ -113,6 +113,38 @@ pub(crate) async fn seed_demo_endpoint(
 /// Seeds an idempotent end-to-end Tessara UAT demo dataset.
 pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
     let account_id = require_dev_admin_account(pool).await?;
+    let operator_account_id = ensure_demo_account(
+        pool,
+        "operator@tessara.local",
+        "Demo Operator",
+        "operator",
+        "tessara-dev-operator",
+    )
+    .await?;
+    let parent_account_id = ensure_demo_account(
+        pool,
+        "parent@tessara.local",
+        "Demo Parent",
+        "respondent",
+        "tessara-dev-parent",
+    )
+    .await?;
+    let respondent_account_id = ensure_demo_account(
+        pool,
+        "respondent@tessara.local",
+        "Demo Respondent",
+        "respondent",
+        "tessara-dev-respondent",
+    )
+    .await?;
+    let child_respondent_account_id = ensure_demo_account(
+        pool,
+        "child@tessara.local",
+        "Demo Child Respondent",
+        "respondent",
+        "tessara-dev-child",
+    )
+    .await?;
 
     let partner_type_id = ensure_node_type(pool, "Partner", "partner").await?;
     let program_type_id = ensure_node_type(pool, "Program", "program").await?;
@@ -630,6 +662,10 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
     )
     .await?;
 
+    ensure_account_scope_assignment(pool, operator_account_id, program_a).await?;
+    ensure_account_scope_assignment(pool, operator_account_id, activity_e).await?;
+    ensure_subordinate_relationship(pool, parent_account_id, child_respondent_account_id).await?;
+
     let partner_form = ensure_demo_form(
         pool,
         DemoFormSpec {
@@ -851,7 +887,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
     .await?;
     ensure_seed_submission(
         pool,
-        account_id,
+        parent_account_id,
         partner_form.form_version_id,
         partner_a,
         SeedSubmissionSpec {
@@ -869,7 +905,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
 
     ensure_seed_submission(
         pool,
-        account_id,
+        operator_account_id,
         program_form.form_version_id,
         program_a,
         SeedSubmissionSpec {
@@ -906,7 +942,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
     .await?;
     ensure_seed_submission(
         pool,
-        account_id,
+        parent_account_id,
         program_form.form_version_id,
         program_b,
         SeedSubmissionSpec {
@@ -923,7 +959,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
     .await?;
     ensure_seed_submission(
         pool,
-        account_id,
+        operator_account_id,
         activity_form.form_version_id,
         activity_a,
         SeedSubmissionSpec {
@@ -943,7 +979,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
     .await?;
     ensure_seed_submission(
         pool,
-        account_id,
+        operator_account_id,
         activity_form.form_version_id,
         activity_e,
         SeedSubmissionSpec {
@@ -963,7 +999,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
     .await?;
     ensure_seed_submission(
         pool,
-        account_id,
+        child_respondent_account_id,
         activity_form.form_version_id,
         activity_c,
         SeedSubmissionSpec {
@@ -983,7 +1019,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
 
     let session_submitted_a = ensure_seed_submission(
         pool,
-        account_id,
+        respondent_account_id,
         session_form.form_version_id,
         session_a,
         SeedSubmissionSpec {
@@ -1004,7 +1040,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
     .await?;
     ensure_seed_submission(
         pool,
-        account_id,
+        child_respondent_account_id,
         session_form.form_version_id,
         session_g,
         SeedSubmissionSpec {
@@ -1022,7 +1058,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
     .await?;
     ensure_seed_submission(
         pool,
-        account_id,
+        respondent_account_id,
         session_form.form_version_id,
         session_b,
         SeedSubmissionSpec {
@@ -1034,6 +1070,21 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
                 ("completed_as_planned", json!(false)),
             ],
         },
+    )
+    .await?;
+
+    ensure_form_assignment(
+        pool,
+        program_form.form_version_id,
+        program_d,
+        respondent_account_id,
+    )
+    .await?;
+    ensure_form_assignment(
+        pool,
+        activity_form.form_version_id,
+        activity_d,
+        child_respondent_account_id,
     )
     .await?;
 
@@ -1155,6 +1206,99 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         session_form_version_id: session_form.form_version_id,
         analytics_values: analytics_status.value_count,
     })
+}
+
+async fn ensure_demo_account(
+    pool: &PgPool,
+    email: &str,
+    display_name: &str,
+    role_name: &str,
+    password: &str,
+) -> ApiResult<Uuid> {
+    let account_id: Uuid = sqlx::query_scalar(
+        r#"
+        INSERT INTO accounts (email, display_name)
+        VALUES ($1, $2)
+        ON CONFLICT (email)
+        DO UPDATE SET display_name = EXCLUDED.display_name
+        RETURNING id
+        "#,
+    )
+    .bind(email)
+    .bind(display_name)
+    .fetch_one(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
+        INSERT INTO account_credentials (account_id, password)
+        VALUES ($1, $2)
+        ON CONFLICT (account_id)
+        DO UPDATE SET password = EXCLUDED.password
+        "#,
+    )
+    .bind(account_id)
+    .bind(password)
+    .execute(pool)
+    .await?;
+
+    let role_id: Uuid = sqlx::query_scalar("SELECT id FROM roles WHERE name = $1")
+        .bind(role_name)
+        .fetch_optional(pool)
+        .await?
+        .ok_or_else(|| ApiError::NotFound(format!("role {role_name}")))?;
+
+    sqlx::query(
+        r#"
+        INSERT INTO account_role_assignments (account_id, role_id)
+        VALUES ($1, $2)
+        ON CONFLICT DO NOTHING
+        "#,
+    )
+    .bind(account_id)
+    .bind(role_id)
+    .execute(pool)
+    .await?;
+
+    Ok(account_id)
+}
+
+async fn ensure_account_scope_assignment(
+    pool: &PgPool,
+    account_id: Uuid,
+    node_id: Uuid,
+) -> ApiResult<()> {
+    sqlx::query(
+        r#"
+        INSERT INTO account_node_scope_assignments (account_id, node_id)
+        VALUES ($1, $2)
+        ON CONFLICT DO NOTHING
+        "#,
+    )
+    .bind(account_id)
+    .bind(node_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+async fn ensure_subordinate_relationship(
+    pool: &PgPool,
+    parent_account_id: Uuid,
+    respondent_account_id: Uuid,
+) -> ApiResult<()> {
+    sqlx::query(
+        r#"
+        INSERT INTO account_subordinate_relationships (parent_account_id, respondent_account_id)
+        VALUES ($1, $2)
+        ON CONFLICT DO NOTHING
+        "#,
+    )
+    .bind(parent_account_id)
+    .bind(respondent_account_id)
+    .execute(pool)
+    .await?;
+    Ok(())
 }
 
 async fn require_dev_admin_account(pool: &PgPool) -> ApiResult<Uuid> {
@@ -1507,6 +1651,46 @@ async fn publish_form_version(pool: &PgPool, form_version_id: Uuid) -> ApiResult
     Ok(())
 }
 
+async fn ensure_form_assignment(
+    pool: &PgPool,
+    form_version_id: Uuid,
+    node_id: Uuid,
+    account_id: Uuid,
+) -> ApiResult<Uuid> {
+    if let Some(id) = sqlx::query_scalar(
+        r#"
+        SELECT id
+        FROM form_assignments
+        WHERE form_version_id = $1
+          AND node_id = $2
+          AND account_id = $3
+        LIMIT 1
+        "#,
+    )
+    .bind(form_version_id)
+    .bind(node_id)
+    .bind(account_id)
+    .fetch_optional(pool)
+    .await?
+    {
+        return Ok(id);
+    }
+
+    sqlx::query_scalar(
+        r#"
+        INSERT INTO form_assignments (form_version_id, node_id, account_id)
+        VALUES ($1, $2, $3)
+        RETURNING id
+        "#,
+    )
+    .bind(form_version_id)
+    .bind(node_id)
+    .bind(account_id)
+    .fetch_one(pool)
+    .await
+    .map_err(Into::into)
+}
+
 async fn ensure_seed_submission(
     pool: &PgPool,
     account_id: Uuid,
@@ -1528,18 +1712,8 @@ async fn ensure_seed_submission(
     {
         id
     } else {
-        let assignment_id: Uuid = sqlx::query_scalar(
-            r#"
-            INSERT INTO form_assignments (form_version_id, node_id, account_id)
-            VALUES ($1, $2, $3)
-            RETURNING id
-            "#,
-        )
-        .bind(form_version_id)
-        .bind(node_id)
-        .bind(account_id)
-        .fetch_one(pool)
-        .await?;
+        let assignment_id =
+            ensure_form_assignment(pool, form_version_id, node_id, account_id).await?;
 
         let submission_id: Uuid = sqlx::query_scalar(
             r#"

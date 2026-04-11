@@ -46,23 +46,14 @@ async fn seed_dev_admin(pool: &PgPool, config: &Config) -> anyhow::Result<()> {
     .fetch_one(pool)
     .await?;
 
-    let admin_role_id: uuid::Uuid = sqlx::query_scalar(
-        r#"
-        INSERT INTO roles (name)
-        VALUES ('admin')
-        ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
-        RETURNING id
-        "#,
-    )
-    .fetch_one(pool)
-    .await?;
-
     let capabilities = [
         ("admin:all", "Full administration access"),
+        ("hierarchy:read", "Browse runtime hierarchy records"),
         (
             "hierarchy:write",
             "Manage hierarchy configuration and nodes",
         ),
+        ("forms:read", "Browse top-level form records"),
         ("forms:write", "Manage form definitions and versions"),
         ("submissions:write", "Create and update submissions"),
         ("analytics:refresh", "Refresh analytics projections"),
@@ -88,18 +79,32 @@ async fn seed_dev_admin(pool: &PgPool, config: &Config) -> anyhow::Result<()> {
         .fetch_one(pool)
         .await?;
 
-        sqlx::query(
-            r#"
-            INSERT INTO role_capabilities (role_id, capability_id)
-            VALUES ($1, $2)
-            ON CONFLICT DO NOTHING
-            "#,
-        )
-        .bind(admin_role_id)
-        .bind(capability_id)
-        .execute(pool)
-        .await?;
+        ensure_role_capability(pool, "admin", capability_id).await?;
     }
+
+    for capability_key in [
+        "hierarchy:read",
+        "forms:read",
+        "submissions:write",
+        "reports:read",
+    ] {
+        let capability_id: uuid::Uuid =
+            sqlx::query_scalar("SELECT id FROM capabilities WHERE key = $1")
+                .bind(capability_key)
+                .fetch_one(pool)
+                .await?;
+        ensure_role_capability(pool, "operator", capability_id).await?;
+    }
+
+    let respondent_capability_id: uuid::Uuid =
+        sqlx::query_scalar("SELECT id FROM capabilities WHERE key = 'submissions:write'")
+            .fetch_one(pool)
+            .await?;
+    ensure_role_capability(pool, "respondent", respondent_capability_id).await?;
+
+    let admin_role_id: uuid::Uuid = sqlx::query_scalar("SELECT id FROM roles WHERE name = 'admin'")
+        .fetch_one(pool)
+        .await?;
 
     sqlx::query(
         r#"
@@ -110,6 +115,50 @@ async fn seed_dev_admin(pool: &PgPool, config: &Config) -> anyhow::Result<()> {
     )
     .bind(admin_account_id)
     .bind(admin_role_id)
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
+        INSERT INTO account_credentials (account_id, password)
+        VALUES ($1, $2)
+        ON CONFLICT (account_id) DO UPDATE SET password = EXCLUDED.password
+        "#,
+    )
+    .bind(admin_account_id)
+    .bind(&config.dev_admin_password)
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+async fn ensure_role_capability(
+    pool: &PgPool,
+    role_name: &str,
+    capability_id: uuid::Uuid,
+) -> anyhow::Result<()> {
+    let role_id: uuid::Uuid = sqlx::query_scalar(
+        r#"
+        INSERT INTO roles (name)
+        VALUES ($1)
+        ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+        RETURNING id
+        "#,
+    )
+    .bind(role_name)
+    .fetch_one(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
+        INSERT INTO role_capabilities (role_id, capability_id)
+        VALUES ($1, $2)
+        ON CONFLICT DO NOTHING
+        "#,
+    )
+    .bind(role_id)
+    .bind(capability_id)
     .execute(pool)
     .await?;
 

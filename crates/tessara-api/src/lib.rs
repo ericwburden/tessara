@@ -45,6 +45,10 @@ pub fn router(state: AppState) -> Router {
             get(|| async { Html(tessara_web::application_shell_html()) }),
         )
         .route(
+            "/app/login",
+            get(|| async { Html(tessara_web::login_application_html()) }),
+        )
+        .route(
             "/app/organization",
             get(|| async { Html(tessara_web::organization_application_shell_html()) }),
         )
@@ -201,6 +205,8 @@ pub fn router(state: AppState) -> Router {
             "/api/admin/forms",
             get(forms::list_forms).post(forms::create_form),
         )
+        .route("/api/forms", get(forms::list_readable_forms))
+        .route("/api/forms/{form_id}", get(forms::get_readable_form))
         .route(
             "/api/admin/forms/{form_id}",
             get(forms::get_form).put(forms::update_form),
@@ -236,6 +242,10 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/api/forms/published",
             get(forms::list_published_form_versions),
+        )
+        .route(
+            "/api/responses/options",
+            get(submissions::list_response_start_options),
         )
         .route("/api/submissions/drafts", post(submissions::create_draft))
         .route("/api/submissions", get(submissions::list_submissions))

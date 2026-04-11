@@ -213,11 +213,7 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
     );
     let nodes = request_json(
         app.clone(),
-        Request::builder()
-            .method("GET")
-            .uri("/api/nodes?q=Demo")
-            .body(Body::empty())
-            .expect("valid nodes request"),
+        authorized_request("GET", "/api/nodes?q=Demo", &token, None),
     )
     .await;
     assert!(
@@ -231,16 +227,17 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
     );
     let node_detail = request_json(
         app.clone(),
-        Request::builder()
-            .method("GET")
-            .uri(format!(
+        authorized_request(
+            "GET",
+            &format!(
                 "/api/nodes/{}",
                 seed["organization_node_id"]
                     .as_str()
                     .expect("seed should include organization node id")
-            ))
-            .body(Body::empty())
-            .expect("valid node detail request"),
+            ),
+            &token,
+            None,
+        ),
     )
     .await;
     assert_eq!(node_detail["name"], "Demo Session April Orientation");
@@ -312,11 +309,7 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
     );
     let published_forms = request_json(
         app.clone(),
-        Request::builder()
-            .method("GET")
-            .uri("/api/forms/published")
-            .body(Body::empty())
-            .expect("valid published forms request"),
+        authorized_request("GET", "/api/forms/published", &token, None),
     )
     .await;
     assert!(
@@ -1187,11 +1180,12 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
     .await;
     let dashboard = request_json(
         app.clone(),
-        Request::builder()
-            .method("GET")
-            .uri(format!("/api/dashboards/{dashboard_id}"))
-            .body(Body::empty())
-            .expect("valid dashboard request"),
+        authorized_request(
+            "GET",
+            &format!("/api/dashboards/{dashboard_id}"),
+            &token,
+            None,
+        ),
     )
     .await;
     assert!(
@@ -1214,11 +1208,7 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
     );
     let dashboards = request_json(
         app.clone(),
-        Request::builder()
-            .method("GET")
-            .uri("/api/dashboards")
-            .body(Body::empty())
-            .expect("valid dashboard list request"),
+        authorized_request("GET", "/api/dashboards", &token, None),
     )
     .await;
     assert!(
@@ -1435,11 +1425,7 @@ async fn demo_seed_creates_full_uat_dataset_and_is_repeatable() {
 
     let dashboards = request_json(
         app,
-        Request::builder()
-            .method("GET")
-            .uri("/api/dashboards")
-            .body(Body::empty())
-            .expect("valid dashboard list request"),
+        authorized_request("GET", "/api/dashboards", &token, None),
     )
     .await;
     assert!(
@@ -1448,6 +1434,177 @@ async fn demo_seed_creates_full_uat_dataset_and_is_repeatable() {
             .expect("dashboards should be an array")
             .iter()
             .any(|dashboard| dashboard["name"] == "Demo Operations Dashboard")
+    );
+}
+
+#[tokio::test]
+async fn role_based_access_respects_scope_and_respondent_context() {
+    let _guard = TEST_DATABASE_LOCK.lock().await;
+    let Some(app) = test_app().await else { return };
+    let admin_token = login_token(app.clone()).await;
+    request_json(
+        app.clone(),
+        authorized_request("POST", "/api/demo/seed", &admin_token, None),
+    )
+    .await;
+
+    let operator_token = login_token_for(
+        app.clone(),
+        "operator@tessara.local",
+        "tessara-dev-operator",
+    )
+    .await;
+    let respondent_token = login_token_for(
+        app.clone(),
+        "respondent@tessara.local",
+        "tessara-dev-respondent",
+    )
+    .await;
+    let parent_token =
+        login_token_for(app.clone(), "parent@tessara.local", "tessara-dev-parent").await;
+
+    let operator_me = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/me", &operator_token, None),
+    )
+    .await;
+    assert_eq!(operator_me["role_family"], "operator");
+    assert_eq!(
+        operator_me["scope_nodes"]
+            .as_array()
+            .expect("operator scope should be present")
+            .len(),
+        2
+    );
+
+    let respondent_me = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/me", &respondent_token, None),
+    )
+    .await;
+    assert_eq!(respondent_me["role_family"], "respondent");
+    assert_eq!(
+        respondent_me["subordinate_respondents"]
+            .as_array()
+            .expect("respondent subordinate list should be present")
+            .len(),
+        0
+    );
+
+    let parent_me = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/me", &parent_token, None),
+    )
+    .await;
+    assert_eq!(parent_me["role_family"], "respondent");
+    assert_eq!(
+        parent_me["subordinate_respondents"]
+            .as_array()
+            .expect("parent subordinate list should be present")
+            .len(),
+        1
+    );
+
+    let operator_nodes = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/nodes?q=Demo", &operator_token, None),
+    )
+    .await;
+    let operator_node_names = operator_nodes
+        .as_array()
+        .expect("operator nodes should be an array")
+        .iter()
+        .filter_map(|node| node["name"].as_str())
+        .collect::<Vec<_>>();
+    assert!(operator_node_names.contains(&"Demo Program Family Outreach"));
+    assert!(operator_node_names.contains(&"Demo Activity Job Coaching"));
+    assert!(!operator_node_names.contains(&"Demo Partner Community Bridge"));
+
+    let all_nodes = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/nodes?q=Community Bridge", &admin_token, None),
+    )
+    .await;
+    let out_of_scope_node_id = all_nodes
+        .as_array()
+        .expect("admin nodes should be an array")
+        .iter()
+        .find(|node| node["name"] == "Demo Partner Community Bridge")
+        .and_then(|node| node["id"].as_str())
+        .expect("out of scope node id should be present");
+    let forbidden_node = request_status_and_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/nodes/{out_of_scope_node_id}"),
+            &operator_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(forbidden_node.0, StatusCode::FORBIDDEN);
+
+    let respondent_forms = request_status_and_json(
+        app.clone(),
+        authorized_request("GET", "/api/forms", &respondent_token, None),
+    )
+    .await;
+    assert_eq!(respondent_forms.0, StatusCode::FORBIDDEN);
+
+    let operator_create_form = request_status_and_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/forms",
+            &operator_token,
+            Some(json!({
+                "name": "Blocked Form",
+                "slug": "blocked-form",
+                "scope_node_type_id": null
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(operator_create_form.0, StatusCode::FORBIDDEN);
+
+    let respondent_options = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/responses/options", &respondent_token, None),
+    )
+    .await;
+    assert_eq!(respondent_options["mode"], "assignment");
+    assert!(
+        respondent_options["assignments"]
+            .as_array()
+            .expect("respondent options should include assignments")
+            .iter()
+            .any(|assignment| assignment["node_name"] == "Demo Program Health Navigation")
+    );
+
+    let child_account_id = parent_me["subordinate_respondents"]
+        .as_array()
+        .expect("parent subordinate list should be present")
+        .first()
+        .and_then(|account| account["account_id"].as_str())
+        .and_then(|value| Uuid::parse_str(value).ok())
+        .expect("parent should expose child respondent id");
+    let parent_child_options = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/responses/options?respondent_account_id={child_account_id}"),
+            &parent_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(parent_child_options["mode"], "assignment");
+    assert!(
+        parent_child_options["assignments"]
+            .as_array()
+            .expect("parent-child options should include assignments")
+            .iter()
+            .any(|assignment| assignment["node_name"] == "Demo Activity After School Check-ins")
     );
 }
 
@@ -1882,11 +2039,7 @@ async fn hierarchy_builder_rejects_required_metadata_after_nodes_exist() {
     .await;
     let nodes = request_json(
         app.clone(),
-        Request::builder()
-            .method("GET")
-            .uri("/api/nodes?q=Updated")
-            .body(Body::empty())
-            .expect("valid nodes request"),
+        authorized_request("GET", "/api/nodes?q=Updated", &token, None),
     )
     .await;
     assert!(
@@ -3958,11 +4111,12 @@ async fn reporting_and_dashboard_builders_return_diagnostics_for_invalid_referen
     .await;
     let updated_dashboard = request_json(
         app.clone(),
-        Request::builder()
-            .method("GET")
-            .uri(format!("/api/dashboards/{dashboard_id}"))
-            .body(Body::empty())
-            .expect("valid dashboard request"),
+        authorized_request(
+            "GET",
+            &format!("/api/dashboards/{dashboard_id}"),
+            &token,
+            None,
+        ),
     )
     .await;
     assert_eq!(updated_dashboard["name"], "Updated Diagnostics Dashboard");
@@ -4008,11 +4162,12 @@ async fn reporting_and_dashboard_builders_return_diagnostics_for_invalid_referen
     .await;
     let dashboard_with_component = request_json(
         app.clone(),
-        Request::builder()
-            .method("GET")
-            .uri(format!("/api/dashboards/{dashboard_id}"))
-            .body(Body::empty())
-            .expect("valid dashboard request"),
+        authorized_request(
+            "GET",
+            &format!("/api/dashboards/{dashboard_id}"),
+            &token,
+            None,
+        ),
     )
     .await;
     assert!(
@@ -4051,11 +4206,12 @@ async fn reporting_and_dashboard_builders_return_diagnostics_for_invalid_referen
     .await;
     let dashboard_after_delete = request_json(
         app.clone(),
-        Request::builder()
-            .method("GET")
-            .uri(format!("/api/dashboards/{dashboard_id}"))
-            .body(Body::empty())
-            .expect("valid dashboard request"),
+        authorized_request(
+            "GET",
+            &format!("/api/dashboards/{dashboard_id}"),
+            &token,
+            None,
+        ),
     )
     .await;
     assert!(
@@ -4127,11 +4283,12 @@ async fn reporting_and_dashboard_builders_return_diagnostics_for_invalid_referen
     .await;
     let deleted_dashboard = request_status_and_json(
         app.clone(),
-        Request::builder()
-            .method("GET")
-            .uri(format!("/api/dashboards/{dashboard_id}"))
-            .body(Body::empty())
-            .expect("valid dashboard request"),
+        authorized_request(
+            "GET",
+            &format!("/api/dashboards/{dashboard_id}"),
+            &token,
+            None,
+        ),
     )
     .await;
     assert_eq!(deleted_dashboard.0, StatusCode::NOT_FOUND);
@@ -4211,11 +4368,12 @@ async fn legacy_fixture_import_rehearsal_projects_report_and_dashboard() {
 
     let dashboard = request_json(
         app,
-        Request::builder()
-            .method("GET")
-            .uri(format!("/api/dashboards/{}", summary.dashboard_id))
-            .body(Body::empty())
-            .expect("valid imported dashboard request"),
+        authorized_request(
+            "GET",
+            &format!("/api/dashboards/{}", summary.dashboard_id),
+            &token,
+            None,
+        ),
     )
     .await;
     assert_eq!(
@@ -4336,6 +4494,10 @@ async fn test_state() -> Option<db::AppState> {
 }
 
 async fn login_token(app: axum::Router) -> String {
+    login_token_for(app, "admin@tessara.local", "tessara-dev-admin").await
+}
+
+async fn login_token_for(app: axum::Router, email: &str, password: &str) -> String {
     let login = request_json(
         app,
         Request::builder()
@@ -4344,8 +4506,8 @@ async fn login_token(app: axum::Router) -> String {
             .header(header::CONTENT_TYPE, "application/json")
             .body(Body::from(
                 json!({
-                    "email": "admin@tessara.local",
-                    "password": "tessara-dev-admin"
+                    "email": email,
+                    "password": password
                 })
                 .to_string(),
             ))
@@ -4538,9 +4700,10 @@ async fn request_status_and_text(
 }
 
 fn authorized_request(method: &str, uri: &str, token: &str, body: Option<Value>) -> Request<Body> {
+    let sanitized_uri = uri.trim().replace(' ', "%20");
     let mut builder = Request::builder()
         .method(method)
-        .uri(uri)
+        .uri(sanitized_uri)
         .header(header::AUTHORIZATION, format!("Bearer {token}"));
 
     let body = if let Some(body) = body {

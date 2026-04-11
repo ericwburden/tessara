@@ -3,6 +3,7 @@
 /// JavaScript controller for `/app` and the dedicated product-area routes.
 pub const APPLICATION_SCRIPT: &str = r#"
       let token = window.sessionStorage.getItem('tessara.devToken');
+      let currentAccount = null;
       const selections = {};
       const page = {
         key: document.body.dataset.pageKey || 'home',
@@ -24,6 +25,7 @@ pub const APPLICATION_SCRIPT: &str = r#"
       };
       let renderedResponseForm = null;
       let currentResponseDetail = null;
+      let currentRespondentContext = window.sessionStorage.getItem('tessara.respondentAccountId');
 
       function byId(id) {
         return document.getElementById(id);
@@ -106,7 +108,7 @@ pub const APPLICATION_SCRIPT: &str = r#"
           return;
         }
         element.textContent = account?.email
-          ? `Signed in as ${account.email}.`
+          ? `Signed in as ${account.email} (${String(account.role_family || '').replaceAll('_', ' ')}).`
           : 'Authenticated for local testing.';
       }
 
@@ -130,6 +132,37 @@ pub const APPLICATION_SCRIPT: &str = r#"
         }
       }
 
+      function isAdmin() {
+        return currentAccount?.role_family === 'admin';
+      }
+
+      function isOperator() {
+        return currentAccount?.role_family === 'operator';
+      }
+
+      function isRespondent() {
+        return currentAccount?.role_family === 'respondent';
+      }
+
+      function setRespondentContext(accountId) {
+        currentRespondentContext = accountId || '';
+        if (currentRespondentContext) {
+          window.sessionStorage.setItem('tessara.respondentAccountId', currentRespondentContext);
+        } else {
+          window.sessionStorage.removeItem('tessara.respondentAccountId');
+        }
+      }
+
+      function respondentQuerySuffix() {
+        return currentRespondentContext ? `respondent_account_id=${encodeURIComponent(currentRespondentContext)}` : '';
+      }
+
+      function withRespondentQuery(path) {
+        const suffix = respondentQuerySuffix();
+        if (!suffix) return path;
+        return path.includes('?') ? `${path}&${suffix}` : `${path}?${suffix}`;
+      }
+
       async function request(path, options = {}) {
         const headers = { ...(options.headers || {}) };
         if (token) {
@@ -144,40 +177,89 @@ pub const APPLICATION_SCRIPT: &str = r#"
         return payload;
       }
 
-      async function login(silent = false) {
+      function openLogin() {
+        redirect('/app/login');
+      }
+
+      async function login(silent = false, email = 'admin@tessara.local', password = 'tessara-dev-admin') {
         const payload = await request('/api/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            email: 'admin@tessara.local',
-            password: 'tessara-dev-admin'
+            email,
+            password
           })
         });
         token = payload.token;
         window.sessionStorage.setItem('tessara.devToken', token);
-        updateSessionStatus();
-        if (!silent) show({ authenticated: true });
-        return payload;
+        currentAccount = await request('/api/me');
+        if (currentAccount.role_family !== 'respondent') {
+          setRespondentContext('');
+        } else if (!currentRespondentContext) {
+          setRespondentContext(currentAccount.account_id);
+        }
+        updateSessionStatus(currentAccount);
+        applyRoleVisibility();
+        if (!silent) show({ authenticated: true, account: currentAccount });
+        return currentAccount;
       }
 
       async function ensureAuthenticated() {
         if (!token) {
-          await login(true);
+          throw new Error('Sign in required.');
         }
+        return token;
       }
 
       function logout() {
         token = null;
+        currentAccount = null;
+        setRespondentContext('');
         window.sessionStorage.removeItem('tessara.devToken');
         updateSessionStatus();
         show({ authenticated: false });
+        redirect('/app/login');
+      }
+
+      async function bootstrapCurrentAccount() {
+        if (!token) {
+          currentAccount = null;
+          updateSessionStatus();
+          applyRoleVisibility();
+          return null;
+        }
+
+        try {
+          currentAccount = await request('/api/me');
+          if (currentAccount.role_family !== 'respondent') {
+            setRespondentContext('');
+          } else if (
+            currentRespondentContext
+            && currentRespondentContext !== currentAccount.account_id
+            && !currentAccount.subordinate_respondents.some((respondent) => respondent.account_id === currentRespondentContext)
+          ) {
+            setRespondentContext(currentAccount.account_id);
+          } else if (!currentRespondentContext) {
+            setRespondentContext(currentAccount.account_id);
+          }
+          updateSessionStatus(currentAccount);
+          applyRoleVisibility();
+          return currentAccount;
+        } catch (error) {
+          token = null;
+          currentAccount = null;
+          window.sessionStorage.removeItem('tessara.devToken');
+          setRespondentContext('');
+          updateSessionStatus();
+          applyRoleVisibility();
+          throw error;
+        }
       }
 
       async function loadCurrentUser() {
         try {
           await ensureAuthenticated();
-          const payload = await request('/api/me');
-          updateSessionStatus(payload);
+          const payload = await bootstrapCurrentAccount();
           show(payload);
         } catch (error) {
           show(error.message);
@@ -193,6 +275,61 @@ pub const APPLICATION_SCRIPT: &str = r#"
         } catch (error) {
           show(error.message);
         }
+      }
+
+      function applyRoleVisibility() {
+        const hiddenForRespondent = ['/app/organization', '/app/forms', '/app/reports', '/app/dashboards', '/app/administration', '/app/migration'];
+        const hiddenForOperator = ['/app/administration', '/app/migration'];
+        for (const link of document.querySelectorAll('.app-nav a')) {
+          const href = link.getAttribute('href') || '';
+          let visible = true;
+          if (!currentAccount) {
+            visible = href === '/app';
+          } else if (isRespondent()) {
+            visible = !hiddenForRespondent.includes(href);
+          } else if (isOperator()) {
+            visible = !hiddenForOperator.includes(href);
+          }
+          link.style.display = visible ? '' : 'none';
+        }
+      }
+
+      function canAccessCurrentPage() {
+        if (page.key === 'login') return true;
+        if (!currentAccount) return false;
+        const adminOnlyPrefixes = ['organization-create', 'organization-edit', 'form-create', 'form-edit', 'report-create', 'report-edit', 'dashboard-create', 'dashboard-edit', 'administration', 'migration'];
+        const respondentHiddenPrefixes = ['organization', 'form-', 'report', 'dashboard', 'administration', 'migration'];
+        if (adminOnlyPrefixes.includes(page.key)) {
+          return isAdmin();
+        }
+        if (isRespondent()) {
+          return !respondentHiddenPrefixes.some((prefix) => page.key.startsWith(prefix));
+        }
+        if (isOperator()) {
+          return page.key !== 'administration' && page.key !== 'migration';
+        }
+        return true;
+      }
+
+      function renderAccessState(title, message) {
+        const appMain = document.querySelector('.app-main');
+        if (!appMain) return;
+        appMain.innerHTML = `
+          <section class="app-screen entity-page">
+            <p class="eyebrow">Access</p>
+            <div class="page-title-row">
+              <div>
+                <h2>${escapeHtml(title)}</h2>
+                <p class="muted">${escapeHtml(message)}</p>
+              </div>
+            </div>
+          </section>
+          <section class="app-screen page-panel">
+            <div class="actions">
+              ${currentAccount ? '<a class="button-link" href="/app">Go Home</a>' : '<a class="button-link" href="/app/login">Sign In</a>'}
+            </div>
+          </section>
+        `;
       }
 
       function setSelectOptions(id, options, blankLabel = '') {
@@ -299,10 +436,68 @@ pub const APPLICATION_SCRIPT: &str = r#"
         renderSelections();
         try {
           await ensureAuthenticated();
-          await Promise.all([loadCurrentUser(), loadAppSummary()]);
+          await Promise.all([bootstrapCurrentAccount(), loadAppSummary()]);
         } catch (error) {
           show(error.message);
         }
+      }
+
+      function renderRespondentContextSwitcher(targetId) {
+        const container = byId(targetId);
+        if (!container) return;
+        if (!isRespondent()) {
+          container.innerHTML = '';
+          return;
+        }
+        const options = [
+          {
+            account_id: currentAccount.account_id,
+            display_name: currentAccount.display_name || currentAccount.email
+          },
+          ...(currentAccount.subordinate_respondents || [])
+        ];
+        if (options.length <= 1) {
+          container.innerHTML = '';
+          return;
+        }
+        container.innerHTML = `
+          <section class="app-screen page-panel compact-panel">
+            <h3>Respondent Context</h3>
+            <p class="muted">Choose whose assigned responses you are currently viewing.</p>
+            <div class="form-field">
+              <label for="respondent-context-select">Respondent</label>
+              <select id="respondent-context-select">
+                ${options.map((option) => `<option value="${escapeHtml(option.account_id)}" ${option.account_id === currentRespondentContext ? 'selected' : ''}>${escapeHtml(option.display_name)}</option>`).join('')}
+              </select>
+            </div>
+          </section>
+        `;
+        const select = byId('respondent-context-select');
+        if (select) {
+          select.onchange = () => {
+            setRespondentContext(select.value);
+            initPage().catch((error) => show(error.message));
+          };
+        }
+      }
+
+      async function initLoginPage() {
+        updateSessionStatus();
+        const form = byId('login-form');
+        if (!form) return;
+        form.onsubmit = async (event) => {
+          event.preventDefault();
+          try {
+            const account = await login(
+              false,
+              byId('login-email').value.trim(),
+              byId('login-password').value
+            );
+            redirect(account.role_family === 'respondent' ? '/app/responses' : '/app');
+          } catch (error) {
+            show(error.message);
+          }
+        };
       }
 
       async function loadOrganizationsList() {
@@ -312,8 +507,8 @@ pub const APPLICATION_SCRIPT: &str = r#"
           const html = payload.length
             ? payload.map((node) => recordCard(
                 node.name,
-                `<p>${escapeHtml(node.node_type_name)}</p><p class=\"muted\">${escapeHtml(node.parent_node_name || 'No parent')}</p>`,
-                `<a class=\"button-link\" href=\"/app/organization/${node.id}\">View</a><a class=\"button-link\" href=\"/app/organization/${node.id}/edit\">Edit</a>`
+              `<p>${escapeHtml(node.node_type_name)}</p><p class=\"muted\">${escapeHtml(node.parent_node_name || 'No parent')}</p>`,
+                `<a class=\"button-link\" href=\"/app/organization/${node.id}\">View</a>${isAdmin() ? `<a class=\"button-link\" href=\"/app/organization/${node.id}/edit\">Edit</a>` : ''}`
               )).join('')
             : emptyState('No organization records found.');
           setHtml('organization-list', html);
@@ -486,12 +681,12 @@ pub const APPLICATION_SCRIPT: &str = r#"
       async function loadFormsList() {
         try {
           await ensureAuthenticated();
-          const payload = await request('/api/admin/forms');
+          const payload = await request('/api/forms');
           const html = payload.length
             ? payload.map((form) => recordCard(
                 form.name,
                 `<p>${escapeHtml(form.slug)}</p><p class=\"muted\">${escapeHtml(form.scope_node_type_name || 'Unscoped')}</p>`,
-                `<a class=\"button-link\" href=\"/app/forms/${form.id}\">View</a><a class=\"button-link\" href=\"/app/forms/${form.id}/edit\">Edit</a>`
+                `<a class=\"button-link\" href=\"/app/forms/${form.id}\">View</a>${isAdmin() ? `<a class=\"button-link\" href=\"/app/forms/${form.id}/edit\">Edit</a>` : ''}`
               )).join('')
             : emptyState('No form records found.');
           setHtml('form-list', html);
@@ -504,7 +699,7 @@ pub const APPLICATION_SCRIPT: &str = r#"
       async function loadFormDetail(id) {
         try {
           await ensureAuthenticated();
-          const payload = await request(`/api/admin/forms/${id}`);
+          const payload = await request(`/api/forms/${id}`);
           selectRecord('form', payload.name, payload.id);
           const versions = payload.versions.length
             ? payload.versions.map((version) => `<li>${escapeHtml(version.version_label)} (${escapeHtml(version.status)})</li>`).join('')
@@ -538,7 +733,7 @@ pub const APPLICATION_SCRIPT: &str = r#"
             'No scope'
           );
           if (mode === 'edit' && id) {
-            const payload = await request(`/api/admin/forms/${id}`);
+            const payload = await request(`/api/forms/${id}`);
             byId('form-name').value = payload.name || '';
             byId('form-slug').value = payload.slug || '';
             byId('form-scope-node-type').value = payload.scope_node_type_id || '';
@@ -570,20 +765,33 @@ pub const APPLICATION_SCRIPT: &str = r#"
       async function loadResponsesList() {
         try {
           await ensureAuthenticated();
-          const [publishedForms, drafts, submitted] = await Promise.all([
-            request('/api/forms/published'),
-            request('/api/submissions?status=draft'),
-            request('/api/submissions?status=submitted')
+          renderRespondentContextSwitcher('response-context-switcher');
+          const [responseOptions, drafts, submitted] = await Promise.all([
+            request(withRespondentQuery('/api/responses/options')),
+            request(withRespondentQuery('/api/submissions?status=draft')),
+            request(withRespondentQuery('/api/submissions?status=submitted'))
           ]);
           setHtml(
             'response-pending-list',
-            publishedForms.length
-              ? publishedForms.map((item) => recordCard(
-                  `${item.form_name} ${item.version_label}`,
-                  `<p class=\"muted\">Published form</p>`,
-                  `<a class=\"button-link\" href=\"/app/responses/new?formVersionId=${item.form_version_id}\">Start</a>`
-                )).join('')
-              : emptyState('No published forms are ready for new responses.')
+            responseOptions.mode === 'assignment'
+              ? (
+                  responseOptions.assignments.length
+                    ? responseOptions.assignments.map((item) => recordCard(
+                        `${item.form_name} ${item.version_label}`,
+                        `<p>${escapeHtml(item.node_name)}</p><p class=\"muted\">${escapeHtml(item.respondent_display_name || 'Assigned respondent')}</p>`,
+                        `<a class=\"button-link\" href=\"/app/responses/new?formVersionId=${item.form_version_id}&nodeId=${item.node_id}${item.respondent_account_id ? `&respondentAccountId=${item.respondent_account_id}` : ''}\">Start</a>`
+                      )).join('')
+                    : emptyState('No assigned responses are ready to start.')
+                )
+              : (
+                  responseOptions.published_forms.length
+                    ? responseOptions.published_forms.map((item) => recordCard(
+                        `${item.form_name} ${item.version_label}`,
+                        `<p class=\"muted\">Published form</p>`,
+                        `<a class=\"button-link\" href=\"/app/responses/new?formVersionId=${item.form_version_id}\">Start</a>`
+                      )).join('')
+                    : emptyState('No published forms are ready for new responses.')
+                )
           );
           setHtml(
             'response-draft-list',
@@ -605,7 +813,7 @@ pub const APPLICATION_SCRIPT: &str = r#"
                 )).join('')
               : emptyState('No submitted responses found.')
           );
-          show({ publishedForms, drafts, submitted });
+          show({ responseOptions, drafts, submitted });
         } catch (error) {
           setHtml('response-pending-list', emptyState(error.message));
           setHtml('response-draft-list', emptyState(error.message));
@@ -616,20 +824,33 @@ pub const APPLICATION_SCRIPT: &str = r#"
       async function initResponseCreateForm() {
         try {
           await ensureAuthenticated();
-          const [forms, nodes] = await Promise.all([
-            request('/api/forms/published'),
-            request('/api/nodes')
-          ]);
-          setSelectOptions(
-            'response-form-version',
-            forms.map((item) => ({ value: item.form_version_id, label: `${item.form_name} ${item.version_label}` })),
-            'Choose published form'
-          );
-          setSelectOptions(
-            'response-node',
-            nodes.map((item) => ({ value: item.id, label: item.name })),
-            'Choose target organization'
-          );
+          const queryRespondentAccountId = page.search.get('respondentAccountId');
+          if (queryRespondentAccountId) setRespondentContext(queryRespondentAccountId);
+          renderRespondentContextSwitcher('response-create-context-switcher');
+          const options = await request(withRespondentQuery('/api/responses/options'));
+          if (options.mode === 'assignment') {
+            setSelectOptions(
+              'response-form-version',
+              options.assignments.map((item) => ({ value: item.form_version_id, label: `${item.form_name} ${item.version_label}` })),
+              'Choose assigned form'
+            );
+            setSelectOptions(
+              'response-node',
+              options.assignments.map((item) => ({ value: item.node_id, label: item.node_name })),
+              'Choose assigned organization'
+            );
+          } else {
+            setSelectOptions(
+              'response-form-version',
+              options.published_forms.map((item) => ({ value: item.form_version_id, label: `${item.form_name} ${item.version_label}` })),
+              'Choose published form'
+            );
+            setSelectOptions(
+              'response-node',
+              options.nodes.map((item) => ({ value: item.id, label: item.name })),
+              'Choose target organization'
+            );
+          }
           const queryFormVersion = page.search.get('formVersionId');
           const queryNodeId = page.search.get('nodeId');
           if (queryFormVersion) byId('response-form-version').value = queryFormVersion;
@@ -643,7 +864,8 @@ pub const APPLICATION_SCRIPT: &str = r#"
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                   form_version_id: byId('response-form-version').value,
-                  node_id: byId('response-node').value
+                  node_id: byId('response-node').value,
+                  respondent_account_id: currentRespondentContext || null
                 })
               });
               redirect(`/app/responses/${response.id}/edit`);
@@ -759,7 +981,7 @@ pub const APPLICATION_SCRIPT: &str = r#"
             ? payload.map((report) => recordCard(
                 report.name,
                 `<p class=\"muted\">${escapeHtml(report.dataset_name || report.form_name || 'Unknown source')}</p>`,
-                `<a class=\"button-link\" href=\"/app/reports/${report.id}\">View</a><a class=\"button-link\" href=\"/app/reports/${report.id}/edit\">Edit</a>`
+                `<a class=\"button-link\" href=\"/app/reports/${report.id}\">View</a>${isAdmin() ? `<a class=\"button-link\" href=\"/app/reports/${report.id}/edit\">Edit</a>` : ''}`
               )).join('')
             : emptyState('No report records found.');
           setHtml('report-list', html);
@@ -877,7 +1099,7 @@ pub const APPLICATION_SCRIPT: &str = r#"
         try {
           await ensureAuthenticated();
           const [forms, datasets] = await Promise.all([
-            request('/api/admin/forms'),
+            request('/api/forms'),
             request('/api/datasets')
           ]);
           reportFormState = {
@@ -952,7 +1174,7 @@ pub const APPLICATION_SCRIPT: &str = r#"
             ? payload.map((dashboard) => recordCard(
                 dashboard.name,
                 `<p class=\"muted\">${dashboard.component_count} components</p>`,
-                `<a class=\"button-link\" href=\"/app/dashboards/${dashboard.id}\">View</a><a class=\"button-link\" href=\"/app/dashboards/${dashboard.id}/edit\">Edit</a>`
+                `<a class=\"button-link\" href=\"/app/dashboards/${dashboard.id}\">View</a>${isAdmin() ? `<a class=\"button-link\" href=\"/app/dashboards/${dashboard.id}/edit\">Edit</a>` : ''}`
               )).join('')
             : emptyState('No dashboard records found.');
           setHtml('dashboard-list', html);
@@ -1099,9 +1321,48 @@ pub const APPLICATION_SCRIPT: &str = r#"
         }
       }
 
+      function applyPageActionVisibility() {
+        if (!currentAccount) return;
+        if (!isAdmin()) {
+          for (const link of document.querySelectorAll('.page-title-row .actions a')) {
+            const href = link.getAttribute('href') || '';
+            if (
+              href.includes('/edit')
+              || href.endsWith('/new')
+              || href === '/app/organization/new'
+              || href === '/app/forms/new'
+              || href === '/app/reports/new'
+              || href === '/app/dashboards/new'
+            ) {
+              link.remove();
+            }
+          }
+        }
+      }
+
       async function initPage() {
         updateSessionStatus();
         renderSelections();
+        if (page.key === 'login') {
+          await initLoginPage();
+          return;
+        }
+
+        try {
+          await bootstrapCurrentAccount();
+        } catch (error) {
+          renderAccessState('Sign In Required', 'This screen requires an authenticated local account.');
+          show(error.message);
+          return;
+        }
+
+        if (!canAccessCurrentPage()) {
+          renderAccessState('Access Restricted', 'Your current role does not have access to this screen.');
+          return;
+        }
+
+        applyPageActionVisibility();
+
         switch (page.key) {
           case 'home':
             await initHomePage();
@@ -1111,8 +1372,7 @@ pub const APPLICATION_SCRIPT: &str = r#"
             updateSessionStatus();
             break;
           case 'migration':
-            await ensureAuthenticated();
-            updateSessionStatus();
+            updateSessionStatus(currentAccount);
             break;
           case 'organization-list':
             await loadOrganizationsList();

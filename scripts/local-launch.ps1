@@ -96,9 +96,12 @@ try {
     Write-Host "Reports:          http://localhost:8080/app/reports"
     Write-Host "Migration:        http://localhost:8080/app/migration"
     Write-Host ""
-    Write-Host "Default dev login:" -ForegroundColor Green
-    Write-Host "  email:    admin@tessara.local"
-    Write-Host "  password: tessara-dev-admin"
+    Write-Host "Demo accounts:" -ForegroundColor Green
+    Write-Host "  admin@tessara.local       / tessara-dev-admin"
+    Write-Host "  operator@tessara.local    / tessara-dev-operator"
+    Write-Host "  parent@tessara.local      / tessara-dev-parent"
+    Write-Host "  respondent@tessara.local  / tessara-dev-respondent"
+    Write-Host "  child@tessara.local       / tessara-dev-child"
     if ($FreshData) {
         Write-Host ""
         Write-Host "Postgres volume was refreshed because -FreshData was supplied." -ForegroundColor Yellow
