@@ -39,7 +39,7 @@ try {
     Write-Host ("Primary submission:     {0}" -f $summary.submission_id)
     Write-Host ("Primary report:         {0}" -f $summary.report_id)
     Write-Host ("Primary dashboard:      {0}" -f $summary.dashboard_id)
-    Write-Host "Demo accounts: admin / operator / parent / respondent / child"
+    Write-Host "Demo accounts: admin / operator / delegator / respondent / delegate"
 } finally {
     Pop-Location
 }

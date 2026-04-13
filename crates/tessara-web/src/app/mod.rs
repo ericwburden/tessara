@@ -41,6 +41,11 @@ pub fn App() -> impl IntoView {
     provide_meta_context();
     let migration_route = Lazy::<migration::MigrationLazyRoute>::new();
 
+    // Route inventory note:
+    // `/app/login` and `/app/administration/*` are the first auth/admin
+    // surfaces being cleaned up as explicit application routes on top of the
+    // retained bridge. The remaining product routes still depend on the
+    // transitional bridge controller for body-level behavior.
     view! {
         <Router>
             <Routes fallback=|| view! { <p>"Not found."</p> }>
@@ -75,6 +80,7 @@ pub fn App() -> impl IntoView {
                 <Route path=path!("/app/administration/users/:account_id/edit") view=administration::UserEditPage ssr=PRIMARY_SSR_MODE />
                 <Route path=path!("/app/administration/users/:account_id/access") view=administration::UserAccessPage ssr=PRIMARY_SSR_MODE />
                 <Route path=path!("/app/administration/roles") view=administration::RolesPage ssr=PRIMARY_SSR_MODE />
+                <Route path=path!("/app/administration/roles/new") view=administration::RoleCreatePage ssr=PRIMARY_SSR_MODE />
                 <Route path=path!("/app/administration/roles/:role_id") view=administration::RoleDetailPage ssr=PRIMARY_SSR_MODE />
                 <Route path=path!("/app/administration/roles/:role_id/edit") view=administration::RoleEditPage ssr=PRIMARY_SSR_MODE />
                 <Route path=path!("/app/admin") view=administration::LegacyAdminPage ssr=PRIMARY_SSR_MODE />

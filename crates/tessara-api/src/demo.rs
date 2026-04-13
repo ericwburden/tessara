@@ -121,12 +121,12 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         "tessara-dev-operator",
     )
     .await?;
-    let parent_account_id = ensure_demo_account(
+    let delegator_account_id = ensure_demo_account(
         pool,
-        "parent@tessara.local",
-        "Demo Parent",
+        "delegator@tessara.local",
+        "Demo Delegator",
         "respondent",
-        "tessara-dev-parent",
+        "tessara-dev-delegator",
     )
     .await?;
     let respondent_account_id = ensure_demo_account(
@@ -137,12 +137,12 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         "tessara-dev-respondent",
     )
     .await?;
-    let child_respondent_account_id = ensure_demo_account(
+    let delegate_account_id = ensure_demo_account(
         pool,
-        "child@tessara.local",
-        "Demo Child Respondent",
+        "delegate@tessara.local",
+        "Demo Delegate",
         "respondent",
-        "tessara-dev-child",
+        "tessara-dev-delegate",
     )
     .await?;
 
@@ -664,7 +664,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
 
     ensure_account_scope_assignment(pool, operator_account_id, program_a).await?;
     ensure_account_scope_assignment(pool, operator_account_id, activity_e).await?;
-    ensure_subordinate_relationship(pool, parent_account_id, child_respondent_account_id).await?;
+    ensure_account_delegation(pool, delegator_account_id, delegate_account_id).await?;
 
     let partner_form = ensure_demo_form(
         pool,
@@ -887,7 +887,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
     .await?;
     ensure_seed_submission(
         pool,
-        parent_account_id,
+        delegator_account_id,
         partner_form.form_version_id,
         partner_a,
         SeedSubmissionSpec {
@@ -942,7 +942,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
     .await?;
     ensure_seed_submission(
         pool,
-        parent_account_id,
+        delegator_account_id,
         program_form.form_version_id,
         program_b,
         SeedSubmissionSpec {
@@ -999,7 +999,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
     .await?;
     ensure_seed_submission(
         pool,
-        child_respondent_account_id,
+        delegate_account_id,
         activity_form.form_version_id,
         activity_c,
         SeedSubmissionSpec {
@@ -1040,7 +1040,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
     .await?;
     ensure_seed_submission(
         pool,
-        child_respondent_account_id,
+        delegate_account_id,
         session_form.form_version_id,
         session_g,
         SeedSubmissionSpec {
@@ -1084,7 +1084,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         pool,
         activity_form.form_version_id,
         activity_d,
-        child_respondent_account_id,
+        delegate_account_id,
     )
     .await?;
 
@@ -1282,20 +1282,20 @@ async fn ensure_account_scope_assignment(
     Ok(())
 }
 
-async fn ensure_subordinate_relationship(
+async fn ensure_account_delegation(
     pool: &PgPool,
-    parent_account_id: Uuid,
-    respondent_account_id: Uuid,
+    delegator_account_id: Uuid,
+    delegate_account_id: Uuid,
 ) -> ApiResult<()> {
     sqlx::query(
         r#"
-        INSERT INTO account_subordinate_relationships (parent_account_id, respondent_account_id)
+        INSERT INTO account_delegations (delegator_account_id, delegate_account_id)
         VALUES ($1, $2)
         ON CONFLICT DO NOTHING
         "#,
     )
-    .bind(parent_account_id)
-    .bind(respondent_account_id)
+    .bind(delegator_account_id)
+    .bind(delegate_account_id)
     .execute(pool)
     .await?;
     Ok(())

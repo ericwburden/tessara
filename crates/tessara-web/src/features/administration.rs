@@ -94,6 +94,18 @@ pub fn RolesPage() -> impl IntoView {
 }
 
 #[component]
+pub fn RoleCreatePage() -> impl IntoView {
+    render_transitional_route(TransitionalPage {
+        title: "Create Role",
+        description: "Create a Tessara role bundle.",
+        body_html: extract_app_root(crate::role_create_application_html()),
+        page_key: "role-create",
+        active_route: "administration",
+        record_id: None,
+    })
+}
+
+#[component]
 pub fn RoleDetailPage() -> impl IntoView {
     let RoleRouteParams { role_id } = require_route_params();
 

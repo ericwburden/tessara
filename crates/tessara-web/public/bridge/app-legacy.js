@@ -31,7 +31,7 @@
       };
       let renderedResponseForm = null;
       let currentResponseDetail = null;
-      let currentRespondentContext = window.sessionStorage.getItem('tessara.respondentAccountId');
+      let currentDelegateContext = window.sessionStorage.getItem('tessara.delegateAccountId');
 
       function storedThemePreference() {
         try {
@@ -198,8 +198,27 @@
           return;
         }
         element.textContent = account?.email
-          ? `Signed in as ${account.email} (${String(account.role_family || '').replaceAll('_', ' ')}).`
+          ? `Signed in as ${account.email} (${String(account.ui_access_profile || '').replaceAll('_', ' ')}).`
           : 'Authenticated for local testing.';
+      }
+
+      function renderCurrentUserSummary(account = null) {
+        const html = !account
+          ? '<p class=\"muted\">Sign in to load account context.</p>'
+          : `
+              <article class=\"selection-item box\">
+                <h3>${escapeHtml(account.display_name || account.email)}</h3>
+                <p>${escapeHtml(account.email)}</p>
+                <p class=\"muted\">Profile: ${escapeHtml(String(account.ui_access_profile || '').replaceAll('_', ' '))}</p>
+                <p class=\"muted\">Roles: ${escapeHtml((account.roles || []).join(', ') || 'None')}</p>
+                <p class=\"muted\">Capabilities: ${escapeHtml((account.capabilities || []).length)}</p>
+                <p class=\"muted\">Scope nodes: ${escapeHtml((account.scope_nodes || []).length)}</p>
+                <p class=\"muted\">Delegations: ${escapeHtml((account.delegations || []).length)}</p>
+              </article>
+            `;
+        for (const id of ['current-user-summary', 'home-current-user-summary']) {
+          setHtml(id, html);
+        }
       }
 
       function selectRecord(kind, label, id) {
@@ -223,15 +242,19 @@
       }
 
       function isAdmin() {
-        return currentAccount?.role_family === 'admin';
+        return currentAccount?.ui_access_profile === 'admin';
       }
 
       function isOperator() {
-        return currentAccount?.role_family === 'operator';
+        return currentAccount?.ui_access_profile === 'operator';
       }
 
-      function isRespondent() {
-        return currentAccount?.role_family === 'respondent';
+      function isResponseUser() {
+        return currentAccount?.ui_access_profile === 'response_user';
+      }
+
+      function canUseDelegatedResponses() {
+        return hasCapability('submissions:write');
       }
 
       function hasCapability(capability) {
@@ -239,21 +262,21 @@
         return currentAccount.capabilities?.includes('admin:all') || currentAccount.capabilities?.includes(capability);
       }
 
-      function setRespondentContext(accountId) {
-        currentRespondentContext = accountId || '';
-        if (currentRespondentContext) {
-          window.sessionStorage.setItem('tessara.respondentAccountId', currentRespondentContext);
+      function setDelegateContext(accountId) {
+        currentDelegateContext = accountId || '';
+        if (currentDelegateContext) {
+          window.sessionStorage.setItem('tessara.delegateAccountId', currentDelegateContext);
         } else {
-          window.sessionStorage.removeItem('tessara.respondentAccountId');
+          window.sessionStorage.removeItem('tessara.delegateAccountId');
         }
       }
 
-      function respondentQuerySuffix() {
-        return currentRespondentContext ? `respondent_account_id=${encodeURIComponent(currentRespondentContext)}` : '';
+      function delegateQuerySuffix() {
+        return currentDelegateContext ? `delegate_account_id=${encodeURIComponent(currentDelegateContext)}` : '';
       }
 
-      function withRespondentQuery(path) {
-        const suffix = respondentQuerySuffix();
+      function withDelegateQuery(path) {
+        const suffix = delegateQuerySuffix();
         if (!suffix) return path;
         return path.includes('?') ? `${path}&${suffix}` : `${path}?${suffix}`;
       }
@@ -288,12 +311,13 @@
         token = payload.token;
         window.sessionStorage.setItem('tessara.devToken', token);
         currentAccount = await request('/api/me');
-        if (currentAccount.role_family !== 'respondent') {
-          setRespondentContext('');
-        } else if (!currentRespondentContext) {
-          setRespondentContext(currentAccount.account_id);
+        if (!canUseDelegatedResponses()) {
+          setDelegateContext('');
+        } else if (!currentDelegateContext) {
+          setDelegateContext(currentAccount.account_id);
         }
         updateSessionStatus(currentAccount);
+        renderCurrentUserSummary(currentAccount);
         applyRoleVisibility();
         if (!silent) show({ authenticated: true, account: currentAccount });
         return currentAccount;
@@ -309,9 +333,10 @@
       function logout() {
         token = null;
         currentAccount = null;
-        setRespondentContext('');
+        setDelegateContext('');
         window.sessionStorage.removeItem('tessara.devToken');
         updateSessionStatus();
+        renderCurrentUserSummary();
         show({ authenticated: false });
         redirect('/app/login');
       }
@@ -320,32 +345,35 @@
         if (!token) {
           currentAccount = null;
           updateSessionStatus();
+          renderCurrentUserSummary();
           applyRoleVisibility();
           return null;
         }
 
         try {
           currentAccount = await request('/api/me');
-          if (currentAccount.role_family !== 'respondent') {
-            setRespondentContext('');
+          if (!canUseDelegatedResponses()) {
+            setDelegateContext('');
           } else if (
-            currentRespondentContext
-            && currentRespondentContext !== currentAccount.account_id
-            && !currentAccount.subordinate_respondents.some((respondent) => respondent.account_id === currentRespondentContext)
+            currentDelegateContext
+            && currentDelegateContext !== currentAccount.account_id
+            && !currentAccount.delegations.some((delegate) => delegate.account_id === currentDelegateContext)
           ) {
-            setRespondentContext(currentAccount.account_id);
-          } else if (!currentRespondentContext) {
-            setRespondentContext(currentAccount.account_id);
+            setDelegateContext(currentAccount.account_id);
+          } else if (!currentDelegateContext) {
+            setDelegateContext(currentAccount.account_id);
           }
           updateSessionStatus(currentAccount);
+          renderCurrentUserSummary(currentAccount);
           applyRoleVisibility();
           return currentAccount;
         } catch (error) {
           token = null;
           currentAccount = null;
           window.sessionStorage.removeItem('tessara.devToken');
-          setRespondentContext('');
+          setDelegateContext('');
           updateSessionStatus();
+          renderCurrentUserSummary();
           applyRoleVisibility();
           throw error;
         }
@@ -427,6 +455,7 @@
           'user-access': 'admin:all',
           'role-list': 'admin:all',
           'role-detail': 'admin:all',
+          'role-create': 'admin:all',
           'role-edit': 'admin:all'
         };
         const requiredCapability = pageCapabilities[page.key];
@@ -564,10 +593,10 @@
         }
       }
 
-      function renderRespondentContextSwitcher(targetId) {
+      function renderDelegateContextSwitcher(targetId) {
         const container = byId(targetId);
         if (!container) return;
-        if (!isRespondent()) {
+        if (!canUseDelegatedResponses()) {
           container.innerHTML = '';
           return;
         }
@@ -576,7 +605,7 @@
             account_id: currentAccount.account_id,
             display_name: currentAccount.display_name || currentAccount.email
           },
-          ...(currentAccount.subordinate_respondents || [])
+          ...(currentAccount.delegations || [])
         ];
         if (options.length <= 1) {
           container.innerHTML = '';
@@ -584,20 +613,20 @@
         }
         container.innerHTML = `
           <section class="app-screen page-panel compact-panel">
-            <h3>Respondent Context</h3>
-            <p class="muted">Choose whose assigned responses you are currently viewing.</p>
+            <h3>Delegated Response Context</h3>
+            <p class="muted">Choose which delegated account's assigned responses you are currently viewing.</p>
             <div class="form-field">
-              <label for="respondent-context-select">Respondent</label>
-              <select id="respondent-context-select">
-                ${options.map((option) => `<option value="${escapeHtml(option.account_id)}" ${option.account_id === currentRespondentContext ? 'selected' : ''}>${escapeHtml(option.display_name)}</option>`).join('')}
+              <label for="delegate-context-select">Acting For</label>
+              <select id="delegate-context-select">
+                ${options.map((option) => `<option value="${escapeHtml(option.account_id)}" ${option.account_id === currentDelegateContext ? 'selected' : ''}>${escapeHtml(option.display_name)}</option>`).join('')}
               </select>
             </div>
           </section>
         `;
-        const select = byId('respondent-context-select');
+        const select = byId('delegate-context-select');
         if (select) {
           select.onchange = () => {
-            setRespondentContext(select.value);
+            setDelegateContext(select.value);
             initPage().catch((error) => show(error.message));
           };
         }
@@ -617,10 +646,11 @@
               byId('login-email').value.trim(),
               byId('login-password').value
             );
-            redirect(account.role_family === 'respondent' ? '/app/responses' : '/app');
+            redirect(account.ui_access_profile === 'response_user' ? '/app/responses' : '/app');
           } catch (error) {
             setLoginFeedback(error.message || 'Sign in failed.');
-            show(error.message);
+            byId('login-password').value = '';
+            byId('login-password').focus();
           }
         };
       }
@@ -675,18 +705,23 @@
           const scopeNodes = payload.scope_nodes.length
             ? payload.scope_nodes.map((node) => `<li>${escapeHtml(node.node_name)} <span class=\"muted\">(${escapeHtml(node.node_type_name)})</span></li>`).join('')
             : '<li class=\"muted\">No scope nodes assigned.</li>';
-          const respondents = payload.subordinate_respondents.length
-            ? payload.subordinate_respondents.map((account) => `<li>${escapeHtml(account.display_name)} <span class=\"muted\">${escapeHtml(account.email)}</span></li>`).join('')
-            : '<li class=\"muted\">No subordinate respondents.</li>';
+          const delegations = payload.delegations.length
+            ? payload.delegations.map((account) => `<li>${escapeHtml(account.display_name)} <span class=\"muted\">${escapeHtml(account.email)}</span></li>`).join('')
+            : '<li class=\"muted\">No delegated accounts.</li>';
+          const delegatedBy = payload.delegated_by.length
+            ? payload.delegated_by.map((account) => `<li>${escapeHtml(account.display_name)} <span class=\"muted\">${escapeHtml(account.email)}</span></li>`).join('')
+            : '<li class=\"muted\">No delegators.</li>';
           const statusNote = payload.id === currentAccount?.account_id ? 'This is the currently signed-in account.' : 'Use Edit to change status or password.';
           const accessActions = isAdmin()
             ? `<div class="actions"><a class="button-link" href="/app/administration/users/${payload.id}/access">Manage Access</a></div>`
             : '';
           setHtml('user-detail', `
-            ${detailSection('Summary', `<p>${escapeHtml(payload.display_name)}</p><p>${escapeHtml(payload.email)}</p><p class=\"muted\">Status: ${escapeHtml(userStatusLabel(payload))}</p><p class=\"muted\">${escapeHtml(statusNote)}</p>`)}
+            ${detailSection('Summary', `<p>${escapeHtml(payload.display_name)}</p><p>${escapeHtml(payload.email)}</p><p class=\"muted\">Status: ${escapeHtml(userStatusLabel(payload))}</p><p class=\"muted\">UI Profile: ${escapeHtml(String(payload.ui_access_profile || '').replaceAll('_', ' '))}</p><p class=\"muted\">${escapeHtml(statusNote)}</p>`)}
             ${detailSection('Assigned Roles', `<ul class=\"app-list\">${roles}</ul>`)}
+            ${detailSection('Effective Capabilities', `<p>${escapeHtml((payload.capabilities || []).join(', ') || 'None')}</p>`)}
             ${detailSection('Scope Nodes', `<ul class=\"app-list\">${scopeNodes}</ul>`)}
-            ${detailSection('Subordinate Respondents', `<ul class=\"app-list\">${respondents}</ul>`)}
+            ${detailSection('Can Act For', `<ul class=\"app-list\">${delegations}</ul>`)}
+            ${detailSection('Delegated By', `<ul class=\"app-list\">${delegatedBy}</ul>`)}
             ${accessActions}
           `);
           show(payload);
@@ -741,16 +776,28 @@
         }
       }
 
+      function normalizeFilterValue(value) {
+        return String(value || '').trim().toLowerCase();
+      }
+
       function renderRoleCapabilityOptions(selectedCapabilityIds = []) {
-        const html = roleFormState.capabilities.length
-          ? roleFormState.capabilities.map((capability) => `
-              <label class="checkbox-label" for="role-capability-${escapeHtml(capability.id)}">
-                <input id="role-capability-${escapeHtml(capability.id)}" class="role-capability-checkbox" type="checkbox" value="${escapeHtml(capability.id)}" ${selectedCapabilityIds.includes(capability.id) ? 'checked' : ''}>
-                <span>${escapeHtml(capability.key)}</span>
-              </label>
-              <p class="muted">${escapeHtml(capability.description || '')}</p>
+        const filter = normalizeFilterValue(byId('role-capability-filter')?.value);
+        const capabilities = roleFormState.capabilities.filter((capability) => {
+          if (!filter) return true;
+          return normalizeFilterValue(capability.key).includes(filter)
+            || normalizeFilterValue(capability.description).includes(filter);
+        });
+        const html = capabilities.length
+          ? capabilities.map((capability) => `
+              <tr>
+                <td>
+                  <input id="role-capability-${escapeHtml(capability.id)}" class="role-capability-checkbox" type="checkbox" value="${escapeHtml(capability.id)}" ${selectedCapabilityIds.includes(capability.id) ? 'checked' : ''}>
+                </td>
+                <td><label for="role-capability-${escapeHtml(capability.id)}">${escapeHtml(capability.key)}</label></td>
+                <td>${escapeHtml(capability.description || '')}</td>
+              </tr>
             `).join('')
-          : '<p class="muted">No capabilities are available.</p>';
+          : '<tr><td colspan="3" class="muted">No capabilities match the current filter.</td></tr>';
         setHtml('role-capability-options', html);
       }
 
@@ -799,43 +846,74 @@
         }
       }
 
-      async function initRoleForm(id) {
+      async function initRoleForm(mode, id = null) {
         try {
           await ensureAuthenticated();
-          const [capabilities, role] = await Promise.all([
-            request('/api/admin/capabilities'),
-            request(`/api/admin/roles/${id}`)
-          ]);
+          const capabilities = await request('/api/admin/capabilities');
+          let role = null;
           roleFormState = { capabilities };
-          renderRoleCapabilityOptions(role.capabilities.map((capability) => capability.id));
+          if (mode === 'edit' && id) {
+            role = await request(`/api/admin/roles/${id}`);
+            byId('role-name').value = role.name || '';
+            byId('role-name').disabled = true;
+          } else {
+            byId('role-name').disabled = false;
+          }
+          renderRoleCapabilityOptions((role?.capabilities || []).map((capability) => capability.id));
+          const filterInput = byId('role-capability-filter');
+          if (filterInput) {
+            filterInput.oninput = () => renderRoleCapabilityOptions(collectSelectedCapabilityIds());
+          }
           const form = byId('role-form');
           if (form) {
             form.onsubmit = async (event) => {
               event.preventDefault();
-              const response = await request(`/api/admin/roles/${id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ capability_ids: collectSelectedCapabilityIds() })
-              });
+              const response = await request(
+                mode === 'create' ? '/api/admin/roles' : `/api/admin/roles/${id}`,
+                {
+                  method: mode === 'create' ? 'POST' : 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(
+                    mode === 'create'
+                      ? {
+                          name: byId('role-name').value.trim(),
+                          capability_ids: collectSelectedCapabilityIds()
+                        }
+                      : {
+                          capability_ids: collectSelectedCapabilityIds()
+                        }
+                  )
+                }
+              );
               redirect(`/app/administration/roles/${response.id}`);
             };
           }
         } catch (error) {
-          setHtml('role-capability-options', emptyState(error.message));
+          setHtml('role-capability-options', `<tr><td colspan="3" class="muted">${escapeHtml(error.message)}</td></tr>`);
           show(error.message);
         }
       }
 
-      function renderUserScopeOptions(nodes, selectedNodeIds = []) {
-        const html = nodes.length
-          ? nodes.map((node) => `
-              <label class="checkbox-label" for="user-scope-${escapeHtml(node.id)}">
-                <input id="user-scope-${escapeHtml(node.id)}" class="user-scope-checkbox" type="checkbox" value="${escapeHtml(node.id)}" ${selectedNodeIds.includes(node.id) ? 'checked' : ''}>
-                <span>${escapeHtml(node.name)}</span>
-              </label>
-              <p class="muted">${escapeHtml(node.node_type_name)}${node.parent_node_name ? ` Â· parent ${escapeHtml(node.parent_node_name)}` : ''}</p>
+      function renderUserScopeOptions(nodes, selectedNodeIds = [], editable = true) {
+        const filter = normalizeFilterValue(byId('user-scope-filter')?.value);
+        const filteredNodes = nodes.filter((node) => {
+          if (!filter) return true;
+          return normalizeFilterValue(node.node_name).includes(filter)
+            || normalizeFilterValue(node.node_type_name).includes(filter)
+            || normalizeFilterValue(node.parent_node_name).includes(filter);
+        });
+        const html = filteredNodes.length
+          ? filteredNodes.map((node) => `
+              <tr>
+                <td>
+                  <input id="user-scope-${escapeHtml(node.node_id)}" class="user-scope-checkbox" type="checkbox" value="${escapeHtml(node.node_id)}" ${selectedNodeIds.includes(node.node_id) ? 'checked' : ''} ${editable ? '' : 'disabled'}>
+                </td>
+                <td><label for="user-scope-${escapeHtml(node.node_id)}">${escapeHtml(node.node_name)}</label></td>
+                <td>${escapeHtml(node.node_type_name)}</td>
+                <td>${escapeHtml(node.parent_node_name || 'No parent')}</td>
+              </tr>
             `).join('')
-          : '<p class="muted">No organization nodes are available.</p>';
+          : '<tr><td colspan="4" class="muted">No organization nodes match the current filter.</td></tr>';
         setHtml('user-scope-options', html);
       }
 
@@ -844,23 +922,87 @@
           .map((input) => input.value);
       }
 
+      function renderUserDelegationOptions(accounts, selectedAccountIds = [], editable = true) {
+        const filter = normalizeFilterValue(byId('user-delegation-filter')?.value);
+        const filteredAccounts = accounts.filter((account) => {
+          if (!filter) return true;
+          return normalizeFilterValue(account.display_name).includes(filter)
+            || normalizeFilterValue(account.email).includes(filter);
+        });
+        const html = filteredAccounts.length
+          ? filteredAccounts.map((account) => `
+              <tr>
+                <td>
+                  <input id="user-delegation-${escapeHtml(account.account_id)}" class="user-delegation-checkbox" type="checkbox" value="${escapeHtml(account.account_id)}" ${selectedAccountIds.includes(account.account_id) ? 'checked' : ''} ${editable ? '' : 'disabled'}>
+                </td>
+                <td><label for="user-delegation-${escapeHtml(account.account_id)}">${escapeHtml(account.display_name)}</label></td>
+                <td>${escapeHtml(account.email)}</td>
+              </tr>
+            `).join('')
+          : '<tr><td colspan="3" class="muted">No delegate accounts match the current filter.</td></tr>';
+        setHtml('user-delegation-options', html);
+      }
+
+      function collectSelectedDelegateAccountIds() {
+        return Array.from(document.querySelectorAll('.user-delegation-checkbox:checked'))
+          .map((input) => input.value);
+      }
+
+      function renderUserAccessSummary(payload) {
+        setHtml('user-access-summary', `
+          <dl class="detail-list">
+            <div><dt>Display Name</dt><dd>${escapeHtml(payload.display_name)}</dd></div>
+            <div><dt>Email</dt><dd>${escapeHtml(payload.email)}</dd></div>
+            <div><dt>UI Profile</dt><dd>${escapeHtml(String(payload.ui_access_profile || '').replaceAll('_', ' '))}</dd></div>
+            <div><dt>Capabilities</dt><dd>${escapeHtml((payload.capabilities || []).join(', ') || 'None')}</dd></div>
+            <div><dt>Scope Summary</dt><dd>${escapeHtml(`${(payload.scope_nodes || []).length} assigned node(s)`)}</dd></div>
+            <div><dt>Delegation Summary</dt><dd>${escapeHtml(`${(payload.delegations || []).length} delegated account(s)`)}</dd></div>
+          </dl>
+        `);
+      }
+
       async function initUserAccessForm(id) {
         try {
           await ensureAuthenticated();
-          const [user, nodes] = await Promise.all([
-            request(`/api/admin/users/${id}`),
-            request('/api/nodes')
-          ]);
-          selectRecord('user', user.display_name || user.email, user.id);
-          setHtml('user-access-summary', `
-            <dl class="detail-list">
-              <div><dt>Display Name</dt><dd>${escapeHtml(user.display_name)}</dd></div>
-              <div><dt>Email</dt><dd>${escapeHtml(user.email)}</dd></div>
-              <div><dt>Role Family</dt><dd>${escapeHtml(String(user.role_family || '').replaceAll('_', ' '))}</dd></div>
-              <div><dt>Capabilities</dt><dd>${escapeHtml((user.capabilities || []).join(', ') || 'None')}</dd></div>
-            </dl>
-          `);
-          renderUserScopeOptions(nodes, user.scope_nodes.map((node) => node.node_id));
+          const payload = await request(`/api/admin/users/${id}/access`);
+          selectRecord('user', payload.display_name || payload.email, payload.account_id);
+          renderUserAccessSummary(payload);
+          renderUserScopeOptions(
+            payload.available_scope_nodes || [],
+            (payload.scope_nodes || []).map((node) => node.node_id),
+            payload.scope_assignments_editable
+          );
+          renderUserDelegationOptions(
+            payload.available_delegate_accounts || [],
+            (payload.delegations || []).map((account) => account.account_id),
+            payload.delegation_assignments_editable
+          );
+          const scopeEditability = byId('user-scope-editability');
+          if (scopeEditability) {
+            scopeEditability.textContent = payload.scope_assignments_editable
+              ? 'Scope assignments are editable for this account because its current capability set supports scoped product access.'
+              : 'Scope assignments are read-only for this account because its current capability set does not use scoped product access.';
+          }
+          const scopeFilter = byId('user-scope-filter');
+          if (scopeFilter) {
+            scopeFilter.oninput = () => {
+              renderUserScopeOptions(
+                payload.available_scope_nodes || [],
+                collectSelectedScopeNodeIds(),
+                payload.scope_assignments_editable
+              );
+            };
+          }
+          const delegationFilter = byId('user-delegation-filter');
+          if (delegationFilter) {
+            delegationFilter.oninput = () => {
+              renderUserDelegationOptions(
+                payload.available_delegate_accounts || [],
+                collectSelectedDelegateAccountIds(),
+                payload.delegation_assignments_editable
+              );
+            };
+          }
           const form = byId('user-access-form');
           if (form) {
             form.onsubmit = async (event) => {
@@ -868,13 +1010,17 @@
               const response = await request(`/api/admin/users/${id}/access`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ scope_node_ids: collectSelectedScopeNodeIds() })
+                body: JSON.stringify({
+                  scope_node_ids: collectSelectedScopeNodeIds(),
+                  delegate_account_ids: collectSelectedDelegateAccountIds()
+                })
               });
               redirect(`/app/administration/users/${response.id}`);
             };
           }
         } catch (error) {
-          setHtml('user-scope-options', emptyState(error.message));
+          setHtml('user-scope-options', `<tr><td colspan="4" class="muted">${escapeHtml(error.message)}</td></tr>`);
+          setHtml('user-delegation-options', `<tr><td colspan="3" class="muted">${escapeHtml(error.message)}</td></tr>`);
           show(error.message);
         }
       }
@@ -1144,7 +1290,7 @@
       async function loadResponsesList() {
         try {
           await ensureAuthenticated();
-          renderRespondentContextSwitcher('response-context-switcher');
+          renderDelegateContextSwitcher('response-context-switcher');
           const [responseOptions, drafts, submitted] = await Promise.all([
             request(withRespondentQuery('/api/responses/options')),
             request(withRespondentQuery('/api/submissions?status=draft')),
@@ -1157,8 +1303,8 @@
                   responseOptions.assignments.length
                     ? responseOptions.assignments.map((item) => recordCard(
                         `${item.form_name} ${item.version_label}`,
-                        `<p>${escapeHtml(item.node_name)}</p><p class=\"muted\">${escapeHtml(item.respondent_display_name || 'Assigned respondent')}</p>`,
-                        `<a class=\"button-link\" href=\"/app/responses/new?formVersionId=${item.form_version_id}&nodeId=${item.node_id}${item.respondent_account_id ? `&respondentAccountId=${item.respondent_account_id}` : ''}\">Start</a>`
+                        `<p>${escapeHtml(item.node_name)}</p><p class=\"muted\">${escapeHtml(item.delegate_display_name || 'Assigned account')}</p>`,
+                        `<a class=\"button-link\" href=\"/app/responses/new?formVersionId=${item.form_version_id}&nodeId=${item.node_id}${item.delegate_account_id ? `&delegateAccountId=${item.delegate_account_id}` : ''}\">Start</a>`
                       )).join('')
                     : emptyState('No assigned responses are ready to start.')
                 )
@@ -1203,9 +1349,9 @@
       async function initResponseCreateForm() {
         try {
           await ensureAuthenticated();
-          const queryRespondentAccountId = page.search.get('respondentAccountId');
-          if (queryRespondentAccountId) setRespondentContext(queryRespondentAccountId);
-          renderRespondentContextSwitcher('response-create-context-switcher');
+          const queryDelegateAccountId = page.search.get('delegateAccountId');
+          if (queryDelegateAccountId) setDelegateContext(queryDelegateAccountId);
+          renderDelegateContextSwitcher('response-create-context-switcher');
           const options = await request(withRespondentQuery('/api/responses/options'));
           if (options.mode === 'assignment') {
             setSelectOptions(
@@ -1244,7 +1390,7 @@
                 body: JSON.stringify({
                   form_version_id: byId('response-form-version').value,
                   node_id: byId('response-node').value,
-                  respondent_account_id: currentRespondentContext || null
+                  delegate_account_id: currentDelegateContext || null
                 })
               });
               redirect(`/app/responses/${response.id}/edit`);
@@ -1771,8 +1917,11 @@
           case 'role-detail':
             await loadRoleDetail(page.recordId);
             break;
+          case 'role-create':
+            await initRoleForm('create');
+            break;
           case 'role-edit':
-            await initRoleForm(page.recordId);
+            await initRoleForm('edit', page.recordId);
             break;
           case 'migration':
             updateSessionStatus(currentAccount);

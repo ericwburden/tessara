@@ -134,7 +134,7 @@ try {
         throw "Expected application home HTML to include overview and split-area navigation"
     }
     $loginShell = Invoke-RestMethod -Uri "$baseUrl/app/login" -TimeoutSec 30
-    if (-not ($loginShell -like "*Sign In*") -or -not ($loginShell -like "*operator@tessara.local*") -or -not ($loginShell -like "*respondent@tessara.local*")) {
+    if (-not ($loginShell -like "*Sign In*") -or -not ($loginShell -like "*operator@tessara.local*") -or -not ($loginShell -like "*delegator@tessara.local*") -or -not ($loginShell -like "*delegate@tessara.local*")) {
         throw "Expected login HTML to include dedicated sign-in controls and demo credentials"
     }
     $organizationShell = Invoke-RestMethod -Uri "$baseUrl/app/organization" -TimeoutSec 30
@@ -191,11 +191,11 @@ try {
         -Uri "$baseUrl/api/auth/login" `
         -Body @{ email = "respondent@tessara.local"; password = "tessara-dev-respondent" }
     $respondentHeaders = @{ Authorization = "Bearer $($respondentLogin.token)" }
-    $parentLogin = Invoke-Json `
+    $delegatorLogin = Invoke-Json `
         -Method "Post" `
         -Uri "$baseUrl/api/auth/login" `
-        -Body @{ email = "parent@tessara.local"; password = "tessara-dev-parent" }
-    $parentHeaders = @{ Authorization = "Bearer $($parentLogin.token)" }
+        -Body @{ email = "delegator@tessara.local"; password = "tessara-dev-delegator" }
+    $delegatorHeaders = @{ Authorization = "Bearer $($delegatorLogin.token)" }
     if ($summary.published_form_versions -lt 1 -or $summary.submitted_submissions -lt 1 -or $summary.reports -lt 1 -or $summary.dashboards -lt 1) {
         throw "Expected application summary to include seeded published forms, submissions, reports, and dashboards"
     }
@@ -205,9 +205,9 @@ try {
     $operatorMe = Invoke-Json -Method "Get" -Uri "$baseUrl/api/me" -Headers $operatorHeaders
     $operatorNodes = Invoke-Json -Method "Get" -Uri "$baseUrl/api/nodes?q=Demo" -Headers $operatorHeaders
     $respondentOptions = Invoke-Json -Method "Get" -Uri "$baseUrl/api/responses/options" -Headers $respondentHeaders
-    $parentMe = Invoke-Json -Method "Get" -Uri "$baseUrl/api/me" -Headers $parentHeaders
-    $childAccountId = $parentMe.subordinate_respondents[0].account_id
-    $parentChildOptions = Invoke-Json -Method "Get" -Uri "$baseUrl/api/responses/options?respondent_account_id=$childAccountId" -Headers $parentHeaders
+    $delegatorMe = Invoke-Json -Method "Get" -Uri "$baseUrl/api/me" -Headers $delegatorHeaders
+    $delegateAccountId = $delegatorMe.delegations[0].account_id
+    $delegatedOptions = Invoke-Json -Method "Get" -Uri "$baseUrl/api/responses/options?delegate_account_id=$delegateAccountId" -Headers $delegatorHeaders
     $respondentFormsDenied = $false
     try {
         Invoke-Json -Method "Get" -Uri "$baseUrl/api/forms" -Headers $respondentHeaders | Out-Null
@@ -227,8 +227,8 @@ try {
     if ($report.rows.Count -lt 1 -or -not ($report.rows | Where-Object { $_.logical_key -eq "participants" -and $_.field_value -eq "42" })) {
         throw "Expected report value 42, got: $($report | ConvertTo-Json -Depth 20)"
     }
-    if ($operatorMe.role_family -ne "operator" -or $operatorMe.scope_nodes.Count -lt 1) {
-        throw "Expected operator account context to include operator role family and scoped nodes"
+    if ($operatorMe.ui_access_profile -ne "operator" -or $operatorMe.scope_nodes.Count -lt 1) {
+        throw "Expected operator account context to include operator UI access profile and scoped nodes"
     }
     if (-not ($operatorNodes | Where-Object { $_.name -eq "Demo Program Family Outreach" }) -or ($operatorNodes | Where-Object { $_.name -eq "Demo Partner Community Bridge" })) {
         throw "Expected operator node list to stay within assigned scope"
@@ -236,8 +236,8 @@ try {
     if ($respondentOptions.mode -ne "assignment" -or $respondentOptions.assignments.Count -lt 1) {
         throw "Expected respondent response options to return assigned response starts"
     }
-    if ($parentChildOptions.mode -ne "assignment" -or $parentChildOptions.assignments.Count -lt 1) {
-        throw "Expected parent response options to support subordinate respondent context"
+    if ($delegatedOptions.mode -ne "assignment" -or $delegatedOptions.assignments.Count -lt 1) {
+        throw "Expected delegated response options to support delegated response context"
     }
     if (-not $respondentFormsDenied) {
         throw "Expected respondent access to /api/forms to be forbidden"

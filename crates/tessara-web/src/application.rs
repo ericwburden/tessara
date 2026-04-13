@@ -163,9 +163,12 @@ fn sidebar(active_route: &str, include_internal_create: bool) -> String {
           </section>
           {create_html}
           <section class="selection-panel">
-            <h3>Current Selections</h3>
-            <p class="muted">Selections follow you between list, detail, and edit screens.</p>
+            <h3>Session And Selections</h3>
+            <p class="muted">The current signed-in account and your selected records appear here.</p>
             <p id="session-status" class="muted">Not signed in.</p>
+            <div id="current-user-summary" class="selection-grid">
+              <p class="muted">Sign in to load account context.</p>
+            </div>
             <div id="selection-state" class="selection-grid">
               <p class="muted">No records selected yet.</p>
             </div>
@@ -411,9 +414,9 @@ fn login_body() -> String {
               <p class="muted">tessara-dev-operator</p>
             </article>
             <article class="record-card compact-record-card">
-              <h4>Parent / Respondent</h4>
-              <p class="muted">parent@tessara.local / respondent@tessara.local</p>
-              <p class="muted">tessara-dev-parent / tessara-dev-respondent</p>
+              <h4>Delegator / Delegate</h4>
+              <p class="muted">delegator@tessara.local / delegate@tessara.local</p>
+              <p class="muted">tessara-dev-delegator / tessara-dev-delegate</p>
             </article>
           </div>
         </section>
@@ -469,12 +472,12 @@ fn administration_body() -> String {
         ),
         empty_panel(
             "Roles And Access",
-            "Manage reusable capability bundles and the scoped access assignments that control operator visibility.",
+            "Manage reusable capability bundles and the scoped access and delegation assignments that control application visibility.",
             r#"
             <div class="record-list">
               <article class="record-card">
                 <h4>Role Catalog</h4>
-                <p>Review the current role bundles, inspect their capabilities, and edit what each role grants.</p>
+                <p>Review the current role bundles, inspect their capabilities, create additional roles, and edit what each role grants.</p>
                 <div class="actions">
                   <a class="button-link" href="/app/administration/roles">Open Roles</a>
                 </div>
@@ -791,9 +794,54 @@ fn user_access_form_fields() -> String {
         </section>
         <section class="page-panel nested-form-panel">
           <h3>Scope Assignments</h3>
-          <p class="muted">Choose the organization nodes that define this user's scoped visibility.</p>
-          <div id="user-scope-options" class="form-grid">
-            <p class="muted">Loading available organization nodes...</p>
+          <p class="muted">Assigned scope nodes expand to all descendants automatically.</p>
+          <div class="form-grid">
+            <div class="form-field wide-field">
+              <label for="user-scope-filter">Filter Scope Nodes</label>
+              <input class="input" id="user-scope-filter" type="text" autocomplete="off" placeholder="Filter by name, type, or parent" />
+            </div>
+          </div>
+          <div id="user-scope-editability" class="notification is-light">
+            Scope assignments load here.
+          </div>
+          <div class="table-wrap">
+            <table class="data-grid">
+              <thead>
+                <tr>
+                  <th>Assigned</th>
+                  <th>Node</th>
+                  <th>Type</th>
+                  <th>Parent</th>
+                </tr>
+              </thead>
+              <tbody id="user-scope-options">
+                <tr><td colspan="4" class="muted">Loading available organization nodes...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+        <section class="page-panel nested-form-panel">
+          <h3>Delegations</h3>
+          <p class="muted">Delegations are generic account relationships. They currently affect delegated response context only.</p>
+          <div class="form-grid">
+            <div class="form-field wide-field">
+              <label for="user-delegation-filter">Filter Delegate Accounts</label>
+              <input class="input" id="user-delegation-filter" type="text" autocomplete="off" placeholder="Filter by display name or email" />
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="data-grid">
+              <thead>
+                <tr>
+                  <th>Assigned</th>
+                  <th>Display Name</th>
+                  <th>Email</th>
+                </tr>
+              </thead>
+              <tbody id="user-delegation-options">
+                <tr><td colspan="3" class="muted">Loading available delegate accounts...</td></tr>
+              </tbody>
+            </table>
           </div>
         </section>
     "#
@@ -804,9 +852,30 @@ fn role_form_fields() -> String {
     r#"
         <section class="page-panel nested-form-panel">
           <h3>Capabilities</h3>
-          <p class="muted">Choose the capabilities included in this role bundle.</p>
-          <div id="role-capability-options" class="form-grid">
-            <p class="muted">Loading capabilities...</p>
+          <p class="muted">Filter and assign the capabilities included in this role bundle.</p>
+          <div class="form-grid">
+            <div class="form-field wide-field">
+              <label for="role-name">Role Name</label>
+              <input class="input" id="role-name" type="text" autocomplete="off" />
+            </div>
+            <div class="form-field wide-field">
+              <label for="role-capability-filter">Filter Capabilities</label>
+              <input class="input" id="role-capability-filter" type="text" autocomplete="off" placeholder="Filter by key or description" />
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="data-grid">
+              <thead>
+                <tr>
+                  <th>Assigned</th>
+                  <th>Capability</th>
+                  <th>Description</th>
+                </tr>
+              </thead>
+              <tbody id="role-capability-options">
+                <tr><td colspan="3" class="muted">Loading capabilities...</td></tr>
+              </tbody>
+            </table>
           </div>
         </section>
     "#
@@ -917,7 +986,7 @@ pub fn user_create_application_html(_script: &str) -> String {
             form_screen(
                 "Administration",
                 "Create User",
-                "Create a local account for administration, operator, or respondent testing flows.",
+                "Create a local account for administration, scoped operational access, or delegated response testing flows.",
                 "user-form",
                 "/app/administration/users",
                 &user_form_fields(false),
@@ -940,7 +1009,7 @@ pub fn user_detail_application_html(_script: &str, account_id: &str) -> String {
             "administration",
             "Internal Area",
             "User Detail",
-            "Inspect account status, role memberships, scope, and subordinate respondent relationships.",
+            "Inspect account status, role memberships, scope assignments, and delegations.",
             &[
                 ("Home", Some("/app")),
                 ("Administration", Some("/app/administration")),
@@ -1007,7 +1076,7 @@ pub fn user_access_application_html(_script: &str, account_id: &str) -> String {
             "administration",
             "Internal Area",
             "User Access",
-            "Manage scope assignments and inspect the capabilities this user currently receives from assigned roles.",
+            "Manage scope assignments, delegations, and the effective access this user currently receives from assigned roles.",
             &[
                 ("Home", Some("/app")),
                 ("Administration", Some("/app/administration")),
@@ -1017,7 +1086,7 @@ pub fn user_access_application_html(_script: &str, account_id: &str) -> String {
             form_screen(
                 "Administration",
                 "User Access",
-                "Update the scoped access that governs visible organization data for this account.",
+                "Update the scoped access and delegations that govern what this account can see and who it can act for.",
                 "user-access-form",
                 &format!("/app/administration/users/{escaped}"),
                 &user_access_form_fields(),
@@ -1047,10 +1116,40 @@ pub fn roles_application_shell_html(_script: &str) -> String {
                 "Administration",
                 "Roles",
                 "This list screen contains the current role bundles used for access control.",
-                "Refresh Roles",
-                "/app/administration/roles",
+                "Create Role",
+                "/app/administration/roles/new",
                 "role-list",
                 "role",
+            ),
+            false,
+        ),
+    )
+}
+
+pub fn role_create_application_html(_script: &str) -> String {
+    render_application_document(
+        "Create Role",
+        "Create a Tessara role bundle.",
+        &pipeline::bridge_asset_path("app-legacy.js"),
+        r#"data-page-key="role-create" data-active-route="administration""#,
+        app_shell(
+            "administration",
+            "Internal Area",
+            "Create Role",
+            "Create a new role bundle and assign the capability set it should grant.",
+            &[
+                ("Home", Some("/app")),
+                ("Administration", Some("/app/administration")),
+                ("Roles", Some("/app/administration/roles")),
+                ("Create Role", None),
+            ],
+            form_screen(
+                "Administration",
+                "Create Role",
+                "Create a reusable capability bundle for future account assignments.",
+                "role-form",
+                "/app/administration/roles",
+                &role_form_fields(),
             ),
             false,
         ),

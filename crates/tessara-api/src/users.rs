@@ -8,7 +8,7 @@ use sqlx::{PgPool, Postgres, Row, Transaction};
 use uuid::Uuid;
 
 use crate::{
-    auth::{self, RespondentSummary, RoleFamily, ScopeNodeSummary},
+    auth::{self, DelegationSummary, ScopeNodeSummary, UiAccessProfile},
     db::AppState,
     error::{ApiError, ApiResult},
     hierarchy::require_text,
@@ -59,11 +59,27 @@ pub struct UserDetail {
     pub email: String,
     pub display_name: String,
     pub is_active: bool,
-    pub role_family: RoleFamily,
+    pub ui_access_profile: UiAccessProfile,
     pub capabilities: Vec<String>,
     pub roles: Vec<RoleSummary>,
     pub scope_nodes: Vec<ScopeNodeSummary>,
-    pub subordinate_respondents: Vec<RespondentSummary>,
+    pub delegations: Vec<DelegationSummary>,
+    pub delegated_by: Vec<DelegationSummary>,
+}
+
+#[derive(Serialize)]
+pub struct UserAccessDetail {
+    pub account_id: Uuid,
+    pub email: String,
+    pub display_name: String,
+    pub ui_access_profile: UiAccessProfile,
+    pub capabilities: Vec<String>,
+    pub scope_nodes: Vec<ScopeNodeSummary>,
+    pub available_scope_nodes: Vec<ScopeNodeSummary>,
+    pub delegations: Vec<DelegationSummary>,
+    pub available_delegate_accounts: Vec<DelegationSummary>,
+    pub scope_assignments_editable: bool,
+    pub delegation_assignments_editable: bool,
 }
 
 #[derive(Serialize)]
@@ -90,6 +106,12 @@ pub struct UpdateUserRequest {
 }
 
 #[derive(Deserialize)]
+pub struct CreateRoleRequest {
+    pub name: String,
+    pub capability_ids: Vec<Uuid>,
+}
+
+#[derive(Deserialize)]
 pub struct UpdateRoleRequest {
     pub capability_ids: Vec<Uuid>,
 }
@@ -97,6 +119,7 @@ pub struct UpdateRoleRequest {
 #[derive(Deserialize)]
 pub struct UpdateUserAccessRequest {
     pub scope_node_ids: Vec<Uuid>,
+    pub delegate_account_ids: Vec<Uuid>,
 }
 
 pub async fn list_capabilities(
@@ -144,6 +167,35 @@ pub async fn list_roles(
     Ok(Json(roles))
 }
 
+pub async fn create_role(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<CreateRoleRequest>,
+) -> ApiResult<Json<IdResponse>> {
+    auth::require_capability(&state.pool, &headers, "admin:all").await?;
+    require_text("role name", &payload.name)?;
+    ensure_capability_ids_exist(&state.pool, &payload.capability_ids).await?;
+
+    let mut tx = state.pool.begin().await?;
+    ensure_role_name_unique(&mut tx, &payload.name, None).await?;
+
+    let role_id: Uuid = sqlx::query_scalar(
+        r#"
+        INSERT INTO roles (name)
+        VALUES ($1)
+        RETURNING id
+        "#,
+    )
+    .bind(payload.name.trim())
+    .fetch_one(&mut *tx)
+    .await?;
+
+    replace_role_capabilities(&mut tx, role_id, &payload.capability_ids).await?;
+    tx.commit().await?;
+
+    Ok(Json(IdResponse { id: role_id }))
+}
+
 pub async fn get_role(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -168,7 +220,22 @@ pub async fn update_role(
         .await?
         .ok_or_else(|| ApiError::NotFound(format!("role {role_id}")))?;
 
-    if role_name == "admin" {
+    let role_currently_grants_admin = sqlx::query_scalar::<_, bool>(
+        r#"
+        SELECT EXISTS(
+            SELECT 1
+            FROM role_capabilities
+            JOIN capabilities ON capabilities.id = role_capabilities.capability_id
+            WHERE role_capabilities.role_id = $1
+              AND capabilities.key = 'admin:all'
+        )
+        "#,
+    )
+    .bind(role_id)
+    .fetch_one(&state.pool)
+    .await?;
+
+    if role_currently_grants_admin {
         let has_admin_all = sqlx::query_scalar::<_, bool>(
             r#"
             SELECT EXISTS(
@@ -183,32 +250,17 @@ pub async fn update_role(
         .fetch_one(&state.pool)
         .await?;
         if !has_admin_all {
-            return Err(ApiError::BadRequest(
-                "admin role must keep admin:all".into(),
-            ));
+            return Err(ApiError::BadRequest(format!(
+                "role '{}' must keep admin:all while it grants administrative access",
+                role_name
+            )));
         }
     }
 
     let mut tx = state.pool.begin().await?;
-    sqlx::query("DELETE FROM role_capabilities WHERE role_id = $1")
-        .bind(role_id)
-        .execute(&mut *tx)
-        .await?;
-
-    for capability_id in &payload.capability_ids {
-        sqlx::query(
-            r#"
-            INSERT INTO role_capabilities (role_id, capability_id)
-            VALUES ($1, $2)
-            "#,
-        )
-        .bind(role_id)
-        .bind(capability_id)
-        .execute(&mut *tx)
-        .await?;
-    }
-
+    replace_role_capabilities(&mut tx, role_id, &payload.capability_ids).await?;
     tx.commit().await?;
+
     Ok(Json(IdResponse { id: role_id }))
 }
 
@@ -357,6 +409,42 @@ pub async fn update_user(
     Ok(Json(IdResponse { id: account_id }))
 }
 
+pub async fn get_user_access(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(account_id): Path<Uuid>,
+) -> ApiResult<Json<UserAccessDetail>> {
+    auth::require_capability(&state.pool, &headers, "admin:all").await?;
+    require_account_exists(&state.pool, account_id).await?;
+
+    let capabilities = auth::load_effective_capabilities(&state.pool, account_id).await?;
+    let ui_access_profile = auth::derive_ui_access_profile(&capabilities);
+    let row = sqlx::query(
+        r#"
+        SELECT id, email, display_name
+        FROM accounts
+        WHERE id = $1
+        "#,
+    )
+    .bind(account_id)
+    .fetch_one(&state.pool)
+    .await?;
+
+    Ok(Json(UserAccessDetail {
+        account_id,
+        email: row.try_get("email")?,
+        display_name: row.try_get("display_name")?,
+        ui_access_profile: ui_access_profile.clone(),
+        capabilities,
+        scope_nodes: auth::load_scope_nodes(&state.pool, account_id).await?,
+        available_scope_nodes: load_all_scope_nodes(&state.pool).await?,
+        delegations: auth::load_delegations(&state.pool, account_id).await?,
+        available_delegate_accounts: load_delegate_accounts(&state.pool, account_id).await?,
+        scope_assignments_editable: auth::scope_assignments_are_meaningful(&ui_access_profile),
+        delegation_assignments_editable: true,
+    }))
+}
+
 pub async fn update_user_access(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -366,27 +454,24 @@ pub async fn update_user_access(
     auth::require_capability(&state.pool, &headers, "admin:all").await?;
     require_account_exists(&state.pool, account_id).await?;
     ensure_node_ids_exist(&state.pool, &payload.scope_node_ids).await?;
-
-    let mut tx = state.pool.begin().await?;
-    sqlx::query("DELETE FROM account_node_scope_assignments WHERE account_id = $1")
-        .bind(account_id)
-        .execute(&mut *tx)
+    ensure_delegate_account_ids_exist(&state.pool, account_id, &payload.delegate_account_ids)
         .await?;
 
-    for node_id in &payload.scope_node_ids {
-        sqlx::query(
-            r#"
-            INSERT INTO account_node_scope_assignments (account_id, node_id)
-            VALUES ($1, $2)
-            "#,
-        )
-        .bind(account_id)
-        .bind(node_id)
-        .execute(&mut *tx)
-        .await?;
+    let capabilities = auth::load_effective_capabilities(&state.pool, account_id).await?;
+    let ui_access_profile = auth::derive_ui_access_profile(&capabilities);
+    if !auth::scope_assignments_are_meaningful(&ui_access_profile)
+        && !payload.scope_node_ids.is_empty()
+    {
+        return Err(ApiError::BadRequest(
+            "scope assignments are only meaningful for operator-style access".into(),
+        ));
     }
 
+    let mut tx = state.pool.begin().await?;
+    replace_scope_assignments(&mut tx, account_id, &payload.scope_node_ids).await?;
+    replace_delegations(&mut tx, account_id, &payload.delegate_account_ids).await?;
     tx.commit().await?;
+
     Ok(Json(IdResponse { id: account_id }))
 }
 
@@ -402,18 +487,20 @@ async fn load_user_detail(pool: &PgPool, account_id: Uuid) -> ApiResult<UserDeta
     .fetch_optional(pool)
     .await?
     .ok_or_else(|| ApiError::NotFound(format!("account {account_id}")))?;
-    let (role_family, capabilities) = load_role_family_and_capabilities(pool, account_id).await?;
+    let capabilities = auth::load_effective_capabilities(pool, account_id).await?;
+    let ui_access_profile = auth::derive_ui_access_profile(&capabilities);
 
     Ok(UserDetail {
         id: row.try_get("id")?,
         email: row.try_get("email")?,
         display_name: row.try_get("display_name")?,
         is_active: row.try_get("is_active")?,
-        role_family,
+        ui_access_profile,
         capabilities,
         roles: load_roles_for_account(pool, account_id).await?,
-        scope_nodes: load_scope_nodes(pool, account_id).await?,
-        subordinate_respondents: load_subordinate_respondents(pool, account_id).await?,
+        scope_nodes: auth::load_scope_nodes(pool, account_id).await?,
+        delegations: auth::load_delegations(pool, account_id).await?,
+        delegated_by: load_delegated_by(pool, account_id).await?,
     })
 }
 
@@ -529,52 +616,7 @@ async fn load_role_detail(pool: &PgPool, role_id: Uuid) -> ApiResult<RoleDetail>
     })
 }
 
-async fn load_role_family_and_capabilities(
-    pool: &PgPool,
-    account_id: Uuid,
-) -> ApiResult<(RoleFamily, Vec<String>)> {
-    let capabilities = sqlx::query_scalar::<_, String>(
-        r#"
-        SELECT DISTINCT capabilities.key
-        FROM account_role_assignments
-        JOIN role_capabilities ON role_capabilities.role_id = account_role_assignments.role_id
-        JOIN capabilities ON capabilities.id = role_capabilities.capability_id
-        WHERE account_role_assignments.account_id = $1
-        UNION
-        SELECT capabilities.key
-        FROM permission_grants
-        JOIN capabilities ON capabilities.id = permission_grants.capability_id
-        WHERE permission_grants.account_id = $1 AND permission_grants.is_allowed = true
-        "#,
-    )
-    .bind(account_id)
-    .fetch_all(pool)
-    .await?;
-
-    let role_names = sqlx::query_scalar::<_, String>(
-        r#"
-        SELECT roles.name
-        FROM account_role_assignments
-        JOIN roles ON roles.id = account_role_assignments.role_id
-        WHERE account_role_assignments.account_id = $1
-        "#,
-    )
-    .bind(account_id)
-    .fetch_all(pool)
-    .await?;
-
-    let role_family = if role_names.iter().any(|role| role == "admin") {
-        RoleFamily::Admin
-    } else if role_names.iter().any(|role| role == "operator") {
-        RoleFamily::Operator
-    } else {
-        RoleFamily::Respondent
-    };
-
-    Ok((role_family, capabilities))
-}
-
-async fn load_scope_nodes(pool: &PgPool, account_id: Uuid) -> ApiResult<Vec<ScopeNodeSummary>> {
+async fn load_all_scope_nodes(pool: &PgPool) -> ApiResult<Vec<ScopeNodeSummary>> {
     Ok(sqlx::query(
         r#"
         SELECT
@@ -583,15 +625,12 @@ async fn load_scope_nodes(pool: &PgPool, account_id: Uuid) -> ApiResult<Vec<Scop
             node_types.name AS node_type_name,
             nodes.parent_node_id,
             parent_nodes.name AS parent_node_name
-        FROM account_node_scope_assignments
-        JOIN nodes ON nodes.id = account_node_scope_assignments.node_id
+        FROM nodes
         JOIN node_types ON node_types.id = nodes.node_type_id
         LEFT JOIN nodes AS parent_nodes ON parent_nodes.id = nodes.parent_node_id
-        WHERE account_node_scope_assignments.account_id = $1
         ORDER BY nodes.name, nodes.id
         "#,
     )
-    .bind(account_id)
     .fetch_all(pool)
     .await?
     .into_iter()
@@ -607,19 +646,42 @@ async fn load_scope_nodes(pool: &PgPool, account_id: Uuid) -> ApiResult<Vec<Scop
     .collect::<Result<Vec<_>, sqlx::Error>>()?)
 }
 
-async fn load_subordinate_respondents(
+async fn load_delegate_accounts(
     pool: &PgPool,
     account_id: Uuid,
-) -> ApiResult<Vec<RespondentSummary>> {
+) -> ApiResult<Vec<DelegationSummary>> {
+    Ok(sqlx::query(
+        r#"
+        SELECT id AS account_id, email, display_name
+        FROM accounts
+        WHERE id <> $1
+        ORDER BY display_name, email, id
+        "#,
+    )
+    .bind(account_id)
+    .fetch_all(pool)
+    .await?
+    .into_iter()
+    .map(|row| {
+        Ok(DelegationSummary {
+            account_id: row.try_get("account_id")?,
+            email: row.try_get("email")?,
+            display_name: row.try_get("display_name")?,
+        })
+    })
+    .collect::<Result<Vec<_>, sqlx::Error>>()?)
+}
+
+async fn load_delegated_by(pool: &PgPool, account_id: Uuid) -> ApiResult<Vec<DelegationSummary>> {
     Ok(sqlx::query(
         r#"
         SELECT
             accounts.id AS account_id,
             accounts.email,
             accounts.display_name
-        FROM account_subordinate_relationships
-        JOIN accounts ON accounts.id = account_subordinate_relationships.respondent_account_id
-        WHERE account_subordinate_relationships.parent_account_id = $1
+        FROM account_delegations
+        JOIN accounts ON accounts.id = account_delegations.delegator_account_id
+        WHERE account_delegations.delegate_account_id = $1
         ORDER BY accounts.display_name, accounts.email
         "#,
     )
@@ -628,7 +690,7 @@ async fn load_subordinate_respondents(
     .await?
     .into_iter()
     .map(|row| {
-        Ok(RespondentSummary {
+        Ok(DelegationSummary {
             account_id: row.try_get("account_id")?,
             email: row.try_get("email")?,
             display_name: row.try_get("display_name")?,
@@ -686,6 +748,36 @@ async fn ensure_email_unique(
     }
 }
 
+async fn ensure_role_name_unique(
+    tx: &mut Transaction<'_, Postgres>,
+    role_name: &str,
+    exclude_role_id: Option<Uuid>,
+) -> ApiResult<()> {
+    let existing = sqlx::query_scalar::<_, bool>(
+        r#"
+        SELECT EXISTS(
+            SELECT 1
+            FROM roles
+            WHERE name = $1
+              AND ($2::uuid IS NULL OR id <> $2)
+        )
+        "#,
+    )
+    .bind(role_name.trim())
+    .bind(exclude_role_id)
+    .fetch_one(&mut **tx)
+    .await?;
+
+    if existing {
+        Err(ApiError::BadRequest(format!(
+            "role '{}' already exists",
+            role_name.trim()
+        )))
+    } else {
+        Ok(())
+    }
+}
+
 async fn ensure_role_ids_exist(
     tx: &mut Transaction<'_, Postgres>,
     role_ids: &[Uuid],
@@ -734,6 +826,32 @@ async fn ensure_node_ids_exist(pool: &PgPool, node_ids: &[Uuid]) -> ApiResult<()
     Ok(())
 }
 
+async fn ensure_delegate_account_ids_exist(
+    pool: &PgPool,
+    account_id: Uuid,
+    delegate_account_ids: &[Uuid],
+) -> ApiResult<()> {
+    for delegate_account_id in delegate_account_ids {
+        if *delegate_account_id == account_id {
+            return Err(ApiError::BadRequest(
+                "an account cannot delegate to itself".into(),
+            ));
+        }
+
+        let exists =
+            sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM accounts WHERE id = $1)")
+                .bind(delegate_account_id)
+                .fetch_one(pool)
+                .await?;
+        if !exists {
+            return Err(ApiError::BadRequest(format!(
+                "unknown account {delegate_account_id}"
+            )));
+        }
+    }
+    Ok(())
+}
+
 async fn replace_role_assignments(
     tx: &mut Transaction<'_, Postgres>,
     account_id: Uuid,
@@ -753,6 +871,84 @@ async fn replace_role_assignments(
         )
         .bind(account_id)
         .bind(role_id)
+        .execute(&mut **tx)
+        .await?;
+    }
+
+    Ok(())
+}
+
+async fn replace_role_capabilities(
+    tx: &mut Transaction<'_, Postgres>,
+    role_id: Uuid,
+    capability_ids: &[Uuid],
+) -> ApiResult<()> {
+    sqlx::query("DELETE FROM role_capabilities WHERE role_id = $1")
+        .bind(role_id)
+        .execute(&mut **tx)
+        .await?;
+
+    for capability_id in capability_ids {
+        sqlx::query(
+            r#"
+            INSERT INTO role_capabilities (role_id, capability_id)
+            VALUES ($1, $2)
+            "#,
+        )
+        .bind(role_id)
+        .bind(capability_id)
+        .execute(&mut **tx)
+        .await?;
+    }
+
+    Ok(())
+}
+
+async fn replace_scope_assignments(
+    tx: &mut Transaction<'_, Postgres>,
+    account_id: Uuid,
+    node_ids: &[Uuid],
+) -> ApiResult<()> {
+    sqlx::query("DELETE FROM account_node_scope_assignments WHERE account_id = $1")
+        .bind(account_id)
+        .execute(&mut **tx)
+        .await?;
+
+    for node_id in node_ids {
+        sqlx::query(
+            r#"
+            INSERT INTO account_node_scope_assignments (account_id, node_id)
+            VALUES ($1, $2)
+            "#,
+        )
+        .bind(account_id)
+        .bind(node_id)
+        .execute(&mut **tx)
+        .await?;
+    }
+
+    Ok(())
+}
+
+async fn replace_delegations(
+    tx: &mut Transaction<'_, Postgres>,
+    account_id: Uuid,
+    delegate_account_ids: &[Uuid],
+) -> ApiResult<()> {
+    sqlx::query("DELETE FROM account_delegations WHERE delegator_account_id = $1")
+        .bind(account_id)
+        .execute(&mut **tx)
+        .await?;
+
+    for delegate_account_id in delegate_account_ids {
+        sqlx::query(
+            r#"
+            INSERT INTO account_delegations (delegator_account_id, delegate_account_id)
+            VALUES ($1, $2)
+            "#,
+        )
+        .bind(account_id)
+        .bind(delegate_account_id)
         .execute(&mut **tx)
         .await?;
     }

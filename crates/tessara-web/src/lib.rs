@@ -140,6 +140,10 @@ pub fn roles_application_shell_html() -> String {
     application::roles_application_shell_html(app_script::APPLICATION_SCRIPT)
 }
 
+pub fn role_create_application_html() -> String {
+    application::role_create_application_html(app_script::APPLICATION_SCRIPT)
+}
+
 pub fn role_detail_application_html(role_id: &str) -> String {
     application::role_detail_application_html(app_script::APPLICATION_SCRIPT, role_id)
 }
@@ -189,10 +193,11 @@ mod tests {
         report_create_application_html, report_detail_application_html,
         report_edit_application_html, reporting_application_shell_html,
         response_create_application_html, response_detail_application_html,
-        response_edit_application_html, role_detail_application_html, role_edit_application_html,
-        roles_application_shell_html, submission_application_shell_html,
-        user_access_application_html, user_create_application_html, user_detail_application_html,
-        user_edit_application_html, users_application_shell_html,
+        response_edit_application_html, role_create_application_html, role_detail_application_html,
+        role_edit_application_html, roles_application_shell_html,
+        submission_application_shell_html, user_access_application_html,
+        user_create_application_html, user_detail_application_html, user_edit_application_html,
+        users_application_shell_html,
     };
 
     #[test]
@@ -356,6 +361,7 @@ mod tests {
 
         assert!(roles.contains("Roles"));
         assert!(roles.contains("role-list"));
+        assert!(roles.contains("Create Role"));
 
         assert!(migration.contains("Migration Workbench"));
         assert!(migration.contains("Load Fixture Examples"));
@@ -370,6 +376,7 @@ mod tests {
         let detail = user_detail_application_html("00000000-0000-0000-0000-000000000006");
         let edit = user_edit_application_html("00000000-0000-0000-0000-000000000006");
         let access = user_access_application_html("00000000-0000-0000-0000-000000000006");
+        let role_create = role_create_application_html();
         let role_detail = role_detail_application_html("00000000-0000-0000-0000-000000000007");
         let role_edit = role_edit_application_html("00000000-0000-0000-0000-000000000007");
 
@@ -389,7 +396,10 @@ mod tests {
         assert!(access.contains("User Access"));
         assert!(access.contains("user-access-form"));
         assert!(access.contains("user-scope-options"));
+        assert!(access.contains("user-delegation-options"));
 
+        assert!(role_create.contains("Create Role"));
+        assert!(role_create.contains("role-name"));
         assert!(role_detail.contains("Role Detail"));
         assert!(role_detail.contains("Back to List"));
 

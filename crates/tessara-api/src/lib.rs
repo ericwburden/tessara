@@ -121,7 +121,6 @@ pub fn router(state: AppState) -> Router {
             "/app/administration",
             get(|| async { Html(tessara_web::administration_application_shell_html()) }),
         )
-
         .route(
             "/app/administration/users",
             get(|| async { Html(tessara_web::users_application_shell_html()) }),
@@ -151,6 +150,10 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/app/administration/roles",
             get(|| async { Html(tessara_web::roles_application_shell_html()) }),
+        )
+        .route(
+            "/app/administration/roles/new",
+            get(|| async { Html(tessara_web::role_create_application_html()) }),
         )
         .route(
             "/app/administration/roles/{role_id}/edit",
@@ -219,7 +222,10 @@ pub fn router(state: AppState) -> Router {
         .route("/api/auth/login", post(auth::login))
         .route("/api/me", get(auth::me))
         .route("/api/admin/capabilities", get(users::list_capabilities))
-        .route("/api/admin/roles", get(users::list_roles))
+        .route(
+            "/api/admin/roles",
+            get(users::list_roles).post(users::create_role),
+        )
         .route(
             "/api/admin/roles/{role_id}",
             get(users::get_role).put(users::update_role),
@@ -234,7 +240,7 @@ pub fn router(state: AppState) -> Router {
         )
         .route(
             "/api/admin/users/{account_id}/access",
-            put(users::update_user_access),
+            get(users::get_user_access).put(users::update_user_access),
         )
         .route(
             "/api/admin/node-types",

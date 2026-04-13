@@ -1460,15 +1460,19 @@ async fn role_based_access_respects_scope_and_respondent_context() {
         "tessara-dev-respondent",
     )
     .await;
-    let parent_token =
-        login_token_for(app.clone(), "parent@tessara.local", "tessara-dev-parent").await;
+    let delegator_token = login_token_for(
+        app.clone(),
+        "delegator@tessara.local",
+        "tessara-dev-delegator",
+    )
+    .await;
 
     let operator_me = request_json(
         app.clone(),
         authorized_request("GET", "/api/me", &operator_token, None),
     )
     .await;
-    assert_eq!(operator_me["role_family"], "operator");
+    assert_eq!(operator_me["ui_access_profile"], "operator");
     assert_eq!(
         operator_me["scope_nodes"]
             .as_array()
@@ -1482,25 +1486,25 @@ async fn role_based_access_respects_scope_and_respondent_context() {
         authorized_request("GET", "/api/me", &respondent_token, None),
     )
     .await;
-    assert_eq!(respondent_me["role_family"], "respondent");
+    assert_eq!(respondent_me["ui_access_profile"], "response_user");
     assert_eq!(
-        respondent_me["subordinate_respondents"]
+        respondent_me["delegations"]
             .as_array()
-            .expect("respondent subordinate list should be present")
+            .expect("respondent delegation list should be present")
             .len(),
         0
     );
 
-    let parent_me = request_json(
+    let delegator_me = request_json(
         app.clone(),
-        authorized_request("GET", "/api/me", &parent_token, None),
+        authorized_request("GET", "/api/me", &delegator_token, None),
     )
     .await;
-    assert_eq!(parent_me["role_family"], "respondent");
+    assert_eq!(delegator_me["ui_access_profile"], "response_user");
     assert_eq!(
-        parent_me["subordinate_respondents"]
+        delegator_me["delegations"]
             .as_array()
-            .expect("parent subordinate list should be present")
+            .expect("delegator delegation list should be present")
             .len(),
         1
     );
@@ -1581,28 +1585,28 @@ async fn role_based_access_respects_scope_and_respondent_context() {
             .any(|assignment| assignment["node_name"] == "Demo Program Health Navigation")
     );
 
-    let child_account_id = parent_me["subordinate_respondents"]
+    let delegate_account_id = delegator_me["delegations"]
         .as_array()
-        .expect("parent subordinate list should be present")
+        .expect("delegator delegation list should be present")
         .first()
         .and_then(|account| account["account_id"].as_str())
         .and_then(|value| Uuid::parse_str(value).ok())
-        .expect("parent should expose child respondent id");
-    let parent_child_options = request_json(
+        .expect("delegator should expose delegated account id");
+    let delegated_options = request_json(
         app.clone(),
         authorized_request(
             "GET",
-            &format!("/api/responses/options?respondent_account_id={child_account_id}"),
-            &parent_token,
+            &format!("/api/responses/options?delegate_account_id={delegate_account_id}"),
+            &delegator_token,
             None,
         ),
     )
     .await;
-    assert_eq!(parent_child_options["mode"], "assignment");
+    assert_eq!(delegated_options["mode"], "assignment");
     assert!(
-        parent_child_options["assignments"]
+        delegated_options["assignments"]
             .as_array()
-            .expect("parent-child options should include assignments")
+            .expect("delegated options should include assignments")
             .iter()
             .any(|assignment| assignment["node_name"] == "Demo Activity After School Check-ins")
     );
@@ -1781,6 +1785,32 @@ async fn role_management_updates_capabilities_and_scoped_access() {
         .collect::<Vec<_>>();
     assert_eq!(selected_capability_ids.len(), 2);
 
+    let observer_capability_ids = capabilities
+        .as_array()
+        .expect("capabilities should be an array")
+        .iter()
+        .filter(|capability| matches!(capability["key"].as_str(), Some("reports:read")))
+        .filter_map(|capability| capability["id"].as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(observer_capability_ids.len(), 1);
+
+    let created_role = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/roles",
+            &admin_token,
+            Some(json!({
+                "name": "observer",
+                "capability_ids": observer_capability_ids
+            })),
+        ),
+    )
+    .await;
+    let observer_role_id = created_role["id"]
+        .as_str()
+        .expect("created role should return an id");
+
     request_json(
         app.clone(),
         authorized_request(
@@ -1831,6 +1861,58 @@ async fn role_management_updates_capabilities_and_scoped_access() {
         .find(|user| user["email"] == "operator@tessara.local")
         .and_then(|user| user["id"].as_str())
         .expect("seeded operator account should be present");
+    let operator_detail = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/admin/users/{operator_account_id}"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    let updated_role_ids = operator_detail["roles"]
+        .as_array()
+        .expect("operator detail should include roles")
+        .iter()
+        .filter_map(|role| role["id"].as_str())
+        .chain(std::iter::once(observer_role_id))
+        .collect::<Vec<_>>();
+
+    request_json(
+        app.clone(),
+        authorized_request(
+            "PUT",
+            &format!("/api/admin/users/{operator_account_id}"),
+            &admin_token,
+            Some(json!({
+                "email": operator_detail["email"],
+                "display_name": operator_detail["display_name"],
+                "password": null,
+                "is_active": operator_detail["is_active"],
+                "role_ids": updated_role_ids
+            })),
+        ),
+    )
+    .await;
+
+    let observer_role_detail = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/admin/roles/{observer_role_id}"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert!(
+        observer_role_detail["assigned_accounts"]
+            .as_array()
+            .expect("created role should expose assigned accounts")
+            .iter()
+            .any(|account| account["email"] == "operator@tessara.local")
+    );
 
     let north_star_nodes = request_json(
         app.clone(),
@@ -1854,7 +1936,10 @@ async fn role_management_updates_capabilities_and_scoped_access() {
             "PUT",
             &format!("/api/admin/users/{operator_account_id}/access"),
             &admin_token,
-            Some(json!({ "scope_node_ids": [north_star_partner_id] })),
+            Some(json!({
+                "scope_node_ids": [north_star_partner_id],
+                "delegate_account_ids": []
+            })),
         ),
     )
     .await;
@@ -1869,7 +1954,7 @@ async fn role_management_updates_capabilities_and_scoped_access() {
         ),
     )
     .await;
-    assert_eq!(updated_operator["role_family"], "operator");
+    assert_eq!(updated_operator["ui_access_profile"], "operator");
     assert!(
         updated_operator["capabilities"]
             .as_array()
@@ -1900,7 +1985,7 @@ async fn role_management_updates_capabilities_and_scoped_access() {
         authorized_request("GET", "/api/me", &operator_token, None),
     )
     .await;
-    assert_eq!(operator_me["role_family"], "operator");
+    assert_eq!(operator_me["ui_access_profile"], "operator");
     assert_eq!(
         operator_me["scope_nodes"]
             .as_array()
