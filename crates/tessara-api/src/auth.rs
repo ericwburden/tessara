@@ -48,6 +48,7 @@ pub struct AccountContext {
     pub account_id: Uuid,
     pub email: String,
     pub display_name: String,
+    pub is_active: bool,
     pub role_family: RoleFamily,
     pub capabilities: Vec<String>,
     pub scope_nodes: Vec<ScopeNodeSummary>,
@@ -73,7 +74,9 @@ pub async fn login(
         SELECT accounts.id
         FROM accounts
         JOIN account_credentials ON account_credentials.account_id = accounts.id
-        WHERE accounts.email = $1 AND account_credentials.password = $2
+        WHERE accounts.email = $1
+          AND account_credentials.password = $2
+          AND accounts.is_active = true
         "#,
     )
     .bind(&payload.email)
@@ -136,10 +139,11 @@ pub async fn account_from_headers(pool: &PgPool, headers: &HeaderMap) -> ApiResu
 
     let row = sqlx::query(
         r#"
-        SELECT accounts.id, accounts.email, accounts.display_name
+        SELECT accounts.id, accounts.email, accounts.display_name, accounts.is_active
         FROM auth_sessions
         JOIN accounts ON accounts.id = auth_sessions.account_id
         WHERE auth_sessions.token = $1
+          AND accounts.is_active = true
         "#,
     )
     .bind(token)
@@ -246,6 +250,7 @@ pub async fn account_from_headers(pool: &PgPool, headers: &HeaderMap) -> ApiResu
         account_id,
         email: row.try_get("email")?,
         display_name: row.try_get("display_name")?,
+        is_active: row.try_get("is_active")?,
         role_family,
         capabilities,
         scope_nodes,
