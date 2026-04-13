@@ -27,14 +27,38 @@ arrow = "56"
 axum = "0.8"
 chrono = { version = "0.4", features = ["serde"] }
 datafusion = "50"
-leptos = { version = "0.8.17", default-features = false, features = ["ssr"] }
+leptos = { version = "0.8.17", default-features = false }
+leptos_meta = { version = "0.8.5", default-features = false }
+leptos_router = { version = "0.8.13", default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "json", "migrate"] }
 thiserror = "2"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal"] }
-tower-http = { version = "0.6", features = ["cors", "trace"] }
+tower-http = { version = "0.6", features = ["cors", "trace", "fs"] }
 tower = { version = "0.5", features = ["util"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 uuid = { version = "1", features = ["serde", "v4"] }
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+web-sys = { version = "0.3", features = ["Document", "HtmlElement", "Window"] }
+
+[[workspace.metadata.leptos]]
+name = "tessara-web"
+bin-package = "tessara-api"
+lib-package = "tessara-web"
+output-name = "tessara-web"
+site-root = "target/site"
+site-pkg-dir = "pkg"
+site-addr = "127.0.0.1:8080"
+assets-dir = "crates/tessara-web/public"
+style-file = "style/main.css"
+browserquery = "defaults"
+bin-features = ["ssr"]
+lib-features = ["hydrate"]
+bin-default-features = false
+lib-default-features = false
+end2end-cmd = "npx playwright test"
+end2end-dir = "end2end"
+reload-port = 3001

@@ -28,7 +28,7 @@ use axum::{
     routing::{delete, get, post, put},
 };
 use db::AppState;
-use tower_http::{cors::CorsLayer, trace::TraceLayer};
+use tower_http::{cors::CorsLayer, services::ServeDir, trace::TraceLayer};
 
 /// Builds the complete Tessara HTTP router for the supplied application state.
 ///
@@ -40,6 +40,8 @@ pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/", get(|| async { Html(tessara_web::admin_shell_html()) }))
         .route("/assets/{asset_name}", get(svg_asset))
+        .route("/bridge/{asset_name}", get(bridge_asset))
+        .nest_service("/pkg", ServeDir::new(tessara_web::pkg_dir()))
         .route(
             "/app",
             get(|| async { Html(tessara_web::application_shell_html()) }),
@@ -358,6 +360,17 @@ async fn svg_asset(Path(asset_name): Path<String>) -> impl IntoResponse {
         Some(svg) => (
             [(header::CONTENT_TYPE, "image/svg+xml; charset=utf-8")],
             svg,
+        )
+            .into_response(),
+        None => (StatusCode::NOT_FOUND, "asset not found").into_response(),
+    }
+}
+
+async fn bridge_asset(Path(asset_name): Path<String>) -> impl IntoResponse {
+    match tessara_web::bridge_asset(&asset_name) {
+        Some(asset) => (
+            [(header::CONTENT_TYPE, "text/javascript; charset=utf-8")],
+            asset,
         )
             .into_response(),
         None => (StatusCode::NOT_FOUND, "asset not found").into_response(),

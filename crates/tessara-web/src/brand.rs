@@ -8,7 +8,7 @@ pub(crate) fn document_head_tags(title: &str, description: &str) -> String {
     format!(
         r##"<meta name="description" content="{description}">
     <meta name="theme-color" content="#F8FAFC">
-    <meta name="color-scheme" content="light">
+    <meta name="color-scheme" content="light dark">
     <meta property="og:type" content="website">
     <meta property="og:title" content="{title}">
     <meta property="og:description" content="{description}">
@@ -56,6 +56,7 @@ mod tests {
         assert!(head.contains("tessara-icon-512.svg"));
         assert!(head.contains("theme-color"));
         assert!(head.contains("#F8FAFC"));
+        assert!(head.contains("light dark"));
     }
 
     #[test]

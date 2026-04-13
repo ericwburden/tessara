@@ -1,6 +1,7 @@
 //! Route-specific Tessara application pages.
 
-use crate::brand::document_head_tags;
+use crate::pipeline;
+use crate::{brand::document_head_tags, theme};
 
 #[derive(Copy, Clone)]
 struct ActionSpec {
@@ -30,29 +31,40 @@ const STANDARD_ACTIONS: &[ActionSpec] = &[
 fn render_application_document(
     title: &str,
     description: &str,
-    style: &str,
-    script: &str,
+    bridge_script_path: &str,
     body_attrs: &str,
     shell: String,
 ) -> String {
     let brand = document_head_tags(title, description);
+    let theme_bootstrap = theme::bootstrap_script();
+    let stylesheets = theme::stylesheet_links();
+    let hydration = pipeline::hydration_module_tag();
 
     format!(
         r#"<!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light" data-theme-preference="system">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{title}</title>
     {brand}
-    <style>{style}</style>
+    <script>{theme_bootstrap}</script>
+    {stylesheets}
   </head>
-  <body {body_attrs}>
-    {shell}
-    <script>{script}</script>
+  <body class="tessara-app" {body_attrs}>
+    <div id="{app_root_id}">{app_root_start}{shell}{app_root_end}</div>
+    <script src="{bridge_script_path}" defer></script>
+    {hydration}
   </body>
-</html>"#
+</html>"#,
+        app_root_id = pipeline::APP_ROOT_ID,
+        app_root_start = pipeline::APP_ROOT_START,
+        app_root_end = pipeline::APP_ROOT_END,
     )
+}
+
+fn theme_toggle() -> &'static str {
+    theme::control_html()
 }
 
 fn escape_attr(value: &str) -> String {
@@ -79,7 +91,7 @@ fn action_buttons(actions: &[ActionSpec]) -> String {
         .iter()
         .map(|action| {
             format!(
-                r#"<button type="button" onclick="{}">{}</button>"#,
+                r#"<button class="button is-primary is-light" type="button" onclick="{}">{}</button>"#,
                 action.handler, action.label
             )
         })
@@ -105,7 +117,7 @@ fn sidebar(active_route: &str, include_internal_create: bool) -> String {
         .into_iter()
         .map(|(key, href, label)| {
             let class_name = if key == active_route { "active" } else { "" };
-            format!(r#"<a class="{class_name}" href="{href}">{label}</a>"#)
+            format!(r#"<li><a class="{class_name}" href="{href}">{label}</a></li>"#)
         })
         .collect::<Vec<_>>()
         .join("");
@@ -113,7 +125,7 @@ fn sidebar(active_route: &str, include_internal_create: bool) -> String {
         .into_iter()
         .map(|(key, href, label)| {
             let class_name = if key == active_route { "active" } else { "" };
-            format!(r#"<a class="{class_name}" href="{href}">{label}</a>"#)
+            format!(r#"<li><a class="{class_name}" href="{href}">{label}</a></li>"#)
         })
         .collect::<Vec<_>>()
         .join("");
@@ -136,14 +148,18 @@ fn sidebar(active_route: &str, include_internal_create: bool) -> String {
 
     format!(
         r#"
-        <aside class="panel app-sidebar">
-          <section class="nav-panel">
-            <h2>Product Areas</h2>
-            <nav class="app-nav" aria-label="Product navigation">{product_html}</nav>
+        <aside class="panel box app-sidebar">
+          <section class="nav-panel menu">
+            <p class="menu-label">Product Areas</p>
+            <nav aria-label="Product navigation">
+              <ul class="menu-list app-nav">{product_html}</ul>
+            </nav>
           </section>
-          <section class="nav-panel nav-panel-secondary">
-            <h2>Internal Areas</h2>
-            <nav class="app-nav" aria-label="Internal navigation">{internal_html}</nav>
+          <section class="nav-panel nav-panel-secondary menu">
+            <p class="menu-label">Internal Areas</p>
+            <nav aria-label="Internal navigation">
+              <ul class="menu-list app-nav">{internal_html}</ul>
+            </nav>
           </section>
           {create_html}
           <section class="selection-panel">
@@ -171,10 +187,13 @@ fn app_shell(
     format!(
         r#"
         <main class="shell app-shell">
-          <section class="panel hero">
-            <div class="brand-lockup">
-              <img class="brand-mark" src="/assets/tessara-icon-1024.svg" alt="" />
-              <span>Tessara</span>
+          <section class="panel box hero">
+            <div class="hero-header">
+              <div class="brand-lockup">
+                <img class="brand-mark" src="/assets/tessara-icon-1024.svg" alt="" />
+                <span>Tessara</span>
+              </div>
+              {}
             </div>
             <nav class="breadcrumb-trail" aria-label="Breadcrumb">{}</nav>
             <p class="muted">{}</p>
@@ -184,13 +203,14 @@ fn app_shell(
           </section>
           <section class="app-layout">
             {}
-            <section class="panel app-main">
+            <section class="panel box app-main">
               {}
             </section>
           </section>
           <pre id="output" hidden></pre>
         </main>
         "#,
+        theme_toggle(),
         breadcrumb(breadcrumbs),
         area_kind,
         title,
@@ -204,7 +224,7 @@ fn app_shell(
 fn page_header(eyebrow: &str, title: &str, description: &str, actions: String) -> String {
     format!(
         r#"
-        <section class="app-screen entity-page">
+        <section class="app-screen box entity-page">
           <p class="eyebrow">{eyebrow}</p>
           <div class="page-title-row">
             <div>
@@ -221,7 +241,7 @@ fn page_header(eyebrow: &str, title: &str, description: &str, actions: String) -
 fn empty_panel(title: &str, description: &str, body: &str) -> String {
     format!(
         r#"
-        <section class="app-screen page-panel">
+        <section class="app-screen box page-panel">
           <h3>{title}</h3>
           <p class="muted">{description}</p>
           {body}
@@ -341,7 +361,7 @@ fn home_body() -> String {
             .iter()
             .map(|(title, description, href, label)| {
                 format!(
-                    r#"<article class="home-card"><h3>{title}</h3><p>{description}</p><a class="button-link" href="{href}">{label}</a></article>"#
+                    r#"<article class="home-card card"><div class="card-content"><h3>{title}</h3><p>{description}</p><a class="button-link button is-light" href="{href}">{label}</a></div></article>"#
                 )
             })
             .collect::<Vec<_>>()
@@ -350,7 +370,7 @@ fn home_body() -> String {
             .iter()
             .map(|(title, description, href, label)| {
                 format!(
-                    r#"<article class="directory-card"><h3>{title}</h3><p>{description}</p><a class="button-link" href="{href}">{label}</a></article>"#
+                    r#"<article class="directory-card card"><div class="card-content"><h3>{title}</h3><p>{description}</p><a class="button-link button is-light" href="{href}">{label}</a></div></article>"#
                 )
             })
             .collect::<Vec<_>>()
@@ -366,14 +386,15 @@ fn login_body() -> String {
         "login-form",
         "/app",
         r#"
+        <div id="login-feedback" class="notification is-danger is-light is-hidden"></div>
         <div class="form-grid">
           <div class="form-field">
             <label for="login-email">Email</label>
-            <input id="login-email" type="email" autocomplete="username" />
+            <input class="input" id="login-email" type="email" autocomplete="username" />
           </div>
           <div class="form-field">
             <label for="login-password">Password</label>
-            <input id="login-password" type="password" autocomplete="current-password" />
+            <input class="input" id="login-password" type="password" autocomplete="current-password" />
           </div>
         </div>
         <section class="app-screen page-panel compact-panel">
@@ -429,6 +450,8 @@ fn administration_body() -> String {
             </div>
             "#,
         ),
+
+
         empty_panel(
             "Internal Links",
             "Migration and older internal tooling remain available without taking over the product navigation model.",
@@ -470,7 +493,7 @@ fn migration_body() -> String {
                 <button type="button" onclick="importLegacyFixture()">Import Fixture</button>
               </div>
               <label class="wide-field" for="legacy-fixture-json">Fixture JSON</label>
-              <textarea id="legacy-fixture-json" rows="18" placeholder="Paste legacy fixture JSON"></textarea>
+              <textarea class="textarea" id="legacy-fixture-json" rows="18" placeholder="Paste legacy fixture JSON"></textarea>
             </div>
             <div id="migration-list" class="record-list">
               <p class="muted">Load fixture examples or validate a pasted fixture.</p>
@@ -503,7 +526,9 @@ fn list_screen(
             eyebrow,
             title,
             description,
-            format!(r#"<a class="button-link" href="{create_href}">{create_label}</a>"#),
+            format!(
+                r#"<a class="button-link button is-primary" href="{create_href}">{create_label}</a>"#
+            ),
         ),
         empty_panel(
             &format!("{item_label} List"),
@@ -536,7 +561,7 @@ fn detail_screen(
             title,
             description,
             format!(
-                r#"<a class="button-link" href="{back_href}">Back to List</a><a class="button-link" href="{edit_href}">Edit</a>"#
+                r#"<a class="button-link button is-light" href="{back_href}">Back to List</a><a class="button-link button is-primary is-light" href="{edit_href}">Edit</a>"#
             ),
         ),
         empty_panel(
@@ -560,12 +585,12 @@ fn form_screen(
     format!(
         r#"
         {}
-        <section class="app-screen page-panel">
+        <section class="app-screen box page-panel">
           <form id="{form_id}" class="entity-form">
             {fields_html}
             <div class="actions form-actions">
-              <button type="submit">Submit</button>
-              <a class="button-link" href="{cancel_href}">Cancel</a>
+              <button class="button is-primary" type="submit">Submit</button>
+              <a class="button-link button is-light" href="{cancel_href}">Cancel</a>
             </div>
           </form>
         </section>
@@ -581,15 +606,15 @@ fn organization_form_fields(is_edit: bool) -> String {
         <div class="form-grid">
           <div class="form-field">
             <label for="organization-node-type">Node Type</label>
-            <select id="organization-node-type"{disabled}></select>
+            <select class="input" id="organization-node-type"{disabled}></select>
           </div>
           <div class="form-field">
             <label for="organization-parent-node">Parent Organization</label>
-            <select id="organization-parent-node"></select>
+            <select class="input" id="organization-parent-node"></select>
           </div>
           <div class="form-field wide-field">
             <label for="organization-name">Name</label>
-            <input id="organization-name" type="text" autocomplete="off" />
+            <input class="input" id="organization-name" type="text" autocomplete="off" />
           </div>
         </div>
         <section class="page-panel nested-form-panel">
@@ -608,15 +633,15 @@ fn form_entity_fields() -> String {
         <div class="form-grid">
           <div class="form-field wide-field">
             <label for="form-name">Name</label>
-            <input id="form-name" type="text" autocomplete="off" />
+            <input class="input" id="form-name" type="text" autocomplete="off" />
           </div>
           <div class="form-field">
             <label for="form-slug">Slug</label>
-            <input id="form-slug" type="text" autocomplete="off" />
+            <input class="input" id="form-slug" type="text" autocomplete="off" />
           </div>
           <div class="form-field">
             <label for="form-scope-node-type">Scope Node Type</label>
-            <select id="form-scope-node-type"></select>
+            <select class="input" id="form-scope-node-type"></select>
           </div>
         </div>
     "#
@@ -628,11 +653,11 @@ fn response_new_fields() -> String {
         <div class="form-grid">
           <div class="form-field">
             <label for="response-form-version">Published Form</label>
-            <select id="response-form-version"></select>
+            <select class="input" id="response-form-version"></select>
           </div>
           <div class="form-field">
             <label for="response-node">Target Organization</label>
-            <select id="response-node"></select>
+            <select class="input" id="response-node"></select>
           </div>
         </div>
     "#
@@ -644,18 +669,18 @@ fn report_form_fields() -> String {
         <div class="form-grid">
           <div class="form-field wide-field">
             <label for="report-name">Name</label>
-            <input id="report-name" type="text" autocomplete="off" />
+            <input class="input" id="report-name" type="text" autocomplete="off" />
           </div>
           <div class="form-field">
             <label for="report-source-type">Source Type</label>
-            <select id="report-source-type">
+            <select class="input" id="report-source-type">
               <option value="form">Form</option>
               <option value="dataset">Dataset</option>
             </select>
           </div>
           <div class="form-field">
             <label for="report-source-id">Source</label>
-            <select id="report-source-id"></select>
+            <select class="input" id="report-source-id"></select>
           </div>
         </div>
         <section class="page-panel nested-form-panel">
@@ -679,19 +704,90 @@ fn dashboard_form_fields() -> String {
         <div class="form-grid">
           <div class="form-field wide-field">
             <label for="dashboard-name">Name</label>
-            <input id="dashboard-name" type="text" autocomplete="off" />
+            <input class="input" id="dashboard-name" type="text" autocomplete="off" />
           </div>
         </div>
     "#
     .to_string()
 }
 
-pub fn application_shell_html(style: &str, script: &str) -> String {
+fn user_form_fields(is_edit: bool) -> String {
+    let password_help = if is_edit {
+        "Leave blank to keep the current password."
+    } else {
+        "Set the password used for local sign-in."
+    };
+    format!(
+        r#"
+        <div class="form-grid">
+          <div class="form-field wide-field">
+            <label for="user-display-name">Display Name</label>
+            <input class="input" id="user-display-name" type="text" autocomplete="name" />
+          </div>
+          <div class="form-field">
+            <label for="user-email">Email</label>
+            <input class="input" id="user-email" type="email" autocomplete="username" />
+          </div>
+          <div class="form-field">
+            <label for="user-password">Password</label>
+            <input class="input" id="user-password" type="password" autocomplete="new-password" />
+            <p class="muted">{password_help}</p>
+          </div>
+          <div class="form-field">
+            <label class="checkbox-label" for="user-is-active">
+              <input id="user-is-active" type="checkbox" checked>
+              Account is active
+            </label>
+          </div>
+        </div>
+        <section class="page-panel nested-form-panel">
+          <h3>Roles</h3>
+          <p class="muted">Select the role memberships that should apply to this account.</p>
+          <div id="user-role-options" class="form-grid">
+            <p class="muted">Loading roles...</p>
+          </div>
+        </section>
+        "#
+    )
+}
+
+fn user_access_form_fields() -> String {
+    r#"
+        <section class="page-panel nested-form-panel">
+          <h3>Effective Access</h3>
+          <div id="user-access-summary" class="record-detail">
+            <p class="muted">Loading current access summary...</p>
+          </div>
+        </section>
+        <section class="page-panel nested-form-panel">
+          <h3>Scope Assignments</h3>
+          <p class="muted">Choose the organization nodes that define this user's scoped visibility.</p>
+          <div id="user-scope-options" class="form-grid">
+            <p class="muted">Loading available organization nodes...</p>
+          </div>
+        </section>
+    "#
+    .to_string()
+}
+
+fn role_form_fields() -> String {
+    r#"
+        <section class="page-panel nested-form-panel">
+          <h3>Capabilities</h3>
+          <p class="muted">Choose the capabilities included in this role bundle.</p>
+          <div id="role-capability-options" class="form-grid">
+            <p class="muted">Loading capabilities...</p>
+          </div>
+        </section>
+    "#
+    .to_string()
+}
+
+pub fn application_shell_html(_script: &str) -> String {
     render_application_document(
         "Tessara Home",
         "Tessara application home for local replacement workflow testing.",
-        style,
-        script,
+        &pipeline::bridge_asset_path("app-legacy.js"),
         r#"data-page-key="home" data-active-route="home""#,
         app_shell(
             "home",
@@ -705,12 +801,11 @@ pub fn application_shell_html(style: &str, script: &str) -> String {
     )
 }
 
-pub fn login_application_html(style: &str, script: &str) -> String {
+pub fn login_application_html(_script: &str) -> String {
     render_application_document(
         "Tessara Sign In",
         "Sign in to the Tessara application shell.",
-        style,
-        script,
+        &pipeline::bridge_asset_path("app-legacy.js"),
         r#"data-page-key="login" data-active-route="login""#,
         app_shell(
             "home",
@@ -724,12 +819,11 @@ pub fn login_application_html(style: &str, script: &str) -> String {
     )
 }
 
-pub fn administration_application_shell_html(style: &str, script: &str) -> String {
+pub fn administration_application_shell_html(_script: &str) -> String {
     render_application_document(
         "Tessara Administration",
         "Tessara internal administration landing page.",
-        style,
-        script,
+        &pipeline::bridge_asset_path("app-legacy.js"),
         r#"data-page-key="administration" data-active-route="administration""#,
         app_shell(
             "administration",
@@ -743,12 +837,12 @@ pub fn administration_application_shell_html(style: &str, script: &str) -> Strin
     )
 }
 
-pub fn migration_application_shell_html(style: &str, script: &str) -> String {
+
+pub fn migration_application_shell_html(_script: &str) -> String {
     render_application_document(
         "Tessara Migration",
         "Tessara migration workbench.",
-        style,
-        script,
+        &pipeline::bridge_asset_path("app-legacy.js"),
         r#"data-page-key="migration" data-active-route="migration""#,
         app_shell(
             "migration",
@@ -762,12 +856,11 @@ pub fn migration_application_shell_html(style: &str, script: &str) -> String {
     )
 }
 
-pub fn organization_application_shell_html(style: &str, script: &str) -> String {
+pub fn organization_application_shell_html(_script: &str) -> String {
     render_application_document(
         "Tessara Organizations",
         "Tessara organization list screen.",
-        style,
-        script,
+        &pipeline::bridge_asset_path("app-legacy.js"),
         r#"data-page-key="organization-list" data-active-route="organization""#,
         app_shell(
             "organization",
@@ -789,12 +882,11 @@ pub fn organization_application_shell_html(style: &str, script: &str) -> String 
     )
 }
 
-pub fn organization_create_application_html(style: &str, script: &str) -> String {
+pub fn organization_create_application_html(_script: &str) -> String {
     render_application_document(
         "Create Organization",
         "Create a runtime organization record.",
-        style,
-        script,
+        &pipeline::bridge_asset_path("app-legacy.js"),
         r#"data-page-key="organization-create" data-active-route="organization""#,
         app_shell(
             "organization",
@@ -819,13 +911,12 @@ pub fn organization_create_application_html(style: &str, script: &str) -> String
     )
 }
 
-pub fn organization_detail_application_html(style: &str, script: &str, node_id: &str) -> String {
+pub fn organization_detail_application_html(_script: &str, node_id: &str) -> String {
     let escaped = escape_attr(node_id);
     render_application_document(
         "Organization Detail",
         "Organization detail screen.",
-        style,
-        script,
+        &pipeline::bridge_asset_path("app-legacy.js"),
         &format!(
             r#"data-page-key="organization-detail" data-active-route="organization" data-record-id="{escaped}""#
         ),
@@ -853,13 +944,12 @@ pub fn organization_detail_application_html(style: &str, script: &str, node_id: 
     )
 }
 
-pub fn organization_edit_application_html(style: &str, script: &str, node_id: &str) -> String {
+pub fn organization_edit_application_html(_script: &str, node_id: &str) -> String {
     let escaped = escape_attr(node_id);
     render_application_document(
         "Edit Organization",
         "Edit a runtime organization record.",
-        style,
-        script,
+        &pipeline::bridge_asset_path("app-legacy.js"),
         &format!(
             r#"data-page-key="organization-edit" data-active-route="organization" data-record-id="{escaped}""#
         ),
@@ -890,12 +980,11 @@ pub fn organization_edit_application_html(style: &str, script: &str, node_id: &s
     )
 }
 
-pub fn forms_application_shell_html(style: &str, script: &str) -> String {
+pub fn forms_application_shell_html(_script: &str) -> String {
     render_application_document(
         "Tessara Forms",
         "Tessara forms list screen.",
-        style,
-        script,
+        &pipeline::bridge_asset_path("app-legacy.js"),
         r#"data-page-key="form-list" data-active-route="forms""#,
         app_shell(
             "forms",
@@ -917,12 +1006,11 @@ pub fn forms_application_shell_html(style: &str, script: &str) -> String {
     )
 }
 
-pub fn form_create_application_html(style: &str, script: &str) -> String {
+pub fn form_create_application_html(_script: &str) -> String {
     render_application_document(
         "Create Form",
         "Create a top-level form.",
-        style,
-        script,
+        &pipeline::bridge_asset_path("app-legacy.js"),
         r#"data-page-key="form-create" data-active-route="forms""#,
         app_shell(
             "forms",
@@ -947,13 +1035,12 @@ pub fn form_create_application_html(style: &str, script: &str) -> String {
     )
 }
 
-pub fn form_detail_application_html(style: &str, script: &str, form_id: &str) -> String {
+pub fn form_detail_application_html(_script: &str, form_id: &str) -> String {
     let escaped = escape_attr(form_id);
     render_application_document(
         "Form Detail",
         "Form detail screen.",
-        style,
-        script,
+        &pipeline::bridge_asset_path("app-legacy.js"),
         &format!(
             r#"data-page-key="form-detail" data-active-route="forms" data-record-id="{escaped}""#
         ),
@@ -981,13 +1068,12 @@ pub fn form_detail_application_html(style: &str, script: &str, form_id: &str) ->
     )
 }
 
-pub fn form_edit_application_html(style: &str, script: &str, form_id: &str) -> String {
+pub fn form_edit_application_html(_script: &str, form_id: &str) -> String {
     let escaped = escape_attr(form_id);
     render_application_document(
         "Edit Form",
         "Edit a top-level form.",
-        style,
-        script,
+        &pipeline::bridge_asset_path("app-legacy.js"),
         &format!(
             r#"data-page-key="form-edit" data-active-route="forms" data-record-id="{escaped}""#
         ),
@@ -1015,12 +1101,11 @@ pub fn form_edit_application_html(style: &str, script: &str, form_id: &str) -> S
     )
 }
 
-pub fn responses_application_shell_html(style: &str, script: &str) -> String {
+pub fn responses_application_shell_html(_script: &str) -> String {
     render_application_document(
         "Tessara Responses",
         "Tessara responses list screen.",
-        style,
-        script,
+        &pipeline::bridge_asset_path("app-legacy.js"),
         r#"data-page-key="response-list" data-active-route="responses""#,
         app_shell(
             "responses",
@@ -1065,16 +1150,15 @@ pub fn responses_application_shell_html(style: &str, script: &str) -> String {
     )
 }
 
-pub fn submission_application_shell_html(style: &str, script: &str) -> String {
-    responses_application_shell_html(style, script)
+pub fn submission_application_shell_html(_script: &str) -> String {
+    responses_application_shell_html(_script)
 }
 
-pub fn response_create_application_html(style: &str, script: &str) -> String {
+pub fn response_create_application_html(_script: &str) -> String {
     render_application_document(
         "Start Response",
         "Start a new response draft.",
-        style,
-        script,
+        &pipeline::bridge_asset_path("app-legacy.js"),
         r#"data-page-key="response-create" data-active-route="responses""#,
         app_shell(
             "responses",
@@ -1102,13 +1186,12 @@ pub fn response_create_application_html(style: &str, script: &str) -> String {
     )
 }
 
-pub fn response_detail_application_html(style: &str, script: &str, submission_id: &str) -> String {
+pub fn response_detail_application_html(_script: &str, submission_id: &str) -> String {
     let escaped = escape_attr(submission_id);
     render_application_document(
         "Response Detail",
         "Response detail screen.",
-        style,
-        script,
+        &pipeline::bridge_asset_path("app-legacy.js"),
         &format!(
             r#"data-page-key="response-detail" data-active-route="responses" data-record-id="{escaped}""#
         ),
@@ -1144,13 +1227,12 @@ pub fn response_detail_application_html(style: &str, script: &str, submission_id
     )
 }
 
-pub fn response_edit_application_html(style: &str, script: &str, submission_id: &str) -> String {
+pub fn response_edit_application_html(_script: &str, submission_id: &str) -> String {
     let escaped = escape_attr(submission_id);
     render_application_document(
         "Edit Response",
         "Edit a draft response.",
-        style,
-        script,
+        &pipeline::bridge_asset_path("app-legacy.js"),
         &format!(
             r#"data-page-key="response-edit" data-active-route="responses" data-record-id="{escaped}""#
         ),
@@ -1190,12 +1272,11 @@ pub fn response_edit_application_html(style: &str, script: &str, submission_id: 
     )
 }
 
-pub fn reporting_application_shell_html(style: &str, script: &str) -> String {
+pub fn reporting_application_shell_html(_script: &str) -> String {
     render_application_document(
         "Tessara Reports",
         "Tessara reports list screen.",
-        style,
-        script,
+        &pipeline::bridge_asset_path("app-legacy.js"),
         r#"data-page-key="report-list" data-active-route="reports""#,
         app_shell(
             "reports",
@@ -1217,12 +1298,11 @@ pub fn reporting_application_shell_html(style: &str, script: &str) -> String {
     )
 }
 
-pub fn report_create_application_html(style: &str, script: &str) -> String {
+pub fn report_create_application_html(_script: &str) -> String {
     render_application_document(
         "Create Report",
         "Create a top-level report.",
-        style,
-        script,
+        &pipeline::bridge_asset_path("app-legacy.js"),
         r#"data-page-key="report-create" data-active-route="reports""#,
         app_shell(
             "reports",
@@ -1247,13 +1327,12 @@ pub fn report_create_application_html(style: &str, script: &str) -> String {
     )
 }
 
-pub fn report_detail_application_html(style: &str, script: &str, report_id: &str) -> String {
+pub fn report_detail_application_html(_script: &str, report_id: &str) -> String {
     let escaped = escape_attr(report_id);
     render_application_document(
         "Report Detail",
         "Report detail screen.",
-        style,
-        script,
+        &pipeline::bridge_asset_path("app-legacy.js"),
         &format!(
             r#"data-page-key="report-detail" data-active-route="reports" data-record-id="{escaped}""#
         ),
@@ -1297,13 +1376,12 @@ pub fn report_detail_application_html(style: &str, script: &str, report_id: &str
     )
 }
 
-pub fn report_edit_application_html(style: &str, script: &str, report_id: &str) -> String {
+pub fn report_edit_application_html(_script: &str, report_id: &str) -> String {
     let escaped = escape_attr(report_id);
     render_application_document(
         "Edit Report",
         "Edit a top-level report.",
-        style,
-        script,
+        &pipeline::bridge_asset_path("app-legacy.js"),
         &format!(
             r#"data-page-key="report-edit" data-active-route="reports" data-record-id="{escaped}""#
         ),
@@ -1331,12 +1409,11 @@ pub fn report_edit_application_html(style: &str, script: &str, report_id: &str) 
     )
 }
 
-pub fn dashboards_application_shell_html(style: &str, script: &str) -> String {
+pub fn dashboards_application_shell_html(_script: &str) -> String {
     render_application_document(
         "Tessara Dashboards",
         "Tessara dashboards list screen.",
-        style,
-        script,
+        &pipeline::bridge_asset_path("app-legacy.js"),
         r#"data-page-key="dashboard-list" data-active-route="dashboards""#,
         app_shell(
             "dashboards",
@@ -1358,12 +1435,11 @@ pub fn dashboards_application_shell_html(style: &str, script: &str) -> String {
     )
 }
 
-pub fn dashboard_create_application_html(style: &str, script: &str) -> String {
+pub fn dashboard_create_application_html(_script: &str) -> String {
     render_application_document(
         "Create Dashboard",
         "Create a top-level dashboard.",
-        style,
-        script,
+        &pipeline::bridge_asset_path("app-legacy.js"),
         r#"data-page-key="dashboard-create" data-active-route="dashboards""#,
         app_shell(
             "dashboards",
@@ -1388,13 +1464,12 @@ pub fn dashboard_create_application_html(style: &str, script: &str) -> String {
     )
 }
 
-pub fn dashboard_detail_application_html(style: &str, script: &str, dashboard_id: &str) -> String {
+pub fn dashboard_detail_application_html(_script: &str, dashboard_id: &str) -> String {
     let escaped = escape_attr(dashboard_id);
     render_application_document(
         "Dashboard Detail",
         "Dashboard detail screen.",
-        style,
-        script,
+        &pipeline::bridge_asset_path("app-legacy.js"),
         &format!(
             r#"data-page-key="dashboard-detail" data-active-route="dashboards" data-record-id="{escaped}""#
         ),
@@ -1432,13 +1507,12 @@ pub fn dashboard_detail_application_html(style: &str, script: &str, dashboard_id
     )
 }
 
-pub fn dashboard_edit_application_html(style: &str, script: &str, dashboard_id: &str) -> String {
+pub fn dashboard_edit_application_html(_script: &str, dashboard_id: &str) -> String {
     let escaped = escape_attr(dashboard_id);
     render_application_document(
         "Edit Dashboard",
         "Edit a top-level dashboard.",
-        style,
-        script,
+        &pipeline::bridge_asset_path("app-legacy.js"),
         &format!(
             r#"data-page-key="dashboard-edit" data-active-route="dashboards" data-record-id="{escaped}""#
         ),
