@@ -69,6 +69,14 @@ pub fn App() -> impl IntoView {
                 <Route path=path!("/app/dashboards/:dashboard_id") view=dashboards::DashboardDetailPage ssr=PRIMARY_SSR_MODE />
                 <Route path=path!("/app/dashboards/:dashboard_id/edit") view=dashboards::DashboardEditPage ssr=PRIMARY_SSR_MODE />
                 <Route path=path!("/app/administration") view=administration::AdministrationPage ssr=PRIMARY_SSR_MODE />
+                <Route path=path!("/app/administration/users") view=administration::UsersPage ssr=PRIMARY_SSR_MODE />
+                <Route path=path!("/app/administration/users/new") view=administration::UserCreatePage ssr=PRIMARY_SSR_MODE />
+                <Route path=path!("/app/administration/users/:account_id") view=administration::UserDetailPage ssr=PRIMARY_SSR_MODE />
+                <Route path=path!("/app/administration/users/:account_id/edit") view=administration::UserEditPage ssr=PRIMARY_SSR_MODE />
+                <Route path=path!("/app/administration/users/:account_id/access") view=administration::UserAccessPage ssr=PRIMARY_SSR_MODE />
+                <Route path=path!("/app/administration/roles") view=administration::RolesPage ssr=PRIMARY_SSR_MODE />
+                <Route path=path!("/app/administration/roles/:role_id") view=administration::RoleDetailPage ssr=PRIMARY_SSR_MODE />
+                <Route path=path!("/app/administration/roles/:role_id/edit") view=administration::RoleEditPage ssr=PRIMARY_SSR_MODE />
                 <Route path=path!("/app/admin") view=administration::LegacyAdminPage ssr=PRIMARY_SSR_MODE />
                 <Route path=path!("/app/migration") view=migration_route.clone() ssr=PRIMARY_SSR_MODE />
             </Routes>

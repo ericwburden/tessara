@@ -427,6 +427,8 @@ fn administration_body() -> String {
         {}
         {}
         {}
+        {}
+        {}
         "#,
         page_header(
             "Internal Area",
@@ -450,8 +452,36 @@ fn administration_body() -> String {
             </div>
             "#,
         ),
-
-
+        empty_panel(
+            "User Management",
+            "User accounts now have dedicated application screens for browse, detail, create, and edit work.",
+            r#"
+            <div class="record-list">
+              <article class="record-card">
+                <h4>User Accounts</h4>
+                <p>Manage local users, passwords, role memberships, and active status without dropping into the legacy builder.</p>
+                <div class="actions">
+                  <a class="button-link" href="/app/administration/users">Open User Management</a>
+                </div>
+              </article>
+            </div>
+            "#,
+        ),
+        empty_panel(
+            "Roles And Access",
+            "Manage reusable capability bundles and the scoped access assignments that control operator visibility.",
+            r#"
+            <div class="record-list">
+              <article class="record-card">
+                <h4>Role Catalog</h4>
+                <p>Review the current role bundles, inspect their capabilities, and edit what each role grants.</p>
+                <div class="actions">
+                  <a class="button-link" href="/app/administration/roles">Open Roles</a>
+                </div>
+              </article>
+            </div>
+            "#,
+        ),
         empty_panel(
             "Internal Links",
             "Migration and older internal tooling remain available without taking over the product navigation model.",
@@ -837,6 +867,262 @@ pub fn administration_application_shell_html(_script: &str) -> String {
     )
 }
 
+pub fn users_application_shell_html(_script: &str) -> String {
+    render_application_document(
+        "Tessara User Management",
+        "Browse and manage Tessara user accounts.",
+        &pipeline::bridge_asset_path("app-legacy.js"),
+        r#"data-page-key="user-list" data-active-route="administration""#,
+        app_shell(
+            "administration",
+            "Internal Area",
+            "User Management",
+            "Manage application users, passwords, active status, and assigned roles from dedicated administration screens.",
+            &[
+                ("Home", Some("/app")),
+                ("Administration", Some("/app/administration")),
+                ("Users", None),
+            ],
+            list_screen(
+                "Administration",
+                "Users",
+                "This list screen contains the current local application accounts.",
+                "Create User",
+                "/app/administration/users/new",
+                "user-list",
+                "user",
+            ),
+            false,
+        ),
+    )
+}
+
+pub fn user_create_application_html(_script: &str) -> String {
+    render_application_document(
+        "Create User",
+        "Create a Tessara application account.",
+        &pipeline::bridge_asset_path("app-legacy.js"),
+        r#"data-page-key="user-create" data-active-route="administration""#,
+        app_shell(
+            "administration",
+            "Internal Area",
+            "Create User",
+            "Create a local application account with login credentials and assigned roles.",
+            &[
+                ("Home", Some("/app")),
+                ("Administration", Some("/app/administration")),
+                ("Users", Some("/app/administration/users")),
+                ("Create User", None),
+            ],
+            form_screen(
+                "Administration",
+                "Create User",
+                "Create a local account for administration, operator, or respondent testing flows.",
+                "user-form",
+                "/app/administration/users",
+                &user_form_fields(false),
+            ),
+            false,
+        ),
+    )
+}
+
+pub fn user_detail_application_html(_script: &str, account_id: &str) -> String {
+    let escaped = escape_attr(account_id);
+    render_application_document(
+        "User Detail",
+        "Inspect a Tessara application account.",
+        &pipeline::bridge_asset_path("app-legacy.js"),
+        &format!(
+            r#"data-page-key="user-detail" data-active-route="administration" data-record-id="{escaped}""#
+        ),
+        app_shell(
+            "administration",
+            "Internal Area",
+            "User Detail",
+            "Inspect account status, role memberships, scope, and subordinate respondent relationships.",
+            &[
+                ("Home", Some("/app")),
+                ("Administration", Some("/app/administration")),
+                ("Users", Some("/app/administration/users")),
+                ("User Detail", None),
+            ],
+            detail_screen(
+                "Administration",
+                "User Detail",
+                "This screen is read-only. Use Edit to make changes.",
+                "/app/administration/users",
+                &format!("/app/administration/users/{escaped}/edit"),
+                "user-detail",
+                "User Detail",
+            ),
+            false,
+        ),
+    )
+}
+
+pub fn user_edit_application_html(_script: &str, account_id: &str) -> String {
+    let escaped = escape_attr(account_id);
+    render_application_document(
+        "Edit User",
+        "Edit a Tessara application account.",
+        &pipeline::bridge_asset_path("app-legacy.js"),
+        &format!(
+            r#"data-page-key="user-edit" data-active-route="administration" data-record-id="{escaped}""#
+        ),
+        app_shell(
+            "administration",
+            "Internal Area",
+            "Edit User",
+            "Update account details, password, active status, and assigned roles.",
+            &[
+                ("Home", Some("/app")),
+                ("Administration", Some("/app/administration")),
+                ("Users", Some("/app/administration/users")),
+                ("Edit User", None),
+            ],
+            form_screen(
+                "Administration",
+                "Edit User",
+                "Update this account and keep the application in a user-testable state.",
+                "user-form",
+                &format!("/app/administration/users/{escaped}"),
+                &user_form_fields(true),
+            ),
+            false,
+        ),
+    )
+}
+
+pub fn user_access_application_html(_script: &str, account_id: &str) -> String {
+    let escaped = escape_attr(account_id);
+    render_application_document(
+        "User Access",
+        "Manage scoped access assignments for a Tessara application account.",
+        &pipeline::bridge_asset_path("app-legacy.js"),
+        &format!(
+            r#"data-page-key="user-access" data-active-route="administration" data-record-id="{escaped}""#
+        ),
+        app_shell(
+            "administration",
+            "Internal Area",
+            "User Access",
+            "Manage scope assignments and inspect the capabilities this user currently receives from assigned roles.",
+            &[
+                ("Home", Some("/app")),
+                ("Administration", Some("/app/administration")),
+                ("Users", Some("/app/administration/users")),
+                ("User Access", None),
+            ],
+            form_screen(
+                "Administration",
+                "User Access",
+                "Update the scoped access that governs visible organization data for this account.",
+                "user-access-form",
+                &format!("/app/administration/users/{escaped}"),
+                &user_access_form_fields(),
+            ),
+            false,
+        ),
+    )
+}
+
+pub fn roles_application_shell_html(_script: &str) -> String {
+    render_application_document(
+        "Tessara Roles",
+        "Browse and inspect Tessara role bundles.",
+        &pipeline::bridge_asset_path("app-legacy.js"),
+        r#"data-page-key="role-list" data-active-route="administration""#,
+        app_shell(
+            "administration",
+            "Internal Area",
+            "Roles",
+            "Review the current role bundles and the capabilities each one grants.",
+            &[
+                ("Home", Some("/app")),
+                ("Administration", Some("/app/administration")),
+                ("Roles", None),
+            ],
+            list_screen(
+                "Administration",
+                "Roles",
+                "This list screen contains the current role bundles used for access control.",
+                "Refresh Roles",
+                "/app/administration/roles",
+                "role-list",
+                "role",
+            ),
+            false,
+        ),
+    )
+}
+
+pub fn role_detail_application_html(_script: &str, role_id: &str) -> String {
+    let escaped = escape_attr(role_id);
+    render_application_document(
+        "Role Detail",
+        "Inspect a Tessara role bundle.",
+        &pipeline::bridge_asset_path("app-legacy.js"),
+        &format!(
+            r#"data-page-key="role-detail" data-active-route="administration" data-record-id="{escaped}""#
+        ),
+        app_shell(
+            "administration",
+            "Internal Area",
+            "Role Detail",
+            "Inspect the capabilities in this role and the accounts currently assigned to it.",
+            &[
+                ("Home", Some("/app")),
+                ("Administration", Some("/app/administration")),
+                ("Roles", Some("/app/administration/roles")),
+                ("Role Detail", None),
+            ],
+            detail_screen(
+                "Administration",
+                "Role Detail",
+                "This screen is read-only. Use Edit to change the role bundle.",
+                "/app/administration/roles",
+                &format!("/app/administration/roles/{escaped}/edit"),
+                "role-detail",
+                "Role Detail",
+            ),
+            false,
+        ),
+    )
+}
+
+pub fn role_edit_application_html(_script: &str, role_id: &str) -> String {
+    let escaped = escape_attr(role_id);
+    render_application_document(
+        "Edit Role",
+        "Edit a Tessara role bundle.",
+        &pipeline::bridge_asset_path("app-legacy.js"),
+        &format!(
+            r#"data-page-key="role-edit" data-active-route="administration" data-record-id="{escaped}""#
+        ),
+        app_shell(
+            "administration",
+            "Internal Area",
+            "Edit Role",
+            "Update the capability bundle granted by this role.",
+            &[
+                ("Home", Some("/app")),
+                ("Administration", Some("/app/administration")),
+                ("Roles", Some("/app/administration/roles")),
+                ("Edit Role", None),
+            ],
+            form_screen(
+                "Administration",
+                "Edit Role",
+                "Choose which capabilities belong to this role bundle.",
+                "role-form",
+                &format!("/app/administration/roles/{escaped}"),
+                &role_form_fields(),
+            ),
+            false,
+        ),
+    )
+}
 
 pub fn migration_application_shell_html(_script: &str) -> String {
     render_application_document(

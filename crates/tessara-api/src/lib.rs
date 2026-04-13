@@ -123,6 +123,48 @@ pub fn router(state: AppState) -> Router {
         )
 
         .route(
+            "/app/administration/users",
+            get(|| async { Html(tessara_web::users_application_shell_html()) }),
+        )
+        .route(
+            "/app/administration/users/new",
+            get(|| async { Html(tessara_web::user_create_application_html()) }),
+        )
+        .route(
+            "/app/administration/users/{account_id}/edit",
+            get(|Path(account_id): Path<String>| async move {
+                Html(tessara_web::user_edit_application_html(&account_id))
+            }),
+        )
+        .route(
+            "/app/administration/users/{account_id}",
+            get(|Path(account_id): Path<String>| async move {
+                Html(tessara_web::user_detail_application_html(&account_id))
+            }),
+        )
+        .route(
+            "/app/administration/users/{account_id}/access",
+            get(|Path(account_id): Path<String>| async move {
+                Html(tessara_web::user_access_application_html(&account_id))
+            }),
+        )
+        .route(
+            "/app/administration/roles",
+            get(|| async { Html(tessara_web::roles_application_shell_html()) }),
+        )
+        .route(
+            "/app/administration/roles/{role_id}/edit",
+            get(|Path(role_id): Path<String>| async move {
+                Html(tessara_web::role_edit_application_html(&role_id))
+            }),
+        )
+        .route(
+            "/app/administration/roles/{role_id}",
+            get(|Path(role_id): Path<String>| async move {
+                Html(tessara_web::role_detail_application_html(&role_id))
+            }),
+        )
+        .route(
             "/app/admin",
             get(|| async { Html(tessara_web::admin_application_shell_html()) }),
         )

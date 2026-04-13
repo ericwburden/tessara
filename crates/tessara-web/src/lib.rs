@@ -116,13 +116,37 @@ pub fn administration_application_shell_html() -> String {
     application::administration_application_shell_html(app_script::APPLICATION_SCRIPT)
 }
 
+pub fn users_application_shell_html() -> String {
+    application::users_application_shell_html(app_script::APPLICATION_SCRIPT)
+}
 
+pub fn user_create_application_html() -> String {
+    application::user_create_application_html(app_script::APPLICATION_SCRIPT)
+}
 
+pub fn user_detail_application_html(account_id: &str) -> String {
+    application::user_detail_application_html(app_script::APPLICATION_SCRIPT, account_id)
+}
 
+pub fn user_edit_application_html(account_id: &str) -> String {
+    application::user_edit_application_html(app_script::APPLICATION_SCRIPT, account_id)
+}
 
+pub fn user_access_application_html(account_id: &str) -> String {
+    application::user_access_application_html(app_script::APPLICATION_SCRIPT, account_id)
+}
 
+pub fn roles_application_shell_html() -> String {
+    application::roles_application_shell_html(app_script::APPLICATION_SCRIPT)
+}
 
+pub fn role_detail_application_html(role_id: &str) -> String {
+    application::role_detail_application_html(app_script::APPLICATION_SCRIPT, role_id)
+}
 
+pub fn role_edit_application_html(role_id: &str) -> String {
+    application::role_edit_application_html(app_script::APPLICATION_SCRIPT, role_id)
+}
 
 pub fn admin_application_shell_html() -> String {
     shell::admin_shell_html(shell_script::SCRIPT)
@@ -165,7 +189,10 @@ mod tests {
         report_create_application_html, report_detail_application_html,
         report_edit_application_html, reporting_application_shell_html,
         response_create_application_html, response_detail_application_html,
-        response_edit_application_html, submission_application_shell_html,
+        response_edit_application_html, role_detail_application_html, role_edit_application_html,
+        roles_application_shell_html, submission_application_shell_html,
+        user_access_application_html, user_create_application_html, user_detail_application_html,
+        user_edit_application_html, users_application_shell_html,
     };
 
     #[test]
@@ -310,17 +337,64 @@ mod tests {
     #[test]
     fn administration_and_migration_stay_internal() {
         let administration = administration_application_shell_html();
-                let migration = migration_application_shell_html();
+        let users = users_application_shell_html();
+        let roles = roles_application_shell_html();
+        let migration = migration_application_shell_html();
 
         assert!(administration.contains("Administration"));
         assert!(administration.contains("Advanced Configuration"));
+        assert!(administration.contains("User Accounts"));
+        assert!(administration.contains("/app/administration/users"));
+        assert!(administration.contains("Role Catalog"));
+        assert!(administration.contains("/app/administration/roles"));
         assert!(administration.contains("Open Legacy Builder"));
         assert!(administration.contains("/app/admin"));
+
+        assert!(users.contains("User Management"));
+        assert!(users.contains("Create User"));
+        assert!(users.contains("user-list"));
+
+        assert!(roles.contains("Roles"));
+        assert!(roles.contains("role-list"));
 
         assert!(migration.contains("Migration Workbench"));
         assert!(migration.contains("Load Fixture Examples"));
         assert!(migration.contains("Validate Fixture"));
         assert!(migration.contains("Dry-Run Fixture"));
         assert!(migration.contains("Import Fixture"));
+    }
+
+    #[test]
+    fn user_management_pages_are_dedicated() {
+        let create = user_create_application_html();
+        let detail = user_detail_application_html("00000000-0000-0000-0000-000000000006");
+        let edit = user_edit_application_html("00000000-0000-0000-0000-000000000006");
+        let access = user_access_application_html("00000000-0000-0000-0000-000000000006");
+        let role_detail = role_detail_application_html("00000000-0000-0000-0000-000000000007");
+        let role_edit = role_edit_application_html("00000000-0000-0000-0000-000000000007");
+
+        assert!(create.contains("Create User"));
+        assert!(create.contains("user-form"));
+        assert!(create.contains("user-role-options"));
+        assert!(create.contains("Account is active"));
+
+        assert!(detail.contains("User Detail"));
+        assert!(detail.contains("Back to List"));
+
+        assert!(edit.contains("Edit User"));
+        assert!(edit.contains("Leave blank to keep the current password."));
+        assert!(edit.contains("Submit"));
+        assert!(edit.contains("Cancel"));
+
+        assert!(access.contains("User Access"));
+        assert!(access.contains("user-access-form"));
+        assert!(access.contains("user-scope-options"));
+
+        assert!(role_detail.contains("Role Detail"));
+        assert!(role_detail.contains("Back to List"));
+
+        assert!(role_edit.contains("Edit Role"));
+        assert!(role_edit.contains("role-capability-options"));
+        assert!(role_edit.contains("Submit"));
     }
 }
