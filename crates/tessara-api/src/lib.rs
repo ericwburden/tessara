@@ -19,6 +19,7 @@ mod hierarchy;
 pub mod legacy_import;
 mod reporting;
 mod submissions;
+mod users;
 
 use axum::{
     Router,
@@ -120,6 +121,7 @@ pub fn router(state: AppState) -> Router {
             "/app/administration",
             get(|| async { Html(tessara_web::administration_application_shell_html()) }),
         )
+
         .route(
             "/app/admin",
             get(|| async { Html(tessara_web::admin_application_shell_html()) }),
@@ -174,6 +176,24 @@ pub fn router(state: AppState) -> Router {
         .route("/api/app/summary", get(app_summary::get_summary))
         .route("/api/auth/login", post(auth::login))
         .route("/api/me", get(auth::me))
+        .route("/api/admin/capabilities", get(users::list_capabilities))
+        .route("/api/admin/roles", get(users::list_roles))
+        .route(
+            "/api/admin/roles/{role_id}",
+            get(users::get_role).put(users::update_role),
+        )
+        .route(
+            "/api/admin/users",
+            get(users::list_users).post(users::create_user),
+        )
+        .route(
+            "/api/admin/users/{account_id}",
+            get(users::get_user).put(users::update_user),
+        )
+        .route(
+            "/api/admin/users/{account_id}/access",
+            put(users::update_user_access),
+        )
         .route(
             "/api/admin/node-types",
             get(hierarchy::list_node_types).post(hierarchy::create_node_type),

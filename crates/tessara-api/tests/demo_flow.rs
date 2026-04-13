@@ -1609,6 +1609,366 @@ async fn role_based_access_respects_scope_and_respondent_context() {
 }
 
 #[tokio::test]
+async fn user_management_supports_create_edit_and_account_status() {
+    let _guard = TEST_DATABASE_LOCK.lock().await;
+    let Some(app) = test_app().await else { return };
+    let admin_token = login_token(app.clone()).await;
+
+    let roles = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/admin/roles", &admin_token, None),
+    )
+    .await;
+    let operator_role_id = roles
+        .as_array()
+        .expect("roles should be an array")
+        .iter()
+        .find(|role| role["name"] == "operator")
+        .and_then(|role| role["id"].as_str())
+        .expect("operator role should be present");
+
+    let created = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/users",
+            &admin_token,
+            Some(json!({
+                "email": "sprint1-operator@tessara.local",
+                "display_name": "Sprint 1 Operator",
+                "password": "tessara-dev-sprint1",
+                "is_active": true,
+                "role_ids": [operator_role_id]
+            })),
+        ),
+    )
+    .await;
+    let account_id = created["id"]
+        .as_str()
+        .and_then(|value| Uuid::parse_str(value).ok())
+        .expect("created user should expose id");
+
+    let users = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/admin/users", &admin_token, None),
+    )
+    .await;
+    assert!(
+        users
+            .as_array()
+            .expect("users should be an array")
+            .iter()
+            .any(|user| user["id"] == account_id.to_string() && user["is_active"] == true)
+    );
+
+    let detail = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/admin/users/{account_id}"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(detail["display_name"], "Sprint 1 Operator");
+    assert_eq!(detail["is_active"], true);
+    assert!(
+        detail["roles"]
+            .as_array()
+            .expect("user detail should include roles")
+            .iter()
+            .any(|role| role["name"] == "operator")
+    );
+
+    let operator_token = login_token_for(
+        app.clone(),
+        "sprint1-operator@tessara.local",
+        "tessara-dev-sprint1",
+    )
+    .await;
+    let operator_me = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/me", &operator_token, None),
+    )
+    .await;
+    assert_eq!(operator_me["display_name"], "Sprint 1 Operator");
+
+    request_json(
+        app.clone(),
+        authorized_request(
+            "PUT",
+            &format!("/api/admin/users/{account_id}"),
+            &admin_token,
+            Some(json!({
+                "email": "sprint1-operator@tessara.local",
+                "display_name": "Sprint 1 Operator Updated",
+                "password": null,
+                "is_active": false,
+                "role_ids": [operator_role_id]
+            })),
+        ),
+    )
+    .await;
+
+    let inactive_me = request_status_and_json(
+        app.clone(),
+        authorized_request("GET", "/api/me", &operator_token, None),
+    )
+    .await;
+    assert_eq!(inactive_me.0, StatusCode::UNAUTHORIZED);
+
+    let inactive_login = request_status_and_json(
+        app.clone(),
+        Request::builder()
+            .method("POST")
+            .uri("/api/auth/login")
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(
+                json!({
+                    "email": "sprint1-operator@tessara.local",
+                    "password": "tessara-dev-sprint1"
+                })
+                .to_string(),
+            ))
+            .expect("valid inactive login request"),
+    )
+    .await;
+    assert_eq!(inactive_login.0, StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn role_management_updates_capabilities_and_scoped_access() {
+    let _guard = TEST_DATABASE_LOCK.lock().await;
+    let Some(app) = test_app().await else { return };
+    let admin_token = login_token(app.clone()).await;
+
+    request_json(
+        app.clone(),
+        authorized_request("POST", "/api/demo/seed", &admin_token, None),
+    )
+    .await;
+
+    let roles = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/admin/roles", &admin_token, None),
+    )
+    .await;
+    let operator_role_id = roles
+        .as_array()
+        .expect("roles should be an array")
+        .iter()
+        .find(|role| role["name"] == "operator")
+        .and_then(|role| role["id"].as_str())
+        .expect("operator role should be present");
+
+    let capabilities = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/admin/capabilities", &admin_token, None),
+    )
+    .await;
+    let selected_capability_ids = capabilities
+        .as_array()
+        .expect("capabilities should be an array")
+        .iter()
+        .filter(|capability| {
+            matches!(
+                capability["key"].as_str(),
+                Some("hierarchy:read" | "submissions:write")
+            )
+        })
+        .filter_map(|capability| capability["id"].as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(selected_capability_ids.len(), 2);
+
+    request_json(
+        app.clone(),
+        authorized_request(
+            "PUT",
+            &format!("/api/admin/roles/{operator_role_id}"),
+            &admin_token,
+            Some(json!({ "capability_ids": selected_capability_ids })),
+        ),
+    )
+    .await;
+
+    let operator_role_detail = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/admin/roles/{operator_role_id}"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    let operator_capability_keys = operator_role_detail["capabilities"]
+        .as_array()
+        .expect("role detail should include capabilities")
+        .iter()
+        .filter_map(|capability| capability["key"].as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(operator_capability_keys.len(), 2);
+    assert!(operator_capability_keys.contains(&"hierarchy:read"));
+    assert!(operator_capability_keys.contains(&"submissions:write"));
+    assert!(
+        operator_role_detail["assigned_accounts"]
+            .as_array()
+            .expect("role detail should include assigned accounts")
+            .iter()
+            .any(|account| account["email"] == "operator@tessara.local")
+    );
+
+    let users = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/admin/users", &admin_token, None),
+    )
+    .await;
+    let operator_account_id = users
+        .as_array()
+        .expect("users should be an array")
+        .iter()
+        .find(|user| user["email"] == "operator@tessara.local")
+        .and_then(|user| user["id"].as_str())
+        .expect("seeded operator account should be present");
+
+    let north_star_nodes = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/nodes?q=North%20Star", &admin_token, None),
+    )
+    .await;
+    let north_star_partner_id = north_star_nodes
+        .as_array()
+        .expect("north star nodes should be an array")
+        .iter()
+        .find(|node| {
+            node["name"] == "Demo Partner North Star Services"
+                && node["node_type_name"] == "Partner"
+        })
+        .and_then(|node| node["id"].as_str())
+        .expect("north star partner should be present");
+
+    request_json(
+        app.clone(),
+        authorized_request(
+            "PUT",
+            &format!("/api/admin/users/{operator_account_id}/access"),
+            &admin_token,
+            Some(json!({ "scope_node_ids": [north_star_partner_id] })),
+        ),
+    )
+    .await;
+
+    let updated_operator = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/admin/users/{operator_account_id}"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(updated_operator["role_family"], "operator");
+    assert!(
+        updated_operator["capabilities"]
+            .as_array()
+            .expect("user detail should include capabilities")
+            .iter()
+            .any(|capability| capability == "hierarchy:read")
+    );
+    assert_eq!(
+        updated_operator["scope_nodes"]
+            .as_array()
+            .expect("user detail should include scope nodes")
+            .len(),
+        1
+    );
+    assert_eq!(
+        updated_operator["scope_nodes"][0]["node_name"],
+        "Demo Partner North Star Services"
+    );
+
+    let operator_token = login_token_for(
+        app.clone(),
+        "operator@tessara.local",
+        "tessara-dev-operator",
+    )
+    .await;
+    let operator_me = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/me", &operator_token, None),
+    )
+    .await;
+    assert_eq!(operator_me["role_family"], "operator");
+    assert_eq!(
+        operator_me["scope_nodes"]
+            .as_array()
+            .expect("operator scope should be present")
+            .len(),
+        1
+    );
+
+    let operator_demo_nodes = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/nodes?q=Demo", &operator_token, None),
+    )
+    .await;
+    let operator_demo_names = operator_demo_nodes
+        .as_array()
+        .expect("operator node list should be an array")
+        .iter()
+        .filter_map(|node| node["name"].as_str())
+        .collect::<Vec<_>>();
+    assert!(
+        operator_demo_nodes
+            .as_array()
+            .expect("operator node list should be an array")
+            .len()
+            > 1
+    );
+    assert!(operator_demo_names.contains(&"Demo Partner North Star Services"));
+    assert!(!operator_demo_names.contains(&"Demo Partner Community Bridge"));
+
+    let operator_bridge_nodes = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            "/api/nodes?q=Community%20Bridge",
+            &operator_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(
+        operator_bridge_nodes
+            .as_array()
+            .expect("operator bridge nodes should be an array")
+            .len(),
+        0
+    );
+
+    let no_capabilities: Vec<&str> = Vec::new();
+    request_json(
+        app.clone(),
+        authorized_request(
+            "PUT",
+            &format!("/api/admin/roles/{operator_role_id}"),
+            &admin_token,
+            Some(json!({ "capability_ids": no_capabilities })),
+        ),
+    )
+    .await;
+
+    let forbidden_nodes = request_status_and_json(
+        app.clone(),
+        authorized_request("GET", "/api/nodes?q=North%20Star", &operator_token, None),
+    )
+    .await;
+    assert_eq!(forbidden_nodes.0, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
 async fn form_builder_guards_cross_version_sections_and_supersedes_previous_publish() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
     let Some(app) = test_app().await else { return };
