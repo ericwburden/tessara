@@ -1,0 +1,11 @@
+{
+  "name": "tessara-end2end",
+  "private": true,
+  "scripts": {
+    "test": "playwright test",
+    "install-browsers": "playwright install"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.54.2"
+  }
+}

@@ -7,6 +7,10 @@ This repository is intended to become the Rust + Leptos rewrite described in
 the migration blueprint. It should be developed as a domain-driven redesign,
 not as a direct port of the legacy Django application.
 
+Project direction, architecture, roadmap, and UI rules are authoritative in
+[`/docs`](/D:/Projects/dms-migration/docs/README.md). This README focuses on
+local development and operational workflow for the Rust workspace.
+
 ## Intended Architecture
 
 - Rust backend with `axum`, `sqlx`, and PostgreSQL
@@ -106,11 +110,34 @@ Invoke-RestMethod `
   -Body '{"email":"admin@tessara.local","password":"tessara-dev-admin"}'
 ```
 
+Frontend development should use the cargo-leptos workflow:
+
+```powershell
+cargo leptos watch --split
+```
+
+Release packaging for the UI/application binary path:
+
+```powershell
+cargo leptos build --release --split
+```
+
+End-to-end coverage runs through Playwright:
+
+```powershell
+cd .\end2end
+npm install
+cd ..
+cargo leptos end-to-end
+```
+
 Useful checks:
 
 ```powershell
 cargo fmt --all --check
 cargo check -p tessara-api
+cargo check -p tessara-web
+cargo check -p tessara-web --no-default-features --features hydrate --target wasm32-unknown-unknown
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 .\scripts\smoke.ps1
@@ -202,8 +229,10 @@ To rebuild and relaunch the user-testing stack with the latest UI/backend code:
 
 The local shell now covers the main demo workflow surfaces:
 
-- Leptos SSR-rendered shell structure with the current JavaScript controller
-  retained for immediate local workflow testing.
+- Leptos SSR-first route shell rendered through the cargo-leptos build
+  pipeline, using `cargo leptos ... --split` for selective lazy-route
+  splitting, with the current JavaScript controller retained only as a
+  transitional bridge for immediate workflow continuity.
 - Focused `/app`, `/app/reports`, and `/app/migration` screens now use a
   smaller application controller with session-token reuse, current-user
   inspection, and logout; `/app/admin` still uses the full builder controller.
