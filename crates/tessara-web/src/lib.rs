@@ -136,6 +136,22 @@ pub fn user_access_application_html(account_id: &str) -> String {
     application::user_access_application_html(app_script::APPLICATION_SCRIPT, account_id)
 }
 
+pub fn node_types_application_shell_html() -> String {
+    application::node_types_application_shell_html(app_script::APPLICATION_SCRIPT)
+}
+
+pub fn node_type_create_application_html() -> String {
+    application::node_type_create_application_html(app_script::APPLICATION_SCRIPT)
+}
+
+pub fn node_type_detail_application_html(node_type_id: &str) -> String {
+    application::node_type_detail_application_html(app_script::APPLICATION_SCRIPT, node_type_id)
+}
+
+pub fn node_type_edit_application_html(node_type_id: &str) -> String {
+    application::node_type_edit_application_html(app_script::APPLICATION_SCRIPT, node_type_id)
+}
+
 pub fn roles_application_shell_html() -> String {
     application::roles_application_shell_html(app_script::APPLICATION_SCRIPT)
 }
@@ -188,6 +204,8 @@ mod tests {
         dashboard_edit_application_html, dashboards_application_shell_html,
         form_create_application_html, form_detail_application_html, form_edit_application_html,
         forms_application_shell_html, login_application_html, migration_application_shell_html,
+        node_type_create_application_html, node_type_detail_application_html,
+        node_type_edit_application_html, node_types_application_shell_html,
         organization_application_shell_html, organization_create_application_html,
         organization_detail_application_html, organization_edit_application_html,
         report_create_application_html, report_detail_application_html,
@@ -199,6 +217,109 @@ mod tests {
         user_create_application_html, user_detail_application_html, user_edit_application_html,
         users_application_shell_html,
     };
+    use std::collections::{HashMap, HashSet};
+
+    #[derive(Clone)]
+    struct OrganizationScopeFixture {
+        node_id: Option<&'static str>,
+        id: Option<&'static str>,
+        node_type_name: Option<&'static str>,
+        scope_node_type: Option<&'static str>,
+        scope_node_type_name: Option<&'static str>,
+    }
+
+    #[derive(Clone)]
+    struct OrganizationNodeFixture {
+        id: &'static str,
+        node_type_name: Option<&'static str>,
+        parent_node_id: Option<&'static str>,
+    }
+
+    fn normalize_type_label(raw: &str) -> String {
+        let parts = raw
+            .trim()
+            .split(&['_', '-'][..])
+            .filter_map(|part| {
+                let part = part.trim();
+                if part.is_empty() {
+                    None
+                } else {
+                    let mut chars = part.chars();
+                    Some(match chars.next() {
+                        Some(first) => {
+                            let mut out = String::new();
+                            out.push(first.to_ascii_uppercase());
+                            out.push_str(&chars.as_str().to_ascii_lowercase());
+                            out
+                        }
+                        None => String::new(),
+                    })
+                }
+            })
+            .filter(|part| !part.is_empty())
+            .collect::<Vec<_>>();
+
+        if parts.is_empty() {
+            "Organization".to_string()
+        } else {
+            parts.join(" ")
+        }
+    }
+
+    fn derive_destination_label_for_test(
+        scopes: &[OrganizationScopeFixture],
+        nodes: &[OrganizationNodeFixture],
+    ) -> String {
+        let node_by_id = nodes
+            .iter()
+            .map(|node| (node.id, node.clone()))
+            .collect::<HashMap<_, _>>();
+
+        let mut scored = Vec::new();
+        for scope in scopes {
+            let raw_id = scope.node_id.or(scope.id);
+            let node = raw_id.and_then(|scope_id| node_by_id.get(scope_id).cloned());
+            let type_label = node
+                .as_ref()
+                .and_then(|node| node.node_type_name)
+                .or(scope.node_type_name)
+                .or(scope.scope_node_type)
+                .or(scope.scope_node_type_name)
+                .unwrap_or("Organization");
+
+            let mut depth = 0usize;
+            let mut cursor = node;
+            let mut seen = HashSet::new();
+            while let Some(current_node) = cursor {
+                if seen.contains(current_node.id) {
+                    break;
+                }
+                seen.insert(current_node.id);
+                let next = current_node
+                    .parent_node_id
+                    .and_then(|parent_id| node_by_id.get(parent_id).cloned());
+                if let Some(parent_node) = next {
+                    depth += 1;
+                    cursor = Some(parent_node);
+                } else {
+                    break;
+                }
+            }
+
+            scored.push((depth, type_label.to_string()));
+        }
+
+        let mut filtered = scored
+            .into_iter()
+            .filter(|(_, label)| !label.trim().is_empty())
+            .collect::<Vec<_>>();
+        if filtered.is_empty() {
+            return "Organization List".to_string();
+        }
+
+        filtered.sort_by(|left, right| left.0.cmp(&right.0).then_with(|| left.1.cmp(&right.1)));
+        format!("{} List", normalize_type_label(&filtered[0].1))
+    }
 
     #[test]
     fn admin_shell_still_exposes_legacy_builder_contract() {
@@ -263,9 +384,17 @@ mod tests {
         let reports = reporting_application_shell_html();
         let dashboards = dashboards_application_shell_html();
 
-        assert!(organization.contains("Organizations"));
+        assert!(organization.contains("Organization Directory"));
         assert!(organization.contains("Create Organization"));
-        assert!(organization.contains("organization-list"));
+        assert!(organization.contains("organization-directory-tree"));
+        assert!(organization.contains("organization-skeleton-card"));
+        assert!(organization.contains("organization-toggle-button"));
+        assert!(organization.contains("organization-create-link"));
+        assert!(!organization.contains("organization-list-title"));
+        assert!(!organization.contains("organization-list-status"));
+        assert!(!organization.contains("organization-expand-all"));
+        assert!(!organization.contains("organization-collapse-all"));
+        assert!(!organization.contains("record-card"));
         assert!(!organization.contains("Node ID"));
 
         assert!(forms.contains("Forms"));
@@ -313,8 +442,6 @@ mod tests {
             dashboard_edit_application_html("00000000-0000-0000-0000-000000000005");
 
         for html in [
-            organization_new.as_str(),
-            organization_edit.as_str(),
             form_new.as_str(),
             form_edit.as_str(),
             response_new.as_str(),
@@ -329,8 +456,17 @@ mod tests {
             assert!(!html.contains(" ID"));
         }
 
+        assert!(organization_new.contains("Submit"));
+        assert!(organization_new.contains("Cancel"));
         assert!(organization_detail.contains("Organization Detail"));
         assert!(organization_detail.contains("Back to List"));
+        assert!(organization_detail.contains("organization-detail"));
+        assert!(organization_detail.contains("No Node ID was provided"));
+        assert!(organization_detail.contains("organization-detail-path"));
+        assert!(organization_detail.contains("organization-child-actions"));
+        assert!(!organization_detail.contains("Related Responses"));
+        assert!(organization_edit.contains("Submit"));
+        assert!(organization_edit.contains("Cancel"));
         assert!(form_detail.contains("Form Detail"));
         assert!(response_detail.contains("Response Detail"));
         assert!(report_detail.contains("Report Detail"));
@@ -352,6 +488,8 @@ mod tests {
         assert!(administration.contains("/app/administration/users"));
         assert!(administration.contains("Role Catalog"));
         assert!(administration.contains("/app/administration/roles"));
+        assert!(administration.contains("Organization Schema"));
+        assert!(administration.contains("/app/administration/node-types"));
         assert!(administration.contains("Open Legacy Builder"));
         assert!(administration.contains("/app/admin"));
 
@@ -371,11 +509,123 @@ mod tests {
     }
 
     #[test]
+    fn org_and_node_type_pages_expose_route_ownership_markers() {
+        let organization = organization_application_shell_html();
+        let organization_create = organization_create_application_html();
+        let organization_detail =
+            organization_detail_application_html("00000000-0000-0000-0000-000000000001");
+        let organization_edit =
+            organization_edit_application_html("00000000-0000-0000-0000-000000000001");
+        let node_types = node_types_application_shell_html();
+        let node_type_create = node_type_create_application_html();
+        let node_type_detail =
+            node_type_detail_application_html("00000000-0000-0000-0000-000000000010");
+        let node_type_edit =
+            node_type_edit_application_html("00000000-0000-0000-0000-000000000010");
+
+        assert!(organization.contains(r#"data-page-key="organization-list""#));
+        assert!(organization.contains(r#"data-active-route="organization""#));
+        assert!(organization_create.contains(r#"data-page-key="organization-create""#));
+        assert!(organization_create.contains(r#"data-active-route="organization""#));
+        assert!(organization_detail.contains(r#"data-page-key="organization-detail""#));
+        assert!(
+            organization_detail
+                .contains(r#"data-record-id="00000000-0000-0000-0000-000000000001""#)
+        );
+        assert!(organization_edit.contains(r#"data-page-key="organization-edit""#));
+
+        assert!(node_types.contains(r#"data-page-key="node-type-list""#));
+        assert!(node_types.contains(r#"data-active-route="administration""#));
+        assert!(node_type_create.contains(r#"data-page-key="node-type-create""#));
+        assert!(node_type_detail.contains(r#"data-page-key="node-type-detail""#));
+        assert!(
+            node_type_detail.contains(r#"data-record-id="00000000-0000-0000-0000-000000000010""#)
+        );
+        assert!(node_type_edit.contains(r#"data-page-key="node-type-edit""#));
+    }
+
+    #[test]
+    fn organization_scope_title_prefers_top_level_scope_over_deeper_scope_nodes() {
+        let nodes = vec![
+            OrganizationNodeFixture {
+                id: "partner-id",
+                node_type_name: Some("Partner"),
+                parent_node_id: None,
+            },
+            OrganizationNodeFixture {
+                id: "program-id",
+                node_type_name: Some("Program"),
+                parent_node_id: Some("partner-id"),
+            },
+            OrganizationNodeFixture {
+                id: "activity-id",
+                node_type_name: Some("Activity"),
+                parent_node_id: Some("program-id"),
+            },
+        ];
+        let scopes = vec![
+            OrganizationScopeFixture {
+                node_id: Some("activity-id"),
+                id: None,
+                node_type_name: None,
+                scope_node_type: None,
+                scope_node_type_name: None,
+            },
+            OrganizationScopeFixture {
+                node_id: Some("partner-id"),
+                id: None,
+                node_type_name: None,
+                scope_node_type: None,
+                scope_node_type_name: None,
+            },
+        ];
+
+        let label = derive_destination_label_for_test(&scopes, &nodes);
+
+        assert_eq!(label, "Partner List");
+    }
+
+    #[test]
+    fn organization_scope_title_handles_missing_tree_rows_with_scope_fallbacks() {
+        let nodes = vec![OrganizationNodeFixture {
+            id: "orphan-child-id",
+            node_type_name: Some("Session"),
+            parent_node_id: Some("missing-parent-id"),
+        }];
+        let scopes = vec![
+            OrganizationScopeFixture {
+                node_id: Some("orphan-child-id"),
+                id: None,
+                node_type_name: None,
+                scope_node_type: None,
+                scope_node_type_name: None,
+            },
+            OrganizationScopeFixture {
+                node_id: Some("missing-scope-id"),
+                id: None,
+                node_type_name: None,
+                scope_node_type: None,
+                scope_node_type_name: Some("Partner"),
+            },
+        ];
+
+        let label = derive_destination_label_for_test(&scopes, &nodes);
+
+        assert_eq!(label, "Partner List");
+    }
+
+    #[test]
     fn user_management_pages_are_dedicated() {
         let create = user_create_application_html();
         let detail = user_detail_application_html("00000000-0000-0000-0000-000000000006");
         let edit = user_edit_application_html("00000000-0000-0000-0000-000000000006");
         let access = user_access_application_html("00000000-0000-0000-0000-000000000006");
+        let node_types = node_types_application_shell_html();
+        let node_type_create = node_type_create_application_html();
+        let node_type_detail =
+            node_type_detail_application_html("00000000-0000-0000-0000-000000000008");
+        let node_type_edit =
+            node_type_edit_application_html("00000000-0000-0000-0000-000000000008");
         let role_create = role_create_application_html();
         let role_detail = role_detail_application_html("00000000-0000-0000-0000-000000000007");
         let role_edit = role_edit_application_html("00000000-0000-0000-0000-000000000007");
@@ -397,6 +647,25 @@ mod tests {
         assert!(access.contains("user-access-form"));
         assert!(access.contains("user-scope-options"));
         assert!(access.contains("user-delegation-options"));
+
+        assert!(node_types.contains("Organization Node Types"));
+        assert!(node_types.contains("node-type-list"));
+        assert!(node_types.contains("Create Organization Node Type"));
+        assert!(node_type_create.contains("node-type-form"));
+        assert!(!node_type_create.contains("node-type-singular-label"));
+        assert!(node_type_create.contains("node-type-parent-tags"));
+        assert!(node_type_create.contains("node-type-parent-filter"));
+        assert!(node_type_create.contains("node-type-parent-options"));
+        assert!(node_type_create.contains("node-type-child-tags"));
+        assert!(node_type_create.contains("node-type-child-filter"));
+        assert!(node_type_create.contains("node-type-child-options"));
+        assert!(node_type_create.contains("node-type-metadata-fields-editor"));
+        assert!(node_type_create.contains("node-type-metadata-settings-modal"));
+        assert!(node_type_detail.contains("Organization Node Type Detail"));
+        assert!(node_type_detail.contains("Back to List"));
+        assert!(node_type_edit.contains("Edit Organization Node Type"));
+        assert!(node_type_edit.contains("node-type-plural-label"));
+        assert!(node_type_edit.contains("Submit"));
 
         assert!(role_create.contains("Create Role"));
         assert!(role_create.contains("role-name"));

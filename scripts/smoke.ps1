@@ -138,7 +138,7 @@ try {
         throw "Expected login HTML to include dedicated sign-in controls and demo credentials"
     }
     $organizationShell = Invoke-RestMethod -Uri "$baseUrl/app/organization" -TimeoutSec 30
-    if (-not ($organizationShell -like "*Organizations*") -or -not ($organizationShell -like "*Create Organization*") -or -not ($organizationShell -like "*organization-list*")) {
+    if (-not ($organizationShell -like "*Organization Directory*") -or -not ($organizationShell -like "*Create Organization*") -or -not ($organizationShell -like "*organization-directory-tree*") -or -not ($organizationShell -like "*organization-skeleton-card*")) {
         throw "Expected organization application shell HTML to include organization route controls"
     }
     $formsShell = Invoke-RestMethod -Uri "$baseUrl/app/forms" -TimeoutSec 30
@@ -154,8 +154,16 @@ try {
         throw "Expected responses compatibility shell HTML to include response workflow controls"
     }
     $administrationShell = Invoke-RestMethod -Uri "$baseUrl/app/administration" -TimeoutSec 30
-    if (-not ($administrationShell -like "*Administration*") -or -not ($administrationShell -like "*Advanced Configuration*") -or -not ($administrationShell -like "*Open Legacy Builder*")) {
+    if (-not ($administrationShell -like "*Administration*") -or -not ($administrationShell -like "*Advanced Configuration*") -or -not ($administrationShell -like "*Open Legacy Builder*") -or -not ($administrationShell -like "*Organization Schema*") -or -not ($administrationShell -like "*/app/administration/node-types*")) {
         throw "Expected administration application shell HTML to include setup workflow controls"
+    }
+    $nodeTypesShell = Invoke-RestMethod -Uri "$baseUrl/app/administration/node-types" -TimeoutSec 30
+    if (-not ($nodeTypesShell -like "*Organization Node Types*") -or -not ($nodeTypesShell -like "*Create Organization Node Type*") -or -not ($nodeTypesShell -like "*node-type-list*")) {
+        throw "Expected node-type administration HTML to include dedicated list controls"
+    }
+    $nodeTypeCreateShell = Invoke-RestMethod -Uri "$baseUrl/app/administration/node-types/new" -TimeoutSec 30
+    if (-not ($nodeTypeCreateShell -like "*Create Organization Node Type*") -or -not ($nodeTypeCreateShell -like "*node-type-form*") -or -not ($nodeTypeCreateShell -like "*node-type-parent-tags*") -or -not ($nodeTypeCreateShell -like "*node-type-parent-options*") -or -not ($nodeTypeCreateShell -like "*node-type-child-tags*") -or -not ($nodeTypeCreateShell -like "*node-type-child-options*") -or -not ($nodeTypeCreateShell -like "*node-type-metadata-fields-editor*") -or -not ($nodeTypeCreateShell -like "*node-type-metadata-settings-modal*")) {
+        throw "Expected node-type create HTML to include dedicated form controls"
     }
     $adminAppShell = Invoke-RestMethod -Uri "$baseUrl/app/admin" -TimeoutSec 30
     if (-not ($adminAppShell -like "*Admin Shell*") -or -not ($adminAppShell -like "*Create Form*") -or -not ($adminAppShell -like "*Validate Legacy Fixture*")) {
@@ -209,11 +217,24 @@ try {
     $delegateAccountId = $delegatorMe.delegations[0].account_id
     $delegatedOptions = Invoke-Json -Method "Get" -Uri "$baseUrl/api/responses/options?delegate_account_id=$delegateAccountId" -Headers $delegatorHeaders
     $respondentFormsDenied = $false
+    $operatorNodeTypeAdminDenied = $false
+    $respondentNodeTypeAdminDenied = $false
     try {
         Invoke-Json -Method "Get" -Uri "$baseUrl/api/forms" -Headers $respondentHeaders | Out-Null
     } catch {
         $respondentFormsDenied = $_.Exception.Message -like "*403*"
     }
+    try {
+        Invoke-Json -Method "Get" -Uri "$baseUrl/api/admin/node-types" -Headers $operatorHeaders | Out-Null
+    } catch {
+        $operatorNodeTypeAdminDenied = $_.Exception.Message -like "*403*"
+    }
+    try {
+        Invoke-Json -Method "Get" -Uri "$baseUrl/api/admin/node-types" -Headers $respondentHeaders | Out-Null
+    } catch {
+        $respondentNodeTypeAdminDenied = $_.Exception.Message -like "*403*"
+    }
+    $readableNodeTypes = Invoke-Json -Method "Get" -Uri "$baseUrl/api/node-types" -Headers $headers
 
     if ($seed.analytics_values -lt 1) {
         throw "Expected at least one analytics value, got $($seed.analytics_values)"
@@ -242,13 +263,19 @@ try {
     if (-not $respondentFormsDenied) {
         throw "Expected respondent access to /api/forms to be forbidden"
     }
+    if (-not $operatorNodeTypeAdminDenied -or -not $respondentNodeTypeAdminDenied) {
+        throw "Expected operator and respondent access to /api/admin/node-types to be forbidden"
+    }
+    if ($readableNodeTypes.Count -lt 1 -or -not ($readableNodeTypes | Where-Object { $_.singular_label -and $_.plural_label })) {
+        throw "Expected readable node-type catalog to include singular/plural labels"
+    }
 
     $organizationDetail = Invoke-RestMethod -Uri "$baseUrl/app/organization/$($seed.organization_node_id)" -TimeoutSec 30
-    if (-not ($organizationDetail -like "*Organization Detail*") -or -not ($organizationDetail -like "*Back to List*") -or -not ($organizationDetail -like "*organization-detail*")) {
+    if (-not ($organizationDetail -like "*Organization Detail*") -or -not ($organizationDetail -like "*Back to List*") -or -not ($organizationDetail -like "*organization-detail*") -or -not ($organizationDetail -like "*organization-detail-status*") -or -not ($organizationDetail -like "*organization-detail-path*") -or -not ($organizationDetail -like "*organization-child-actions*") -or -not ($organizationDetail -like "*Related Forms*") -or -not ($organizationDetail -like "*Related Dashboards*") -or ($organizationDetail -like "*Related Responses*")) {
         throw "Expected organization detail HTML to include dedicated detail framing"
     }
     $organizationNew = Invoke-RestMethod -Uri "$baseUrl/app/organization/new" -TimeoutSec 30
-    if (-not ($organizationNew -like "*Create Organization*") -or -not ($organizationNew -like "*Submit*") -or -not ($organizationNew -like "*Cancel*")) {
+    if (-not ($organizationNew -like "*Create Organization*") -or -not ($organizationNew -like "*Submit*") -or -not ($organizationNew -like "*Cancel*") -or -not ($organizationNew -like "*organization-form-status*") -or -not ($organizationNew -like "*organization-node-type-label*") -or -not ($organizationNew -like "*organization-parent-node-label*") -or -not ($organizationNew -like "*organization-metadata-title*")) {
         throw "Expected organization create HTML to include dedicated form controls"
     }
     $formDetail = Invoke-RestMethod -Uri "$baseUrl/app/forms/$($seed.form_id)" -TimeoutSec 30

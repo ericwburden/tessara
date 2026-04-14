@@ -1,7 +1,9 @@
 use leptos::prelude::*;
 
 use crate::app::transitional::{TransitionalPage, extract_app_root, render_transitional_route};
-use crate::infra::routing::{AccountRouteParams, RoleRouteParams, require_route_params};
+use crate::infra::routing::{
+    AccountRouteParams, NodeTypeRouteParams, RoleRouteParams, require_route_params,
+};
 
 #[component]
 pub fn AdministrationPage() -> impl IntoView {
@@ -90,6 +92,58 @@ pub fn RolesPage() -> impl IntoView {
         page_key: "role-list",
         active_route: "administration",
         record_id: None,
+    })
+}
+
+#[component]
+pub fn NodeTypesPage() -> impl IntoView {
+    render_transitional_route(TransitionalPage {
+        title: "Tessara Organization Node Types",
+        description: "Browse and manage Tessara organization node types.",
+        body_html: extract_app_root(crate::node_types_application_shell_html()),
+        page_key: "node-type-list",
+        active_route: "administration",
+        record_id: None,
+    })
+}
+
+#[component]
+pub fn NodeTypeCreatePage() -> impl IntoView {
+    render_transitional_route(TransitionalPage {
+        title: "Create Organization Node Type",
+        description: "Create a Tessara organization node type.",
+        body_html: extract_app_root(crate::node_type_create_application_html()),
+        page_key: "node-type-create",
+        active_route: "administration",
+        record_id: None,
+    })
+}
+
+#[component]
+pub fn NodeTypeDetailPage() -> impl IntoView {
+    let NodeTypeRouteParams { node_type_id } = require_route_params();
+
+    render_transitional_route(TransitionalPage {
+        title: "Organization Node Type Detail",
+        description: "Inspect a Tessara organization node type.",
+        body_html: extract_app_root(crate::node_type_detail_application_html(&node_type_id)),
+        page_key: "node-type-detail",
+        active_route: "administration",
+        record_id: Some(node_type_id),
+    })
+}
+
+#[component]
+pub fn NodeTypeEditPage() -> impl IntoView {
+    let NodeTypeRouteParams { node_type_id } = require_route_params();
+
+    render_transitional_route(TransitionalPage {
+        title: "Edit Organization Node Type",
+        description: "Edit a Tessara organization node type.",
+        body_html: extract_app_root(crate::node_type_edit_application_html(&node_type_id)),
+        page_key: "node-type-edit",
+        active_route: "administration",
+        record_id: Some(node_type_id),
     })
 }
 

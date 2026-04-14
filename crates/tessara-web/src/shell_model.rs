@@ -166,7 +166,7 @@ const HIERARCHY_INPUTS: &[TextInput] = &[
 ];
 
 const HIERARCHY_ACTIONS: &[Action] = &[
-    Action::new("createNodeType()", "Create Node Type"),
+    Action::new("createNodeType()", "Create Organization Node Type"),
     Action::new("updateNodeType()", "Update Node Type"),
     Action::new(
         "useSelectedNodeTypeAsFormScope()",

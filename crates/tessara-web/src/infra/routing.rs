@@ -37,6 +37,11 @@ pub struct RoleRouteParams {
     pub role_id: String,
 }
 
+#[derive(Params, PartialEq, Clone, Debug)]
+pub struct NodeTypeRouteParams {
+    pub node_type_id: String,
+}
+
 pub fn require_route_params<T>() -> T
 where
     T: Params + Clone + PartialEq + Send + Sync + 'static,

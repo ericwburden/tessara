@@ -10,14 +10,6 @@
         recordId: document.body.dataset.recordId || '',
         search: new URLSearchParams(window.location.search)
       };
-      let organizationFormState = {
-        nodeTypes: [],
-        nodes: [],
-        metadataFields: [],
-        metadataValues: {},
-        editNodeId: null,
-        editNodeTypeId: null
-      };
       let reportFormState = {
         forms: [],
         datasets: [],
@@ -28,6 +20,14 @@
       };
       let roleFormState = {
         capabilities: []
+      };
+      let nodeTypeFormState = {
+        nodeTypes: [],
+        excludeId: '',
+        parentSelection: [],
+        childSelection: [],
+        metadataFields: [],
+        activeMetadataIndex: -1
       };
       let renderedResponseForm = null;
       let currentResponseDetail = null;
@@ -288,7 +288,12 @@
         }
         const response = await fetch(path, { ...options, headers });
         const text = await response.text();
-        const payload = text ? JSON.parse(text) : null;
+        let payload = null;
+        try {
+          payload = text ? JSON.parse(text) : null;
+        } catch (_error) {
+          payload = null;
+        }
         if (!response.ok) {
           throw new Error((payload && payload.error) || text || `Request failed: ${response.status}`);
         }
@@ -453,6 +458,10 @@
           'user-create': 'admin:all',
           'user-edit': 'admin:all',
           'user-access': 'admin:all',
+          'node-type-list': 'admin:all',
+          'node-type-detail': 'admin:all',
+          'node-type-create': 'admin:all',
+          'node-type-edit': 'admin:all',
           'role-list': 'admin:all',
           'role-detail': 'admin:all',
           'role-create': 'admin:all',
@@ -894,6 +903,627 @@
         }
       }
 
+      function renderNodeTypeCheckboxes(containerId, nodeTypes, selectedIds = [], excludeId = '') {
+        const element = byId(containerId);
+        if (!element) return;
+        const html = nodeTypes.length
+          ? nodeTypes.map((nodeType) => `
+              <label class="checkbox-label" for="${escapeHtml(containerId)}-${escapeHtml(nodeType.id)}">
+                <input id="${escapeHtml(containerId)}-${escapeHtml(nodeType.id)}" class="${escapeHtml(containerId)}-checkbox" type="checkbox" value="${escapeHtml(nodeType.id)}" ${selectedIds.includes(nodeType.id) ? 'checked' : ''} ${excludeId && excludeId === nodeType.id ? 'disabled' : ''}>
+                <span>
+                  <strong>${escapeHtml(nodeType.singular_label || nodeType.name)}</strong>
+                  <span class="muted">(${escapeHtml(nodeType.plural_label || nodeType.name)})</span>
+                </span>
+              </label>
+            `).join('')
+          : '<p class="muted">No node types are available.</p>';
+        element.innerHTML = html;
+      }
+
+      function collectNodeTypeSelections(containerId) {
+        return Array.from(document.querySelectorAll(`.${containerId}-checkbox:checked`))
+          .filter((input) => !input.disabled)
+          .map((input) => input.value);
+      }
+
+      async function loadNodeTypesList() {
+        try {
+          await ensureAuthenticated();
+          const payload = await request('/api/node-types');
+          const html = payload.length
+            ? payload.map((nodeType) => recordCard(
+                nodeType.singular_label || nodeType.name,
+                `<p>${escapeHtml(nodeType.slug)}</p><p class=\"muted\">Plural: ${escapeHtml(nodeType.plural_label || nodeType.name)}</p><p class=\"muted\">Top-level: ${nodeType.is_root_type ? 'yes' : 'no'}</p><p class=\"muted\">Nodes: ${escapeHtml(nodeType.node_count)}</p>`,
+                `<a class=\"button-link\" href=\"/app/administration/node-types/${nodeType.id}\">View</a><a class=\"button-link\" href=\"/app/administration/node-types/${nodeType.id}/edit\">Edit</a>`
+              )).join('')
+            : emptyState('No node types found.');
+          setHtml('node-type-list', html);
+          show(payload);
+        } catch (error) {
+          setHtml('node-type-list', emptyState(error.message));
+        }
+      }
+
+      async function loadNodeTypeDetail(id) {
+        try {
+          await ensureAuthenticated();
+          const payload = await request(`/api/admin/node-types/${id}`);
+          selectRecord('node type', payload.singular_label || payload.name, payload.id);
+          const parentTypes = payload.parent_relationships.length
+            ? payload.parent_relationships.map((nodeType) => `<li>${escapeHtml(nodeType.singular_label || nodeType.node_type_name)}</li>`).join('')
+            : '<li class=\"muted\">This is a top-level node type.</li>';
+          const childTypes = payload.child_relationships.length
+            ? payload.child_relationships.map((nodeType) => `<li>${escapeHtml(nodeType.singular_label || nodeType.node_type_name)}</li>`).join('')
+            : '<li class=\"muted\">No child node types configured.</li>';
+          const metadataFields = payload.metadata_fields.length
+            ? payload.metadata_fields.map((field) => `<li>${escapeHtml(field.label)} <span class=\"muted\">(${escapeHtml(field.key)} · ${escapeHtml(field.field_type)}${field.required ? ' · required' : ''})</span></li>`).join('')
+            : '<li class=\"muted\">No metadata fields configured.</li>';
+          const forms = payload.scoped_forms.length
+            ? payload.scoped_forms.map((form) => `<li><a href=\"/app/forms/${form.form_id}\">${escapeHtml(form.form_name)}</a></li>`).join('')
+            : '<li class=\"muted\">No forms scoped to this node type.</li>';
+          setHtml('node-type-detail', `
+            ${detailSection('Summary', `<p>${escapeHtml(payload.name)}</p><p class=\"muted\">Slug: ${escapeHtml(payload.slug)}</p><p class=\"muted\">Singular: ${escapeHtml(payload.singular_label)}</p><p class=\"muted\">Plural: ${escapeHtml(payload.plural_label)}</p><p class=\"muted\">Top-level: ${payload.is_root_type ? 'yes' : 'no'}</p><p class=\"muted\">Nodes: ${escapeHtml(payload.node_count)}</p>`)}
+            ${detailSection('Allowed Parents', `<ul class=\"app-list\">${parentTypes}</ul>`)}
+            ${detailSection('Allowed Children', `<ul class=\"app-list\">${childTypes}</ul>`)}
+            ${detailSection('Metadata Fields', `<ul class=\"app-list\">${metadataFields}</ul>`)}
+            ${detailSection('Scoped Forms', `<ul class=\"app-list\">${forms}</ul>`)}
+          `);
+          show(payload);
+        } catch (error) {
+          setHtml('node-type-detail', emptyState(error.message));
+        }
+      }
+
+      async function initNodeTypeForm(mode, id = null) {
+        try {
+          await ensureAuthenticated();
+          const nodeTypes = await request('/api/node-types');
+          nodeTypeFormState = { nodeTypes };
+          let payload = null;
+          if (mode === 'edit' && id) {
+            payload = await request(`/api/admin/node-types/${id}`);
+            byId('node-type-name').value = payload.name || '';
+            byId('node-type-slug').value = payload.slug || '';
+            byId('node-type-singular-label').value = payload.singular_label || '';
+            byId('node-type-plural-label').value = payload.plural_label || '';
+          }
+
+          renderNodeTypeCheckboxes(
+            'node-type-parent-options',
+            nodeTypes.filter((nodeType) => nodeType.id !== id),
+            (payload?.parent_relationships || []).map((nodeType) => nodeType.node_type_id),
+            id || ''
+          );
+          renderNodeTypeCheckboxes(
+            'node-type-child-options',
+            nodeTypes.filter((nodeType) => nodeType.id !== id),
+            (payload?.child_relationships || []).map((nodeType) => nodeType.node_type_id),
+            id || ''
+          );
+
+          const form = byId('node-type-form');
+          if (form) {
+            form.onsubmit = async (event) => {
+              event.preventDefault();
+              const name = byId('node-type-name').value.trim();
+              const slug = byId('node-type-slug').value.trim();
+              if (!name || !slug) {
+                byId('node-type-form-status').textContent = 'Name and slug are required.';
+                return;
+              }
+              const response = await request(
+                mode === 'create' ? '/api/admin/node-types' : `/api/admin/node-types/${id}`,
+                {
+                  method: mode === 'create' ? 'POST' : 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    name,
+                    slug,
+                    singular_label: byId('node-type-singular-label').value.trim() || null,
+                    plural_label: byId('node-type-plural-label').value.trim() || null,
+                    parent_node_type_ids: collectNodeTypeSelections('node-type-parent-options'),
+                    child_node_type_ids: collectNodeTypeSelections('node-type-child-options')
+                  })
+                }
+              );
+              redirect(`/app/administration/node-types/${response.id}`);
+            };
+          }
+          byId('node-type-form-status').textContent = 'Node-type configuration loaded.';
+        } catch (error) {
+          setHtml('node-type-parent-options', emptyState(error.message));
+          setHtml('node-type-child-options', emptyState(error.message));
+          if (byId('node-type-form-status')) {
+            byId('node-type-form-status').textContent = error.message;
+          }
+          show(error.message);
+        }
+      }
+
+      function renderOrganizationNodeTypeRelationshipTags(title, items, emptyLabel) {
+        const tags = items.length
+          ? items.map((item) => `<span class=\"tag organization-node-type-tag\">${escapeHtml(item.singular_label || item.node_type_name || item.name)}</span>`).join('')
+          : `<span class=\"tag organization-node-type-tag organization-node-type-tag-placeholder\">${escapeHtml(emptyLabel)}</span>`;
+        return `<p class=\"muted\">${escapeHtml(title)}</p><div class=\"tags organization-node-type-relationship-tags\">${tags}</div>`;
+      }
+
+      function organizationNodeTypeSelectionKey(kind) {
+        return kind === 'parent' ? 'parentSelection' : 'childSelection';
+      }
+
+      function organizationNodeMetadataFieldTypeOptions(selectedValue) {
+        const fieldTypes = [
+          ['text', 'Text'],
+          ['number', 'Number'],
+          ['boolean', 'Boolean'],
+          ['date', 'Date'],
+          ['single_choice', 'Single Choice'],
+          ['multi_choice', 'Multi Choice']
+        ];
+        return fieldTypes.map(([value, label]) => `
+          <option value="${escapeHtml(value)}" ${selectedValue === value ? 'selected' : ''}>${escapeHtml(label)}</option>
+        `).join('');
+      }
+
+      function syncOrganizationNodeTypeMetadataStateFromGrid() {
+        const rows = Array.from(document.querySelectorAll('.node-type-metadata-grid-row[data-metadata-index]'));
+        if (!rows.length) return;
+        nodeTypeFormState.metadataFields = rows.map((row) => ({
+          id: row.dataset.fieldId || '',
+          label: row.querySelector('.node-type-metadata-label')?.value.trim() || '',
+          key: row.querySelector('.node-type-metadata-key')?.value.trim() || '',
+          field_type: row.querySelector('.node-type-metadata-type')?.value || 'text',
+          required: Boolean(row.dataset.required === 'true')
+        }));
+      }
+
+      function renderOrganizationNodeTypeMetadataFieldRows() {
+        const fields = nodeTypeFormState.metadataFields || [];
+        const html = fields.length
+          ? `
+              <div class=\"node-type-metadata-grid\" role=\"rowgroup\">
+                <div class=\"node-type-metadata-grid-header\" role=\"row\">
+                  <div role=\"columnheader\">Label</div>
+                  <div role=\"columnheader\">Key</div>
+                  <div role=\"columnheader\">Field Type</div>
+                  <div role=\"columnheader\">Settings</div>
+                </div>
+                ${fields.map((field, index) => `
+                  <div class=\"node-type-metadata-grid-row\" role=\"row\" data-metadata-index=\"${index}\" data-field-id=\"${escapeHtml(field.id || '')}\" data-required=\"${field.required ? 'true' : 'false'}\">
+                    <div class=\"node-type-metadata-grid-cell\" role=\"gridcell\">
+                      <input class=\"input node-type-metadata-label\" id=\"node-type-metadata-label-${index}\" type=\"text\" autocomplete=\"off\" value=\"${escapeHtml(field.label || '')}\" placeholder=\"Display label\">
+                    </div>
+                    <div class=\"node-type-metadata-grid-cell\" role=\"gridcell\">
+                      <input class=\"input node-type-metadata-key\" id=\"node-type-metadata-key-${index}\" type=\"text\" autocomplete=\"off\" value=\"${escapeHtml(field.key || '')}\" placeholder=\"metadata_key\">
+                    </div>
+                    <div class=\"node-type-metadata-grid-cell\" role=\"gridcell\">
+                      <div class=\"select is-fullwidth\">
+                        <select class=\"node-type-metadata-type\" id=\"node-type-metadata-type-${index}\">
+                          ${organizationNodeMetadataFieldTypeOptions(field.field_type || 'text')}
+                        </select>
+                      </div>
+                    </div>
+                    <div class=\"node-type-metadata-grid-cell node-type-metadata-grid-cell-actions\" role=\"gridcell\">
+                      <button type=\"button\" class=\"button is-light is-small node-type-metadata-settings-button\" data-metadata-index=\"${index}\">Settings</button>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            `
+          : '<p class=\"muted\">No metadata fields configured yet.</p>';
+        setHtml('node-type-metadata-fields-editor', html);
+      }
+
+      function addOrganizationNodeTypeMetadataField() {
+        nodeTypeFormState.metadataFields = [
+          ...(nodeTypeFormState.metadataFields || []),
+          { id: '', label: '', key: '', field_type: 'text', required: false }
+        ];
+        renderOrganizationNodeTypeMetadataFieldRows();
+      }
+
+      function removeOrganizationNodeTypeMetadataField(index) {
+        nodeTypeFormState.metadataFields = (nodeTypeFormState.metadataFields || []).filter((_field, fieldIndex) => fieldIndex !== index);
+        renderOrganizationNodeTypeMetadataFieldRows();
+      }
+
+      async function syncOrganizationNodeTypeMetadataFields(nodeTypeId) {
+        syncOrganizationNodeTypeMetadataStateFromGrid();
+        const fields = (nodeTypeFormState.metadataFields || []).filter((field) => field.id || field.label || field.key);
+        for (const [index, field] of fields.entries()) {
+          if (!field.label || !field.key) {
+            throw new Error(`Metadata field ${index + 1} requires both a label and key.`);
+          }
+          if (field.id) {
+            await request(`/api/admin/node-metadata-fields/${field.id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                key: field.key,
+                label: field.label,
+                field_type: field.field_type,
+                required: field.required
+              })
+            });
+          } else {
+            await request('/api/admin/node-metadata-fields', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                node_type_id: nodeTypeId,
+                key: field.key,
+                label: field.label,
+                field_type: field.field_type,
+                required: field.required
+              })
+            });
+          }
+        }
+      }
+
+      async function removePersistedOrganizationNodeTypeMetadataField(index) {
+        const field = (nodeTypeFormState.metadataFields || [])[index];
+        if (!field) return;
+        if (field.id) {
+          await request(`/api/admin/node-metadata-fields/${field.id}`, {
+            method: 'DELETE'
+          });
+        }
+        removeOrganizationNodeTypeMetadataField(index);
+      }
+
+      function closeOrganizationNodeTypeMetadataSettingsModal() {
+        const modal = byId('node-type-metadata-settings-modal');
+        if (modal) {
+          modal.classList.remove('is-active');
+        }
+        nodeTypeFormState.activeMetadataIndex = -1;
+      }
+
+      function openOrganizationNodeTypeMetadataSettingsModal(index) {
+        syncOrganizationNodeTypeMetadataStateFromGrid();
+        const field = (nodeTypeFormState.metadataFields || [])[index];
+        const modal = byId('node-type-metadata-settings-modal');
+        const title = byId('node-type-metadata-settings-title');
+        const required = byId('node-type-metadata-settings-required');
+        const removeButton = byId('node-type-metadata-settings-remove');
+        if (!field || !modal || !title || !required || !removeButton) return;
+        nodeTypeFormState.activeMetadataIndex = index;
+        title.textContent = field.label || field.key || `Metadata Field ${index + 1}`;
+        required.checked = Boolean(field.required);
+        removeButton.textContent = field.id ? 'Remove Field' : 'Remove Draft';
+        modal.classList.add('is-active');
+      }
+
+      function initOrganizationNodeTypeMetadataSettingsModal() {
+        const modal = byId('node-type-metadata-settings-modal');
+        const saveButton = byId('node-type-metadata-settings-save');
+        const removeButton = byId('node-type-metadata-settings-remove');
+        const required = byId('node-type-metadata-settings-required');
+        if (modal) {
+          modal.onclick = (event) => {
+            const dismiss = event.target.closest('[data-dismiss=\"modal\"]');
+            if (dismiss) {
+              closeOrganizationNodeTypeMetadataSettingsModal();
+            }
+          };
+        }
+        if (saveButton) {
+          saveButton.onclick = () => {
+            const index = nodeTypeFormState.activeMetadataIndex;
+            if (index < 0) return;
+            syncOrganizationNodeTypeMetadataStateFromGrid();
+            if (nodeTypeFormState.metadataFields[index]) {
+              nodeTypeFormState.metadataFields[index].required = Boolean(required?.checked);
+            }
+            renderOrganizationNodeTypeMetadataFieldRows();
+            closeOrganizationNodeTypeMetadataSettingsModal();
+          };
+        }
+        if (removeButton) {
+          removeButton.onclick = async () => {
+            const index = nodeTypeFormState.activeMetadataIndex;
+            if (index < 0) return;
+            try {
+              await removePersistedOrganizationNodeTypeMetadataField(index);
+              closeOrganizationNodeTypeMetadataSettingsModal();
+            } catch (error) {
+              if (byId('node-type-form-status')) {
+                byId('node-type-form-status').textContent = error.message;
+              }
+            }
+          };
+        }
+      }
+
+      function initOrganizationNodeTypeMetadataFieldControls() {
+        const addButton = byId('node-type-metadata-add');
+        const editor = byId('node-type-metadata-fields-editor');
+        if (addButton) {
+          addButton.onclick = () => addOrganizationNodeTypeMetadataField();
+        }
+        if (editor) {
+          editor.onclick = (event) => {
+            const button = event.target.closest('.node-type-metadata-settings-button');
+            if (!button || !editor.contains(button)) return;
+            openOrganizationNodeTypeMetadataSettingsModal(Number(button.dataset.metadataIndex || '-1'));
+          };
+        }
+        initOrganizationNodeTypeMetadataSettingsModal();
+      }
+
+      function organizationNodeTypeFilterId(kind) {
+        return `node-type-${kind}-filter`;
+      }
+
+      function organizationNodeTypeTagsId(kind) {
+        return `node-type-${kind}-tags`;
+      }
+
+      function organizationNodeTypeOptionsId(kind) {
+        return `node-type-${kind}-options`;
+      }
+
+      function selectedOrganizationNodeTypeIds(kind) {
+        return nodeTypeFormState[organizationNodeTypeSelectionKey(kind)] || [];
+      }
+
+      function setSelectedOrganizationNodeTypeIds(kind, values) {
+        nodeTypeFormState[organizationNodeTypeSelectionKey(kind)] = [...values].sort();
+      }
+
+      function availableOrganizationNodeTypesForSelection(kind) {
+        const filter = normalizeFilterValue(byId(organizationNodeTypeFilterId(kind))?.value);
+        const selectedIds = new Set(selectedOrganizationNodeTypeIds(kind));
+        const oppositeKind = kind === 'parent' ? 'child' : 'parent';
+        const oppositeSelectedIds = new Set(selectedOrganizationNodeTypeIds(oppositeKind));
+        return (nodeTypeFormState.nodeTypes || []).filter((nodeType) => {
+          if (nodeType.id === nodeTypeFormState.excludeId) return false;
+          if (selectedIds.has(nodeType.id)) return false;
+          if (oppositeSelectedIds.has(nodeType.id)) return false;
+          if (!filter) return true;
+          return normalizeFilterValue(nodeType.name).includes(filter)
+            || normalizeFilterValue(nodeType.plural_label || nodeType.name).includes(filter)
+            || normalizeFilterValue(nodeType.slug).includes(filter);
+        });
+      }
+
+      function renderOrganizationNodeTypeSelectionTags(kind) {
+        const selectedIds = selectedOrganizationNodeTypeIds(kind);
+        const nodeTypesById = new Map((nodeTypeFormState.nodeTypes || []).map((nodeType) => [nodeType.id, nodeType]));
+        const html = selectedIds.length
+          ? selectedIds.map((nodeTypeId) => {
+              const nodeType = nodeTypesById.get(nodeTypeId);
+              if (!nodeType) return '';
+              return `
+                <div class=\"tags has-addons organization-node-type-selection-tag\">
+                  <span class=\"tag organization-node-type-tag\">${escapeHtml(nodeType.name)}</span>
+                  <a class=\"tag is-delete node-type-tag-remove\" data-kind=\"${escapeHtml(kind)}\" data-node-type-id=\"${escapeHtml(nodeTypeId)}\" aria-label=\"Remove ${escapeHtml(nodeType.name)}\"></a>
+                </div>
+              `;
+            }).join('')
+          : `<span class=\"tag organization-node-type-tag organization-node-type-tag-placeholder\">${kind === 'parent' ? 'Top-level' : 'No child node types selected'}</span>`;
+        setHtml(organizationNodeTypeTagsId(kind), html);
+      }
+
+      function renderOrganizationNodeTypeSelectionOptions(kind) {
+        const options = availableOrganizationNodeTypesForSelection(kind);
+        const html = options.length
+          ? options.map((nodeType) => `
+              <button type=\"button\" class=\"node-type-option-button\" data-kind=\"${escapeHtml(kind)}\" data-node-type-id=\"${escapeHtml(nodeType.id)}\">
+                <strong>${escapeHtml(nodeType.name)}</strong>
+                <span class=\"muted\">${escapeHtml(nodeType.plural_label || nodeType.name)} · ${escapeHtml(nodeType.slug)}</span>
+              </button>
+            `).join('')
+          : '<p class=\"muted\">No organization node types match the current search.</p>';
+        setHtml(organizationNodeTypeOptionsId(kind), html);
+      }
+
+      function renderOrganizationNodeTypeSelection(kind) {
+        renderOrganizationNodeTypeSelectionTags(kind);
+        renderOrganizationNodeTypeSelectionOptions(kind);
+      }
+
+      function addOrganizationNodeTypeSelection(kind, nodeTypeId) {
+        const selectedIds = new Set(selectedOrganizationNodeTypeIds(kind));
+        const oppositeKind = kind === 'parent' ? 'child' : 'parent';
+        const oppositeIds = new Set(selectedOrganizationNodeTypeIds(oppositeKind));
+        if (oppositeIds.has(nodeTypeId)) {
+          if (byId('node-type-form-status')) {
+            byId('node-type-form-status').textContent = 'A node type cannot be both a parent and child of the same organization node type.';
+          }
+          return;
+        }
+        selectedIds.add(nodeTypeId);
+        setSelectedOrganizationNodeTypeIds(kind, Array.from(selectedIds));
+        renderOrganizationNodeTypeSelection(kind);
+        renderOrganizationNodeTypeSelection(oppositeKind);
+        const input = byId(organizationNodeTypeFilterId(kind));
+        if (input) {
+          input.value = '';
+          renderOrganizationNodeTypeSelection(kind);
+          input.focus();
+        }
+      }
+
+      function removeOrganizationNodeTypeSelection(kind, nodeTypeId) {
+        const oppositeKind = kind === 'parent' ? 'child' : 'parent';
+        setSelectedOrganizationNodeTypeIds(
+          kind,
+          selectedOrganizationNodeTypeIds(kind).filter((value) => value !== nodeTypeId)
+        );
+        renderOrganizationNodeTypeSelection(kind);
+        renderOrganizationNodeTypeSelection(oppositeKind);
+      }
+
+      function initOrganizationNodeTypeSelectionControls(kind) {
+        const input = byId(organizationNodeTypeFilterId(kind));
+        const options = byId(organizationNodeTypeOptionsId(kind));
+        const tags = byId(organizationNodeTypeTagsId(kind));
+        if (input) {
+          input.oninput = () => renderOrganizationNodeTypeSelection(kind);
+          input.onkeydown = (event) => {
+            if (event.key !== 'Enter') return;
+            event.preventDefault();
+            const firstOption = availableOrganizationNodeTypesForSelection(kind)[0];
+            if (firstOption) {
+              addOrganizationNodeTypeSelection(kind, firstOption.id);
+            }
+          };
+        }
+        if (options) {
+          options.onclick = (event) => {
+            const button = event.target.closest('.node-type-option-button');
+            if (!button || !options.contains(button)) return;
+            addOrganizationNodeTypeSelection(kind, button.dataset.nodeTypeId || '');
+          };
+        }
+        if (tags) {
+          tags.onclick = (event) => {
+            const button = event.target.closest('.node-type-tag-remove');
+            if (!button || !tags.contains(button)) return;
+            removeOrganizationNodeTypeSelection(kind, button.dataset.nodeTypeId || '');
+          };
+        }
+      }
+
+      async function loadOrganizationNodeTypesList() {
+        try {
+          await ensureAuthenticated();
+          const payload = await request('/api/node-types');
+          const html = payload.length
+            ? payload.map((nodeType) => recordCard(
+                nodeType.name,
+                `<p>${escapeHtml(nodeType.slug)}</p><p class=\"muted\">Plural Label: ${escapeHtml(nodeType.plural_label || nodeType.name)}</p><p class=\"muted\">Top-level: ${nodeType.is_root_type ? 'yes' : 'no'}</p><p class=\"muted\">Nodes: ${escapeHtml(nodeType.node_count)}</p>${renderOrganizationNodeTypeRelationshipTags('Allowed Under', nodeType.parent_relationships || [], 'Top-level')}${renderOrganizationNodeTypeRelationshipTags('Can Contain', nodeType.child_relationships || [], 'No child node types')}`,
+                `<a class=\"button-link\" href=\"/app/administration/node-types/${nodeType.id}\">View</a><a class=\"button-link\" href=\"/app/administration/node-types/${nodeType.id}/edit\">Edit</a>`
+              )).join('')
+            : emptyState('No organization node types found.');
+          setHtml('node-type-list', html);
+          show(payload);
+        } catch (error) {
+          setHtml('node-type-list', emptyState(error.message));
+        }
+      }
+
+      async function loadOrganizationNodeTypeDetail(id) {
+        try {
+          await ensureAuthenticated();
+          const payload = await request(`/api/admin/node-types/${id}`);
+          selectRecord('organization node type', payload.name, payload.id);
+          const parentTypes = payload.parent_relationships.length
+            ? payload.parent_relationships.map((nodeType) => `<li>${escapeHtml(nodeType.singular_label || nodeType.node_type_name)}</li>`).join('')
+            : '<li class=\"muted\">This is a top-level organization node type.</li>';
+          const childTypes = payload.child_relationships.length
+            ? payload.child_relationships.map((nodeType) => `<li>${escapeHtml(nodeType.singular_label || nodeType.node_type_name)}</li>`).join('')
+            : '<li class=\"muted\">No child organization node types configured.</li>';
+          const metadataFields = payload.metadata_fields.length
+            ? payload.metadata_fields.map((field) => `<li>${escapeHtml(field.label)} <span class=\"muted\">(${escapeHtml(field.key)} · ${escapeHtml(field.field_type)}${field.required ? ' · required' : ''})</span></li>`).join('')
+            : '<li class=\"muted\">No metadata fields configured.</li>';
+          const forms = payload.scoped_forms.length
+            ? payload.scoped_forms.map((form) => `<li><a href=\"/app/forms/${form.form_id}\">${escapeHtml(form.form_name)}</a></li>`).join('')
+            : '<li class=\"muted\">No forms scoped to this node type.</li>';
+          setHtml('node-type-detail', `
+            ${detailSection('Summary', `<p>${escapeHtml(payload.name)}</p><p class=\"muted\">Slug: ${escapeHtml(payload.slug)}</p><p class=\"muted\">Plural Label: ${escapeHtml(payload.plural_label)}</p><p class=\"muted\">Top-level: ${payload.is_root_type ? 'yes' : 'no'}</p><p class=\"muted\">Nodes: ${escapeHtml(payload.node_count)}</p>`)}
+            ${detailSection('Allowed Parents', `<ul class=\"app-list\">${parentTypes}</ul>`)}
+            ${detailSection('Allowed Children', `<ul class=\"app-list\">${childTypes}</ul>`)}
+            ${detailSection('Metadata Fields', `<ul class=\"app-list\">${metadataFields}</ul>`)}
+            ${detailSection('Scoped Forms', `<ul class=\"app-list\">${forms}</ul>`)}
+          `);
+          show(payload);
+        } catch (error) {
+          setHtml('node-type-detail', emptyState(error.message));
+        }
+      }
+
+      async function initOrganizationNodeTypeForm(mode, id = null) {
+        try {
+          await ensureAuthenticated();
+          const nodeTypes = await request('/api/node-types');
+          nodeTypeFormState = {
+            nodeTypes,
+            excludeId: id || '',
+            parentSelection: [],
+            childSelection: [],
+            metadataFields: []
+          };
+
+          if (mode === 'edit' && id) {
+            const payload = await request(`/api/admin/node-types/${id}`);
+            byId('node-type-name').value = payload.name || '';
+            byId('node-type-slug').value = payload.slug || '';
+            byId('node-type-plural-label').value = payload.plural_label || '';
+            nodeTypeFormState.parentSelection = (payload.parent_relationships || []).map((nodeType) => nodeType.node_type_id);
+            nodeTypeFormState.childSelection = (payload.child_relationships || []).map((nodeType) => nodeType.node_type_id);
+            nodeTypeFormState.metadataFields = (payload.metadata_fields || []).map((field) => ({
+              id: field.id,
+              label: field.label,
+              key: field.key,
+              field_type: field.field_type,
+              required: field.required
+            }));
+          }
+
+          initOrganizationNodeTypeSelectionControls('parent');
+          initOrganizationNodeTypeSelectionControls('child');
+          initOrganizationNodeTypeMetadataFieldControls();
+          renderOrganizationNodeTypeSelection('parent');
+          renderOrganizationNodeTypeSelection('child');
+          renderOrganizationNodeTypeMetadataFieldRows();
+
+          const form = byId('node-type-form');
+          if (form) {
+            form.onsubmit = async (event) => {
+              event.preventDefault();
+              try {
+                const name = byId('node-type-name').value.trim();
+                const slug = byId('node-type-slug').value.trim();
+                if (!name || !slug) {
+                  byId('node-type-form-status').textContent = 'Name and slug are required.';
+                  return;
+                }
+                if (selectedOrganizationNodeTypeIds('parent').some((nodeTypeId) => selectedOrganizationNodeTypeIds('child').includes(nodeTypeId))) {
+                  byId('node-type-form-status').textContent = 'A node type cannot be both a parent and child of the same organization node type.';
+                  return;
+                }
+                byId('node-type-form-status').textContent = mode === 'create'
+                  ? 'Saving organization node type.'
+                  : 'Saving organization node type changes.';
+                const response = await request(
+                  mode === 'create' ? '/api/admin/node-types' : `/api/admin/node-types/${id}`,
+                  {
+                    method: mode === 'create' ? 'POST' : 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      name,
+                      slug,
+                      plural_label: byId('node-type-plural-label').value.trim() || null,
+                      parent_node_type_ids: selectedOrganizationNodeTypeIds('parent'),
+                      child_node_type_ids: selectedOrganizationNodeTypeIds('child')
+                    })
+                  }
+                );
+                byId('node-type-form-status').textContent = 'Saving metadata field configuration.';
+                await syncOrganizationNodeTypeMetadataFields(response.id);
+                redirect(`/app/administration/node-types/${response.id}`);
+              } catch (error) {
+                byId('node-type-form-status').textContent = error.message;
+              }
+            };
+          }
+
+          byId('node-type-form-status').textContent = 'Organization node-type configuration loaded.';
+        } catch (error) {
+          setHtml('node-type-parent-options', emptyState(error.message));
+          setHtml('node-type-child-options', emptyState(error.message));
+          setHtml('node-type-parent-tags', `<span class=\"tag is-danger is-light\">${escapeHtml(error.message)}</span>`);
+          setHtml('node-type-child-tags', `<span class=\"tag is-danger is-light\">${escapeHtml(error.message)}</span>`);
+          if (byId('node-type-form-status')) {
+            byId('node-type-form-status').textContent = error.message;
+          }
+          show(error.message);
+        }
+      }
+
       function renderUserScopeOptions(nodes, selectedNodeIds = [], editable = true) {
         const filter = normalizeFilterValue(byId('user-scope-filter')?.value);
         const filteredNodes = nodes.filter((node) => {
@@ -1023,184 +1653,6 @@
           setHtml('user-delegation-options', `<tr><td colspan="3" class="muted">${escapeHtml(error.message)}</td></tr>`);
           show(error.message);
         }
-      }
-
-      async function loadOrganizationsList() {
-        try {
-          await ensureAuthenticated();
-          const payload = await request('/api/nodes');
-          const html = payload.length
-            ? payload.map((node) => recordCard(
-                node.name,
-              `<p>${escapeHtml(node.node_type_name)}</p><p class=\"muted\">${escapeHtml(node.parent_node_name || 'No parent')}</p>`,
-                `<a class=\"button-link\" href=\"/app/organization/${node.id}\">View</a>${isAdmin() ? `<a class=\"button-link\" href=\"/app/organization/${node.id}/edit\">Edit</a>` : ''}`
-              )).join('')
-            : emptyState('No organization records found.');
-          setHtml('organization-list', html);
-          show(payload);
-        } catch (error) {
-          setHtml('organization-list', emptyState(error.message));
-        }
-      }
-
-      async function loadOrganizationDetail(id) {
-        try {
-          await ensureAuthenticated();
-          const payload = await request(`/api/nodes/${id}`);
-          selectRecord('organization', payload.name, payload.id);
-          const forms = payload.related_forms.length
-            ? payload.related_forms.map((form) => `<li><a href=\"/app/forms/${form.form_id}\">${escapeHtml(form.form_name)}</a></li>`).join('')
-            : '<li class=\"muted\">No related forms.</li>';
-          const responses = payload.related_responses.length
-            ? payload.related_responses.map((response) => `<li><a href=\"/app/responses/${response.submission_id}\">${escapeHtml(response.form_name)} ${escapeHtml(response.version_label)}</a></li>`).join('')
-            : '<li class=\"muted\">No related responses.</li>';
-          const dashboards = payload.related_dashboards.length
-            ? payload.related_dashboards.map((dashboard) => `<li><a href=\"/app/dashboards/${dashboard.dashboard_id}\">${escapeHtml(dashboard.dashboard_name)}</a></li>`).join('')
-            : '<li class=\"muted\">No related dashboards.</li>';
-          const metadata = Object.entries(payload.metadata || {});
-          setHtml('organization-detail', `
-            ${detailSection('Summary', `<p>${escapeHtml(payload.name)}</p><p class=\"muted\">${escapeHtml(payload.node_type_name)}</p><p class=\"muted\">Parent: ${escapeHtml(payload.parent_node_name || 'None')}</p>`)}
-            ${detailSection('Metadata', metadata.length ? `<dl class=\"detail-list\">${metadata.map(([key, value]) => `<div><dt>${escapeHtml(key)}</dt><dd>${escapeHtml(JSON.stringify(value))}</dd></div>`).join('')}</dl>` : '<p class=\"muted\">No metadata values.</p>')}
-            ${detailSection('Related Forms', `<ul class=\"app-list\">${forms}</ul>`)}
-            ${detailSection('Related Responses', `<ul class=\"app-list\">${responses}</ul>`)}
-            ${detailSection('Related Dashboards', `<ul class=\"app-list\">${dashboards}</ul>`)}
-          `);
-          show(payload);
-        } catch (error) {
-          setHtml('organization-detail', emptyState(error.message));
-        }
-      }
-
-      async function initOrganizationForm(mode, id) {
-        try {
-          await ensureAuthenticated();
-          const [nodeTypes, nodes, metadataFields] = await Promise.all([
-            request('/api/admin/node-types'),
-            request('/api/nodes'),
-            request('/api/admin/node-metadata-fields')
-          ]);
-          organizationFormState = {
-            nodeTypes,
-            nodes,
-            metadataFields,
-            metadataValues: {},
-            editNodeId: id || null,
-            editNodeTypeId: null
-          };
-          setSelectOptions(
-            'organization-node-type',
-            nodeTypes.map((item) => ({ value: item.id, label: item.name })),
-            'Choose node type'
-          );
-          setSelectOptions(
-            'organization-parent-node',
-            nodes
-              .filter((item) => item.id !== id)
-              .map((item) => ({ value: item.id, label: item.name })),
-            'No parent'
-          );
-          const nodeTypeSelect = byId('organization-node-type');
-          if (nodeTypeSelect) {
-            nodeTypeSelect.onchange = () => renderOrganizationMetadataFields(nodeTypeSelect.value);
-          }
-          if (mode === 'edit' && id) {
-            const payload = await request(`/api/nodes/${id}`);
-            organizationFormState.metadataValues = payload.metadata || {};
-            organizationFormState.editNodeTypeId = payload.node_type_id;
-            if (nodeTypeSelect) nodeTypeSelect.value = payload.node_type_id;
-            byId('organization-parent-node').value = payload.parent_node_id || '';
-            byId('organization-name').value = payload.name || '';
-            renderOrganizationMetadataFields(payload.node_type_id);
-          } else if (nodeTypeSelect && nodeTypeSelect.value) {
-            renderOrganizationMetadataFields(nodeTypeSelect.value);
-          }
-          const form = byId('organization-form');
-          if (form) {
-            form.onsubmit = async (event) => {
-              event.preventDefault();
-              await submitOrganizationForm(mode, id);
-            };
-          }
-        } catch (error) {
-          setHtml('organization-metadata-fields', emptyState(error.message));
-        }
-      }
-
-      function renderOrganizationMetadataFields(nodeTypeId) {
-        const fields = organizationFormState.metadataFields.filter((field) => field.node_type_id === nodeTypeId);
-        const html = fields.length
-          ? fields.map((field) => {
-              const value = organizationFormState.metadataValues[field.key];
-              const inputId = `organization-metadata-${field.key}`;
-              const hint = field.required ? 'required' : 'optional';
-              if (field.field_type === 'boolean') {
-                return `
-                  <div class=\"form-field\">
-                    <label for=\"${escapeHtml(inputId)}\">${escapeHtml(field.label)} (${escapeHtml(hint)})</label>
-                    <input id=\"${escapeHtml(inputId)}\" type=\"checkbox\" ${value ? 'checked' : ''}>
-                  </div>
-                `;
-              }
-              const inputType = field.field_type === 'number'
-                ? 'number'
-                : field.field_type === 'date'
-                  ? 'date'
-                  : 'text';
-              const renderedValue = Array.isArray(value) ? value.join(', ') : (value ?? '');
-              const placeholder = field.field_type === 'multi_choice' ? 'Comma-separated values' : field.label;
-              return `
-                <div class=\"form-field\">
-                  <label for=\"${escapeHtml(inputId)}\">${escapeHtml(field.label)} (${escapeHtml(hint)})</label>
-                  <input id=\"${escapeHtml(inputId)}\" type=\"${inputType}\" value=\"${escapeHtml(renderedValue)}\" placeholder=\"${escapeHtml(placeholder)}\">
-                </div>
-              `;
-            }).join('')
-          : '<p class=\"muted\">No metadata fields are defined for this node type.</p>';
-        setHtml('organization-metadata-fields', html);
-      }
-
-      function collectOrganizationMetadata(nodeTypeId) {
-        const metadata = {};
-        const fields = organizationFormState.metadataFields.filter((field) => field.node_type_id === nodeTypeId);
-        for (const field of fields) {
-          const element = byId(`organization-metadata-${field.key}`);
-          if (!element) continue;
-          if (field.field_type === 'boolean') {
-            metadata[field.key] = element.checked;
-            continue;
-          }
-          const raw = element.value.trim();
-          if (raw === '') continue;
-          if (field.field_type === 'number') {
-            metadata[field.key] = Number(raw);
-          } else if (field.field_type === 'multi_choice') {
-            metadata[field.key] = raw.split(',').map((item) => item.trim()).filter(Boolean);
-          } else {
-            metadata[field.key] = raw;
-          }
-        }
-        return metadata;
-      }
-
-      async function submitOrganizationForm(mode, id) {
-        const nodeTypeId = byId('organization-node-type').value;
-        const payload = {
-          parent_node_id: byId('organization-parent-node').value || null,
-          name: byId('organization-name').value.trim(),
-          metadata: collectOrganizationMetadata(nodeTypeId || organizationFormState.editNodeTypeId)
-        };
-        if (mode === 'create') {
-          payload.node_type_id = nodeTypeId;
-        }
-        const response = await request(
-          mode === 'create' ? '/api/admin/nodes' : `/api/admin/nodes/${id}`,
-          {
-            method: mode === 'create' ? 'POST' : 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          }
-        );
-        redirect(`/app/organization/${response.id}`);
       }
 
       async function loadFormsList() {
@@ -1858,6 +2310,7 @@
               || href === '/app/forms/new'
               || href === '/app/reports/new'
               || href === '/app/dashboards/new'
+              || href === '/app/administration/node-types/new'
             ) {
               link.remove();
             }
@@ -1911,6 +2364,18 @@
           case 'user-access':
             await initUserAccessForm(page.recordId);
             break;
+          case 'node-type-list':
+            await loadOrganizationNodeTypesList();
+            break;
+          case 'node-type-detail':
+            await loadOrganizationNodeTypeDetail(page.recordId);
+            break;
+          case 'node-type-create':
+            await initOrganizationNodeTypeForm('create');
+            break;
+          case 'node-type-edit':
+            await initOrganizationNodeTypeForm('edit', page.recordId);
+            break;
           case 'role-list':
             await loadRolesList();
             break;
@@ -1925,18 +2390,6 @@
             break;
           case 'migration':
             updateSessionStatus(currentAccount);
-            break;
-          case 'organization-list':
-            await loadOrganizationsList();
-            break;
-          case 'organization-detail':
-            await loadOrganizationDetail(page.recordId);
-            break;
-          case 'organization-create':
-            await initOrganizationForm('create');
-            break;
-          case 'organization-edit':
-            await initOrganizationForm('edit', page.recordId);
             break;
           case 'form-list':
             await loadFormsList();
