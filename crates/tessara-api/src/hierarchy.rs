@@ -22,12 +22,22 @@ use crate::{
 pub struct CreateNodeTypeRequest {
     name: String,
     slug: String,
+    plural_label: Option<String>,
+    #[serde(default)]
+    parent_node_type_ids: Option<Vec<Uuid>>,
+    #[serde(default)]
+    child_node_type_ids: Option<Vec<Uuid>>,
 }
 
 #[derive(Deserialize)]
 pub struct UpdateNodeTypeRequest {
     name: String,
     slug: String,
+    plural_label: Option<String>,
+    #[serde(default)]
+    parent_node_type_ids: Option<Vec<Uuid>>,
+    #[serde(default)]
+    child_node_type_ids: Option<Vec<Uuid>>,
 }
 
 #[derive(Deserialize)]
@@ -85,6 +95,9 @@ pub struct NodeResponse {
     id: Uuid,
     node_type_id: Uuid,
     node_type_name: String,
+    node_type_slug: String,
+    node_type_singular_label: String,
+    node_type_plural_label: String,
     parent_node_id: Option<Uuid>,
     parent_node_name: Option<String>,
     name: String,
@@ -96,6 +109,9 @@ pub struct NodeDetail {
     id: Uuid,
     node_type_id: Uuid,
     node_type_name: String,
+    node_type_slug: String,
+    node_type_singular_label: String,
+    node_type_plural_label: String,
     parent_node_id: Option<Uuid>,
     parent_node_name: Option<String>,
     name: String,
@@ -137,7 +153,32 @@ pub struct NodeTypeSummary {
     id: Uuid,
     name: String,
     slug: String,
+    singular_label: String,
+    plural_label: String,
+    is_root_type: bool,
     node_count: i64,
+}
+
+#[derive(Serialize, Clone)]
+pub struct NodeTypePeerLink {
+    node_type_id: Uuid,
+    node_type_name: String,
+    node_type_slug: String,
+    singular_label: String,
+    plural_label: String,
+}
+
+#[derive(Serialize)]
+pub struct NodeTypeCatalogEntry {
+    id: Uuid,
+    name: String,
+    slug: String,
+    singular_label: String,
+    plural_label: String,
+    is_root_type: bool,
+    node_count: i64,
+    parent_relationships: Vec<NodeTypePeerLink>,
+    child_relationships: Vec<NodeTypePeerLink>,
 }
 
 #[derive(Serialize)]
@@ -145,17 +186,14 @@ pub struct NodeTypeDefinition {
     id: Uuid,
     name: String,
     slug: String,
+    singular_label: String,
+    plural_label: String,
+    is_root_type: bool,
     node_count: i64,
     parent_relationships: Vec<NodeTypePeerLink>,
     child_relationships: Vec<NodeTypePeerLink>,
     metadata_fields: Vec<NodeMetadataFieldSummary>,
     scoped_forms: Vec<NodeTypeFormLink>,
-}
-
-#[derive(Serialize)]
-pub struct NodeTypePeerLink {
-    node_type_id: Uuid,
-    node_type_name: String,
 }
 
 #[derive(Serialize)]
@@ -189,18 +227,43 @@ pub async fn create_node_type(
     headers: HeaderMap,
     Json(payload): Json<CreateNodeTypeRequest>,
 ) -> ApiResult<Json<IdResponse>> {
-    auth::require_capability(&state.pool, &headers, "hierarchy:write").await?;
+    auth::require_capability(&state.pool, &headers, "admin:all").await?;
     require_text("node type name", &payload.name)?;
     require_text("node type slug", &payload.slug)?;
     require_node_type_slug_available(&state.pool, &payload.slug).await?;
-
-    let id = sqlx::query_scalar("INSERT INTO node_types (name, slug) VALUES ($1, $2) RETURNING id")
-        .bind(payload.name)
-        .bind(payload.slug)
-        .fetch_one(&state.pool)
+    let node_type_id = Uuid::new_v4();
+    let relationship_selection = resolve_node_type_relationship_selection(
+        &state.pool,
+        node_type_id,
+        payload.parent_node_type_ids.as_deref(),
+        payload.child_node_type_ids.as_deref(),
+    )
+    .await?;
+    validate_node_type_relationship_selection(&state.pool, node_type_id, &relationship_selection)
         .await?;
 
-    Ok(Json(IdResponse { id }))
+    let mut transaction = state.pool.begin().await?;
+    sqlx::query(
+        r#"
+        INSERT INTO node_types (
+            id,
+            name,
+            slug,
+            plural_label
+        ) VALUES ($1, $2, $3, $4)
+        "#,
+    )
+    .bind(node_type_id)
+    .bind(payload.name)
+    .bind(payload.slug)
+    .bind(payload.plural_label)
+    .execute(&mut *transaction)
+    .await?;
+
+    sync_node_type_relationships(&mut transaction, node_type_id, &relationship_selection).await?;
+    transaction.commit().await?;
+
+    Ok(Json(IdResponse { id: node_type_id }))
 }
 
 /// Updates node-type display metadata used by hierarchy and form-builder screens.
@@ -210,16 +273,29 @@ pub async fn update_node_type(
     Path(node_type_id): Path<Uuid>,
     Json(payload): Json<UpdateNodeTypeRequest>,
 ) -> ApiResult<Json<IdResponse>> {
-    auth::require_capability(&state.pool, &headers, "hierarchy:write").await?;
+    auth::require_capability(&state.pool, &headers, "admin:all").await?;
     require_text("node type name", &payload.name)?;
     require_text("node type slug", &payload.slug)?;
     require_node_type_exists(&state.pool, node_type_id).await?;
     require_node_type_slug_available_for_type(&state.pool, node_type_id, &payload.slug).await?;
+    let relationship_selection = resolve_node_type_relationship_selection(
+        &state.pool,
+        node_type_id,
+        payload.parent_node_type_ids.as_deref(),
+        payload.child_node_type_ids.as_deref(),
+    )
+    .await?;
+    validate_node_type_relationship_selection(&state.pool, node_type_id, &relationship_selection)
+        .await?;
+    assert_removed_relationships_unused(&state.pool, node_type_id, &relationship_selection).await?;
 
+    let mut transaction = state.pool.begin().await?;
     let id = sqlx::query_scalar(
         r#"
         UPDATE node_types
-        SET name = $2, slug = $3
+        SET name = $2,
+            slug = $3,
+            plural_label = $4
         WHERE id = $1
         RETURNING id
         "#,
@@ -227,8 +303,12 @@ pub async fn update_node_type(
     .bind(node_type_id)
     .bind(payload.name)
     .bind(payload.slug)
-    .fetch_one(&state.pool)
+    .bind(payload.plural_label)
+    .fetch_one(&mut *transaction)
     .await?;
+
+    sync_node_type_relationships(&mut transaction, node_type_id, &relationship_selection).await?;
+    transaction.commit().await?;
 
     Ok(Json(IdResponse { id }))
 }
@@ -238,33 +318,31 @@ pub async fn list_node_types(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> ApiResult<Json<Vec<NodeTypeSummary>>> {
-    auth::require_capability(&state.pool, &headers, "hierarchy:write").await?;
+    auth::require_capability(&state.pool, &headers, "admin:all").await?;
 
-    let rows = sqlx::query(
-        r#"
-        SELECT node_types.id, node_types.name, node_types.slug, COUNT(nodes.id) AS node_count
-        FROM node_types
-        LEFT JOIN nodes ON nodes.node_type_id = node_types.id
-        GROUP BY node_types.id, node_types.name, node_types.slug, node_types.created_at
-        ORDER BY node_types.created_at, node_types.name
-        "#,
-    )
-    .fetch_all(&state.pool)
-    .await?;
-
-    let node_types = rows
+    let node_types = load_node_type_catalog(&state.pool)
+        .await?
         .into_iter()
-        .map(|row| {
-            Ok(NodeTypeSummary {
-                id: row.try_get("id")?,
-                name: row.try_get("name")?,
-                slug: row.try_get("slug")?,
-                node_count: row.try_get("node_count")?,
-            })
+        .map(|entry| NodeTypeSummary {
+            id: entry.id,
+            name: entry.name,
+            slug: entry.slug,
+            singular_label: entry.singular_label,
+            plural_label: entry.plural_label,
+            is_root_type: entry.is_root_type,
+            node_count: entry.node_count,
         })
-        .collect::<Result<Vec<_>, sqlx::Error>>()?;
+        .collect();
 
     Ok(Json(node_types))
+}
+
+pub async fn list_readable_node_types(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> ApiResult<Json<Vec<NodeTypeCatalogEntry>>> {
+    auth::require_capability(&state.pool, &headers, "hierarchy:read").await?;
+    Ok(Json(load_node_type_catalog(&state.pool).await?))
 }
 
 /// Returns one node type with linked relationships, metadata fields, and scoped forms.
@@ -273,65 +351,8 @@ pub async fn get_node_type(
     headers: HeaderMap,
     Path(node_type_id): Path<Uuid>,
 ) -> ApiResult<Json<NodeTypeDefinition>> {
-    auth::require_capability(&state.pool, &headers, "hierarchy:write").await?;
-
-    let node_type = sqlx::query(
-        r#"
-        SELECT node_types.id, node_types.name, node_types.slug, COUNT(nodes.id) AS node_count
-        FROM node_types
-        LEFT JOIN nodes ON nodes.node_type_id = node_types.id
-        WHERE node_types.id = $1
-        GROUP BY node_types.id, node_types.name, node_types.slug
-        "#,
-    )
-    .bind(node_type_id)
-    .fetch_optional(&state.pool)
-    .await?
-    .ok_or_else(|| ApiError::NotFound(format!("node type {node_type_id}")))?;
-
-    let parent_relationships = sqlx::query(
-        r#"
-        SELECT parent_node_types.id AS node_type_id, parent_node_types.name AS node_type_name
-        FROM node_type_relationships
-        JOIN node_types AS parent_node_types
-            ON parent_node_types.id = node_type_relationships.parent_node_type_id
-        WHERE node_type_relationships.child_node_type_id = $1
-        ORDER BY parent_node_types.name, parent_node_types.id
-        "#,
-    )
-    .bind(node_type_id)
-    .fetch_all(&state.pool)
-    .await?
-    .into_iter()
-    .map(|row| {
-        Ok(NodeTypePeerLink {
-            node_type_id: row.try_get("node_type_id")?,
-            node_type_name: row.try_get("node_type_name")?,
-        })
-    })
-    .collect::<Result<Vec<_>, sqlx::Error>>()?;
-
-    let child_relationships = sqlx::query(
-        r#"
-        SELECT child_node_types.id AS node_type_id, child_node_types.name AS node_type_name
-        FROM node_type_relationships
-        JOIN node_types AS child_node_types
-            ON child_node_types.id = node_type_relationships.child_node_type_id
-        WHERE node_type_relationships.parent_node_type_id = $1
-        ORDER BY child_node_types.name, child_node_types.id
-        "#,
-    )
-    .bind(node_type_id)
-    .fetch_all(&state.pool)
-    .await?
-    .into_iter()
-    .map(|row| {
-        Ok(NodeTypePeerLink {
-            node_type_id: row.try_get("node_type_id")?,
-            node_type_name: row.try_get("node_type_name")?,
-        })
-    })
-    .collect::<Result<Vec<_>, sqlx::Error>>()?;
+    auth::require_capability(&state.pool, &headers, "admin:all").await?;
+    let catalog_entry = load_node_type_catalog_entry(&state.pool, node_type_id).await?;
 
     let metadata_fields = sqlx::query(
         r#"
@@ -388,12 +409,15 @@ pub async fn get_node_type(
     .collect::<Result<Vec<_>, sqlx::Error>>()?;
 
     Ok(Json(NodeTypeDefinition {
-        id: node_type.try_get("id")?,
-        name: node_type.try_get("name")?,
-        slug: node_type.try_get("slug")?,
-        node_count: node_type.try_get("node_count")?,
-        parent_relationships,
-        child_relationships,
+        id: catalog_entry.id,
+        name: catalog_entry.name,
+        slug: catalog_entry.slug,
+        singular_label: catalog_entry.singular_label,
+        plural_label: catalog_entry.plural_label,
+        is_root_type: catalog_entry.is_root_type,
+        node_count: catalog_entry.node_count,
+        parent_relationships: catalog_entry.parent_relationships,
+        child_relationships: catalog_entry.child_relationships,
         metadata_fields,
         scoped_forms,
     }))
@@ -404,7 +428,7 @@ pub async fn list_node_type_relationships(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> ApiResult<Json<Vec<NodeTypeRelationshipSummary>>> {
-    auth::require_capability(&state.pool, &headers, "hierarchy:write").await?;
+    auth::require_capability(&state.pool, &headers, "admin:all").await?;
 
     let rows = sqlx::query(
         r#"
@@ -444,7 +468,7 @@ pub async fn create_node_type_relationship(
     headers: HeaderMap,
     Json(payload): Json<CreateNodeTypeRelationshipRequest>,
 ) -> ApiResult<Json<IdResponse>> {
-    auth::require_capability(&state.pool, &headers, "hierarchy:write").await?;
+    auth::require_capability(&state.pool, &headers, "admin:all").await?;
     require_node_type_exists(&state.pool, payload.parent_node_type_id).await?;
     require_node_type_exists(&state.pool, payload.child_node_type_id).await?;
     assert_relationship_is_acyclic(
@@ -477,7 +501,7 @@ pub async fn delete_node_type_relationship(
     headers: HeaderMap,
     Path((parent_node_type_id, child_node_type_id)): Path<(Uuid, Uuid)>,
 ) -> ApiResult<Json<IdResponse>> {
-    auth::require_capability(&state.pool, &headers, "hierarchy:write").await?;
+    auth::require_capability(&state.pool, &headers, "admin:all").await?;
     require_node_type_relationship_exists(&state.pool, parent_node_type_id, child_node_type_id)
         .await?;
     assert_relationship_unused(&state.pool, parent_node_type_id, child_node_type_id).await?;
@@ -503,7 +527,7 @@ pub async fn list_node_metadata_fields(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> ApiResult<Json<Vec<NodeMetadataFieldSummary>>> {
-    auth::require_capability(&state.pool, &headers, "hierarchy:write").await?;
+    auth::require_capability(&state.pool, &headers, "admin:all").await?;
 
     let rows = sqlx::query(
         r#"
@@ -546,7 +570,7 @@ pub async fn create_node_metadata_field(
     headers: HeaderMap,
     Json(payload): Json<CreateNodeMetadataFieldRequest>,
 ) -> ApiResult<Json<IdResponse>> {
-    auth::require_capability(&state.pool, &headers, "hierarchy:write").await?;
+    auth::require_capability(&state.pool, &headers, "admin:all").await?;
     require_node_type_exists(&state.pool, payload.node_type_id).await?;
     require_text("metadata key", &payload.key)?;
     require_text("metadata label", &payload.label)?;
@@ -588,6 +612,11 @@ struct ExistingMetadataField {
     required: bool,
 }
 
+struct NodeTypeRelationshipSelection {
+    parent_node_type_ids: Vec<Uuid>,
+    child_node_type_ids: Vec<Uuid>,
+}
+
 /// Updates metadata field display and safe schema settings for a node type.
 pub async fn update_node_metadata_field(
     State(state): State<AppState>,
@@ -595,7 +624,7 @@ pub async fn update_node_metadata_field(
     Path(field_id): Path<Uuid>,
     Json(payload): Json<UpdateNodeMetadataFieldRequest>,
 ) -> ApiResult<Json<IdResponse>> {
-    auth::require_capability(&state.pool, &headers, "hierarchy:write").await?;
+    auth::require_capability(&state.pool, &headers, "admin:all").await?;
     let existing = require_node_metadata_field(&state.pool, field_id).await?;
     require_text("metadata key", &payload.key)?;
     require_text("metadata label", &payload.label)?;
@@ -645,6 +674,28 @@ pub async fn update_node_metadata_field(
     Ok(Json(IdResponse { id: field_id }))
 }
 
+/// Deletes a node metadata field definition and any collected values for that field.
+pub async fn delete_node_metadata_field(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(field_id): Path<Uuid>,
+) -> ApiResult<Json<IdResponse>> {
+    auth::require_capability(&state.pool, &headers, "admin:all").await?;
+    require_node_metadata_field(&state.pool, field_id).await?;
+
+    sqlx::query(
+        r#"
+        DELETE FROM node_metadata_field_definitions
+        WHERE id = $1
+        "#,
+    )
+    .bind(field_id)
+    .execute(&state.pool)
+    .await?;
+
+    Ok(Json(IdResponse { id: field_id }))
+}
+
 pub async fn create_node(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -654,34 +705,13 @@ pub async fn create_node(
     require_node_type_exists(&state.pool, payload.node_type_id).await?;
     require_text("node name", &payload.name)?;
 
-    if let Some(parent_node_id) = payload.parent_node_id {
-        let parent_type_id: Uuid =
-            sqlx::query_scalar("SELECT node_type_id FROM nodes WHERE id = $1")
-                .bind(parent_node_id)
-                .fetch_optional(&state.pool)
-                .await?
-                .ok_or_else(|| ApiError::NotFound(format!("parent node {parent_node_id}")))?;
-
-        let relationship_exists: bool = sqlx::query_scalar(
-            r#"
-            SELECT EXISTS (
-                SELECT 1
-                FROM node_type_relationships
-                WHERE parent_node_type_id = $1 AND child_node_type_id = $2
-            )
-            "#,
-        )
-        .bind(parent_type_id)
-        .bind(payload.node_type_id)
-        .fetch_one(&state.pool)
-        .await?;
-
-        if !relationship_exists {
-            return Err(ApiError::BadRequest(
-                "node parent type is not allowed for this child type".into(),
-            ));
-        }
-    }
+    assert_parent_allowed(
+        &state.pool,
+        None,
+        payload.node_type_id,
+        payload.parent_node_id,
+    )
+    .await?;
 
     let field_rows = metadata_field_rows(&state.pool, payload.node_type_id).await?;
     validate_node_metadata_values(&field_rows, &payload.metadata, true)?;
@@ -710,7 +740,13 @@ pub async fn update_node(
     auth::require_capability(&state.pool, &headers, "hierarchy:write").await?;
     require_text("node name", &payload.name)?;
     let node_type_id = require_node_type_for_node(&state.pool, node_id).await?;
-    assert_parent_allowed(&state.pool, node_id, node_type_id, payload.parent_node_id).await?;
+    assert_parent_allowed(
+        &state.pool,
+        Some(node_id),
+        node_type_id,
+        payload.parent_node_id,
+    )
+    .await?;
 
     let field_rows = metadata_field_rows(&state.pool, node_type_id).await?;
     validate_node_metadata_values(&field_rows, &payload.metadata, false)?;
@@ -746,6 +782,8 @@ pub async fn list_nodes(
                 nodes.id,
                 nodes.node_type_id,
                 node_types.name AS node_type_name,
+                node_types.slug AS node_type_slug,
+                node_types.plural_label,
                 nodes.parent_node_id,
                 parent_nodes.name AS parent_node_name,
                 nodes.name,
@@ -772,6 +810,8 @@ pub async fn list_nodes(
                 nodes.id,
                 nodes.node_type_id,
                 node_types.name,
+                node_types.slug,
+                node_types.plural_label,
                 nodes.parent_node_id,
                 parent_nodes.name,
                 nodes.name,
@@ -790,6 +830,8 @@ pub async fn list_nodes(
                 nodes.id,
                 nodes.node_type_id,
                 node_types.name AS node_type_name,
+                node_types.slug AS node_type_slug,
+                node_types.plural_label,
                 nodes.parent_node_id,
                 parent_nodes.name AS parent_node_name,
                 nodes.name,
@@ -815,6 +857,8 @@ pub async fn list_nodes(
                 nodes.id,
                 nodes.node_type_id,
                 node_types.name,
+                node_types.slug,
+                node_types.plural_label,
                 nodes.parent_node_id,
                 parent_nodes.name,
                 nodes.name,
@@ -830,10 +874,18 @@ pub async fn list_nodes(
     let nodes = rows
         .into_iter()
         .map(|row| {
+            let node_type_name: String = row.try_get("node_type_name")?;
+            let raw_plural_label: Option<String> = row.try_get("plural_label")?;
             Ok(NodeResponse {
                 id: row.try_get("id")?,
                 node_type_id: row.try_get("node_type_id")?,
-                node_type_name: row.try_get("node_type_name")?,
+                node_type_name: node_type_name.clone(),
+                node_type_slug: row.try_get("node_type_slug")?,
+                node_type_singular_label: derive_node_type_label(&node_type_name),
+                node_type_plural_label: derive_node_type_plural_label(
+                    &node_type_name,
+                    raw_plural_label,
+                ),
                 parent_node_id: row.try_get("parent_node_id")?,
                 parent_node_name: row.try_get("parent_node_name")?,
                 name: row.try_get("name")?,
@@ -864,6 +916,8 @@ pub async fn get_node(
             nodes.id,
             nodes.node_type_id,
             node_types.name AS node_type_name,
+            node_types.slug AS node_type_slug,
+            node_types.plural_label,
             nodes.parent_node_id,
             parent_nodes.name AS parent_node_name,
             nodes.name,
@@ -885,6 +939,8 @@ pub async fn get_node(
             nodes.id,
             nodes.node_type_id,
             node_types.name,
+            node_types.slug,
+            node_types.plural_label,
             nodes.parent_node_id,
             parent_nodes.name,
             nodes.name
@@ -1019,6 +1075,14 @@ pub async fn get_node(
         id: node.try_get("id")?,
         node_type_id: node.try_get("node_type_id")?,
         node_type_name: node.try_get("node_type_name")?,
+        node_type_slug: node.try_get("node_type_slug")?,
+        node_type_singular_label: derive_node_type_label(
+            &node.try_get::<String, _>("node_type_name")?,
+        ),
+        node_type_plural_label: derive_node_type_plural_label(
+            &node.try_get::<String, _>("node_type_name")?,
+            node.try_get::<Option<String>, _>("plural_label")?,
+        ),
         parent_node_id: node.try_get("parent_node_id")?,
         parent_node_name: node.try_get("parent_node_name")?,
         name: node.try_get("name")?,
@@ -1039,15 +1103,23 @@ async fn require_node_type_for_node(pool: &sqlx::PgPool, node_id: Uuid) -> ApiRe
 
 async fn assert_parent_allowed(
     pool: &sqlx::PgPool,
-    node_id: Uuid,
+    node_id: Option<Uuid>,
     node_type_id: Uuid,
     parent_node_id: Option<Uuid>,
 ) -> ApiResult<()> {
+    let allowed_parent_type_ids = allowed_parent_type_ids(pool, node_type_id).await?;
+
     let Some(parent_node_id) = parent_node_id else {
-        return Ok(());
+        return if allowed_parent_type_ids.is_empty() {
+            Ok(())
+        } else {
+            Err(ApiError::BadRequest(
+                "node parent is required for this child type".into(),
+            ))
+        };
     };
 
-    if parent_node_id == node_id {
+    if Some(parent_node_id) == node_id {
         return Err(ApiError::BadRequest("node cannot be its own parent".into()));
     }
 
@@ -1057,21 +1129,7 @@ async fn assert_parent_allowed(
         .await?
         .ok_or_else(|| ApiError::NotFound(format!("parent node {parent_node_id}")))?;
 
-    let relationship_exists: bool = sqlx::query_scalar(
-        r#"
-        SELECT EXISTS (
-            SELECT 1
-            FROM node_type_relationships
-            WHERE parent_node_type_id = $1 AND child_node_type_id = $2
-        )
-        "#,
-    )
-    .bind(parent_type_id)
-    .bind(node_type_id)
-    .fetch_one(pool)
-    .await?;
-
-    if relationship_exists {
+    if allowed_parent_type_ids.contains(&parent_type_id) {
         Ok(())
     } else {
         Err(ApiError::BadRequest(
@@ -1217,6 +1275,191 @@ async fn require_node_type_slug_available_for_type(
     }
 }
 
+async fn load_node_type_catalog(pool: &sqlx::PgPool) -> ApiResult<Vec<NodeTypeCatalogEntry>> {
+    let rows = sqlx::query(
+        r#"
+        SELECT
+            node_types.id,
+            node_types.name,
+            node_types.slug,
+            node_types.plural_label,
+            COUNT(nodes.id) AS node_count
+        FROM node_types
+        LEFT JOIN nodes ON nodes.node_type_id = node_types.id
+        GROUP BY
+            node_types.id,
+            node_types.name,
+            node_types.slug,
+            node_types.created_at,
+            node_types.plural_label
+        ORDER BY node_types.created_at, node_types.name
+        "#,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let relationships = sqlx::query(
+        r#"
+        SELECT
+            parent_node_types.id AS parent_node_type_id,
+            parent_node_types.name AS parent_node_type_name,
+            parent_node_types.slug AS parent_node_type_slug,
+            parent_node_types.plural_label AS parent_plural_label,
+            child_node_types.id AS child_node_type_id,
+            child_node_types.name AS child_node_type_name,
+            child_node_types.slug AS child_node_type_slug,
+            child_node_types.plural_label AS child_plural_label
+        FROM node_type_relationships
+        JOIN node_types AS parent_node_types
+            ON parent_node_types.id = node_type_relationships.parent_node_type_id
+        JOIN node_types AS child_node_types
+            ON child_node_types.id = node_type_relationships.child_node_type_id
+        ORDER BY
+            parent_node_types.name,
+            parent_node_types.id,
+            child_node_types.name,
+            child_node_types.id
+        "#,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut parent_relationships: HashMap<Uuid, Vec<NodeTypePeerLink>> = HashMap::new();
+    let mut child_relationships: HashMap<Uuid, Vec<NodeTypePeerLink>> = HashMap::new();
+    for row in relationships {
+        let parent_name: String = row.try_get("parent_node_type_name")?;
+        let child_name: String = row.try_get("child_node_type_name")?;
+        let parent_id: Uuid = row.try_get("parent_node_type_id")?;
+        let child_id: Uuid = row.try_get("child_node_type_id")?;
+        let parent_link = NodeTypePeerLink {
+            node_type_id: parent_id,
+            node_type_name: parent_name.clone(),
+            node_type_slug: row.try_get("parent_node_type_slug")?,
+            singular_label: derive_node_type_label(&parent_name),
+            plural_label: derive_node_type_plural_label(
+                &parent_name,
+                row.try_get("parent_plural_label")?,
+            ),
+        };
+        let child_link = NodeTypePeerLink {
+            node_type_id: child_id,
+            node_type_name: child_name.clone(),
+            node_type_slug: row.try_get("child_node_type_slug")?,
+            singular_label: derive_node_type_label(&child_name),
+            plural_label: derive_node_type_plural_label(
+                &child_name,
+                row.try_get("child_plural_label")?,
+            ),
+        };
+        parent_relationships
+            .entry(child_id)
+            .or_default()
+            .push(parent_link);
+        child_relationships
+            .entry(parent_id)
+            .or_default()
+            .push(child_link);
+    }
+
+    let catalog = rows
+        .into_iter()
+        .map(|row| {
+            let id: Uuid = row.try_get("id")?;
+            let name: String = row.try_get("name")?;
+            let parent_links = parent_relationships.remove(&id).unwrap_or_default();
+            let child_links = child_relationships.remove(&id).unwrap_or_default();
+            let singular_label = derive_node_type_label(&name);
+            let plural_label = derive_node_type_plural_label(
+                &name,
+                row.try_get::<Option<String>, _>("plural_label")?,
+            );
+            Ok(NodeTypeCatalogEntry {
+                id,
+                name,
+                slug: row.try_get("slug")?,
+                singular_label,
+                plural_label,
+                is_root_type: parent_links.is_empty(),
+                node_count: row.try_get("node_count")?,
+                parent_relationships: parent_links,
+                child_relationships: child_links,
+            })
+        })
+        .collect::<Result<Vec<_>, sqlx::Error>>()?;
+
+    Ok(catalog)
+}
+
+async fn load_node_type_catalog_entry(
+    pool: &sqlx::PgPool,
+    node_type_id: Uuid,
+) -> ApiResult<NodeTypeCatalogEntry> {
+    load_node_type_catalog(pool)
+        .await?
+        .into_iter()
+        .find(|entry| entry.id == node_type_id)
+        .ok_or_else(|| ApiError::NotFound(format!("node type {node_type_id}")))
+}
+
+async fn allowed_parent_type_ids(pool: &sqlx::PgPool, node_type_id: Uuid) -> ApiResult<Vec<Uuid>> {
+    Ok(sqlx::query_scalar(
+        r#"
+        SELECT parent_node_type_id
+        FROM node_type_relationships
+        WHERE child_node_type_id = $1
+        ORDER BY parent_node_type_id
+        "#,
+    )
+    .bind(node_type_id)
+    .fetch_all(pool)
+    .await?)
+}
+
+fn derive_node_type_label(node_type_name: &str) -> String {
+    node_type_name.to_string()
+}
+
+fn derive_node_type_plural_label(node_type_name: &str, provided: Option<String>) -> String {
+    if let Some(label) = provided
+        && !label.trim().is_empty()
+    {
+        return label;
+    }
+    infer_plural_node_type_label(node_type_name)
+}
+
+fn infer_plural_node_type_label(name: &str) -> String {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return "Organizations".to_string();
+    }
+    if trimmed.ends_with('s') {
+        return format!("{trimmed}es");
+    }
+    if trimmed.ends_with('y') {
+        if trimmed.len() >= 2 {
+            let chars: Vec<char> = trimmed.chars().collect();
+            let stem: String = chars[..chars.len() - 1].iter().collect();
+            return format!("{stem}ies");
+        }
+    }
+    if trimmed.ends_with("fe") {
+        let stem = &trimmed[..trimmed.len() - 2];
+        return format!("{stem}ves");
+    }
+    if trimmed.ends_with("f") {
+        let stem = &trimmed[..trimmed.len() - 1];
+        return format!("{stem}ves");
+    }
+    format!("{trimmed}s")
+}
+
+fn normalize_uuid_items(mut value: Vec<Uuid>) -> Vec<Uuid> {
+    value.sort_unstable();
+    value.dedup();
+    value
+}
+
 async fn require_node_metadata_key_available(
     pool: &sqlx::PgPool,
     node_type_id: Uuid,
@@ -1325,6 +1568,196 @@ async fn node_count_for_type(pool: &sqlx::PgPool, node_type_id: Uuid) -> ApiResu
             .fetch_one(pool)
             .await?,
     )
+}
+
+async fn current_node_type_relationship_selection(
+    pool: &sqlx::PgPool,
+    node_type_id: Uuid,
+) -> ApiResult<NodeTypeRelationshipSelection> {
+    let parent_node_type_ids = sqlx::query_scalar(
+        r#"
+        SELECT parent_node_type_id
+        FROM node_type_relationships
+        WHERE child_node_type_id = $1
+        ORDER BY parent_node_type_id
+        "#,
+    )
+    .bind(node_type_id)
+    .fetch_all(pool)
+    .await?;
+
+    let child_node_type_ids = sqlx::query_scalar(
+        r#"
+        SELECT child_node_type_id
+        FROM node_type_relationships
+        WHERE parent_node_type_id = $1
+        ORDER BY child_node_type_id
+        "#,
+    )
+    .bind(node_type_id)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(NodeTypeRelationshipSelection {
+        parent_node_type_ids,
+        child_node_type_ids,
+    })
+}
+
+async fn resolve_node_type_relationship_selection(
+    pool: &sqlx::PgPool,
+    node_type_id: Uuid,
+    parent_node_type_ids: Option<&[Uuid]>,
+    child_node_type_ids: Option<&[Uuid]>,
+) -> ApiResult<NodeTypeRelationshipSelection> {
+    let current_selection = current_node_type_relationship_selection(pool, node_type_id).await?;
+
+    Ok(NodeTypeRelationshipSelection {
+        parent_node_type_ids: parent_node_type_ids
+            .map(|value| normalize_uuid_items(value.to_vec()))
+            .unwrap_or(current_selection.parent_node_type_ids),
+        child_node_type_ids: child_node_type_ids
+            .map(|value| normalize_uuid_items(value.to_vec()))
+            .unwrap_or(current_selection.child_node_type_ids),
+    })
+}
+
+fn planned_relationships_for_node(
+    node_type_id: Uuid,
+    selection: &NodeTypeRelationshipSelection,
+) -> Vec<(Uuid, Uuid)> {
+    let mut planned_relationships = selection
+        .parent_node_type_ids
+        .iter()
+        .map(|parent_node_type_id| (*parent_node_type_id, node_type_id))
+        .collect::<Vec<_>>();
+    planned_relationships.extend(
+        selection
+            .child_node_type_ids
+            .iter()
+            .map(|child_node_type_id| (node_type_id, *child_node_type_id)),
+    );
+    planned_relationships
+}
+
+async fn validate_node_type_relationship_selection(
+    pool: &sqlx::PgPool,
+    node_type_id: Uuid,
+    selection: &NodeTypeRelationshipSelection,
+) -> ApiResult<()> {
+    for parent_node_type_id in &selection.parent_node_type_ids {
+        if *parent_node_type_id == node_type_id {
+            return Err(ApiError::BadRequest(
+                "node type cannot be its own parent".into(),
+            ));
+        }
+        require_node_type_exists(pool, *parent_node_type_id).await?;
+    }
+
+    for child_node_type_id in &selection.child_node_type_ids {
+        if *child_node_type_id == node_type_id {
+            return Err(ApiError::BadRequest(
+                "node type cannot be its own child".into(),
+            ));
+        }
+        require_node_type_exists(pool, *child_node_type_id).await?;
+    }
+
+    if selection
+        .parent_node_type_ids
+        .iter()
+        .any(|parent_node_type_id| selection.child_node_type_ids.contains(parent_node_type_id))
+    {
+        return Err(ApiError::BadRequest(
+            "node type cannot be both a parent and child of the same node type".into(),
+        ));
+    }
+
+    let existing_relationships = sqlx::query_as::<_, (Uuid, Uuid)>(
+        "SELECT parent_node_type_id, child_node_type_id FROM node_type_relationships",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut planned_relationships = existing_relationships
+        .into_iter()
+        .filter(|(parent_node_type_id, child_node_type_id)| {
+            *parent_node_type_id != node_type_id && *child_node_type_id != node_type_id
+        })
+        .collect::<Vec<_>>();
+
+    for (parent_node_type_id, child_node_type_id) in
+        planned_relationships_for_node(node_type_id, selection)
+    {
+        validate_node_type_relationship(
+            parent_node_type_id,
+            child_node_type_id,
+            &planned_relationships,
+        )
+        .map_err(|error| ApiError::BadRequest(error.to_string()))?;
+        planned_relationships.push((parent_node_type_id, child_node_type_id));
+    }
+
+    Ok(())
+}
+
+async fn assert_removed_relationships_unused(
+    pool: &sqlx::PgPool,
+    node_type_id: Uuid,
+    selection: &NodeTypeRelationshipSelection,
+) -> ApiResult<()> {
+    let current_selection = current_node_type_relationship_selection(pool, node_type_id).await?;
+
+    for parent_node_type_id in current_selection.parent_node_type_ids {
+        if !selection
+            .parent_node_type_ids
+            .contains(&parent_node_type_id)
+        {
+            assert_relationship_unused(pool, parent_node_type_id, node_type_id).await?;
+        }
+    }
+
+    for child_node_type_id in current_selection.child_node_type_ids {
+        if !selection.child_node_type_ids.contains(&child_node_type_id) {
+            assert_relationship_unused(pool, node_type_id, child_node_type_id).await?;
+        }
+    }
+
+    Ok(())
+}
+
+async fn sync_node_type_relationships(
+    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    node_type_id: Uuid,
+    selection: &NodeTypeRelationshipSelection,
+) -> ApiResult<()> {
+    sqlx::query(
+        r#"
+        DELETE FROM node_type_relationships
+        WHERE parent_node_type_id = $1 OR child_node_type_id = $1
+        "#,
+    )
+    .bind(node_type_id)
+    .execute(&mut **transaction)
+    .await?;
+
+    for (parent_node_type_id, child_node_type_id) in
+        planned_relationships_for_node(node_type_id, selection)
+    {
+        sqlx::query(
+            r#"
+            INSERT INTO node_type_relationships (parent_node_type_id, child_node_type_id)
+            VALUES ($1, $2)
+            ON CONFLICT DO NOTHING
+            "#,
+        )
+        .bind(parent_node_type_id)
+        .bind(child_node_type_id)
+        .execute(&mut **transaction)
+        .await?;
+    }
+
+    Ok(())
 }
 
 async fn assert_relationship_is_acyclic(

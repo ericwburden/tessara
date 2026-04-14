@@ -34,7 +34,7 @@ pub struct CreateDatasetRequest {
 pub struct CreateDatasetSourceRequest {
     source_alias: String,
     form_id: Option<Uuid>,
-    compatibility_group_id: Option<Uuid>,
+    form_version_major: Option<i32>,
     selection_rule: String,
 }
 
@@ -76,8 +76,7 @@ pub struct DatasetSourceDefinition {
     source_alias: String,
     form_id: Option<Uuid>,
     form_name: Option<String>,
-    compatibility_group_id: Option<Uuid>,
-    compatibility_group_name: Option<String>,
+    form_version_major: Option<i32>,
     selection_rule: String,
     position: i32,
 }
@@ -116,7 +115,7 @@ pub struct DatasetTableRow {
 struct ValidatedDatasetSource {
     source_alias: String,
     form_id: Option<Uuid>,
-    compatibility_group_id: Option<Uuid>,
+    form_version_major: Option<i32>,
     selection_rule: DatasetSelectionRule,
     position: i32,
 }
@@ -316,14 +315,11 @@ pub async fn get_dataset(
             dataset_sources.source_alias,
             dataset_sources.form_id,
             forms.name AS form_name,
-            dataset_sources.compatibility_group_id,
-            compatibility_groups.name AS compatibility_group_name,
+            dataset_sources.form_version_major,
             dataset_sources.selection_rule,
             dataset_sources.position
         FROM dataset_sources
         LEFT JOIN forms ON forms.id = dataset_sources.form_id
-        LEFT JOIN compatibility_groups
-            ON compatibility_groups.id = dataset_sources.compatibility_group_id
         WHERE dataset_sources.dataset_id = $1
         ORDER BY dataset_sources.position, dataset_sources.source_alias
         "#,
@@ -370,8 +366,7 @@ pub async fn get_dataset(
                     source_alias: row.try_get("source_alias")?,
                     form_id: row.try_get("form_id")?,
                     form_name: row.try_get("form_name")?,
-                    compatibility_group_id: row.try_get("compatibility_group_id")?,
-                    compatibility_group_name: row.try_get("compatibility_group_name")?,
+                    form_version_major: row.try_get("form_version_major")?,
                     selection_rule: row.try_get("selection_rule")?,
                     position: row.try_get("position")?,
                 })
@@ -427,33 +422,35 @@ async fn validate_dataset_sources(
         require_text("dataset source alias", &source.source_alias)?;
         let selection_rule = DatasetSelectionRule::parse(&source.selection_rule)
             .map_err(|error| ApiError::BadRequest(error.to_string()))?;
-        match (source.form_id, source.compatibility_group_id) {
-            (Some(form_id), None) => {
-                require_form_exists(pool, form_id).await?;
-                validated.push(ValidatedDatasetSource {
-                    source_alias: source.source_alias,
-                    form_id: Some(form_id),
-                    compatibility_group_id: None,
-                    selection_rule,
-                    position: position as i32,
-                });
-            }
-            (None, Some(compatibility_group_id)) => {
-                require_compatibility_group_exists(pool, compatibility_group_id).await?;
-                validated.push(ValidatedDatasetSource {
-                    source_alias: source.source_alias,
-                    form_id: None,
-                    compatibility_group_id: Some(compatibility_group_id),
-                    selection_rule,
-                    position: position as i32,
-                });
-            }
-            _ => {
+        if let Some(form_version_major) = source.form_version_major {
+            if form_version_major < 1 {
                 return Err(ApiError::BadRequest(
-                    "dataset source must reference exactly one form or compatibility group".into(),
+                    "dataset source major version must be 1 or greater".into(),
+                ));
+            }
+            if source.form_id.is_none() {
+                return Err(ApiError::BadRequest(
+                    "dataset source major version requires a form source".into(),
                 ));
             }
         }
+        let Some(form_id) = source.form_id else {
+            return Err(ApiError::BadRequest(
+                "dataset source must reference a form".into(),
+            ));
+        };
+        require_form_exists(pool, form_id).await?;
+        let form_version_major = match source.form_version_major {
+            Some(form_version_major) => Some(form_version_major),
+            None => load_latest_published_form_major(pool, form_id).await?,
+        };
+        validated.push(ValidatedDatasetSource {
+            source_alias: source.source_alias,
+            form_id: Some(form_id),
+            form_version_major,
+            selection_rule,
+            position: position as i32,
+        });
     }
 
     Ok(validated)
@@ -506,14 +503,14 @@ async fn insert_dataset_sources(
         sqlx::query(
             r#"
             INSERT INTO dataset_sources
-                (dataset_id, source_alias, form_id, compatibility_group_id, selection_rule, position)
-            VALUES ($1, $2, $3, $4, $5, $6)
+                (dataset_id, source_alias, form_id, form_version_major, compatibility_group_id, selection_rule, position)
+            VALUES ($1, $2, $3, $4, NULL, $5, $6)
             "#,
         )
         .bind(dataset_id)
         .bind(&source.source_alias)
         .bind(source.form_id)
-        .bind(source.compatibility_group_id)
+        .bind(source.form_version_major)
         .bind(source.selection_rule.as_str())
         .bind(source.position)
         .execute(&mut **tx)
@@ -556,35 +553,45 @@ async fn require_source_field_exists(
     source_field_key: &str,
 ) -> ApiResult<String> {
     let row = if let Some(form_id) = source.form_id {
-        sqlx::query(
-            r#"
-            SELECT form_fields.field_type::text AS field_type
-            FROM form_fields
-            JOIN form_versions ON form_versions.id = form_fields.form_version_id
-            WHERE form_versions.form_id = $1 AND form_fields.key = $2
-            ORDER BY form_versions.created_at DESC, form_fields.position
-            LIMIT 1
-            "#,
-        )
-        .bind(form_id)
-        .bind(source_field_key)
-        .fetch_optional(pool)
-        .await?
-    } else if let Some(compatibility_group_id) = source.compatibility_group_id {
-        sqlx::query(
-            r#"
-            SELECT form_fields.field_type::text AS field_type
-            FROM form_fields
-            JOIN form_versions ON form_versions.id = form_fields.form_version_id
-            WHERE form_versions.compatibility_group_id = $1 AND form_fields.key = $2
-            ORDER BY form_versions.created_at DESC, form_fields.position
-            LIMIT 1
-            "#,
-        )
-        .bind(compatibility_group_id)
-        .bind(source_field_key)
-        .fetch_optional(pool)
-        .await?
+        if let Some(form_version_major) = source.form_version_major {
+            sqlx::query(
+                r#"
+                SELECT form_fields.field_type::text AS field_type
+                FROM form_fields
+                JOIN form_versions ON form_versions.id = form_fields.form_version_id
+                WHERE form_versions.form_id = $1
+                  AND form_versions.version_major = $2
+                  AND form_versions.status = 'published'::form_version_status
+                  AND form_fields.key = $3
+                ORDER BY
+                    form_versions.version_minor DESC NULLS LAST,
+                    form_versions.version_patch DESC NULLS LAST,
+                    form_versions.published_at DESC NULLS LAST,
+                    form_fields.position
+                LIMIT 1
+                "#,
+            )
+            .bind(form_id)
+            .bind(form_version_major)
+            .bind(source_field_key)
+            .fetch_optional(pool)
+            .await?
+        } else {
+            sqlx::query(
+                r#"
+                SELECT form_fields.field_type::text AS field_type
+                FROM form_fields
+                JOIN form_versions ON form_versions.id = form_fields.form_version_id
+                WHERE form_versions.form_id = $1 AND form_fields.key = $2
+                ORDER BY form_versions.created_at DESC, form_fields.position
+                LIMIT 1
+                "#,
+            )
+            .bind(form_id)
+            .bind(source_field_key)
+            .fetch_optional(pool)
+            .await?
+        }
     } else {
         None
     };
@@ -636,21 +643,30 @@ async fn run_union_dataset_table(
                         submission_fact.submission_id
                 ) AS selection_rank
             FROM dataset_sources
-            JOIN analytics.form_version_dim
-                ON (
-                    dataset_sources.form_id IS NOT NULL
-                    AND form_version_dim.form_id = dataset_sources.form_id
-                )
-                OR (
-                    dataset_sources.compatibility_group_id IS NOT NULL
-                    AND form_version_dim.compatibility_group_id = dataset_sources.compatibility_group_id
-                )
             JOIN analytics.submission_fact
-                ON submission_fact.form_version_id = form_version_dim.form_version_id
+                ON submission_fact.status = 'submitted'
+            JOIN form_versions
+                ON form_versions.id = submission_fact.form_version_id
             JOIN analytics.node_dim
                 ON node_dim.node_id = submission_fact.node_id
             WHERE dataset_sources.dataset_id = $1
-              AND submission_fact.status = 'submitted'
+              AND (
+                    (
+                        dataset_sources.form_id IS NOT NULL
+                        AND dataset_sources.form_version_major IS NULL
+                        AND form_versions.form_id = dataset_sources.form_id
+                    )
+                    OR (
+                        dataset_sources.form_id IS NOT NULL
+                        AND dataset_sources.form_version_major IS NOT NULL
+                        AND form_versions.form_id = dataset_sources.form_id
+                        AND form_versions.version_major = dataset_sources.form_version_major
+                    )
+                    OR (
+                        dataset_sources.compatibility_group_id IS NOT NULL
+                        AND form_versions.compatibility_group_id = dataset_sources.compatibility_group_id
+                    )
+              )
         )
         SELECT
             ranked_submissions.submission_id::text AS submission_id,
@@ -723,21 +739,30 @@ async fn run_join_dataset_table(
                         submission_fact.submission_id
                 ) AS selection_rank
             FROM dataset_sources
-            JOIN analytics.form_version_dim
-                ON (
-                    dataset_sources.form_id IS NOT NULL
-                    AND form_version_dim.form_id = dataset_sources.form_id
-                )
-                OR (
-                    dataset_sources.compatibility_group_id IS NOT NULL
-                    AND form_version_dim.compatibility_group_id = dataset_sources.compatibility_group_id
-                )
             JOIN analytics.submission_fact
-                ON submission_fact.form_version_id = form_version_dim.form_version_id
+                ON submission_fact.status = 'submitted'
+            JOIN form_versions
+                ON form_versions.id = submission_fact.form_version_id
             JOIN analytics.node_dim
                 ON node_dim.node_id = submission_fact.node_id
             WHERE dataset_sources.dataset_id = $1
-              AND submission_fact.status = 'submitted'
+              AND (
+                    (
+                        dataset_sources.form_id IS NOT NULL
+                        AND dataset_sources.form_version_major IS NULL
+                        AND form_versions.form_id = dataset_sources.form_id
+                    )
+                    OR (
+                        dataset_sources.form_id IS NOT NULL
+                        AND dataset_sources.form_version_major IS NOT NULL
+                        AND form_versions.form_id = dataset_sources.form_id
+                        AND form_versions.version_major = dataset_sources.form_version_major
+                    )
+                    OR (
+                        dataset_sources.compatibility_group_id IS NOT NULL
+                        AND form_versions.compatibility_group_id = dataset_sources.compatibility_group_id
+                    )
+              )
         ),
         selected_submissions AS (
             SELECT *
@@ -826,7 +851,7 @@ pub(crate) async fn require_executable_submission_dataset(
 
     let source_rows = sqlx::query(
         r#"
-        SELECT source_alias, form_id, compatibility_group_id, selection_rule
+        SELECT source_alias, form_id, form_version_major, compatibility_group_id, selection_rule
         FROM dataset_sources
         WHERE dataset_id = $1
         ORDER BY position, source_alias
@@ -847,12 +872,18 @@ pub(crate) async fn require_executable_submission_dataset(
     for source in source_rows {
         source_count += 1;
         let form_id: Option<Uuid> = source.try_get("form_id")?;
+        let form_version_major: Option<i32> = source.try_get("form_version_major")?;
         let compatibility_group_id: Option<Uuid> = source.try_get("compatibility_group_id")?;
         let selection_rule: String = source.try_get("selection_rule")?;
         if form_id.is_none() && compatibility_group_id.is_none() {
             return Err(ApiError::BadRequest(
                 "dataset table execution currently requires form or compatibility-group sources"
                     .into(),
+            ));
+        }
+        if form_version_major.is_some() && form_id.is_none() {
+            return Err(ApiError::BadRequest(
+                "dataset table execution requires major-version sources to reference a form".into(),
             ));
         }
         if composition_mode == DatasetCompositionMode::Join && selection_rule == "all" {
@@ -952,21 +983,28 @@ async fn require_form_exists(pool: &sqlx::PgPool, form_id: Uuid) -> ApiResult<()
     }
 }
 
-async fn require_compatibility_group_exists(
+async fn load_latest_published_form_major(
     pool: &sqlx::PgPool,
-    compatibility_group_id: Uuid,
-) -> ApiResult<()> {
-    let exists: bool =
-        sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM compatibility_groups WHERE id = $1)")
-            .bind(compatibility_group_id)
-            .fetch_one(pool)
-            .await?;
-
-    if exists {
-        Ok(())
-    } else {
-        Err(ApiError::NotFound(format!(
-            "compatibility group {compatibility_group_id}"
-        )))
-    }
+    form_id: Uuid,
+) -> ApiResult<Option<i32>> {
+    sqlx::query_scalar(
+        r#"
+        SELECT version_major
+        FROM form_versions
+        WHERE form_id = $1
+          AND status = 'published'::form_version_status
+          AND version_major IS NOT NULL
+        ORDER BY
+            version_major DESC,
+            version_minor DESC NULLS LAST,
+            version_patch DESC NULLS LAST,
+            published_at DESC NULLS LAST,
+            created_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(form_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(Into::into)
 }

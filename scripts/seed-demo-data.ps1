@@ -14,12 +14,20 @@ if (-not (Test-Path $composeFile)) {
 Push-Location $repoRoot
 try {
     Write-Host "`n==> Seeding UAT demo dataset" -ForegroundColor Cyan
-    $json = docker compose exec -T api tessara-api seed-demo | Out-String
+    $rawOutput = docker compose exec -T api tessara-api seed-demo | Out-String
 
     if ($LASTEXITCODE -ne 0) {
         throw "Demo seed failed with exit code $LASTEXITCODE"
     }
 
+    $jsonStart = $rawOutput.IndexOf("{")
+    $jsonEnd = $rawOutput.LastIndexOf("}")
+
+    if ($jsonStart -lt 0 -or $jsonEnd -lt $jsonStart) {
+        throw "Demo seed did not return a JSON payload. Raw output:`n$rawOutput"
+    }
+
+    $json = $rawOutput.Substring($jsonStart, ($jsonEnd - $jsonStart) + 1)
     $summary = $json | ConvertFrom-Json
 
     Write-Host "Seed version: $($summary.seed_version)" -ForegroundColor Green
@@ -39,7 +47,7 @@ try {
     Write-Host ("Primary submission:     {0}" -f $summary.submission_id)
     Write-Host ("Primary report:         {0}" -f $summary.report_id)
     Write-Host ("Primary dashboard:      {0}" -f $summary.dashboard_id)
-    Write-Host "Demo accounts: admin / operator / parent / respondent / child"
+    Write-Host "Demo accounts: admin / operator / delegator / respondent / delegate"
 } finally {
     Pop-Location
 }

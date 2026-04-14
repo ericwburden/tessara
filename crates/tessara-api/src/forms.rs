@@ -5,6 +5,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use sqlx::{Postgres, Row, Transaction};
+use std::collections::BTreeMap;
 use tessara_forms::{
     ensure_form_version_editable, ensure_form_version_publishable,
     ensure_section_belongs_to_form_version,
@@ -32,11 +33,9 @@ pub struct UpdateFormRequest {
     scope_node_type_id: Option<Uuid>,
 }
 
-#[derive(Deserialize)]
-pub struct CreateFormVersionRequest {
-    version_label: String,
-    compatibility_group_name: Option<String>,
-}
+#[derive(Deserialize, Default)]
+#[serde(default, deny_unknown_fields)]
+pub struct CreateFormVersionRequest {}
 
 #[derive(Deserialize)]
 pub struct CreateFormSectionRequest {
@@ -75,7 +74,7 @@ pub struct RenderedForm {
     form_version_id: Uuid,
     form_id: Uuid,
     form_name: String,
-    version_label: String,
+    version_label: Option<String>,
     status: String,
     sections: Vec<RenderedSection>,
 }
@@ -123,12 +122,45 @@ pub struct FormDefinition {
 #[derive(Serialize)]
 pub struct FormVersionSummary {
     id: Uuid,
-    version_label: String,
+    version_label: Option<String>,
     status: String,
+    version_major: Option<i32>,
+    version_minor: Option<i32>,
+    version_patch: Option<i32>,
     compatibility_group_id: Option<Uuid>,
     compatibility_group_name: Option<String>,
     published_at: Option<chrono::DateTime<chrono::Utc>>,
     field_count: i64,
+    semantic_bump: Option<String>,
+    started_new_major_line: Option<bool>,
+    publish_preview: Option<FormPublishPreview>,
+}
+
+#[derive(Serialize)]
+pub struct FormPublishPreview {
+    version_label: String,
+    version_major: i32,
+    version_minor: i32,
+    version_patch: i32,
+    semantic_bump: String,
+    compatibility_label: String,
+    starts_new_major_line: bool,
+    dependency_warnings: Vec<String>,
+}
+
+#[derive(Serialize)]
+pub struct PublishFormVersionResponse {
+    id: Uuid,
+    version_label: String,
+    version_major: i32,
+    version_minor: i32,
+    version_patch: i32,
+    semantic_bump: String,
+    compatibility_label: String,
+    status: String,
+    published_at: chrono::DateTime<chrono::Utc>,
+    dependency_warnings: Vec<String>,
+    starts_new_major_line: bool,
 }
 
 #[derive(Serialize)]
@@ -240,9 +272,14 @@ pub async fn list_forms(
             form_versions.form_id,
             form_versions.version_label,
             form_versions.status::text AS status,
+            form_versions.version_major,
+            form_versions.version_minor,
+            form_versions.version_patch,
             form_versions.compatibility_group_id,
             compatibility_groups.name AS compatibility_group_name,
             form_versions.published_at,
+            form_versions.semantic_bump,
+            form_versions.started_new_major_line,
             COUNT(form_fields.id) AS field_count
         FROM form_versions
         LEFT JOIN compatibility_groups
@@ -253,9 +290,14 @@ pub async fn list_forms(
             form_versions.form_id,
             form_versions.version_label,
             form_versions.status,
+            form_versions.version_major,
+            form_versions.version_minor,
+            form_versions.version_patch,
             form_versions.compatibility_group_id,
             compatibility_groups.name,
             form_versions.published_at,
+            form_versions.semantic_bump,
+            form_versions.started_new_major_line,
             form_versions.created_at
         ORDER BY form_versions.created_at, form_versions.version_label
         "#,
@@ -274,10 +316,16 @@ pub async fn list_forms(
                     id: version.try_get("id")?,
                     version_label: version.try_get("version_label")?,
                     status: version.try_get("status")?,
+                    version_major: version.try_get("version_major")?,
+                    version_minor: version.try_get("version_minor")?,
+                    version_patch: version.try_get("version_patch")?,
                     compatibility_group_id: version.try_get("compatibility_group_id")?,
                     compatibility_group_name: version.try_get("compatibility_group_name")?,
                     published_at: version.try_get("published_at")?,
                     field_count: version.try_get("field_count")?,
+                    semantic_bump: version.try_get("semantic_bump")?,
+                    started_new_major_line: version.try_get("started_new_major_line")?,
+                    publish_preview: None,
                 });
             }
         }
@@ -434,9 +482,14 @@ pub async fn list_readable_forms(
                 form_versions.form_id,
                 form_versions.version_label,
                 form_versions.status::text AS status,
+                form_versions.version_major,
+                form_versions.version_minor,
+                form_versions.version_patch,
                 form_versions.compatibility_group_id,
                 compatibility_groups.name AS compatibility_group_name,
                 form_versions.published_at,
+                form_versions.semantic_bump,
+                form_versions.started_new_major_line,
                 COUNT(form_fields.id) AS field_count
             FROM form_versions
             LEFT JOIN compatibility_groups
@@ -448,9 +501,14 @@ pub async fn list_readable_forms(
                 form_versions.form_id,
                 form_versions.version_label,
                 form_versions.status,
+                form_versions.version_major,
+                form_versions.version_minor,
+                form_versions.version_patch,
                 form_versions.compatibility_group_id,
                 compatibility_groups.name,
                 form_versions.published_at,
+                form_versions.semantic_bump,
+                form_versions.started_new_major_line,
                 form_versions.created_at
             ORDER BY form_versions.created_at, form_versions.version_label
             "#,
@@ -471,10 +529,16 @@ pub async fn list_readable_forms(
                     id: version.try_get("id")?,
                     version_label: version.try_get("version_label")?,
                     status: version.try_get("status")?,
+                    version_major: version.try_get("version_major")?,
+                    version_minor: version.try_get("version_minor")?,
+                    version_patch: version.try_get("version_patch")?,
                     compatibility_group_id: version.try_get("compatibility_group_id")?,
                     compatibility_group_name: version.try_get("compatibility_group_name")?,
                     published_at: version.try_get("published_at")?,
                     field_count: version.try_get("field_count")?,
+                    semantic_bump: version.try_get("semantic_bump")?,
+                    started_new_major_line: version.try_get("started_new_major_line")?,
+                    publish_preview: None,
                 });
             }
         }
@@ -542,15 +606,20 @@ async fn get_form_definition(pool: &sqlx::PgPool, form_id: Uuid) -> ApiResult<Fo
     .await?
     .ok_or_else(|| ApiError::NotFound(format!("form {form_id}")))?;
 
-    let versions = sqlx::query(
+    let mut versions = sqlx::query(
         r#"
         SELECT
             form_versions.id,
             form_versions.version_label,
             form_versions.status::text AS status,
+            form_versions.version_major,
+            form_versions.version_minor,
+            form_versions.version_patch,
             form_versions.compatibility_group_id,
             compatibility_groups.name AS compatibility_group_name,
             form_versions.published_at,
+            form_versions.semantic_bump,
+            form_versions.started_new_major_line,
             COUNT(form_fields.id) AS field_count
         FROM form_versions
         LEFT JOIN compatibility_groups
@@ -561,9 +630,14 @@ async fn get_form_definition(pool: &sqlx::PgPool, form_id: Uuid) -> ApiResult<Fo
             form_versions.id,
             form_versions.version_label,
             form_versions.status,
+            form_versions.version_major,
+            form_versions.version_minor,
+            form_versions.version_patch,
             form_versions.compatibility_group_id,
             compatibility_groups.name,
             form_versions.published_at,
+            form_versions.semantic_bump,
+            form_versions.started_new_major_line,
             form_versions.created_at
         ORDER BY form_versions.created_at, form_versions.version_label
         "#,
@@ -577,13 +651,26 @@ async fn get_form_definition(pool: &sqlx::PgPool, form_id: Uuid) -> ApiResult<Fo
             id: row.try_get("id")?,
             version_label: row.try_get("version_label")?,
             status: row.try_get("status")?,
+            version_major: row.try_get("version_major")?,
+            version_minor: row.try_get("version_minor")?,
+            version_patch: row.try_get("version_patch")?,
             compatibility_group_id: row.try_get("compatibility_group_id")?,
             compatibility_group_name: row.try_get("compatibility_group_name")?,
             published_at: row.try_get("published_at")?,
             field_count: row.try_get("field_count")?,
+            semantic_bump: row.try_get("semantic_bump")?,
+            started_new_major_line: row.try_get("started_new_major_line")?,
+            publish_preview: None,
         })
     })
     .collect::<Result<Vec<_>, sqlx::Error>>()?;
+
+    for version in &mut versions {
+        if version.status == "draft" {
+            version.publish_preview =
+                Some(build_form_publish_preview(pool, form_id, version.id).await?);
+        }
+    }
 
     let reports = sqlx::query("SELECT id, name FROM reports WHERE form_id = $1 ORDER BY name, id")
         .bind(form_id)
@@ -641,41 +728,19 @@ pub async fn create_form_version(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(form_id): Path<Uuid>,
-    Json(payload): Json<CreateFormVersionRequest>,
+    Json(_payload): Json<CreateFormVersionRequest>,
 ) -> ApiResult<Json<IdResponse>> {
     auth::require_capability(&state.pool, &headers, "forms:write").await?;
     require_form_exists(&state.pool, form_id).await?;
-    require_text("version label", &payload.version_label)?;
-    require_form_version_label_available(&state.pool, form_id, &payload.version_label).await?;
-
-    let group_name = payload
-        .compatibility_group_name
-        .unwrap_or_else(|| "Default compatibility".into());
-    require_text("compatibility group name", &group_name)?;
-    let compatibility_group_id: Uuid = sqlx::query_scalar(
-        r#"
-        INSERT INTO compatibility_groups (form_id, name)
-        VALUES ($1, $2)
-        ON CONFLICT (form_id, name)
-        DO UPDATE SET name = EXCLUDED.name
-        RETURNING id
-        "#,
-    )
-    .bind(form_id)
-    .bind(group_name)
-    .fetch_one(&state.pool)
-    .await?;
 
     let id = sqlx::query_scalar(
         r#"
-        INSERT INTO form_versions (form_id, compatibility_group_id, version_label)
-        VALUES ($1, $2, $3)
+        INSERT INTO form_versions (form_id)
+        VALUES ($1)
         RETURNING id
         "#,
     )
     .bind(form_id)
-    .bind(compatibility_group_id)
-    .bind(payload.version_label)
     .fetch_one(&state.pool)
     .await?;
 
@@ -738,28 +803,6 @@ async fn require_form_slug_available_for_form(
     if exists {
         Err(ApiError::BadRequest(format!(
             "form slug '{slug}' is already in use"
-        )))
-    } else {
-        Ok(())
-    }
-}
-
-async fn require_form_version_label_available(
-    pool: &sqlx::PgPool,
-    form_id: Uuid,
-    version_label: &str,
-) -> ApiResult<()> {
-    let exists: bool = sqlx::query_scalar(
-        "SELECT EXISTS (SELECT 1 FROM form_versions WHERE form_id = $1 AND version_label = $2)",
-    )
-    .bind(form_id)
-    .bind(version_label)
-    .fetch_one(pool)
-    .await?;
-
-    if exists {
-        Err(ApiError::BadRequest(format!(
-            "form version label '{version_label}' is already in use for form {form_id}"
         )))
     } else {
         Ok(())
@@ -935,43 +978,77 @@ pub async fn publish_form_version(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(form_version_id): Path<Uuid>,
-) -> ApiResult<Json<IdResponse>> {
+) -> ApiResult<Json<PublishFormVersionResponse>> {
     auth::require_capability(&state.pool, &headers, "forms:write").await?;
 
+    let preview = build_publish_computation(&state.pool, form_version_id).await?;
     let mut tx = state.pool.begin().await?;
     let version = require_publishable_form_version(&mut tx, form_version_id).await?;
+    let current_latest_published =
+        load_latest_published_version_tx(&mut tx, version.form_id).await?;
+    let current_latest_published_id = current_latest_published.as_ref().map(|item| item.id);
+    if current_latest_published_id != preview.latest_published_version_id {
+        return Err(ApiError::BadRequest(
+            "form publish state changed; reload the form and try publishing again".into(),
+        ));
+    }
 
     sqlx::query(
         r#"
         UPDATE form_versions
         SET status = 'superseded'::form_version_status
         WHERE form_id = $1
-            AND compatibility_group_id IS NOT DISTINCT FROM $2
+            AND version_major = $2
             AND id != $3
             AND status = 'published'::form_version_status
         "#,
     )
     .bind(version.form_id)
-    .bind(version.compatibility_group_id)
+    .bind(preview.version_major)
     .bind(form_version_id)
     .execute(&mut *tx)
     .await?;
 
-    sqlx::query(
+    let published_at: chrono::DateTime<chrono::Utc> = sqlx::query_scalar(
         r#"
         UPDATE form_versions
-        SET status = 'published'::form_version_status, published_at = now()
+        SET
+            version_label = $2,
+            version_major = $3,
+            version_minor = $4,
+            version_patch = $5,
+            semantic_bump = $6,
+            started_new_major_line = $7,
+            status = 'published'::form_version_status,
+            published_at = now()
         WHERE id = $1 AND status = 'draft'::form_version_status
+        RETURNING published_at
         "#,
     )
     .bind(form_version_id)
-    .execute(&mut *tx)
+    .bind(&preview.version_label)
+    .bind(preview.version_major)
+    .bind(preview.version_minor)
+    .bind(preview.version_patch)
+    .bind(preview.semantic_bump.as_str())
+    .bind(preview.starts_new_major_line)
+    .fetch_one(&mut *tx)
     .await?;
 
     tx.commit().await?;
 
-    Ok(Json(IdResponse {
+    Ok(Json(PublishFormVersionResponse {
         id: form_version_id,
+        version_label: preview.version_label,
+        version_major: preview.version_major,
+        version_minor: preview.version_minor,
+        version_patch: preview.version_patch,
+        semantic_bump: preview.semantic_bump.as_str().into(),
+        compatibility_label: preview.compatibility_label,
+        status: "published".into(),
+        published_at,
+        dependency_warnings: preview.dependency_warnings,
+        starts_new_major_line: preview.starts_new_major_line,
     }))
 }
 
@@ -1143,7 +1220,6 @@ async fn require_form_field_key_available(
 
 struct PublishableFormVersion {
     form_id: Uuid,
-    compatibility_group_id: Option<Uuid>,
 }
 
 async fn require_publishable_form_version(
@@ -1152,7 +1228,7 @@ async fn require_publishable_form_version(
 ) -> ApiResult<PublishableFormVersion> {
     let version = sqlx::query(
         r#"
-        SELECT form_id, compatibility_group_id, status::text AS status
+        SELECT form_id, status::text AS status
         FROM form_versions
         WHERE id = $1
         FOR UPDATE
@@ -1180,6 +1256,433 @@ async fn require_publishable_form_version(
 
     Ok(PublishableFormVersion {
         form_id: version.try_get("form_id")?,
-        compatibility_group_id: version.try_get("compatibility_group_id")?,
     })
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum SemanticBump {
+    Initial,
+    Patch,
+    Minor,
+    Major,
+}
+
+impl SemanticBump {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Initial => "INITIAL",
+            Self::Patch => "PATCH",
+            Self::Minor => "MINOR",
+            Self::Major => "MAJOR",
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct SemanticVersion {
+    major: i32,
+    minor: i32,
+    patch: i32,
+}
+
+impl SemanticVersion {
+    fn parse(version_label: &str) -> Option<Self> {
+        let mut parts = version_label.split('.');
+        let major = parts.next()?.parse().ok()?;
+        let minor = parts.next()?.parse().ok()?;
+        let patch = parts.next()?.parse().ok()?;
+        if parts.next().is_some() {
+            return None;
+        }
+        Some(Self {
+            major,
+            minor,
+            patch,
+        })
+    }
+
+    fn increment(self, bump: SemanticBump) -> Self {
+        match bump {
+            SemanticBump::Initial => Self {
+                major: 1,
+                minor: 0,
+                patch: 0,
+            },
+            SemanticBump::Patch => Self {
+                major: self.major,
+                minor: self.minor,
+                patch: self.patch + 1,
+            },
+            SemanticBump::Minor => Self {
+                major: self.major,
+                minor: self.minor + 1,
+                patch: 0,
+            },
+            SemanticBump::Major => Self {
+                major: self.major + 1,
+                minor: 0,
+                patch: 0,
+            },
+        }
+    }
+
+    fn label(self) -> String {
+        format!("{}.{}.{}", self.major, self.minor, self.patch)
+    }
+}
+
+struct ComparableFormField {
+    key: String,
+    label: String,
+    field_type: String,
+    required: bool,
+    section_title: String,
+    section_position: i32,
+    field_position: i32,
+}
+
+struct FormVersionContract {
+    section_signature: Vec<String>,
+    fields_by_key: BTreeMap<String, ComparableFormField>,
+}
+
+struct LatestPublishedVersion {
+    id: Uuid,
+    version_label: Option<String>,
+    version_major: Option<i32>,
+    version_minor: Option<i32>,
+    version_patch: Option<i32>,
+}
+
+struct PublishComputation {
+    latest_published_version_id: Option<Uuid>,
+    version_label: String,
+    version_major: i32,
+    version_minor: i32,
+    version_patch: i32,
+    semantic_bump: SemanticBump,
+    compatibility_label: String,
+    starts_new_major_line: bool,
+    dependency_warnings: Vec<String>,
+}
+
+async fn build_form_publish_preview(
+    pool: &sqlx::PgPool,
+    form_id: Uuid,
+    form_version_id: Uuid,
+) -> ApiResult<FormPublishPreview> {
+    let preview = build_publish_computation_for_form(pool, form_id, form_version_id).await?;
+    Ok(FormPublishPreview {
+        version_label: preview.version_label,
+        version_major: preview.version_major,
+        version_minor: preview.version_minor,
+        version_patch: preview.version_patch,
+        semantic_bump: preview.semantic_bump.as_str().into(),
+        compatibility_label: preview.compatibility_label,
+        starts_new_major_line: preview.starts_new_major_line,
+        dependency_warnings: preview.dependency_warnings,
+    })
+}
+
+async fn build_publish_computation(
+    pool: &sqlx::PgPool,
+    form_version_id: Uuid,
+) -> ApiResult<PublishComputation> {
+    let form_id: Uuid = sqlx::query_scalar("SELECT form_id FROM form_versions WHERE id = $1")
+        .bind(form_version_id)
+        .fetch_optional(pool)
+        .await?
+        .ok_or_else(|| ApiError::NotFound(format!("form version {form_version_id}")))?;
+    build_publish_computation_for_form(pool, form_id, form_version_id).await
+}
+
+async fn build_publish_computation_for_form(
+    pool: &sqlx::PgPool,
+    form_id: Uuid,
+    form_version_id: Uuid,
+) -> ApiResult<PublishComputation> {
+    let latest_published = load_latest_published_version(pool, form_id).await?;
+    let Some(latest_published) = latest_published else {
+        return Ok(PublishComputation {
+            latest_published_version_id: None,
+            version_label: "1.0.0".into(),
+            version_major: 1,
+            version_minor: 0,
+            version_patch: 0,
+            semantic_bump: SemanticBump::Initial,
+            compatibility_label: compatibility_label_for_major(1),
+            starts_new_major_line: true,
+            dependency_warnings: Vec::new(),
+        });
+    };
+
+    let current_version = current_semantic_version(&latest_published).unwrap_or(SemanticVersion {
+        major: 1,
+        minor: 0,
+        patch: 0,
+    });
+    let published_contract = load_form_version_contract(pool, latest_published.id).await?;
+    let draft_contract = load_form_version_contract(pool, form_version_id).await?;
+    let semantic_bump = classify_contract_change(&published_contract, &draft_contract);
+    let next_version = current_version.increment(semantic_bump);
+    let starts_new_major_line =
+        matches!(semantic_bump, SemanticBump::Initial | SemanticBump::Major);
+    let dependency_warnings = if starts_new_major_line {
+        load_direct_dependency_warnings(pool, form_id).await?
+    } else {
+        Vec::new()
+    };
+
+    Ok(PublishComputation {
+        latest_published_version_id: Some(latest_published.id),
+        version_label: next_version.label(),
+        version_major: next_version.major,
+        version_minor: next_version.minor,
+        version_patch: next_version.patch,
+        semantic_bump,
+        compatibility_label: compatibility_label_for_major(next_version.major),
+        starts_new_major_line,
+        dependency_warnings,
+    })
+}
+
+fn current_semantic_version(version: &LatestPublishedVersion) -> Option<SemanticVersion> {
+    match (
+        version.version_major,
+        version.version_minor,
+        version.version_patch,
+    ) {
+        (Some(major), Some(minor), Some(patch)) => Some(SemanticVersion {
+            major,
+            minor,
+            patch,
+        }),
+        _ => version
+            .version_label
+            .as_deref()
+            .and_then(SemanticVersion::parse),
+    }
+}
+
+fn classify_contract_change(
+    published: &FormVersionContract,
+    draft: &FormVersionContract,
+) -> SemanticBump {
+    let mut bump = SemanticBump::Patch;
+
+    for (key, published_field) in &published.fields_by_key {
+        let Some(draft_field) = draft.fields_by_key.get(key) else {
+            return SemanticBump::Major;
+        };
+
+        if published_field.field_type != draft_field.field_type {
+            return SemanticBump::Major;
+        }
+        if !published_field.required && draft_field.required {
+            return SemanticBump::Major;
+        }
+        if published_field.required && !draft_field.required {
+            bump = bump.max(SemanticBump::Minor);
+        }
+        if published_field.label != draft_field.label
+            || published_field.section_title != draft_field.section_title
+            || published_field.section_position != draft_field.section_position
+            || published_field.field_position != draft_field.field_position
+        {
+            bump = bump.max(SemanticBump::Patch);
+        }
+    }
+
+    for draft_field in draft.fields_by_key.values() {
+        if !published.fields_by_key.contains_key(&draft_field.key) {
+            if draft_field.required {
+                return SemanticBump::Major;
+            }
+            bump = bump.max(SemanticBump::Minor);
+        }
+    }
+
+    if published.section_signature != draft.section_signature {
+        bump = bump.max(SemanticBump::Patch);
+    }
+
+    bump
+}
+
+fn compatibility_label_for_major(major: i32) -> String {
+    format!("Compatible with v{major}.x")
+}
+
+async fn load_form_version_contract(
+    pool: &sqlx::PgPool,
+    form_version_id: Uuid,
+) -> ApiResult<FormVersionContract> {
+    let sections = sqlx::query(
+        r#"
+        SELECT title, position
+        FROM form_sections
+        WHERE form_version_id = $1
+        ORDER BY position, title
+        "#,
+    )
+    .bind(form_version_id)
+    .fetch_all(pool)
+    .await?;
+    let fields = sqlx::query(
+        r#"
+        SELECT
+            form_fields.key,
+            form_fields.label,
+            form_fields.field_type::text AS field_type,
+            form_fields.required,
+            form_fields.position,
+            form_sections.title AS section_title,
+            form_sections.position AS section_position
+        FROM form_fields
+        JOIN form_sections ON form_sections.id = form_fields.section_id
+        WHERE form_fields.form_version_id = $1
+        ORDER BY form_fields.position, form_fields.key
+        "#,
+    )
+    .bind(form_version_id)
+    .fetch_all(pool)
+    .await?;
+
+    let section_signature = sections
+        .into_iter()
+        .map(|row| {
+            Ok(format!(
+                "{}:{}",
+                row.try_get::<i32, _>("position")?,
+                row.try_get::<String, _>("title")?
+            ))
+        })
+        .collect::<Result<Vec<_>, sqlx::Error>>()?;
+    let mut fields_by_key = BTreeMap::new();
+    for row in fields {
+        let field = ComparableFormField {
+            key: row.try_get("key")?,
+            label: row.try_get("label")?,
+            field_type: row.try_get("field_type")?,
+            required: row.try_get("required")?,
+            section_title: row.try_get("section_title")?,
+            section_position: row.try_get("section_position")?,
+            field_position: row.try_get("position")?,
+        };
+        fields_by_key.insert(field.key.clone(), field);
+    }
+
+    Ok(FormVersionContract {
+        section_signature,
+        fields_by_key,
+    })
+}
+
+async fn load_latest_published_version(
+    pool: &sqlx::PgPool,
+    form_id: Uuid,
+) -> ApiResult<Option<LatestPublishedVersion>> {
+    let row = sqlx::query(
+        r#"
+        SELECT id, version_label, version_major, version_minor, version_patch
+        FROM form_versions
+        WHERE form_id = $1
+          AND status = 'published'::form_version_status
+        ORDER BY published_at DESC NULLS LAST, created_at DESC, id DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(form_id)
+    .fetch_optional(pool)
+    .await?;
+
+    match row {
+        Some(row) => Ok(Some(LatestPublishedVersion {
+            id: row.try_get("id")?,
+            version_label: row.try_get("version_label")?,
+            version_major: row.try_get("version_major")?,
+            version_minor: row.try_get("version_minor")?,
+            version_patch: row.try_get("version_patch")?,
+        })),
+        None => Ok(None),
+    }
+}
+
+async fn load_latest_published_version_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    form_id: Uuid,
+) -> ApiResult<Option<LatestPublishedVersion>> {
+    let row = sqlx::query(
+        r#"
+        SELECT id, version_label, version_major, version_minor, version_patch
+        FROM form_versions
+        WHERE form_id = $1
+          AND status = 'published'::form_version_status
+        ORDER BY published_at DESC NULLS LAST, created_at DESC, id DESC
+        LIMIT 1
+        FOR UPDATE
+        "#,
+    )
+    .bind(form_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+
+    match row {
+        Some(row) => Ok(Some(LatestPublishedVersion {
+            id: row.try_get("id")?,
+            version_label: row.try_get("version_label")?,
+            version_major: row.try_get("version_major")?,
+            version_minor: row.try_get("version_minor")?,
+            version_patch: row.try_get("version_patch")?,
+        })),
+        None => Ok(None),
+    }
+}
+
+async fn load_direct_dependency_warnings(
+    pool: &sqlx::PgPool,
+    form_id: Uuid,
+) -> ApiResult<Vec<String>> {
+    let dataset_rows = sqlx::query(
+        r#"
+        SELECT datasets.name AS dataset_name, dataset_sources.source_alias
+        FROM dataset_sources
+        JOIN datasets ON datasets.id = dataset_sources.dataset_id
+        WHERE dataset_sources.form_id = $1
+          AND dataset_sources.form_version_major IS NULL
+        ORDER BY datasets.name, dataset_sources.source_alias
+        "#,
+    )
+    .bind(form_id)
+    .fetch_all(pool)
+    .await?;
+    let report_rows = sqlx::query(
+        "SELECT name FROM reports WHERE form_id = $1 AND form_version_major IS NULL ORDER BY name, id",
+    )
+        .bind(form_id)
+        .fetch_all(pool)
+        .await?;
+
+    let mut warnings = dataset_rows
+        .into_iter()
+        .map(|row| {
+            Ok(format!(
+                "Dataset source '{} / {}' is bound directly to this form and should be reviewed.",
+                row.try_get::<String, _>("dataset_name")?,
+                row.try_get::<String, _>("source_alias")?
+            ))
+        })
+        .collect::<Result<Vec<_>, sqlx::Error>>()?;
+    warnings.extend(
+        report_rows
+            .into_iter()
+            .map(|row| {
+                Ok(format!(
+                    "Report '{}' is bound directly to this form and should be reviewed.",
+                    row.try_get::<String, _>("name")?
+                ))
+            })
+            .collect::<Result<Vec<_>, sqlx::Error>>()?,
+    );
+    Ok(warnings)
 }

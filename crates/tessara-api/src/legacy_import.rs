@@ -1111,18 +1111,37 @@ async fn ensure_form_version(
     compatibility_group_id: Uuid,
     version_label: &str,
 ) -> ApiResult<Uuid> {
+    let (version_major, version_minor, version_patch) =
+        parse_semantic_version_label(version_label)?;
     Ok(sqlx::query_scalar(
         r#"
-        INSERT INTO form_versions (form_id, compatibility_group_id, version_label)
-        VALUES ($1, $2, $3)
+        INSERT INTO form_versions (
+            form_id,
+            compatibility_group_id,
+            version_label,
+            version_major,
+            version_minor,
+            version_patch,
+            started_new_major_line
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
         ON CONFLICT (form_id, version_label)
-        DO UPDATE SET compatibility_group_id = EXCLUDED.compatibility_group_id
+        DO UPDATE SET
+            compatibility_group_id = EXCLUDED.compatibility_group_id,
+            version_major = EXCLUDED.version_major,
+            version_minor = EXCLUDED.version_minor,
+            version_patch = EXCLUDED.version_patch,
+            started_new_major_line = EXCLUDED.started_new_major_line
         RETURNING id
         "#,
     )
     .bind(form_id)
     .bind(compatibility_group_id)
     .bind(version_label)
+    .bind(version_major)
+    .bind(version_minor)
+    .bind(version_patch)
+    .bind(version_minor == 0 && version_patch == 0)
     .fetch_one(pool)
     .await?)
 }
@@ -1195,7 +1214,7 @@ async fn ensure_form_sections_and_fields(
 async fn publish_form_version(
     pool: &PgPool,
     form_id: Uuid,
-    compatibility_group_id: Uuid,
+    _compatibility_group_id: Uuid,
     form_version_id: Uuid,
 ) -> ApiResult<()> {
     sqlx::query(
@@ -1203,13 +1222,12 @@ async fn publish_form_version(
         UPDATE form_versions
         SET status = 'superseded'::form_version_status
         WHERE form_id = $1
-          AND compatibility_group_id = $2
-          AND id != $3
+          AND version_major = (SELECT version_major FROM form_versions WHERE id = $2)
+          AND id != $2
           AND status = 'published'::form_version_status
         "#,
     )
     .bind(form_id)
-    .bind(compatibility_group_id)
     .bind(form_version_id)
     .execute(pool)
     .await?;
@@ -1319,6 +1337,7 @@ async fn ensure_submission(
 }
 
 async fn ensure_report(pool: &PgPool, form_id: Uuid, report: &LegacyReport) -> ApiResult<Uuid> {
+    let form_version_major = current_form_major(pool, form_id).await?;
     let report_id: Uuid = if let Some(id) =
         sqlx::query_scalar("SELECT id FROM reports WHERE form_id = $1 AND name = $2")
             .bind(form_id)
@@ -1326,11 +1345,19 @@ async fn ensure_report(pool: &PgPool, form_id: Uuid, report: &LegacyReport) -> A
             .fetch_optional(pool)
             .await?
     {
+        sqlx::query("UPDATE reports SET form_version_major = $1 WHERE id = $2")
+            .bind(form_version_major)
+            .bind(id)
+            .execute(pool)
+            .await?;
         id
     } else {
-        sqlx::query_scalar("INSERT INTO reports (name, form_id) VALUES ($1, $2) RETURNING id")
+        sqlx::query_scalar(
+            "INSERT INTO reports (name, form_id, form_version_major) VALUES ($1, $2, $3) RETURNING id",
+        )
             .bind(&report.name)
             .bind(form_id)
+            .bind(form_version_major)
             .fetch_one(pool)
             .await?
     };
@@ -1354,6 +1381,63 @@ async fn ensure_report(pool: &PgPool, form_id: Uuid, report: &LegacyReport) -> A
     .await?;
 
     Ok(report_id)
+}
+
+fn parse_semantic_version_label(version_label: &str) -> ApiResult<(i32, i32, i32)> {
+    if let Some((major, minor, patch)) = parse_strict_semantic_version(version_label) {
+        return Ok((major, minor, patch));
+    }
+    if let Some(major) = parse_legacy_major_version(version_label) {
+        return Ok((major, 0, 0));
+    }
+    Err(ApiError::BadRequest(format!(
+        "invalid semantic version '{version_label}'"
+    )))
+}
+
+fn parse_strict_semantic_version(version_label: &str) -> Option<(i32, i32, i32)> {
+    let mut parts = version_label.split('.');
+    let major = parts.next()?.parse().ok()?;
+    let minor = parts.next()?.parse().ok()?;
+    let patch = parts.next()?.parse().ok()?;
+    if parts.next().is_some() {
+        return None;
+    }
+    Some((major, minor, patch))
+}
+
+fn parse_legacy_major_version(version_label: &str) -> Option<i32> {
+    let digits = version_label
+        .trim()
+        .rsplit(|character: char| !character.is_ascii_digit())
+        .next()?;
+    if digits.is_empty() || !digits.chars().all(|character| character.is_ascii_digit()) {
+        return None;
+    }
+    digits.parse().ok()
+}
+
+async fn current_form_major(pool: &PgPool, form_id: Uuid) -> ApiResult<Option<i32>> {
+    sqlx::query_scalar(
+        r#"
+        SELECT version_major
+        FROM form_versions
+        WHERE form_id = $1
+          AND status = 'published'::form_version_status
+          AND version_major IS NOT NULL
+        ORDER BY
+            version_major DESC,
+            version_minor DESC NULLS LAST,
+            version_patch DESC NULLS LAST,
+            published_at DESC NULLS LAST,
+            created_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(form_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(Into::into)
 }
 
 async fn ensure_chart(pool: &PgPool, name: &str, report_id: Uuid) -> ApiResult<Uuid> {

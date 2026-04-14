@@ -8,7 +8,7 @@ pub(crate) fn document_head_tags(title: &str, description: &str) -> String {
     format!(
         r##"<meta name="description" content="{description}">
     <meta name="theme-color" content="#F8FAFC">
-    <meta name="color-scheme" content="light">
+    <meta name="color-scheme" content="light dark">
     <meta property="og:type" content="website">
     <meta property="og:title" content="{title}">
     <meta property="og:description" content="{description}">
@@ -17,6 +17,7 @@ pub(crate) fn document_head_tags(title: &str, description: &str) -> String {
     <meta name="twitter:title" content="{title}">
     <meta name="twitter:description" content="{description}">
     <meta name="twitter:image" content="{ASSET_PREFIX}/tessara-icon-512.svg">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
     <link rel="icon" type="image/svg+xml" sizes="16x16" href="{ASSET_PREFIX}/tessara-favicon-16.svg">
     <link rel="icon" type="image/svg+xml" sizes="32x32" href="{ASSET_PREFIX}/tessara-favicon-32.svg">
     <link rel="icon" type="image/svg+xml" sizes="64x64" href="{ASSET_PREFIX}/tessara-favicon-64.svg">
@@ -54,8 +55,10 @@ mod tests {
         assert!(head.contains("tessara-favicon-mono.svg"));
         assert!(head.contains("tessara-icon-256.svg"));
         assert!(head.contains("tessara-icon-512.svg"));
+        assert!(head.contains("font-awesome"));
         assert!(head.contains("theme-color"));
         assert!(head.contains("#F8FAFC"));
+        assert!(head.contains("light dark"));
     }
 
     #[test]

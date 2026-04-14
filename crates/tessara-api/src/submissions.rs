@@ -26,7 +26,7 @@ use crate::{
 pub struct CreateDraftRequest {
     form_version_id: Uuid,
     node_id: Uuid,
-    respondent_account_id: Option<Uuid>,
+    delegate_account_id: Option<Uuid>,
 }
 
 #[derive(Deserialize)]
@@ -39,7 +39,7 @@ pub struct ListSubmissionsQuery {
     status: Option<String>,
     form_id: Option<Uuid>,
     node_id: Option<Uuid>,
-    respondent_account_id: Option<Uuid>,
+    delegate_account_id: Option<Uuid>,
     q: Option<String>,
 }
 
@@ -57,8 +57,8 @@ pub struct ResponseStartAssignment {
     version_label: String,
     node_id: Uuid,
     node_name: String,
-    respondent_account_id: Option<Uuid>,
-    respondent_display_name: Option<String>,
+    delegate_account_id: Option<Uuid>,
+    delegate_display_name: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -216,10 +216,10 @@ pub async fn list_response_start_options(
         }));
     }
 
-    let respondent_account_id = auth::resolve_accessible_respondent_account_id(
+    let delegate_account_id = auth::resolve_accessible_delegate_account_id(
         &state.pool,
         &account,
-        query.respondent_account_id,
+        query.delegate_account_id,
     )
     .await?;
     let assignments = sqlx::query(
@@ -231,8 +231,8 @@ pub async fn list_response_start_options(
             form_versions.version_label,
             nodes.id AS node_id,
             nodes.name AS node_name,
-            accounts.id AS respondent_account_id,
-            accounts.display_name AS respondent_display_name
+            accounts.id AS delegate_account_id,
+            accounts.display_name AS delegate_display_name
         FROM form_assignments
         JOIN form_versions ON form_versions.id = form_assignments.form_version_id
         JOIN forms ON forms.id = form_versions.form_id
@@ -245,7 +245,7 @@ pub async fn list_response_start_options(
         ORDER BY forms.name, nodes.name, form_assignments.created_at
         "#,
     )
-    .bind(respondent_account_id)
+    .bind(delegate_account_id)
     .fetch_all(&state.pool)
     .await?
     .into_iter()
@@ -257,8 +257,8 @@ pub async fn list_response_start_options(
             version_label: row.try_get("version_label")?,
             node_id: row.try_get("node_id")?,
             node_name: row.try_get("node_name")?,
-            respondent_account_id: row.try_get("respondent_account_id")?,
-            respondent_display_name: row.try_get("respondent_display_name")?,
+            delegate_account_id: row.try_get("delegate_account_id")?,
+            delegate_display_name: row.try_get("delegate_display_name")?,
         })
     })
     .collect::<Result<Vec<_>, sqlx::Error>>()?;
@@ -307,10 +307,10 @@ pub async fn create_draft(
         .fetch_one(&state.pool)
         .await?
     } else {
-        let respondent_account_id = auth::resolve_accessible_respondent_account_id(
+        let delegate_account_id = auth::resolve_accessible_delegate_account_id(
             &state.pool,
             &account,
-            payload.respondent_account_id,
+            payload.delegate_account_id,
         )
         .await?;
 
@@ -327,7 +327,7 @@ pub async fn create_draft(
         )
         .bind(payload.form_version_id)
         .bind(payload.node_id)
-        .bind(respondent_account_id)
+        .bind(delegate_account_id)
         .fetch_optional(&state.pool)
         .await?
         .ok_or_else(|| ApiError::Forbidden("submissions:write".into()))?
@@ -475,10 +475,10 @@ pub async fn list_submissions(
         .fetch_all(&state.pool)
         .await?
     } else {
-        let respondent_account_id = auth::resolve_accessible_respondent_account_id(
+        let delegate_account_id = auth::resolve_accessible_delegate_account_id(
             &state.pool,
             &account,
-            query.respondent_account_id,
+            query.delegate_account_id,
         )
         .await?;
         sqlx::query(
@@ -526,7 +526,7 @@ pub async fn list_submissions(
             ORDER BY submissions.created_at, submissions.id
             "#,
         )
-        .bind(respondent_account_id)
+        .bind(delegate_account_id)
         .bind(status)
         .bind(query.form_id)
         .bind(query.node_id)
@@ -830,9 +830,9 @@ async fn require_submission_access(
             }
         } else if assignment_account_id != Some(account.account_id)
             && !account
-                .subordinate_respondents
+                .delegations
                 .iter()
-                .any(|respondent| Some(respondent.account_id) == assignment_account_id)
+                .any(|delegate| Some(delegate.account_id) == assignment_account_id)
         {
             return Err(ApiError::Forbidden("submissions:write".into()));
         }

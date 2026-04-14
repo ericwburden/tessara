@@ -19,6 +19,7 @@ mod hierarchy;
 pub mod legacy_import;
 mod reporting;
 mod submissions;
+mod users;
 
 use axum::{
     Router,
@@ -28,7 +29,7 @@ use axum::{
     routing::{delete, get, post, put},
 };
 use db::AppState;
-use tower_http::{cors::CorsLayer, trace::TraceLayer};
+use tower_http::{cors::CorsLayer, services::ServeDir, trace::TraceLayer};
 
 /// Builds the complete Tessara HTTP router for the supplied application state.
 ///
@@ -40,6 +41,8 @@ pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/", get(|| async { Html(tessara_web::admin_shell_html()) }))
         .route("/assets/{asset_name}", get(svg_asset))
+        .route("/bridge/{asset_name}", get(bridge_asset))
+        .nest_service("/pkg", ServeDir::new(tessara_web::pkg_dir()))
         .route(
             "/app",
             get(|| async { Html(tessara_web::application_shell_html()) }),
@@ -119,6 +122,74 @@ pub fn router(state: AppState) -> Router {
             get(|| async { Html(tessara_web::administration_application_shell_html()) }),
         )
         .route(
+            "/app/administration/users",
+            get(|| async { Html(tessara_web::users_application_shell_html()) }),
+        )
+        .route(
+            "/app/administration/users/new",
+            get(|| async { Html(tessara_web::user_create_application_html()) }),
+        )
+        .route(
+            "/app/administration/users/{account_id}/edit",
+            get(|Path(account_id): Path<String>| async move {
+                Html(tessara_web::user_edit_application_html(&account_id))
+            }),
+        )
+        .route(
+            "/app/administration/users/{account_id}",
+            get(|Path(account_id): Path<String>| async move {
+                Html(tessara_web::user_detail_application_html(&account_id))
+            }),
+        )
+        .route(
+            "/app/administration/users/{account_id}/access",
+            get(|Path(account_id): Path<String>| async move {
+                Html(tessara_web::user_access_application_html(&account_id))
+            }),
+        )
+        .route(
+            "/app/administration/node-types",
+            get(|| async { Html(tessara_web::node_types_application_shell_html()) }),
+        )
+        .route(
+            "/app/administration/node-types/new",
+            get(|| async { Html(tessara_web::node_type_create_application_html()) }),
+        )
+        .route(
+            "/app/administration/node-types/{node_type_id}/edit",
+            get(|Path(node_type_id): Path<String>| async move {
+                Html(tessara_web::node_type_edit_application_html(&node_type_id))
+            }),
+        )
+        .route(
+            "/app/administration/node-types/{node_type_id}",
+            get(|Path(node_type_id): Path<String>| async move {
+                Html(tessara_web::node_type_detail_application_html(
+                    &node_type_id,
+                ))
+            }),
+        )
+        .route(
+            "/app/administration/roles",
+            get(|| async { Html(tessara_web::roles_application_shell_html()) }),
+        )
+        .route(
+            "/app/administration/roles/new",
+            get(|| async { Html(tessara_web::role_create_application_html()) }),
+        )
+        .route(
+            "/app/administration/roles/{role_id}/edit",
+            get(|Path(role_id): Path<String>| async move {
+                Html(tessara_web::role_edit_application_html(&role_id))
+            }),
+        )
+        .route(
+            "/app/administration/roles/{role_id}",
+            get(|Path(role_id): Path<String>| async move {
+                Html(tessara_web::role_detail_application_html(&role_id))
+            }),
+        )
+        .route(
             "/app/admin",
             get(|| async { Html(tessara_web::admin_application_shell_html()) }),
         )
@@ -172,6 +243,27 @@ pub fn router(state: AppState) -> Router {
         .route("/api/app/summary", get(app_summary::get_summary))
         .route("/api/auth/login", post(auth::login))
         .route("/api/me", get(auth::me))
+        .route("/api/admin/capabilities", get(users::list_capabilities))
+        .route(
+            "/api/admin/roles",
+            get(users::list_roles).post(users::create_role),
+        )
+        .route(
+            "/api/admin/roles/{role_id}",
+            get(users::get_role).put(users::update_role),
+        )
+        .route(
+            "/api/admin/users",
+            get(users::list_users).post(users::create_user),
+        )
+        .route(
+            "/api/admin/users/{account_id}",
+            get(users::get_user).put(users::update_user),
+        )
+        .route(
+            "/api/admin/users/{account_id}/access",
+            get(users::get_user_access).put(users::update_user_access),
+        )
         .route(
             "/api/admin/node-types",
             get(hierarchy::list_node_types).post(hierarchy::create_node_type),
@@ -180,6 +272,7 @@ pub fn router(state: AppState) -> Router {
             "/api/admin/node-types/{node_type_id}",
             get(hierarchy::get_node_type).put(hierarchy::update_node_type),
         )
+        .route("/api/node-types", get(hierarchy::list_readable_node_types))
         .route(
             "/api/admin/node-type-relationships",
             get(hierarchy::list_node_type_relationships)
@@ -195,7 +288,8 @@ pub fn router(state: AppState) -> Router {
         )
         .route(
             "/api/admin/node-metadata-fields/{field_id}",
-            put(hierarchy::update_node_metadata_field),
+            put(hierarchy::update_node_metadata_field)
+                .delete(hierarchy::delete_node_metadata_field),
         )
         .route("/api/admin/nodes", post(hierarchy::create_node))
         .route("/api/admin/nodes/{node_id}", put(hierarchy::update_node))
@@ -358,6 +452,17 @@ async fn svg_asset(Path(asset_name): Path<String>) -> impl IntoResponse {
         Some(svg) => (
             [(header::CONTENT_TYPE, "image/svg+xml; charset=utf-8")],
             svg,
+        )
+            .into_response(),
+        None => (StatusCode::NOT_FOUND, "asset not found").into_response(),
+    }
+}
+
+async fn bridge_asset(Path(asset_name): Path<String>) -> impl IntoResponse {
+    match tessara_web::bridge_asset(&asset_name) {
+        Some(asset) => (
+            [(header::CONTENT_TYPE, "text/javascript; charset=utf-8")],
+            asset,
         )
             .into_response(),
         None => (StatusCode::NOT_FOUND, "asset not found").into_response(),

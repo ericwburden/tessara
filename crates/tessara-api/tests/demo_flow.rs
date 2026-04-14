@@ -320,7 +320,7 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
             .any(|form_version| form_version["form_id"] == seed["form_id"]
                 && form_version["form_name"] == "Demo Session Log"
                 && form_version["form_version_id"] == seed["form_version_id"]
-                && form_version["version_label"] == "v1")
+                && form_version["version_label"] == "1.0.0")
     );
 
     let submissions = request_json(
@@ -545,13 +545,6 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
             .any(|row| row["submission_id"] == seed["submission_id"]
                 && row["values"]["participant_count"] == "42")
     );
-    let compatibility_group_id = forms
-        .as_array()
-        .expect("forms response should be an array")
-        .iter()
-        .find(|form| form["id"] == seed["form_id"])
-        .and_then(|form| form["versions"][0]["compatibility_group_id"].as_str())
-        .expect("seeded form version should expose a compatibility group id");
     let compatibility_dataset = request_json(
         app.clone(),
         authorized_request(
@@ -564,8 +557,7 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
                 "grain": "submission",
                 "sources": [{
                     "source_alias": "check_in",
-                    "form_id": null,
-                    "compatibility_group_id": compatibility_group_id,
+                    "form_id": seed["form_id"],
                     "selection_rule": "all"
                 }],
                 "fields": [{
@@ -1460,15 +1452,19 @@ async fn role_based_access_respects_scope_and_respondent_context() {
         "tessara-dev-respondent",
     )
     .await;
-    let parent_token =
-        login_token_for(app.clone(), "parent@tessara.local", "tessara-dev-parent").await;
+    let delegator_token = login_token_for(
+        app.clone(),
+        "delegator@tessara.local",
+        "tessara-dev-delegator",
+    )
+    .await;
 
     let operator_me = request_json(
         app.clone(),
         authorized_request("GET", "/api/me", &operator_token, None),
     )
     .await;
-    assert_eq!(operator_me["role_family"], "operator");
+    assert_eq!(operator_me["ui_access_profile"], "operator");
     assert_eq!(
         operator_me["scope_nodes"]
             .as_array()
@@ -1482,25 +1478,25 @@ async fn role_based_access_respects_scope_and_respondent_context() {
         authorized_request("GET", "/api/me", &respondent_token, None),
     )
     .await;
-    assert_eq!(respondent_me["role_family"], "respondent");
+    assert_eq!(respondent_me["ui_access_profile"], "response_user");
     assert_eq!(
-        respondent_me["subordinate_respondents"]
+        respondent_me["delegations"]
             .as_array()
-            .expect("respondent subordinate list should be present")
+            .expect("respondent delegation list should be present")
             .len(),
         0
     );
 
-    let parent_me = request_json(
+    let delegator_me = request_json(
         app.clone(),
-        authorized_request("GET", "/api/me", &parent_token, None),
+        authorized_request("GET", "/api/me", &delegator_token, None),
     )
     .await;
-    assert_eq!(parent_me["role_family"], "respondent");
+    assert_eq!(delegator_me["ui_access_profile"], "response_user");
     assert_eq!(
-        parent_me["subordinate_respondents"]
+        delegator_me["delegations"]
             .as_array()
-            .expect("parent subordinate list should be present")
+            .expect("delegator delegation list should be present")
             .len(),
         1
     );
@@ -1581,31 +1577,472 @@ async fn role_based_access_respects_scope_and_respondent_context() {
             .any(|assignment| assignment["node_name"] == "Demo Program Health Navigation")
     );
 
-    let child_account_id = parent_me["subordinate_respondents"]
+    let delegate_account_id = delegator_me["delegations"]
         .as_array()
-        .expect("parent subordinate list should be present")
+        .expect("delegator delegation list should be present")
         .first()
         .and_then(|account| account["account_id"].as_str())
         .and_then(|value| Uuid::parse_str(value).ok())
-        .expect("parent should expose child respondent id");
-    let parent_child_options = request_json(
+        .expect("delegator should expose delegated account id");
+    let delegated_options = request_json(
         app.clone(),
         authorized_request(
             "GET",
-            &format!("/api/responses/options?respondent_account_id={child_account_id}"),
-            &parent_token,
+            &format!("/api/responses/options?delegate_account_id={delegate_account_id}"),
+            &delegator_token,
             None,
         ),
     )
     .await;
-    assert_eq!(parent_child_options["mode"], "assignment");
+    assert_eq!(delegated_options["mode"], "assignment");
     assert!(
-        parent_child_options["assignments"]
+        delegated_options["assignments"]
             .as_array()
-            .expect("parent-child options should include assignments")
+            .expect("delegated options should include assignments")
             .iter()
             .any(|assignment| assignment["node_name"] == "Demo Activity After School Check-ins")
     );
+}
+
+#[tokio::test]
+async fn user_management_supports_create_edit_and_account_status() {
+    let _guard = TEST_DATABASE_LOCK.lock().await;
+    let Some(app) = test_app().await else { return };
+    let admin_token = login_token(app.clone()).await;
+
+    let roles = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/admin/roles", &admin_token, None),
+    )
+    .await;
+    let operator_role_id = roles
+        .as_array()
+        .expect("roles should be an array")
+        .iter()
+        .find(|role| role["name"] == "operator")
+        .and_then(|role| role["id"].as_str())
+        .expect("operator role should be present");
+
+    let created = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/users",
+            &admin_token,
+            Some(json!({
+                "email": "sprint1-operator@tessara.local",
+                "display_name": "Sprint 1 Operator",
+                "password": "tessara-dev-sprint1",
+                "is_active": true,
+                "role_ids": [operator_role_id]
+            })),
+        ),
+    )
+    .await;
+    let account_id = created["id"]
+        .as_str()
+        .and_then(|value| Uuid::parse_str(value).ok())
+        .expect("created user should expose id");
+
+    let users = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/admin/users", &admin_token, None),
+    )
+    .await;
+    assert!(
+        users
+            .as_array()
+            .expect("users should be an array")
+            .iter()
+            .any(|user| user["id"] == account_id.to_string() && user["is_active"] == true)
+    );
+
+    let detail = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/admin/users/{account_id}"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(detail["display_name"], "Sprint 1 Operator");
+    assert_eq!(detail["is_active"], true);
+    assert!(
+        detail["roles"]
+            .as_array()
+            .expect("user detail should include roles")
+            .iter()
+            .any(|role| role["name"] == "operator")
+    );
+
+    let operator_token = login_token_for(
+        app.clone(),
+        "sprint1-operator@tessara.local",
+        "tessara-dev-sprint1",
+    )
+    .await;
+    let operator_me = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/me", &operator_token, None),
+    )
+    .await;
+    assert_eq!(operator_me["display_name"], "Sprint 1 Operator");
+
+    request_json(
+        app.clone(),
+        authorized_request(
+            "PUT",
+            &format!("/api/admin/users/{account_id}"),
+            &admin_token,
+            Some(json!({
+                "email": "sprint1-operator@tessara.local",
+                "display_name": "Sprint 1 Operator Updated",
+                "password": null,
+                "is_active": false,
+                "role_ids": [operator_role_id]
+            })),
+        ),
+    )
+    .await;
+
+    let inactive_me = request_status_and_json(
+        app.clone(),
+        authorized_request("GET", "/api/me", &operator_token, None),
+    )
+    .await;
+    assert_eq!(inactive_me.0, StatusCode::UNAUTHORIZED);
+
+    let inactive_login = request_status_and_json(
+        app.clone(),
+        Request::builder()
+            .method("POST")
+            .uri("/api/auth/login")
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(
+                json!({
+                    "email": "sprint1-operator@tessara.local",
+                    "password": "tessara-dev-sprint1"
+                })
+                .to_string(),
+            ))
+            .expect("valid inactive login request"),
+    )
+    .await;
+    assert_eq!(inactive_login.0, StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn role_management_updates_capabilities_and_scoped_access() {
+    let _guard = TEST_DATABASE_LOCK.lock().await;
+    let Some(app) = test_app().await else { return };
+    let admin_token = login_token(app.clone()).await;
+
+    request_json(
+        app.clone(),
+        authorized_request("POST", "/api/demo/seed", &admin_token, None),
+    )
+    .await;
+
+    let roles = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/admin/roles", &admin_token, None),
+    )
+    .await;
+    let operator_role_id = roles
+        .as_array()
+        .expect("roles should be an array")
+        .iter()
+        .find(|role| role["name"] == "operator")
+        .and_then(|role| role["id"].as_str())
+        .expect("operator role should be present");
+
+    let capabilities = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/admin/capabilities", &admin_token, None),
+    )
+    .await;
+    let selected_capability_ids = capabilities
+        .as_array()
+        .expect("capabilities should be an array")
+        .iter()
+        .filter(|capability| {
+            matches!(
+                capability["key"].as_str(),
+                Some("hierarchy:read" | "submissions:write")
+            )
+        })
+        .filter_map(|capability| capability["id"].as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(selected_capability_ids.len(), 2);
+
+    let observer_capability_ids = capabilities
+        .as_array()
+        .expect("capabilities should be an array")
+        .iter()
+        .filter(|capability| matches!(capability["key"].as_str(), Some("reports:read")))
+        .filter_map(|capability| capability["id"].as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(observer_capability_ids.len(), 1);
+
+    let created_role = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/roles",
+            &admin_token,
+            Some(json!({
+                "name": "observer",
+                "capability_ids": observer_capability_ids
+            })),
+        ),
+    )
+    .await;
+    let observer_role_id = created_role["id"]
+        .as_str()
+        .expect("created role should return an id");
+
+    request_json(
+        app.clone(),
+        authorized_request(
+            "PUT",
+            &format!("/api/admin/roles/{operator_role_id}"),
+            &admin_token,
+            Some(json!({ "capability_ids": selected_capability_ids })),
+        ),
+    )
+    .await;
+
+    let operator_role_detail = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/admin/roles/{operator_role_id}"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    let operator_capability_keys = operator_role_detail["capabilities"]
+        .as_array()
+        .expect("role detail should include capabilities")
+        .iter()
+        .filter_map(|capability| capability["key"].as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(operator_capability_keys.len(), 2);
+    assert!(operator_capability_keys.contains(&"hierarchy:read"));
+    assert!(operator_capability_keys.contains(&"submissions:write"));
+    assert!(
+        operator_role_detail["assigned_accounts"]
+            .as_array()
+            .expect("role detail should include assigned accounts")
+            .iter()
+            .any(|account| account["email"] == "operator@tessara.local")
+    );
+
+    let users = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/admin/users", &admin_token, None),
+    )
+    .await;
+    let operator_account_id = users
+        .as_array()
+        .expect("users should be an array")
+        .iter()
+        .find(|user| user["email"] == "operator@tessara.local")
+        .and_then(|user| user["id"].as_str())
+        .expect("seeded operator account should be present");
+    let operator_detail = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/admin/users/{operator_account_id}"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    let updated_role_ids = operator_detail["roles"]
+        .as_array()
+        .expect("operator detail should include roles")
+        .iter()
+        .filter_map(|role| role["id"].as_str())
+        .chain(std::iter::once(observer_role_id))
+        .collect::<Vec<_>>();
+
+    request_json(
+        app.clone(),
+        authorized_request(
+            "PUT",
+            &format!("/api/admin/users/{operator_account_id}"),
+            &admin_token,
+            Some(json!({
+                "email": operator_detail["email"],
+                "display_name": operator_detail["display_name"],
+                "password": null,
+                "is_active": operator_detail["is_active"],
+                "role_ids": updated_role_ids
+            })),
+        ),
+    )
+    .await;
+
+    let observer_role_detail = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/admin/roles/{observer_role_id}"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert!(
+        observer_role_detail["assigned_accounts"]
+            .as_array()
+            .expect("created role should expose assigned accounts")
+            .iter()
+            .any(|account| account["email"] == "operator@tessara.local")
+    );
+
+    let north_star_nodes = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/nodes?q=North%20Star", &admin_token, None),
+    )
+    .await;
+    let north_star_partner_id = north_star_nodes
+        .as_array()
+        .expect("north star nodes should be an array")
+        .iter()
+        .find(|node| {
+            node["name"] == "Demo Partner North Star Services"
+                && node["node_type_name"] == "Partner"
+        })
+        .and_then(|node| node["id"].as_str())
+        .expect("north star partner should be present");
+
+    request_json(
+        app.clone(),
+        authorized_request(
+            "PUT",
+            &format!("/api/admin/users/{operator_account_id}/access"),
+            &admin_token,
+            Some(json!({
+                "scope_node_ids": [north_star_partner_id],
+                "delegate_account_ids": []
+            })),
+        ),
+    )
+    .await;
+
+    let updated_operator = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/admin/users/{operator_account_id}"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(updated_operator["ui_access_profile"], "operator");
+    assert!(
+        updated_operator["capabilities"]
+            .as_array()
+            .expect("user detail should include capabilities")
+            .iter()
+            .any(|capability| capability == "hierarchy:read")
+    );
+    assert_eq!(
+        updated_operator["scope_nodes"]
+            .as_array()
+            .expect("user detail should include scope nodes")
+            .len(),
+        1
+    );
+    assert_eq!(
+        updated_operator["scope_nodes"][0]["node_name"],
+        "Demo Partner North Star Services"
+    );
+
+    let operator_token = login_token_for(
+        app.clone(),
+        "operator@tessara.local",
+        "tessara-dev-operator",
+    )
+    .await;
+    let operator_me = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/me", &operator_token, None),
+    )
+    .await;
+    assert_eq!(operator_me["ui_access_profile"], "operator");
+    assert_eq!(
+        operator_me["scope_nodes"]
+            .as_array()
+            .expect("operator scope should be present")
+            .len(),
+        1
+    );
+
+    let operator_demo_nodes = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/nodes?q=Demo", &operator_token, None),
+    )
+    .await;
+    let operator_demo_names = operator_demo_nodes
+        .as_array()
+        .expect("operator node list should be an array")
+        .iter()
+        .filter_map(|node| node["name"].as_str())
+        .collect::<Vec<_>>();
+    assert!(
+        operator_demo_nodes
+            .as_array()
+            .expect("operator node list should be an array")
+            .len()
+            > 1
+    );
+    assert!(operator_demo_names.contains(&"Demo Partner North Star Services"));
+    assert!(!operator_demo_names.contains(&"Demo Partner Community Bridge"));
+
+    let operator_bridge_nodes = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            "/api/nodes?q=Community%20Bridge",
+            &operator_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(
+        operator_bridge_nodes
+            .as_array()
+            .expect("operator bridge nodes should be an array")
+            .len(),
+        0
+    );
+
+    let no_capabilities: Vec<&str> = Vec::new();
+    request_json(
+        app.clone(),
+        authorized_request(
+            "PUT",
+            &format!("/api/admin/roles/{operator_role_id}"),
+            &admin_token,
+            Some(json!({ "capability_ids": no_capabilities })),
+        ),
+    )
+    .await;
+
+    let forbidden_nodes = request_status_and_json(
+        app.clone(),
+        authorized_request("GET", "/api/nodes?q=North%20Star", &operator_token, None),
+    )
+    .await;
+    assert_eq!(forbidden_nodes.0, StatusCode::FORBIDDEN);
 }
 
 #[tokio::test]
@@ -1645,26 +2082,8 @@ async fn form_builder_guards_cross_version_sections_and_supersedes_previous_publ
     .await;
 
     let version_one_id = create_form_version(app.clone(), &token, form_id, "v1").await;
-    let duplicate_version_label = request_status_and_json(
-        app.clone(),
-        authorized_request(
-            "POST",
-            &format!("/api/admin/forms/{form_id}/versions"),
-            &token,
-            Some(json!({
-                "version_label": "v1",
-                "compatibility_group_name": "Default compatibility"
-            })),
-        ),
-    )
-    .await;
-    assert_eq!(duplicate_version_label.0, StatusCode::BAD_REQUEST);
-    assert!(
-        duplicate_version_label.1["error"]
-            .as_str()
-            .expect("error body should include message")
-            .contains("already in use")
-    );
+    let version_two_id = create_form_version(app.clone(), &token, form_id, "v2").await;
+    assert_ne!(version_one_id, version_two_id);
     let section_one_id = create_form_section(app.clone(), &token, version_one_id, "Main").await;
     let field_one_id = create_number_field(
         app.clone(),
@@ -1905,7 +2324,7 @@ async fn form_builder_guards_cross_version_sections_and_supersedes_previous_publ
             .expect("valid render request"),
     )
     .await;
-    assert_eq!(version_one["status"], "superseded");
+    assert_eq!(version_one["status"], "published");
     assert_eq!(version_one["form_name"], "Monthly Services Report");
     assert_eq!(version_one["sections"][0]["title"], "Updated Main");
     assert_eq!(
@@ -2160,6 +2579,70 @@ async fn hierarchy_builder_rejects_required_metadata_after_nodes_exist() {
 }
 
 #[tokio::test]
+async fn node_metadata_fields_can_be_deleted() {
+    let _guard = TEST_DATABASE_LOCK.lock().await;
+    let Some(app) = test_app().await else { return };
+    let token = login_token(app.clone()).await;
+
+    let node_type = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/node-types",
+            &token,
+            Some(json!({
+                "name": "Organization",
+                "slug": "organization"
+            })),
+        ),
+    )
+    .await;
+    let node_type_id = id_from(&node_type);
+
+    let metadata_field = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/node-metadata-fields",
+            &token,
+            Some(json!({
+                "node_type_id": node_type_id,
+                "key": "region",
+                "label": "Region",
+                "field_type": "text",
+                "required": false
+            })),
+        ),
+    )
+    .await;
+    let metadata_field_id = id_from(&metadata_field);
+
+    request_json(
+        app.clone(),
+        authorized_request(
+            "DELETE",
+            &format!("/api/admin/node-metadata-fields/{metadata_field_id}"),
+            &token,
+            None,
+        ),
+    )
+    .await;
+
+    let metadata_fields = request_json(
+        app,
+        authorized_request("GET", "/api/admin/node-metadata-fields", &token, None),
+    )
+    .await;
+    assert!(
+        metadata_fields
+            .as_array()
+            .expect("metadata field list should be an array")
+            .iter()
+            .all(|field| field["id"] != metadata_field_id.to_string())
+    );
+}
+
+#[tokio::test]
 async fn hierarchy_and_form_builders_return_diagnostics_for_invalid_references() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
     let Some(app) = test_app().await else { return };
@@ -2351,10 +2834,7 @@ async fn hierarchy_and_form_builders_return_diagnostics_for_invalid_references()
             "POST",
             &format!("/api/admin/forms/{}/versions", Uuid::new_v4()),
             &token,
-            Some(json!({
-                "version_label": "v1",
-                "compatibility_group_name": "Default compatibility"
-            })),
+            Some(json!({})),
         ),
     )
     .await;
@@ -2482,6 +2962,185 @@ async fn hierarchy_and_form_builders_return_diagnostics_for_invalid_references()
 }
 
 #[tokio::test]
+async fn readable_node_type_catalog_exposes_labels_and_relationships() {
+    let _guard = TEST_DATABASE_LOCK.lock().await;
+    let Some(app) = test_app().await else { return };
+    let admin_token = login_token(app.clone()).await;
+
+    request_json(
+        app.clone(),
+        authorized_request("POST", "/api/demo/seed", &admin_token, None),
+    )
+    .await;
+
+    let operator_token = login_token_for(
+        app.clone(),
+        "operator@tessara.local",
+        "tessara-dev-operator",
+    )
+    .await;
+
+    let admin_node_types = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/admin/node-types", &admin_token, None),
+    )
+    .await;
+    let partner_summary = admin_node_types
+        .as_array()
+        .expect("admin node type list should be an array")
+        .iter()
+        .find(|entry| entry["slug"] == "partner")
+        .expect("partner summary should exist");
+    assert_eq!(partner_summary["singular_label"], "Partner");
+    assert_eq!(partner_summary["plural_label"], "Partners");
+    assert_eq!(partner_summary["is_root_type"], true);
+
+    let readable_catalog = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/node-types", &operator_token, None),
+    )
+    .await;
+    let program_entry = readable_catalog
+        .as_array()
+        .expect("readable node type catalog should be an array")
+        .iter()
+        .find(|entry| entry["slug"] == "program")
+        .expect("program entry should exist");
+    assert_eq!(program_entry["singular_label"], "Program");
+    assert_eq!(program_entry["plural_label"], "Programs");
+    assert_eq!(program_entry["is_root_type"], false);
+    assert!(
+        program_entry["parent_relationships"]
+            .as_array()
+            .expect("program entry should include parent relationships")
+            .iter()
+            .any(|parent| parent["node_type_slug"] == "partner"
+                && parent["singular_label"] == "Partner"
+                && parent["plural_label"] == "Partners")
+    );
+    assert!(
+        program_entry["child_relationships"]
+            .as_array()
+            .expect("program entry should include child relationships")
+            .iter()
+            .any(|child| child["node_type_slug"] == "activity"
+                && child["singular_label"] == "Activity")
+    );
+}
+
+#[tokio::test]
+async fn non_root_node_types_require_a_parent_node() {
+    let _guard = TEST_DATABASE_LOCK.lock().await;
+    let Some(app) = test_app().await else { return };
+    let token = login_token(app.clone()).await;
+
+    let parent_type_id = create_node_type(app.clone(), &token, "Partner", "partner");
+    let parent_type_id = parent_type_id.await;
+    let child_type_id = create_node_type(app.clone(), &token, "Program", "program");
+    let child_type_id = child_type_id.await;
+    create_node_type_relationship(app.clone(), &token, parent_type_id, child_type_id).await;
+
+    let missing_parent = request_status_and_json(
+        app,
+        authorized_request(
+            "POST",
+            "/api/admin/nodes",
+            &token,
+            Some(json!({
+                "node_type_id": child_type_id,
+                "parent_node_id": null,
+                "name": "Detached Program",
+                "metadata": {}
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(missing_parent.0, StatusCode::BAD_REQUEST);
+    assert!(
+        missing_parent.1["error"]
+            .as_str()
+            .expect("error body should include message")
+            .contains("parent is required")
+    );
+}
+
+#[tokio::test]
+async fn operator_cannot_access_admin_node_type_management_routes() {
+    let _guard = TEST_DATABASE_LOCK.lock().await;
+    let Some(app) = test_app().await else { return };
+    let admin_token = login_token(app.clone()).await;
+    request_json(
+        app.clone(),
+        authorized_request("POST", "/api/demo/seed", &admin_token, None),
+    )
+    .await;
+    let operator_token = login_token_for(
+        app.clone(),
+        "operator@tessara.local",
+        "tessara-dev-operator",
+    )
+    .await;
+
+    let forbidden = request_status_and_json(
+        app,
+        authorized_request("GET", "/api/admin/node-types", &operator_token, None),
+    )
+    .await;
+    assert_eq!(forbidden.0, StatusCode::FORBIDDEN);
+    assert_eq!(forbidden.1["error"], "forbidden: admin:all");
+}
+
+#[tokio::test]
+async fn node_type_updates_reject_cycles_in_parent_child_selections() {
+    let _guard = TEST_DATABASE_LOCK.lock().await;
+    let Some(app) = test_app().await else { return };
+    let admin_token = login_token(app.clone()).await;
+
+    let parent_type_id = create_node_type(app.clone(), &admin_token, "Partner", "partner").await;
+    let child_type_id = create_node_type(app.clone(), &admin_token, "Program", "program").await;
+
+    request_json(
+        app.clone(),
+        authorized_request(
+            "PUT",
+            &format!("/api/admin/node-types/{parent_type_id}"),
+            &admin_token,
+            Some(json!({
+                "name": "Partner",
+                "slug": "partner",
+                "plural_label": "Partners",
+                "child_node_type_ids": [child_type_id]
+            })),
+        ),
+    )
+    .await;
+
+    let cyclic_update = request_status_and_json(
+        app,
+        authorized_request(
+            "PUT",
+            &format!("/api/admin/node-types/{child_type_id}"),
+            &admin_token,
+            Some(json!({
+                "name": "Program",
+                "slug": "program",
+                "plural_label": "Programs",
+                "child_node_type_ids": [parent_type_id]
+            })),
+        ),
+    )
+    .await;
+
+    assert_eq!(cyclic_update.0, StatusCode::BAD_REQUEST);
+    assert!(
+        cyclic_update.1["error"]
+            .as_str()
+            .expect("error body should include message")
+            .contains("both a parent and child")
+    );
+}
+
+#[tokio::test]
 async fn admin_mutation_routes_require_authentication() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
     let Some(app) = test_app().await else { return };
@@ -2580,13 +3239,7 @@ async fn admin_mutation_routes_require_authentication() {
             .method("POST")
             .uri(format!("/api/admin/forms/{form_id}/versions"))
             .header(header::CONTENT_TYPE, "application/json")
-            .body(Body::from(
-                json!({
-                    "version_label": "v1",
-                    "compatibility_group_name": "Default compatibility"
-                })
-                .to_string(),
-            ))
+            .body(Body::from(json!({}).to_string()))
             .expect("valid form version request"),
         Request::builder()
             .method("POST")
@@ -4525,7 +5178,7 @@ async fn create_form_version(
     app: axum::Router,
     token: &str,
     form_id: Uuid,
-    version_label: &str,
+    _version_label: &str,
 ) -> Uuid {
     let version = request_json(
         app,
@@ -4533,10 +5186,7 @@ async fn create_form_version(
             "POST",
             &format!("/api/admin/forms/{form_id}/versions"),
             token,
-            Some(json!({
-                "version_label": version_label,
-                "compatibility_group_name": "Default compatibility"
-            })),
+            Some(json!({})),
         ),
     )
     .await;

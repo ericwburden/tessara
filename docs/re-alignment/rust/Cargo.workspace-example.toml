@@ -1,0 +1,19 @@
+[workspace]
+members = [
+  "crates/tessara_core",
+  "crates/tessara_access",
+  "crates/tessara_org",
+  "crates/tessara_fields",
+  "crates/tessara_forms",
+  "crates/tessara_workflows",
+  "crates/tessara_runtime",
+  "crates/tessara_lookups",
+  "crates/tessara_materialization",
+  "crates/tessara_datasets",
+  "crates/tessara_components",
+  "crates/tessara_dashboards",
+  "crates/tessara_db",
+  "crates/tessara_api",
+  "crates/tessara_app",
+]
+resolver = "2"

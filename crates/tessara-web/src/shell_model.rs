@@ -166,7 +166,7 @@ const HIERARCHY_INPUTS: &[TextInput] = &[
 ];
 
 const HIERARCHY_ACTIONS: &[Action] = &[
-    Action::new("createNodeType()", "Create Node Type"),
+    Action::new("createNodeType()", "Create Organization Node Type"),
     Action::new("updateNodeType()", "Update Node Type"),
     Action::new(
         "useSelectedNodeTypeAsFormScope()",
@@ -202,12 +202,6 @@ const FORM_INPUTS: &[TextInput] = &[
         "Version label",
         "Form version label",
         "v1",
-    ),
-    TextInput::new(
-        "compatibility-group-name",
-        "Compatibility group",
-        "Compatibility group name",
-        "Default compatibility",
     ),
     TextInput::new(
         "form-version-id",
@@ -326,12 +320,6 @@ const REPORTING_INPUTS: &[TextInput] = &[
         "dataset-form-id",
         "Dataset form ID",
         "Selected source form ID",
-        "",
-    ),
-    TextInput::new(
-        "dataset-compatibility-group-id",
-        "Dataset compatibility group ID",
-        "Optional compatibility group ID",
         "",
     ),
     TextInput::new(

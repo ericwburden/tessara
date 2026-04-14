@@ -99,9 +99,9 @@ try {
     Write-Host "Demo accounts:" -ForegroundColor Green
     Write-Host "  admin@tessara.local       / tessara-dev-admin"
     Write-Host "  operator@tessara.local    / tessara-dev-operator"
-    Write-Host "  parent@tessara.local      / tessara-dev-parent"
+    Write-Host "  delegator@tessara.local   / tessara-dev-delegator"
     Write-Host "  respondent@tessara.local  / tessara-dev-respondent"
-    Write-Host "  child@tessara.local       / tessara-dev-child"
+    Write-Host "  delegate@tessara.local    / tessara-dev-delegate"
     if ($FreshData) {
         Write-Host ""
         Write-Host "Postgres volume was refreshed because -FreshData was supplied." -ForegroundColor Yellow

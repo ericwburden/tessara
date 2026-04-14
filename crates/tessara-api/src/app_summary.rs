@@ -133,9 +133,9 @@ pub async fn get_summary(
         let mut ids = vec![account.account_id];
         ids.extend(
             account
-                .subordinate_respondents
+                .delegations
                 .iter()
-                .map(|respondent| respondent.account_id),
+                .map(|delegate| delegate.account_id),
         );
         ids
     };

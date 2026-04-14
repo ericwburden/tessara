@@ -21,10 +21,10 @@ pub struct LoginResponse {
 
 #[derive(Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum RoleFamily {
+pub enum UiAccessProfile {
     Admin,
     Operator,
-    Respondent,
+    ResponseUser,
 }
 
 #[derive(Clone, Serialize)]
@@ -37,7 +37,7 @@ pub struct ScopeNodeSummary {
 }
 
 #[derive(Clone, Serialize)]
-pub struct RespondentSummary {
+pub struct DelegationSummary {
     pub account_id: Uuid,
     pub email: String,
     pub display_name: String,
@@ -48,20 +48,44 @@ pub struct AccountContext {
     pub account_id: Uuid,
     pub email: String,
     pub display_name: String,
-    pub role_family: RoleFamily,
+    pub is_active: bool,
+    pub ui_access_profile: UiAccessProfile,
+    pub roles: Vec<String>,
     pub capabilities: Vec<String>,
     pub scope_nodes: Vec<ScopeNodeSummary>,
-    pub subordinate_respondents: Vec<RespondentSummary>,
+    pub delegations: Vec<DelegationSummary>,
 }
 
 impl AccountContext {
     pub fn is_admin(&self) -> bool {
-        self.role_family == RoleFamily::Admin
+        self.ui_access_profile == UiAccessProfile::Admin
     }
 
     pub fn is_operator(&self) -> bool {
-        self.role_family == RoleFamily::Operator
+        self.ui_access_profile == UiAccessProfile::Operator
     }
+}
+
+pub fn derive_ui_access_profile(capabilities: &[String]) -> UiAccessProfile {
+    if capabilities
+        .iter()
+        .any(|capability| capability == "admin:all")
+    {
+        UiAccessProfile::Admin
+    } else if capabilities.iter().any(|capability| {
+        matches!(
+            capability.as_str(),
+            "hierarchy:read" | "forms:read" | "reports:read"
+        )
+    }) {
+        UiAccessProfile::Operator
+    } else {
+        UiAccessProfile::ResponseUser
+    }
+}
+
+pub fn scope_assignments_are_meaningful(profile: &UiAccessProfile) -> bool {
+    matches!(profile, UiAccessProfile::Operator)
 }
 
 pub async fn login(
@@ -73,7 +97,9 @@ pub async fn login(
         SELECT accounts.id
         FROM accounts
         JOIN account_credentials ON account_credentials.account_id = accounts.id
-        WHERE accounts.email = $1 AND account_credentials.password = $2
+        WHERE accounts.email = $1
+          AND account_credentials.password = $2
+          AND accounts.is_active = true
         "#,
     )
     .bind(&payload.email)
@@ -136,10 +162,11 @@ pub async fn account_from_headers(pool: &PgPool, headers: &HeaderMap) -> ApiResu
 
     let row = sqlx::query(
         r#"
-        SELECT accounts.id, accounts.email, accounts.display_name
+        SELECT accounts.id, accounts.email, accounts.display_name, accounts.is_active
         FROM auth_sessions
         JOIN accounts ON accounts.id = auth_sessions.account_id
         WHERE auth_sessions.token = $1
+          AND accounts.is_active = true
         "#,
     )
     .bind(token)
@@ -148,7 +175,27 @@ pub async fn account_from_headers(pool: &PgPool, headers: &HeaderMap) -> ApiResu
     .ok_or(ApiError::Unauthorized)?;
 
     let account_id: Uuid = row.try_get("id")?;
-    let capabilities = sqlx::query_scalar::<_, String>(
+    let capabilities = load_effective_capabilities(pool, account_id).await?;
+    let ui_access_profile = derive_ui_access_profile(&capabilities);
+
+    Ok(AccountContext {
+        account_id,
+        email: row.try_get("email")?,
+        display_name: row.try_get("display_name")?,
+        is_active: row.try_get("is_active")?,
+        ui_access_profile,
+        roles: load_role_names(pool, account_id).await?,
+        capabilities,
+        scope_nodes: load_scope_nodes(pool, account_id).await?,
+        delegations: load_delegations(pool, account_id).await?,
+    })
+}
+
+pub async fn load_effective_capabilities(
+    pool: &PgPool,
+    account_id: Uuid,
+) -> ApiResult<Vec<String>> {
+    Ok(sqlx::query_scalar::<_, String>(
         r#"
         SELECT DISTINCT capabilities.key
         FROM account_role_assignments
@@ -164,29 +211,11 @@ pub async fn account_from_headers(pool: &PgPool, headers: &HeaderMap) -> ApiResu
     )
     .bind(account_id)
     .fetch_all(pool)
-    .await?;
+    .await?)
+}
 
-    let role_names = sqlx::query_scalar::<_, String>(
-        r#"
-        SELECT roles.name
-        FROM account_role_assignments
-        JOIN roles ON roles.id = account_role_assignments.role_id
-        WHERE account_role_assignments.account_id = $1
-        "#,
-    )
-    .bind(account_id)
-    .fetch_all(pool)
-    .await?;
-
-    let role_family = if role_names.iter().any(|role| role == "admin") {
-        RoleFamily::Admin
-    } else if role_names.iter().any(|role| role == "operator") {
-        RoleFamily::Operator
-    } else {
-        RoleFamily::Respondent
-    };
-
-    let scope_nodes = sqlx::query(
+pub async fn load_scope_nodes(pool: &PgPool, account_id: Uuid) -> ApiResult<Vec<ScopeNodeSummary>> {
+    Ok(sqlx::query(
         r#"
         SELECT
             nodes.id AS node_id,
@@ -215,17 +244,37 @@ pub async fn account_from_headers(pool: &PgPool, headers: &HeaderMap) -> ApiResu
             parent_node_name: row.try_get("parent_node_name")?,
         })
     })
-    .collect::<Result<Vec<_>, sqlx::Error>>()?;
+    .collect::<Result<Vec<_>, sqlx::Error>>()?)
+}
 
-    let subordinate_respondents = sqlx::query(
+async fn load_role_names(pool: &PgPool, account_id: Uuid) -> ApiResult<Vec<String>> {
+    Ok(sqlx::query_scalar(
+        r#"
+        SELECT roles.name
+        FROM account_role_assignments
+        JOIN roles ON roles.id = account_role_assignments.role_id
+        WHERE account_role_assignments.account_id = $1
+        ORDER BY roles.name, roles.id
+        "#,
+    )
+    .bind(account_id)
+    .fetch_all(pool)
+    .await?)
+}
+
+pub async fn load_delegations(
+    pool: &PgPool,
+    account_id: Uuid,
+) -> ApiResult<Vec<DelegationSummary>> {
+    Ok(sqlx::query(
         r#"
         SELECT
             accounts.id AS account_id,
             accounts.email,
             accounts.display_name
-        FROM account_subordinate_relationships
-        JOIN accounts ON accounts.id = account_subordinate_relationships.respondent_account_id
-        WHERE account_subordinate_relationships.parent_account_id = $1
+        FROM account_delegations
+        JOIN accounts ON accounts.id = account_delegations.delegate_account_id
+        WHERE account_delegations.delegator_account_id = $1
         ORDER BY accounts.display_name, accounts.email
         "#,
     )
@@ -234,23 +283,13 @@ pub async fn account_from_headers(pool: &PgPool, headers: &HeaderMap) -> ApiResu
     .await?
     .into_iter()
     .map(|row| {
-        Ok(RespondentSummary {
+        Ok(DelegationSummary {
             account_id: row.try_get("account_id")?,
             email: row.try_get("email")?,
             display_name: row.try_get("display_name")?,
         })
     })
-    .collect::<Result<Vec<_>, sqlx::Error>>()?;
-
-    Ok(AccountContext {
-        account_id,
-        email: row.try_get("email")?,
-        display_name: row.try_get("display_name")?,
-        role_family,
-        capabilities,
-        scope_nodes,
-        subordinate_respondents,
-    })
+    .collect::<Result<Vec<_>, sqlx::Error>>()?)
 }
 
 pub async fn effective_scope_node_ids(pool: &PgPool, account_id: Uuid) -> ApiResult<Vec<Uuid>> {
@@ -274,7 +313,7 @@ pub async fn effective_scope_node_ids(pool: &PgPool, account_id: Uuid) -> ApiRes
     .await?)
 }
 
-pub async fn resolve_accessible_respondent_account_id(
+pub async fn resolve_accessible_delegate_account_id(
     pool: &PgPool,
     context: &AccountContext,
     requested_account_id: Option<Uuid>,
@@ -282,9 +321,9 @@ pub async fn resolve_accessible_respondent_account_id(
     let mut allowed = vec![context.account_id];
     allowed.extend(
         context
-            .subordinate_respondents
+            .delegations
             .iter()
-            .map(|respondent| respondent.account_id),
+            .map(|delegate| delegate.account_id),
     );
 
     let selected = requested_account_id.unwrap_or(context.account_id);
@@ -292,6 +331,6 @@ pub async fn resolve_accessible_respondent_account_id(
         Ok(selected)
     } else {
         let _ = pool;
-        Err(ApiError::Forbidden("responses:respondent-context".into()))
+        Err(ApiError::Forbidden("responses:delegate-context".into()))
     }
 }

@@ -3,6 +3,10 @@ name = "tessara-api"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = []
+ssr = ["tessara-web/ssr"]
+
 [dependencies]
 anyhow = { workspace = true }
 arrow = { workspace = true }

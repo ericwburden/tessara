@@ -2,33 +2,43 @@
 
 use leptos::prelude::*;
 
-use crate::brand::document_head_tags;
+use crate::pipeline;
 use crate::shell_model::{Action, PRIMARY_SECTION, WORKFLOW_SECTIONS, WorkflowSection};
+use crate::{brand::document_head_tags, theme};
 
 /// Builds the local shell document from separately maintained style and script
 /// assets.
-pub fn admin_shell_html(style: &str, script: &str) -> String {
+pub fn admin_shell_html(_script: &str) -> String {
     let shell = view! { <AdminShell/> }.to_html();
     let brand = document_head_tags(
         "Tessara",
         "Tessara local admin workbench for migration setup and workflow testing.",
     );
+    let theme_bootstrap = theme::bootstrap_script();
+    let stylesheets = theme::stylesheet_links();
+    let hydration = pipeline::hydration_module_tag();
 
     format!(
         r#"<!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light" data-theme-preference="system">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Tessara</title>
     {brand}
-    <style>{style}</style>
+    <script>{theme_bootstrap}</script>
+    {stylesheets}
   </head>
-  <body>
-    {shell}
-    <script>{script}</script>
+  <body class="tessara-app">
+    <div id="{app_root_id}">{app_root_start}{shell}{app_root_end}</div>
+    <script src="{bridge_script_path}" defer></script>
+    {hydration}
   </body>
-</html>"#
+</html>"#,
+        app_root_id = pipeline::APP_ROOT_ID,
+        app_root_start = pipeline::APP_ROOT_START,
+        app_root_end = pipeline::APP_ROOT_END,
+        bridge_script_path = pipeline::bridge_asset_path("admin-legacy.js"),
     )
 }
 
@@ -36,10 +46,13 @@ pub fn admin_shell_html(style: &str, script: &str) -> String {
 fn AdminShell() -> impl IntoView {
     view! {
         <main class="shell">
-            <section class="panel hero">
-                <div class="brand-lockup">
-                    <img class="brand-mark" src="/assets/tessara-icon-1024.svg" alt="" />
-                    <span>"Tessara"</span>
+            <section class="panel box hero">
+                <div class="hero-header">
+                    <div class="brand-lockup">
+                        <img class="brand-mark" src="/assets/tessara-icon-1024.svg" alt="" />
+                        <span>"Tessara"</span>
+                    </div>
+                    <ThemeToggle/>
                 </div>
                 <p class="muted">"Tessara Core"</p>
                 <h1>"Admin Shell"</h1>
@@ -55,7 +68,7 @@ fn AdminShell() -> impl IntoView {
             </section>
             <UserTestingGuide/>
             <SelectionContext/>
-            <section class="panel">
+            <section class="panel box">
                 <h2>"Builder Workflows"</h2>
                 <p class="muted">
                     "These sections follow the migration roadmap slices: hierarchy, forms, "
@@ -68,11 +81,11 @@ fn AdminShell() -> impl IntoView {
                         .collect_view()}
                 </div>
             </section>
-            <section class="panel">
+            <section class="panel box">
                 <h2>"Screen"</h2>
                 <div id="screen" class="cards"></div>
             </section>
-            <section class="panel">
+            <section class="panel box">
                 <h2>"Raw Output"</h2>
                 <pre id="output">"No API calls yet."</pre>
             </section>
@@ -81,9 +94,26 @@ fn AdminShell() -> impl IntoView {
 }
 
 #[component]
+fn ThemeToggle() -> impl IntoView {
+    view! {
+        <div class="theme-toggle" role="group" aria-label="Theme preference">
+            <button class="theme-toggle-button" type="button" data-theme-choice="system" aria-pressed="true">
+                "System"
+            </button>
+            <button class="theme-toggle-button" type="button" data-theme-choice="light" aria-pressed="false">
+                "Light"
+            </button>
+            <button class="theme-toggle-button" type="button" data-theme-choice="dark" aria-pressed="false">
+                "Dark"
+            </button>
+        </div>
+    }
+}
+
+#[component]
 fn SelectionContext() -> impl IntoView {
     view! {
-        <section class="panel">
+        <section class="panel box">
             <h2>"Selected Context"</h2>
             <p class="muted">
                 "Selections from cards populate workflow inputs and are summarized here."
@@ -98,7 +128,7 @@ fn SelectionContext() -> impl IntoView {
 #[component]
 fn UserTestingGuide() -> impl IntoView {
     view! {
-        <section class="panel">
+        <section class="panel box">
             <h2>"User Testing Guide"</h2>
             <p class="muted">
                 "Recommended path for the current Docker Compose test deployment."
