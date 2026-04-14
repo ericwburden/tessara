@@ -1,0 +1,4 @@
+interface:
+  display_name: "Tessara Sprint Kickoff"
+  short_description: "Start Tessara sprints with a clean kickoff workflow"
+  default_prompt: "Use $tessara-sprint-kickoff to start the next Tessara sprint from roadmap selection through branch, worktree, and kickoff plan setup."

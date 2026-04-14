@@ -1,0 +1,4 @@
+interface:
+  display_name: "Tessara Sprint Closeout"
+  short_description: "Close Tessara sprints with validation and handoff"
+  default_prompt: "Use $tessara-sprint-closeout to finish a Tessara sprint with roadmap updates, validation, and reviewer-ready handoff notes."
