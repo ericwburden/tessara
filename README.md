@@ -8,7 +8,7 @@ the migration blueprint. It should be developed as a domain-driven redesign,
 not as a direct port of the legacy Django application.
 
 Project direction, architecture, roadmap, and UI rules are authoritative in
-[`/docs`](/D:/Projects/dms-migration/docs/README.md). This README focuses on
+[`/docs`](./docs/README.md). This README focuses on
 local development and operational workflow for the Rust workspace.
 
 ## Intended Architecture
