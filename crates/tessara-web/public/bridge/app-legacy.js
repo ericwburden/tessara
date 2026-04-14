@@ -32,6 +32,12 @@
       let renderedResponseForm = null;
       let currentResponseDetail = null;
       let currentDelegateContext = window.sessionStorage.getItem('tessara.delegateAccountId');
+      let formBuilderState = {
+        form: null,
+        renderedVersion: null,
+        selectedVersionId: ''
+      };
+      const formActionLocks = new Set();
 
       function storedThemePreference() {
         try {
@@ -163,6 +169,194 @@
             <h4>${escapeHtml(title)}</h4>
             ${body}
           </section>
+        `;
+      }
+
+      function formatDateTime(value) {
+        if (!value) return 'Not published';
+        try {
+          return new Intl.DateTimeFormat('en-US', {
+            dateStyle: 'medium',
+            timeStyle: 'short'
+          }).format(new Date(value));
+        } catch (_error) {
+          return String(value);
+        }
+      }
+
+      function formStatusLabel(status) {
+        return String(status || 'unknown').replaceAll('_', ' ');
+      }
+
+      function setFormStatus(id, message = '', tone = 'muted') {
+        const element = byId(id);
+        if (!element) return;
+        element.textContent = message;
+        element.className = tone === 'error'
+          ? 'notification is-danger is-light'
+          : tone === 'success'
+            ? 'notification is-success is-light'
+            : 'muted';
+      }
+
+      async function runLockedFormAction(lockKey, action) {
+        if (formActionLocks.has(lockKey)) {
+          throw new Error('A form update is already in progress. Wait for the current request to finish.');
+        }
+        formActionLocks.add(lockKey);
+        try {
+          return await action();
+        } finally {
+          formActionLocks.delete(lockKey);
+        }
+      }
+
+      function latestMatchingVersion(versions, predicate) {
+        for (let index = versions.length - 1; index >= 0; index -= 1) {
+          if (predicate(versions[index])) {
+            return versions[index];
+          }
+        }
+        return null;
+      }
+
+      function choosePreferredFormVersion(payload, preferredVersionId = '') {
+        if (!payload?.versions?.length) return null;
+        const explicit = preferredVersionId
+          ? payload.versions.find((version) => version.id === preferredVersionId)
+          : null;
+        if (explicit) return explicit;
+        return latestMatchingVersion(payload.versions, (version) => version.status === 'published')
+          || payload.versions[payload.versions.length - 1];
+      }
+
+      function renderFormFieldTypeOptions(selectedValue = 'text') {
+        return ['text', 'number', 'boolean', 'date', 'multi_choice']
+          .map((fieldType) => `
+            <option value=\"${escapeHtml(fieldType)}\" ${fieldType === selectedValue ? 'selected' : ''}>
+              ${escapeHtml(formStatusLabel(fieldType))}
+            </option>
+          `)
+          .join('');
+      }
+
+      function renderFormSectionOptions(sectionId = '') {
+        return (formBuilderState.renderedVersion?.sections || [])
+          .map((section) => `
+            <option value=\"${escapeHtml(section.id)}\" ${section.id === sectionId ? 'selected' : ''}>
+              ${escapeHtml(section.title)}
+            </option>
+          `)
+          .join('');
+      }
+
+      function formVersionLabel(version) {
+        return version?.version_label || version?.publish_preview?.version_label || 'Draft version';
+      }
+
+      function formVersionCompatibility(version) {
+        if (version?.publish_preview?.compatibility_label) {
+          return version.publish_preview.compatibility_label;
+        }
+        if (Number.isInteger(version?.version_major)) {
+          return `Compatible with v${version.version_major}.x`;
+        }
+        return 'Compatibility line assigned on publish';
+      }
+
+      function formVersionSemanticBump(version) {
+        return version?.semantic_bump || version?.publish_preview?.semantic_bump || '';
+      }
+
+      function formVersionLifecycleSummary(version) {
+        if (version?.publish_preview) {
+          const preview = version.publish_preview;
+          return `
+            <p class=\"muted\">Publish preview: ${escapeHtml(preview.semantic_bump)} -> ${escapeHtml(preview.version_label)}</p>
+            <p class=\"muted\">${escapeHtml(preview.compatibility_label)}${preview.starts_new_major_line ? ' (new major line)' : ''}</p>
+            ${preview.dependency_warnings.length
+              ? `<ul class=\"app-list\">${preview.dependency_warnings.map((warning) => `<li>${escapeHtml(warning)}</li>`).join('')}</ul>`
+              : '<p class=\"muted\">No direct-consumer warnings for this publish.</p>'}
+          `;
+        }
+        const bump = formVersionSemanticBump(version);
+        return `
+          ${bump ? `<p class=\"muted\">Semantic bump: ${escapeHtml(bump)}</p>` : ''}
+          <p class=\"muted\">${escapeHtml(formVersionCompatibility(version))}${version?.started_new_major_line ? ' (new major line)' : ''}</p>
+        `;
+      }
+
+      function renderFormVersionCards(payload, selectedVersionId, editable) {
+        return payload.versions.length
+          ? payload.versions.map((version) => `
+              <article class=\"record-card ${version.id === selectedVersionId ? 'compact-record-card' : ''}\">
+                <h4>${escapeHtml(formVersionLabel(version))}</h4>
+                <p class=\"muted\">Status: ${escapeHtml(formStatusLabel(version.status))}</p>
+                ${formVersionSemanticBump(version)
+                  ? `<p class=\"muted\">Semantic bump: ${escapeHtml(formVersionSemanticBump(version))}</p>`
+                  : ''}
+                <p class=\"muted\">Compatibility: ${escapeHtml(formVersionCompatibility(version))}</p>
+                <p class=\"muted\">Published: ${escapeHtml(formatDateTime(version.published_at))}</p>
+                <p class=\"muted\">Fields: ${escapeHtml(version.field_count)}</p>
+                ${version.status === 'published' ? '<p class=\"muted\">Current published version.</p>' : ''}
+                ${version.id === selectedVersionId ? '<p class=\"muted\">Selected version.</p>' : ''}
+                <div class=\"actions\">
+                  <button type=\"button\" onclick=\"previewFormVersion('${escapeHtml(version.id)}')\">${editable ? 'Open Workspace' : 'Preview'}</button>
+                  ${editable && hasCapability('forms:write') && version.status === 'draft'
+                    ? `<button type=\"button\" onclick=\"publishSelectedFormVersion('${escapeHtml(version.id)}')\">Publish</button>`
+                    : ''}
+                </div>
+              </article>
+            `).join('')
+          : emptyState('No versions have been created for this form yet.');
+      }
+
+      function renderFormPreview(versionSummary, rendered) {
+        const sections = rendered.sections.length
+          ? rendered.sections.map((section) => `
+              <section class=\"page-panel nested-form-panel\">
+                <h3>${escapeHtml(section.title)}</h3>
+                <p class=\"muted\">Section order: ${escapeHtml(section.position)}</p>
+                <div class=\"record-list\">
+                  ${section.fields.length
+                    ? section.fields.map((field) => `
+                        <article class=\"record-card compact-record-card\">
+                          <h4>${escapeHtml(field.label)}</h4>
+                          <p class=\"muted\">Key: ${escapeHtml(field.key)}</p>
+                          <p class=\"muted\">Type: ${escapeHtml(formStatusLabel(field.field_type))}</p>
+                          <p class=\"muted\">${field.required ? 'Required' : 'Optional'} field</p>
+                          <p class=\"muted\">Option-set and lookup touchpoints remain read-only in this slice.</p>
+                        </article>
+                      `).join('')
+                    : emptyState('No fields in this section yet.')}
+                </div>
+              </section>
+            `).join('')
+          : emptyState('No sections were added to this version yet.');
+
+        return `
+          <article class=\"record-card\">
+            <h4>${escapeHtml(formVersionLabel(versionSummary))}</h4>
+            <p class=\"muted\">Status: ${escapeHtml(formStatusLabel(versionSummary.status))}</p>
+            <p class=\"muted\">Compatibility: ${escapeHtml(formVersionCompatibility(versionSummary))}</p>
+            <p class=\"muted\">Published: ${escapeHtml(formatDateTime(versionSummary.published_at))}</p>
+            ${formVersionLifecycleSummary(versionSummary)}
+          </article>
+          ${sections}
+        `;
+      }
+
+      function renderFormWorkflowAttachments(payload) {
+        const reports = payload.reports.length
+          ? payload.reports.map((report) => `<li><a href=\"/app/reports/${report.id}\">${escapeHtml(report.name)}</a></li>`).join('')
+          : '<li class=\"muted\">No related reports.</li>';
+        const datasets = payload.dataset_sources.length
+          ? payload.dataset_sources.map((dataset) => `<li>${escapeHtml(dataset.dataset_name)} (${escapeHtml(dataset.source_alias)}; ${escapeHtml(dataset.selection_rule)})</li>`).join('')
+          : '<li class=\"muted\">No related dataset sources.</li>';
+
+        return `
+          ${detailSection('Related Reports', `<ul class=\"app-list\">${reports}</ul>`)}
+          ${detailSection('Related Dataset Sources', `<ul class=\"app-list\">${datasets}</ul>`)}
         `;
       }
 
@@ -405,6 +599,10 @@
         }
       }
 
+      function isPublicReadableCapability(requiredCapability) {
+        return ['hierarchy:read', 'forms:read', 'reports:read'].includes(requiredCapability);
+      }
+
       function applyRoleVisibility() {
         const routeCapabilities = {
           '/app': null,
@@ -420,7 +618,7 @@
           const href = link.getAttribute('href') || '';
           const requiredCapability = routeCapabilities[href];
           const visible = !currentAccount
-            ? href === '/app'
+            ? href === '/app' || isPublicReadableCapability(requiredCapability)
             : !requiredCapability || hasCapability(requiredCapability);
           link.style.display = visible ? '' : 'none';
         }
@@ -428,7 +626,6 @@
 
       function canAccessCurrentPage() {
         if (page.key === 'login') return true;
-        if (!currentAccount) return false;
         const pageCapabilities = {
           home: null,
           administration: 'admin:all',
@@ -468,7 +665,9 @@
           'role-edit': 'admin:all'
         };
         const requiredCapability = pageCapabilities[page.key];
-        return !requiredCapability || hasCapability(requiredCapability);
+        if (!requiredCapability) return true;
+        if (!currentAccount) return isPublicReadableCapability(requiredCapability);
+        return hasCapability(requiredCapability);
       }
 
       function renderAccessState(title, message) {
@@ -1662,8 +1861,8 @@
           const html = payload.length
             ? payload.map((form) => recordCard(
                 form.name,
-                `<p>${escapeHtml(form.slug)}</p><p class=\"muted\">${escapeHtml(form.scope_node_type_name || 'Unscoped')}</p>`,
-                `<a class=\"button-link\" href=\"/app/forms/${form.id}\">View</a>${isAdmin() ? `<a class=\"button-link\" href=\"/app/forms/${form.id}/edit\">Edit</a>` : ''}`
+                `<p>${escapeHtml(form.slug)}</p><p class=\"muted\">Scope: ${escapeHtml(form.scope_node_type_name || 'Unscoped')}</p><p class=\"muted\">Published: ${escapeHtml((latestMatchingVersion(form.versions, (version) => version.status === 'published') || {}).version_label || 'None')}</p><p class=\"muted\">Drafts: ${escapeHtml(form.versions.filter((version) => version.status === 'draft').length)}</p>`,
+                `<a class=\"button-link\" href=\"/app/forms/${form.id}\">View</a>${hasCapability('forms:write') ? `<a class=\"button-link\" href=\"/app/forms/${form.id}/edit\">Edit</a>` : ''}`
               )).join('')
             : emptyState('No form records found.');
           setHtml('form-list', html);
@@ -1676,27 +1875,13 @@
       async function loadFormDetail(id) {
         try {
           await ensureAuthenticated();
-          const payload = await request(`/api/forms/${id}`);
-          selectRecord('form', payload.name, payload.id);
-          const versions = payload.versions.length
-            ? payload.versions.map((version) => `<li>${escapeHtml(version.version_label)} (${escapeHtml(version.status)})</li>`).join('')
-            : '<li class=\"muted\">No versions.</li>';
-          const reports = payload.reports.length
-            ? payload.reports.map((report) => `<li><a href=\"/app/reports/${report.id}\">${escapeHtml(report.name)}</a></li>`).join('')
-            : '<li class=\"muted\">No related reports.</li>';
-          const datasets = payload.dataset_sources.length
-            ? payload.dataset_sources.map((dataset) => `<li>${escapeHtml(dataset.dataset_name)} (${escapeHtml(dataset.source_alias)})</li>`).join('')
-            : '<li class=\"muted\">No related dataset sources.</li>';
-          const publishedCount = payload.versions.filter((version) => version.status === 'published').length;
-          setHtml('form-detail', `
-            ${detailSection('Summary', `<p>${escapeHtml(payload.name)}</p><p>${escapeHtml(payload.slug)}</p><p class=\"muted\">Scope: ${escapeHtml(payload.scope_node_type_name || 'Unscoped')}</p><p class=\"muted\">Published versions: ${publishedCount}</p>`)}
-            ${detailSection('Versions', `<ul class=\"app-list\">${versions}</ul>`)}
-            ${detailSection('Related Reports', `<ul class=\"app-list\">${reports}</ul>`)}
-            ${detailSection('Related Dataset Sources', `<ul class=\"app-list\">${datasets}</ul>`)}
-          `);
-          show(payload);
+          await loadReadableFormSurface(id, formBuilderState.selectedVersionId);
+          show(formBuilderState.form);
         } catch (error) {
           setHtml('form-detail', emptyState(error.message));
+          setHtml('form-version-summary', emptyState(error.message));
+          setHtml('form-version-preview', emptyState(error.message));
+          setHtml('form-workflow-links', emptyState(error.message));
         }
       }
 
@@ -1709,32 +1894,564 @@
             nodeTypes.map((item) => ({ value: item.id, label: item.name })),
             'No scope'
           );
-          if (mode === 'edit' && id) {
-            const payload = await request(`/api/forms/${id}`);
-            byId('form-name').value = payload.name || '';
-            byId('form-slug').value = payload.slug || '';
-            byId('form-scope-node-type').value = payload.scope_node_type_id || '';
-          }
           const form = byId('form-entity-form');
           if (form) {
             form.onsubmit = async (event) => {
               event.preventDefault();
-              const response = await request(
-                mode === 'create' ? '/api/admin/forms' : `/api/admin/forms/${id}`,
-                {
-                  method: mode === 'create' ? 'POST' : 'PUT',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    name: byId('form-name').value.trim(),
-                    slug: byId('form-slug').value.trim(),
-                    scope_node_type_id: byId('form-scope-node-type').value || null
-                  })
+              try {
+                const response = await runLockedFormAction('form-metadata', async () => {
+                  setFormStatus('form-editor-status', mode === 'create' ? 'Creating form...' : 'Saving form metadata...');
+                  return request(
+                    mode === 'create' ? '/api/admin/forms' : `/api/admin/forms/${id}`,
+                    {
+                      method: mode === 'create' ? 'POST' : 'PUT',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        name: byId('form-name').value.trim(),
+                        slug: byId('form-slug').value.trim(),
+                        scope_node_type_id: byId('form-scope-node-type').value || null
+                      })
+                    }
+                  );
+                });
+                setFormStatus('form-editor-status', 'Form metadata saved.', 'success');
+                if (mode === 'create') {
+                  redirect(`/app/forms/${response.id}/edit`);
+                  return;
                 }
-              );
-              redirect(`/app/forms/${response.id}`);
+                await loadEditableFormSurface(response.id, formBuilderState.selectedVersionId);
+              } catch (error) {
+                setFormStatus('form-editor-status', error.message, 'error');
+                show(error.message);
+              }
             };
           }
+          if (mode === 'edit' && id) {
+            const versionForm = byId('form-version-create-form');
+            if (versionForm) {
+              versionForm.onsubmit = async (event) => {
+                event.preventDefault();
+                await createFormVersion();
+              };
+            }
+            await loadEditableFormSurface(id);
+          } else {
+            setFormStatus('form-editor-status', 'Create the form record first. Version authoring opens after the form is saved.');
+          }
         } catch (error) {
+          setFormStatus('form-editor-status', error.message, 'error');
+          show(error.message);
+        }
+      }
+
+      async function loadReadableFormSurface(id, preferredVersionId = '') {
+        const payload = await request(`/api/forms/${id}`);
+        formBuilderState.form = payload;
+        selectRecord('form', payload.name, payload.id);
+        const publishedVersion = latestMatchingVersion(payload.versions, (version) => version.status === 'published');
+        const draftCount = payload.versions.filter((version) => version.status === 'draft').length;
+        setHtml('form-detail', `
+          ${detailSection('Summary', `<p>${escapeHtml(payload.name)}</p><p>${escapeHtml(payload.slug)}</p><p class=\"muted\">Scope: ${escapeHtml(payload.scope_node_type_name || 'Unscoped')}</p><p class=\"muted\">Published version: ${escapeHtml(publishedVersion ? formVersionLabel(publishedVersion) : 'None')}</p><p class=\"muted\">Draft versions: ${escapeHtml(draftCount)}</p>`)}
+        `);
+        const selectedVersion = choosePreferredFormVersion(payload, preferredVersionId);
+        setHtml('form-version-summary', renderFormVersionCards(payload, selectedVersion?.id || '', false));
+        setHtml('form-workflow-links', renderFormWorkflowAttachments(payload));
+        if (!selectedVersion) {
+          formBuilderState.selectedVersionId = '';
+          formBuilderState.renderedVersion = null;
+          setHtml('form-version-preview', emptyState('No form versions are available to preview.'));
+          return;
+        }
+        formBuilderState.selectedVersionId = selectedVersion.id;
+        formBuilderState.renderedVersion = await request(`/api/form-versions/${selectedVersion.id}/render`);
+        setHtml('form-version-preview', renderFormPreview(selectedVersion, formBuilderState.renderedVersion));
+      }
+
+      function renderEditableFormWorkspace() {
+        const version = formBuilderState.form?.versions?.find((item) => item.id === formBuilderState.selectedVersionId);
+        const rendered = formBuilderState.renderedVersion;
+        if (!version || !rendered) {
+          setHtml('form-version-workspace', emptyState('Create a draft version to start authoring sections and fields.'));
+          return;
+        }
+
+        if (version.status !== 'draft') {
+          setHtml('form-version-workspace', `
+            <article class=\"record-card\">
+              <h4>${escapeHtml(formVersionLabel(version))}</h4>
+              <p class=\"muted\">This version is ${escapeHtml(formStatusLabel(version.status))} and is read-only.</p>
+              <p class=\"muted\">Create a new draft version to change sections, fields, or ordering.</p>
+            </article>
+            ${renderFormPreview(version, rendered)}
+          `);
+          return;
+        }
+
+        const sections = rendered.sections.length
+          ? rendered.sections.map((section, sectionIndex) => `
+              <article class=\"record-card\">
+                <div class=\"page-title-row compact-title-row\">
+                  <div>
+                    <h4>${escapeHtml(section.title)}</h4>
+                    <p class=\"muted\">Draft section ${sectionIndex + 1}</p>
+                  </div>
+                  <div class=\"actions\">
+                    <button type=\"button\" onclick=\"moveFormSection('${escapeHtml(section.id)}', -1)\">Move Up</button>
+                    <button type=\"button\" onclick=\"moveFormSection('${escapeHtml(section.id)}', 1)\">Move Down</button>
+                    <button type=\"button\" onclick=\"deleteFormSection('${escapeHtml(section.id)}')\">Delete</button>
+                  </div>
+                </div>
+                <div class=\"form-grid\">
+                  <div class=\"form-field wide-field\">
+                    <label for=\"form-section-title-${escapeHtml(section.id)}\">Section Title</label>
+                    <input class=\"input\" id=\"form-section-title-${escapeHtml(section.id)}\" type=\"text\" value=\"${escapeHtml(section.title)}\" />
+                  </div>
+                  <div class=\"form-field\">
+                    <label for=\"form-section-position-${escapeHtml(section.id)}\">Display Order</label>
+                    <input class=\"input\" id=\"form-section-position-${escapeHtml(section.id)}\" type=\"number\" value=\"${escapeHtml(section.position)}\" />
+                  </div>
+                </div>
+                <div class=\"actions\">
+                  <button type=\"button\" onclick=\"updateFormSection('${escapeHtml(section.id)}')\">Save Section</button>
+                </div>
+                <div class=\"record-list\">
+                  ${section.fields.length
+                    ? section.fields.map((field, fieldIndex) => `
+                        <article class=\"record-card compact-record-card\">
+                          <div class=\"page-title-row compact-title-row\">
+                            <div>
+                              <h4>${escapeHtml(field.label)}</h4>
+                              <p class=\"muted\">Field ${fieldIndex + 1}</p>
+                            </div>
+                            <div class=\"actions\">
+                              <button type=\"button\" onclick=\"moveFormField('${escapeHtml(field.id)}', -1)\">Move Up</button>
+                              <button type=\"button\" onclick=\"moveFormField('${escapeHtml(field.id)}', 1)\">Move Down</button>
+                              <button type=\"button\" onclick=\"deleteFormField('${escapeHtml(field.id)}')\">Delete</button>
+                            </div>
+                          </div>
+                          <div class=\"form-grid\">
+                            <div class=\"form-field\">
+                              <label for=\"form-field-key-${escapeHtml(field.id)}\">Field Key</label>
+                              <input class=\"input\" id=\"form-field-key-${escapeHtml(field.id)}\" type=\"text\" value=\"${escapeHtml(field.key)}\" />
+                            </div>
+                            <div class=\"form-field\">
+                              <label for=\"form-field-label-${escapeHtml(field.id)}\">Label</label>
+                              <input class=\"input\" id=\"form-field-label-${escapeHtml(field.id)}\" type=\"text\" value=\"${escapeHtml(field.label)}\" />
+                            </div>
+                            <div class=\"form-field\">
+                              <label for=\"form-field-type-${escapeHtml(field.id)}\">Field Type</label>
+                              <select class=\"input\" id=\"form-field-type-${escapeHtml(field.id)}\">
+                                ${renderFormFieldTypeOptions(field.field_type)}
+                              </select>
+                            </div>
+                            <div class=\"form-field\">
+                              <label for=\"form-field-required-${escapeHtml(field.id)}\">Required</label>
+                              <select class=\"input\" id=\"form-field-required-${escapeHtml(field.id)}\">
+                                <option value=\"true\" ${field.required ? 'selected' : ''}>Required</option>
+                                <option value=\"false\" ${field.required ? '' : 'selected'}>Optional</option>
+                              </select>
+                            </div>
+                            <div class=\"form-field\">
+                              <label for=\"form-field-position-${escapeHtml(field.id)}\">Display Order</label>
+                              <input class=\"input\" id=\"form-field-position-${escapeHtml(field.id)}\" type=\"number\" value=\"${escapeHtml(field.position)}\" />
+                            </div>
+                            <div class=\"form-field\">
+                              <label for=\"form-field-section-${escapeHtml(field.id)}\">Section</label>
+                              <select class=\"input\" id=\"form-field-section-${escapeHtml(field.id)}\">
+                                ${renderFormSectionOptions(section.id)}
+                              </select>
+                            </div>
+                          </div>
+                          <p class=\"muted\">Option-set and lookup touchpoints remain visible but read-only until backend metadata is available.</p>
+                          <div class=\"actions\">
+                            <button type=\"button\" onclick=\"updateFormField('${escapeHtml(field.id)}')\">Save Field</button>
+                          </div>
+                        </article>
+                      `).join('')
+                    : emptyState('No fields were added to this section yet.')}
+                </div>
+                <section class=\"page-panel nested-form-panel\">
+                  <div class=\"page-title-row compact-title-row\">
+                    <div>
+                      <h4>Add Field</h4>
+                      <p class=\"muted\">Create a new field inside this section.</p>
+                    </div>
+                  </div>
+                  <div class=\"form-grid\">
+                    <div class=\"form-field\">
+                      <label for=\"new-form-field-key-${escapeHtml(section.id)}\">Field Key</label>
+                      <input class=\"input\" id=\"new-form-field-key-${escapeHtml(section.id)}\" type=\"text\" />
+                    </div>
+                    <div class=\"form-field\">
+                      <label for=\"new-form-field-label-${escapeHtml(section.id)}\">Label</label>
+                      <input class=\"input\" id=\"new-form-field-label-${escapeHtml(section.id)}\" type=\"text\" />
+                    </div>
+                    <div class=\"form-field\">
+                      <label for=\"new-form-field-type-${escapeHtml(section.id)}\">Field Type</label>
+                      <select class=\"input\" id=\"new-form-field-type-${escapeHtml(section.id)}\">
+                        ${renderFormFieldTypeOptions('text')}
+                      </select>
+                    </div>
+                    <div class=\"form-field\">
+                      <label for=\"new-form-field-required-${escapeHtml(section.id)}\">Required</label>
+                      <select class=\"input\" id=\"new-form-field-required-${escapeHtml(section.id)}\">
+                        <option value=\"false\" selected>Optional</option>
+                        <option value=\"true\">Required</option>
+                      </select>
+                    </div>
+                  </div>
+                  <p class=\"muted\">Option-set and lookup anchors remain informational until backend metadata support lands.</p>
+                  <div class=\"actions\">
+                    <button type=\"button\" onclick=\"createFormField('${escapeHtml(section.id)}')\">Add Field</button>
+                  </div>
+                </section>
+              </article>
+            `).join('')
+          : emptyState('No sections were added to this draft yet.');
+
+        setHtml('form-version-workspace', `
+          <section class=\"page-panel nested-form-panel\">
+            <div class=\"page-title-row compact-title-row\">
+              <div>
+                <h3>${escapeHtml(formVersionLabel(version))}</h3>
+                <p class=\"muted\">Draft version workspace for ${escapeHtml(formBuilderState.form.name)}</p>
+              </div>
+              <div class=\"actions\">
+                <button type=\"button\" onclick=\"publishSelectedFormVersion()\">Publish Draft Version</button>
+              </div>
+            </div>
+            <p class=\"muted\">Compatibility: ${escapeHtml(formVersionCompatibility(version))}</p>
+            ${formVersionLifecycleSummary(version)}
+            <p class=\"muted\">Publish attempts surface validation errors here before the route reloads.</p>
+          </section>
+          <section class=\"page-panel nested-form-panel\">
+            <div class=\"page-title-row compact-title-row\">
+              <div>
+                <h3>Add Section</h3>
+                <p class=\"muted\">Create a new section for the selected draft version.</p>
+              </div>
+            </div>
+            <div class=\"form-grid\">
+              <div class=\"form-field wide-field\">
+                <label for=\"new-form-section-title\">Section Title</label>
+                <input class=\"input\" id=\"new-form-section-title\" type=\"text\" />
+              </div>
+            </div>
+            <div class=\"actions\">
+              <button type=\"button\" onclick=\"createFormSection()\">Add Section</button>
+            </div>
+          </section>
+          ${sections}
+        `);
+      }
+
+      async function loadEditableFormSurface(id, preferredVersionId = '') {
+        const payload = await request(`/api/admin/forms/${id}`);
+        formBuilderState.form = payload;
+        selectRecord('form', payload.name, payload.id);
+        byId('form-name').value = payload.name || '';
+        byId('form-slug').value = payload.slug || '';
+        byId('form-scope-node-type').value = payload.scope_node_type_id || '';
+        const selectedVersion = choosePreferredFormVersion(payload, preferredVersionId);
+        setHtml('form-version-list', renderFormVersionCards(payload, selectedVersion?.id || '', true));
+        if (!selectedVersion) {
+          formBuilderState.selectedVersionId = '';
+          formBuilderState.renderedVersion = null;
+          setHtml('form-version-workspace', emptyState('Create a draft version to start authoring sections and fields.'));
+          return;
+        }
+        formBuilderState.selectedVersionId = selectedVersion.id;
+        formBuilderState.renderedVersion = await request(`/api/form-versions/${selectedVersion.id}/render`);
+        setHtml('form-version-list', renderFormVersionCards(payload, selectedVersion.id, true));
+        renderEditableFormWorkspace();
+      }
+
+      async function previewFormVersion(formVersionId) {
+        try {
+          if (!page.recordId) throw new Error('Choose a form first.');
+          if (page.key === 'form-edit') {
+            await loadEditableFormSurface(page.recordId, formVersionId);
+          } else {
+            await loadReadableFormSurface(page.recordId, formVersionId);
+          }
+        } catch (error) {
+          setFormStatus('form-version-status', error.message, 'error');
+          show(error.message);
+        }
+      }
+
+      function currentRenderedSection(sectionId) {
+        return (formBuilderState.renderedVersion?.sections || []).find((section) => section.id === sectionId);
+      }
+
+      function currentRenderedField(fieldId) {
+        for (const section of formBuilderState.renderedVersion?.sections || []) {
+          const field = section.fields.find((item) => item.id === fieldId);
+          if (field) {
+            return { field, section };
+          }
+        }
+        return null;
+      }
+
+      function nextSectionPosition() {
+        return (formBuilderState.renderedVersion?.sections || []).reduce((max, section) => Math.max(max, Number(section.position) || 0), 0) + 1;
+      }
+
+      function nextFieldPosition(sectionId) {
+        const section = currentRenderedSection(sectionId);
+        return (section?.fields || []).reduce((max, field) => Math.max(max, Number(field.position) || 0), 0) + 1;
+      }
+
+      async function createFormVersion() {
+        try {
+          if (!page.recordId) throw new Error('Choose a form first.');
+          const response = await runLockedFormAction('form-version-create', async () => {
+            setFormStatus('form-version-status', 'Creating draft version...');
+            return request(`/api/admin/forms/${page.recordId}/versions`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({})
+            });
+          });
+          setFormStatus('form-version-status', 'Draft version created.', 'success');
+          await loadEditableFormSurface(page.recordId, response.id);
+        } catch (error) {
+          setFormStatus('form-version-status', error.message, 'error');
+          show(error.message);
+        }
+      }
+
+      async function publishSelectedFormVersion(versionId = '') {
+        try {
+          const selectedVersionId = versionId || formBuilderState.selectedVersionId;
+          if (!selectedVersionId) throw new Error('Select a draft version first.');
+          const response = await runLockedFormAction('form-version-publish', async () => {
+            setFormStatus('form-version-status', 'Publishing draft version...');
+            return request(`/api/admin/form-versions/${selectedVersionId}/publish`, {
+              method: 'POST'
+            });
+          });
+          const warningSuffix = response.dependency_warnings?.length
+            ? ` ${response.dependency_warnings.length} direct dependency warning(s) need review.`
+            : '';
+          setFormStatus(
+            'form-version-status',
+            `Draft version published as ${response.version_label}.${warningSuffix}`.trim(),
+            'success'
+          );
+          await loadEditableFormSurface(page.recordId, selectedVersionId);
+        } catch (error) {
+          setFormStatus('form-version-status', error.message, 'error');
+          show(error.message);
+        }
+      }
+
+      async function createFormSection() {
+        try {
+          if (!formBuilderState.selectedVersionId) throw new Error('Select a draft version first.');
+          await runLockedFormAction('form-section-create', async () => {
+            setFormStatus('form-version-status', 'Creating section...');
+            await request(`/api/admin/form-versions/${formBuilderState.selectedVersionId}/sections`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                title: byId('new-form-section-title').value.trim(),
+                position: nextSectionPosition()
+              })
+            });
+          });
+          byId('new-form-section-title').value = '';
+          setFormStatus('form-version-status', 'Section created.', 'success');
+          await loadEditableFormSurface(page.recordId, formBuilderState.selectedVersionId);
+        } catch (error) {
+          setFormStatus('form-version-status', error.message, 'error');
+          show(error.message);
+        }
+      }
+
+      async function updateFormSection(sectionId) {
+        try {
+          await runLockedFormAction(`form-section-update:${sectionId}`, async () => {
+            setFormStatus('form-version-status', 'Saving section...');
+            await request(`/api/admin/form-sections/${sectionId}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                title: byId(`form-section-title-${sectionId}`).value.trim(),
+                position: Number(byId(`form-section-position-${sectionId}`).value || 0)
+              })
+            });
+          });
+          setFormStatus('form-version-status', 'Section saved.', 'success');
+          await loadEditableFormSurface(page.recordId, formBuilderState.selectedVersionId);
+        } catch (error) {
+          setFormStatus('form-version-status', error.message, 'error');
+          show(error.message);
+        }
+      }
+
+      async function deleteFormSection(sectionId) {
+        try {
+          await runLockedFormAction(`form-section-delete:${sectionId}`, async () => {
+            setFormStatus('form-version-status', 'Deleting section...');
+            await request(`/api/admin/form-sections/${sectionId}`, {
+              method: 'DELETE'
+            });
+          });
+          setFormStatus('form-version-status', 'Section deleted.', 'success');
+          await loadEditableFormSurface(page.recordId, formBuilderState.selectedVersionId);
+        } catch (error) {
+          setFormStatus('form-version-status', error.message, 'error');
+          show(error.message);
+        }
+      }
+
+      async function moveFormSection(sectionId, direction) {
+        try {
+          const sections = [...(formBuilderState.renderedVersion?.sections || [])].sort((left, right) => left.position - right.position);
+          const currentIndex = sections.findIndex((section) => section.id === sectionId);
+          const targetIndex = currentIndex + direction;
+          if (currentIndex < 0 || targetIndex < 0 || targetIndex >= sections.length) {
+            return;
+          }
+          const current = sections[currentIndex];
+          const target = sections[targetIndex];
+          await runLockedFormAction(`form-section-move:${sectionId}`, async () => {
+            setFormStatus('form-version-status', 'Reordering sections...');
+            await request(`/api/admin/form-sections/${current.id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ title: current.title, position: target.position })
+            });
+            await request(`/api/admin/form-sections/${target.id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ title: target.title, position: current.position })
+            });
+          });
+          setFormStatus('form-version-status', 'Section order updated.', 'success');
+          await loadEditableFormSurface(page.recordId, formBuilderState.selectedVersionId);
+        } catch (error) {
+          setFormStatus('form-version-status', error.message, 'error');
+          show(error.message);
+        }
+      }
+
+      async function createFormField(sectionId) {
+        try {
+          if (!formBuilderState.selectedVersionId) throw new Error('Select a draft version first.');
+          await runLockedFormAction(`form-field-create:${sectionId}`, async () => {
+            setFormStatus('form-version-status', 'Creating field...');
+            await request(`/api/admin/form-versions/${formBuilderState.selectedVersionId}/fields`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                section_id: sectionId,
+                key: byId(`new-form-field-key-${sectionId}`).value.trim(),
+                label: byId(`new-form-field-label-${sectionId}`).value.trim(),
+                field_type: byId(`new-form-field-type-${sectionId}`).value,
+                required: byId(`new-form-field-required-${sectionId}`).value === 'true',
+                position: nextFieldPosition(sectionId)
+              })
+            });
+          });
+          byId(`new-form-field-key-${sectionId}`).value = '';
+          byId(`new-form-field-label-${sectionId}`).value = '';
+          byId(`new-form-field-type-${sectionId}`).value = 'text';
+          byId(`new-form-field-required-${sectionId}`).value = 'false';
+          setFormStatus('form-version-status', 'Field created.', 'success');
+          await loadEditableFormSurface(page.recordId, formBuilderState.selectedVersionId);
+        } catch (error) {
+          setFormStatus('form-version-status', error.message, 'error');
+          show(error.message);
+        }
+      }
+
+      async function updateFormField(fieldId) {
+        try {
+          await runLockedFormAction(`form-field-update:${fieldId}`, async () => {
+            setFormStatus('form-version-status', 'Saving field...');
+            await request(`/api/admin/form-fields/${fieldId}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                section_id: byId(`form-field-section-${fieldId}`).value,
+                key: byId(`form-field-key-${fieldId}`).value.trim(),
+                label: byId(`form-field-label-${fieldId}`).value.trim(),
+                field_type: byId(`form-field-type-${fieldId}`).value,
+                required: byId(`form-field-required-${fieldId}`).value === 'true',
+                position: Number(byId(`form-field-position-${fieldId}`).value || 0)
+              })
+            });
+          });
+          setFormStatus('form-version-status', 'Field saved.', 'success');
+          await loadEditableFormSurface(page.recordId, formBuilderState.selectedVersionId);
+        } catch (error) {
+          setFormStatus('form-version-status', error.message, 'error');
+          show(error.message);
+        }
+      }
+
+      async function deleteFormField(fieldId) {
+        try {
+          await runLockedFormAction(`form-field-delete:${fieldId}`, async () => {
+            setFormStatus('form-version-status', 'Deleting field...');
+            await request(`/api/admin/form-fields/${fieldId}`, {
+              method: 'DELETE'
+            });
+          });
+          setFormStatus('form-version-status', 'Field deleted.', 'success');
+          await loadEditableFormSurface(page.recordId, formBuilderState.selectedVersionId);
+        } catch (error) {
+          setFormStatus('form-version-status', error.message, 'error');
+          show(error.message);
+        }
+      }
+
+      async function moveFormField(fieldId, direction) {
+        try {
+          const existing = currentRenderedField(fieldId);
+          if (!existing) throw new Error('The selected field is no longer available. Reload the page and try again.');
+          const fields = [...existing.section.fields].sort((left, right) => left.position - right.position);
+          const currentIndex = fields.findIndex((field) => field.id === fieldId);
+          const targetIndex = currentIndex + direction;
+          if (currentIndex < 0 || targetIndex < 0 || targetIndex >= fields.length) {
+            return;
+          }
+          const current = fields[currentIndex];
+          const target = fields[targetIndex];
+          await runLockedFormAction(`form-field-move:${fieldId}`, async () => {
+            setFormStatus('form-version-status', 'Reordering fields...');
+            await request(`/api/admin/form-fields/${current.id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                section_id: existing.section.id,
+                key: current.key,
+                label: current.label,
+                field_type: current.field_type,
+                required: current.required,
+                position: target.position
+              })
+            });
+            await request(`/api/admin/form-fields/${target.id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                section_id: existing.section.id,
+                key: target.key,
+                label: target.label,
+                field_type: target.field_type,
+                required: target.required,
+                position: current.position
+              })
+            });
+          });
+          setFormStatus('form-version-status', 'Field order updated.', 'success');
+          await loadEditableFormSurface(page.recordId, formBuilderState.selectedVersionId);
+        } catch (error) {
+          setFormStatus('form-version-status', error.message, 'error');
           show(error.message);
         }
       }
@@ -2326,15 +3043,22 @@
           return;
         }
 
+        let bootstrapError = null;
         try {
           await bootstrapCurrentAccount();
         } catch (error) {
-          renderAccessState('Sign In Required', 'This screen requires an authenticated local account.');
-          show(error.message);
-          return;
+          bootstrapError = error;
+          currentAccount = null;
+          applyRoleVisibility();
+          updateSessionStatus();
         }
 
         if (!canAccessCurrentPage()) {
+          if (bootstrapError && !currentAccount) {
+            renderAccessState('Sign In Required', 'This screen requires an authenticated local account.');
+            show(bootstrapError.message);
+            return;
+          }
           renderAccessState('Access Restricted', 'Your current role does not have access to this screen.');
           return;
         }

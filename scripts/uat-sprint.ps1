@@ -97,6 +97,45 @@ Assert-Contains -Content $orgEdit -Needles @(
     "Cancel"
 ) -Context "organization edit"
 
+$formsList = Invoke-RestMethod -Uri "$BaseUrl/app/forms" -TimeoutSec 30
+Assert-Contains -Content $formsList -Needles @(
+    "Forms",
+    "Create Form",
+    "form-list",
+    "Lifecycle Summary"
+) -Context "forms list"
+
+$formCreate = Invoke-RestMethod -Uri "$BaseUrl/app/forms/new" -TimeoutSec 30
+Assert-Contains -Content $formCreate -Needles @(
+    "Create Form",
+    "form-editor-status",
+    "form-name",
+    "form-slug",
+    "form-scope-node-type",
+    "Submit",
+    "Cancel"
+) -Context "form create"
+
+$formDetail = Invoke-RestMethod -Uri "$BaseUrl/app/forms/$($seedSummary.form_id)" -TimeoutSec 30
+Assert-Contains -Content $formDetail -Needles @(
+    "Form Detail",
+    "Form Summary",
+    "Version Summary",
+    "Section Preview",
+    "Workflow Attachments"
+) -Context "form detail"
+
+$formEdit = Invoke-RestMethod -Uri "$BaseUrl/app/forms/$($seedSummary.form_id)/edit" -TimeoutSec 30
+Assert-Contains -Content $formEdit -Needles @(
+    "Edit Form",
+    "Form Metadata",
+    "Version Lifecycle",
+    "form-version-create-form",
+    "form-version-list",
+    "Draft Version Workspace",
+    "Publish Draft Version"
+) -Context "form edit"
+
 $nodeTypesList = Invoke-RestMethod -Uri "$BaseUrl/app/administration/node-types" -TimeoutSec 30
 Assert-Contains -Content $nodeTypesList -Needles @(
     "Organization Node Types",
@@ -140,5 +179,5 @@ foreach ($roleCheck in @(
     }
 }
 
-Write-Host "`n== Sprint UAT checks passed for org and seed flows. ==" -ForegroundColor Green
+Write-Host "`n== Sprint UAT checks passed for organization, forms, and seed flows. ==" -ForegroundColor Green
 Write-Host "Next: if this was a sprint-completion run, keep the deployment open for UAT and log these pass markers."

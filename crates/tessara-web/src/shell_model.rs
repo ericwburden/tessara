@@ -204,12 +204,6 @@ const FORM_INPUTS: &[TextInput] = &[
         "v1",
     ),
     TextInput::new(
-        "compatibility-group-name",
-        "Compatibility group",
-        "Compatibility group name",
-        "Default compatibility",
-    ),
-    TextInput::new(
         "form-version-id",
         "Published form version ID",
         "Published form version ID",
@@ -326,12 +320,6 @@ const REPORTING_INPUTS: &[TextInput] = &[
         "dataset-form-id",
         "Dataset form ID",
         "Selected source form ID",
-        "",
-    ),
-    TextInput::new(
-        "dataset-compatibility-group-id",
-        "Dataset compatibility group ID",
-        "Optional compatibility group ID",
         "",
     ),
     TextInput::new(

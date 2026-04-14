@@ -40,8 +40,7 @@ pub fn hydration_module_tag() -> String {
     let js_path = js_path();
     format!(
         r#"<script type="module">
-import init, {{ {HYDRATE_EXPORT} }} from "{js_path}";
-init().then(() => {HYDRATE_EXPORT}("{APP_ROOT_ID}"));
+import "{js_path}";
 </script>"#
     )
 }

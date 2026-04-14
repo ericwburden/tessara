@@ -142,7 +142,7 @@ try {
         throw "Expected organization application shell HTML to include organization route controls"
     }
     $formsShell = Invoke-RestMethod -Uri "$baseUrl/app/forms" -TimeoutSec 30
-    if (-not ($formsShell -like "*Forms*") -or -not ($formsShell -like "*Create Form*") -or -not ($formsShell -like "*form-list*")) {
+    if (-not ($formsShell -like "*Forms*") -or -not ($formsShell -like "*Create Form*") -or -not ($formsShell -like "*form-list*") -or -not ($formsShell -like "*Lifecycle Summary*")) {
         throw "Expected forms application shell HTML to include forms route controls"
     }
     $responsesShell = Invoke-RestMethod -Uri "$baseUrl/app/responses" -TimeoutSec 30
@@ -279,12 +279,16 @@ try {
         throw "Expected organization create HTML to include dedicated form controls"
     }
     $formDetail = Invoke-RestMethod -Uri "$baseUrl/app/forms/$($seed.form_id)" -TimeoutSec 30
-    if (-not ($formDetail -like "*Form Detail*") -or -not ($formDetail -like "*Back to List*")) {
+    if (-not ($formDetail -like "*Form Detail*") -or -not ($formDetail -like "*Version Summary*") -or -not ($formDetail -like "*Section Preview*") -or -not ($formDetail -like "*Workflow Attachments*")) {
         throw "Expected form detail HTML to include dedicated detail framing"
     }
     $formNew = Invoke-RestMethod -Uri "$baseUrl/app/forms/new" -TimeoutSec 30
-    if (-not ($formNew -like "*Create Form*") -or -not ($formNew -like "*Submit*") -or -not ($formNew -like "*Cancel*")) {
+    if (-not ($formNew -like "*Create Form*") -or -not ($formNew -like "*form-editor-status*") -or -not ($formNew -like "*Submit*") -or -not ($formNew -like "*Cancel*")) {
         throw "Expected form create HTML to include dedicated form controls"
+    }
+    $formEdit = Invoke-RestMethod -Uri "$baseUrl/app/forms/$($seed.form_id)/edit" -TimeoutSec 30
+    if (-not ($formEdit -like "*Edit Form*") -or -not ($formEdit -like "*Version Lifecycle*") -or -not ($formEdit -like "*form-version-create-form*") -or -not ($formEdit -like "*Draft Version Workspace*") -or -not ($formEdit -like "*Publish Draft Version*")) {
+        throw "Expected form edit HTML to include dedicated version authoring controls"
     }
     $responseDetail = Invoke-RestMethod -Uri "$baseUrl/app/responses/$($seed.submission_id)" -TimeoutSec 30
     if (-not ($responseDetail -like "*Response Detail*") -or -not ($responseDetail -like "*Back to List*")) {

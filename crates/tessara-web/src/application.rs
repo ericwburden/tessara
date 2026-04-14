@@ -1665,6 +1665,7 @@ fn organization_form_script() -> String {
 
 fn form_entity_fields() -> String {
     r#"
+        <p id="form-editor-status" class="muted">Create the form record first. Version authoring opens after the form is saved.</p>
         <div class="form-grid">
           <div class="form-field wide-field">
             <label for="form-name">Name</label>
@@ -2673,16 +2674,31 @@ pub fn forms_application_shell_html(_script: &str) -> String {
             "forms",
             "Product Area",
             "Forms",
-            "Browse top-level forms and move into their dedicated detail and edit screens.",
+            "Browse forms, inspect version lifecycle state, and move into version authoring without falling back to the legacy builder.",
             &[("Home", Some("/app")), ("Forms", None)],
-            list_screen(
-                "Forms",
-                "Forms",
-                "This list screen contains the current top-level form records.",
-                "Create Form",
-                "/app/forms/new",
-                "form-list",
-                "form",
+            format!(
+                r#"
+                {}
+                {}
+                {}
+                "#,
+                page_header(
+                    "Forms",
+                    "Forms",
+                    "This directory surfaces published, draft, and superseded lifecycle state for each form before you open it.",
+                    r#"<a class="button-link button is-primary" href="/app/forms/new">Create Form</a>"#
+                        .to_string(),
+                ),
+                empty_panel(
+                    "Form Directory",
+                    "Current form records and their version status appear here.",
+                    r#"<div id="form-list" class="record-list"><p class="muted">Loading form records...</p></div>"#,
+                ),
+                empty_panel(
+                    "Lifecycle Summary",
+                    "Each form card shows scope, published pointers, draft counts, and field totals so testers can choose the right record without using the legacy builder.",
+                    r#"<div class="record-list"><article class="record-card compact-record-card"><h4>Published and Draft Status</h4><p class="muted">Version lifecycle status and compatibility details appear inline on each form card.</p></article></div>"#,
+                ),
             ),
             false,
         ),
@@ -2708,7 +2724,7 @@ pub fn form_create_application_html(_script: &str) -> String {
             form_screen(
                 "Forms",
                 "Create Form",
-                "Complete the fields below to create a top-level form.",
+                "Complete the fields below to create a top-level form. After save, the route continues directly into version authoring.",
                 "form-entity-form",
                 "/app/forms",
                 &form_entity_fields(),
@@ -2731,20 +2747,48 @@ pub fn form_detail_application_html(_script: &str, form_id: &str) -> String {
             "forms",
             "Product Area",
             "Forms",
-            "Review the selected form, its scope, current version summary, and related records.",
+            "Review the selected form, its version lifecycle, and downstream workflow attachments.",
             &[
                 ("Home", Some("/app")),
                 ("Forms", Some("/app/forms")),
                 ("Form Detail", None),
             ],
-            detail_screen(
-                "Forms",
-                "Form Detail",
-                "This screen shows the selected top-level form in read-only form.",
-                "/app/forms",
-                &format!("/app/forms/{escaped}/edit"),
-                "form-detail",
-                "Form Record",
+            format!(
+                r#"
+                {}
+                {}
+                {}
+                {}
+                {}
+                "#,
+                page_header(
+                    "Forms",
+                    "Form Detail",
+                    "This screen shows the selected form, its active version pointers, and read-only field and section visibility.",
+                    format!(
+                        r#"<a class="button-link button is-light" href="/app/forms">Back to List</a><a class="button-link button is-primary is-light" href="/app/forms/{escaped}/edit">Edit</a>"#
+                    ),
+                ),
+                empty_panel(
+                    "Form Summary",
+                    "Top-level form metadata appears here.",
+                    r#"<div id="form-detail" class="record-detail"><p class="muted">Loading form summary...</p></div>"#,
+                ),
+                empty_panel(
+                    "Version Summary",
+                    "Draft, published, and superseded versions load here with semantic versions, major compatibility lines, and publish timestamps.",
+                    r#"<div id="form-version-summary" class="record-list"><p class="muted">Loading version summary...</p></div>"#,
+                ),
+                empty_panel(
+                    "Section Preview",
+                    "The selected version's sections and fields appear here.",
+                    r#"<div id="form-version-preview" class="record-detail"><p class="muted">Loading section preview...</p></div>"#,
+                ),
+                empty_panel(
+                    "Workflow Attachments",
+                    "Existing report and dataset links stay visible from the form detail route.",
+                    r#"<div id="form-workflow-links" class="record-detail"><p class="muted">Loading workflow attachments...</p></div>"#,
+                ),
             ),
             false,
         ),
@@ -2764,20 +2808,58 @@ pub fn form_edit_application_html(_script: &str, form_id: &str) -> String {
             "forms",
             "Product Area",
             "Forms",
-            "Edit the selected top-level form from a dedicated form screen.",
+            "Edit form metadata, create versions, author sections and fields, and publish valid draft versions from this route.",
             &[
                 ("Home", Some("/app")),
                 ("Forms", Some("/app/forms")),
                 ("Form Detail", Some(&format!("/app/forms/{escaped}"))),
                 ("Edit Form", None),
             ],
-            form_screen(
-                "Forms",
-                "Edit Form",
-                "Update the selected top-level form and submit to save changes.",
-                "form-entity-form",
-                &format!("/app/forms/{escaped}"),
-                &form_entity_fields(),
+            format!(
+                r#"
+                {}
+                <section class="app-screen box page-panel">
+                  <h3>Form Metadata</h3>
+                  <p class="muted">Update the top-level form record here. Metadata saves stay separate from draft version authoring.</p>
+                  <form id="form-entity-form" class="entity-form">
+                    {}
+                    <div class="actions form-actions">
+                      <button class="button is-primary" type="submit">Submit</button>
+                      <a class="button-link button is-light" href="/app/forms/{escaped}">Cancel</a>
+                    </div>
+                  </form>
+                </section>
+                {}
+                {}
+                "#,
+                page_header(
+                    "Forms",
+                    "Edit Form",
+                    "Update the selected form, create draft versions, reorder sections and fields, and publish valid versions from this route.",
+                    format!(
+                        r#"<a class="button-link button is-light" href="/app/forms/{escaped}">Back to Detail</a>"#
+                    ),
+                ),
+                form_entity_fields(),
+                empty_panel(
+                    "Version Lifecycle",
+                    "Create draft versions, review publish-time semantic version previews, and choose which version to author. Publish precondition checks stay visible here.",
+                    r#"
+                    <p id="form-version-status" class="muted">Select or create a version to start authoring.</p>
+                    <form id="form-version-create-form" class="entity-form">
+                      <p class="muted">Draft versions stay unlabeled until publish. Semantic version and major-line compatibility are assigned automatically when you publish.</p>
+                      <div class="actions form-actions">
+                        <button class="button is-primary" type="submit">Create Draft Version</button>
+                      </div>
+                    </form>
+                    <div id="form-version-list" class="record-list"><p class="muted">Loading form versions...</p></div>
+                    "#,
+                ),
+                empty_panel(
+                    "Draft Version Workspace",
+                    "Publish Draft Version is available only when the selected draft is valid. The workspace shows the computed semantic-version preview, major-line compatibility, section and field editing, and read-only option-set and lookup touchpoints.",
+                    r#"<div id="form-version-workspace" class="record-detail"><p class="muted">Loading draft workspace...</p></div>"#,
+                ),
             ),
             false,
         ),

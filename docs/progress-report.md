@@ -1,5 +1,186 @@
 # Progress Report
 
+## 2026-04-14 - Form Versioning Pivot To Major-Version Compatibility
+
+- Pivoted form versioning from compatibility-group-centric behavior to semantic versioning with major-version compatibility.
+- Backend changes now:
+  - assign `version_major`, `version_minor`, and `version_patch` on publish
+  - derive `PATCH` / `MINOR` / `MAJOR` from the form contract delta at publish time
+  - keep compatible publishes on the current major line
+  - start a new major line for breaking publishes
+  - freeze new direct dataset and direct report consumers to the current published form major automatically
+- Application and builder surfaces now:
+  - create unlabeled draft versions and defer final version assignment until publish
+  - show publish previews and major-line compatibility messaging instead of manual compatibility-group entry
+  - remove remaining compatibility-group controls from the active forms routes and the legacy admin builder dataset/form authoring surfaces
+- Migration updates:
+  - `015_form_version_semver.sql` introduces semantic-version fields and major-version binding fields for dataset/report consumers
+  - `016_form_version_legacy_label_backfill.sql` backfills older non-semver labels such as `v1` and `legacy-v1`
+- Validation:
+  - `cargo fmt --all`: completed successfully on 2026-04-14
+  - `cargo test -p tessara-api`: completed successfully on 2026-04-14
+  - `cargo test -p tessara-web`: completed successfully on 2026-04-14
+  - `scripts\local-launch.ps1`: completed successfully on 2026-04-14 after splitting the legacy-label backfill into migration `016`
+  - `scripts\smoke.ps1`: completed successfully on 2026-04-14 against the revised major-version model
+
+## 2026-04-14 - Sprint 1D Forms, Fields, And Version Authoring Closeout
+
+- Completed Sprint 1D closeout work in `D:\Projects\tessara`.
+- Delivered application-owned forms route coverage for:
+  - `/app/forms`
+  - `/app/forms/new`
+  - `/app/forms/{form_id}`
+  - `/app/forms/{form_id}/edit`
+- Delivered form-authoring workflow updates in the application shell:
+  - top-level form create/edit flows continue through native app routes instead of builder-only fallback behavior
+  - form detail now surfaces version summary, workflow attachments, and section/field preview panels
+  - form edit now supports draft version creation, section add/update/delete/reorder, field add/update/delete/reorder, and draft publish actions
+  - publish validation and stale/double-submit protection are surfaced in route-local status messages
+  - option-set and lookup touchpoints remain visible as non-blocking read-only affordances where backend metadata is not yet available
+- Expanded closeout evidence coverage for the forms slice:
+  - `scripts\uat-sprint.ps1` now checks forms list, new, detail, and edit routes
+  - `scripts\smoke.ps1` now checks forms lifecycle and authoring route markers
+  - `end2end\tests\app.spec.ts` now includes forms route render and JS-disabled readability checks
+- Roadmap update:
+  - Marked Sprint 1D as complete in `D:\Projects\tessara\docs\roadmap.md`.
+  - Marked Sprint 2A as the next sprint focus.
+- Validation:
+  - `scripts\local-launch.ps1`: completed successfully on 2026-04-14.
+  - `scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`: completed successfully on 2026-04-14.
+  - `scripts\smoke.ps1`: completed successfully on 2026-04-14 after updating stale `demo_flow` assertion expectations to match current API behavior.
+  - `cargo fmt --all`: completed successfully on 2026-04-14.
+  - `cargo test -p tessara-api`: completed successfully on 2026-04-14.
+  - `cargo test -p tessara-web`: completed successfully on 2026-04-14.
+- Next Sprint: Sprint 2A Workflow Assignment And Response Start
+
+## Sprint Handoff / Demo Instructions
+
+### Forms Directory And Lifecycle Visibility
+- Role: admin
+- Paths:
+  - `http://localhost:8080/app/forms`
+  - `http://localhost:8080/api/forms`
+- Steps:
+  1. Sign in as `admin@tessara.local`.
+  2. Open `/app/forms`.
+  3. Verify the forms directory renders cards with scope, published version, and draft-count summaries.
+  4. Open one form detail route from the list.
+- Expected:
+  - the forms list renders without builder-only fallback navigation
+  - lifecycle information is visible before entering detail
+- Acceptance check:
+  - Admin can browse the forms directory and identify published and draft state from the route itself.
+- Evidence location:
+  - `scripts\uat-sprint.ps1`
+  - `scripts\smoke.ps1`
+  - `end2end\tests\app.spec.ts`
+  - 2026-04-14 terminal transcript from the sprint closeout run
+
+### Form Creation And Native Route Ownership
+- Role: admin
+- Paths:
+  - `http://localhost:8080/app/forms/new`
+  - `http://localhost:8080/api/admin/forms`
+- Steps:
+  1. Open `/app/forms/new`.
+  2. Enter a form name, slug, and optional scope node type.
+  3. Submit the form.
+  4. Confirm the browser redirects into `/app/forms/{form_id}/edit`.
+- Expected:
+  - the form can be created from the application route
+  - the route continues directly into version authoring
+- Acceptance check:
+  - Admin can create a form without using the legacy builder and land in the authoring route.
+- Evidence location:
+  - `scripts\uat-sprint.ps1`
+  - `crates/tessara-web/public/bridge/app-legacy.js`
+  - 2026-04-14 terminal transcript from the sprint closeout run
+
+### Version Authoring, Sections, Fields, And Publish
+- Role: admin
+- Paths:
+  - `http://localhost:8080/app/forms/{form_id}/edit`
+  - `http://localhost:8080/api/admin/forms/{form_id}/versions`
+  - `http://localhost:8080/api/admin/form-versions/{form_version_id}/sections`
+  - `http://localhost:8080/api/admin/form-versions/{form_version_id}/fields`
+  - `http://localhost:8080/api/admin/form-versions/{form_version_id}/publish`
+- Steps:
+  1. Open `/app/forms/{form_id}/edit`.
+  2. Create a draft version.
+  3. Add a section.
+  4. Add one or more fields to that section.
+  5. Reorder a section and a field.
+  6. Publish the draft version.
+- Expected:
+  - draft lifecycle controls are visible in the route
+  - section and field authoring actions are available without leaving the app route
+  - invalid publish attempts show explicit route-local validation messages
+- Acceptance check:
+  - Admin can complete create draft version -> add section -> add field -> reorder -> publish entirely through `/app/forms/{id}/edit`.
+- Evidence location:
+  - `scripts\uat-sprint.ps1`
+  - `scripts\smoke.ps1`
+  - `crates/tessara-web/public/bridge/app-legacy.js`
+  - 2026-04-14 terminal transcript from the sprint closeout run
+
+### Form Detail Review And Workflow Attachments
+- Role: admin
+- Paths:
+  - `http://localhost:8080/app/forms/{form_id}`
+  - `http://localhost:8080/api/forms/{form_id}`
+  - `http://localhost:8080/api/form-versions/{form_version_id}/render`
+- Steps:
+  1. Open `/app/forms/{form_id}`.
+  2. Verify the summary section shows scope and published/draft state.
+  3. Verify the version summary panel renders semantic version, major-line compatibility, and publish metadata.
+  4. Verify section and field preview panels render.
+  5. Verify related reports and dataset-source workflow attachments are visible.
+- Expected:
+  - detail route clearly separates summary, version lifecycle, section preview, and workflow attachments
+  - route remains readable without JavaScript for core headings and structure
+- Acceptance check:
+  - A tester can inspect version status and downstream workflow links entirely from the form detail route.
+- Evidence location:
+  - `scripts\uat-sprint.ps1`
+  - `end2end\tests\app.spec.ts`
+  - 2026-04-14 terminal transcript from the sprint closeout run
+
+### Access Control And Non-Admin Readability
+- Role: operator
+- Paths:
+  - `http://localhost:8080/app/forms`
+  - `http://localhost:8080/app/forms/{form_id}`
+  - `http://localhost:8080/app/forms/{form_id}/edit`
+  - `http://localhost:8080/api/forms`
+  - `http://localhost:8080/api/admin/forms/{form_id}`
+- Steps:
+  1. Sign in as `operator@tessara.local`.
+  2. Open `/app/forms` and a visible form detail route.
+  3. Attempt to open the edit route or call an admin forms endpoint.
+  4. Confirm readable forms surfaces remain available while write/admin actions stay gated.
+- Expected:
+  - readable routes remain usable where the role has access
+  - admin-only write flow remains restricted
+- Acceptance check:
+  - At least one allowed read path and one denied write/admin path are both demonstrated.
+- Evidence location:
+  - `scripts\uat-sprint.ps1`
+  - `crates/tessara-web/public/bridge/app-legacy.js`
+  - 2026-04-14 terminal transcript from the sprint closeout run
+
+## Acceptance Mapping
+
+- Exit condition:
+  - a tester can create a form, add/edit/remove/reorder fields, publish a version, and inspect status entirely through UI
+- Manual demonstration:
+  - `Form Creation And Native Route Ownership`
+  - `Version Authoring, Sections, Fields, And Publish`
+  - `Form Detail Review And Workflow Attachments`
+- Automated check:
+  - `scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`
+  - `scripts\smoke.ps1`
+  - `end2end\tests\app.spec.ts`
+
 ## 2026-04-13 - Sprint 1C Organization Management Closeout
 
 - Completed organization-management closure work in `D:\Projects\dms-migration\tessara`.
@@ -397,7 +578,7 @@
 - Form detail now includes:
   - versions
   - linked reports that use the form directly
-  - linked dataset sources that use the form or its compatibility groups
+  - linked dataset sources that use the form directly or a form major line
 - Updated the admin shell so testers can:
   - inspect a selected form
   - move directly from form detail into versions, linked reports, and linked datasets

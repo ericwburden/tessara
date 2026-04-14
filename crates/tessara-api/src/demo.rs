@@ -673,7 +673,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
             slug: "demo-partner-profile",
             scope_node_type_id: partner_type_id,
             compatibility_group_name: "Demo Partner Profile Compatible",
-            version_label: "v1",
+            version_label: "1.0.0",
             section_title: "Partner Profile",
             fields: vec![
                 FormFieldDef {
@@ -722,7 +722,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
             slug: "demo-program-snapshot",
             scope_node_type_id: program_type_id,
             compatibility_group_name: "Demo Program Snapshot Compatible",
-            version_label: "v1",
+            version_label: "1.0.0",
             section_title: "Program Snapshot",
             fields: vec![
                 FormFieldDef {
@@ -764,7 +764,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
             slug: "demo-activity-plan",
             scope_node_type_id: activity_type_id,
             compatibility_group_name: "Demo Activity Plan Compatible",
-            version_label: "v1",
+            version_label: "1.0.0",
             section_title: "Activity Plan",
             fields: vec![
                 FormFieldDef {
@@ -806,7 +806,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
             slug: "demo-session-log",
             scope_node_type_id: session_type_id,
             compatibility_group_name: "Demo Session Log Compatible",
-            version_label: "v1",
+            version_label: "1.0.0",
             section_title: "Session Log",
             fields: vec![
                 FormFieldDef {
@@ -1555,18 +1555,37 @@ async fn ensure_form_version(
     compatibility_group_id: Uuid,
     version_label: &str,
 ) -> ApiResult<Uuid> {
+    let (version_major, version_minor, version_patch) =
+        parse_semantic_version_label(version_label)?;
     sqlx::query_scalar(
         r#"
-        INSERT INTO form_versions (form_id, compatibility_group_id, version_label)
-        VALUES ($1, $2, $3)
+        INSERT INTO form_versions (
+            form_id,
+            compatibility_group_id,
+            version_label,
+            version_major,
+            version_minor,
+            version_patch,
+            started_new_major_line
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
         ON CONFLICT (form_id, version_label)
-        DO UPDATE SET compatibility_group_id = EXCLUDED.compatibility_group_id
+        DO UPDATE SET
+            compatibility_group_id = EXCLUDED.compatibility_group_id,
+            version_major = EXCLUDED.version_major,
+            version_minor = EXCLUDED.version_minor,
+            version_patch = EXCLUDED.version_patch,
+            started_new_major_line = EXCLUDED.started_new_major_line
         RETURNING id
         "#,
     )
     .bind(form_id)
     .bind(compatibility_group_id)
     .bind(version_label)
+    .bind(version_major)
+    .bind(version_minor)
+    .bind(version_patch)
+    .bind(version_minor == 0 && version_patch == 0)
     .fetch_one(pool)
     .await
     .map_err(Into::into)
@@ -1898,6 +1917,7 @@ async fn ensure_report(
     name: &str,
     bindings: &[ReportBinding<'_>],
 ) -> ApiResult<Uuid> {
+    let form_version_major = current_form_major(pool, form_id).await?;
     let report_id = if let Some(id) =
         sqlx::query_scalar("SELECT id FROM reports WHERE form_id = $1 AND name = $2")
             .bind(form_id)
@@ -1905,11 +1925,19 @@ async fn ensure_report(
             .fetch_optional(pool)
             .await?
     {
+        sqlx::query("UPDATE reports SET form_version_major = $1 WHERE id = $2")
+            .bind(form_version_major)
+            .bind(id)
+            .execute(pool)
+            .await?;
         id
     } else {
-        sqlx::query_scalar("INSERT INTO reports (name, form_id) VALUES ($1, $2) RETURNING id")
+        sqlx::query_scalar(
+            "INSERT INTO reports (name, form_id, form_version_major) VALUES ($1, $2, $3) RETURNING id",
+        )
             .bind(name)
             .bind(form_id)
+            .bind(form_version_major)
             .fetch_one(pool)
             .await?
     };
@@ -1936,6 +1964,63 @@ async fn ensure_report(
     }
 
     Ok(report_id)
+}
+
+fn parse_semantic_version_label(version_label: &str) -> ApiResult<(i32, i32, i32)> {
+    if let Some((major, minor, patch)) = parse_strict_semantic_version(version_label) {
+        return Ok((major, minor, patch));
+    }
+    if let Some(major) = parse_legacy_major_version(version_label) {
+        return Ok((major, 0, 0));
+    }
+    Err(ApiError::BadRequest(format!(
+        "invalid semantic version '{version_label}'"
+    )))
+}
+
+fn parse_strict_semantic_version(version_label: &str) -> Option<(i32, i32, i32)> {
+    let mut parts = version_label.split('.');
+    let major = parts.next()?.parse().ok()?;
+    let minor = parts.next()?.parse().ok()?;
+    let patch = parts.next()?.parse().ok()?;
+    if parts.next().is_some() {
+        return None;
+    }
+    Some((major, minor, patch))
+}
+
+fn parse_legacy_major_version(version_label: &str) -> Option<i32> {
+    let digits = version_label
+        .trim()
+        .rsplit(|character: char| !character.is_ascii_digit())
+        .next()?;
+    if digits.is_empty() || !digits.chars().all(|character| character.is_ascii_digit()) {
+        return None;
+    }
+    digits.parse().ok()
+}
+
+async fn current_form_major(pool: &PgPool, form_id: Uuid) -> ApiResult<Option<i32>> {
+    sqlx::query_scalar(
+        r#"
+        SELECT version_major
+        FROM form_versions
+        WHERE form_id = $1
+          AND status = 'published'::form_version_status
+          AND version_major IS NOT NULL
+        ORDER BY
+            version_major DESC,
+            version_minor DESC NULLS LAST,
+            version_patch DESC NULLS LAST,
+            published_at DESC NULLS LAST,
+            created_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(form_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(Into::into)
 }
 
 async fn ensure_chart(

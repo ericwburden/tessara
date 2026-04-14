@@ -1,6 +1,8 @@
 # Tessara Brand And Design
 
-This document is the canonical source for Tessara naming, positioning, and visual guidance that should influence product UI decisions.
+This document is a secondary brand reference for Tessara naming background, positioning, and asset guidance.
+
+The canonical source for active UI implementation guidance is now [ui-guidance.md](./ui-guidance.md).
 
 ## Product Name And Positioning
 
@@ -90,7 +92,7 @@ Usage rules:
 
 ## Application Implications
 
-This guidance should shape UI work in [ui-direction.md](./ui-direction.md):
+Apply these brand decisions through [ui-guidance.md](./ui-guidance.md):
 
 - the shell should read as a product, not a utility console
 - typography, spacing, and card structure should support calm inspection and modular authoring
@@ -109,4 +111,4 @@ When app metadata is updated, prefer:
 
 ## Relationship To Historical Sources
 
-This file replaces the old standalone naming and design guide documents. It preserves the useful naming, palette, icon, and positioning guidance, but keeps it close to the canonical roadmap and UI direction set.
+This file preserves useful naming, palette, icon, and positioning guidance as supporting brand context. For active UI decisions, use [ui-guidance.md](./ui-guidance.md).

@@ -320,7 +320,7 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
             .any(|form_version| form_version["form_id"] == seed["form_id"]
                 && form_version["form_name"] == "Demo Session Log"
                 && form_version["form_version_id"] == seed["form_version_id"]
-                && form_version["version_label"] == "v1")
+                && form_version["version_label"] == "1.0.0")
     );
 
     let submissions = request_json(
@@ -545,13 +545,6 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
             .any(|row| row["submission_id"] == seed["submission_id"]
                 && row["values"]["participant_count"] == "42")
     );
-    let compatibility_group_id = forms
-        .as_array()
-        .expect("forms response should be an array")
-        .iter()
-        .find(|form| form["id"] == seed["form_id"])
-        .and_then(|form| form["versions"][0]["compatibility_group_id"].as_str())
-        .expect("seeded form version should expose a compatibility group id");
     let compatibility_dataset = request_json(
         app.clone(),
         authorized_request(
@@ -564,8 +557,7 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
                 "grain": "submission",
                 "sources": [{
                     "source_alias": "check_in",
-                    "form_id": null,
-                    "compatibility_group_id": compatibility_group_id,
+                    "form_id": seed["form_id"],
                     "selection_rule": "all"
                 }],
                 "fields": [{
@@ -2090,26 +2082,8 @@ async fn form_builder_guards_cross_version_sections_and_supersedes_previous_publ
     .await;
 
     let version_one_id = create_form_version(app.clone(), &token, form_id, "v1").await;
-    let duplicate_version_label = request_status_and_json(
-        app.clone(),
-        authorized_request(
-            "POST",
-            &format!("/api/admin/forms/{form_id}/versions"),
-            &token,
-            Some(json!({
-                "version_label": "v1",
-                "compatibility_group_name": "Default compatibility"
-            })),
-        ),
-    )
-    .await;
-    assert_eq!(duplicate_version_label.0, StatusCode::BAD_REQUEST);
-    assert!(
-        duplicate_version_label.1["error"]
-            .as_str()
-            .expect("error body should include message")
-            .contains("already in use")
-    );
+    let version_two_id = create_form_version(app.clone(), &token, form_id, "v2").await;
+    assert_ne!(version_one_id, version_two_id);
     let section_one_id = create_form_section(app.clone(), &token, version_one_id, "Main").await;
     let field_one_id = create_number_field(
         app.clone(),
@@ -2350,7 +2324,7 @@ async fn form_builder_guards_cross_version_sections_and_supersedes_previous_publ
             .expect("valid render request"),
     )
     .await;
-    assert_eq!(version_one["status"], "superseded");
+    assert_eq!(version_one["status"], "published");
     assert_eq!(version_one["form_name"], "Monthly Services Report");
     assert_eq!(version_one["sections"][0]["title"], "Updated Main");
     assert_eq!(
@@ -2860,10 +2834,7 @@ async fn hierarchy_and_form_builders_return_diagnostics_for_invalid_references()
             "POST",
             &format!("/api/admin/forms/{}/versions", Uuid::new_v4()),
             &token,
-            Some(json!({
-                "version_label": "v1",
-                "compatibility_group_name": "Default compatibility"
-            })),
+            Some(json!({})),
         ),
     )
     .await;
@@ -3116,7 +3087,7 @@ async fn operator_cannot_access_admin_node_type_management_routes() {
     )
     .await;
     assert_eq!(forbidden.0, StatusCode::FORBIDDEN);
-    assert_eq!(forbidden.1["error"], "admin:all");
+    assert_eq!(forbidden.1["error"], "forbidden: admin:all");
 }
 
 #[tokio::test]
@@ -3165,7 +3136,7 @@ async fn node_type_updates_reject_cycles_in_parent_child_selections() {
         cyclic_update.1["error"]
             .as_str()
             .expect("error body should include message")
-            .contains("cycle")
+            .contains("both a parent and child")
     );
 }
 
@@ -3268,13 +3239,7 @@ async fn admin_mutation_routes_require_authentication() {
             .method("POST")
             .uri(format!("/api/admin/forms/{form_id}/versions"))
             .header(header::CONTENT_TYPE, "application/json")
-            .body(Body::from(
-                json!({
-                    "version_label": "v1",
-                    "compatibility_group_name": "Default compatibility"
-                })
-                .to_string(),
-            ))
+            .body(Body::from(json!({}).to_string()))
             .expect("valid form version request"),
         Request::builder()
             .method("POST")
@@ -5213,7 +5178,7 @@ async fn create_form_version(
     app: axum::Router,
     token: &str,
     form_id: Uuid,
-    version_label: &str,
+    _version_label: &str,
 ) -> Uuid {
     let version = request_json(
         app,
@@ -5221,10 +5186,7 @@ async fn create_form_version(
             "POST",
             &format!("/api/admin/forms/{form_id}/versions"),
             token,
-            Some(json!({
-                "version_label": version_label,
-                "compatibility_group_name": "Default compatibility"
-            })),
+            Some(json!({})),
         ),
     )
     .await;

@@ -55,7 +55,7 @@ test("theme preference persists on the login route", async ({ page }) => {
   await assertNoConsoleErrors();
 });
 
-test("migration route remains isolated and reachable as the first split candidate", async ({ page }) => {
+test("migration route remains isolated and reachable", async ({ page }) => {
   const assertNoConsoleErrors = attachConsoleGuard(page);
 
   await page.goto("/app");
@@ -66,11 +66,21 @@ test("migration route remains isolated and reachable as the first split candidat
   await expect(page.getByRole("heading", { name: "Migration Workbench" })).toBeVisible();
 
   const migrationScripts = new Set(await pkgScripts(page));
-  const newScripts = [...migrationScripts].filter((name) => !homeScripts.has(name));
   expect([...homeScripts]).toContainEqual(expect.stringContaining("/pkg/tessara-web.js"));
   expect([...migrationScripts]).toContainEqual(expect.stringContaining("/pkg/tessara-web.js"));
-  expect(newScripts.length).toBeGreaterThan(0);
   await expect(page.locator('script[src="/bridge/app-legacy.js"]')).toHaveCount(1);
+
+  await assertNoConsoleErrors();
+});
+
+test("forms list route stays readable and console-clean", async ({ page }) => {
+  const assertNoConsoleErrors = attachConsoleGuard(page);
+
+  await page.goto("/app/forms");
+
+  await expect(page.getByRole("heading", { name: "Forms" }).first()).toBeVisible();
+  await expect(page.locator("#form-list")).toHaveCount(1);
+  await expect(page.locator("body")).toContainText("Lifecycle Summary");
 
   await assertNoConsoleErrors();
 });
@@ -83,10 +93,26 @@ test("core SSR surfaces remain readable without JavaScript", async ({ browser, b
   await expect(page.getByRole("heading", { name: "Application Overview" })).toBeVisible();
 
   await page.goto(`${baseURL}/app/login`);
-  await expect(page.getByRole("heading", { name: "Sign In" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Sign In" })).toBeVisible();
 
   await page.goto(`${baseURL}/app/dashboards`);
-  await expect(page.getByRole("heading", { name: "Dashboards" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Dashboards" })).toBeVisible();
+
+  await page.goto(`${baseURL}/app/forms`);
+  await expect(page.getByRole("heading", { name: "Forms" }).first()).toBeVisible();
+  await expect(page.locator("body")).toContainText("Form Directory");
+
+  await page.goto(`${baseURL}/app/forms/new`);
+  await expect(page.locator("body")).toContainText("Create Form");
+  await expect(page.locator("#form-editor-status")).toHaveCount(1);
+
+  await page.goto(`${baseURL}/app/forms/00000000-0000-0000-0000-000000000002`);
+  await expect(page.locator("body")).toContainText("Form Detail");
+  await expect(page.locator("body")).toContainText("Version Summary");
+
+  await page.goto(`${baseURL}/app/forms/00000000-0000-0000-0000-000000000002/edit`);
+  await expect(page.locator("body")).toContainText("Edit Form");
+  await expect(page.locator("body")).toContainText("Draft Version Workspace");
 
   await context.close();
 });

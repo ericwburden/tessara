@@ -1,56 +1,79 @@
-use leptos::prelude::*;
-
-use crate::app::transitional::{TransitionalPage, extract_app_root, render_transitional_route};
+use crate::app::transitional::extract_app_root;
 use crate::infra::routing::{FormRouteParams, require_route_params};
+use leptos::prelude::*;
+use leptos_meta::{Meta, Title};
+
+#[cfg(feature = "hydrate")]
+fn set_forms_page_context(page_key: &'static str, record_id: Option<String>) {
+    use web_sys::window;
+
+    Effect::new(move |_| {
+        let Some(document) = window().and_then(|window| window.document()) else {
+            return;
+        };
+        let Some(body) = document.body() else {
+            return;
+        };
+        body.set_class_name("tessara-app");
+        body.set_attribute("data-page-key", page_key).ok();
+        body.set_attribute("data-active-route", "forms").ok();
+        if let Some(record_id) = record_id.as_ref() {
+            body.set_attribute("data-record-id", record_id).ok();
+        } else {
+            body.remove_attribute("data-record-id").ok();
+        }
+    });
+}
+
+#[cfg(not(feature = "hydrate"))]
+fn set_forms_page_context(_page_key: &'static str, _record_id: Option<String>) {}
 
 #[component]
 pub fn FormsListPage() -> impl IntoView {
-    render_transitional_route(TransitionalPage {
-        title: "Tessara Forms",
-        description: "Tessara forms list screen.",
-        body_html: extract_app_root(crate::forms_application_shell_html()),
-        page_key: "form-list",
-        active_route: "forms",
-        record_id: None,
-    })
+    set_forms_page_context("form-list", None);
+    let html = extract_app_root(crate::forms_application_shell_html());
+
+    view! {
+        <Title text="Tessara Forms" />
+        <Meta name="description" content="Tessara forms list screen." />
+        <div inner_html=html></div>
+    }
 }
 
 #[component]
 pub fn FormCreatePage() -> impl IntoView {
-    render_transitional_route(TransitionalPage {
-        title: "Create Form",
-        description: "Create a Tessara form.",
-        body_html: extract_app_root(crate::form_create_application_html()),
-        page_key: "form-create",
-        active_route: "forms",
-        record_id: None,
-    })
+    set_forms_page_context("form-create", None);
+    let html = extract_app_root(crate::form_create_application_html());
+
+    view! {
+        <Title text="Create Form" />
+        <Meta name="description" content="Create a Tessara form." />
+        <div inner_html=html></div>
+    }
 }
 
 #[component]
 pub fn FormDetailPage() -> impl IntoView {
     let FormRouteParams { form_id } = require_route_params();
+    set_forms_page_context("form-detail", Some(form_id.clone()));
+    let html = extract_app_root(crate::form_detail_application_html(&form_id));
 
-    render_transitional_route(TransitionalPage {
-        title: "Form Detail",
-        description: "Inspect a Tessara form.",
-        body_html: extract_app_root(crate::form_detail_application_html(&form_id)),
-        page_key: "form-detail",
-        active_route: "forms",
-        record_id: Some(form_id),
-    })
+    view! {
+        <Title text="Form Detail" />
+        <Meta name="description" content="Inspect a Tessara form." />
+        <div inner_html=html></div>
+    }
 }
 
 #[component]
 pub fn FormEditPage() -> impl IntoView {
     let FormRouteParams { form_id } = require_route_params();
+    set_forms_page_context("form-edit", Some(form_id.clone()));
+    let html = extract_app_root(crate::form_edit_application_html(&form_id));
 
-    render_transitional_route(TransitionalPage {
-        title: "Edit Form",
-        description: "Edit a Tessara form.",
-        body_html: extract_app_root(crate::form_edit_application_html(&form_id)),
-        page_key: "form-edit",
-        active_route: "forms",
-        record_id: Some(form_id),
-    })
+    view! {
+        <Title text="Edit Form" />
+        <Meta name="description" content="Edit a Tessara form." />
+        <div inner_html=html></div>
+    }
 }

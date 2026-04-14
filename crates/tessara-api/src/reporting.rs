@@ -173,6 +173,7 @@ pub struct ReportSummary {
     id: Uuid,
     name: String,
     form_id: Option<Uuid>,
+    form_version_major: Option<i32>,
     form_name: Option<String>,
     dataset_id: Option<Uuid>,
     dataset_name: Option<String>,
@@ -183,6 +184,7 @@ pub struct ReportDefinition {
     id: Uuid,
     name: String,
     form_id: Option<Uuid>,
+    form_version_major: Option<i32>,
     form_name: Option<String>,
     dataset_id: Option<Uuid>,
     dataset_name: Option<String>,
@@ -553,13 +555,15 @@ pub async fn create_report(
         payload.fields,
     )
     .await?;
+    let form_version_major = resolve_report_form_major(&state.pool, payload.form_id).await?;
 
     let mut tx = state.pool.begin().await?;
     let report_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO reports (name, form_id, dataset_id) VALUES ($1, $2, $3) RETURNING id",
+        "INSERT INTO reports (name, form_id, form_version_major, dataset_id) VALUES ($1, $2, $3, $4) RETURNING id",
     )
     .bind(payload.name)
     .bind(payload.form_id)
+    .bind(form_version_major)
     .bind(payload.dataset_id)
     .fetch_one(&mut *tx)
     .await?;
@@ -595,11 +599,15 @@ pub async fn update_report(
         payload.fields,
     )
     .await?;
+    let form_version_major = resolve_report_form_major(&state.pool, payload.form_id).await?;
 
     let mut tx = state.pool.begin().await?;
-    sqlx::query("UPDATE reports SET name = $1, form_id = $2, dataset_id = $3 WHERE id = $4")
+    sqlx::query(
+        "UPDATE reports SET name = $1, form_id = $2, form_version_major = $3, dataset_id = $4 WHERE id = $5",
+    )
         .bind(payload.name)
         .bind(payload.form_id)
+        .bind(form_version_major)
         .bind(payload.dataset_id)
         .bind(report_id)
         .execute(&mut *tx)
@@ -646,6 +654,7 @@ pub async fn list_reports(
                 reports.id,
                 reports.name,
                 reports.form_id,
+                reports.form_version_major,
                 forms.name AS form_name,
                 reports.dataset_id,
                 datasets.name AS dataset_name
@@ -668,6 +677,7 @@ pub async fn list_reports(
                 reports.id,
                 reports.name,
                 reports.form_id,
+                reports.form_version_major,
                 forms.name AS form_name,
                 reports.dataset_id,
                 datasets.name AS dataset_name
@@ -688,6 +698,7 @@ pub async fn list_reports(
                 id: row.try_get("id")?,
                 name: row.try_get("name")?,
                 form_id: row.try_get("form_id")?,
+                form_version_major: row.try_get("form_version_major")?,
                 form_name: row.try_get("form_name")?,
                 dataset_id: row.try_get("dataset_id")?,
                 dataset_name: row.try_get("dataset_name")?,
@@ -736,6 +747,7 @@ pub async fn get_report(
             reports.id,
             reports.name,
             reports.form_id,
+            reports.form_version_major,
             forms.name AS form_name,
             reports.dataset_id,
             datasets.name AS dataset_name
@@ -845,6 +857,7 @@ pub async fn get_report(
         id: report.try_get("id")?,
         name: report.try_get("name")?,
         form_id: report.try_get("form_id")?,
+        form_version_major: report.try_get("form_version_major")?,
         form_name: report.try_get("form_name")?,
         dataset_id: report.try_get("dataset_id")?,
         dataset_name: report.try_get("dataset_name")?,
@@ -937,21 +950,30 @@ async fn load_report_source_rows(
                 FROM reports
                 JOIN dataset_sources
                     ON dataset_sources.dataset_id = reports.dataset_id
-                JOIN analytics.form_version_dim
-                    ON (
-                        dataset_sources.form_id IS NOT NULL
-                        AND form_version_dim.form_id = dataset_sources.form_id
-                    )
-                    OR (
-                        dataset_sources.compatibility_group_id IS NOT NULL
-                        AND form_version_dim.compatibility_group_id = dataset_sources.compatibility_group_id
-                    )
                 JOIN analytics.submission_fact
-                    ON submission_fact.form_version_id = form_version_dim.form_version_id
+                    ON submission_fact.status = 'submitted'
+                JOIN form_versions
+                    ON form_versions.id = submission_fact.form_version_id
                 JOIN analytics.node_dim
                     ON node_dim.node_id = submission_fact.node_id
                 WHERE reports.id = $1
-                  AND submission_fact.status = 'submitted'
+                  AND (
+                        (
+                            dataset_sources.form_id IS NOT NULL
+                            AND dataset_sources.form_version_major IS NULL
+                            AND form_versions.form_id = dataset_sources.form_id
+                        )
+                        OR (
+                            dataset_sources.form_id IS NOT NULL
+                            AND dataset_sources.form_version_major IS NOT NULL
+                            AND form_versions.form_id = dataset_sources.form_id
+                            AND form_versions.version_major = dataset_sources.form_version_major
+                        )
+                        OR (
+                            dataset_sources.compatibility_group_id IS NOT NULL
+                            AND form_versions.compatibility_group_id = dataset_sources.compatibility_group_id
+                        )
+                  )
             )
             SELECT
                 ranked_submissions.submission_id::text AS submission_id,
@@ -1019,17 +1041,26 @@ async fn load_report_source_rows(
             FROM reports
             JOIN report_field_bindings
                 ON report_field_bindings.report_id = reports.id
-            JOIN analytics.form_version_dim
-                ON reports.form_id IS NULL OR analytics.form_version_dim.form_id = reports.form_id
             JOIN analytics.submission_fact
-                ON submission_fact.form_version_id = analytics.form_version_dim.form_version_id
+                ON submission_fact.status = 'submitted'
+            JOIN form_versions
+                ON form_versions.id = submission_fact.form_version_id
             JOIN analytics.node_dim
                 ON node_dim.node_id = submission_fact.node_id
             LEFT JOIN analytics.submission_value_fact
                 ON submission_value_fact.submission_id = submission_fact.submission_id
                AND submission_value_fact.field_key = report_field_bindings.source_field_key
             WHERE reports.id = $1
-              AND submission_fact.status = 'submitted'
+              AND (
+                reports.form_id IS NULL
+                OR (
+                    form_versions.form_id = reports.form_id
+                    AND (
+                        reports.form_version_major IS NULL
+                        OR form_versions.version_major = reports.form_version_major
+                    )
+                )
+              )
               AND (
                 report_field_bindings.computed_expression IS NOT NULL
                 OR
@@ -1384,6 +1415,36 @@ async fn require_dataset_exists(pool: &sqlx::PgPool, dataset_id: Uuid) -> ApiRes
     } else {
         Err(ApiError::NotFound(format!("dataset {dataset_id}")))
     }
+}
+
+async fn resolve_report_form_major(
+    pool: &sqlx::PgPool,
+    form_id: Option<Uuid>,
+) -> ApiResult<Option<i32>> {
+    let Some(form_id) = form_id else {
+        return Ok(None);
+    };
+
+    sqlx::query_scalar(
+        r#"
+        SELECT version_major
+        FROM form_versions
+        WHERE form_id = $1
+          AND status = 'published'::form_version_status
+          AND version_major IS NOT NULL
+        ORDER BY
+            version_major DESC,
+            version_minor DESC NULLS LAST,
+            version_patch DESC NULLS LAST,
+            published_at DESC NULLS LAST,
+            created_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(form_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(Into::into)
 }
 
 async fn assert_report_dataset_is_executable(

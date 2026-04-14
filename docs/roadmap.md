@@ -230,7 +230,7 @@ Before deeper application-surface replacement continues, the frontend platform s
 
 **User-testable exit condition:** a tester can browse and manage organization nodes without IDs or workbench-only flows.
 
-### Sprint 1D: Forms, Fields, And Version Authoring (Next)
+### Sprint 1D: Forms, Fields, And Version Authoring (Complete)
 
 **Outcome:** form authoring is application-grade and explicitly supports field creation and editing.
 
@@ -249,9 +249,30 @@ Before deeper application-surface replacement continues, the frontend platform s
 
 **User-testable exit condition:** a tester can create a form, add/edit/remove/reorder fields, publish a version, and inspect status entirely through UI.
 
+### Sprint 1E: Form Semantic Versioning And Compatibility Automation
+
+**Outcome:** form publishing automatically assigns semantic version and major-version compatibility without asking users for manual version labels or compatibility-group selection.
+
+**Build:**
+
+- publish-time server-side semantic version derivation for form versions
+- structural compatibility classification at publish time
+- automatic major-version reuse for compatible revisions and automatic major-version rollover for breaking revisions
+- publish-time diff summary that explains whether the revision is `PATCH`, `MINOR`, or `MAJOR`
+- automatic binding of dataset and direct report consumers to the current published form major so existing consumers do not drift across breaking revisions
+- explicit handling for direct form-bound reports and datasets so breaking form changes surface stale-dependency warnings without requiring users to interpret compatibility identifiers manually
+
+**Application UI delivered this sprint:**
+
+- draft version flows that defer semantic version and major-version assignment until publish
+- publish review screens that show the proposed semantic version, major-version decision, and downstream impact before confirmation
+- compatibility status messaging on form detail and edit routes so authors can see when a published revision stayed in the current major line or started a new one
+
+**User-testable exit condition:** a tester can revise a draft form version, publish it, receive an automatically assigned semantic version and major-version compatibility outcome at publish time, and verify from the UI whether the revision stayed in the same major line or created a new one without entering version labels or compatibility-group identifiers manually.
+
 ## Phase 2: Workflow Runtime, Responses, And Materialization
 
-### Sprint 2A: Workflow Assignment And Response Start
+### Sprint 2A: Workflow Assignment And Response Start (Next)
 
 **Outcome:** published forms and workflows are assignable and discoverable from the product UI.
 

@@ -795,7 +795,6 @@
                     ${escapeHtml(version.version_label)}:
                     ${escapeHtml(version.status)}
                     <button type="button" onclick="useFormVersion('${escapeHtml(version.id)}', '${escapeHtml(form.id)}', '${escapeHtml(form.name)} ${escapeHtml(version.version_label)}')">Use Version</button>
-                    ${version.compatibility_group_id ? `<button type="button" onclick="useCompatibilityGroup('${escapeHtml(version.compatibility_group_id)}', '${escapeHtml(version.compatibility_group_name || version.compatibility_group_id)}')">Use Compatibility Group</button>` : ""}
                     <button type="button" onclick="renderForm('${escapeHtml(version.id)}')">Render</button>
                   </li>
                 `).join("")}
@@ -844,7 +843,6 @@
               <p>${escapeHtml(version.status)} with ${version.field_count} fields</p>
               <button type="button" onclick="useFormVersion('${escapeHtml(version.id)}', '${escapeHtml(payload.id)}', '${escapeHtml(payload.name)} ${escapeHtml(version.version_label)}')">Use Version</button>
               <button type="button" onclick="renderForm('${escapeHtml(version.id)}')">Preview Version</button>
-              ${version.compatibility_group_id ? `<button type="button" onclick="useCompatibilityGroup('${escapeHtml(version.compatibility_group_id)}', '${escapeHtml(version.compatibility_group_name || version.compatibility_group_id)}')">Use Compatibility Group</button>` : ""}
             </article>
           `).join("") || '<p class="muted">No versions exist yet.</p>'}
           ${payload.reports.map((report) => `
@@ -890,13 +888,6 @@
           "form-version-id": formVersionId,
           "form-id": formId,
           "dataset-form-id": formId
-        });
-      }
-
-      function useCompatibilityGroup(compatibilityGroupId, label = compatibilityGroupId) {
-        selectRecord("compatibility group", label, compatibilityGroupId, {
-          "dataset-form-id": "",
-          "dataset-compatibility-group-id": compatibilityGroupId
         });
       }
 
@@ -978,12 +969,9 @@
           if (!formId) throw new Error("Create or choose a form first.");
           const payload = await request(`/api/admin/forms/${formId}/versions`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              version_label: inputValue("form-version-label"),
-              compatibility_group_name: inputValue("compatibility-group-name")
-            })
-          });
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({})
+            });
           document.getElementById("form-version-id").value = payload.id;
           show(payload);
           await loadForms();
@@ -999,12 +987,9 @@
           if (!formId) throw new Error("Create or select a form first.");
           const version = await request(`/api/admin/forms/${formId}/versions`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              version_label: inputValue("form-version-label"),
-              compatibility_group_name: inputValue("compatibility-group-name")
-            })
-          });
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({})
+            });
           setInput("form-version-id", version.id);
           const section = await request(`/api/admin/form-versions/${version.id}/sections`, {
             method: "POST",
@@ -1620,11 +1605,9 @@
 
       function datasetSourceDraftFromInputs() {
         const formId = inputValue("dataset-form-id") || inputValue("form-id");
-        const compatibilityGroupId = inputValue("dataset-compatibility-group-id");
         return {
           source_alias: inputValue("dataset-source-alias") || "service",
           form_id: formId || null,
-          compatibility_group_id: compatibilityGroupId || null,
           selection_rule: inputValue("dataset-selection-rule") || "all"
         };
       }
@@ -1647,10 +1630,11 @@
         const sourceCards = datasetSources.map((source) => `
           <article class="card">
             <h3>Source ${escapeHtml(source.source_alias)}</h3>
-            <p class="muted">${escapeHtml(source.form_id || source.compatibility_group_id || "Unbound source")}</p>
+            <p class="muted">${escapeHtml(source.form_id || "Unbound source")}</p>
+            ${source.form_version_major ? `<p class="muted">Compatible with v${escapeHtml(source.form_version_major)}.x</p>` : ""}
             <p>${escapeHtml(source.selection_rule)} records</p>
-            <button type="button" onclick="useDatasetSource('${escapeHtml(source.source_alias)}', '${escapeHtml(source.form_id || "")}', '${escapeHtml(source.compatibility_group_id || "")}', '${escapeHtml(source.selection_rule)}')">Use Source</button>
-            <button type="button" onclick="useDatasetSource('${escapeHtml(source.source_alias)}', '${escapeHtml(source.form_id || "")}', '${escapeHtml(source.compatibility_group_id || "")}', '${escapeHtml(source.selection_rule)}'); removeSelectedDatasetSource()">Remove Source</button>
+            <button type="button" onclick="useDatasetSource('${escapeHtml(source.source_alias)}', '${escapeHtml(source.form_id || "")}', '${escapeHtml(source.selection_rule)}')">Use Source</button>
+            <button type="button" onclick="useDatasetSource('${escapeHtml(source.source_alias)}', '${escapeHtml(source.form_id || "")}', '${escapeHtml(source.selection_rule)}'); removeSelectedDatasetSource()">Remove Source</button>
           </article>
         `);
         const fieldCards = datasetFields.map((field) => `
@@ -1664,13 +1648,13 @@
         document.getElementById("screen").innerHTML = (sourceCards.join("") + fieldCards.join("")) || '<p class="muted">No dataset draft sources or fields staged yet.</p>';
       }
 
-      function addDatasetSource() {
-        try {
-          const source = datasetSourceDraftFromInputs();
-          if (!source.source_alias) throw new Error("Enter a dataset source alias first.");
-          if (!source.form_id && !source.compatibility_group_id) {
-            throw new Error("Select a source form or compatibility group first.");
-          }
+        function addDatasetSource() {
+          try {
+            const source = datasetSourceDraftFromInputs();
+            if (!source.source_alias) throw new Error("Enter a dataset source alias first.");
+            if (!source.form_id) {
+              throw new Error("Select a source form first.");
+            }
           const index = datasetSources.findIndex((existing) => existing.source_alias === source.source_alias);
           if (index >= 0) {
             datasetSources[index] = source;
@@ -1828,15 +1812,13 @@
         });
       }
 
-      function useDatasetSource(sourceAlias, formId = "", compatibilityGroupId = "", selectionRule = "all") {
+      function useDatasetSource(sourceAlias, formId = "", selectionRule = "all") {
         selectRecord("dataset source", sourceAlias, sourceAlias, {
           "dataset-source-alias": sourceAlias,
           "dataset-form-id": formId,
-          "dataset-compatibility-group-id": compatibilityGroupId,
           "dataset-selection-rule": selectionRule
         });
         if (formId) useForm(formId, formId);
-        if (compatibilityGroupId) useCompatibilityGroup(compatibilityGroupId, compatibilityGroupId);
       }
 
       async function loadDatasetById() {
@@ -1862,7 +1844,7 @@
         datasetSources.splice(0, datasetSources.length, ...payload.sources.map((source) => ({
           source_alias: source.source_alias,
           form_id: source.form_id,
-          compatibility_group_id: source.compatibility_group_id,
+          form_version_major: source.form_version_major,
           selection_rule: source.selection_rule
         })));
         datasetFields.splice(0, datasetFields.length, ...payload.fields.map((field, position) => ({
@@ -1878,7 +1860,6 @@
           useDatasetSource(
             firstSource.source_alias,
             firstSource.form_id || "",
-            firstSource.compatibility_group_id || "",
             firstSource.selection_rule
           );
         }
@@ -1895,9 +1876,10 @@
           ${payload.sources.map((source) => `
             <article class="card">
               <h3>Source ${escapeHtml(source.source_alias)}</h3>
-              <p class="muted">${escapeHtml(source.form_name || source.compatibility_group_name || "Unresolved source")}</p>
+              <p class="muted">${escapeHtml(source.form_name || "Unresolved source")}</p>
+              ${source.form_version_major ? `<p class="muted">Compatible with v${escapeHtml(source.form_version_major)}.x</p>` : ""}
               <p>${escapeHtml(source.selection_rule)} records</p>
-              <button type="button" onclick="useDatasetSource('${escapeHtml(source.source_alias)}', '${escapeHtml(source.form_id || "")}', '${escapeHtml(source.compatibility_group_id || "")}', '${escapeHtml(source.selection_rule)}')">Use Source</button>
+              <button type="button" onclick="useDatasetSource('${escapeHtml(source.source_alias)}', '${escapeHtml(source.form_id || "")}', '${escapeHtml(source.selection_rule)}')">Use Source</button>
             </article>
           `).join("")}
           ${payload.fields.map((field) => `
