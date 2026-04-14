@@ -148,6 +148,28 @@ pub fn router(state: AppState) -> Router {
             }),
         )
         .route(
+            "/app/administration/node-types",
+            get(|| async { Html(tessara_web::node_types_application_shell_html()) }),
+        )
+        .route(
+            "/app/administration/node-types/new",
+            get(|| async { Html(tessara_web::node_type_create_application_html()) }),
+        )
+        .route(
+            "/app/administration/node-types/{node_type_id}/edit",
+            get(|Path(node_type_id): Path<String>| async move {
+                Html(tessara_web::node_type_edit_application_html(&node_type_id))
+            }),
+        )
+        .route(
+            "/app/administration/node-types/{node_type_id}",
+            get(|Path(node_type_id): Path<String>| async move {
+                Html(tessara_web::node_type_detail_application_html(
+                    &node_type_id,
+                ))
+            }),
+        )
+        .route(
             "/app/administration/roles",
             get(|| async { Html(tessara_web::roles_application_shell_html()) }),
         )
@@ -250,6 +272,7 @@ pub fn router(state: AppState) -> Router {
             "/api/admin/node-types/{node_type_id}",
             get(hierarchy::get_node_type).put(hierarchy::update_node_type),
         )
+        .route("/api/node-types", get(hierarchy::list_readable_node_types))
         .route(
             "/api/admin/node-type-relationships",
             get(hierarchy::list_node_type_relationships)
@@ -265,7 +288,8 @@ pub fn router(state: AppState) -> Router {
         )
         .route(
             "/api/admin/node-metadata-fields/{field_id}",
-            put(hierarchy::update_node_metadata_field),
+            put(hierarchy::update_node_metadata_field)
+                .delete(hierarchy::delete_node_metadata_field),
         )
         .route("/api/admin/nodes", post(hierarchy::create_node))
         .route("/api/admin/nodes/{node_id}", put(hierarchy::update_node))

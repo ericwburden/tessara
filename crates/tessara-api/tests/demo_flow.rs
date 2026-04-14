@@ -2605,6 +2605,70 @@ async fn hierarchy_builder_rejects_required_metadata_after_nodes_exist() {
 }
 
 #[tokio::test]
+async fn node_metadata_fields_can_be_deleted() {
+    let _guard = TEST_DATABASE_LOCK.lock().await;
+    let Some(app) = test_app().await else { return };
+    let token = login_token(app.clone()).await;
+
+    let node_type = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/node-types",
+            &token,
+            Some(json!({
+                "name": "Organization",
+                "slug": "organization"
+            })),
+        ),
+    )
+    .await;
+    let node_type_id = id_from(&node_type);
+
+    let metadata_field = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/node-metadata-fields",
+            &token,
+            Some(json!({
+                "node_type_id": node_type_id,
+                "key": "region",
+                "label": "Region",
+                "field_type": "text",
+                "required": false
+            })),
+        ),
+    )
+    .await;
+    let metadata_field_id = id_from(&metadata_field);
+
+    request_json(
+        app.clone(),
+        authorized_request(
+            "DELETE",
+            &format!("/api/admin/node-metadata-fields/{metadata_field_id}"),
+            &token,
+            None,
+        ),
+    )
+    .await;
+
+    let metadata_fields = request_json(
+        app,
+        authorized_request("GET", "/api/admin/node-metadata-fields", &token, None),
+    )
+    .await;
+    assert!(
+        metadata_fields
+            .as_array()
+            .expect("metadata field list should be an array")
+            .iter()
+            .all(|field| field["id"] != metadata_field_id.to_string())
+    );
+}
+
+#[tokio::test]
 async fn hierarchy_and_form_builders_return_diagnostics_for_invalid_references() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
     let Some(app) = test_app().await else { return };
@@ -2920,6 +2984,185 @@ async fn hierarchy_and_form_builders_return_diagnostics_for_invalid_references()
     assert_eq!(cyclic_relationship.0, StatusCode::BAD_REQUEST);
     assert!(
         cyclic_relationship.1["error"]
+            .as_str()
+            .expect("error body should include message")
+            .contains("cycle")
+    );
+}
+
+#[tokio::test]
+async fn readable_node_type_catalog_exposes_labels_and_relationships() {
+    let _guard = TEST_DATABASE_LOCK.lock().await;
+    let Some(app) = test_app().await else { return };
+    let admin_token = login_token(app.clone()).await;
+
+    request_json(
+        app.clone(),
+        authorized_request("POST", "/api/demo/seed", &admin_token, None),
+    )
+    .await;
+
+    let operator_token = login_token_for(
+        app.clone(),
+        "operator@tessara.local",
+        "tessara-dev-operator",
+    )
+    .await;
+
+    let admin_node_types = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/admin/node-types", &admin_token, None),
+    )
+    .await;
+    let partner_summary = admin_node_types
+        .as_array()
+        .expect("admin node type list should be an array")
+        .iter()
+        .find(|entry| entry["slug"] == "partner")
+        .expect("partner summary should exist");
+    assert_eq!(partner_summary["singular_label"], "Partner");
+    assert_eq!(partner_summary["plural_label"], "Partners");
+    assert_eq!(partner_summary["is_root_type"], true);
+
+    let readable_catalog = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/node-types", &operator_token, None),
+    )
+    .await;
+    let program_entry = readable_catalog
+        .as_array()
+        .expect("readable node type catalog should be an array")
+        .iter()
+        .find(|entry| entry["slug"] == "program")
+        .expect("program entry should exist");
+    assert_eq!(program_entry["singular_label"], "Program");
+    assert_eq!(program_entry["plural_label"], "Programs");
+    assert_eq!(program_entry["is_root_type"], false);
+    assert!(
+        program_entry["parent_relationships"]
+            .as_array()
+            .expect("program entry should include parent relationships")
+            .iter()
+            .any(|parent| parent["node_type_slug"] == "partner"
+                && parent["singular_label"] == "Partner"
+                && parent["plural_label"] == "Partners")
+    );
+    assert!(
+        program_entry["child_relationships"]
+            .as_array()
+            .expect("program entry should include child relationships")
+            .iter()
+            .any(|child| child["node_type_slug"] == "activity"
+                && child["singular_label"] == "Activity")
+    );
+}
+
+#[tokio::test]
+async fn non_root_node_types_require_a_parent_node() {
+    let _guard = TEST_DATABASE_LOCK.lock().await;
+    let Some(app) = test_app().await else { return };
+    let token = login_token(app.clone()).await;
+
+    let parent_type_id = create_node_type(app.clone(), &token, "Partner", "partner");
+    let parent_type_id = parent_type_id.await;
+    let child_type_id = create_node_type(app.clone(), &token, "Program", "program");
+    let child_type_id = child_type_id.await;
+    create_node_type_relationship(app.clone(), &token, parent_type_id, child_type_id).await;
+
+    let missing_parent = request_status_and_json(
+        app,
+        authorized_request(
+            "POST",
+            "/api/admin/nodes",
+            &token,
+            Some(json!({
+                "node_type_id": child_type_id,
+                "parent_node_id": null,
+                "name": "Detached Program",
+                "metadata": {}
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(missing_parent.0, StatusCode::BAD_REQUEST);
+    assert!(
+        missing_parent.1["error"]
+            .as_str()
+            .expect("error body should include message")
+            .contains("parent is required")
+    );
+}
+
+#[tokio::test]
+async fn operator_cannot_access_admin_node_type_management_routes() {
+    let _guard = TEST_DATABASE_LOCK.lock().await;
+    let Some(app) = test_app().await else { return };
+    let admin_token = login_token(app.clone()).await;
+    request_json(
+        app.clone(),
+        authorized_request("POST", "/api/demo/seed", &admin_token, None),
+    )
+    .await;
+    let operator_token = login_token_for(
+        app.clone(),
+        "operator@tessara.local",
+        "tessara-dev-operator",
+    )
+    .await;
+
+    let forbidden = request_status_and_json(
+        app,
+        authorized_request("GET", "/api/admin/node-types", &operator_token, None),
+    )
+    .await;
+    assert_eq!(forbidden.0, StatusCode::FORBIDDEN);
+    assert_eq!(forbidden.1["error"], "admin:all");
+}
+
+#[tokio::test]
+async fn node_type_updates_reject_cycles_in_parent_child_selections() {
+    let _guard = TEST_DATABASE_LOCK.lock().await;
+    let Some(app) = test_app().await else { return };
+    let admin_token = login_token(app.clone()).await;
+
+    let parent_type_id = create_node_type(app.clone(), &admin_token, "Partner", "partner").await;
+    let child_type_id = create_node_type(app.clone(), &admin_token, "Program", "program").await;
+
+    request_json(
+        app.clone(),
+        authorized_request(
+            "PUT",
+            &format!("/api/admin/node-types/{parent_type_id}"),
+            &admin_token,
+            Some(json!({
+                "name": "Partner",
+                "slug": "partner",
+                "plural_label": "Partners",
+                "child_node_type_ids": [child_type_id]
+            })),
+        ),
+    )
+    .await;
+
+    let cyclic_update = request_status_and_json(
+        app,
+        authorized_request(
+            "PUT",
+            &format!("/api/admin/node-types/{child_type_id}"),
+            &admin_token,
+            Some(json!({
+                "name": "Program",
+                "slug": "program",
+                "plural_label": "Programs",
+                "child_node_type_ids": [parent_type_id]
+            })),
+        ),
+    )
+    .await;
+
+    assert_eq!(cyclic_update.0, StatusCode::BAD_REQUEST);
+    assert!(
+        cyclic_update.1["error"]
             .as_str()
             .expect("error body should include message")
             .contains("cycle")
