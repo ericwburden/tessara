@@ -1,5 +1,29 @@
 # Progress Report
 
+## 2026-04-15 - Tessara UI Component System Detour
+
+- Decision:
+  - keep the current `cargo-leptos` plus Sass pipeline and start an internal `tessara-ui` component library instead of switching CSS frameworks or continuing to hand-produce every route surface
+  - use `docs/ui-guidance.md` and `docs/style-examples/` as the component specification source for appearance and behavior
+  - if a component cannot be specified confidently from those sources, stop and resolve the spec gap before adding a new bespoke pattern
+- Completed:
+  - created `crates/tessara-ui` and added it to the workspace
+  - extracted the first shared primitives: buttons, action groups, page headers, metadata strips, cards, and panels
+  - refactored initial application surfaces to consume those primitives so the component layer is real rather than only planned
+- Planned next work:
+  - continue the explicit `Sprint 1G` detour on top of `tessara-ui` rather than route-local markup
+  - extract the next component families needed for workflow assignment and response-start work: inputs, field wrappers, section layouts, and table or list toolbar primitives
+  - keep the shared shell stable while moving new and touched surfaces onto the component layer incrementally
+- Validation:
+  - `cargo fmt --all`
+  - `cargo test -p tessara-ui`
+  - `cargo test -p tessara-web`
+  - `cd end2end; npx playwright test`
+- Roadmap impact:
+  - inserted `Sprint 1G: Tessara UI Component System Foundation` between Sprint 1F and Sprint 2A
+  - Sprint 1G is now the next sprint
+  - Sprint 2A no longer carries the component-system extraction as hidden scope
+
 ## 2026-04-15 - Sprint 1F Application UI Guidance Alignment Closeout
 
 - Completed:
@@ -17,7 +41,7 @@
   - `cd end2end; npx playwright test`
   - `cargo fmt --all`
   - refreshed the local Docker image with a no-cache rebuild before the final Playwright pass so the served app matched the Sprint 1F worktree sources
-- Next Sprint: Sprint 2A Workflow Assignment And Response Start
+- Next Sprint: Sprint 1G Tessara UI Component System Foundation
 
 ## Sprint Handoff / Demo Instructions
 

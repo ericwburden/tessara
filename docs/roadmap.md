@@ -289,9 +289,28 @@ Before deeper application-surface replacement continues, the frontend platform s
 
 **User-testable exit condition:** a tester can sign in and move through the existing application routes in a coherent shell on desktop and narrow widths, without builder-centric framing, shell-level horizontal scroll, hydration regressions, or browser-console errors.
 
+### Sprint 1G: Tessara UI Component System Foundation (Next)
+
+**Outcome:** shared application surfaces move onto a predictable internal component layer so future route work stops depending on ad hoc page-local markup and styling.
+
+**Build:**
+
+- establish `tessara-ui` as the shared internal component library for Tessara
+- use `ui-guidance.md` and `docs/style-examples/` as the specification source for component appearance and behavior
+- extract the first stable primitives for shared page headers, action groups, cards, panels, metadata strips, inputs, field wrappers, and table or list toolbar patterns
+- move touched route surfaces onto `tessara-ui` incrementally while keeping the shared shell stable and SSR-first
+- stop adding new bespoke route-level UI patterns when an approved component spec already exists
+
+**Application UI delivered this sprint:**
+
+- current shared routes begin rendering through a recognizable `tessara-ui` visual system instead of route-by-route markup drift
+- new Sprint 2A assignment and response-start work can land on top of shared component primitives rather than introducing another parallel styling layer
+
+**User-testable exit condition:** a tester can move through the current shared application surfaces and see consistent headers, actions, cards, panels, and common control styling, and engineers can extend the same component layer for the next workflow-runtime sprint without inventing a new surface pattern each time.
+
 ## Phase 2: Workflow Runtime, Responses, And Materialization
 
-### Sprint 2A: Workflow Assignment And Response Start (Next)
+### Sprint 2A: Workflow Assignment And Response Start
 
 **Outcome:** published forms and workflows are assignable and discoverable from the product UI.
 
