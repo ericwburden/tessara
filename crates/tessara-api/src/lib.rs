@@ -214,6 +214,28 @@ pub fn router(state: AppState) -> Router {
             }),
         )
         .route(
+            "/app/datasets",
+            get(|| async { Html(tessara_web::datasets_application_shell_html()) }),
+        )
+        .route(
+            "/app/datasets/{dataset_id}",
+            get(|Path(dataset_id): Path<String>| async move {
+                Html(tessara_web::dataset_detail_application_html(&dataset_id))
+            }),
+        )
+        .route(
+            "/app/components",
+            get(|| async { Html(tessara_web::components_application_shell_html()) }),
+        )
+        .route(
+            "/app/components/{component_ref}",
+            get(|Path(component_ref): Path<String>| async move {
+                Html(tessara_web::component_detail_application_html(
+                    &component_ref,
+                ))
+            }),
+        )
+        .route(
             "/app/dashboards",
             get(|| async { Html(tessara_web::dashboards_application_shell_html()) }),
         )

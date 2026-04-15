@@ -9,6 +9,14 @@ struct ActionSpec {
     label: &'static str,
 }
 
+#[derive(Copy, Clone)]
+struct NavLink {
+    href: &'static str,
+    icon: &'static str,
+    key: &'static str,
+    label: &'static str,
+}
+
 const STANDARD_ACTIONS: &[ActionSpec] = &[
     ActionSpec {
         handler: "openLogin()",
@@ -25,6 +33,69 @@ const STANDARD_ACTIONS: &[ActionSpec] = &[
     ActionSpec {
         handler: "loadAppSummary()",
         label: "Refresh Summary",
+    },
+];
+
+const PRODUCT_LINKS: &[NavLink] = &[
+    NavLink {
+        key: "home",
+        href: "/app",
+        label: "Home",
+        icon: "fa-house",
+    },
+    NavLink {
+        key: "organization",
+        href: "/app/organization",
+        label: "Organization",
+        icon: "fa-sitemap",
+    },
+    NavLink {
+        key: "forms",
+        href: "/app/forms",
+        label: "Forms",
+        icon: "fa-clipboard-list",
+    },
+    NavLink {
+        key: "responses",
+        href: "/app/responses",
+        label: "Responses",
+        icon: "fa-square-check",
+    },
+    NavLink {
+        key: "dashboards",
+        href: "/app/dashboards",
+        label: "Dashboards",
+        icon: "fa-table-columns",
+    },
+];
+
+const ANALYTICS_LINKS: &[NavLink] = &[
+    NavLink {
+        key: "datasets",
+        href: "/app/datasets",
+        label: "Datasets",
+        icon: "fa-database",
+    },
+    NavLink {
+        key: "components",
+        href: "/app/components",
+        label: "Components",
+        icon: "fa-cubes",
+    },
+];
+
+const INTERNAL_LINKS: &[NavLink] = &[
+    NavLink {
+        key: "administration",
+        href: "/app/administration",
+        label: "Administration",
+        icon: "fa-sliders",
+    },
+    NavLink {
+        key: "migration",
+        href: "/app/migration",
+        label: "Migration",
+        icon: "fa-truck-fast",
     },
 ];
 
@@ -76,11 +147,19 @@ fn escape_attr(value: &str) -> String {
 }
 
 fn breadcrumb(parts: &[(&str, Option<&str>)]) -> String {
+    if parts.len() <= 2 {
+        return String::new();
+    }
+
     parts
         .iter()
         .map(|(label, href)| match href {
-            Some(href) => format!(r#"<a href="{href}">{label}</a>"#),
-            None => format!(r#"<span>{label}</span>"#),
+            Some(href) => {
+                format!(r#"<span class="breadcrumb-item"><a href="{href}">{label}</a></span>"#)
+            }
+            None => {
+                format!(r#"<span class="breadcrumb-item"><span>{label}</span></span>"#)
+            }
         })
         .collect::<Vec<_>>()
         .join("")
@@ -99,45 +178,109 @@ fn action_buttons(actions: &[ActionSpec]) -> String {
         .join("")
 }
 
-fn sidebar(active_route: &str, include_internal_create: bool) -> String {
-    let product_links = [
-        ("home", "/app", "Home"),
-        ("organization", "/app/organization", "Organization"),
-        ("forms", "/app/forms", "Forms"),
-        ("responses", "/app/responses", "Responses"),
-        ("reports", "/app/reports", "Reports"),
-        ("dashboards", "/app/dashboards", "Dashboards"),
-    ];
-    let internal_links = [
-        ("administration", "/app/administration", "Administration"),
-        ("migration", "/app/migration", "Migration"),
-    ];
+fn nav_link(link: &NavLink, active_route: &str) -> String {
+    let class_name = if link.key == active_route {
+        "active"
+    } else {
+        ""
+    };
+    format!(
+        r#"<li><a class="{class_name}" href="{href}" title="{label}" aria-label="{label}"><span class="app-nav__icon" aria-hidden="true"><i class="fa-solid {icon}"></i></span><span class="app-nav__label">{label}</span></a></li>"#,
+        href = link.href,
+        icon = link.icon,
+        label = link.label,
+    )
+}
 
-    let product_html = product_links
-        .into_iter()
-        .map(|(key, href, label)| {
-            let class_name = if key == active_route { "active" } else { "" };
-            format!(r#"<li><a class="{class_name}" href="{href}">{label}</a></li>"#)
-        })
+fn nav_section(
+    heading: &str,
+    aria_label: &str,
+    links: &[NavLink],
+    active_route: &str,
+    section_class: &str,
+) -> String {
+    let links_html = links
+        .iter()
+        .map(|link| nav_link(link, active_route))
         .collect::<Vec<_>>()
         .join("");
-    let internal_html = internal_links
-        .into_iter()
-        .map(|(key, href, label)| {
-            let class_name = if key == active_route { "active" } else { "" };
-            format!(r#"<li><a class="{class_name}" href="{href}">{label}</a></li>"#)
-        })
-        .collect::<Vec<_>>()
-        .join("");
+
+    format!(
+        r#"
+        <section class="nav-panel menu {section_class}">
+          <p class="menu-label">{heading}</p>
+          <nav aria-label="{aria_label}">
+            <ul class="menu-list app-nav">{links_html}</ul>
+          </nav>
+        </section>
+        "#
+    )
+}
+
+fn top_app_bar(active_route: &str, area_kind: &str) -> String {
+    let workspace_badge = match active_route {
+        "administration" => "Administration Workspace",
+        "components" => "Component Workspace",
+        "datasets" => "Dataset Workspace",
+        "migration" => "Migration Workspace",
+        "reports" => "Transitional Analytics",
+        _ => area_kind,
+    };
+
+    format!(
+        r#"
+        <header class="top-app-bar">
+          <div class="top-app-bar__brand">
+            <button
+              id="app-nav-toggle"
+              class="app-nav-toggle"
+              type="button"
+              aria-label="Toggle navigation"
+              aria-controls="app-sidebar"
+              aria-expanded="false"
+            >
+              <span class="app-nav-toggle__icon" aria-hidden="true"><i class="fa-solid fa-bars"></i></span>
+            </button>
+            <a class="top-app-home-link" href="/app" aria-label="Open Tessara home">
+              <img class="top-app-bar__mark" src="/assets/tessara-icon-256.svg" alt="" />
+              <span class="top-app-bar__name">Tessara</span>
+            </a>
+            <span class="top-app-bar__context">{workspace_badge}</span>
+          </div>
+          <div class="top-app-bar__utilities">
+            <div class="top-app-bar__search">
+              <label class="is-sr-only" for="global-search">Global search</label>
+              <input
+                id="global-search"
+                class="input app-search-input"
+                type="search"
+                placeholder="Search Tessara"
+                autocomplete="off"
+              />
+            </div>
+            {theme}
+          </div>
+        </header>
+        "#,
+        theme = theme_toggle(),
+    )
+}
+
+fn sidebar(active_route: &str, include_internal_create: bool) -> String {
+    let transitional_class = if active_route == "reports" {
+        "active"
+    } else {
+        ""
+    };
 
     let create_html = if include_internal_create {
         r#"
-            <section class="nav-panel">
-              <h2>Create Shortcuts</h2>
-              <p class="muted">These shortcuts stay internal while product routes own normal entity workflows.</p>
+            <section class="nav-panel app-sidebar__supplemental">
+              <h2>Internal Shortcuts</h2>
+              <p class="muted">These admin-only destinations stay available without becoming the default product journey.</p>
               <div class="create-menu">
                 <a class="create-link" href="/app/admin">Open Legacy Builder</a>
-                <a class="create-link" href="/">Open Test Harness</a>
+                <a class="create-link" href="/">Open Developer Console</a>
               </div>
             </section>
         "#
@@ -148,78 +291,96 @@ fn sidebar(active_route: &str, include_internal_create: bool) -> String {
 
     format!(
         r#"
-        <aside class="panel box app-sidebar">
-          <section class="nav-panel menu">
-            <p class="menu-label">Product Areas</p>
-            <nav aria-label="Product navigation">
-              <ul class="menu-list app-nav">{product_html}</ul>
-            </nav>
-          </section>
-          <section class="nav-panel nav-panel-secondary menu">
-            <p class="menu-label">Internal Areas</p>
-            <nav aria-label="Internal navigation">
-              <ul class="menu-list app-nav">{internal_html}</ul>
-            </nav>
-          </section>
-          {create_html}
-          <section class="selection-panel">
-            <h3>Session And Selections</h3>
-            <p class="muted">The current signed-in account and your selected records appear here.</p>
-            <p id="session-status" class="muted">Not signed in.</p>
-            <div id="current-user-summary" class="selection-grid">
-              <p class="muted">Sign in to load account context.</p>
-            </div>
-            <div id="selection-state" class="selection-grid">
-              <p class="muted">No records selected yet.</p>
-            </div>
-          </section>
+        <aside id="app-sidebar" class="panel box app-sidebar" aria-label="Application navigation">
+          <div class="app-sidebar__header">
+            <button class="app-sidebar-close" type="button" aria-label="Close navigation" data-sidebar-dismiss>
+              <span aria-hidden="true"><i class="fa-solid fa-xmark"></i></span>
+            </button>
+          </div>
+          <div class="app-sidebar__content">
+            {product_section}
+            {analytics_section}
+            <section class="nav-panel nav-panel-transitional menu">
+              <p class="menu-label">Transitional Analytics</p>
+              <nav aria-label="Transitional reporting navigation">
+                <ul class="menu-list app-nav">
+                  <li><a class="{transitional_class}" href="/app/reports" title="Reports" aria-label="Reports"><span class="app-nav__icon" aria-hidden="true"><i class="fa-solid fa-chart-line"></i></span><span class="app-nav__label">Reports</span></a></li>
+                </ul>
+              </nav>
+            </section>
+            {internal_section}
+            {create_html}
+            <section class="selection-panel app-sidebar__supplemental">
+              <h3>Session And Selections</h3>
+              <p class="muted">The current signed-in account and your selected records appear here.</p>
+              <p id="session-status" class="muted">Not signed in.</p>
+              <div id="current-user-summary" class="selection-grid">
+                <p class="muted">Sign in to load account context.</p>
+              </div>
+              <div id="selection-state" class="selection-grid">
+                <p class="muted">No records selected yet.</p>
+              </div>
+            </section>
+          </div>
         </aside>
-        "#
+        "#,
+        product_section = nav_section(
+            "Product Areas",
+            "Product navigation",
+            PRODUCT_LINKS,
+            active_route,
+            "nav-panel-primary",
+        ),
+        analytics_section = nav_section(
+            "Data And Components",
+            "Data and component navigation",
+            ANALYTICS_LINKS,
+            active_route,
+            "nav-panel-analytics",
+        ),
+        internal_section = nav_section(
+            "Internal Areas",
+            "Internal navigation",
+            INTERNAL_LINKS,
+            active_route,
+            "nav-panel-secondary",
+        ),
     )
 }
 
 fn app_shell(
     active_route: &str,
     area_kind: &str,
-    title: &str,
-    description: &str,
+    _title: &str,
+    _description: &str,
     breadcrumbs: &[(&str, Option<&str>)],
     children: String,
     include_internal_create: bool,
 ) -> String {
     format!(
         r#"
-        <main class="shell app-shell">
-          <section class="panel box hero">
-            <div class="hero-header">
-              <div class="brand-lockup">
-                <img class="brand-mark" src="/assets/tessara-icon-1024.svg" alt="" />
-                <span>Tessara</span>
-              </div>
-              {}
-            </div>
-            <nav class="breadcrumb-trail" aria-label="Breadcrumb">{}</nav>
-            <p class="muted">{}</p>
-            <h1>{}</h1>
-            <p>{}</p>
-            <div class="actions">{}</div>
-          </section>
+        <main class="shell app-shell app-shell--{active_route}">
+          {}
+          <button
+            class="app-sidebar-backdrop"
+            type="button"
+            aria-label="Close navigation"
+            data-sidebar-dismiss
+            tabindex="-1"
+          ></button>
           <section class="app-layout">
             {}
             <section class="panel box app-main">
+              <nav class="breadcrumb-trail" aria-label="Breadcrumb">{}</nav>
               {}
             </section>
           </section>
           <pre id="output" hidden></pre>
         </main>
         "#,
-        theme_toggle(),
-        breadcrumb(breadcrumbs),
-        area_kind,
-        title,
-        description,
-        action_buttons(STANDARD_ACTIONS),
+        top_app_bar(active_route, area_kind),
         sidebar(active_route, include_internal_create),
+        breadcrumb(breadcrumbs),
         children
     )
 }
@@ -231,7 +392,7 @@ fn page_header(eyebrow: &str, title: &str, description: &str, actions: String) -
           <p class="eyebrow">{eyebrow}</p>
           <div class="page-title-row">
             <div>
-              <h2>{title}</h2>
+              <h1>{title}</h1>
               <p class="muted">{description}</p>
             </div>
             <div class="actions">{actions}</div>
@@ -279,19 +440,25 @@ fn home_body() -> String {
             "Go to Responses",
         ),
         (
-            "Reports",
-            "Browse reports, inspect definitions, and run supported report views.",
-            "/app/reports",
-            "Go to Reports",
-        ),
-        (
             "Dashboards",
-            "Browse dashboards, inspect component summaries, and open previews.",
+            "Browse dashboards, inspect component summaries, and open previews from the shared application shell.",
             "/app/dashboards",
             "Go to Dashboards",
         ),
     ];
     let internal_cards = [
+        (
+            "Datasets",
+            "Review dataset definitions, their source structure, and current read-ready status from the shared shell.",
+            "/app/datasets",
+            "Open Datasets",
+        ),
+        (
+            "Components",
+            "Inspect dashboard component definitions and their linked charts without dropping straight into the legacy builder.",
+            "/app/components",
+            "Open Components",
+        ),
         (
             "Administration",
             "Internal configuration and legacy builder access stay here, not on product routes.",
@@ -308,11 +475,7 @@ fn home_body() -> String {
 
     format!(
         r#"
-        <section class="app-screen">
-          <p class="eyebrow">Shared Home</p>
-          <h2>Welcome to Tessara</h2>
-          <p class="muted">Use this shared home as the application entry point. It is structured so future role-aware home variants can reuse the same modules without changing routes.</p>
-        </section>
+        {}
         <section class="app-screen">
           <p class="eyebrow">Shared Home</p>
           <h2>Role-Ready Home Modules</h2>
@@ -328,7 +491,7 @@ fn home_body() -> String {
             </article>
             <article class="home-card">
               <h3>Oversight and Insight</h3>
-              <p>Reports, dashboards, and internal oversight remain available without collapsing back into a control console.</p>
+              <p>Dashboards, reports, datasets, and internal oversight remain available without collapsing back into a control console.</p>
             </article>
           </div>
         </section>
@@ -338,6 +501,20 @@ fn home_body() -> String {
           <p class="muted">These are the primary destinations for top-level entity browsing and normal workflow entry.</p>
           <div class="home-grid">
             {}
+          </div>
+        </section>
+        <section class="app-screen">
+          <p class="eyebrow">Shared Home</p>
+          <h2>Transitional Reporting</h2>
+          <p class="muted">Reporting remains reachable while dashboards stay in the primary navigation and the target component model continues to replace the older asset shape.</p>
+          <div class="home-grid">
+            <article class="directory-card card">
+              <div class="card-content">
+                <h3>Reports</h3>
+                <p>Browse, inspect, and run the transitional report surfaces without promoting them to the primary long-term navigation model.</p>
+                <a class="button-link button is-light" href="/app/reports">Open Reports</a>
+              </div>
+            </article>
           </div>
         </section>
         <section class="app-screen">
@@ -358,13 +535,19 @@ fn home_body() -> String {
         </section>
         <section class="app-screen">
           <p class="eyebrow">Shared Home</p>
-          <h2>Internal Areas</h2>
-          <p class="muted">Internal operator surfaces stay available, but they are clearly secondary to the main product areas.</p>
+          <h2>Internal Workspaces</h2>
+          <p class="muted">Internal operator and composition surfaces stay available, but they remain clearly secondary to the main product areas.</p>
           <div class="home-grid">
             {}
           </div>
         </section>
         "#,
+        page_header(
+            "Shared Home",
+            "Application Overview",
+            "Use this shared home as the entry point for the product shell, current readiness, and role-aware next actions.",
+            action_buttons(STANDARD_ACTIONS),
+        ),
         product_cards
             .iter()
             .map(|(title, description, href, label)| {
@@ -559,6 +742,90 @@ fn migration_body() -> String {
             "Validation, dry-run, and import results appear here.",
             r#"<div id="migration-results" class="record-detail"><p class="muted">No migration activity yet.</p></div>"#,
         )
+    )
+}
+
+fn datasets_body() -> String {
+    format!(
+        r#"
+        {}
+        {}
+        "#,
+        page_header(
+            "Datasets",
+            "Datasets",
+            "Browse readable dataset definitions and inspect source and field structure from the shared shell.",
+            r#"<a class="button-link button is-light" href="/app/administration">Open Administration</a>"#
+                .to_string(),
+        ),
+        empty_panel(
+            "Dataset Directory",
+            "Dataset definitions remain internal-facing, but they should be readable without dropping into the legacy builder for every inspection task.",
+            r#"<div id="dataset-list" class="record-list"><p class="muted">Loading dataset definitions...</p></div>"#,
+        ),
+    )
+}
+
+fn dataset_detail_body() -> String {
+    format!(
+        r#"
+        {}
+        <section class="app-screen box page-panel">
+          <h3>Dataset Definition</h3>
+          <div id="dataset-detail" class="record-detail">
+            <p class="muted">Loading dataset detail...</p>
+          </div>
+        </section>
+        "#,
+        page_header(
+            "Datasets",
+            "Dataset Detail",
+            "Review the selected dataset definition, its source structure, and a preview of readable rows when available.",
+            r#"<a class="button-link button is-light" href="/app/datasets">Back to List</a><a class="button-link button is-light" href="/app/administration">Open Administration</a><a class="button-link button is-light" href="/app/admin">Legacy Builder</a>"#
+                .to_string(),
+        ),
+    )
+}
+
+fn components_body() -> String {
+    format!(
+        r#"
+        {}
+        {}
+        "#,
+        page_header(
+            "Components",
+            "Components",
+            "Browse dashboard component definitions and inspect how each component maps to a dashboard, chart, and report surface.",
+            r#"<a class="button-link button is-light" href="/app/dashboards">Open Dashboards</a>"#
+                .to_string(),
+        ),
+        empty_panel(
+            "Component Directory",
+            "Components remain internal-facing, but they should be inspectable from the shared shell without relying on the legacy workbench.",
+            r#"<div id="component-list" class="record-list"><p class="muted">Loading dashboard components...</p></div>"#,
+        ),
+    )
+}
+
+fn component_detail_body() -> String {
+    format!(
+        r#"
+        {}
+        <section class="app-screen box page-panel">
+          <h3>Component Definition</h3>
+          <div id="component-detail" class="record-detail">
+            <p class="muted">Loading component detail...</p>
+          </div>
+        </section>
+        "#,
+        page_header(
+            "Components",
+            "Component Detail",
+            "Review the selected dashboard component, its chart dependency, and the dashboard context that currently owns it.",
+            r#"<a class="button-link button is-light" href="/app/components">Back to List</a><a class="button-link button is-light" href="/app/dashboards">Open Dashboards</a>"#
+                .to_string(),
+        ),
     )
 }
 
@@ -3303,6 +3570,92 @@ pub fn dashboard_edit_application_html(_script: &str, dashboard_id: &str) -> Str
                 &format!("/app/dashboards/{escaped}"),
                 &dashboard_form_fields(),
             ),
+            false,
+        ),
+    )
+}
+
+pub fn datasets_application_shell_html(_script: &str) -> String {
+    render_application_document(
+        "Tessara Datasets",
+        "Tessara datasets list screen.",
+        &pipeline::bridge_asset_path("app-legacy.js"),
+        r#"data-page-key="dataset-list" data-active-route="datasets""#,
+        app_shell(
+            "datasets",
+            "Internal Area",
+            "Datasets",
+            "Browse readable dataset definitions from the shared shell.",
+            &[("Home", Some("/app")), ("Datasets", None)],
+            datasets_body(),
+            false,
+        ),
+    )
+}
+
+pub fn dataset_detail_application_html(_script: &str, dataset_id: &str) -> String {
+    let escaped = escape_attr(dataset_id);
+    render_application_document(
+        "Dataset Detail",
+        "Dataset detail screen.",
+        &pipeline::bridge_asset_path("app-legacy.js"),
+        &format!(
+            r#"data-page-key="dataset-detail" data-active-route="datasets" data-record-id="{escaped}""#
+        ),
+        app_shell(
+            "datasets",
+            "Internal Area",
+            "Datasets",
+            "Review the selected dataset definition from a dedicated detail screen.",
+            &[
+                ("Home", Some("/app")),
+                ("Datasets", Some("/app/datasets")),
+                ("Dataset Detail", None),
+            ],
+            dataset_detail_body(),
+            false,
+        ),
+    )
+}
+
+pub fn components_application_shell_html(_script: &str) -> String {
+    render_application_document(
+        "Tessara Components",
+        "Tessara component list screen.",
+        &pipeline::bridge_asset_path("app-legacy.js"),
+        r#"data-page-key="component-list" data-active-route="components""#,
+        app_shell(
+            "components",
+            "Internal Area",
+            "Components",
+            "Browse readable dashboard component definitions from the shared shell.",
+            &[("Home", Some("/app")), ("Components", None)],
+            components_body(),
+            false,
+        ),
+    )
+}
+
+pub fn component_detail_application_html(_script: &str, component_ref: &str) -> String {
+    let escaped = escape_attr(component_ref);
+    render_application_document(
+        "Component Detail",
+        "Component detail screen.",
+        &pipeline::bridge_asset_path("app-legacy.js"),
+        &format!(
+            r#"data-page-key="component-detail" data-active-route="components" data-record-id="{escaped}""#
+        ),
+        app_shell(
+            "components",
+            "Internal Area",
+            "Components",
+            "Review the selected dashboard component from a dedicated detail screen.",
+            &[
+                ("Home", Some("/app")),
+                ("Components", Some("/app/components")),
+                ("Component Detail", None),
+            ],
+            component_detail_body(),
             false,
         ),
     )

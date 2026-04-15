@@ -270,6 +270,25 @@ Before deeper application-surface replacement continues, the frontend platform s
 
 **User-testable exit condition:** a tester can revise a draft form version, publish it, receive an automatically assigned semantic version and major-version compatibility outcome at publish time, and verify from the UI whether the revision stayed in the same major line or created a new one without entering version labels or compatibility-group identifiers manually.
 
+### Sprint 1F: Application UI Guidance Alignment (Complete)
+
+**Outcome:** the current application UI aligns with the canonical shell, page-family, and responsive guidance before deeper workflow-runtime delivery continues.
+
+**Build:**
+
+- shared shell alignment to `ui-guidance.md` for top app bar, sidebar behavior, page headers, breadcrumbs, spacing, responsive layout, theme controls, and internal-area distinction
+- route-by-route UI cleanup for existing `Home`, `Organization`, `Forms`, `Responses`, `Dashboards`, `Administration`, and `Migration` surfaces
+- organization browse and detail polish toward the hierarchy-first, scope-aware direction already called out in canonical docs
+- reduction of builder-era and transitional framing in end-user-facing application surfaces without adding new backend workflow scope
+
+**Application UI delivered this sprint:**
+
+- coherent shared shell with utility-only top bar and visible static global search
+- consistent directory, detail, and editor framing across the existing core routes
+- clearer product-vs-internal separation, with Administration subtle and Migration subordinate to the main application shell
+
+**User-testable exit condition:** a tester can sign in and move through the existing application routes in a coherent shell on desktop and narrow widths, without builder-centric framing, shell-level horizontal scroll, hydration regressions, or browser-console errors.
+
 ## Phase 2: Workflow Runtime, Responses, And Materialization
 
 ### Sprint 2A: Workflow Assignment And Response Start (Next)

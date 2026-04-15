@@ -100,6 +100,22 @@ pub fn dashboards_application_shell_html() -> String {
     application::dashboards_application_shell_html(app_script::APPLICATION_SCRIPT)
 }
 
+pub fn datasets_application_shell_html() -> String {
+    application::datasets_application_shell_html(app_script::APPLICATION_SCRIPT)
+}
+
+pub fn dataset_detail_application_html(dataset_id: &str) -> String {
+    application::dataset_detail_application_html(app_script::APPLICATION_SCRIPT, dataset_id)
+}
+
+pub fn components_application_shell_html() -> String {
+    application::components_application_shell_html(app_script::APPLICATION_SCRIPT)
+}
+
+pub fn component_detail_application_html(component_ref: &str) -> String {
+    application::component_detail_application_html(app_script::APPLICATION_SCRIPT, component_ref)
+}
+
 pub fn dashboard_create_application_html() -> String {
     application::dashboard_create_application_html(app_script::APPLICATION_SCRIPT)
 }
@@ -200,8 +216,10 @@ pub fn svg_asset(name: &str) -> Option<&'static str> {
 mod tests {
     use super::{
         admin_shell_html, administration_application_shell_html, application_shell_html,
-        bridge_asset, dashboard_create_application_html, dashboard_detail_application_html,
+        bridge_asset, component_detail_application_html, components_application_shell_html,
+        dashboard_create_application_html, dashboard_detail_application_html,
         dashboard_edit_application_html, dashboards_application_shell_html,
+        dataset_detail_application_html, datasets_application_shell_html,
         form_create_application_html, form_detail_application_html, form_edit_application_html,
         forms_application_shell_html, login_application_html, migration_application_shell_html,
         node_type_create_application_html, node_type_detail_application_html,
@@ -345,20 +363,26 @@ mod tests {
         let html = application_shell_html();
 
         assert!(html.contains("Application Overview"));
-        assert!(html.contains("Welcome to Tessara"));
         assert!(html.contains("Role-Ready Home Modules"));
         assert!(html.contains("Product Areas"));
+        assert!(html.contains("Transitional Reporting"));
         assert!(html.contains("Current Deployment Readiness"));
         assert!(html.contains("Current Workflow Context"));
-        assert!(html.contains("Internal Areas"));
+        assert!(html.contains("Internal Workspaces"));
+        assert!(html.contains("top-app-bar"));
+        assert!(html.contains("app-nav-toggle"));
+        assert!(html.contains("global-search"));
         assert!(html.contains("/app/organization"));
         assert!(html.contains("/app/forms"));
         assert!(html.contains("/app/responses"));
+        assert!(html.contains("/app/datasets"));
+        assert!(html.contains("/app/components"));
         assert!(html.contains("/app/reports"));
         assert!(html.contains("/app/dashboards"));
         assert!(html.contains("/app/administration"));
         assert!(html.contains("/app/migration"));
         assert!(!html.contains("Create Shortcuts"));
+        assert!(!html.contains("breadcrumb-item"));
     }
 
     #[test]
@@ -374,6 +398,7 @@ mod tests {
         assert!(html.contains("login-password"));
         assert!(html.contains("operator@tessara.local"));
         assert!(html.contains("data-theme-choice=\"system\""));
+        assert!(html.contains("global-search"));
     }
 
     #[test]
@@ -381,6 +406,8 @@ mod tests {
         let organization = organization_application_shell_html();
         let forms = forms_application_shell_html();
         let responses = submission_application_shell_html();
+        let datasets = datasets_application_shell_html();
+        let components = components_application_shell_html();
         let reports = reporting_application_shell_html();
         let dashboards = dashboards_application_shell_html();
 
@@ -409,6 +436,14 @@ mod tests {
         assert!(responses.contains("Submitted Responses"));
         assert!(!responses.contains("Draft submission ID"));
 
+        assert!(datasets.contains("Datasets"));
+        assert!(datasets.contains("Dataset Directory"));
+        assert!(datasets.contains("dataset-list"));
+
+        assert!(components.contains("Components"));
+        assert!(components.contains("Component Directory"));
+        assert!(components.contains("component-list"));
+
         assert!(reports.contains("Reports"));
         assert!(reports.contains("Create Report"));
         assert!(reports.contains("report-list"));
@@ -432,6 +467,11 @@ mod tests {
         let response_detail =
             response_detail_application_html("00000000-0000-0000-0000-000000000003");
         let response_edit = response_edit_application_html("00000000-0000-0000-0000-000000000003");
+        let dataset_detail =
+            dataset_detail_application_html("00000000-0000-0000-0000-000000000010");
+        let component_detail = component_detail_application_html(
+            "00000000-0000-0000-0000-000000000011__00000000-0000-0000-0000-000000000012",
+        );
         let report_new = report_create_application_html();
         let report_detail = report_detail_application_html("00000000-0000-0000-0000-000000000004");
         let report_edit = report_edit_application_html("00000000-0000-0000-0000-000000000004");
@@ -469,6 +509,10 @@ mod tests {
         assert!(organization_edit.contains("Cancel"));
         assert!(form_detail.contains("Form Detail"));
         assert!(response_detail.contains("Response Detail"));
+        assert!(dataset_detail.contains("Dataset Detail"));
+        assert!(dataset_detail.contains("dataset-detail"));
+        assert!(component_detail.contains("Component Detail"));
+        assert!(component_detail.contains("component-detail"));
         assert!(report_detail.contains("Report Detail"));
         assert!(report_detail.contains("Run"));
         assert!(dashboard_detail.contains("Dashboard Detail"));
@@ -492,6 +536,8 @@ mod tests {
         assert!(administration.contains("/app/administration/node-types"));
         assert!(administration.contains("Open Legacy Builder"));
         assert!(administration.contains("/app/admin"));
+        assert!(administration.contains("/app/datasets"));
+        assert!(administration.contains("/app/components"));
 
         assert!(users.contains("User Management"));
         assert!(users.contains("Create User"));
@@ -506,6 +552,20 @@ mod tests {
         assert!(migration.contains("Validate Fixture"));
         assert!(migration.contains("Dry-Run Fixture"));
         assert!(migration.contains("Import Fixture"));
+        assert!(administration.contains("Administration Workspace"));
+        assert!(migration.contains("Migration Workspace"));
+    }
+
+    #[test]
+    fn breadcrumbs_only_render_on_deeper_routes() {
+        let forms = forms_application_shell_html();
+        let organization_detail =
+            organization_detail_application_html("00000000-0000-0000-0000-000000000001");
+        let report_detail = report_detail_application_html("00000000-0000-0000-0000-000000000004");
+
+        assert!(!forms.contains("breadcrumb-item"));
+        assert!(organization_detail.contains("breadcrumb-item"));
+        assert!(report_detail.contains("breadcrumb-item"));
     }
 
     #[test]

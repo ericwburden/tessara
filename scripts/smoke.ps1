@@ -130,8 +130,8 @@ try {
     }
 
     $appShell = Invoke-RestMethod -Uri "$baseUrl/app" -TimeoutSec 30
-    if (-not ($appShell -like "*Application Overview*") -or -not ($appShell -like "*Welcome to Tessara*") -or -not ($appShell -like "*Role-Ready Home Modules*") -or -not ($appShell -like "*Product Areas*") -or -not ($appShell -like "*Current Deployment Readiness*") -or -not ($appShell -like "*Current Workflow Context*") -or -not ($appShell -like "*Internal Areas*") -or -not ($appShell -like "*Go to Organization*") -or -not ($appShell -like "*Go to Forms*") -or -not ($appShell -like "*Go to Responses*")) {
-        throw "Expected application home HTML to include overview and split-area navigation"
+    if (-not ($appShell -like "*Application Overview*") -or -not ($appShell -like "*Role-Ready Home Modules*") -or -not ($appShell -like "*Product Areas*") -or -not ($appShell -like "*Transitional Reporting*") -or -not ($appShell -like "*Current Deployment Readiness*") -or -not ($appShell -like "*Current Workflow Context*") -or -not ($appShell -like "*Internal Areas*") -or -not ($appShell -like "*global-search*") -or -not ($appShell -like "*Go to Organization*") -or -not ($appShell -like "*Go to Forms*") -or -not ($appShell -like "*Go to Responses*")) {
+        throw "Expected application home HTML to include Sprint 1F shell markers and shared navigation"
     }
     $loginShell = Invoke-RestMethod -Uri "$baseUrl/app/login" -TimeoutSec 30
     if (-not ($loginShell -like "*Sign In*") -or -not ($loginShell -like "*operator@tessara.local*") -or -not ($loginShell -like "*delegator@tessara.local*") -or -not ($loginShell -like "*delegate@tessara.local*")) {

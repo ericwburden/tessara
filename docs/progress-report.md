@@ -1,5 +1,149 @@
 # Progress Report
 
+## 2026-04-15 - Sprint 1F Application UI Guidance Alignment Closeout
+
+- Completed:
+  - replaced the hero-first shared application chrome with a utility top app bar, static global search, left-sidebar navigation, page-local headers, and selective breadcrumbs
+  - aligned the core `Home`, `Organization`, `Forms`, `Responses`, `Dashboards`, `Administration`, and `Migration` routes to a more consistent directory/detail/editor shell treatment
+  - tightened responsive shell behavior for desktop, tablet, and mobile, including sidebar collapse and overlay navigation behavior without losing SSR readability
+  - updated shared shell copy so product routes stop reading like builder or harness surfaces while transitional reporting remains reachable but subordinate
+  - extended application route coverage in `crates/tessara-web/src/lib.rs`, `end2end/tests/app.spec.ts`, and `scripts/smoke.ps1` to guard the Sprint 1F shell contract
+- Validation:
+  - `.\scripts\local-launch.ps1`
+  - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`
+  - `.\scripts\smoke.ps1 -KeepServices`
+  - `cargo test -p tessara-web`
+  - `cargo test -p tessara-api`
+  - `cd end2end; npx playwright test`
+  - `cargo fmt --all`
+  - refreshed the local Docker image with a no-cache rebuild before the final Playwright pass so the served app matched the Sprint 1F worktree sources
+- Next Sprint: Sprint 2A Workflow Assignment And Response Start
+
+## Sprint Handoff / Demo Instructions
+
+### Shared Shell And Product Navigation
+- Role: admin
+- Paths:
+  - `http://localhost:8080/app`
+- Steps:
+  1. Sign in as `admin@tessara.local`.
+  2. Open `/app`.
+  3. Confirm the top bar stays visible with the Tessara mark, static search field, and theme controls.
+  4. Confirm the left sidebar emphasizes `Home`, `Organization`, `Forms`, `Responses`, and `Dashboards`, with `Reports` shown under transitional analytics.
+- Expected:
+  - the application home renders inside the shared shell with a utility-only top bar and no hero-style shell header
+  - primary product destinations are visible in the sidebar and transitional reporting is visually subordinate
+- Acceptance check:
+  - A reviewer can identify the shared product shell immediately and move into core product areas without landing in builder-style framing.
+- Evidence location:
+  - `D:\Projects\tessara-sprint-1f\tmp\ui-guidance\app-home-desktop.png`
+  - `crates/tessara-web/src/application.rs`
+  - `end2end/tests/app.spec.ts`
+
+### Responsive Shell Behavior
+- Role: admin
+- Paths:
+  - `http://localhost:8080/app`
+- Steps:
+  1. Open `/app` on desktop width and verify the sidebar is expanded in the two-region shell.
+  2. Resize to tablet width and confirm the sidebar can collapse while the page content remains readable.
+  3. Resize to mobile width and confirm the navigation opens as an overlay and closes when dismissed.
+- Expected:
+  - desktop keeps an expanded sidebar
+  - tablet supports collapsed navigation
+  - mobile uses an overlay nav without shell-level horizontal overflow
+- Acceptance check:
+  - The shell stays readable and controllable at desktop and narrow widths without broken layout or stranded navigation.
+- Evidence location:
+  - `D:\Projects\tessara-sprint-1f\tmp\ui-guidance\app-home-mobile.png`
+  - `end2end/tests/app.spec.ts`
+  - closeout Playwright run
+
+### Core Route Framing
+- Role: admin
+- Paths:
+  - `http://localhost:8080/app/organization`
+  - `http://localhost:8080/app/forms`
+  - `http://localhost:8080/app/responses`
+  - `http://localhost:8080/app/dashboards`
+  - `http://localhost:8080/app/administration`
+  - `http://localhost:8080/app/migration`
+- Steps:
+  1. Open each route from the shared shell.
+  2. Confirm each route renders its heading and actions inside the main workspace rather than in a shell hero.
+  3. Open a deeper route such as an organization detail or form detail page and confirm breadcrumbs only appear there.
+  4. Confirm Administration and Migration remain reachable but visibly secondary to the core product areas.
+- Expected:
+  - list, detail, and editor pages follow the shared framing
+  - breadcrumbs appear only on deeper flows
+  - internal/operator areas remain subordinate without becoming separate themes
+- Acceptance check:
+  - A reviewer can move through the current application routes and recognize one coherent app shell rather than mixed builder-era route framing.
+- Evidence location:
+  - `D:\Projects\tessara-sprint-1f\tmp\ui-guidance\organization-desktop.png`
+  - `D:\Projects\tessara-sprint-1f\tmp\ui-guidance\migration-desktop.png`
+  - `crates/tessara-web/src/application.rs`
+  - `crates/tessara-web/src/lib.rs`
+
+### Role-Gated Internal Surfaces
+- Role: operator
+- Paths:
+  - `http://localhost:8080/app/administration`
+  - `http://localhost:8080/app/migration`
+- Steps:
+  1. Sign in as `operator@tessara.local`.
+  2. Attempt to open `/app/administration`.
+  3. Attempt to open `/app/migration`.
+- Expected:
+  - restricted internal surfaces do not render as usable operator pages
+  - the shell remains readable while access is denied appropriately
+- Acceptance check:
+  - Non-admin users do not gain access to internal-only surfaces while the shared shell still behaves coherently.
+- Evidence location:
+  - `scripts\uat-sprint.ps1`
+  - `scripts\smoke.ps1`
+  - `end2end/tests/app.spec.ts`
+
+## Acceptance Mapping
+
+- Exit condition:
+  - a tester can sign in and move through the existing application routes in a coherent shell on desktop and narrow widths, without builder-centric framing, shell-level horizontal scroll, hydration regressions, or browser-console errors
+- Manual demonstration:
+  - `Shared Shell And Product Navigation`
+  - `Responsive Shell Behavior`
+  - `Core Route Framing`
+- Automated check:
+  - `cargo test -p tessara-web`
+  - `cargo test -p tessara-api`
+  - `npx playwright test`
+  - `.\scripts\smoke.ps1`
+  - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`
+  - `.\scripts\local-launch.ps1`
+  - `cargo fmt --all`
+
+## 2026-04-14 - Sprint 1F Application UI Guidance Alignment Kickoff
+
+- Kickoff status: started `Sprint 1F: Application UI Guidance Alignment` from clean `main`.
+- Branch and worktree:
+  - branch: `codex/sprint-1f`
+  - worktree: `D:\Projects\tessara-sprint-1f`
+- Plan file: `D:\Projects\tessara-sprint-1f\docs\sprints\sprint-1f-plan.md`
+- Roadmap update:
+  - inserted Sprint 1F after Sprint 1E
+  - marked Sprint 1F as `(Next)` and pushed Sprint 2A back to the next slot
+- Planned verification commands:
+  - `cargo fmt --all`
+  - `cargo test -p tessara-api`
+  - `cargo test -p tessara-web`
+  - `cd end2end; npx playwright test`
+  - `.\scripts\smoke.ps1`
+  - `.\scripts\local-launch.ps1`
+  - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`
+- Immediate implementation focus:
+  - replace the hero-first application chrome with a utility top bar, left-sidebar shell, selective breadcrumbs, and route-local page headers
+  - tighten the existing core routes so Home, Organization, Forms, Responses, Dashboards, Administration, and Migration read as one coherent application
+  - keep transitional reporting reachable without treating it as the primary navigation model
+
 ## 2026-04-14 - Form Versioning Pivot To Major-Version Compatibility
 
 - Pivoted form versioning from compatibility-group-centric behavior to semantic versioning with major-version compatibility.
@@ -1476,4 +1620,3 @@ Next UI steps:
   - `cargo clippy -p tessara-api -p tessara-web --all-targets -- -D warnings` passed
   - `D:\Projects\dms-migration\tessara\scripts\smoke.ps1` passed
   - `D:\Projects\dms-migration\tessara\scripts\local-launch.ps1` passed and left the refreshed stack running
-

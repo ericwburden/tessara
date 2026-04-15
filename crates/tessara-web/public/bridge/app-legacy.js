@@ -112,6 +112,92 @@
         );
       }
 
+      let tabletSidebarExpanded = false;
+      let mobileSidebarOpen = false;
+
+      function shellViewport() {
+        if (window.innerWidth < 768) return 'mobile';
+        if (window.innerWidth < 1024) return 'tablet';
+        return 'desktop';
+      }
+
+      function shellSidebarState(viewport = shellViewport()) {
+        if (viewport === 'mobile') {
+          return mobileSidebarOpen ? 'overlay-open' : 'overlay-closed';
+        }
+        if (viewport === 'tablet') {
+          return tabletSidebarExpanded ? 'expanded' : 'collapsed';
+        }
+        return 'expanded';
+      }
+
+      function applyShellChromeState() {
+        const viewport = shellViewport();
+        const state = shellSidebarState(viewport);
+        const root = document.documentElement;
+        const body = document.body;
+        const sidebar = byId('app-sidebar');
+        const toggle = byId('app-nav-toggle');
+        const dismissButtons = document.querySelectorAll('[data-sidebar-dismiss]');
+
+        root.dataset.shellReady = 'true';
+        body.dataset.shellViewport = viewport;
+        body.dataset.sidebarState = state;
+
+        if (sidebar) {
+          sidebar.setAttribute('data-sidebar-state', state);
+          sidebar.setAttribute('aria-hidden', viewport === 'mobile' && state === 'overlay-closed' ? 'true' : 'false');
+        }
+
+        if (toggle) {
+          toggle.setAttribute('aria-expanded', String(state === 'overlay-open' || state === 'expanded'));
+          toggle.setAttribute('aria-label', viewport === 'mobile'
+            ? (state === 'overlay-open' ? 'Close navigation' : 'Open navigation')
+            : (state === 'collapsed' ? 'Expand navigation' : 'Collapse navigation'));
+        }
+
+        dismissButtons.forEach((button) => {
+          button.tabIndex = viewport === 'mobile' && state === 'overlay-open' ? 0 : -1;
+        });
+      }
+
+      function toggleShellSidebar() {
+        const viewport = shellViewport();
+        if (viewport === 'mobile') {
+          mobileSidebarOpen = !mobileSidebarOpen;
+        } else if (viewport === 'tablet') {
+          tabletSidebarExpanded = !tabletSidebarExpanded;
+        }
+        applyShellChromeState();
+      }
+
+      function closeShellSidebar() {
+        const viewport = shellViewport();
+        if (viewport === 'mobile') {
+          mobileSidebarOpen = false;
+        } else if (viewport === 'tablet') {
+          tabletSidebarExpanded = false;
+        }
+        applyShellChromeState();
+      }
+
+      function initShellChrome() {
+        const toggle = byId('app-nav-toggle');
+        if (toggle) {
+          toggle.addEventListener('click', toggleShellSidebar);
+        }
+        document.querySelectorAll('[data-sidebar-dismiss]').forEach((button) => {
+          button.addEventListener('click', closeShellSidebar);
+        });
+        window.addEventListener('resize', applyShellChromeState);
+        document.addEventListener('keydown', (event) => {
+          if (event.key === 'Escape') {
+            closeShellSidebar();
+          }
+        });
+        applyShellChromeState();
+      }
+
       function byId(id) {
         return document.getElementById(id);
       }
@@ -600,7 +686,7 @@
       }
 
       function isPublicReadableCapability(requiredCapability) {
-        return ['hierarchy:read', 'forms:read', 'reports:read'].includes(requiredCapability);
+        return ['hierarchy:read', 'forms:read', 'reports:read', 'datasets:read'].includes(requiredCapability);
       }
 
       function applyRoleVisibility() {
@@ -609,6 +695,8 @@
           '/app/organization': 'hierarchy:read',
           '/app/forms': 'forms:read',
           '/app/responses': 'submissions:write',
+          '/app/datasets': 'datasets:read',
+          '/app/components': 'reports:read',
           '/app/reports': 'reports:read',
           '/app/dashboards': 'reports:read',
           '/app/administration': 'admin:all',
@@ -642,6 +730,10 @@
           'response-detail': 'submissions:write',
           'response-create': 'submissions:write',
           'response-edit': 'submissions:write',
+          'dataset-list': 'datasets:read',
+          'dataset-detail': 'datasets:read',
+          'component-list': 'reports:read',
+          'component-detail': 'reports:read',
           'report-list': 'reports:read',
           'report-detail': 'reports:read',
           'report-create': 'admin:all',
@@ -2903,6 +2995,122 @@
         }
       }
 
+      async function loadDatasetsList() {
+        try {
+          await ensureAuthenticated();
+          const payload = await request('/api/datasets');
+          const html = payload.length
+            ? payload.map((dataset) => recordCard(
+                dataset.name,
+                `<p class=\"muted\">${escapeHtml(dataset.slug)} · ${escapeHtml(dataset.grain)} grain · ${escapeHtml(dataset.composition_mode)} composition</p><p>${dataset.source_count} sources · ${dataset.field_count} fields</p>`,
+                `<a class=\"button-link\" href=\"/app/datasets/${dataset.id}\">View</a>${isAdmin() ? '<a class=\"button-link button is-light\" href=\"/app/administration\">Administration</a>' : ''}`
+              )).join('')
+            : `<p class=\"muted\">No dataset definitions are readable yet.</p>${isAdmin() ? '<div class=\"actions\"><a class=\"button-link button is-light\" href=\"/app/administration\">Open Administration</a></div>' : ''}`;
+          setHtml('dataset-list', html);
+          show(payload);
+        } catch (error) {
+          setHtml('dataset-list', emptyState(error.message));
+        }
+      }
+
+      async function loadDatasetDetail(id) {
+        try {
+          await ensureAuthenticated();
+          const payload = await request(`/api/datasets/${id}`);
+          selectRecord('dataset', payload.name, payload.id);
+          let tableHtml = '<p class=\"muted\">Dataset preview is not available yet.</p>';
+          try {
+            const preview = await request(`/api/datasets/${id}/table`);
+            tableHtml = preview.rows.length
+              ? `<div class=\"table-wrap\"><table><thead><tr><th>Node</th><th>Source</th><th>Values</th></tr></thead><tbody>${preview.rows.slice(0, 5).map((row) => `<tr><td>${escapeHtml(row.node_name || 'Unknown node')}</td><td>${escapeHtml(row.source_alias || 'Direct')}</td><td>${escapeHtml(Object.entries(row.values || {}).map(([key, value]) => `${key}: ${value ?? ''}`).join(' · '))}</td></tr>`).join('')}</tbody></table></div>`
+              : '<p class=\"muted\">No readable dataset rows are currently available.</p>';
+          } catch (_previewError) {
+          }
+          const sources = payload.sources?.length
+            ? `<ul class=\"app-list\">${payload.sources.map((source) => `<li>${escapeHtml(source.source_alias)} · ${escapeHtml(source.form_name || 'Unresolved source')} · ${escapeHtml(source.selection_rule || 'all')}</li>`).join('')}</ul>`
+            : '<p class=\"muted\">No dataset sources are configured.</p>';
+          const fields = payload.fields?.length
+            ? `<ul class=\"app-list\">${payload.fields.map((field) => `<li>${escapeHtml(field.label)} · ${escapeHtml(field.source_alias)}.${escapeHtml(field.source_field_key)} · ${escapeHtml(field.field_type)}</li>`).join('')}</ul>`
+            : '<p class=\"muted\">No dataset fields are configured.</p>';
+          const reports = payload.reports?.length
+            ? `<ul class=\"app-list\">${payload.reports.map((report) => `<li><a href=\"/app/reports/${report.id}\">${escapeHtml(report.name)}</a></li>`).join('')}</ul>`
+            : '<p class=\"muted\">No reports are linked to this dataset yet.</p>';
+          setHtml('dataset-detail', `
+            ${detailSection('Summary', `<p>${escapeHtml(payload.name)}</p><p class=\"muted\">${escapeHtml(payload.slug)} · ${escapeHtml(payload.grain)} grain · ${escapeHtml(payload.composition_mode)} composition</p><p>${payload.sources.length} sources · ${payload.fields.length} fields</p>`)}
+            ${detailSection('Sources', sources)}
+            ${detailSection('Fields', fields)}
+            ${detailSection('Linked Reports', reports)}
+            ${detailSection('Row Preview', tableHtml)}
+          `);
+          show(payload);
+        } catch (error) {
+          setHtml('dataset-detail', emptyState(error.message));
+        }
+      }
+
+      async function loadComponentsList() {
+        try {
+          await ensureAuthenticated();
+          const dashboards = await request('/api/dashboards');
+          const detailPayloads = await Promise.all(
+            dashboards.map(async (dashboard) => {
+              try {
+                return await request(`/api/dashboards/${dashboard.id}`);
+              } catch (_error) {
+                return null;
+              }
+            })
+          );
+          const components = detailPayloads
+            .filter(Boolean)
+            .flatMap((dashboard) => dashboard.components.map((component) => ({
+              dashboardId: dashboard.id,
+              dashboardName: dashboard.name,
+              component
+            })));
+          const html = components.length
+            ? components.map(({ dashboardId, dashboardName, component }) => {
+                const title = component.config?.title || component.chart?.name || component.id;
+                return recordCard(
+                  title,
+                  `<p class=\"muted\">${escapeHtml(dashboardName)} · ${escapeHtml(component.chart?.chart_type || 'Unknown chart')}</p><p>${escapeHtml(component.chart?.report_name || component.chart?.aggregation_name || 'No linked report')}</p>`,
+                  `<a class=\"button-link\" href=\"/app/components/${dashboardId}__${component.id}\">View</a><a class=\"button-link button is-light\" href=\"/app/dashboards/${dashboardId}\">Dashboard</a>`
+                );
+              }).join('')
+            : '<p class=\"muted\">No dashboard components are readable yet.</p>';
+          setHtml('component-list', html);
+          show(components);
+        } catch (error) {
+          setHtml('component-list', emptyState(error.message));
+        }
+      }
+
+      async function loadComponentDetail(componentRef) {
+        try {
+          await ensureAuthenticated();
+          const [dashboardId, componentId] = String(componentRef || '').split('__');
+          if (!dashboardId || !componentId) {
+            throw new Error('Component detail requires a dashboard and component identifier.');
+          }
+          const payload = await request(`/api/dashboards/${dashboardId}`);
+          const component = (payload.components || []).find((entry) => entry.id === componentId);
+          if (!component) {
+            throw new Error('The selected component was not found in the current dashboard.');
+          }
+          const title = component.config?.title || component.chart?.name || component.id;
+          selectRecord('component', title, component.id);
+          setHtml('component-detail', `
+            ${detailSection('Summary', `<p>${escapeHtml(title)}</p><p class=\"muted\">${escapeHtml(payload.name)} · position ${escapeHtml(component.position)}</p>`)}
+            ${detailSection('Chart', `<p>${escapeHtml(component.chart?.name || 'Unknown chart')}</p><p class=\"muted\">${escapeHtml(component.chart?.chart_type || 'Unknown type')} · ${escapeHtml(component.chart?.report_name || component.chart?.aggregation_name || 'No linked report')}</p>`)}
+            ${detailSection('Configuration', `<pre>${escapeHtml(JSON.stringify(component.config || {}, null, 2))}</pre>`)}
+            ${detailSection('Related Destinations', `<div class=\"actions\"><a class=\"button-link button is-light\" href=\"/app/dashboards/${payload.id}\">Open Dashboard</a>${component.chart?.report_id ? `<a class=\"button-link button is-light\" href=\"/app/reports/${component.chart.report_id}\">Open Report</a>` : ''}</div>`)}
+          `);
+          show({ dashboard: payload.id, component });
+        } catch (error) {
+          setHtml('component-detail', emptyState(error.message));
+        }
+      }
+
       function viewCurrentDashboard() {
         loadDashboardDetail(page.recordId);
       }
@@ -3139,6 +3347,18 @@
           case 'response-edit':
             await initResponseEditPage(page.recordId);
             break;
+          case 'dataset-list':
+            await loadDatasetsList();
+            break;
+          case 'dataset-detail':
+            await loadDatasetDetail(page.recordId);
+            break;
+          case 'component-list':
+            await loadComponentsList();
+            break;
+          case 'component-detail':
+            await loadComponentDetail(page.recordId);
+            break;
           case 'report-list':
             await loadReportsList();
             break;
@@ -3168,5 +3388,6 @@
 
       document.addEventListener('DOMContentLoaded', () => {
         initThemeControls();
+        initShellChrome();
         initPage().catch((error) => show(error.message));
       });
