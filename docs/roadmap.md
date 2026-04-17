@@ -1,6 +1,6 @@
 # Tessara Roadmap
 
-This roadmap is authoritative as of April 13, 2026. It starts from the current implemented baseline, identifies the transition from the current reporting stack to the re-aligned target model, and defines future delivery as explicit vertical-slice sprints.
+This roadmap is authoritative as of April 15, 2026. It starts from the current implemented baseline, identifies the transition from the current reporting stack to the re-aligned target model, and defines future delivery as explicit vertical-slice sprints.
 
 ## Delivery Rule
 
@@ -10,6 +10,9 @@ Every future sprint is a full vertical slice.
 - The application must remain in a user-testable condition in the intended end-user-facing shape after each sprint.
 - Backend-only completion does not satisfy roadmap completion.
 - Internal/admin/configuration screens may evolve inside the same sprint, but they do not replace the requirement for coherent application UI.
+- Any sprint that touches existing route or UI surfaces must migrate those touched surfaces onto the native Leptos SSR platform in that same sprint.
+- Touched surfaces do not count as complete if they still depend on the hybrid shell pattern through `application.rs` HTML-string shells, `inner_html` route injection, or `app-legacy.js`.
+- Every sprint must reduce the remaining hybrid-shell footprint, with the explicit end-state that the hybrid shell is fully gone when the roadmap is complete.
 
 ## Sprint completion protocol (applies to every sprint)
 
@@ -18,6 +21,7 @@ Every future sprint is a full vertical slice.
 - Print and run the sprint UAT script:
   - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`
 - Confirm the UAT script output includes current route ownership and role-gated behavior before closing the sprint.
+- Confirm every route surface touched in the sprint runs through native SSR ownership rather than the retained hybrid shell before closing the sprint.
 
 ## Current State Of Development
 
@@ -289,7 +293,7 @@ Before deeper application-surface replacement continues, the frontend platform s
 
 **User-testable exit condition:** a tester can sign in and move through the existing application routes in a coherent shell on desktop and narrow widths, without builder-centric framing, shell-level horizontal scroll, hydration regressions, or browser-console errors.
 
-### Sprint 1G: Tessara UI Component System Foundation (Next)
+### Sprint 1G: Tessara UI Component System Foundation (Complete)
 
 **Outcome:** shared application surfaces move onto a predictable internal component layer so future route work stops depending on ad hoc page-local markup and styling.
 
@@ -310,7 +314,7 @@ Before deeper application-surface replacement continues, the frontend platform s
 
 ## Phase 2: Workflow Runtime, Responses, And Materialization
 
-### Sprint 2A: Workflow Assignment And Response Start
+### Sprint 2A: Workflow Assignment And Response Start (Complete)
 
 **Outcome:** published forms and workflows are assignable and discoverable from the product UI.
 
@@ -319,15 +323,17 @@ Before deeper application-surface replacement continues, the frontend platform s
 - workflow-assignment flows
 - response-start entry points
 - scope-aware pending-work surfaces
+- first-step-only workflow runtime foundation that can be extended without replacing the Sprint 2A data model
 
 **Application UI delivered this sprint:**
 
 - usable assignment flows
 - clear "start response" entry points in the intended application shell
+- migration of the Sprint 2A-touched `Home`, `Forms`, `Workflows`, and `Responses` surfaces off the hybrid shell and onto native SSR ownership with successful hydration
 
-**User-testable exit condition:** a tester can assign work and start the correct response flow without builder tooling.
+**User-testable exit condition:** a tester can assign work and start the correct response flow without builder tooling, while the runtime foundation remains ready for later multi-step expansion.
 
-### Sprint 2B: Draft, Submit, And Review Response Slice
+### Sprint 2B: Draft, Submit, And Review Response Slice (Next)
 
 **Outcome:** the end-user response lifecycle is coherent and complete.
 
@@ -343,7 +349,26 @@ Before deeper application-surface replacement continues, the frontend platform s
 
 **User-testable exit condition:** a tester can save draft, resume, submit, and review responses through the application UI.
 
-### Sprint 2C: Runtime Status And Materialization Slice
+### Sprint 2C: Multi-Step Workflow Authoring And Execution
+
+**Outcome:** workflows are no longer limited to a single response step, and runtime execution can advance across explicit step definitions.
+
+**Build:**
+
+- multi-step workflow version authoring with ordered step definitions
+- explicit step transitions and runtime progression across workflow instances
+- assignment support for step-specific work rather than only workflow-level single-step work
+- response handoff behavior between steps, including completion of one step and activation of the next
+- publish-time validation that multi-step workflow versions are structurally complete
+
+**Application UI delivered this sprint:**
+
+- workflow authoring screens that let operators define and inspect multi-step workflow versions
+- runtime surfaces that show current step, upcoming step, and completed-step history for in-flight work
+
+**User-testable exit condition:** a tester can create a workflow with more than one step, assign and start it, complete the first step, and observe the next step become the active work item through the application UI.
+
+### Sprint 2D: Runtime Status And Materialization Slice
 
 **Outcome:** runtime execution and materialization readiness are visible and usable.
 

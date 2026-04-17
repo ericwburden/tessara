@@ -55,6 +55,14 @@ async fn seed_dev_admin(pool: &PgPool, config: &Config) -> anyhow::Result<()> {
         ),
         ("forms:read", "Browse top-level form records"),
         ("forms:write", "Manage form definitions and versions"),
+        (
+            "workflows:read",
+            "Browse workflow definitions and assignments",
+        ),
+        (
+            "workflows:write",
+            "Manage workflow definitions and assignments",
+        ),
         ("submissions:write", "Create and update submissions"),
         ("analytics:refresh", "Refresh analytics projections"),
         ("datasets:write", "Manage dataset definitions"),
@@ -85,6 +93,8 @@ async fn seed_dev_admin(pool: &PgPool, config: &Config) -> anyhow::Result<()> {
     for capability_key in [
         "hierarchy:read",
         "forms:read",
+        "workflows:read",
+        "workflows:write",
         "submissions:write",
         "reports:read",
     ] {

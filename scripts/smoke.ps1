@@ -12,6 +12,21 @@ $apiOut = Join-Path $tmpDir "tessara-api.out.log"
 $apiErr = Join-Path $tmpDir "tessara-api.err.log"
 $baseUrl = "http://127.0.0.1:8080"
 $apiProcess = $null
+$cargoCommand = $null
+
+function Resolve-CargoCommand {
+    $cargo = Get-Command cargo -ErrorAction SilentlyContinue
+    if ($cargo) {
+        return $cargo.Source
+    }
+
+    $defaultCargo = Join-Path $HOME ".cargo\bin\cargo.exe"
+    if (Test-Path $defaultCargo) {
+        return $defaultCargo
+    }
+
+    throw "Unable to locate cargo. Add cargo to PATH or install it under $HOME\\.cargo\\bin."
+}
 
 function Invoke-Json {
     param(
@@ -44,21 +59,70 @@ function Assert-LastExitCode {
     }
 }
 
+function Start-ComposeWithRetry {
+    param(
+        [string[]]$Arguments,
+        [string]$CommandName,
+        [int]$Attempts = 3
+    )
+
+    for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
+        docker compose @Arguments | Out-Host
+        if ($LASTEXITCODE -eq 0) {
+            return
+        }
+
+        if ($attempt -eq $Attempts) {
+            throw "$CommandName failed with exit code $LASTEXITCODE"
+        }
+
+        Start-Sleep -Seconds 3
+        docker compose down -v | Out-Null
+    }
+}
+
+function Invoke-PostgresSqlWithRetry {
+    param(
+        [string]$Sql,
+        [string]$Database = "postgres",
+        [int]$Attempts = 10
+    )
+
+    $previousNativePreference = $PSNativeCommandUseErrorActionPreference
+    $PSNativeCommandUseErrorActionPreference = $false
+
+    try {
+    for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
+        $result = docker compose exec -T postgres psql -U tessara -d $Database -tc $Sql 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            return $result
+        }
+
+        if ($attempt -eq $Attempts) {
+            throw "psql command failed after $Attempts attempts: $result"
+        }
+
+        Start-Sleep -Seconds 2
+    }
+    } finally {
+        $PSNativeCommandUseErrorActionPreference = $previousNativePreference
+    }
+}
+
 try {
     Set-Location $repoRoot
     New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
     Remove-Item -LiteralPath $apiOut, $apiErr -ErrorAction SilentlyContinue
+    $cargoCommand = Resolve-CargoCommand
 
     if ($ComposeApi) {
         docker compose down --remove-orphans | Out-Host
         Assert-LastExitCode "docker compose down"
-        docker compose up -d --build | Out-Host
-        Assert-LastExitCode "docker compose up"
+        Start-ComposeWithRetry -Arguments @("up", "-d", "--build") -CommandName "docker compose up"
     } else {
         docker compose down --remove-orphans | Out-Host
         Assert-LastExitCode "docker compose down"
-        docker compose up -d --wait postgres | Out-Host
-        Assert-LastExitCode "docker compose up"
+        Start-ComposeWithRetry -Arguments @("up", "-d", "--wait", "postgres") -CommandName "docker compose up"
     }
 
     $postgresDeadline = (Get-Date).AddSeconds(120)
@@ -80,20 +144,18 @@ try {
     $env:RUST_LOG = "tessara_api=debug,sqlx=warn"
 
     foreach ($databaseName in @("tessara", "tessara_test")) {
-        $dbExists = docker compose exec -T postgres psql -U tessara -d postgres -tc "SELECT 1 FROM pg_database WHERE datname = '$databaseName'"
-        Assert-LastExitCode "checking $databaseName database"
+        $dbExists = Invoke-PostgresSqlWithRetry "SELECT 1 FROM pg_database WHERE datname = '$databaseName'"
         if (-not ($dbExists | Select-String "1" -Quiet)) {
-            docker compose exec -T postgres psql -U tessara -d postgres -c "CREATE DATABASE $databaseName" | Out-Host
-            Assert-LastExitCode "creating $databaseName database"
+            $null = Invoke-PostgresSqlWithRetry "CREATE DATABASE $databaseName"
         }
     }
 
     if (-not $ComposeApi) {
-        cargo test -p tessara-api --test demo_flow | Out-Host
+        & $cargoCommand test -p tessara-api --test demo_flow | Out-Host
         Assert-LastExitCode "cargo test -p tessara-api --test demo_flow"
 
         $apiProcess = Start-Process `
-            -FilePath "cargo" `
+            -FilePath $cargoCommand `
             -ArgumentList @("run", "-p", "tessara-api") `
             -WorkingDirectory $repoRoot `
             -NoNewWindow `
@@ -130,7 +192,7 @@ try {
     }
 
     $appShell = Invoke-RestMethod -Uri "$baseUrl/app" -TimeoutSec 30
-    if (-not ($appShell -like "*Application Overview*") -or -not ($appShell -like "*Role-Ready Home Modules*") -or -not ($appShell -like "*Product Areas*") -or -not ($appShell -like "*Transitional Reporting*") -or -not ($appShell -like "*Current Deployment Readiness*") -or -not ($appShell -like "*Current Workflow Context*") -or -not ($appShell -like "*Internal Areas*") -or -not ($appShell -like "*global-search*") -or -not ($appShell -like "*Go to Organization*") -or -not ($appShell -like "*Go to Forms*") -or -not ($appShell -like "*Go to Responses*")) {
+    if (-not ($appShell -like "*Application Overview*") -or -not ($appShell -like "*Role-Ready Home Modules*") -or -not ($appShell -like "*Product Areas*") -or -not ($appShell -like "*Transitional Reporting*") -or -not ($appShell -like "*Current Deployment Readiness*") -or -not ($appShell -like "*Current Workflow Context*") -or -not ($appShell -like "*Internal Workspaces*") -or -not ($appShell -like "*global-search*") -or -not ($appShell -like "*Product navigation*")) {
         throw "Expected application home HTML to include Sprint 1F shell markers and shared navigation"
     }
     $loginShell = Invoke-RestMethod -Uri "$baseUrl/app/login" -TimeoutSec 30
@@ -145,12 +207,16 @@ try {
     if (-not ($formsShell -like "*Forms*") -or -not ($formsShell -like "*Create Form*") -or -not ($formsShell -like "*form-list*") -or -not ($formsShell -like "*Lifecycle Summary*")) {
         throw "Expected forms application shell HTML to include forms route controls"
     }
+    $workflowsShell = Invoke-RestMethod -Uri "$baseUrl/app/workflows" -TimeoutSec 30
+    if (-not ($workflowsShell -like "*Workflows*") -or -not ($workflowsShell -like "*Create Workflow*") -or -not ($workflowsShell -like "*workflow-list*")) {
+        throw "Expected workflows application shell HTML to include workflow route controls"
+    }
     $responsesShell = Invoke-RestMethod -Uri "$baseUrl/app/responses" -TimeoutSec 30
-    if (-not ($responsesShell -like "*Responses*") -or -not ($responsesShell -like "*Start Response*") -or -not ($responsesShell -like "*Start New Response*") -or -not ($responsesShell -like "*Draft Responses*") -or -not ($responsesShell -like "*Submitted Responses*")) {
+    if (-not ($responsesShell -like "*Responses*") -or -not ($responsesShell -like "*Response work queue*") -or -not ($responsesShell -like "*Pending Work*") -or -not ($responsesShell -like "*Draft Responses*") -or -not ($responsesShell -like "*Submitted Responses*")) {
         throw "Expected responses application shell HTML to include responses route controls"
     }
     $submissionAppShell = Invoke-RestMethod -Uri "$baseUrl/app/submissions" -TimeoutSec 30
-    if (-not ($submissionAppShell -like "*Responses*") -or -not ($submissionAppShell -like "*Start Response*") -or -not ($submissionAppShell -like "*Draft Responses*") -or -not ($submissionAppShell -like "*Submitted Responses*")) {
+    if (-not ($submissionAppShell -like "*Responses*") -or -not ($submissionAppShell -like "*Response work queue*") -or -not ($submissionAppShell -like "*Pending Work*") -or -not ($submissionAppShell -like "*Draft Responses*") -or -not ($submissionAppShell -like "*Submitted Responses*")) {
         throw "Expected responses compatibility shell HTML to include response workflow controls"
     }
     $administrationShell = Invoke-RestMethod -Uri "$baseUrl/app/administration" -TimeoutSec 30
@@ -213,6 +279,7 @@ try {
     $operatorMe = Invoke-Json -Method "Get" -Uri "$baseUrl/api/me" -Headers $operatorHeaders
     $operatorNodes = Invoke-Json -Method "Get" -Uri "$baseUrl/api/nodes?q=Demo" -Headers $operatorHeaders
     $respondentOptions = Invoke-Json -Method "Get" -Uri "$baseUrl/api/responses/options" -Headers $respondentHeaders
+    $respondentPending = Invoke-Json -Method "Get" -Uri "$baseUrl/api/workflow-assignments/pending" -Headers $respondentHeaders
     $delegatorMe = Invoke-Json -Method "Get" -Uri "$baseUrl/api/me" -Headers $delegatorHeaders
     $delegateAccountId = $delegatorMe.delegations[0].account_id
     $delegatedOptions = Invoke-Json -Method "Get" -Uri "$baseUrl/api/responses/options?delegate_account_id=$delegateAccountId" -Headers $delegatorHeaders
@@ -256,6 +323,9 @@ try {
     }
     if ($respondentOptions.mode -ne "assignment" -or $respondentOptions.assignments.Count -lt 1) {
         throw "Expected respondent response options to return assigned response starts"
+    }
+    if ($respondentPending.Count -lt 1) {
+        throw "Expected respondent pending workflow assignments to return assigned start work"
     }
     if ($delegatedOptions.mode -ne "assignment" -or $delegatedOptions.assignments.Count -lt 1) {
         throw "Expected delegated response options to support delegated response context"

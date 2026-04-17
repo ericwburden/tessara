@@ -2,6 +2,7 @@
 
 use crate::pipeline;
 use crate::{brand::document_head_tags, theme};
+use tessara_ui::{ActionItem, ActionStyle, MetadataItem};
 
 #[derive(Copy, Clone)]
 struct ActionSpec {
@@ -54,6 +55,12 @@ const PRODUCT_LINKS: &[NavLink] = &[
         href: "/app/forms",
         label: "Forms",
         icon: "fa-clipboard-list",
+    },
+    NavLink {
+        key: "workflows",
+        href: "/app/workflows",
+        label: "Workflows",
+        icon: "fa-diagram-project",
     },
     NavLink {
         key: "responses",
@@ -122,7 +129,7 @@ fn render_application_document(
     <script>{theme_bootstrap}</script>
     {stylesheets}
   </head>
-  <body class="tessara-app" {body_attrs}>
+  <body class="tessara-app" data-hybrid-shell="true" {body_attrs}>
     <div id="{app_root_id}">{app_root_start}{shell}{app_root_end}</div>
     <script src="{bridge_script_path}" defer></script>
     {hydration}
@@ -166,16 +173,40 @@ fn breadcrumb(parts: &[(&str, Option<&str>)]) -> String {
 }
 
 fn action_buttons(actions: &[ActionSpec]) -> String {
-    actions
+    let items = actions
         .iter()
-        .map(|action| {
-            format!(
-                r#"<button class="button is-primary is-light" type="button" onclick="{}">{}</button>"#,
-                action.handler, action.label
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("")
+        .map(|action| ActionItem::button(action.label, action.handler, ActionStyle::Light))
+        .collect::<Vec<_>>();
+
+    tessara_ui::action_group(&items)
+}
+
+fn metadata_strip_html(items: &[(&str, &str)]) -> String {
+    let items = items
+        .iter()
+        .map(|(label, value)| MetadataItem::new(*label, *value))
+        .collect::<Vec<_>>();
+
+    tessara_ui::metadata_strip(&items)
+}
+
+fn surface_metadata(mode: &str, surface: &str, state: &str) -> String {
+    metadata_strip_html(&[("Mode", mode), ("Surface", surface), ("State", state)])
+}
+
+fn directory_card(
+    class_name: &str,
+    title: &str,
+    description: &str,
+    href: &str,
+    label: &str,
+) -> String {
+    let body = format!(
+        r#"<p>{description}</p>{}"#,
+        tessara_ui::action_group(&[ActionItem::link(label, href, ActionStyle::Light)])
+    );
+
+    tessara_ui::card(class_name, title, &body)
 }
 
 fn nav_link(link: &NavLink, active_route: &str) -> String {
@@ -386,37 +417,17 @@ fn app_shell(
 }
 
 fn page_header(eyebrow: &str, title: &str, description: &str, actions: String) -> String {
-    format!(
-        r#"
-        <section class="app-screen box entity-page">
-          <p class="eyebrow">{eyebrow}</p>
-          <div class="page-title-row">
-            <div>
-              <h1>{title}</h1>
-              <p class="muted">{description}</p>
-            </div>
-            <div class="actions">{actions}</div>
-          </div>
-        </section>
-        "#
-    )
+    let actions_html = if actions.trim().is_empty() {
+        None
+    } else {
+        Some(actions.as_str())
+    };
+
+    tessara_ui::page_header(eyebrow, title, description, None, actions_html)
 }
 
 fn empty_panel(title: &str, description: &str, body: &str) -> String {
-    let description_html = if description.trim().is_empty() {
-        String::new()
-    } else {
-        format!(r#"<p class="muted">{description}</p>"#)
-    };
-    format!(
-        r#"
-        <section class="app-screen box page-panel">
-          <h3>{title}</h3>
-          {description_html}
-          {body}
-        </section>
-        "#
-    )
+    tessara_ui::panel(title, description, body)
 }
 
 fn home_body() -> String {
@@ -475,6 +486,7 @@ fn home_body() -> String {
 
     format!(
         r#"
+        {}
         {}
         <section class="app-screen">
           <p class="eyebrow">Shared Home</p>
@@ -548,21 +560,22 @@ fn home_body() -> String {
             "Use this shared home as the entry point for the product shell, current readiness, and role-aware next actions.",
             action_buttons(STANDARD_ACTIONS),
         ),
+        metadata_strip_html(&[
+            ("Mode", "Shared Home"),
+            ("Surface", "Role-aware overview"),
+            ("State", "Ready for navigation"),
+        ]),
         product_cards
             .iter()
             .map(|(title, description, href, label)| {
-                format!(
-                    r#"<article class="home-card card"><div class="card-content"><h3>{title}</h3><p>{description}</p><a class="button-link button is-light" href="{href}">{label}</a></div></article>"#
-                )
+                directory_card("home-card", title, description, href, label)
             })
             .collect::<Vec<_>>()
             .join(""),
         internal_cards
             .iter()
             .map(|(title, description, href, label)| {
-                format!(
-                    r#"<article class="directory-card card"><div class="card-content"><h3>{title}</h3><p>{description}</p><a class="button-link button is-light" href="{href}">{label}</a></div></article>"#
-                )
+                directory_card("directory-card", title, description, href, label)
             })
             .collect::<Vec<_>>()
             .join("")
@@ -621,12 +634,18 @@ fn administration_body() -> String {
         {}
         {}
         {}
+        {}
         "#,
         page_header(
             "Internal Area",
             "Administration",
             "Administration stays internal. Use it for advanced configuration and legacy builder access, not for the normal top-level entity workflows now handled in product areas.",
             String::new(),
+        ),
+        surface_metadata(
+            "Directory",
+            "Internal configuration",
+            "Legacy and dedicated admin routes"
         ),
         empty_panel(
             "Advanced Configuration",
@@ -711,12 +730,18 @@ fn migration_body() -> String {
         {}
         {}
         {}
+        {}
         "#,
         page_header(
             "Internal Area",
             "Migration Workbench",
             "Use this operator surface to validate, dry-run, and import representative legacy fixtures.",
             String::new(),
+        ),
+        surface_metadata(
+            "Workspace",
+            "Operator import flow",
+            "Ready for fixture intake"
         ),
         empty_panel(
             "Fixture Intake",
@@ -750,6 +775,7 @@ fn datasets_body() -> String {
         r#"
         {}
         {}
+        {}
         "#,
         page_header(
             "Datasets",
@@ -758,6 +784,7 @@ fn datasets_body() -> String {
             r#"<a class="button-link button is-light" href="/app/administration">Open Administration</a>"#
                 .to_string(),
         ),
+        surface_metadata("Directory", "Internal analytics", "Loading datasets"),
         empty_panel(
             "Dataset Directory",
             "Dataset definitions remain internal-facing, but they should be readable without dropping into the legacy builder for every inspection task.",
@@ -769,6 +796,7 @@ fn datasets_body() -> String {
 fn dataset_detail_body() -> String {
     format!(
         r#"
+        {}
         {}
         <section class="app-screen box page-panel">
           <h3>Dataset Definition</h3>
@@ -784,12 +812,14 @@ fn dataset_detail_body() -> String {
             r#"<a class="button-link button is-light" href="/app/datasets">Back to List</a><a class="button-link button is-light" href="/app/administration">Open Administration</a><a class="button-link button is-light" href="/app/admin">Legacy Builder</a>"#
                 .to_string(),
         ),
+        surface_metadata("Detail", "Dataset definition", "Loading record"),
     )
 }
 
 fn components_body() -> String {
     format!(
         r#"
+        {}
         {}
         {}
         "#,
@@ -800,6 +830,7 @@ fn components_body() -> String {
             r#"<a class="button-link button is-light" href="/app/dashboards">Open Dashboards</a>"#
                 .to_string(),
         ),
+        surface_metadata("Directory", "Internal composition", "Loading components"),
         empty_panel(
             "Component Directory",
             "Components remain internal-facing, but they should be inspectable from the shared shell without relying on the legacy workbench.",
@@ -811,6 +842,7 @@ fn components_body() -> String {
 fn component_detail_body() -> String {
     format!(
         r#"
+        {}
         {}
         <section class="app-screen box page-panel">
           <h3>Component Definition</h3>
@@ -826,6 +858,7 @@ fn component_detail_body() -> String {
             r#"<a class="button-link button is-light" href="/app/components">Back to List</a><a class="button-link button is-light" href="/app/dashboards">Open Dashboards</a>"#
                 .to_string(),
         ),
+        surface_metadata("Detail", "Component definition", "Loading record"),
     )
 }
 
@@ -838,8 +871,15 @@ fn list_screen(
     list_id: &str,
     item_label: &str,
 ) -> String {
+    let page_metadata = metadata_strip_html(&[
+        ("Mode", "Directory"),
+        ("Surface", "Browse"),
+        ("State", "Loading records"),
+    ]);
+
     format!(
         r#"
+        {}
         {}
         {}
         "#,
@@ -851,6 +891,7 @@ fn list_screen(
                 r#"<a class="button-link button is-primary" href="{create_href}">{create_label}</a>"#
             ),
         ),
+        page_metadata,
         empty_panel(
             &format!("{item_label} List"),
             &format!(
@@ -872,8 +913,15 @@ fn detail_screen(
     detail_id: &str,
     detail_title: &str,
 ) -> String {
+    let page_metadata = metadata_strip_html(&[
+        ("Mode", "Detail"),
+        ("Surface", "Read-only"),
+        ("State", "Loading record"),
+    ]);
+
     format!(
         r#"
+        {}
         {}
         {}
         "#,
@@ -885,6 +933,7 @@ fn detail_screen(
                 r#"<a class="button-link button is-light" href="{back_href}">Back to List</a><a class="button-link button is-primary is-light" href="{edit_href}">Edit</a>"#
             ),
         ),
+        page_metadata,
         empty_panel(
             detail_title,
             "This screen is read-only. Use Edit to make changes.",
@@ -903,8 +952,22 @@ fn form_screen(
     cancel_href: &str,
     fields_html: &str,
 ) -> String {
+    let mode = if title.starts_with("Create ") {
+        "Create"
+    } else if title.starts_with("Edit ") {
+        "Edit"
+    } else {
+        "Form"
+    };
+    let page_metadata = metadata_strip_html(&[
+        ("Mode", mode),
+        ("Surface", "Authoring"),
+        ("Save model", "Explicit submit"),
+    ]);
+
     format!(
         r#"
+        {}
         {}
         <section class="app-screen box page-panel">
           <form id="{form_id}" class="entity-form">
@@ -916,7 +979,8 @@ fn form_screen(
           </form>
         </section>
         "#,
-        page_header(eyebrow, title, description, String::new())
+        page_header(eyebrow, title, description, String::new()),
+        page_metadata,
     )
 }
 
@@ -1931,87 +1995,127 @@ fn organization_form_script() -> String {
 }
 
 fn form_entity_fields() -> String {
-    r#"
+    format!(
+        r#"
         <p id="form-editor-status" class="muted">Create the form record first. Version authoring opens after the form is saved.</p>
         <div class="form-grid">
-          <div class="form-field wide-field">
-            <label for="form-name">Name</label>
-            <input class="input" id="form-name" type="text" autocomplete="off" />
-          </div>
-          <div class="form-field">
-            <label for="form-slug">Slug</label>
-            <input class="input" id="form-slug" type="text" autocomplete="off" />
-          </div>
-          <div class="form-field">
-            <label for="form-scope-node-type">Scope Node Type</label>
-            <select class="input" id="form-scope-node-type"></select>
-          </div>
+          {}
+          {}
+          {}
         </div>
-    "#
-    .to_string()
+    "#,
+        tessara_ui::field_wrapper(
+            "form-name",
+            "Name",
+            &tessara_ui::text_input("form-name", "text", "off", "", ""),
+            None,
+            "wide-field",
+        ),
+        tessara_ui::field_wrapper(
+            "form-slug",
+            "Slug",
+            &tessara_ui::text_input("form-slug", "text", "off", "", ""),
+            None,
+            "",
+        ),
+        tessara_ui::field_wrapper(
+            "form-scope-node-type",
+            "Scope Node Type",
+            &tessara_ui::select_control("form-scope-node-type", "", ""),
+            None,
+            "",
+        ),
+    )
 }
 
 fn response_new_fields() -> String {
-    r#"
+    format!(
+        r#"
         <div class="form-grid">
-          <div class="form-field">
-            <label for="response-form-version">Published Form</label>
-            <select class="input" id="response-form-version"></select>
-          </div>
-          <div class="form-field">
-            <label for="response-node">Target Organization</label>
-            <select class="input" id="response-node"></select>
-          </div>
+          {}
+          {}
         </div>
-    "#
-    .to_string()
+    "#,
+        tessara_ui::field_wrapper(
+            "response-form-version",
+            "Published Form",
+            &tessara_ui::select_control("response-form-version", "", ""),
+            Some("Choose the published form version that should seed this response."),
+            "",
+        ),
+        tessara_ui::field_wrapper(
+            "response-node",
+            "Target Organization",
+            &tessara_ui::select_control("response-node", "", ""),
+            Some("Choose the organization context that will own the draft."),
+            "",
+        ),
+    )
 }
 
 fn report_form_fields() -> String {
-    r#"
+    format!(
+        r#"
         <div class="form-grid">
-          <div class="form-field wide-field">
-            <label for="report-name">Name</label>
-            <input class="input" id="report-name" type="text" autocomplete="off" />
-          </div>
-          <div class="form-field">
-            <label for="report-source-type">Source Type</label>
-            <select class="input" id="report-source-type">
-              <option value="form">Form</option>
-              <option value="dataset">Dataset</option>
-            </select>
-          </div>
-          <div class="form-field">
-            <label for="report-source-id">Source</label>
-            <select class="input" id="report-source-id"></select>
-          </div>
+          {}
+          {}
+          {}
         </div>
-        <section class="page-panel nested-form-panel">
-          <div class="page-title-row compact-title-row">
-            <div>
-              <h3>Bindings</h3>
-              <p class="muted">Each binding defines one logical field in the report output.</p>
-            </div>
-            <div class="actions">
-              <button type="button" onclick="addReportBindingRow()">Add Binding</button>
-            </div>
-          </div>
-          <div id="report-binding-rows" class="binding-list"></div>
-        </section>
-    "#
-    .to_string()
+        {}
+    "#,
+        tessara_ui::field_wrapper(
+            "report-name",
+            "Name",
+            &tessara_ui::text_input("report-name", "text", "off", "", ""),
+            None,
+            "wide-field",
+        ),
+        tessara_ui::field_wrapper(
+            "report-source-type",
+            "Source Type",
+            &tessara_ui::select_control(
+                "report-source-type",
+                r#"<option value="form">Form</option><option value="dataset">Dataset</option>"#,
+                "",
+            ),
+            None,
+            "",
+        ),
+        tessara_ui::field_wrapper(
+            "report-source-id",
+            "Source",
+            &tessara_ui::select_control("report-source-id", "", ""),
+            Some("The available source records update after you choose the source type."),
+            "",
+        ),
+        tessara_ui::panel_with_header(
+            "Bindings",
+            "Each binding defines one logical field in the report output.",
+            Some(&tessara_ui::action_group(&[ActionItem::button(
+                "Add Binding",
+                "addReportBindingRow()",
+                ActionStyle::Default,
+            )])),
+            r#"<div id="report-binding-rows" class="binding-list"></div>"#,
+        ),
+    )
 }
 
 fn dashboard_form_fields() -> String {
-    r#"
+    format!(
+        r#"
         <div class="form-grid">
-          <div class="form-field wide-field">
-            <label for="dashboard-name">Name</label>
-            <input class="input" id="dashboard-name" type="text" autocomplete="off" />
-          </div>
+          {}
         </div>
-    "#
-    .to_string()
+    "#,
+        tessara_ui::field_wrapper(
+            "dashboard-name",
+            "Name",
+            &tessara_ui::text_input("dashboard-name", "text", "off", "", ""),
+            None,
+            "wide-field",
+        ),
+    )
 }
 
 fn user_form_fields(is_edit: bool) -> String {
@@ -2023,194 +2127,206 @@ fn user_form_fields(is_edit: bool) -> String {
     format!(
         r#"
         <div class="form-grid">
-          <div class="form-field wide-field">
-            <label for="user-display-name">Display Name</label>
-            <input class="input" id="user-display-name" type="text" autocomplete="name" />
-          </div>
-          <div class="form-field">
-            <label for="user-email">Email</label>
-            <input class="input" id="user-email" type="email" autocomplete="username" />
-          </div>
-          <div class="form-field">
-            <label for="user-password">Password</label>
-            <input class="input" id="user-password" type="password" autocomplete="new-password" />
-            <p class="muted">{password_help}</p>
-          </div>
-          <div class="form-field">
-            <label class="checkbox-label" for="user-is-active">
-              <input id="user-is-active" type="checkbox" checked>
-              Account is active
-            </label>
-          </div>
+          {}
+          {}
+          {}
+          {}
         </div>
-        <section class="page-panel nested-form-panel">
-          <h3>Roles</h3>
-          <p class="muted">Select the role memberships that should apply to this account.</p>
-          <div id="user-role-options" class="form-grid">
-            <p class="muted">Loading roles...</p>
-          </div>
-        </section>
-        "#
+        {}
+        "#,
+        tessara_ui::field_wrapper(
+            "user-display-name",
+            "Display Name",
+            &tessara_ui::text_input("user-display-name", "text", "name", "", ""),
+            None,
+            "wide-field",
+        ),
+        tessara_ui::field_wrapper(
+            "user-email",
+            "Email",
+            &tessara_ui::text_input("user-email", "email", "username", "", ""),
+            None,
+            "",
+        ),
+        tessara_ui::field_wrapper(
+            "user-password",
+            "Password",
+            &tessara_ui::text_input("user-password", "password", "new-password", "", ""),
+            Some(password_help),
+            "",
+        ),
+        tessara_ui::checkbox_field("user-is-active", "Account is active", true, None),
+        tessara_ui::panel(
+            "Roles",
+            "Select the role memberships that should apply to this account.",
+            r#"<div id="user-role-options" class="form-grid"><p class="muted">Loading roles...</p></div>"#,
+        ),
     )
 }
 
 fn user_access_form_fields() -> String {
-    r#"
-        <section class="page-panel nested-form-panel">
-          <h3>Effective Access</h3>
-          <div id="user-access-summary" class="record-detail">
-            <p class="muted">Loading current access summary...</p>
-          </div>
-        </section>
-        <section class="page-panel nested-form-panel">
-          <h3>Scope Assignments</h3>
-          <p class="muted">Assigned scope nodes expand to all descendants automatically.</p>
-          <div class="form-grid">
-            <div class="form-field wide-field">
-              <label for="user-scope-filter">Filter Scope Nodes</label>
-              <input class="input" id="user-scope-filter" type="text" autocomplete="off" placeholder="Filter by name, type, or parent" />
-            </div>
-          </div>
-          <div id="user-scope-editability" class="notification is-light">
-            Scope assignments load here.
-          </div>
-          <div class="table-wrap">
-            <table class="data-grid">
-              <thead>
-                <tr>
-                  <th>Assigned</th>
-                  <th>Node</th>
-                  <th>Type</th>
-                  <th>Parent</th>
-                </tr>
-              </thead>
-              <tbody id="user-scope-options">
-                <tr><td colspan="4" class="muted">Loading available organization nodes...</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
-        <section class="page-panel nested-form-panel">
-          <h3>Delegations</h3>
-          <p class="muted">Delegations are generic account relationships. They currently affect delegated response context only.</p>
-          <div class="form-grid">
-            <div class="form-field wide-field">
-              <label for="user-delegation-filter">Filter Delegate Accounts</label>
-              <input class="input" id="user-delegation-filter" type="text" autocomplete="off" placeholder="Filter by display name or email" />
-            </div>
-          </div>
-          <div class="table-wrap">
-            <table class="data-grid">
-              <thead>
-                <tr>
-                  <th>Assigned</th>
-                  <th>Display Name</th>
-                  <th>Email</th>
-                </tr>
-              </thead>
-              <tbody id="user-delegation-options">
-                <tr><td colspan="3" class="muted">Loading available delegate accounts...</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
-    "#
-    .to_string()
+    format!(
+        r#"
+        {}
+        {}
+        {}
+    "#,
+        tessara_ui::panel(
+            "Effective Access",
+            "",
+            r#"<div id="user-access-summary" class="record-detail"><p class="muted">Loading current access summary...</p></div>"#,
+        ),
+        tessara_ui::panel(
+            "Scope Assignments",
+            "Assigned scope nodes expand to all descendants automatically.",
+            &format!(
+                r#"
+                {}
+                <div id="user-scope-editability" class="notification is-light">
+                  Scope assignments load here.
+                </div>
+                <div class="table-wrap">
+                  <table class="data-grid">
+                    <thead>
+                      <tr>
+                        <th>Assigned</th>
+                        <th>Node</th>
+                        <th>Type</th>
+                        <th>Parent</th>
+                      </tr>
+                    </thead>
+                    <tbody id="user-scope-options">
+                      <tr><td colspan="4" class="muted">Loading available organization nodes...</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+                "#,
+                tessara_ui::toolbar(
+                    &tessara_ui::field_wrapper(
+                        "user-scope-filter",
+                        "Filter Scope Nodes",
+                        &tessara_ui::text_input(
+                            "user-scope-filter",
+                            "text",
+                            "off",
+                            "Filter by name, type, or parent",
+                            "",
+                        ),
+                        None,
+                        "wide-field",
+                    ),
+                    "",
+                )
+            ),
+        ),
+        tessara_ui::panel(
+            "Delegations",
+            "Delegations are generic account relationships. They currently affect delegated response context only.",
+            &format!(
+                r#"
+                {}
+                <div class="table-wrap">
+                  <table class="data-grid">
+                    <thead>
+                      <tr>
+                        <th>Assigned</th>
+                        <th>Display Name</th>
+                        <th>Email</th>
+                      </tr>
+                    </thead>
+                    <tbody id="user-delegation-options">
+                      <tr><td colspan="3" class="muted">Loading available delegate accounts...</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+                "#,
+                tessara_ui::toolbar(
+                    &tessara_ui::field_wrapper(
+                        "user-delegation-filter",
+                        "Filter Delegate Accounts",
+                        &tessara_ui::text_input(
+                            "user-delegation-filter",
+                            "text",
+                            "off",
+                            "Filter by display name or email",
+                            "",
+                        ),
+                        None,
+                        "wide-field",
+                    ),
+                    "",
+                )
+            ),
+        ),
+    )
 }
 
 fn role_form_fields() -> String {
-    r#"
-        <section class="page-panel nested-form-panel">
-          <h3>Capabilities</h3>
-          <p class="muted">Filter and assign the capabilities included in this role bundle.</p>
-          <div class="form-grid">
-            <div class="form-field wide-field">
-              <label for="role-name">Role Name</label>
-              <input class="input" id="role-name" type="text" autocomplete="off" />
+    tessara_ui::panel(
+        "Capabilities",
+        "Filter and assign the capabilities included in this role bundle.",
+        &format!(
+            r#"
+            <div class="form-grid">
+              {}
             </div>
-            <div class="form-field wide-field">
-              <label for="role-capability-filter">Filter Capabilities</label>
-              <input class="input" id="role-capability-filter" type="text" autocomplete="off" placeholder="Filter by key or description" />
+            {}
+            <div class="table-wrap">
+              <table class="data-grid">
+                <thead>
+                  <tr>
+                    <th>Assigned</th>
+                    <th>Capability</th>
+                    <th>Description</th>
+                  </tr>
+                </thead>
+                <tbody id="role-capability-options">
+                  <tr><td colspan="3" class="muted">Loading capabilities...</td></tr>
+                </tbody>
+              </table>
             </div>
-          </div>
-          <div class="table-wrap">
-            <table class="data-grid">
-              <thead>
-                <tr>
-                  <th>Assigned</th>
-                  <th>Capability</th>
-                  <th>Description</th>
-                </tr>
-              </thead>
-              <tbody id="role-capability-options">
-                <tr><td colspan="3" class="muted">Loading capabilities...</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
-    "#
-    .to_string()
+            "#,
+            tessara_ui::field_wrapper(
+                "role-name",
+                "Role Name",
+                &tessara_ui::text_input("role-name", "text", "off", "", ""),
+                None,
+                "wide-field",
+            ),
+            tessara_ui::toolbar(
+                &tessara_ui::field_wrapper(
+                    "role-capability-filter",
+                    "Filter Capabilities",
+                    &tessara_ui::text_input(
+                        "role-capability-filter",
+                        "text",
+                        "off",
+                        "Filter by key or description",
+                        "",
+                    ),
+                    None,
+                    "wide-field",
+                ),
+                "",
+            ),
+        ),
+    )
 }
 
 fn node_type_form_fields() -> String {
-    r#"
+    format!(
+        r#"
         <p id="node-type-form-status" class="muted">Loading node-type configuration.</p>
         <div class="form-grid">
-          <div class="form-field">
-            <label for="node-type-name">Name</label>
-            <input class="input" id="node-type-name" type="text" autocomplete="off" />
-          </div>
-          <div class="form-field">
-            <label for="node-type-slug">Slug</label>
-            <input class="input" id="node-type-slug" type="text" autocomplete="off" />
-          </div>
-          <div class="form-field">
-            <label for="node-type-plural-label">Plural Label</label>
-            <input class="input" id="node-type-plural-label" type="text" autocomplete="off" placeholder="Falls back to a pluralized Name" />
-          </div>
+          {}
+          {}
+          {}
         </div>
         <div class="node-type-selector-grid">
-          <section class="page-panel nested-form-panel node-type-selector-panel">
-            <h3>Allowed Parents</h3>
-            <p class="muted">These organization node types may contain this node type. Leave empty to make it top-level.</p>
-            <div id="node-type-parent-tags" class="tags organization-node-type-tags">
-              <span class="tag is-light">Loading node types...</span>
-            </div>
-            <div class="form-field">
-              <label for="node-type-parent-filter">Add Parent</label>
-              <input class="input" id="node-type-parent-filter" type="text" autocomplete="off" placeholder="Search organization node types" />
-            </div>
-            <div id="node-type-parent-options" class="node-type-option-list">
-              <p class="muted">Loading node types...</p>
-            </div>
-          </section>
-          <section class="page-panel nested-form-panel node-type-selector-panel">
-            <h3>Allowed Children</h3>
-            <p class="muted">These organization node types may be created beneath this node type.</p>
-            <div id="node-type-child-tags" class="tags organization-node-type-tags">
-              <span class="tag is-light">Loading node types...</span>
-            </div>
-            <div class="form-field">
-              <label for="node-type-child-filter">Add Child</label>
-              <input class="input" id="node-type-child-filter" type="text" autocomplete="off" placeholder="Search organization node types" />
-            </div>
-            <div id="node-type-child-options" class="node-type-option-list">
-              <p class="muted">Loading node types...</p>
-            </div>
-          </section>
+          {}
+          {}
         </div>
-        <section class="page-panel nested-form-panel node-type-metadata-panel">
-          <div class="compact-title-row">
-            <div>
-              <h3>Metadata Fields</h3>
-              <p class="muted">Define the metadata captured for organization nodes of this type. Existing fields can be edited here.</p>
-            </div>
-            <button type="button" id="node-type-metadata-add" class="button is-light is-small">Add Metadata Field</button>
-          </div>
-          <div id="node-type-metadata-fields-editor" class="node-type-metadata-editor" role="grid" aria-label="Metadata fields">
-            <p class="muted">Loading metadata fields...</p>
-          </div>
-        </section>
+        {}
         <div id="node-type-metadata-settings-modal" class="modal">
           <div class="modal-background" data-dismiss="modal"></div>
           <div class="modal-card node-type-metadata-modal-card">
@@ -2234,8 +2350,99 @@ fn node_type_form_fields() -> String {
             </footer>
           </div>
         </div>
-    "#
-    .to_string()
+    "#,
+        tessara_ui::field_wrapper(
+            "node-type-name",
+            "Name",
+            &tessara_ui::text_input("node-type-name", "text", "off", "", ""),
+            None,
+            "",
+        ),
+        tessara_ui::field_wrapper(
+            "node-type-slug",
+            "Slug",
+            &tessara_ui::text_input("node-type-slug", "text", "off", "", ""),
+            None,
+            "",
+        ),
+        tessara_ui::field_wrapper(
+            "node-type-plural-label",
+            "Plural Label",
+            &tessara_ui::text_input(
+                "node-type-plural-label",
+                "text",
+                "off",
+                "Falls back to a pluralized Name",
+                "",
+            ),
+            None,
+            "",
+        ),
+        tessara_ui::panel(
+            "Allowed Parents",
+            "These organization node types may contain this node type. Leave empty to make it top-level.",
+            &format!(
+                r#"
+                <div id="node-type-parent-tags" class="tags organization-node-type-tags">
+                  <span class="tag is-light">Loading node types...</span>
+                </div>
+                {}
+                <div id="node-type-parent-options" class="node-type-option-list">
+                  <p class="muted">Loading node types...</p>
+                </div>
+                "#,
+                tessara_ui::field_wrapper(
+                    "node-type-parent-filter",
+                    "Add Parent",
+                    &tessara_ui::text_input(
+                        "node-type-parent-filter",
+                        "text",
+                        "off",
+                        "Search organization node types",
+                        "",
+                    ),
+                    None,
+                    "",
+                )
+            ),
+        ),
+        tessara_ui::panel(
+            "Allowed Children",
+            "These organization node types may be created beneath this node type.",
+            &format!(
+                r#"
+                <div id="node-type-child-tags" class="tags organization-node-type-tags">
+                  <span class="tag is-light">Loading node types...</span>
+                </div>
+                {}
+                <div id="node-type-child-options" class="node-type-option-list">
+                  <p class="muted">Loading node types...</p>
+                </div>
+                "#,
+                tessara_ui::field_wrapper(
+                    "node-type-child-filter",
+                    "Add Child",
+                    &tessara_ui::text_input(
+                        "node-type-child-filter",
+                        "text",
+                        "off",
+                        "Search organization node types",
+                        "",
+                    ),
+                    None,
+                    "",
+                )
+            ),
+        ),
+        tessara_ui::panel_with_header(
+            "Metadata Fields",
+            "Define the metadata captured for organization nodes of this type. Existing fields can be edited here.",
+            Some(
+                r#"<div class="actions"><button type="button" id="node-type-metadata-add" class="button is-light is-small">Add Metadata Field</button></div>"#,
+            ),
+            r#"<div id="node-type-metadata-fields-editor" class="node-type-metadata-editor" role="grid" aria-label="Metadata fields"><p class="muted">Loading metadata fields...</p></div>"#,
+        ),
+    )
 }
 
 pub fn application_shell_html(_script: &str) -> String {
@@ -2758,6 +2965,7 @@ pub fn organization_application_shell_html(_script: &str) -> String {
                 {}
                 {}
                 {}
+                {}
                 "#,
                 page_header(
                     "Organization",
@@ -2765,6 +2973,7 @@ pub fn organization_application_shell_html(_script: &str) -> String {
                     "Browse your scope-aware hierarchy from a full-width navigator.",
                     r#"<a id="organization-create-link" class="button-link button is-primary" href="/app/organization/new">Create Organization</a>"#.to_string(),
                 ),
+                surface_metadata("Directory", "Hierarchy navigator", "Loading scoped nodes"),
                 empty_panel(
                     "Organization Directory",
                     "",
@@ -2852,6 +3061,7 @@ pub fn organization_detail_application_html(_script: &str, node_id: &str) -> Str
                 {}
                 {}
                 {}
+                {}
                 <div id="organization-related" class="app-screen"></div>
                 <p id="organization-detail-status" class="muted">Loading organization detail...</p>
                 {}"#,
@@ -2863,6 +3073,7 @@ pub fn organization_detail_application_html(_script: &str, node_id: &str) -> Str
                         r#"<a class="button-link button is-light" href="/app/organization">Back to List</a><a class="button-link button is-primary is-light" href="/app/organization/{escaped}/edit">Edit</a>"#
                     ),
                 ),
+                surface_metadata("Detail", "Hierarchy record", "Loading record"),
                 r#"<section class="app-screen box entity-page"><div class="page-title-row"><div><h2 id="organization-detail-heading">Organization Detail</h2><p id="organization-detail-context" class="muted">Loading visible hierarchy context.</p></div></div></section>"#,
                 empty_panel(
                     "Path",
@@ -2948,6 +3159,7 @@ pub fn forms_application_shell_html(_script: &str) -> String {
                 {}
                 {}
                 {}
+                {}
                 "#,
                 page_header(
                     "Forms",
@@ -2956,6 +3168,7 @@ pub fn forms_application_shell_html(_script: &str) -> String {
                     r#"<a class="button-link button is-primary" href="/app/forms/new">Create Form</a>"#
                         .to_string(),
                 ),
+                surface_metadata("Directory", "Form catalog", "Loading form records"),
                 empty_panel(
                     "Form Directory",
                     "Current form records and their version status appear here.",
@@ -3027,6 +3240,7 @@ pub fn form_detail_application_html(_script: &str, form_id: &str) -> String {
                 {}
                 {}
                 {}
+                {}
                 "#,
                 page_header(
                     "Forms",
@@ -3036,6 +3250,7 @@ pub fn form_detail_application_html(_script: &str, form_id: &str) -> String {
                         r#"<a class="button-link button is-light" href="/app/forms">Back to List</a><a class="button-link button is-primary is-light" href="/app/forms/{escaped}/edit">Edit</a>"#
                     ),
                 ),
+                surface_metadata("Detail", "Form lifecycle", "Loading record"),
                 empty_panel(
                     "Form Summary",
                     "Top-level form metadata appears here.",
@@ -3085,6 +3300,7 @@ pub fn form_edit_application_html(_script: &str, form_id: &str) -> String {
             format!(
                 r#"
                 {}
+                {}
                 <section class="app-screen box page-panel">
                   <h3>Form Metadata</h3>
                   <p class="muted">Update the top-level form record here. Metadata saves stay separate from draft version authoring.</p>
@@ -3107,6 +3323,7 @@ pub fn form_edit_application_html(_script: &str, form_id: &str) -> String {
                         r#"<a class="button-link button is-light" href="/app/forms/{escaped}">Back to Detail</a>"#
                     ),
                 ),
+                surface_metadata("Edit", "Form authoring", "Metadata and draft workspace"),
                 form_entity_fields(),
                 empty_panel(
                     "Version Lifecycle",
@@ -3133,12 +3350,264 @@ pub fn form_edit_application_html(_script: &str, form_id: &str) -> String {
     )
 }
 
+pub fn workflows_application_shell_html(_script: &str) -> String {
+    render_application_document(
+        "Tessara Workflows",
+        "Tessara workflows list screen.",
+        &pipeline::bridge_asset_path("app-legacy.js"),
+        r#"data-page-key="workflow-list" data-active-route="workflows""#,
+        app_shell(
+            "workflows",
+            "Product Area",
+            "Workflows",
+            "Manage workflow definitions, published single-step workflow versions, and assignment routing.",
+            &[("Home", Some("/app")), ("Workflows", None)],
+            format!(
+                r#"
+                {}
+                {}
+                {}
+                "#,
+                page_header(
+                    "Workflows",
+                    "Workflows",
+                    "This list screen shows workflow records, their current published version, and assignment depth.",
+                    r#"<a class="button-link button is-primary" href="/app/workflows/new">Create Workflow</a><a class="button-link button is-light" href="/app/workflows/assignments">Open Assignment Console</a>"#
+                        .to_string(),
+                ),
+                surface_metadata("Directory", "Workflow catalog", "Loading workflow records"),
+                empty_panel(
+                    "Workflow Directory",
+                    "Published workflows and their draft or published single-step versions appear here.",
+                    r#"<div id="workflow-list" class="record-list"><p class="muted">Loading workflow records...</p></div>"#,
+                ),
+            ),
+            false,
+        ),
+    )
+}
+
+pub fn workflow_create_application_html(_script: &str) -> String {
+    render_application_document(
+        "Create Workflow",
+        "Create a Tessara workflow.",
+        &pipeline::bridge_asset_path("app-legacy.js"),
+        r#"data-page-key="workflow-create" data-active-route="workflows""#,
+        app_shell(
+            "workflows",
+            "Product Area",
+            "Workflows",
+            "Create a form-backed workflow shell and then publish versions from linked form versions.",
+            &[
+                ("Home", Some("/app")),
+                ("Workflows", Some("/app/workflows")),
+                ("Create Workflow", None),
+            ],
+            form_screen(
+                "Workflows",
+                "Create Workflow",
+                "Create a workflow that wraps one form as a single-step runtime shell.",
+                "workflow-form",
+                "/app/workflows",
+                r#"
+                <p id="workflow-form-status" class="muted">Workflow metadata saves here.</p>
+                <div class="form-grid">
+                  <div class="form-field wide-field">
+                    <label for="workflow-name">Name</label>
+                    <input class="input" id="workflow-name" type="text" autocomplete="off" />
+                  </div>
+                  <div class="form-field">
+                    <label for="workflow-slug">Slug</label>
+                    <input class="input" id="workflow-slug" type="text" autocomplete="off" />
+                  </div>
+                  <div class="form-field">
+                    <label for="workflow-form-id">Linked Form</label>
+                    <select class="input" id="workflow-form-id"></select>
+                  </div>
+                  <div class="form-field wide-field">
+                    <label for="workflow-description">Description</label>
+                    <textarea class="textarea" id="workflow-description" rows="3"></textarea>
+                  </div>
+                </div>
+                "#,
+            ),
+            false,
+        ),
+    )
+}
+
+pub fn workflow_detail_application_html(_script: &str, workflow_id: &str) -> String {
+    let escaped = escape_attr(workflow_id);
+    render_application_document(
+        "Workflow Detail",
+        "Workflow detail screen.",
+        &pipeline::bridge_asset_path("app-legacy.js"),
+        &format!(
+            r#"data-page-key="workflow-detail" data-active-route="workflows" data-record-id="{escaped}""#
+        ),
+        app_shell(
+            "workflows",
+            "Product Area",
+            "Workflows",
+            "Inspect the selected workflow, linked form versions, and its assignment footprint.",
+            &[
+                ("Home", Some("/app")),
+                ("Workflows", Some("/app/workflows")),
+                ("Workflow Detail", None),
+            ],
+            format!(
+                r#"
+                {}
+                {}
+                {}
+                {}
+                "#,
+                page_header(
+                    "Workflows",
+                    "Workflow Detail",
+                    "This screen shows the linked form, available workflow versions, and assignment console deep links.",
+                    format!(
+                        r#"<a class="button-link button is-light" href="/app/workflows">Back to List</a><a class="button-link button is-primary is-light" href="/app/workflows/{escaped}/edit">Edit</a><a class="button-link button is-light" href="/app/workflows/assignments?workflowId={escaped}">Assignment Console</a>"#
+                    ),
+                ),
+                surface_metadata("Detail", "Workflow runtime shell", "Loading record"),
+                empty_panel(
+                    "Workflow Summary",
+                    "Core workflow metadata and current runtime status appear here.",
+                    r#"<div id="workflow-detail" class="record-detail"><p class="muted">Loading workflow detail...</p></div>"#,
+                ),
+                empty_panel(
+                    "Workflow Versions",
+                    "Single-step workflow versions mirror linked form versions for Sprint 2A.",
+                    r#"<div id="workflow-version-list" class="record-list"><p class="muted">Loading workflow versions...</p></div>"#,
+                ),
+            ),
+            false,
+        ),
+    )
+}
+
+pub fn workflow_edit_application_html(_script: &str, workflow_id: &str) -> String {
+    let escaped = escape_attr(workflow_id);
+    render_application_document(
+        "Edit Workflow",
+        "Edit a Tessara workflow.",
+        &pipeline::bridge_asset_path("app-legacy.js"),
+        &format!(r#"data-page-key="workflow-edit" data-active-route="workflows" data-record-id="{escaped}""#),
+        app_shell(
+            "workflows",
+            "Product Area",
+            "Workflows",
+            "Update workflow metadata and create or publish single-step workflow versions from published forms.",
+            &[
+                ("Home", Some("/app")),
+                ("Workflows", Some("/app/workflows")),
+                ("Workflow Detail", Some(&format!("/app/workflows/{escaped}"))),
+                ("Edit Workflow", None),
+            ],
+            format!(
+                r#"
+                {}
+                {}
+                {}
+                {}
+                "#,
+                page_header(
+                    "Workflows",
+                    "Edit Workflow",
+                    "Workflow metadata stays separate from version creation and assignment management.",
+                    format!(r#"<a class="button-link button is-light" href="/app/workflows/{escaped}">Back to Detail</a><a class="button-link button is-light" href="/app/workflows/assignments?workflowId={escaped}">Assignment Console</a>"#),
+                ),
+                surface_metadata("Edit", "Workflow authoring", "Metadata and version lifecycle"),
+                r#"
+                <section class="app-screen box page-panel">
+                  <p id="workflow-form-status" class="muted">Workflow metadata saves here.</p>
+                  <form id="workflow-form" class="entity-form">
+                    <div class="form-grid">
+                      <div class="form-field wide-field">
+                        <label for="workflow-name">Name</label>
+                        <input class="input" id="workflow-name" type="text" autocomplete="off" />
+                      </div>
+                      <div class="form-field">
+                        <label for="workflow-slug">Slug</label>
+                        <input class="input" id="workflow-slug" type="text" autocomplete="off" />
+                      </div>
+                      <div class="form-field">
+                        <label for="workflow-form-id">Linked Form</label>
+                        <select class="input" id="workflow-form-id"></select>
+                      </div>
+                      <div class="form-field wide-field">
+                        <label for="workflow-description">Description</label>
+                        <textarea class="textarea" id="workflow-description" rows="3"></textarea>
+                      </div>
+                    </div>
+                    <div class="actions"><button class="button is-primary" type="submit">Submit</button></div>
+                  </form>
+                </section>
+                "#.to_string(),
+                empty_panel(
+                    "Workflow Version Lifecycle",
+                    "Create one single-step workflow version from a linked form version, then publish it when the form version is already published.",
+                    r#"<div id="workflow-version-editor" class="record-detail"><p class="muted">Loading version lifecycle...</p></div>"#,
+                ),
+            ),
+            false,
+        ),
+    )
+}
+
+pub fn workflow_assignments_application_html(_script: &str) -> String {
+    render_application_document(
+        "Workflow Assignments",
+        "Workflow assignment console.",
+        &pipeline::bridge_asset_path("app-legacy.js"),
+        r#"data-page-key="workflow-assignments" data-active-route="workflows""#,
+        app_shell(
+            "workflows",
+            "Product Area",
+            "Workflows",
+            "Create and update workflow assignments in one shared console, with optional workflow or form deep links.",
+            &[
+                ("Home", Some("/app")),
+                ("Workflows", Some("/app/workflows")),
+                ("Assignment Console", None),
+            ],
+            format!(
+                r#"
+                {}
+                {}
+                {}
+                {}
+                "#,
+                page_header(
+                    "Workflows",
+                    "Assignment Console",
+                    "Use one shared surface to assign workflow work to any active user.",
+                    r#"<a class="button-link button is-light" href="/app/workflows">Back to Workflows</a>"#.to_string(),
+                ),
+                surface_metadata("Console", "Assignment management", "Loading workflow assignments"),
+                r#"
+                <section class="app-screen box page-panel">
+                  <div id="workflow-assignment-toolbar"></div>
+                </section>
+                "#.to_string(),
+                empty_panel(
+                    "Workflow Assignments",
+                    "Assignments show the current workflow, assignee, node context, and whether draft or submitted response work already exists.",
+                    r#"<div id="workflow-assignment-list" class="record-list"><p class="muted">Loading workflow assignments...</p></div>"#,
+                ),
+            ),
+            false,
+        ),
+    )
+}
+
 pub fn responses_application_shell_html(_script: &str) -> String {
     render_application_document(
         "Tessara Responses",
         "Tessara responses list screen.",
         &pipeline::bridge_asset_path("app-legacy.js"),
-        r#"data-page-key="response-list" data-active-route="responses""#,
+        r#"data-page-key="native-response-list" data-active-route="responses""#,
         app_shell(
             "responses",
             "Product Area",
@@ -3152,6 +3621,7 @@ pub fn responses_application_shell_html(_script: &str) -> String {
                 {}
                 {}
                 {}
+                {}
                 "#,
                 page_header(
                     "Responses",
@@ -3159,6 +3629,11 @@ pub fn responses_application_shell_html(_script: &str) -> String {
                     "This list screen separates new work, drafts, and submitted responses.",
                     r#"<a class="button-link" href="/app/responses/new">Start Response</a>"#
                         .to_string(),
+                ),
+                surface_metadata(
+                    "Directory",
+                    "Response work queue",
+                    "Loading drafts and submitted work"
                 ),
                 r#"<div id="response-context-switcher"></div>"#,
                 empty_panel(
@@ -3191,7 +3666,7 @@ pub fn response_create_application_html(_script: &str) -> String {
         "Start Response",
         "Start a new response draft.",
         &pipeline::bridge_asset_path("app-legacy.js"),
-        r#"data-page-key="response-create" data-active-route="responses""#,
+        r#"data-page-key="native-response-create" data-active-route="responses""#,
         app_shell(
             "responses",
             "Product Area",
@@ -3225,7 +3700,7 @@ pub fn response_detail_application_html(_script: &str, submission_id: &str) -> S
         "Response detail screen.",
         &pipeline::bridge_asset_path("app-legacy.js"),
         &format!(
-            r#"data-page-key="response-detail" data-active-route="responses" data-record-id="{escaped}""#
+            r#"data-page-key="native-response-detail" data-active-route="responses" data-record-id="{escaped}""#
         ),
         app_shell(
             "responses",
@@ -3241,6 +3716,7 @@ pub fn response_detail_application_html(_script: &str, submission_id: &str) -> S
                 r#"
                 {}
                 {}
+                {}
                 "#,
                 page_header(
                     "Responses",
@@ -3248,6 +3724,7 @@ pub fn response_detail_application_html(_script: &str, submission_id: &str) -> S
                     "This screen shows the selected response in read-only form. Drafts expose their edit action inside the detail content.",
                     r#"<a class="button-link" href="/app/responses">Back to List</a>"#.to_string(),
                 ),
+                surface_metadata("Detail", "Response record", "Loading record"),
                 empty_panel(
                     "Response Record",
                     "Response values and audit trail appear here.",
@@ -3266,7 +3743,7 @@ pub fn response_edit_application_html(_script: &str, submission_id: &str) -> Str
         "Edit a draft response.",
         &pipeline::bridge_asset_path("app-legacy.js"),
         &format!(
-            r#"data-page-key="response-edit" data-active-route="responses" data-record-id="{escaped}""#
+            r#"data-page-key="native-response-edit" data-active-route="responses" data-record-id="{escaped}""#
         ),
         app_shell(
             "responses",
@@ -3286,6 +3763,7 @@ pub fn response_edit_application_html(_script: &str, submission_id: &str) -> Str
                 r#"
                 {}
                 {}
+                {}
                 "#,
                 page_header(
                     "Responses",
@@ -3293,6 +3771,7 @@ pub fn response_edit_application_html(_script: &str, submission_id: &str) -> Str
                     "Save changes to the current draft or submit it from this dedicated response form screen.",
                     format!(r#"<a class="button-link" href="/app/responses/{escaped}">Cancel</a>"#),
                 ),
+                surface_metadata("Edit", "Draft response", "Loading editable submission"),
                 empty_panel(
                     "Draft Response Form",
                     "The current draft loads here. Submitted responses show a read-only guard instead of editable controls.",

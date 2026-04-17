@@ -47,6 +47,7 @@ pub async fn refresh_projection(pool: &sqlx::PgPool) -> ApiResult<AnalyticsStatu
             (form_version_id, form_id, version_label, compatibility_group_id)
         SELECT id, form_id, version_label, compatibility_group_id
         FROM form_versions
+        WHERE version_label IS NOT NULL
         "#,
         r#"
         INSERT INTO analytics.field_dim

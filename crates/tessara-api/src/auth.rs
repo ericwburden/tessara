@@ -19,6 +19,11 @@ pub struct LoginResponse {
     token: Uuid,
 }
 
+#[derive(Serialize)]
+pub struct LogoutResponse {
+    pub signed_out: bool,
+}
+
 #[derive(Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum UiAccessProfile {
@@ -124,6 +129,23 @@ pub async fn me(
     Ok(Json(require_authenticated(&state.pool, &headers).await?))
 }
 
+pub async fn logout(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> ApiResult<Json<LogoutResponse>> {
+    let token = session_token_from_headers(&headers)?;
+    let deleted = sqlx::query("DELETE FROM auth_sessions WHERE token = $1")
+        .bind(token)
+        .execute(&state.pool)
+        .await?;
+
+    if deleted.rows_affected() == 0 {
+        return Err(ApiError::Unauthorized);
+    }
+
+    Ok(Json(LogoutResponse { signed_out: true }))
+}
+
 pub async fn require_authenticated(
     pool: &PgPool,
     headers: &HeaderMap,
@@ -150,15 +172,7 @@ pub async fn require_capability(
 }
 
 pub async fn account_from_headers(pool: &PgPool, headers: &HeaderMap) -> ApiResult<AccountContext> {
-    let auth = headers
-        .get("authorization")
-        .and_then(|value| value.to_str().ok())
-        .ok_or(ApiError::Unauthorized)?;
-    let token = auth
-        .strip_prefix("Bearer ")
-        .ok_or(ApiError::Unauthorized)?
-        .parse::<Uuid>()
-        .map_err(|_| ApiError::Unauthorized)?;
+    let token = session_token_from_headers(headers)?;
 
     let row = sqlx::query(
         r#"
@@ -189,6 +203,17 @@ pub async fn account_from_headers(pool: &PgPool, headers: &HeaderMap) -> ApiResu
         scope_nodes: load_scope_nodes(pool, account_id).await?,
         delegations: load_delegations(pool, account_id).await?,
     })
+}
+
+fn session_token_from_headers(headers: &HeaderMap) -> ApiResult<Uuid> {
+    let auth = headers
+        .get("authorization")
+        .and_then(|value| value.to_str().ok())
+        .ok_or(ApiError::Unauthorized)?;
+    auth.strip_prefix("Bearer ")
+        .ok_or(ApiError::Unauthorized)?
+        .parse::<Uuid>()
+        .map_err(|_| ApiError::Unauthorized)
 }
 
 pub async fn load_effective_capabilities(

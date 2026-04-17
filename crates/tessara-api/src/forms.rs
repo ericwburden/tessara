@@ -17,6 +17,7 @@ use crate::{
     db::AppState,
     error::{ApiError, ApiResult},
     hierarchy::{IdResponse, parse_field_type, require_text},
+    workflows,
 };
 
 #[derive(Deserialize)]
@@ -115,6 +116,7 @@ pub struct FormDefinition {
     scope_node_type_id: Option<Uuid>,
     scope_node_type_name: Option<String>,
     versions: Vec<FormVersionSummary>,
+    workflows: Vec<FormWorkflowLink>,
     reports: Vec<FormReportLink>,
     dataset_sources: Vec<FormDatasetSourceLink>,
 }
@@ -175,6 +177,17 @@ pub struct FormDatasetSourceLink {
     dataset_name: String,
     source_alias: String,
     selection_rule: String,
+}
+
+#[derive(Serialize)]
+pub struct FormWorkflowLink {
+    id: Uuid,
+    name: String,
+    slug: String,
+    current_version_id: Option<Uuid>,
+    current_version_label: Option<String>,
+    current_status: Option<String>,
+    assignment_count: i64,
 }
 
 #[derive(Serialize)]
@@ -685,6 +698,61 @@ async fn get_form_definition(pool: &sqlx::PgPool, form_id: Uuid) -> ApiResult<Fo
         })
         .collect::<Result<Vec<_>, sqlx::Error>>()?;
 
+    let workflows = sqlx::query(
+        r#"
+        SELECT
+            workflows.id,
+            workflows.name,
+            workflows.slug,
+            current_versions.id AS current_version_id,
+            current_versions.version_label AS current_version_label,
+            current_versions.status::text AS current_status,
+            COUNT(workflow_assignments.id) FILTER (WHERE workflow_assignments.is_active) AS assignment_count
+        FROM workflows
+        LEFT JOIN LATERAL (
+            SELECT id, version_label, status
+            FROM workflow_versions
+            WHERE workflow_id = workflows.id
+            ORDER BY
+                CASE status
+                    WHEN 'published' THEN 0
+                    WHEN 'draft' THEN 1
+                    ELSE 2
+                END,
+                created_at DESC
+            LIMIT 1
+        ) AS current_versions ON true
+        LEFT JOIN workflow_versions ON workflow_versions.workflow_id = workflows.id
+        LEFT JOIN workflow_assignments
+            ON workflow_assignments.workflow_version_id = workflow_versions.id
+        WHERE workflows.form_id = $1
+        GROUP BY
+            workflows.id,
+            workflows.name,
+            workflows.slug,
+            current_versions.id,
+            current_versions.version_label,
+            current_versions.status
+        ORDER BY workflows.name, workflows.slug
+        "#,
+    )
+    .bind(form_id)
+    .fetch_all(pool)
+    .await?
+    .into_iter()
+    .map(|row| {
+        Ok(FormWorkflowLink {
+            id: row.try_get("id")?,
+            name: row.try_get("name")?,
+            slug: row.try_get("slug")?,
+            current_version_id: row.try_get("current_version_id")?,
+            current_version_label: row.try_get("current_version_label")?,
+            current_status: row.try_get("current_status")?,
+            assignment_count: row.try_get("assignment_count")?,
+        })
+    })
+    .collect::<Result<Vec<_>, sqlx::Error>>()?;
+
     let dataset_sources = sqlx::query(
         r#"
         SELECT
@@ -719,6 +787,7 @@ async fn get_form_definition(pool: &sqlx::PgPool, form_id: Uuid) -> ApiResult<Fo
         scope_node_type_id: form.try_get("scope_node_type_id")?,
         scope_node_type_name: form.try_get("scope_node_type_name")?,
         versions,
+        workflows,
         reports,
         dataset_sources,
     })
@@ -1034,6 +1103,9 @@ pub async fn publish_form_version(
     .bind(preview.starts_new_major_line)
     .fetch_one(&mut *tx)
     .await?;
+
+    let _ =
+        workflows::ensure_workflow_for_published_form_version_tx(&mut tx, form_version_id).await?;
 
     tx.commit().await?;
 

@@ -1,9 +1,12 @@
+#![recursion_limit = "512"]
+
 //! Local frontend shell for the API-first Tessara vertical slice.
 
 pub mod app;
 mod app_script;
 mod application;
 mod brand;
+mod document;
 pub mod features;
 pub mod infra;
 mod pipeline;
@@ -11,6 +14,16 @@ mod shell;
 mod shell_model;
 mod shell_script;
 mod theme;
+
+#[cfg(feature = "hydrate")]
+use wasm_bindgen::prelude::wasm_bindgen;
+
+#[cfg(feature = "hydrate")]
+#[wasm_bindgen(start)]
+pub fn start() {
+    console_error_panic_hook::set_once();
+    app::hydrate_app(pipeline::APP_ROOT_ID);
+}
 
 pub fn admin_shell_html() -> String {
     shell::admin_shell_html(shell_script::SCRIPT)
@@ -37,7 +50,11 @@ pub fn pkg_dir() -> std::path::PathBuf {
 }
 
 pub fn application_shell_html() -> String {
-    application::application_shell_html(app_script::APPLICATION_SCRIPT)
+    document::render_native_app_document(
+        "Tessara Home",
+        "Tessara application home for local replacement workflow testing.",
+        "/app",
+    )
 }
 
 pub fn login_application_html() -> String {
@@ -61,39 +78,111 @@ pub fn organization_edit_application_html(node_id: &str) -> String {
 }
 
 pub fn forms_application_shell_html() -> String {
-    application::forms_application_shell_html(app_script::APPLICATION_SCRIPT)
+    document::render_native_app_document(
+        "Tessara Forms",
+        "Tessara forms list screen.",
+        "/app/forms",
+    )
 }
 
 pub fn form_create_application_html() -> String {
-    application::form_create_application_html(app_script::APPLICATION_SCRIPT)
+    document::render_native_app_document("Create Form", "Create a Tessara form.", "/app/forms/new")
 }
 
 pub fn form_detail_application_html(form_id: &str) -> String {
-    application::form_detail_application_html(app_script::APPLICATION_SCRIPT, form_id)
+    document::render_native_app_document(
+        "Form Detail",
+        "Inspect a Tessara form.",
+        &format!("/app/forms/{form_id}"),
+    )
 }
 
 pub fn form_edit_application_html(form_id: &str) -> String {
-    application::form_edit_application_html(app_script::APPLICATION_SCRIPT, form_id)
+    document::render_native_app_document(
+        "Edit Form",
+        "Edit a Tessara form.",
+        &format!("/app/forms/{form_id}/edit"),
+    )
+}
+
+pub fn workflows_application_shell_html() -> String {
+    document::render_native_app_document(
+        "Tessara Workflows",
+        "Tessara workflows list screen.",
+        "/app/workflows",
+    )
+}
+
+pub fn workflow_create_application_html() -> String {
+    document::render_native_app_document(
+        "Create Workflow",
+        "Create a Tessara workflow.",
+        "/app/workflows/new",
+    )
+}
+
+pub fn workflow_detail_application_html(workflow_id: &str) -> String {
+    document::render_native_app_document(
+        "Workflow Detail",
+        "Inspect a Tessara workflow.",
+        &format!("/app/workflows/{workflow_id}"),
+    )
+}
+
+pub fn workflow_edit_application_html(workflow_id: &str) -> String {
+    document::render_native_app_document(
+        "Edit Workflow",
+        "Edit a Tessara workflow.",
+        &format!("/app/workflows/{workflow_id}/edit"),
+    )
+}
+
+pub fn workflow_assignments_application_html() -> String {
+    document::render_native_app_document(
+        "Workflow Assignments",
+        "Workflow assignment console.",
+        "/app/workflows/assignments",
+    )
 }
 
 pub fn responses_application_shell_html() -> String {
-    application::responses_application_shell_html(app_script::APPLICATION_SCRIPT)
+    document::render_native_app_document(
+        "Tessara Responses",
+        "Tessara responses list screen.",
+        "/app/responses",
+    )
 }
 
 pub fn submission_application_shell_html() -> String {
-    application::submission_application_shell_html(app_script::APPLICATION_SCRIPT)
+    document::render_native_app_document(
+        "Tessara Responses",
+        "Tessara responses list screen.",
+        "/app/submissions",
+    )
 }
 
 pub fn response_create_application_html() -> String {
-    application::response_create_application_html(app_script::APPLICATION_SCRIPT)
+    document::render_native_app_document(
+        "Start Response",
+        "Start a Tessara response.",
+        "/app/responses/new",
+    )
 }
 
 pub fn response_detail_application_html(submission_id: &str) -> String {
-    application::response_detail_application_html(app_script::APPLICATION_SCRIPT, submission_id)
+    document::render_native_app_document(
+        "Response Detail",
+        "Inspect a Tessara response.",
+        &format!("/app/responses/{submission_id}"),
+    )
 }
 
 pub fn response_edit_application_html(submission_id: &str) -> String {
-    application::response_edit_application_html(app_script::APPLICATION_SCRIPT, submission_id)
+    document::render_native_app_document(
+        "Edit Response",
+        "Edit a Tessara response.",
+        &format!("/app/responses/{submission_id}/edit"),
+    )
 }
 
 pub fn dashboards_application_shell_html() -> String {
@@ -372,15 +461,8 @@ mod tests {
         assert!(html.contains("top-app-bar"));
         assert!(html.contains("app-nav-toggle"));
         assert!(html.contains("global-search"));
-        assert!(html.contains("/app/organization"));
-        assert!(html.contains("/app/forms"));
-        assert!(html.contains("/app/responses"));
-        assert!(html.contains("/app/datasets"));
-        assert!(html.contains("/app/components"));
-        assert!(html.contains("/app/reports"));
-        assert!(html.contains("/app/dashboards"));
-        assert!(html.contains("/app/administration"));
-        assert!(html.contains("/app/migration"));
+        assert!(html.contains("Product navigation"));
+        assert!(html.contains("/app"));
         assert!(!html.contains("Create Shortcuts"));
         assert!(!html.contains("breadcrumb-item"));
     }
@@ -430,8 +512,8 @@ mod tests {
         assert!(!forms.contains("Form ID"));
 
         assert!(responses.contains("Responses"));
-        assert!(responses.contains("Start Response"));
         assert!(responses.contains("Start New Response"));
+        assert!(responses.contains("response-start-actions"));
         assert!(responses.contains("Draft Responses"));
         assert!(responses.contains("Submitted Responses"));
         assert!(!responses.contains("Draft submission ID"));
@@ -482,10 +564,6 @@ mod tests {
             dashboard_edit_application_html("00000000-0000-0000-0000-000000000005");
 
         for html in [
-            form_new.as_str(),
-            form_edit.as_str(),
-            response_new.as_str(),
-            response_edit.as_str(),
             report_new.as_str(),
             report_edit.as_str(),
             dashboard_new.as_str(),
@@ -495,6 +573,23 @@ mod tests {
             assert!(html.contains("Cancel"));
             assert!(!html.contains(" ID"));
         }
+
+        assert!(form_new.contains("Create Form"));
+        assert!(form_new.contains("Cancel"));
+        assert!(form_new.contains("form-editor-status"));
+        assert!(!form_new.contains(" ID"));
+        assert!(form_edit.contains("Edit Form"));
+        assert!(form_edit.contains("Save Form"));
+        assert!(form_edit.contains("Draft Version Workspace"));
+        assert!(form_edit.contains("Cancel"));
+        assert!(!form_edit.contains(" ID"));
+
+        assert!(response_new.contains("Start Response"));
+        assert!(response_new.contains("Start Draft"));
+        assert!(response_new.contains("Cancel"));
+        assert!(response_edit.contains("Edit Response"));
+        assert!(response_edit.contains("Loading response form"));
+        assert!(response_edit.contains("response-edit-surface"));
 
         assert!(organization_new.contains("Submit"));
         assert!(organization_new.contains("Cancel"));

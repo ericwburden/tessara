@@ -48,7 +48,12 @@ if ($seedSummary.seed_version -ne "uat-demo-v1") {
 }
 
 $homeShell = Invoke-RestMethod -Uri "$BaseUrl/app" -TimeoutSec 30
-Assert-Contains -Content $homeShell -Needles @("Application Overview", "Role-Ready Home Modules", "/app/organization") -Context "home shell"
+Assert-Contains -Content $homeShell -Needles @(
+    "Application Overview",
+    "Role-Ready Home Modules",
+    "Product Areas",
+    "Current Deployment Readiness"
+) -Context "home shell"
 
 $orgList = Invoke-RestMethod -Uri "$BaseUrl/app/organization" -TimeoutSec 30
 Assert-Contains -Content $orgList -Needles @(

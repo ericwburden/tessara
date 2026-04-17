@@ -20,6 +20,7 @@ pub mod legacy_import;
 mod reporting;
 mod submissions;
 mod users;
+mod workflows;
 
 use axum::{
     Router,
@@ -89,6 +90,30 @@ pub fn router(state: AppState) -> Router {
             "/app/forms/{form_id}",
             get(|Path(form_id): Path<String>| async move {
                 Html(tessara_web::form_detail_application_html(&form_id))
+            }),
+        )
+        .route(
+            "/app/workflows",
+            get(|| async { Html(tessara_web::workflows_application_shell_html()) }),
+        )
+        .route(
+            "/app/workflows/new",
+            get(|| async { Html(tessara_web::workflow_create_application_html()) }),
+        )
+        .route(
+            "/app/workflows/assignments",
+            get(|| async { Html(tessara_web::workflow_assignments_application_html()) }),
+        )
+        .route(
+            "/app/workflows/{workflow_id}/edit",
+            get(|Path(workflow_id): Path<String>| async move {
+                Html(tessara_web::workflow_edit_application_html(&workflow_id))
+            }),
+        )
+        .route(
+            "/app/workflows/{workflow_id}",
+            get(|Path(workflow_id): Path<String>| async move {
+                Html(tessara_web::workflow_detail_application_html(&workflow_id))
             }),
         )
         .route(
@@ -264,6 +289,7 @@ pub fn router(state: AppState) -> Router {
         .route("/health", get(|| async { "ok" }))
         .route("/api/app/summary", get(app_summary::get_summary))
         .route("/api/auth/login", post(auth::login))
+        .route("/api/auth/logout", delete(auth::logout))
         .route("/api/me", get(auth::me))
         .route("/api/admin/capabilities", get(users::list_capabilities))
         .route(
@@ -358,6 +384,38 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/api/forms/published",
             get(forms::list_published_form_versions),
+        )
+        .route(
+            "/api/workflows",
+            get(workflows::list_workflows).post(workflows::create_workflow),
+        )
+        .route(
+            "/api/workflows/{workflow_id}",
+            get(workflows::get_workflow).put(workflows::update_workflow),
+        )
+        .route(
+            "/api/workflows/{workflow_id}/versions",
+            post(workflows::create_workflow_version),
+        )
+        .route(
+            "/api/workflow-versions/{workflow_version_id}/publish",
+            post(workflows::publish_workflow_version),
+        )
+        .route(
+            "/api/workflow-assignments",
+            get(workflows::list_workflow_assignments).post(workflows::create_workflow_assignment),
+        )
+        .route(
+            "/api/workflow-assignments/pending",
+            get(workflows::list_pending_work),
+        )
+        .route(
+            "/api/workflow-assignments/{workflow_assignment_id}",
+            put(workflows::update_workflow_assignment),
+        )
+        .route(
+            "/api/workflow-assignments/{workflow_assignment_id}/start",
+            post(workflows::start_assignment),
         )
         .route(
             "/api/responses/options",

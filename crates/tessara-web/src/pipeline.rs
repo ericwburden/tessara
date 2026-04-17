@@ -32,15 +32,21 @@ pub fn js_path() -> String {
     pkg_asset_path(&format!("{OUTPUT_NAME}.js"))
 }
 
+pub fn wasm_path() -> String {
+    pkg_asset_path(&format!("{OUTPUT_NAME}.wasm"))
+}
+
 pub fn bridge_asset_path(name: &str) -> String {
     format!("/bridge/{name}")
 }
 
 pub fn hydration_module_tag() -> String {
     let js_path = js_path();
+    let wasm_path = wasm_path();
     format!(
         r#"<script type="module">
-import "{js_path}";
+import init from "{js_path}";
+await init("{wasm_path}");
 </script>"#
     )
 }

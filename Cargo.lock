@@ -701,6 +701,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "console_error_panic_hook"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a06aeb73f470f66dcdbf7223caeebb85984942f22f1adb2a088cf9668146bbbc"
+dependencies = [
+ "cfg-if",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "const-oid"
 version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4333,12 +4343,22 @@ name = "tessara-submissions"
 version = "0.1.0"
 
 [[package]]
+name = "tessara-ui"
+version = "0.1.0"
+
+[[package]]
 name = "tessara-web"
 version = "0.1.0"
 dependencies = [
+ "any_spawner",
+ "console_error_panic_hook",
+ "gloo-net",
  "leptos",
  "leptos_meta",
  "leptos_router",
+ "serde",
+ "serde_json",
+ "tessara-ui",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",

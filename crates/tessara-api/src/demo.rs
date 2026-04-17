@@ -12,6 +12,7 @@ use crate::{
     analytics, auth,
     db::AppState,
     error::{ApiError, ApiResult},
+    workflows,
 };
 
 const DEMO_SEED_VERSION: &str = "uat-demo-v1";
@@ -1676,7 +1677,7 @@ async fn ensure_form_assignment(
     node_id: Uuid,
     account_id: Uuid,
 ) -> ApiResult<Uuid> {
-    if let Some(id) = sqlx::query_scalar(
+    let assignment_id = if let Some(id) = sqlx::query_scalar(
         r#"
         SELECT id
         FROM form_assignments
@@ -1692,22 +1693,24 @@ async fn ensure_form_assignment(
     .fetch_optional(pool)
     .await?
     {
-        return Ok(id);
-    }
+        id
+    } else {
+        sqlx::query_scalar(
+            r#"
+            INSERT INTO form_assignments (form_version_id, node_id, account_id)
+            VALUES ($1, $2, $3)
+            RETURNING id
+            "#,
+        )
+        .bind(form_version_id)
+        .bind(node_id)
+        .bind(account_id)
+        .fetch_one(pool)
+        .await?
+    };
 
-    sqlx::query_scalar(
-        r#"
-        INSERT INTO form_assignments (form_version_id, node_id, account_id)
-        VALUES ($1, $2, $3)
-        RETURNING id
-        "#,
-    )
-    .bind(form_version_id)
-    .bind(node_id)
-    .bind(account_id)
-    .fetch_one(pool)
-    .await
-    .map_err(Into::into)
+    let _ = workflows::ensure_workflow_assignment_for_form_assignment(pool, assignment_id).await?;
+    Ok(assignment_id)
 }
 
 async fn ensure_seed_submission(

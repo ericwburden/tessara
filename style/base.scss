@@ -1308,3 +1308,111 @@ body.tessara-app .app-shell--migration .app-sidebar {
     pointer-events: auto;
   }
 }
+
+body.tessara-app .ui-action-group {
+  margin-top: 0;
+  align-items: center;
+}
+
+body.tessara-app .ui-page-header {
+  gap: 1rem;
+}
+
+body.tessara-app .ui-page-header__copy,
+body.tessara-app .ui-panel__copy {
+  display: grid;
+  gap: 0.5rem;
+  max-width: 52rem;
+}
+
+body.tessara-app .ui-page-header__description,
+body.tessara-app .ui-panel__description,
+body.tessara-app .ui-field__helper {
+  margin: 0;
+}
+
+body.tessara-app .ui-metadata-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--tessara-border);
+  border-radius: 14px;
+  background: var(--tessara-inline-surface);
+}
+
+body.tessara-app .ui-metadata-strip__item {
+  display: grid;
+  gap: 0.2rem;
+}
+
+body.tessara-app .ui-metadata-strip__label {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--tessara-text-muted);
+}
+
+body.tessara-app .ui-metadata-strip__value {
+  font-size: 0.98rem;
+  color: var(--tessara-text);
+}
+
+body.tessara-app .ui-panel,
+body.tessara-app .ui-card__content {
+  gap: 1rem;
+}
+
+body.tessara-app .ui-field {
+  align-content: start;
+  gap: 0.5rem;
+}
+
+body.tessara-app .ui-field__label {
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+body.tessara-app .ui-field__control {
+  display: grid;
+}
+
+body.tessara-app .ui-checkbox-field {
+  margin-top: 0.45rem;
+}
+
+body.tessara-app .ui-toolbar {
+  align-items: end;
+  gap: 1rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--tessara-border);
+  border-radius: 14px;
+  background: var(--tessara-inline-surface);
+}
+
+body.tessara-app .ui-toolbar__primary {
+  flex: 1 1 24rem;
+}
+
+body.tessara-app .ui-toolbar__secondary {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex: 0 0 auto;
+}
+
+body.tessara-app .ui-toolbar .ui-field {
+  margin: 0;
+}
+
+@media (max-width: 768px) {
+  body.tessara-app .ui-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  body.tessara-app .ui-toolbar__secondary {
+    justify-content: flex-start;
+  }
+}

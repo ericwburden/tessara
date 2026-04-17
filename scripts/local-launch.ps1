@@ -66,7 +66,7 @@ function Wait-ForHttpOk {
 
 Push-Location $repoRoot
 try {
-    $downArgs = @("compose", "down", "--remove-orphans")
+    $downArgs = @("compose", "down")
     if ($FreshData) {
         $downArgs += "-v"
     }

@@ -1,5 +1,4 @@
 use leptos::prelude::*;
-use leptos_meta::{Meta, Title};
 
 #[cfg(feature = "hydrate")]
 use web_sys::window;
@@ -56,8 +55,6 @@ pub(crate) fn render_transitional_route(page: TransitionalPage) -> impl IntoView
     let html = page.body_html;
 
     view! {
-        <Title text=page.title/>
-        <Meta name="description" content=page.description/>
         <div inner_html=html></div>
     }
 }

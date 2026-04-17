@@ -13,6 +13,11 @@ pub struct FormRouteParams {
 }
 
 #[derive(Params, PartialEq, Clone, Debug)]
+pub struct WorkflowRouteParams {
+    pub workflow_id: String,
+}
+
+#[derive(Params, PartialEq, Clone, Debug)]
 pub struct SubmissionRouteParams {
     pub submission_id: String,
 }

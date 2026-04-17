@@ -20,6 +20,7 @@ use crate::{
     db::AppState,
     error::{ApiError, ApiResult},
     hierarchy::{IdResponse, parse_field_type, validate_field_value},
+    workflows,
 };
 
 #[derive(Deserialize)]
@@ -134,7 +135,7 @@ pub async fn list_response_start_options(
     headers: HeaderMap,
     Query(query): Query<ListSubmissionsQuery>,
 ) -> ApiResult<Json<ResponseStartOptions>> {
-    let account = auth::require_capability(&state.pool, &headers, "submissions:write").await?;
+    let account = auth::require_authenticated(&state.pool, &headers).await?;
 
     if account.is_admin() || account.is_operator() {
         let published_forms = if account.is_operator() {
@@ -222,46 +223,23 @@ pub async fn list_response_start_options(
         query.delegate_account_id,
     )
     .await?;
-    let assignments = sqlx::query(
-        r#"
-        SELECT
-            forms.id AS form_id,
-            forms.name AS form_name,
-            form_versions.id AS form_version_id,
-            form_versions.version_label,
-            nodes.id AS node_id,
-            nodes.name AS node_name,
-            accounts.id AS delegate_account_id,
-            accounts.display_name AS delegate_display_name
-        FROM form_assignments
-        JOIN form_versions ON form_versions.id = form_assignments.form_version_id
-        JOIN forms ON forms.id = form_versions.form_id
-        JOIN nodes ON nodes.id = form_assignments.node_id
-        LEFT JOIN accounts ON accounts.id = form_assignments.account_id
-        LEFT JOIN submissions ON submissions.assignment_id = form_assignments.id
-        WHERE form_assignments.account_id = $1
-          AND form_versions.status = 'published'::form_version_status
-          AND submissions.id IS NULL
-        ORDER BY forms.name, nodes.name, form_assignments.created_at
-        "#,
-    )
-    .bind(delegate_account_id)
-    .fetch_all(&state.pool)
-    .await?
-    .into_iter()
-    .map(|row| {
-        Ok(ResponseStartAssignment {
-            form_id: row.try_get("form_id")?,
-            form_name: row.try_get("form_name")?,
-            form_version_id: row.try_get("form_version_id")?,
-            version_label: row.try_get("version_label")?,
-            node_id: row.try_get("node_id")?,
-            node_name: row.try_get("node_name")?,
-            delegate_account_id: row.try_get("delegate_account_id")?,
-            delegate_display_name: row.try_get("delegate_display_name")?,
-        })
-    })
-    .collect::<Result<Vec<_>, sqlx::Error>>()?;
+    let assignments =
+        workflows::list_pending_assignments_for_account(&state.pool, delegate_account_id)
+            .await?
+            .into_iter()
+            .map(|item| ResponseStartAssignment {
+                form_id: item.form_id,
+                form_name: item.form_name,
+                form_version_id: item.form_version_id,
+                version_label: item
+                    .form_version_label
+                    .unwrap_or_else(|| "Published".into()),
+                node_id: item.node_id,
+                node_name: item.node_name,
+                delegate_account_id: Some(item.account_id),
+                delegate_display_name: Some(item.account_display_name),
+            })
+            .collect::<Vec<_>>();
 
     Ok(Json(ResponseStartOptions {
         mode: "assignment".into(),
@@ -276,7 +254,7 @@ pub async fn create_draft(
     headers: HeaderMap,
     Json(payload): Json<CreateDraftRequest>,
 ) -> ApiResult<Json<IdResponse>> {
-    let account = auth::require_capability(&state.pool, &headers, "submissions:write").await?;
+    let account = auth::require_authenticated(&state.pool, &headers).await?;
 
     let status: Option<String> =
         sqlx::query_scalar("SELECT status::text FROM form_versions WHERE id = $1")
@@ -286,7 +264,7 @@ pub async fn create_draft(
     ensure_form_version_accepts_submission(status.as_deref().unwrap_or_default())
         .map_err(|error| ApiError::BadRequest(error.to_string()))?;
 
-    let assignment_id: Uuid = if account.is_admin() || account.is_operator() {
+    let workflow_assignment_id: Uuid = if account.is_admin() || account.is_operator() {
         if account.is_operator() {
             let scope_ids = auth::effective_scope_node_ids(&state.pool, account.account_id).await?;
             if !scope_ids.contains(&payload.node_id) {
@@ -294,7 +272,7 @@ pub async fn create_draft(
             }
         }
 
-        sqlx::query_scalar(
+        let form_assignment_id: Uuid = sqlx::query_scalar(
             r#"
             INSERT INTO form_assignments (form_version_id, node_id, account_id)
             VALUES ($1, $2, $3)
@@ -305,7 +283,9 @@ pub async fn create_draft(
         .bind(payload.node_id)
         .bind(account.account_id)
         .fetch_one(&state.pool)
-        .await?
+        .await?;
+        workflows::ensure_workflow_assignment_for_form_assignment(&state.pool, form_assignment_id)
+            .await?
     } else {
         let delegate_account_id = auth::resolve_accessible_delegate_account_id(
             &state.pool,
@@ -316,12 +296,14 @@ pub async fn create_draft(
 
         sqlx::query_scalar(
             r#"
-            SELECT id
-            FROM form_assignments
-            WHERE form_version_id = $1
-              AND node_id = $2
-              AND account_id = $3
-            ORDER BY created_at
+            SELECT workflow_assignments.id
+            FROM workflow_assignments
+            JOIN workflow_steps ON workflow_steps.id = workflow_assignments.workflow_step_id
+            WHERE workflow_steps.form_version_id = $1
+              AND workflow_assignments.node_id = $2
+              AND workflow_assignments.account_id = $3
+              AND workflow_assignments.is_active = true
+            ORDER BY workflow_assignments.created_at
             LIMIT 1
             "#,
         )
@@ -332,27 +314,8 @@ pub async fn create_draft(
         .await?
         .ok_or_else(|| ApiError::Forbidden("submissions:write".into()))?
     };
-
-    let submission_id: Uuid = sqlx::query_scalar(
-        r#"
-        INSERT INTO submissions (assignment_id, form_version_id, node_id)
-        VALUES ($1, $2, $3)
-        RETURNING id
-        "#,
-    )
-    .bind(assignment_id)
-    .bind(payload.form_version_id)
-    .bind(payload.node_id)
-    .fetch_one(&state.pool)
-    .await?;
-
-    audit_submission(
-        &state.pool,
-        submission_id,
-        "create_draft",
-        Some(account.account_id),
-    )
-    .await?;
+    let submission_id =
+        workflows::start_workflow_assignment(&state.pool, &account, workflow_assignment_id).await?;
 
     Ok(Json(IdResponse { id: submission_id }))
 }
@@ -363,7 +326,7 @@ pub async fn list_submissions(
     headers: HeaderMap,
     Query(query): Query<ListSubmissionsQuery>,
 ) -> ApiResult<Json<Vec<SubmissionSummary>>> {
-    let account = auth::require_capability(&state.pool, &headers, "submissions:write").await?;
+    let account = auth::require_authenticated(&state.pool, &headers).await?;
     let status = parse_submission_status_filter(query.status)?;
     let search = query
         .q
@@ -496,12 +459,12 @@ pub async fn list_submissions(
                 submissions.submitted_at,
                 COUNT(submission_values.field_id) AS value_count
             FROM submissions
-            JOIN form_assignments ON form_assignments.id = submissions.assignment_id
+            JOIN workflow_assignments ON workflow_assignments.id = submissions.workflow_assignment_id
             JOIN form_versions ON form_versions.id = submissions.form_version_id
             JOIN forms ON forms.id = form_versions.form_id
             JOIN nodes ON nodes.id = submissions.node_id
             LEFT JOIN submission_values ON submission_values.submission_id = submissions.id
-            WHERE form_assignments.account_id = $1
+            WHERE workflow_assignments.account_id = $1
               AND ($2::submission_status IS NULL OR submissions.status = $2::submission_status)
               AND ($3::uuid IS NULL OR forms.id = $3)
               AND ($4::uuid IS NULL OR submissions.node_id = $4)
@@ -563,7 +526,7 @@ pub async fn get_submission(
     headers: HeaderMap,
     Path(submission_id): Path<Uuid>,
 ) -> ApiResult<Json<SubmissionDetail>> {
-    let account = auth::require_capability(&state.pool, &headers, "submissions:write").await?;
+    let account = auth::require_authenticated(&state.pool, &headers).await?;
     require_submission_access(&state.pool, &account, submission_id).await?;
 
     let row = sqlx::query(
@@ -674,7 +637,7 @@ pub async fn save_submission_values(
     Path(submission_id): Path<Uuid>,
     Json(payload): Json<SaveSubmissionValuesRequest>,
 ) -> ApiResult<Json<IdResponse>> {
-    let account = auth::require_capability(&state.pool, &headers, "submissions:write").await?;
+    let account = auth::require_authenticated(&state.pool, &headers).await?;
 
     let access = require_submission_access(&state.pool, &account, submission_id).await?;
     let form_version_id =
@@ -718,7 +681,7 @@ pub async fn submit_submission(
     headers: HeaderMap,
     Path(submission_id): Path<Uuid>,
 ) -> ApiResult<Json<IdResponse>> {
-    let account = auth::require_capability(&state.pool, &headers, "submissions:write").await?;
+    let account = auth::require_authenticated(&state.pool, &headers).await?;
 
     let access = require_submission_access(&state.pool, &account, submission_id).await?;
     let form_version_id =
@@ -749,6 +712,22 @@ pub async fn submit_submission(
     .execute(&state.pool)
     .await?;
 
+    sqlx::query(
+        r#"
+        UPDATE workflow_step_instances
+        SET status = 'completed',
+            completed_at = now()
+        WHERE id = (
+            SELECT workflow_step_instance_id
+            FROM submissions
+            WHERE id = $1
+        )
+        "#,
+    )
+    .bind(submission_id)
+    .execute(&state.pool)
+    .await?;
+
     audit_submission(
         &state.pool,
         submission_id,
@@ -766,9 +745,37 @@ pub async fn delete_draft_submission(
     headers: HeaderMap,
     Path(submission_id): Path<Uuid>,
 ) -> ApiResult<Json<IdResponse>> {
-    let account = auth::require_capability(&state.pool, &headers, "submissions:write").await?;
+    let account = auth::require_authenticated(&state.pool, &headers).await?;
     let access = require_submission_access(&state.pool, &account, submission_id).await?;
     require_draft_submission_status(submission_id, &access.status, access.form_version_id)?;
+
+    sqlx::query(
+        r#"
+        DELETE FROM workflow_step_instances
+        WHERE id = (
+            SELECT workflow_step_instance_id
+            FROM submissions
+            WHERE id = $1
+        )
+        "#,
+    )
+    .bind(submission_id)
+    .execute(&state.pool)
+    .await?;
+
+    sqlx::query(
+        r#"
+        DELETE FROM workflow_instances
+        WHERE id = (
+            SELECT workflow_instance_id
+            FROM submissions
+            WHERE id = $1
+        )
+        "#,
+    )
+    .bind(submission_id)
+    .execute(&state.pool)
+    .await?;
 
     sqlx::query("DELETE FROM submissions WHERE id = $1")
         .bind(submission_id)
@@ -808,9 +815,10 @@ async fn require_submission_access(
             submissions.form_version_id,
             submissions.node_id,
             submissions.status::text AS status,
-            form_assignments.account_id AS assignment_account_id
+            COALESCE(workflow_assignments.account_id, form_assignments.account_id) AS assignment_account_id
         FROM submissions
         JOIN form_assignments ON form_assignments.id = submissions.assignment_id
+        LEFT JOIN workflow_assignments ON workflow_assignments.id = submissions.workflow_assignment_id
         WHERE submissions.id = $1
         "#,
     )

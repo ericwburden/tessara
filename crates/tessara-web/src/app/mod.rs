@@ -1,5 +1,4 @@
 use leptos::prelude::*;
-use leptos_meta::provide_meta_context;
 use leptos_router::components::{Route, Router, Routes};
 use leptos_router::{Lazy, SsrMode, path};
 #[cfg(feature = "hydrate")]
@@ -9,16 +8,84 @@ pub(crate) mod transitional;
 
 use crate::features::{
     administration, dashboards, forms, home, migration, organization, reporting, responses,
+    workflows,
 };
 
 const PRIMARY_SSR_MODE: SsrMode = SsrMode::InOrder;
 
 #[cfg(feature = "hydrate")]
+fn install_document_navigation_fallback() {
+    use wasm_bindgen::closure::Closure;
+    use web_sys::{Element, MouseEvent, window};
+
+    let Some(document) = window().and_then(|window| window.document()) else {
+        return;
+    };
+    let Some(body) = document.body() else {
+        return;
+    };
+    if body.get_attribute("data-hybrid-shell").as_deref() != Some("true") {
+        return;
+    }
+
+    let closure = Closure::wrap(Box::new(move |event: MouseEvent| {
+        if event.default_prevented()
+            || event.button() != 0
+            || event.alt_key()
+            || event.ctrl_key()
+            || event.meta_key()
+            || event.shift_key()
+        {
+            return;
+        }
+
+        let Some(target) = event.target() else {
+            return;
+        };
+        let Ok(target) = target.dyn_into::<Element>() else {
+            return;
+        };
+        let Ok(Some(anchor)) = target.closest("a[href]") else {
+            return;
+        };
+        let Some(href) = anchor.get_attribute("href") else {
+            return;
+        };
+        if href == "#" || !(href == "/" || href.starts_with("/app")) {
+            return;
+        }
+        if anchor.has_attribute("download") {
+            return;
+        }
+        if anchor
+            .get_attribute("target")
+            .is_some_and(|target| !target.is_empty() && target != "_self")
+        {
+            return;
+        }
+
+        event.prevent_default();
+        if let Some(window) = window() {
+            let _ = window.location().set_href(&href);
+        }
+    }) as Box<dyn FnMut(_)>);
+
+    let _ = document.add_event_listener_with_callback_and_bool(
+        "click",
+        closure.as_ref().unchecked_ref(),
+        true,
+    );
+    closure.forget();
+}
+
+#[cfg(feature = "hydrate")]
 #[wasm_bindgen]
 pub fn hydrate_app(root_id: &str) {
     use leptos::mount::hydrate_from_async;
-    use wasm_bindgen_futures::spawn_local;
     use web_sys::window;
+
+    install_document_navigation_fallback();
+    let _ = any_spawner::Executor::init_wasm_bindgen();
 
     let Some(document) = window().and_then(|window| window.document()) else {
         return;
@@ -30,7 +97,7 @@ pub fn hydrate_app(root_id: &str) {
         return;
     };
 
-    spawn_local(async move {
+    leptos::task::spawn_local(async move {
         let handle = hydrate_from_async(root, App).await;
         handle.forget();
     });
@@ -38,7 +105,6 @@ pub fn hydrate_app(root_id: &str) {
 
 #[component]
 pub fn App() -> impl IntoView {
-    provide_meta_context();
     let migration_route = Lazy::<migration::MigrationLazyRoute>::new();
 
     // Route inventory note:
@@ -60,6 +126,11 @@ pub fn App() -> impl IntoView {
                 <Route path=path!("/app/forms/new") view=forms::FormCreatePage ssr=PRIMARY_SSR_MODE />
                 <Route path=path!("/app/forms/:form_id") view=forms::FormDetailPage ssr=PRIMARY_SSR_MODE />
                 <Route path=path!("/app/forms/:form_id/edit") view=forms::FormEditPage ssr=PRIMARY_SSR_MODE />
+                <Route path=path!("/app/workflows") view=workflows::WorkflowsPage ssr=PRIMARY_SSR_MODE />
+                <Route path=path!("/app/workflows/new") view=workflows::WorkflowCreatePage ssr=PRIMARY_SSR_MODE />
+                <Route path=path!("/app/workflows/assignments") view=workflows::WorkflowAssignmentsPage ssr=PRIMARY_SSR_MODE />
+                <Route path=path!("/app/workflows/:workflow_id") view=workflows::WorkflowDetailPage ssr=PRIMARY_SSR_MODE />
+                <Route path=path!("/app/workflows/:workflow_id/edit") view=workflows::WorkflowEditPage ssr=PRIMARY_SSR_MODE />
                 <Route path=path!("/app/responses") view=responses::ResponsesListPage ssr=PRIMARY_SSR_MODE />
                 <Route path=path!("/app/responses/new") view=responses::ResponseCreatePage ssr=PRIMARY_SSR_MODE />
                 <Route path=path!("/app/responses/:submission_id") view=responses::ResponseDetailPage ssr=PRIMARY_SSR_MODE />

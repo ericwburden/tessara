@@ -24,6 +24,7 @@ use crate::{
     analytics, auth,
     db::AppState,
     error::{ApiError, ApiResult},
+    workflows,
 };
 
 /// Summary returned after importing a legacy rehearsal fixture.
@@ -1286,6 +1287,7 @@ async fn ensure_submission(
     .bind(account_id)
     .fetch_one(pool)
     .await?;
+    let _ = workflows::ensure_workflow_assignment_for_form_assignment(pool, assignment_id).await?;
     let submission_id: Uuid = sqlx::query_scalar(
         r#"
         INSERT INTO submissions (assignment_id, form_version_id, node_id, status, submitted_at)

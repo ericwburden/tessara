@@ -1,5 +1,310 @@
 # Progress Report
 
+## 2026-04-17 - Sprint 2A Final Closeout Verification
+
+- Completed:
+  - reran the full Sprint 2A closeout verification sequence after the final response-queue, role-aware navigation, and delegate-context repaint fixes landed
+  - refreshed stale closeout automation to match the native SSR contract on the touched `Home`, `Forms`, `Workflows`, and `Responses` surfaces in `scripts/uat-sprint.ps1` and `scripts/smoke.ps1`
+  - updated the end-to-end suite so admin-only native-shell assertions sign in before checking admin navigation, and filtered the known benign wasm-download-abort message that occurs when Playwright replaces a page during navigation before the previous wasm stream finishes loading
+  - completed manual Sprint 2A UAT and recorded the final pass state in `docs/context/sprint-2a-manual-uat-2026-04-17.md`
+- Validation:
+  - `.\scripts\local-launch.ps1`
+  - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`
+  - `.\scripts\smoke.ps1`
+  - `C:\Users\ericw\.cargo\bin\cargo.exe check -p tessara-web --no-default-features --features hydrate`
+  - `C:\Users\ericw\.cargo\bin\cargo.exe test -p tessara-api`
+  - `C:\Users\ericw\.cargo\bin\cargo.exe test -p tessara-web`
+  - `cd end2end; node .\node_modules\@playwright\test\cli.js test`
+  - `C:\Users\ericw\.cargo\bin\cargo.exe fmt --all`
+- Notes:
+  - local Playwright execution still uses the repository Node entrypoint because `npx` is not available on this PowerShell `PATH`
+  - the Playwright console guard continues to fail on real console errors; it now ignores only the page-replacement wasm abort message that is emitted when the browser cancels a previous document load during navigation
+- Next Sprint: Sprint 2B Draft, Submit, And Review Response Slice
+
+## 2026-04-17 - Sprint 2A Workflow Assignment And Response Start Closeout
+
+- Completed:
+  - finished the Sprint 2A touched-surface migration by replacing the remaining transitional `Forms` create/edit routes with native Leptos-owned SSR pages and native hydrate-side form authoring behavior
+  - fixed true client hydration for the native shell by restoring hydration startup, configuring the wasm executor, and removing server/client DOM divergence from the shared `NativePage` shell
+  - made the touched-shell navigation, theme controls, responsive sidebar behavior, and forms/workflows/responses route flows pass native-shell browser coverage without `app-legacy.js`
+  - updated the local launch path for the installed Docker Compose CLI by removing the unsupported `down --remove-orphans` flag from `scripts/local-launch.ps1`
+  - expanded Sprint 2A browser coverage so forms authoring routes and left-nav route changes are explicitly guarded as native SSR behavior
+- Validation:
+  - `cargo fmt --all`
+  - `cargo check -p tessara-web --no-default-features --features hydrate`
+  - `cargo test -p tessara-api`
+  - `cargo test -p tessara-web`
+  - `.\scripts\local-launch.ps1`
+  - `.\scripts\smoke.ps1 -KeepServices`
+  - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`
+  - `cd end2end; node .\node_modules\@playwright\test\cli.js test`
+  - local Playwright required a portable Node runtime because `npx`/`npm` were not available on this PowerShell `PATH`; the suite itself passed unchanged
+- Next Sprint: Sprint 2B Draft, Submit, And Review Response Slice
+
+## Sprint Handoff / Demo Instructions
+
+### Native SSR Product Shell
+- Role: admin
+- Paths:
+  - `http://localhost:8080/app`
+  - `http://localhost:8080/app/forms`
+  - `http://localhost:8080/app/workflows`
+  - `http://localhost:8080/app/responses`
+- Steps:
+  1. Sign in as `admin@tessara.local`.
+  2. Open `/app` and confirm the shared shell loads without stale content or console errors.
+  3. Use the left nav to move through `Forms`, `Workflows`, and `Responses`.
+  4. Use browser back/forward once across those routes.
+- Expected:
+  - URL and visible content change together, the shell stays responsive, and touched routes no longer depend on the hybrid bridge script
+- Acceptance check:
+  - Sprint 2A touched routes behave as one native SSR shell with successful hydration rather than remount fallback
+- Evidence location:
+  - `cd end2end; node .\node_modules\@playwright\test\cli.js test`
+  - `.\scripts\local-launch.ps1`
+
+### Workflow Assignment And Start
+- Role: admin, respondent
+- Paths:
+  - `http://localhost:8080/app/workflows`
+  - `http://localhost:8080/app/workflows/assignments`
+  - `http://localhost:8080/app/responses`
+- Steps:
+  1. Sign in as `admin@tessara.local` and open `/app/workflows`.
+  2. Open a workflow, then open the shared assignment console and verify assignments exist and can be reviewed.
+  3. Sign in as `respondent@tessara.local` and open `/app/responses`.
+  4. Start pending work and confirm the item moves into the draft response flow.
+- Expected:
+  - workflow assignments are managed from the workflow/runtime UI and pending work launches the native response editor without builder tooling
+- Acceptance check:
+  - assigned users can discover and start only assignment-backed work through the intended application surfaces
+- Evidence location:
+  - `crates/tessara-api/tests/workflow_runtime.rs`
+  - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`
+
+### Forms Authoring On Native SSR
+- Role: admin
+- Paths:
+  - `http://localhost:8080/app/forms/new`
+  - `http://localhost:8080/app/forms`
+- Steps:
+  1. Open `/app/forms/new` and confirm the route loads natively with metadata controls and no bridge script.
+  2. Return to `/app/forms`, open an existing form edit route, and confirm the draft workspace loads.
+  3. Verify the page stays interactive after hydration and the shell behaves correctly on narrow widths.
+- Expected:
+  - full `/app/forms*` coverage for list, create, detail, and edit now lives on the native SSR platform
+- Acceptance check:
+  - Sprint 2A no longer leaves a touched `Forms` authoring route on the transitional shell
+- Evidence location:
+  - `cd end2end; node .\node_modules\@playwright\test\cli.js test`
+  - `cargo test -p tessara-web`
+
+### Delegate-Aware Response Queue
+- Role: delegator
+- Paths:
+  - `http://localhost:8080/app/responses`
+- Steps:
+  1. Sign in as `delegator@tessara.local`.
+  2. Open `/app/responses` and switch to delegated context.
+  3. Confirm pending, draft, and submitted work reflect the delegate view through the same native response surface.
+- Expected:
+  - delegate-context response access still works after the workflow runtime and native shell migration
+- Acceptance check:
+  - Sprint 2A runtime changes preserve delegated response work discovery and review
+- Evidence location:
+  - `cargo test -p tessara-api`
+  - `.\scripts\smoke.ps1 -KeepServices`
+
+## Acceptance Mapping
+
+- Exit condition:
+  - a tester can assign work and start the correct response flow without builder tooling, while the runtime foundation remains ready for later multi-step expansion
+- Manual demonstration:
+  - `Workflow Assignment And Start`
+  - `Delegate-Aware Response Queue`
+- Automated check:
+  - `cargo test -p tessara-api`
+  - `.\scripts\smoke.ps1 -KeepServices`
+  - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`
+
+- Exit condition:
+  - Sprint 2A-touched `Home`, `Forms`, `Workflows`, and `Responses` surfaces are off the hybrid shell and operating as native SSR routes with successful hydration
+- Manual demonstration:
+  - `Native SSR Product Shell`
+  - `Forms Authoring On Native SSR`
+- Automated check:
+  - `cargo check -p tessara-web --no-default-features --features hydrate`
+  - `cargo test -p tessara-web`
+  - `cd end2end; node .\node_modules\@playwright\test\cli.js test`
+
+## 2026-04-16 - Sprint Delivery Rule Update For Hybrid Shell Removal
+
+- Decision:
+  - every sprint must collapse the hybrid shell on any route or UI surface it touches
+  - a sprint is not complete if its touched surfaces still rely on `application.rs` HTML-string shells, `inner_html` route injection, or `app-legacy.js`
+  - the roadmap end-state now explicitly requires the hybrid shell to be completely removed rather than merely contained
+- Roadmap impact:
+  - Sprint 2A is reopened and remains in progress until the Sprint 2A-touched `Home`, `Forms`, `Workflows`, and `Responses` surfaces are fully migrated to native SSR ownership
+  - Sprint 2B stays queued behind Sprint 2A closeout rather than becoming active immediately
+- Remaining Sprint 2A closeout work under the new rule:
+  - replace the transitional `extract_app_root(...)+inner_html` pattern on touched surfaces with native Leptos-rendered layout and route components
+  - remove `app-legacy.js` dependency from the touched Sprint 2A product surfaces
+  - move touched-surface navigation to router-native SSR behavior instead of the current full-page fallback navigation
+  - extend end-to-end coverage so touched-route navigation and browser-console health are part of closeout validation
+
+## 2026-04-16 - Sprint 2A Workflow Assignment And Response Start Closeout
+
+- Completed:
+  - landed the Sprint 2A workflow runtime foundation with first-class `workflows`, `workflow_versions`, `workflow_steps`, `workflow_assignments`, `workflow_instances`, and `workflow_step_instances`
+  - linked submissions to workflow runtime records without physically renaming the existing submission storage
+  - added workflow CRUD, publish, assignment, pending-work, and response-start APIs in `crates/tessara-api/src/workflows.rs`
+  - replaced the bridge-driven Responses route behavior with native route ownership and added top-level `Workflows` product routes in `crates/tessara-web`
+  - updated form detail workflow cross-linking and workflow/runtime compatibility behavior in demo seeding and legacy import paths
+  - fixed the fresh-database migration backfill query shape in `crates/tessara-api/migrations/017_workflow_runtime.sql`
+  - fixed the hydrate-side web transport helpers and workflow-page event wiring so the `cargo-leptos` production build succeeds
+  - fixed assignment-backed response start compatibility so respondent and delegate response options still surface seeded assignment work after the workflow cutover
+- Validation:
+  - `cargo check -p tessara-web --no-default-features --features hydrate`
+  - `.\scripts\local-launch.ps1`
+  - `cargo test -p tessara-api --test demo_flow role_based_access_respects_scope_and_respondent_context -- --exact --nocapture --test-threads=1`
+  - `.\scripts\smoke.ps1 -KeepServices`
+  - `cd end2end; npx playwright test`
+  - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`
+- Roadmap position:
+  - Sprint 2A functional scope is implemented, but the sprint is reopened by the touched-surface SSR migration rule
+  - Sprint 2B is not active until Sprint 2A closes under that rule
+
+## 2026-04-15 - Sprint 2A Workflow Runtime Pickup Note
+
+- Roadmap position:
+  - Sprint 1G is complete
+  - Sprint 2A is now in progress rather than merely next
+- Completed in the interrupted Sprint 2A worktree:
+  - added workflow runtime schema, backfill migration, and workflow-aware submission linkage
+  - added workflow CRUD, publish, assignment, pending-work, and response-start API surfaces
+  - added top-level `/app/workflows*` routes and native response/workflow pages in `crates/tessara-web`
+  - updated forms detail cross-linking and smoke coverage for workflow shells and pending work
+  - fixed the fresh-database migration failure in `017_workflow_runtime.sql` so full `cargo test -p tessara-api` now passes
+- Verified so far:
+  - `cargo fmt --all`
+  - `cargo test -p tessara-api`
+  - `cargo test -p tessara-web`
+- Still open before Sprint 2A closeout:
+  - rerun `.\scripts\smoke.ps1` to completion after the new Postgres retry helper change
+  - run `.\scripts\local-launch.ps1` to a healthy seeded instance; the prior attempt was interrupted mid-execution
+  - run `cd end2end; npx playwright test` against that live local instance; root-level `npx playwright test` is not the correct invocation for this repo
+  - finish manual UAT for workflow assignment, pending work, and native response start
+- Pickup reference:
+  - `D:\Projects\tessara\docs\context\sprint-2a-workflow-runtime-pickup-2026-04-15.md`
+
+## 2026-04-15 - Roadmap Update For Multi-Step Workflows
+
+- Decision:
+  - keep Sprint 2A bounded to assignment and response-start on top of the new workflow runtime foundation
+  - add explicit roadmap coverage for multi-step workflow authoring and runtime progression instead of leaving it as an implied future enhancement
+- Completed:
+  - updated `D:\Projects\tessara\docs\roadmap.md` so Phase 2 now includes `Sprint 2C: Multi-Step Workflow Authoring And Execution`
+  - moved runtime-status and materialization work to `Sprint 2D` so multi-step workflow support is scheduled before downstream runtime-monitoring refinement
+- Roadmap impact:
+  - Sprint 2A remains the active sprint
+  - multi-step workflows are now a committed roadmap deliverable rather than a deferred note with no slot
+
+## 2026-04-15 - Sprint 1G Tessara UI Component System Foundation Closeout
+
+- Completed:
+  - restored `crates/tessara-ui` as a real workspace crate and routed shared application markup through reusable primitives for page headers, action groups, cards, panels, metadata strips, fields, and toolbars
+  - migrated the shared route scaffolding in `crates/tessara-web/src/application.rs` so home, directory, detail, and editor surfaces now share the same component layer instead of accumulating route-local markup drift
+  - moved common authoring and filter surfaces for forms, reports, dashboards, users, roles, node types, and response-start onto shared field and toolbar wrappers
+  - added `docs/style-examples/tessara-ui-primitives.md` so the `ui-guidance.md` implementation reference now exists in the repo again
+  - fixed the analytics projection in `crates/tessara-api/src/analytics.rs` so unlabeled draft form versions no longer break demo seeding or local launch
+- Validation:
+  - `cargo fmt --all`
+  - `cargo test -p tessara-ui`
+  - `cargo test -p tessara-web`
+  - `cargo test -p tessara-api`
+  - `.\scripts\smoke.ps1 -KeepServices`
+  - `.\scripts\local-launch.ps1`
+  - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`
+  - `cd end2end; npx playwright test`
+- Next Sprint: Sprint 2A Workflow Assignment And Response Start
+
+## Sprint Handoff / Demo Instructions
+
+### Shared Component Shell
+- Role: admin
+- Paths:
+  - `http://localhost:8080/app`
+  - `http://localhost:8080/app/forms`
+  - `http://localhost:8080/app/responses`
+- Steps:
+  1. Sign in as `admin@tessara.local`.
+  2. Open `/app` and confirm the header shows grouped actions plus a compact metadata strip below the page title.
+  3. Open `/app/forms` and `/app/responses`.
+  4. Confirm the route sections use the same card, panel, and action treatment rather than route-specific button and header variants.
+- Expected:
+  - shared routes present one recognizable component system with consistent headers, metadata strips, action groups, cards, and panels
+- Acceptance check:
+  - a reviewer can move between home, forms, and responses without encountering visibly different page-shell patterns for the same UI jobs
+- Evidence location:
+  - `crates/tessara-ui/src/lib.rs`
+  - `crates/tessara-web/src/application.rs`
+  - `cd end2end; npx playwright test`
+
+### Shared Authoring Controls
+- Role: admin
+- Paths:
+  - `http://localhost:8080/app/forms/new`
+  - `http://localhost:8080/app/reports/new`
+  - `http://localhost:8080/app/administration/users/new`
+  - `http://localhost:8080/app/administration/node-types/new`
+- Steps:
+  1. Open each route from the shared shell.
+  2. Confirm labels, controls, helper text, and action rows share one field-wrapper treatment.
+  3. On report, role, user-access, and node-type flows, confirm dense filter/action areas render inside compact toolbar or panel-header containers rather than ad hoc inline markup.
+- Expected:
+  - create and edit routes share a consistent field family and compact toolbar treatment that can be reused by Sprint 2A assignment and response-start work
+- Acceptance check:
+  - engineers can add another authoring or filter surface without inventing a new local markup pattern for labels, controls, or action rows
+- Evidence location:
+  - `crates/tessara-web/src/application.rs`
+  - `docs/style-examples/tessara-ui-primitives.md`
+  - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`
+
+### Role-Gated Validation
+- Role: operator
+- Paths:
+  - `http://localhost:8080/app`
+  - `http://localhost:8080/app/organization`
+  - `http://localhost:8080/app/forms`
+- Steps:
+  1. Sign in as `operator@tessara.local`.
+  2. Open the shared home, organization, and forms routes.
+  3. Confirm the shared component shell remains readable for non-admin work while administration-only node-type management stays denied by scripted validation.
+- Expected:
+  - product routes remain usable for non-admin roles while admin-only management APIs stay blocked
+- Acceptance check:
+  - the new shared component layer does not collapse role boundaries while it standardizes surface presentation
+- Evidence location:
+  - `.\scripts\smoke.ps1 -KeepServices`
+  - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`
+
+## Acceptance Mapping
+
+- Exit condition:
+  - a tester can move through the current shared application surfaces and see consistent headers, actions, cards, panels, and common control styling, and engineers can extend the same component layer for the next workflow-runtime sprint without inventing a new surface pattern each time
+- Manual demonstration:
+  - `Shared Component Shell`
+  - `Shared Authoring Controls`
+  - `Role-Gated Validation`
+- Automated check:
+  - `cargo test -p tessara-ui`
+  - `cargo test -p tessara-web`
+  - `cargo test -p tessara-api`
+  - `.\scripts\smoke.ps1 -KeepServices`
+  - `.\scripts\local-launch.ps1`
+  - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`
+  - `cd end2end; npx playwright test`
+
 ## 2026-04-15 - Tessara UI Component System Detour
 
 - Decision:

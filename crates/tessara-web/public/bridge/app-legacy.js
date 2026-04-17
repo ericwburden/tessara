@@ -433,6 +433,15 @@
       }
 
       function renderFormWorkflowAttachments(payload) {
+        const workflows = payload.workflows && payload.workflows.length
+          ? payload.workflows.map((workflow) => `
+              <li>
+                <a href="/app/workflows/${workflow.id}">${escapeHtml(workflow.name)}</a>
+                <span class="muted">${escapeHtml(workflow.current_version_label || 'No version')} | ${escapeHtml(workflow.current_status || 'draft')} | Assignments: ${escapeHtml(String(workflow.assignment_count || 0))}</span>
+                <span><a href="/app/workflows/assignments?workflowId=${workflow.id}">Assignments</a></span>
+              </li>
+            `).join('')
+          : '<li class=\"muted\">No related workflows.</li>';
         const reports = payload.reports.length
           ? payload.reports.map((report) => `<li><a href=\"/app/reports/${report.id}\">${escapeHtml(report.name)}</a></li>`).join('')
           : '<li class=\"muted\">No related reports.</li>';
@@ -441,6 +450,7 @@
           : '<li class=\"muted\">No related dataset sources.</li>';
 
         return `
+          ${detailSection('Related Workflows', `<ul class=\"app-list\">${workflows}</ul><p><a class=\"button-link\" href=\"/app/workflows/assignments?formId=${payload.id}\">Open Assignment Console</a></p>`)}
           ${detailSection('Related Reports', `<ul class=\"app-list\">${reports}</ul>`)}
           ${detailSection('Related Dataset Sources', `<ul class=\"app-list\">${datasets}</ul>`)}
         `;
