@@ -108,10 +108,10 @@ pub fn App() -> impl IntoView {
     let migration_route = Lazy::<migration::MigrationLazyRoute>::new();
 
     // Route inventory note:
-    // `/app/login`, `/app/organization/*`, and `/app/administration/*` now
-    // have explicit route ownership. Organization pages keep a native
-    // hierarchy-first UI while the broader internal administration area still
-    // uses the retained bridge controller for body-level behavior.
+    // `/app/login`, `/app/organization/*`, and `/app/administration/*` have
+    // explicit route ownership. Organization now runs through the native
+    // hierarchy-first shell while the broader internal administration area
+    // still uses the retained bridge controller for body-level behavior.
     view! {
         <Router>
             <Routes fallback=|| view! { <p>"Not found."</p> }>

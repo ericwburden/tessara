@@ -67,6 +67,10 @@ async function signInAsAdmin(page: Page) {
   await signIn(page, "admin@tessara.local", "tessara-dev-admin");
 }
 
+async function signInAsOperator(page: Page) {
+  await signIn(page, "operator@tessara.local", "tessara-dev-operator");
+}
+
 async function signInAsRespondent(page: Page) {
   await signIn(page, "respondent@tessara.local", "tessara-dev-respondent");
 }
@@ -218,6 +222,90 @@ test("forms list route stays readable and console-clean on the native shell", as
   await page.reload();
   await expect(page.getByRole("heading", { name: "Forms" }).first()).toBeVisible();
   await expectNoLegacyBridge(page);
+
+  await assertNoConsoleErrors();
+});
+
+test("organization routes stay readable and console-clean on the native shell", async ({ page }) => {
+  const assertNoConsoleErrors = attachConsoleGuard(page);
+  await signInAsAdmin(page);
+  await waitForAuthenticatedShell(page, "admin@tessara.local");
+
+  const token = await page.evaluate(() => window.sessionStorage.getItem("tessara.devToken"));
+  expect(token).toBeTruthy();
+  const nodesResponse = await page.request.get("/api/nodes", {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  expect(nodesResponse.ok()).toBeTruthy();
+  const nodes = (await nodesResponse.json()) as Array<{ id: string; name: string }>;
+  expect(nodes.length).toBeGreaterThan(0);
+  const nodeId = nodes[0]!.id;
+
+  await page.goto("/app/organization");
+  await expect(page.getByRole("heading", { name: "Organization" }).first()).toBeVisible();
+  await expect(page.locator("#organization-directory-tree")).toHaveCount(1);
+  await expect(page.locator("body")).toContainText("Hierarchy Navigator");
+  await expectNoLegacyBridge(page);
+
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Organization" }).first()).toBeVisible();
+  await expectNoLegacyBridge(page);
+
+  await page.goto("/app/organization/new");
+  await expect(page.getByRole("heading", { name: "Create Organization" }).first()).toBeVisible();
+  await expect(page.locator("#organization-form-status")).toHaveCount(1);
+  await expectNoLegacyBridge(page);
+
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Create Organization" }).first()).toBeVisible();
+  await expectNoLegacyBridge(page);
+
+  await page.goto(`/app/organization/${nodeId}`);
+  await expect(page.getByRole("heading", { name: "Organization Detail" }).first()).toBeVisible();
+  await expect(page.locator("#organization-detail-path")).toHaveCount(1);
+  await expect(page.locator("#organization-child-actions")).toHaveCount(1);
+  await expectNoLegacyBridge(page);
+
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Organization Detail" }).first()).toBeVisible();
+  await expectNoLegacyBridge(page);
+
+  await page.goto(`/app/organization/${nodeId}/edit`);
+  await expect(page.getByRole("heading", { name: "Edit Organization" }).first()).toBeVisible();
+  await expect(page.locator("#organization-form-status")).toHaveCount(1);
+  await expectNoLegacyBridge(page);
+
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Edit Organization" }).first()).toBeVisible();
+  await expectNoLegacyBridge(page);
+
+  await assertNoConsoleErrors();
+});
+
+test("organization navigator uses scope-aware labels and selection sync for scoped operators", async ({
+  page,
+}) => {
+  const assertNoConsoleErrors = attachConsoleGuard(page);
+  await signInAsOperator(page);
+  await waitForAuthenticatedShell(page, "operator@tessara.local");
+
+  await page.goto("/app/organization");
+  await expect(page.getByRole("heading", { name: "Organization" }).first()).toBeVisible();
+  await expect(page.locator("#organization-list-title")).toHaveText("Activity List");
+
+  const tree = page.locator("#organization-directory-tree");
+  await expect(tree).toContainText("Demo Activity Job Coaching");
+  await expect(tree).toContainText("Demo Program Family Outreach");
+  await expect(tree).not.toContainText("Demo Partner Community Bridge");
+
+  const firstCard = tree.locator("article.organization-disclosure-card").first();
+  const selectedName = (await firstCard.locator("h4").first().textContent())?.trim();
+  expect(selectedName).toBeTruthy();
+
+  await firstCard.locator("button[data-select-node-id]").first().click();
+  await expect(page.locator("#organization-selection-preview")).toContainText(selectedName!);
 
   await assertNoConsoleErrors();
 });

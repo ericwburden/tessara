@@ -62,19 +62,35 @@ pub fn login_application_html() -> String {
 }
 
 pub fn organization_application_shell_html() -> String {
-    application::organization_application_shell_html(app_script::APPLICATION_SCRIPT)
+    document::render_native_app_document(
+        "Tessara Organization",
+        "Tessara organization list screen.",
+        "/app/organization",
+    )
 }
 
 pub fn organization_create_application_html() -> String {
-    application::organization_create_application_html(app_script::APPLICATION_SCRIPT)
+    document::render_native_app_document(
+        "Create Organization",
+        "Create a runtime organization record.",
+        "/app/organization/new",
+    )
 }
 
 pub fn organization_detail_application_html(node_id: &str) -> String {
-    application::organization_detail_application_html(app_script::APPLICATION_SCRIPT, node_id)
+    document::render_native_app_document(
+        "Organization Detail",
+        "Organization detail screen.",
+        &format!("/app/organization/{node_id}"),
+    )
 }
 
 pub fn organization_edit_application_html(node_id: &str) -> String {
-    application::organization_edit_application_html(app_script::APPLICATION_SCRIPT, node_id)
+    document::render_native_app_document(
+        "Edit Organization",
+        "Edit a runtime organization record.",
+        &format!("/app/organization/{node_id}/edit"),
+    )
 }
 
 pub fn forms_application_shell_html() -> String {
@@ -493,17 +509,15 @@ mod tests {
         let reports = reporting_application_shell_html();
         let dashboards = dashboards_application_shell_html();
 
-        assert!(organization.contains("Organization Directory"));
-        assert!(organization.contains("Create Organization"));
+        assert!(organization.contains("Organization"));
+        assert!(organization.contains("Hierarchy Navigator"));
         assert!(organization.contains("organization-directory-tree"));
-        assert!(organization.contains("organization-skeleton-card"));
-        assert!(organization.contains("organization-toggle-button"));
-        assert!(organization.contains("organization-create-link"));
-        assert!(!organization.contains("organization-list-title"));
-        assert!(!organization.contains("organization-list-status"));
-        assert!(!organization.contains("organization-expand-all"));
-        assert!(!organization.contains("organization-collapse-all"));
-        assert!(!organization.contains("record-card"));
+        assert!(organization.contains("organization-list-title"));
+        assert!(organization.contains("organization-list-status"));
+        assert!(organization.contains("organization-selection-preview"));
+        assert!(organization.contains("Loading organization actions"));
+        assert!(!organization.contains("organization-skeleton-card"));
+        assert!(!organization.contains("organization-toggle-button"));
         assert!(!organization.contains("Node ID"));
 
         assert!(forms.contains("Forms"));
@@ -591,17 +605,19 @@ mod tests {
         assert!(response_edit.contains("Loading response form"));
         assert!(response_edit.contains("response-edit-surface"));
 
-        assert!(organization_new.contains("Submit"));
+        assert!(organization_new.contains("Create Organization"));
         assert!(organization_new.contains("Cancel"));
+        assert!(organization_new.contains("organization-form-status"));
+        assert!(organization_new.contains("organization-metadata-fields"));
         assert!(organization_detail.contains("Organization Detail"));
         assert!(organization_detail.contains("Back to List"));
         assert!(organization_detail.contains("organization-detail"));
-        assert!(organization_detail.contains("No Node ID was provided"));
         assert!(organization_detail.contains("organization-detail-path"));
         assert!(organization_detail.contains("organization-child-actions"));
-        assert!(!organization_detail.contains("Related Responses"));
-        assert!(organization_edit.contains("Submit"));
+        assert!(organization_detail.contains("organization-related"));
+        assert!(organization_edit.contains("Save Organization"));
         assert!(organization_edit.contains("Cancel"));
+        assert!(organization_edit.contains("organization-metadata-fields"));
         assert!(form_detail.contains("Form Detail"));
         assert!(response_detail.contains("Response Detail"));
         assert!(dataset_detail.contains("Dataset Detail"));
@@ -678,16 +694,22 @@ mod tests {
         let node_type_edit =
             node_type_edit_application_html("00000000-0000-0000-0000-000000000010");
 
-        assert!(organization.contains(r#"data-page-key="organization-list""#));
-        assert!(organization.contains(r#"data-active-route="organization""#));
-        assert!(organization_create.contains(r#"data-page-key="organization-create""#));
-        assert!(organization_create.contains(r#"data-active-route="organization""#));
-        assert!(organization_detail.contains(r#"data-page-key="organization-detail""#));
-        assert!(
-            organization_detail
-                .contains(r#"data-record-id="00000000-0000-0000-0000-000000000001""#)
-        );
-        assert!(organization_edit.contains(r#"data-page-key="organization-edit""#));
+        for html in [
+            organization.as_str(),
+            organization_create.as_str(),
+            organization_detail.as_str(),
+            organization_edit.as_str(),
+        ] {
+            assert!(html.contains(r#"<div id="app-root">"#));
+            assert!(html.contains(r#"import init from "/pkg/tessara-web.js";"#));
+            assert!(html.contains(r#"await init("/pkg/tessara-web.wasm");"#));
+            assert!(!html.contains(r#"/bridge/app-legacy.js"#));
+        }
+
+        assert!(organization.contains("organization-directory-tree"));
+        assert!(organization_create.contains("organization-form"));
+        assert!(organization_detail.contains("organization-detail"));
+        assert!(organization_edit.contains("organization-form"));
 
         assert!(node_types.contains(r#"data-page-key="node-type-list""#));
         assert!(node_types.contains(r#"data-active-route="administration""#));

@@ -48,12 +48,22 @@ pub struct DelegationSummary {
 }
 
 #[derive(Clone, Deserialize)]
+pub struct ScopeNodeSummary {
+    pub node_id: String,
+    pub node_name: String,
+    pub node_type_name: String,
+    pub parent_node_id: Option<String>,
+    pub parent_node_name: Option<String>,
+}
+
+#[derive(Clone, Deserialize)]
 pub struct AccountContext {
     pub account_id: String,
     pub email: String,
     pub display_name: String,
     pub ui_access_profile: UiAccessProfile,
     pub capabilities: Vec<String>,
+    pub scope_nodes: Vec<ScopeNodeSummary>,
     pub delegations: Vec<DelegationSummary>,
 }
 
@@ -129,7 +139,7 @@ pub(crate) const PRODUCT_LINKS: &[NavLinkSpec] = &[
         href: "/app/organization",
         label: "Organization",
         icon: "fa-sitemap",
-        native: false,
+        native: true,
         required_capability: Some("hierarchy:read"),
         home_description: "Browse runtime organization records and move into related forms and responses.",
         home_action_label: "Go to Organization",
@@ -790,6 +800,8 @@ fn BreadcrumbTrail(items: Vec<BreadcrumbItem>) -> impl IntoView {
 
 fn is_native_href(href: &str) -> bool {
     href == "/app"
+        || href == "/app/organization"
+        || href.starts_with("/app/organization/")
         || href == "/app/forms"
         || href.starts_with("/app/forms/")
         || href == "/app/workflows"
