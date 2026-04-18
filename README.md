@@ -82,10 +82,38 @@ Useful options:
 ```powershell
 .\scripts\local-launch.ps1 -FreshData
 .\scripts\local-launch.ps1 -FollowLogs
+.\scripts\local-launch.ps1 -SkipBuild
+.\scripts\local-launch.ps1 -SkipSeed
+.\scripts\local-launch.ps1 -ApiOnly
 ```
 
 `-FreshData` also removes the local Postgres volume before relaunching.
 `-FollowLogs` tails the Postgres and API container logs after startup.
+`-SkipBuild` reuses the current API image.
+`-SkipSeed` leaves the current local dataset untouched.
+`-ApiOnly` delegates to the fast API refresh path instead of rebuilding the full Compose stack.
+
+For the fast inner-loop Docker refresh path, use:
+
+```powershell
+.\scripts\local-refresh-api.ps1
+```
+
+That script:
+
+- keeps Postgres running
+- rebuilds only the API image unless `-SkipBuild` is supplied
+- recreates only the API container
+- waits for `/health` and `/app` to return `200`
+- reseeds demo data unless `-SkipSeed` is supplied
+
+Useful options:
+
+```powershell
+.\scripts\local-refresh-api.ps1 -SkipBuild
+.\scripts\local-refresh-api.ps1 -SkipSeed
+.\scripts\local-refresh-api.ps1 -FollowLogs
+```
 
 The API listens on:
 
@@ -115,6 +143,18 @@ Frontend development should use the cargo-leptos workflow:
 ```powershell
 cargo leptos watch --split
 ```
+
+For the fastest UI/API development loop, run Postgres in Docker and run Tessara on the host:
+
+```powershell
+docker compose up -d postgres
+Copy-Item .env.example .env
+cargo leptos watch --split
+```
+
+That host-run path avoids a Docker image rebuild for most UI and API changes. Use
+`.\scripts\local-refresh-api.ps1` when you specifically want to validate the
+containerized API image without doing a full stack reset.
 
 Release packaging for the UI/application binary path:
 
@@ -153,6 +193,9 @@ assert generated boilerplate.
 The default smoke script uses Docker for Postgres and runs the API locally with
 `cargo run`. Use `.\scripts\smoke.ps1 -ComposeApi` to validate the fully
 containerized Compose deployment path, including the API image.
+
+See [docs/development-workflow.md](./docs/development-workflow.md) for the
+recommended fast/medium/slow development loops.
 
 The legacy import rehearsal script validates and dry-runs
 `fixtures/legacy-rehearsal.json`, starts Docker Postgres, imports the fixture

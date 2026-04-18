@@ -1,10 +1,8 @@
 [CmdletBinding()]
 param(
-    [switch]$FreshData,
-    [switch]$FollowLogs,
-    [switch]$ApiOnly,
     [switch]$SkipBuild,
-    [switch]$SkipSeed
+    [switch]$SkipSeed,
+    [switch]$FollowLogs
 )
 
 Set-StrictMode -Version Latest
@@ -13,7 +11,6 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $composeFile = Join-Path $repoRoot "docker-compose.yml"
 $seedScript = Join-Path $PSScriptRoot "seed-demo-data.ps1"
-$refreshScript = Join-Path $PSScriptRoot "local-refresh-api.ps1"
 
 if (-not (Test-Path $composeFile)) {
     throw "Could not find docker-compose.yml at $composeFile"
@@ -21,14 +18,6 @@ if (-not (Test-Path $composeFile)) {
 
 if (-not (Test-Path $seedScript)) {
     throw "Could not find seed helper at $seedScript"
-}
-
-if (-not (Test-Path $refreshScript)) {
-    throw "Could not find API refresh helper at $refreshScript"
-}
-
-if ($FreshData -and $ApiOnly) {
-    throw "-FreshData and -ApiOnly cannot be used together. Use .\\scripts\\local-refresh-api.ps1 for API-only refreshes."
 }
 
 function Invoke-CheckedStep {
@@ -78,29 +67,8 @@ function Wait-ForHttpOk {
 
 Push-Location $repoRoot
 try {
-    if ($ApiOnly) {
-        $refreshArgs = @{}
-        if ($SkipBuild) {
-            $refreshArgs.SkipBuild = $true
-        }
-        if ($SkipSeed) {
-            $refreshArgs.SkipSeed = $true
-        }
-        if ($FollowLogs) {
-            $refreshArgs.FollowLogs = $true
-        }
-
-        & $refreshScript @refreshArgs
-        return
-    }
-
-    $downArgs = @("compose", "down")
-    if ($FreshData) {
-        $downArgs += "-v"
-    }
-
-    Invoke-CheckedStep -Label "Stopping existing Compose stack" -Command {
-        docker @downArgs
+    Invoke-CheckedStep -Label "Ensuring Postgres is running" -Command {
+        docker compose up -d postgres
     }
 
     if (-not $SkipBuild) {
@@ -111,8 +79,8 @@ try {
         Write-Host "`n==> Reusing existing API image" -ForegroundColor Cyan
     }
 
-    Invoke-CheckedStep -Label "Starting refreshed Compose stack" -Command {
-        docker compose up -d --force-recreate
+    Invoke-CheckedStep -Label "Refreshing API container" -Command {
+        docker compose up -d --no-deps --force-recreate api
     }
 
     Wait-ForHttpOk -Uri "http://127.0.0.1:8080/health"
@@ -126,22 +94,11 @@ try {
         Write-Host "`n==> Skipping demo seed" -ForegroundColor Cyan
     }
 
-    Write-Host "`nTessara is ready." -ForegroundColor Green
+    Write-Host "`nFast API refresh complete." -ForegroundColor Green
     Write-Host "Application shell: http://localhost:8080/app"
     Write-Host "Administration:   http://localhost:8080/app/administration"
     Write-Host "Reports:          http://localhost:8080/app/reports"
     Write-Host "Migration:        http://localhost:8080/app/migration"
-    Write-Host ""
-    Write-Host "Demo accounts:" -ForegroundColor Green
-    Write-Host "  admin@tessara.local       / tessara-dev-admin"
-    Write-Host "  operator@tessara.local    / tessara-dev-operator"
-    Write-Host "  delegator@tessara.local   / tessara-dev-delegator"
-    Write-Host "  respondent@tessara.local  / tessara-dev-respondent"
-    Write-Host "  delegate@tessara.local    / tessara-dev-delegate"
-    if ($FreshData) {
-        Write-Host ""
-        Write-Host "Postgres volume was refreshed because -FreshData was supplied." -ForegroundColor Yellow
-    }
     if ($SkipBuild) {
         Write-Host "API image rebuild was skipped because -SkipBuild was supplied." -ForegroundColor Yellow
     }
@@ -150,8 +107,8 @@ try {
     }
 
     if ($FollowLogs) {
-        Write-Host "`nFollowing Compose logs. Press Ctrl+C to stop log streaming." -ForegroundColor Cyan
-        docker compose logs -f postgres api
+        Write-Host "`nFollowing API logs. Press Ctrl+C to stop log streaming." -ForegroundColor Cyan
+        docker compose logs -f api
     }
 } finally {
     Pop-Location

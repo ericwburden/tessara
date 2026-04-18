@@ -9,6 +9,7 @@ This `/docs` folder is the authoritative source for Tessara's active roadmap, re
 | [roadmap.md](./roadmap.md) | Current implementation baseline and forward-looking delivery plan |
 | [requirements.md](./requirements.md) | Product and system requirements |
 | [architecture.md](./architecture.md) | Target architecture, transition model, and technical design direction |
+| [development-workflow.md](./development-workflow.md) | Local development loops for fast host-run iteration, API-only refresh, and full-stack relaunch |
 | [ui-guidance.md](./ui-guidance.md) | Canonical UI guidance for naming, shell behavior, rendering, layout, components, states, and transitional UI rules |
 | [brand-design.md](./brand-design.md) | Secondary brand background and asset reference for Tessara identity materials |
 | [ui-direction.md](./ui-direction.md) | Compatibility pointer to the canonical UI guidance |
