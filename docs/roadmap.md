@@ -1,6 +1,6 @@
 # Tessara Roadmap
 
-This roadmap is authoritative as of April 15, 2026. It starts from the current implemented baseline, identifies the transition from the current reporting stack to the re-aligned target model, and defines future delivery as explicit vertical-slice sprints.
+This roadmap is authoritative as of April 17, 2026. It starts from the current implemented baseline, identifies the transition from the current reporting stack to the re-aligned target model, and defines future delivery as explicit vertical-slice sprints.
 
 ## Delivery Rule
 
@@ -22,6 +22,15 @@ Every future sprint is a full vertical slice.
   - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`
 - Confirm the UAT script output includes current route ownership and role-gated behavior before closing the sprint.
 - Confirm every route surface touched in the sprint runs through native SSR ownership rather than the retained hybrid shell before closing the sprint.
+- Confirm route ownership, hydration, and browser-console cleanliness for every touched route before closing the sprint.
+
+## Cross-Cutting Delivery Constraints
+
+- No new user-facing behavior may be added through `application.rs`, `inner_html` injection, `/bridge/*`, or any retained legacy bridge asset unless that behavior is a temporary compatibility shim scheduled for deletion in the same sprint.
+- Any sprint that touches `auth`, `hierarchy`, `forms`, `workflows`, `submissions`, or `reporting` must move touched backend behavior toward bounded-context structure with explicit `router`, `handlers`, `service`, `repo`, and `dto` boundaries rather than expanding large vertical files.
+- Browser authentication for `/app` routes must use a server-managed session contract. JavaScript-managed bearer tokens may remain only for explicit CLI, script, or testing flows.
+- Client-visible error payloads must use stable application codes and messages. Raw database and internal error strings must not be exposed to end users.
+- Every sprint close must verify route ownership, hydration, and browser-console cleanliness for touched routes in addition to the existing UAT script.
 
 ## Current State Of Development
 
@@ -333,7 +342,51 @@ Before deeper application-surface replacement continues, the frontend platform s
 
 **User-testable exit condition:** a tester can assign work and start the correct response flow without builder tooling, while the runtime foundation remains ready for later multi-step expansion.
 
-### Sprint 2B: Draft, Submit, And Review Response Slice (Next)
+### Sprint 2B: Authentication Hardening And Settled-Surface Native SSR Slice (Next)
+
+**Outcome:** authentication and session behavior are safe enough for broader internal testing, and the most settled product routes no longer depend on the hybrid shell.
+
+**Build:**
+
+- replace plaintext password comparison with Argon2id password-hash verification
+- add password-hash migration and backfill for seeded and demo accounts plus user create and edit flows
+- add session expiry, revocation, last-seen tracking, and logout invalidation semantics
+- move browser `/app` authentication to a same-origin `HttpOnly` cookie session contract while keeping bearer tokens only for explicit scripted access
+- introduce a central authenticated-account extractor and request-context boundary instead of ad hoc header parsing in handlers
+- replace raw internal and database error exposure with stable auth and session error responses plus traceable server logs
+- migrate these settled routes off the hybrid shell and onto native SSR ownership: `/app/login`, `/app`, `/app/organization*`, `/app/forms*`
+- remove shipped demo passwords from the public login surface while keeping local-development guidance in docs or internal-only tooling
+- stop adding inline action handlers for newly migrated shared UI surfaces
+
+**Application UI delivered this sprint:**
+
+- native SSR login, home, organization, and forms surfaces with successful hydration and no bridge dependency
+- stable sign-in, sign-out, and reload behavior through the intended application shell
+
+**User-testable exit condition:** a tester can sign in, refresh, browse Organization and Forms, create or edit a form, publish a version, and sign out through native SSR-owned routes without touching the retained hybrid shell.
+
+### Sprint 2C: Workflow/Response Route Ownership And Backend Decomposition Slice
+
+**Outcome:** workflow and response-entry surfaces join the native SSR application, and the backend is reorganized enough that later workflow and response work no longer compounds the god-file pattern.
+
+**Build:**
+
+- migrate these settled and touched routes off the hybrid shell and onto native SSR ownership: `/app/workflows*`, `/app/responses`, response-start and resume entry surfaces, and any touched administration landing surfaces that link into them
+- keep `/app/admin` as explicitly legacy-only for now, but forbid new product behavior from landing there
+- decompose touched backend slices into bounded-context modules, starting with `auth`, `hierarchy`, `forms`, `workflows`, and `submissions`
+- keep `tessara-api::lib` as router, middleware, and state composition only; no new workflow or business orchestration should land there
+- move transport decoding and response shaping into handlers, orchestration into services, and SQL into repositories for touched slices
+- add targeted integration suites for auth and session behavior, role and capability boundaries, form publish safeguards, workflow assignment, and response-start flows
+- tighten shared UI primitives used by migrated routes so new SSR surfaces stop depending on raw inline `onclick` strings
+
+**Application UI delivered this sprint:**
+
+- workflow browse, detail, and assignment surfaces plus response-start and resume entry flows under native SSR ownership
+- a coherently native settled product shell across Home, Organization, Forms, Workflows, and response entry even while deeper response editing and review work remains for the next sprint
+
+**User-testable exit condition:** a tester can browse workflows, assign work, start or resume the correct response entry flow, and move through the settled product routes without falling back to the retained hybrid shell.
+
+### Sprint 2D: Draft, Submit, And Review Response Slice
 
 **Outcome:** the end-user response lifecycle is coherent and complete.
 
@@ -342,6 +395,9 @@ Before deeper application-surface replacement continues, the frontend platform s
 - pending, draft, submitted, and read-only review flows
 - strict submit behavior
 - canonical response persistence surfaced through application flows
+- response edit, save, submit, and review routes delivered as native SSR from first delivery with no new bridge fallback
+- touched `submissions` and workflow-runtime code continuing the `handler`, `service`, and `repo` split introduced in Sprint 2C
+- browser response lifecycle flows supported only through the settled auth and session contract delivered in Sprint 2B
 
 **Application UI delivered this sprint:**
 
@@ -349,7 +405,7 @@ Before deeper application-surface replacement continues, the frontend platform s
 
 **User-testable exit condition:** a tester can save draft, resume, submit, and review responses through the application UI.
 
-### Sprint 2C: Multi-Step Workflow Authoring And Execution
+### Sprint 2E: Multi-Step Workflow Authoring And Execution
 
 **Outcome:** workflows are no longer limited to a single response step, and runtime execution can advance across explicit step definitions.
 
@@ -360,6 +416,9 @@ Before deeper application-surface replacement continues, the frontend platform s
 - assignment support for step-specific work rather than only workflow-level single-step work
 - response handoff behavior between steps, including completion of one step and activation of the next
 - publish-time validation that multi-step workflow versions are structurally complete
+- multi-step runtime work extending the decomposed workflow and runtime service layer rather than adding new orchestration to giant route modules
+- typed workflow step and runtime states where touched, avoiding fresh stringly-typed state expansion
+- touched workflow screens remaining native SSR and not reintroducing bridge-owned state management
 
 **Application UI delivered this sprint:**
 
@@ -368,7 +427,7 @@ Before deeper application-surface replacement continues, the frontend platform s
 
 **User-testable exit condition:** a tester can create a workflow with more than one step, assign and start it, complete the first step, and observe the next step become the active work item through the application UI.
 
-### Sprint 2D: Runtime Status And Materialization Slice
+### Sprint 2F: Runtime Status And Materialization Slice
 
 **Outcome:** runtime execution and materialization readiness are visible and usable.
 
@@ -377,10 +436,14 @@ Before deeper application-surface replacement continues, the frontend platform s
 - workflow/runtime status visibility
 - materialization readiness and refresh status
 - operator-facing monitoring screens
+- CI enforcement for documented checks including `fmt`, `check`, wasm hydrate check, `test`, `clippy`, smoke, and legacy import rehearsal
+- maintenance, import, and demo commands split away from HTTP startup so server startup and operational tooling are no longer conflated
+- workflow-aware tracing and stable operator-facing error and reporting behavior
+- hydration and browser-console cleanliness verified during UAT closeout for touched runtime and materialization routes
 
 **Application UI delivered this sprint:**
 
-- coherent internal runtime/materialization surfaces that do not disrupt the main user shell
+- coherent internal runtime and materialization surfaces that do not disrupt the main user shell
 
 **User-testable exit condition:** operators can inspect runtime and readiness through the app while end-user flows remain working.
 
@@ -395,6 +458,9 @@ Before deeper application-surface replacement continues, the frontend platform s
 - dataset directory/detail/create/edit flows
 - source composition, row filters, calculated fields, and previews
 - clearer separation between authoring and viewing surfaces
+- dataset and reporting work following bounded-context backend structure on touch
+- query planning and execution concerns moving behind clearer dataset and reporting service boundaries
+- pagination, limits, and guardrails added to dataset and reporting list and execution surfaces where touched
 
 **Application UI delivered this sprint:**
 
@@ -412,6 +478,8 @@ Before deeper application-surface replacement continues, the frontend platform s
 - compatibility findings
 - carry-forward behavior
 - dependency visibility
+- revision, compatibility, and dependency states normalized into typed values rather than expanded raw string comparisons
+- dependency and compatibility results surfaced through typed contracts that later component and dashboard work can consume directly
 
 **Application UI delivered this sprint:**
 
@@ -430,6 +498,8 @@ Before deeper application-surface replacement continues, the frontend platform s
 - `DetailTable` and `AggregateTable` authoring
 - component versioning and publication
 - validation and dataset-revision binding behavior
+- legacy `Report`, `Aggregation`, and `Chart` concepts retained only as adapters; no new core behavior may deepen them
+- touched reporting and component routes continuing hybrid-shell removal rather than creating a second long-lived bridge
 
 **Application UI delivered this sprint:**
 
@@ -446,6 +516,8 @@ Before deeper application-surface replacement continues, the frontend platform s
 
 - `Bar`, `Line`, `Pie/Donut`, and `StatCard` authoring
 - component-specific validation and viewing behavior
+- visual component authoring and viewing built directly on `ComponentVersion` and typed validation state
+- any retained legacy chart behavior kept explicitly compatibility-only
 
 **Application UI delivered this sprint:**
 
@@ -464,6 +536,8 @@ Before deeper application-surface replacement continues, the frontend platform s
 - dashboard directory/detail/create/edit/view flows
 - component placement and composition
 - clearer product-facing dashboard viewers
+- dashboard composition depending on `ComponentVersion`, not legacy report or chart nouns
+- touched dashboard routes remaining native SSR and not reviving product-facing bridge logic
 
 **Application UI delivered this sprint:**
 
@@ -481,6 +555,8 @@ Before deeper application-surface replacement continues, the frontend platform s
 - warning/blocking findings
 - carry-forward and rebinding flows
 - publication guards for incompatible changes
+- stale dependency, carry-forward, and rebinding flows operating on typed dataset, component, and dashboard relationships
+- publication guards consuming the typed compatibility and dependency outputs introduced in Sprint 3B
 
 **Application UI delivered this sprint:**
 
@@ -499,6 +575,8 @@ Before deeper application-surface replacement continues, the frontend platform s
 - mapping docs and verification flows aligned to the new model
 - migration UI references into canonical product/detail screens
 - updated operator verification paths
+- an explicit inventory of all remaining hybrid-shell and legacy-builder surfaces plus a deletion plan for each
+- migration and operator screens pointing to canonical native application routes wherever replacements exist
 
 **Application UI delivered this sprint:**
 
@@ -517,6 +595,9 @@ Before deeper application-surface replacement continues, the frontend platform s
 - permission hardening
 - performance cleanup
 - explicit unsupported-v1 documentation
+- close the roadmap only when the hybrid shell is fully gone from primary application routes
+- complete a final permission and session audit, stable error-envelope cleanup, and performance hardening
+- verify that no remaining primary route depends on `application.rs`, `/bridge/*`, or retained legacy bridge assets
 
 **Application UI delivered this sprint:**
 
