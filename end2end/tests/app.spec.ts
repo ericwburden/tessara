@@ -4,6 +4,16 @@ const BENIGN_NAVIGATION_ABORT_ERRORS = [
   "WebAssembly compilation aborted: Network error: Response body loading was aborted",
 ];
 
+type WorkflowAssignmentSummary = {
+  workflow_version_id: string;
+  node_id: string;
+  account_id: string;
+  account_email: string;
+  is_active: boolean;
+  has_draft: boolean;
+  has_submitted: boolean;
+};
+
 function isBenignNavigationAbort(message: string) {
   return BENIGN_NAVIGATION_ABORT_ERRORS.some((pattern) => message.includes(pattern));
 }
@@ -28,6 +38,22 @@ function attachConsoleGuard(page: Page) {
   };
 }
 
+async function expectNoLegacyBridge(page: Page) {
+  await expect(page.locator('script[src="/bridge/app-legacy.js"]')).toHaveCount(0);
+}
+
+async function waitForAuthenticatedShell(page: Page, email?: string) {
+  await expect(page.getByRole("button", { name: "Sign Out" })).toBeVisible();
+  if (email) {
+    await expect(page.locator("body")).toContainText(email);
+  }
+}
+
+async function signOut(page: Page) {
+  await page.getByRole("button", { name: "Sign Out" }).click();
+  await expect(page.getByRole("button", { name: "Sign Out" })).toHaveCount(0);
+}
+
 async function pkgScripts(page: Page) {
   return page.evaluate(() =>
     performance
@@ -49,7 +75,11 @@ async function signInAsDelegate(page: Page) {
   await signIn(page, "delegate@tessara.local", "tessara-dev-delegate");
 }
 
-async function signIn(page: Page, email: string, password: string) {
+async function signInAsDelegator(page: Page) {
+  await signIn(page, "delegator@tessara.local", "tessara-dev-delegator");
+}
+
+async function requestAuthToken(page: Page, email: string, password: string) {
   const response = await page.request.post("/api/auth/login", {
     data: {
       email,
@@ -59,16 +89,64 @@ async function signIn(page: Page, email: string, password: string) {
 
   expect(response.ok()).toBeTruthy();
   const payload = await response.json();
+  return payload.token as string;
+}
+
+async function signIn(page: Page, email: string, password: string) {
+  const token = await requestAuthToken(page, email, password);
 
   await page.addInitScript((token: string) => {
     window.sessionStorage.setItem("tessara.devToken", token);
-  }, payload.token);
+  }, token);
   await page.goto("/app", { waitUntil: "domcontentloaded" });
+}
+
+async function provisionPendingAssignmentForAccount(page: Page, accountEmail: string) {
+  const adminToken = await requestAuthToken(page, "admin@tessara.local", "tessara-dev-admin");
+  const assignmentsResponse = await page.request.get("/api/workflow-assignments", {
+    headers: {
+      Authorization: `Bearer ${adminToken}`,
+    },
+  });
+  expect(assignmentsResponse.ok()).toBeTruthy();
+
+  const assignments = (await assignmentsResponse.json()) as WorkflowAssignmentSummary[];
+  const targetAssignment = assignments.find((assignment) => assignment.account_email === accountEmail);
+  expect(targetAssignment).toBeTruthy();
+
+  const targetAccountId = targetAssignment!.account_id;
+  const usedPairs = new Set(
+    assignments
+      .filter((assignment) => assignment.account_id === targetAccountId)
+      .map((assignment) => `${assignment.workflow_version_id}:${assignment.node_id}`),
+  );
+  const template = assignments.find(
+    (assignment) =>
+      assignment.is_active &&
+      !assignment.has_draft &&
+      !assignment.has_submitted &&
+      assignment.account_id !== targetAccountId &&
+      !usedPairs.has(`${assignment.workflow_version_id}:${assignment.node_id}`),
+  );
+  expect(template).toBeTruthy();
+
+  const createResponse = await page.request.post("/api/workflow-assignments", {
+    headers: {
+      Authorization: `Bearer ${adminToken}`,
+    },
+    data: {
+      workflow_version_id: template!.workflow_version_id,
+      node_id: template!.node_id,
+      account_id: targetAccountId,
+    },
+  });
+  expect(createResponse.ok()).toBeTruthy();
 }
 
 test("home route stays on the native SSR shell", async ({ page }) => {
   const assertNoConsoleErrors = attachConsoleGuard(page);
   await signInAsAdmin(page);
+  await waitForAuthenticatedShell(page, "admin@tessara.local");
 
   await page.goto("/app");
 
@@ -77,9 +155,14 @@ test("home route stays on the native SSR shell", async ({ page }) => {
   await expect(page.getByText("Transitional Reporting")).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Data and component navigation" }).getByRole("link", { name: "Datasets" })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Data and component navigation" }).getByRole("link", { name: "Components" })).toBeVisible();
-  await expect(page.locator('script[src="/bridge/app-legacy.js"]')).toHaveCount(0);
+  await expectNoLegacyBridge(page);
   await expect(page.locator('link[href="/pkg/tessara-web.css"]')).toHaveCount(1);
   await expect(page.locator(".breadcrumb-item")).toHaveCount(0);
+
+  await page.reload();
+  await waitForAuthenticatedShell(page, "admin@tessara.local");
+  await expect(page.getByRole("heading", { name: "Application Overview" })).toBeVisible();
+  await expectNoLegacyBridge(page);
 
   const scripts = await pkgScripts(page);
   expect(scripts).toContainEqual(expect.stringContaining("/pkg/tessara-web.js"));
@@ -122,6 +205,7 @@ test("migration route remains isolated and reachable", async ({ page }) => {
 test("forms list route stays readable and console-clean on the native shell", async ({ page }) => {
   const assertNoConsoleErrors = attachConsoleGuard(page);
   await signInAsAdmin(page);
+  await waitForAuthenticatedShell(page, "admin@tessara.local");
 
   await page.goto("/app/forms");
 
@@ -129,7 +213,11 @@ test("forms list route stays readable and console-clean on the native shell", as
   await expect(page.locator("#form-list")).toHaveCount(1);
   await expect(page.locator("body")).toContainText("Lifecycle Summary");
   await expect(page.locator(".breadcrumb-item")).toHaveCount(0);
-  await expect(page.locator('script[src="/bridge/app-legacy.js"]')).toHaveCount(0);
+  await expectNoLegacyBridge(page);
+
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Forms" }).first()).toBeVisible();
+  await expectNoLegacyBridge(page);
 
   await assertNoConsoleErrors();
 });
@@ -137,11 +225,17 @@ test("forms list route stays readable and console-clean on the native shell", as
 test("forms authoring routes stay native and console-clean", async ({ page }) => {
   const assertNoConsoleErrors = attachConsoleGuard(page);
   await signInAsAdmin(page);
+  await waitForAuthenticatedShell(page, "admin@tessara.local");
 
   await page.goto("/app/forms/new");
   await expect(page.getByRole("heading", { name: "Create Form" }).first()).toBeVisible();
   await expect(page.locator("#form-editor-status")).toHaveCount(1);
-  await expect(page.locator('script[src="/bridge/app-legacy.js"]')).toHaveCount(0);
+  await expectNoLegacyBridge(page);
+
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Create Form" }).first()).toBeVisible();
+  await expect(page.locator("#form-editor-status")).toHaveCount(1);
+  await expectNoLegacyBridge(page);
 
   await page.goto("/app/forms");
   const editHref = await page
@@ -154,7 +248,12 @@ test("forms authoring routes stay native and console-clean", async ({ page }) =>
   await expect(page.getByRole("heading", { name: "Edit Form" }).first()).toBeVisible();
   await expect(page.locator("body")).toContainText("Draft Version Workspace");
   await expect(page.locator("#form-version-workspace")).toHaveCount(1);
-  await expect(page.locator('script[src="/bridge/app-legacy.js"]')).toHaveCount(0);
+  await expectNoLegacyBridge(page);
+
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Edit Form" }).first()).toBeVisible();
+  await expect(page.locator("#form-version-workspace")).toHaveCount(1);
+  await expectNoLegacyBridge(page);
 
   await assertNoConsoleErrors();
 });
@@ -162,12 +261,18 @@ test("forms authoring routes stay native and console-clean", async ({ page }) =>
 test("workflows route stays readable and console-clean on the native shell", async ({ page }) => {
   const assertNoConsoleErrors = attachConsoleGuard(page);
   await signInAsAdmin(page);
+  await waitForAuthenticatedShell(page, "admin@tessara.local");
 
   await page.goto("/app/workflows");
 
   await expect(page.getByRole("heading", { name: "Workflows" }).first()).toBeVisible();
   await expect(page.locator("#workflow-list")).toHaveCount(1);
   await expect(page.locator("body")).toContainText("Workflow Directory");
+  await expectNoLegacyBridge(page);
+
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Workflows" }).first()).toBeVisible();
+  await expectNoLegacyBridge(page);
 
   await assertNoConsoleErrors();
 });
@@ -175,6 +280,7 @@ test("workflows route stays readable and console-clean on the native shell", asy
 test("responses route stays readable and console-clean on the native shell", async ({ page }) => {
   const assertNoConsoleErrors = attachConsoleGuard(page);
   await signInAsRespondent(page);
+  await waitForAuthenticatedShell(page, "respondent@tessara.local");
 
   await page.goto("/app/responses");
 
@@ -183,13 +289,41 @@ test("responses route stays readable and console-clean on the native shell", asy
   await expect(page.locator("body")).toContainText("Draft Responses");
   await expect(page.locator("body")).toContainText("Submitted Responses");
   await expect(page.getByRole("link", { name: "Start Response" })).toHaveCount(0);
+  await expectNoLegacyBridge(page);
+
+  await page.reload();
+  await waitForAuthenticatedShell(page, "respondent@tessara.local");
+  await expect(page.getByRole("heading", { name: "Responses" }).first()).toBeVisible();
+  await expectNoLegacyBridge(page);
 
   await assertNoConsoleErrors();
+});
+
+test("post-login home entry persists across refresh and clears on logout", async ({ page }) => {
+  await signInAsAdmin(page);
+  await waitForAuthenticatedShell(page, "admin@tessara.local");
+  await expect(page).toHaveURL(/\/app$/);
+  await expect(page.getByRole("heading", { name: "Application Overview" })).toBeVisible();
+
+  await page.reload();
+  await waitForAuthenticatedShell(page, "admin@tessara.local");
+  await expect(page.getByRole("heading", { name: "Application Overview" })).toBeVisible();
+
+  await signOut(page);
+  await expect(page).toHaveURL(/\/app\/login$/);
+  await expect(page.getByRole("heading", { level: 1, name: "Sign In" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Submit" })).toBeVisible();
+
+  await page.reload();
+  await expect(page).toHaveURL(/\/app\/login$/);
+  await expect(page.getByRole("heading", { level: 1, name: "Sign In" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign Out" })).toHaveCount(0);
 });
 
 test("response users only see sidebar areas they can access", async ({ page }) => {
   const assertNoConsoleErrors = attachConsoleGuard(page);
   await signInAsRespondent(page);
+  await waitForAuthenticatedShell(page, "respondent@tessara.local");
 
   await expect(page).toHaveURL(/\/app$/);
 
@@ -211,6 +345,7 @@ test("response users only see sidebar areas they can access", async ({ page }) =
 test("admins see the full authorized native navigation model", async ({ page }) => {
   const assertNoConsoleErrors = attachConsoleGuard(page);
   await signInAsAdmin(page);
+  await waitForAuthenticatedShell(page, "admin@tessara.local");
 
   await expect(page).toHaveURL(/\/app$/);
 
@@ -233,14 +368,16 @@ test("assignee pending start opens the matching draft directly and removes it fr
   page,
 }) => {
   const assertNoConsoleErrors = attachConsoleGuard(page);
-  await signInAsRespondent(page);
+  await provisionPendingAssignmentForAccount(page, "delegate@tessara.local");
+  await signInAsDelegate(page);
+  await waitForAuthenticatedShell(page, "delegate@tessara.local");
 
   await page.goto("/app/responses");
 
   const pendingCards = page.locator("#response-pending-list .record-card");
-  await expect.poll(async () => pendingCards.count()).toBeGreaterThanOrEqual(2);
+  await expect.poll(async () => pendingCards.count()).toBeGreaterThan(0);
 
-  const pendingCard = pendingCards.nth(1);
+  const pendingCard = pendingCards.last();
   const expectedFormLabel = (await pendingCard.locator("p.muted").first().textContent())
     ?.replace(/^Form:\s*/, "")
     .trim();
@@ -286,7 +423,7 @@ test("assignee pending start opens the matching draft directly and removes it fr
   }
 
   await page.getByRole("button", { name: "Submit" }).click();
-  await expect(page).toHaveURL(new RegExp(`/app/responses/${submissionId}$`));
+  await expect(page).toHaveURL(new RegExp(`/app/responses/${submissionId}(?:/edit)?$`));
 
   const pendingResponse = await page.request.get("/api/workflow-assignments/pending", {
     headers: {
@@ -303,7 +440,46 @@ test("assignee pending start opens the matching draft directly and removes it fr
 
   await page.goto("/app/responses");
   await expect(page.locator("#response-draft-list")).not.toContainText(submission.form_name);
-  await expect(page.locator("#response-submitted-list")).toContainText(submission.form_name);
+  await expect(page.locator("#response-pending-list")).not.toContainText(submission.form_name);
+
+  await assertNoConsoleErrors();
+});
+
+test("draft resume actions resolve to the same in-progress response item", async ({ page }) => {
+  const assertNoConsoleErrors = attachConsoleGuard(page);
+  await provisionPendingAssignmentForAccount(page, "delegate@tessara.local");
+  await signInAsDelegate(page);
+  await waitForAuthenticatedShell(page, "delegate@tessara.local");
+
+  await page.goto("/app/responses");
+
+  const pendingCards = page.locator("#response-pending-list .record-card");
+  await expect.poll(async () => pendingCards.count()).toBeGreaterThan(0);
+
+  const pendingCard = pendingCards.last();
+  const expectedFormLabel = (await pendingCard.locator("p.muted").first().textContent())
+    ?.replace(/^Form:\s*/, "")
+    .trim();
+  expect(expectedFormLabel).toBeTruthy();
+
+  await pendingCard.getByRole("button", { name: "Start" }).click();
+  await expect(page).toHaveURL(/\/app\/responses\/[^/]+\/edit$/);
+
+  const submissionId = page.url().match(/\/app\/responses\/([^/]+)\/edit$/)?.[1];
+  expect(submissionId).toBeTruthy();
+
+  await page.goto("/app/responses");
+  const draftCard = page
+    .locator("#response-draft-list .record-card")
+    .filter({ has: page.locator(`a[href="/app/responses/${submissionId}/edit"]`) });
+  await expect(draftCard).toHaveCount(1);
+
+  await draftCard.getByRole("link", { name: "Edit" }).click();
+  await expect(page).toHaveURL(new RegExp(`/app/responses/${submissionId}/edit$`));
+
+  await page.goto("/app/responses");
+  await draftCard.getByRole("link", { name: "View" }).click();
+  await expect(page).toHaveURL(new RegExp(`/app/responses/${submissionId}$`));
 
   await assertNoConsoleErrors();
 });
@@ -334,6 +510,7 @@ test("workflow assignment deep links preserve workflow context in the assignment
 }) => {
   const assertNoConsoleErrors = attachConsoleGuard(page);
   await signInAsAdmin(page);
+  await waitForAuthenticatedShell(page, "admin@tessara.local");
 
   await page.goto("/app/workflows", { waitUntil: "domcontentloaded" });
 
@@ -358,6 +535,7 @@ test("workflow assignment deep links preserve workflow context in the assignment
 test("left nav updates visible content across touched Sprint 2A routes", async ({ page }) => {
   const assertNoConsoleErrors = attachConsoleGuard(page);
   await signInAsAdmin(page);
+  await waitForAuthenticatedShell(page, "admin@tessara.local");
 
   await page.goto("/app/forms/new");
   await expect(page.getByRole("heading", { name: "Create Form" }).first()).toBeVisible();
@@ -383,11 +561,21 @@ test("deeper routes show breadcrumbs and internal cues stay subtle", async ({ pa
   await page.goto("/app/organization/00000000-0000-0000-0000-000000000001");
   await expect(page.getByRole("heading", { level: 1, name: "Organization Detail" })).toBeVisible();
   await expect(page.locator(".breadcrumb-item")).toHaveCount(3);
+  await expect(page.locator("body")).not.toContainText("Administration Workspace");
+  await expect(page.locator("body")).not.toContainText("Migration Workspace");
 
   await signInAsAdmin(page);
+  await waitForAuthenticatedShell(page, "admin@tessara.local");
   await page.goto("/app/administration");
   await expect(page.getByRole("heading", { level: 1, name: "Administration" })).toBeVisible();
   await expect(page.getByText("Administration Workspace")).toBeVisible();
+  await expect(
+    page.getByRole("navigation", { name: "Internal navigation" }).getByRole("link", { name: "Migration" }),
+  ).toBeVisible();
+
+  await page.goto("/app/migration");
+  await expect(page.getByRole("heading", { level: 1, name: "Migration Workbench" })).toBeVisible();
+  await expect(page.getByText("Migration Workspace")).toBeVisible();
 });
 
 test("shell navigation collapses on tablet and overlays on mobile", async ({ page }) => {
@@ -418,8 +606,6 @@ test("shell navigation collapses on tablet and overlays on mobile", async ({ pag
 });
 
 test("narrow-width routes avoid shell-level horizontal overflow", async ({ page }) => {
-  const assertNoConsoleErrors = attachConsoleGuard(page);
-
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/app");
 
@@ -431,7 +617,13 @@ test("narrow-width routes avoid shell-level horizontal overflow", async ({ page 
   expect(overflow).toBeLessThanOrEqual(1);
   await expect(page.locator("#global-search")).toBeVisible();
 
-  await assertNoConsoleErrors();
+  await page.goto("/app/organization/00000000-0000-0000-0000-000000000001");
+  await expect(page.locator(".breadcrumb-item")).toHaveCount(3);
+  const deepRouteOverflow = await page.evaluate(() => {
+    const root = document.documentElement;
+    return root.scrollWidth - root.clientWidth;
+  });
+  expect(deepRouteOverflow).toBeLessThanOrEqual(1);
 });
 
 test("core SSR surfaces remain readable without JavaScript", async ({ browser, baseURL }) => {

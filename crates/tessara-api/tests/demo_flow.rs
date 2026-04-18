@@ -1690,6 +1690,29 @@ async fn user_management_supports_create_edit_and_account_status() {
     .await;
     assert_eq!(operator_me["display_name"], "Sprint 1 Operator");
 
+    let wrong_password_login = request_status_and_json(
+        app.clone(),
+        Request::builder()
+            .method("POST")
+            .uri("/api/auth/login")
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(
+                json!({
+                    "email": "sprint1-operator@tessara.local",
+                    "password": "wrong-password"
+                })
+                .to_string(),
+            ))
+            .expect("valid wrong password login request"),
+    )
+    .await;
+    assert_eq!(wrong_password_login.0, StatusCode::UNAUTHORIZED);
+    assert!(
+        wrong_password_login.1["error"]
+            .as_str()
+            .is_some_and(|message| !message.trim().is_empty())
+    );
+
     request_json(
         app.clone(),
         authorized_request(
@@ -1731,6 +1754,78 @@ async fn user_management_supports_create_edit_and_account_status() {
     )
     .await;
     assert_eq!(inactive_login.0, StatusCode::UNAUTHORIZED);
+    assert!(
+        inactive_login.1["error"]
+            .as_str()
+            .is_some_and(|message| !message.trim().is_empty())
+    );
+
+    request_json(
+        app.clone(),
+        authorized_request(
+            "PUT",
+            &format!("/api/admin/users/{account_id}"),
+            &admin_token,
+            Some(json!({
+                "email": "sprint1-operator@tessara.local",
+                "display_name": "Sprint 1 Operator Reactivated",
+                "password": "tessara-dev-sprint1-reset",
+                "is_active": true,
+                "role_ids": [operator_role_id]
+            })),
+        ),
+    )
+    .await;
+
+    let old_password_login = request_status_and_json(
+        app.clone(),
+        Request::builder()
+            .method("POST")
+            .uri("/api/auth/login")
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(
+                json!({
+                    "email": "sprint1-operator@tessara.local",
+                    "password": "tessara-dev-sprint1"
+                })
+                .to_string(),
+            ))
+            .expect("valid old password login request"),
+    )
+    .await;
+    assert_eq!(old_password_login.0, StatusCode::UNAUTHORIZED);
+
+    let reactivated_detail = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/admin/users/{account_id}"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(
+        reactivated_detail["display_name"],
+        "Sprint 1 Operator Reactivated"
+    );
+    assert_eq!(reactivated_detail["is_active"], true);
+
+    let reset_operator_token = login_token_for(
+        app.clone(),
+        "sprint1-operator@tessara.local",
+        "tessara-dev-sprint1-reset",
+    )
+    .await;
+    let reactivated_me = request_json(
+        app,
+        authorized_request("GET", "/api/me", &reset_operator_token, None),
+    )
+    .await;
+    assert_eq!(
+        reactivated_me["display_name"],
+        "Sprint 1 Operator Reactivated"
+    );
 }
 
 #[tokio::test]
@@ -2007,6 +2102,25 @@ async fn role_management_updates_capabilities_and_scoped_access() {
     assert!(operator_demo_names.contains(&"Demo Partner North Star Services"));
     assert!(!operator_demo_names.contains(&"Demo Partner Community Bridge"));
 
+    let in_scope_node_id = operator_demo_nodes
+        .as_array()
+        .expect("operator node list should be an array")
+        .iter()
+        .find(|node| node["name"] == "Demo Activity Job Coaching")
+        .and_then(|node| node["id"].as_str())
+        .expect("operator scope should include a descendant activity node");
+    let in_scope_node = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/nodes/{in_scope_node_id}"),
+            &operator_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(in_scope_node["name"], "Demo Activity Job Coaching");
+
     let operator_bridge_nodes = request_json(
         app.clone(),
         authorized_request(
@@ -2024,6 +2138,13 @@ async fn role_management_updates_capabilities_and_scoped_access() {
             .len(),
         0
     );
+
+    let forbidden_roles = request_status_and_json(
+        app.clone(),
+        authorized_request("GET", "/api/admin/roles", &operator_token, None),
+    )
+    .await;
+    assert_eq!(forbidden_roles.0, StatusCode::FORBIDDEN);
 
     let no_capabilities: Vec<&str> = Vec::new();
     request_json(
@@ -2102,6 +2223,48 @@ async fn form_builder_guards_cross_version_sections_and_supersedes_previous_publ
             Some(json!({
                 "title": "Updated Main",
                 "position": 1
+            })),
+        ),
+    )
+    .await;
+    request_json(
+        app.clone(),
+        authorized_request(
+            "PUT",
+            &format!("/api/admin/form-fields/{field_one_id}"),
+            &token,
+            Some(json!({
+                "section_id": section_one_id,
+                "key": "participant_count",
+                "label": "Participant Count",
+                "field_type": "number",
+                "required": false,
+                "position": 1
+            })),
+        ),
+    )
+    .await;
+    let field_two_id = create_number_field(
+        app.clone(),
+        &token,
+        version_one_id,
+        section_one_id,
+        "staff_count",
+    )
+    .await;
+    request_json(
+        app.clone(),
+        authorized_request(
+            "PUT",
+            &format!("/api/admin/form-fields/{field_two_id}"),
+            &token,
+            Some(json!({
+                "section_id": section_one_id,
+                "key": "staff_count",
+                "label": "Staff Count",
+                "field_type": "number",
+                "required": true,
+                "position": 0
             })),
         ),
     )
@@ -2329,13 +2492,22 @@ async fn form_builder_guards_cross_version_sections_and_supersedes_previous_publ
     assert_eq!(version_one["sections"][0]["title"], "Updated Main");
     assert_eq!(
         version_one["sections"][0]["fields"][0]["key"],
-        "participant_count"
+        "staff_count"
     );
     assert_eq!(
         version_one["sections"][0]["fields"][0]["label"],
+        "Staff Count"
+    );
+    assert_eq!(version_one["sections"][0]["fields"][0]["required"], true);
+    assert_eq!(
+        version_one["sections"][0]["fields"][1]["key"],
+        "participant_count"
+    );
+    assert_eq!(
+        version_one["sections"][0]["fields"][1]["label"],
         "Participant Count"
     );
-    assert_eq!(version_one["sections"][0]["fields"][0]["required"], false);
+    assert_eq!(version_one["sections"][0]["fields"][1]["required"], false);
     assert_eq!(version_two["status"], "published");
     assert_eq!(version_two["form_name"], "Monthly Services Report");
 }

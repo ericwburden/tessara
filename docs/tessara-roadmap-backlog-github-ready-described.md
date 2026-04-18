@@ -486,9 +486,9 @@ This issue implements **1B-R3: Navigation and action-gating matrix coverage** in
 This issue implements **1C-R1: Hierarchy navigator regression coverage** in **Sprint 1C - Organization Management** and should leave the touched surface in a shippable state that satisfies the acceptance criteria below.
 
 **Acceptance criteria:**
-- The hierarchy tree navigator remains the primary browse affordance.
-- Scoped users can browse their assigned subtree without flat-card fallbacks.
-- Regressions identify whether the issue is tree load, selection, or detail sync.
+- The organization route family keeps the hierarchy tree navigator as the primary browse affordance.
+- Scoped users can browse their assigned subtree on `/app/organization*` without flat-card fallback behavior.
+- Regression output identifies whether failures are in tree load, node selection, or detail synchronization on the organization surfaces.
 
 ### 1C-R2: Scope-aware naming regression coverage
 **Scope:** QA / UI semantics  
@@ -501,9 +501,9 @@ This issue implements **1C-R1: Hierarchy navigator regression coverage** in **Sp
 This issue implements **1C-R2: Scope-aware naming regression coverage** in **Sprint 1C - Organization Management** and should leave the touched surface in a shippable state that satisfies the acceptance criteria below.
 
 **Acceptance criteria:**
-- The primary organization list title changes according to highest assigned scope when required.
-- Scope-aware labels remain consistent across list, detail, and navigation surfaces.
-- No route falls back to generic naming where scope-aware naming is required.
+- The primary organization list title changes according to the highest assigned scope on `/app/organization` when required.
+- Scope-aware labels remain consistent across organization list, detail, and navigation entry surfaces that link into the organization area.
+- Regression coverage fails if any touched organization surface falls back to generic naming where scope-aware naming is required.
 
 ### 1C-R3: Organization CRUD and scoped-browse regression suite
 **Scope:** QA / admin + product  
@@ -715,7 +715,7 @@ This issue implements **1F-R2: Product vs internal-area framing regression cover
 - Product-facing surfaces do not drift back toward builder-era framing.
 - The current page-family patterns remain consistent across major routes.
 
-### 1F-R3: Hydration and browser-console baseline for core routes
+### 1F-R3: Hydration and browser-console baseline for settled/native routes
 **Scope:** QA / frontend quality  
 **Labels:** `phase:1-identity-access-forms`, `sprint:1F`, `type:test`, `status:regression-only`, `area:frontend`
 **Depends on:** None
@@ -723,12 +723,72 @@ This issue implements **1F-R2: Product vs internal-area framing regression cover
 
 
 **Description:**
-This issue implements **1F-R3: Hydration and browser-console baseline for core routes** in **Sprint 1F - Application UI Guidance Alignment** and should leave the touched surface in a shippable state that satisfies the acceptance criteria below.
+This issue implements **1F-R3: Hydration and browser-console baseline for settled/native routes** in **Sprint 1F - Application UI Guidance Alignment** and should leave the touched surface in a shippable state that satisfies the acceptance criteria below.
 
 **Acceptance criteria:**
-- Home, Organization, Forms, Responses, Dashboards, Administration, and Migration are free of hydration regressions on their current implementation.
-- Browser-console output is clean for those routes during sprint-close verification.
+- Home, Forms, Workflows, and Responses are free of hydration regressions on their current implementation.
+- Browser-console output is clean for those settled/native routes during sprint-close verification.
 - Failures indicate the specific route that regressed.
+
+### 1F-R4: Organization route hydration and browser-console stabilization
+**Scope:** Frontend / route stabilization  
+**Labels:** `phase:1-identity-access-forms`, `sprint:1F`, `type:feature`, `status:backlog`, `area:frontend`, `area:organization`
+**Depends on:** `1F-R3`
+**Milestone:** `Sprint 1F - Application UI Guidance Alignment`
+
+
+**Description:**
+This issue implements **1F-R4: Organization route hydration and browser-console stabilization** in **Sprint 1F - Application UI Guidance Alignment**. The primary goal is to eliminate hydration/runtime noise and browser-console failures across the current organization route bundle. This ticket spans **Frontend / route stabilization** concerns and should leave the touched surface in a shippable state that satisfies the acceptance criteria below.
+
+**Acceptance criteria:**
+- `/app/organization*` loads, refreshes, and deep-links without hydration/runtime failures on its current implementation.
+- Browser-console output is clean on the organization route bundle during verification.
+- Remaining compatibility behavior, if any, is explicit and isolated rather than appearing as silent route noise.
+
+### 1F-R5: Dashboards route hydration and browser-console stabilization
+**Scope:** Frontend / route stabilization  
+**Labels:** `phase:1-identity-access-forms`, `sprint:1F`, `type:feature`, `status:backlog`, `area:frontend`
+**Depends on:** None
+**Milestone:** `Sprint 1F - Application UI Guidance Alignment`
+
+
+**Description:**
+This issue implements **1F-R5: Dashboards route hydration and browser-console stabilization** in **Sprint 1F - Application UI Guidance Alignment**. The primary goal is to eliminate hydration/runtime noise and browser-console failures across the current dashboards route bundle. This ticket spans **Frontend / route stabilization** concerns and should leave the touched surface in a shippable state that satisfies the acceptance criteria below.
+
+**Acceptance criteria:**
+- `/app/dashboards*` loads, refreshes, and deep-links without hydration/runtime failures on its current implementation.
+- Browser-console output is clean on the dashboards route bundle during verification.
+- Remaining compatibility behavior, if any, is explicit and isolated rather than appearing as silent route noise.
+
+### 1F-R6: Administration route hydration and browser-console stabilization
+**Scope:** Frontend / route stabilization  
+**Labels:** `phase:1-identity-access-forms`, `sprint:1F`, `type:feature`, `status:backlog`, `area:frontend`, `area:admin`
+**Depends on:** None
+**Milestone:** `Sprint 1F - Application UI Guidance Alignment`
+
+
+**Description:**
+This issue implements **1F-R6: Administration route hydration and browser-console stabilization** in **Sprint 1F - Application UI Guidance Alignment**. The primary goal is to eliminate hydration/runtime noise and browser-console failures across the current administration route bundle. This ticket spans **Frontend / route stabilization** concerns and should leave the touched surface in a shippable state that satisfies the acceptance criteria below.
+
+**Acceptance criteria:**
+- `/app/administration*` loads, refreshes, and deep-links without hydration/runtime failures on its current implementation.
+- Browser-console output is clean on the administration route bundle during verification.
+- Remaining compatibility behavior, if any, is explicit and isolated rather than appearing as silent route noise.
+
+### 1F-R7: Migration route hydration and browser-console stabilization
+**Scope:** Frontend / route stabilization  
+**Labels:** `phase:1-identity-access-forms`, `sprint:1F`, `type:feature`, `status:backlog`, `area:frontend`, `area:migration`
+**Depends on:** None
+**Milestone:** `Sprint 1F - Application UI Guidance Alignment`
+
+
+**Description:**
+This issue implements **1F-R7: Migration route hydration and browser-console stabilization** in **Sprint 1F - Application UI Guidance Alignment**. The primary goal is to eliminate hydration/runtime noise and browser-console failures across the current migration route bundle. This ticket spans **Frontend / route stabilization** concerns and should leave the touched surface in a shippable state that satisfies the acceptance criteria below.
+
+**Acceptance criteria:**
+- `/app/migration*` loads, refreshes, and deep-links without hydration/runtime failures on its current implementation.
+- Browser-console output is clean on the migration route bundle during verification.
+- Remaining compatibility behavior, if any, is explicit and isolated rather than appearing as silent route noise.
 
 ---
 

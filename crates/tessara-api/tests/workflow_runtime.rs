@@ -29,6 +29,13 @@ async fn demo_seed_backfills_workflows_and_form_links() {
         authorized_request("GET", "/api/workflows", &admin_token, None),
     )
     .await;
+    let linked_workflow = workflows
+        .as_array()
+        .expect("workflow list should be an array")
+        .iter()
+        .find(|workflow| workflow["form_id"] == seed["form_id"])
+        .cloned()
+        .expect("seeded form should expose a linked workflow");
     assert!(
         workflows
             .as_array()
@@ -37,6 +44,13 @@ async fn demo_seed_backfills_workflows_and_form_links() {
             >= seed["form_count"]
                 .as_u64()
                 .expect("seed should report form_count") as usize
+    );
+    assert_eq!(linked_workflow["current_status"], "published");
+    assert!(
+        linked_workflow["assignment_count"]
+            .as_i64()
+            .expect("workflow summary should expose assignment count")
+            > 0
     );
 
     let form_detail = request_json(
@@ -59,7 +73,39 @@ async fn demo_seed_backfills_workflows_and_form_links() {
             .as_array()
             .expect("form detail should include workflows")
             .iter()
-            .any(|workflow| workflow["current_status"] == "published")
+            .any(|workflow| {
+                workflow["id"] == linked_workflow["id"] && workflow["current_status"] == "published"
+            })
+    );
+
+    let workflow_detail = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!(
+                "/api/workflows/{}",
+                linked_workflow["id"]
+                    .as_str()
+                    .expect("linked workflow should expose an id")
+            ),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(workflow_detail["form_id"], seed["form_id"]);
+    assert!(
+        workflow_detail["assignments"]
+            .as_array()
+            .expect("workflow detail should include assignments")
+            .iter()
+            .any(|assignment| {
+                assignment["form_id"] == seed["form_id"]
+                    && assignment["is_active"] == true
+                    && assignment["workflow_step_title"]
+                        .as_str()
+                        .is_some_and(|title| !title.trim().is_empty())
+            })
     );
 
     let assignments = request_json(
@@ -423,6 +469,207 @@ async fn workflow_assignments_can_be_deactivated() {
             .iter()
             .any(|item| item["id"] == assignment["id"])
     );
+}
+
+#[tokio::test]
+async fn workflow_assignment_filters_support_reactivation_and_context_queries() {
+    let _guard = TEST_DATABASE_LOCK.lock().await;
+    let Some(app) = test_app().await else { return };
+    let admin_token = login_token(app.clone()).await;
+
+    let _seed = request_json(
+        app.clone(),
+        authorized_request("POST", "/api/demo/seed", &admin_token, None),
+    )
+    .await;
+
+    let assignments = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/workflow-assignments", &admin_token, None),
+    )
+    .await;
+    let assignment = assignments[0].clone();
+    let assignment_id = assignment["id"]
+        .as_str()
+        .expect("assignment should include id");
+    let workflow_id = assignment["workflow_id"]
+        .as_str()
+        .expect("assignment should include workflow id");
+    let workflow_version_id = assignment["workflow_version_id"]
+        .as_str()
+        .expect("assignment should include workflow version id");
+    let form_id = assignment["form_id"]
+        .as_str()
+        .expect("assignment should include form id");
+    let node_id = assignment["node_id"]
+        .as_str()
+        .expect("assignment should include node id");
+    let account_id = assignment["account_id"]
+        .as_str()
+        .expect("assignment should include account id");
+
+    for uri in [
+        format!("/api/workflow-assignments?workflow_id={workflow_id}"),
+        format!("/api/workflow-assignments?form_id={form_id}"),
+        format!("/api/workflow-assignments?node_id={node_id}"),
+        format!("/api/workflow-assignments?account_id={account_id}"),
+        "/api/workflow-assignments?active=true".to_string(),
+    ] {
+        let filtered = request_json(
+            app.clone(),
+            authorized_request("GET", &uri, &admin_token, None),
+        )
+        .await;
+        assert!(
+            filtered
+                .as_array()
+                .expect("filtered assignment list should be an array")
+                .iter()
+                .any(|item| item["id"] == assignment_id)
+        );
+    }
+
+    request_json(
+        app.clone(),
+        authorized_request(
+            "PUT",
+            &format!("/api/workflow-assignments/{assignment_id}"),
+            &admin_token,
+            Some(json!({
+                "node_id": node_id,
+                "account_id": account_id,
+                "is_active": false
+            })),
+        ),
+    )
+    .await;
+
+    let active_after_deactivate = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            "/api/workflow-assignments?active=true",
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert!(
+        active_after_deactivate
+            .as_array()
+            .expect("active assignment list should be an array")
+            .iter()
+            .all(|item| item["id"] != assignment_id)
+    );
+
+    let reactivated = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/workflow-assignments",
+            &admin_token,
+            Some(json!({
+                "workflow_version_id": workflow_version_id,
+                "node_id": node_id,
+                "account_id": account_id
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(reactivated["id"], assignment_id);
+
+    let active_after_reactivate = request_json(
+        app,
+        authorized_request(
+            "GET",
+            "/api/workflow-assignments?active=true",
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert!(
+        active_after_reactivate
+            .as_array()
+            .expect("active assignment list should be an array")
+            .iter()
+            .any(|item| item["id"] == assignment_id && item["workflow_id"] == workflow_id)
+    );
+}
+
+#[tokio::test]
+async fn delegator_can_query_pending_work_for_an_accessible_delegate_account() {
+    let _guard = TEST_DATABASE_LOCK.lock().await;
+    let Some(app) = test_app().await else { return };
+    let admin_token = login_token(app.clone()).await;
+    let _seed = request_json(
+        app.clone(),
+        authorized_request("POST", "/api/demo/seed", &admin_token, None),
+    )
+    .await;
+
+    let delegate_token = login_token_for(
+        app.clone(),
+        "delegate@tessara.local",
+        "tessara-dev-delegate",
+    )
+    .await;
+    let delegate_pending = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            "/api/workflow-assignments/pending",
+            &delegate_token,
+            None,
+        ),
+    )
+    .await;
+    let delegate_pending_ids = delegate_pending
+        .as_array()
+        .expect("delegate pending work should be an array")
+        .iter()
+        .filter_map(|item| item["workflow_assignment_id"].as_str())
+        .collect::<Vec<_>>();
+    assert!(
+        !delegate_pending_ids.is_empty(),
+        "demo seed should expose delegate pending work"
+    );
+
+    let delegator_token = login_token_for(
+        app.clone(),
+        "delegator@tessara.local",
+        "tessara-dev-delegator",
+    )
+    .await;
+    let delegator_me = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/me", &delegator_token, None),
+    )
+    .await;
+    let delegate_account_id = delegator_me["delegations"]
+        .as_array()
+        .expect("delegator should include delegations")
+        .first()
+        .and_then(|delegation| delegation["account_id"].as_str())
+        .expect("delegator should expose delegate account id");
+
+    let delegated_pending = request_json(
+        app,
+        authorized_request(
+            "GET",
+            &format!("/api/workflow-assignments/pending?delegate_account_id={delegate_account_id}"),
+            &delegator_token,
+            None,
+        ),
+    )
+    .await;
+    let delegated_pending_ids = delegated_pending
+        .as_array()
+        .expect("delegated pending work should be an array")
+        .iter()
+        .filter_map(|item| item["workflow_assignment_id"].as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(delegated_pending_ids, delegate_pending_ids);
 }
 
 #[tokio::test]
