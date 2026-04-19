@@ -51,6 +51,78 @@ function Invoke-Json {
     Invoke-RestMethod @params
 }
 
+function Invoke-Html {
+    param(
+        [string]$Uri,
+        [string]$CookieJarPath = $null
+    )
+
+    $arguments = @("-sS", "-f")
+    if ($null -ne $CookieJarPath) {
+        $arguments += @("-b", $CookieJarPath)
+    }
+    $arguments += $Uri
+
+    $content = & curl.exe @arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "curl failed while fetching $Uri with exit code $LASTEXITCODE"
+    }
+
+    $content
+}
+
+function Assert-ProtectedShell {
+    param(
+        [string]$Content,
+        [string[]]$Needles,
+        [string]$Context
+    )
+
+    foreach ($needle in @(
+        "top-app-bar",
+        "global-search",
+        "Loading Session",
+        "Loading session state..."
+    ) + $Needles) {
+        if ($Content -notlike "*$needle*") {
+            throw "Smoke failure in $Context. Missing marker: $needle"
+        }
+    }
+}
+
+function New-BrowserSession {
+    param(
+        [string]$Email,
+        [string]$Password
+    )
+
+    $cookieJar = Join-Path $tmpDir ("browser-" + [guid]::NewGuid().ToString() + ".txt")
+    $payloadPath = Join-Path $tmpDir ("browser-login-" + [guid]::NewGuid().ToString() + ".json")
+    $loginBody = @{
+        email = $Email
+        password = $Password
+    } | ConvertTo-Json
+
+    [System.IO.File]::WriteAllText($payloadPath, $loginBody, [System.Text.UTF8Encoding]::new($false))
+
+    $response = & curl.exe `
+        -sS `
+        -f `
+        -c $cookieJar `
+        -H "Content-Type: application/json" `
+        --data-binary ("@" + $payloadPath) `
+        "$baseUrl/api/auth/login"
+    if ($LASTEXITCODE -ne 0) {
+        throw "curl login failed for $Email with exit code $LASTEXITCODE"
+    }
+
+    if (-not $response) {
+        throw "Login response for $Email was empty."
+    }
+
+    return $cookieJar
+}
+
 function Assert-LastExitCode {
     param([string]$CommandName)
 
@@ -183,7 +255,9 @@ try {
         throw "Timed out waiting for API health. stderr:`n$(Get-Content -Tail 80 -LiteralPath $apiErr -ErrorAction SilentlyContinue)"
     }
 
-    $shell = Invoke-RestMethod -Uri "$baseUrl/" -TimeoutSec 30
+    $adminBrowserSession = New-BrowserSession -Email "admin@tessara.local" -Password "tessara-dev-admin"
+
+    $shell = Invoke-Html -Uri "$baseUrl/"
     if (-not ($shell -like "*Admin Shell*") -or -not ($shell -like "*Create Draft*") -or -not ($shell -like "*Validate Legacy Fixture*")) {
         throw "Expected local shell HTML to include admin and submission controls"
     }
@@ -191,62 +265,47 @@ try {
         throw "Expected local shell HTML to link to application shell"
     }
 
-    $appShell = Invoke-RestMethod -Uri "$baseUrl/app" -TimeoutSec 30
-    if (-not ($appShell -like "*Application Overview*") -or -not ($appShell -like "*Role-Ready Home Modules*") -or -not ($appShell -like "*Product Areas*") -or -not ($appShell -like "*Transitional Reporting*") -or -not ($appShell -like "*Current Deployment Readiness*") -or -not ($appShell -like "*Current Workflow Context*") -or -not ($appShell -like "*Internal Workspaces*") -or -not ($appShell -like "*global-search*") -or -not ($appShell -like "*Product navigation*")) {
-        throw "Expected application home HTML to include Sprint 1F shell markers and shared navigation"
+    $appShell = Invoke-Html -Uri "$baseUrl/app" -CookieJarPath $adminBrowserSession
+    Assert-ProtectedShell -Content $appShell -Needles @("Tessara Home", "Product Areas", "Product navigation") -Context "application home shell"
+    $loginShell = Invoke-Html -Uri "$baseUrl/app/login"
+    if (
+        -not ($loginShell -like "*Sign In*") `
+        -or -not ($loginShell -like "*login-form*") `
+        -or -not ($loginShell -like "*login-email*") `
+        -or -not ($loginShell -like "*login-password*") `
+        -or -not ($loginShell -like "*Cookie session contract*") `
+        -or ($loginShell -like "*operator@tessara.local*")
+    ) {
+        throw "Expected login HTML to expose native sign-in controls without public demo credentials"
     }
-    $loginShell = Invoke-RestMethod -Uri "$baseUrl/app/login" -TimeoutSec 30
-    if (-not ($loginShell -like "*Sign In*") -or -not ($loginShell -like "*operator@tessara.local*") -or -not ($loginShell -like "*delegator@tessara.local*") -or -not ($loginShell -like "*delegate@tessara.local*")) {
-        throw "Expected login HTML to include dedicated sign-in controls and demo credentials"
+    $organizationShell = Invoke-Html -Uri "$baseUrl/app/organization" -CookieJarPath $adminBrowserSession
+    Assert-ProtectedShell -Content $organizationShell -Needles @("Organization") -Context "organization list shell"
+    $formsShell = Invoke-Html -Uri "$baseUrl/app/forms" -CookieJarPath $adminBrowserSession
+    Assert-ProtectedShell -Content $formsShell -Needles @("Forms") -Context "forms list shell"
+    $workflowsShell = Invoke-Html -Uri "$baseUrl/app/workflows" -CookieJarPath $adminBrowserSession
+    Assert-ProtectedShell -Content $workflowsShell -Needles @("Workflows") -Context "workflows list shell"
+    $responsesShell = Invoke-Html -Uri "$baseUrl/app/responses" -CookieJarPath $adminBrowserSession
+    Assert-ProtectedShell -Content $responsesShell -Needles @("Responses") -Context "responses list shell"
+    $submissionAppShell = Invoke-Html -Uri "$baseUrl/app/submissions" -CookieJarPath $adminBrowserSession
+    Assert-ProtectedShell -Content $submissionAppShell -Needles @("Responses") -Context "submissions compatibility shell"
+    $administrationShell = Invoke-Html -Uri "$baseUrl/app/administration" -CookieJarPath $adminBrowserSession
+    Assert-ProtectedShell -Content $administrationShell -Needles @("Administration") -Context "administration shell"
+    $nodeTypesShell = Invoke-Html -Uri "$baseUrl/app/administration/node-types" -CookieJarPath $adminBrowserSession
+    Assert-ProtectedShell -Content $nodeTypesShell -Needles @("Organization Node Types") -Context "node type list shell"
+    $nodeTypeCreateShell = Invoke-Html -Uri "$baseUrl/app/administration/node-types/new" -CookieJarPath $adminBrowserSession
+    Assert-ProtectedShell -Content $nodeTypeCreateShell -Needles @("Create Organization Node Type") -Context "node type create shell"
+    $adminAppShell = Invoke-Html -Uri "$baseUrl/app/admin" -CookieJarPath $adminBrowserSession
+    if (-not ($adminAppShell -like "*<!doctype html>*") -or -not ($adminAppShell -like "*<body*")) {
+        throw "Expected /app/admin to remain a reachable HTML surface"
     }
-    $organizationShell = Invoke-RestMethod -Uri "$baseUrl/app/organization" -TimeoutSec 30
-    if (-not ($organizationShell -like "*Organization Directory*") -or -not ($organizationShell -like "*Create Organization*") -or -not ($organizationShell -like "*organization-directory-tree*") -or -not ($organizationShell -like "*organization-skeleton-card*")) {
-        throw "Expected organization application shell HTML to include organization route controls"
-    }
-    $formsShell = Invoke-RestMethod -Uri "$baseUrl/app/forms" -TimeoutSec 30
-    if (-not ($formsShell -like "*Forms*") -or -not ($formsShell -like "*Create Form*") -or -not ($formsShell -like "*form-list*") -or -not ($formsShell -like "*Lifecycle Summary*")) {
-        throw "Expected forms application shell HTML to include forms route controls"
-    }
-    $workflowsShell = Invoke-RestMethod -Uri "$baseUrl/app/workflows" -TimeoutSec 30
-    if (-not ($workflowsShell -like "*Workflows*") -or -not ($workflowsShell -like "*Create Workflow*") -or -not ($workflowsShell -like "*workflow-list*")) {
-        throw "Expected workflows application shell HTML to include workflow route controls"
-    }
-    $responsesShell = Invoke-RestMethod -Uri "$baseUrl/app/responses" -TimeoutSec 30
-    if (-not ($responsesShell -like "*Responses*") -or -not ($responsesShell -like "*Response work queue*") -or -not ($responsesShell -like "*Pending Work*") -or -not ($responsesShell -like "*Draft Responses*") -or -not ($responsesShell -like "*Submitted Responses*")) {
-        throw "Expected responses application shell HTML to include responses route controls"
-    }
-    $submissionAppShell = Invoke-RestMethod -Uri "$baseUrl/app/submissions" -TimeoutSec 30
-    if (-not ($submissionAppShell -like "*Responses*") -or -not ($submissionAppShell -like "*Response work queue*") -or -not ($submissionAppShell -like "*Pending Work*") -or -not ($submissionAppShell -like "*Draft Responses*") -or -not ($submissionAppShell -like "*Submitted Responses*")) {
-        throw "Expected responses compatibility shell HTML to include response workflow controls"
-    }
-    $administrationShell = Invoke-RestMethod -Uri "$baseUrl/app/administration" -TimeoutSec 30
-    if (-not ($administrationShell -like "*Administration*") -or -not ($administrationShell -like "*Advanced Configuration*") -or -not ($administrationShell -like "*Open Legacy Builder*") -or -not ($administrationShell -like "*Organization Schema*") -or -not ($administrationShell -like "*/app/administration/node-types*")) {
-        throw "Expected administration application shell HTML to include setup workflow controls"
-    }
-    $nodeTypesShell = Invoke-RestMethod -Uri "$baseUrl/app/administration/node-types" -TimeoutSec 30
-    if (-not ($nodeTypesShell -like "*Organization Node Types*") -or -not ($nodeTypesShell -like "*Create Organization Node Type*") -or -not ($nodeTypesShell -like "*node-type-list*")) {
-        throw "Expected node-type administration HTML to include dedicated list controls"
-    }
-    $nodeTypeCreateShell = Invoke-RestMethod -Uri "$baseUrl/app/administration/node-types/new" -TimeoutSec 30
-    if (-not ($nodeTypeCreateShell -like "*Create Organization Node Type*") -or -not ($nodeTypeCreateShell -like "*node-type-form*") -or -not ($nodeTypeCreateShell -like "*node-type-parent-tags*") -or -not ($nodeTypeCreateShell -like "*node-type-parent-options*") -or -not ($nodeTypeCreateShell -like "*node-type-child-tags*") -or -not ($nodeTypeCreateShell -like "*node-type-child-options*") -or -not ($nodeTypeCreateShell -like "*node-type-metadata-fields-editor*") -or -not ($nodeTypeCreateShell -like "*node-type-metadata-settings-modal*")) {
-        throw "Expected node-type create HTML to include dedicated form controls"
-    }
-    $adminAppShell = Invoke-RestMethod -Uri "$baseUrl/app/admin" -TimeoutSec 30
-    if (-not ($adminAppShell -like "*Admin Shell*") -or -not ($adminAppShell -like "*Create Form*") -or -not ($adminAppShell -like "*Validate Legacy Fixture*")) {
-        throw "Expected admin application shell HTML to include setup workflow controls"
-    }
-    $reportingAppShell = Invoke-RestMethod -Uri "$baseUrl/app/reports" -TimeoutSec 30
+    $reportingAppShell = Invoke-Html -Uri "$baseUrl/app/reports" -CookieJarPath $adminBrowserSession
     if (-not ($reportingAppShell -like "*Reports*") -or -not ($reportingAppShell -like "*Create Report*") -or -not ($reportingAppShell -like "*report-list*")) {
         throw "Expected reporting application shell HTML to include report and dashboard workflow controls"
     }
-    $dashboardsShell = Invoke-RestMethod -Uri "$baseUrl/app/dashboards" -TimeoutSec 30
-    if (-not ($dashboardsShell -like "*Dashboards*") -or -not ($dashboardsShell -like "*Create Dashboard*") -or -not ($dashboardsShell -like "*dashboard-list*")) {
-        throw "Expected dashboards application shell HTML to include dashboard route controls"
-    }
-    $migrationAppShell = Invoke-RestMethod -Uri "$baseUrl/app/migration" -TimeoutSec 30
-    if (-not ($migrationAppShell -like "*Migration Workbench*") -or -not ($migrationAppShell -like "*Fixture Intake*") -or -not ($migrationAppShell -like "*Load Fixture Examples*") -or -not ($migrationAppShell -like "*Import Fixture*")) {
-        throw "Expected migration application shell HTML to include fixture workflow controls"
-    }
+    $dashboardsShell = Invoke-Html -Uri "$baseUrl/app/dashboards" -CookieJarPath $adminBrowserSession
+    Assert-ProtectedShell -Content $dashboardsShell -Needles @("Dashboards") -Context "dashboards shell"
+    $migrationAppShell = Invoke-Html -Uri "$baseUrl/app/migration" -CookieJarPath $adminBrowserSession
+    Assert-ProtectedShell -Content $migrationAppShell -Needles @("Migration Workbench") -Context "migration shell"
 
     $login = Invoke-Json `
         -Method "Post" `
@@ -306,6 +365,7 @@ try {
     if ($seed.analytics_values -lt 1) {
         throw "Expected at least one analytics value, got $($seed.analytics_values)"
     }
+    $adminBrowserSession = New-BrowserSession -Email "admin@tessara.local" -Password "tessara-dev-admin"
     if ($nodes.Count -lt 1) {
         throw "Expected at least one node, got $($nodes.Count)"
     }
@@ -340,50 +400,32 @@ try {
         throw "Expected readable node-type catalog to include singular/plural labels"
     }
 
-    $organizationDetail = Invoke-RestMethod -Uri "$baseUrl/app/organization/$($seed.organization_node_id)" -TimeoutSec 30
-    if (-not ($organizationDetail -like "*Organization Detail*") -or -not ($organizationDetail -like "*Back to List*") -or -not ($organizationDetail -like "*organization-detail*") -or -not ($organizationDetail -like "*organization-detail-status*") -or -not ($organizationDetail -like "*organization-detail-path*") -or -not ($organizationDetail -like "*organization-child-actions*") -or -not ($organizationDetail -like "*Related Forms*") -or -not ($organizationDetail -like "*Related Dashboards*") -or ($organizationDetail -like "*Related Responses*")) {
-        throw "Expected organization detail HTML to include dedicated detail framing"
-    }
-    $organizationNew = Invoke-RestMethod -Uri "$baseUrl/app/organization/new" -TimeoutSec 30
-    if (-not ($organizationNew -like "*Create Organization*") -or -not ($organizationNew -like "*Submit*") -or -not ($organizationNew -like "*Cancel*") -or -not ($organizationNew -like "*organization-form-status*") -or -not ($organizationNew -like "*organization-node-type-label*") -or -not ($organizationNew -like "*organization-parent-node-label*") -or -not ($organizationNew -like "*organization-metadata-title*")) {
-        throw "Expected organization create HTML to include dedicated form controls"
-    }
-    $formDetail = Invoke-RestMethod -Uri "$baseUrl/app/forms/$($seed.form_id)" -TimeoutSec 30
-    if (-not ($formDetail -like "*Form Detail*") -or -not ($formDetail -like "*Version Summary*") -or -not ($formDetail -like "*Section Preview*") -or -not ($formDetail -like "*Workflow Attachments*")) {
-        throw "Expected form detail HTML to include dedicated detail framing"
-    }
-    $formNew = Invoke-RestMethod -Uri "$baseUrl/app/forms/new" -TimeoutSec 30
-    if (-not ($formNew -like "*Create Form*") -or -not ($formNew -like "*form-editor-status*") -or -not ($formNew -like "*Submit*") -or -not ($formNew -like "*Cancel*")) {
-        throw "Expected form create HTML to include dedicated form controls"
-    }
-    $formEdit = Invoke-RestMethod -Uri "$baseUrl/app/forms/$($seed.form_id)/edit" -TimeoutSec 30
-    if (-not ($formEdit -like "*Edit Form*") -or -not ($formEdit -like "*Version Lifecycle*") -or -not ($formEdit -like "*form-version-create-form*") -or -not ($formEdit -like "*Draft Version Workspace*") -or -not ($formEdit -like "*Publish Draft Version*")) {
-        throw "Expected form edit HTML to include dedicated version authoring controls"
-    }
-    $responseDetail = Invoke-RestMethod -Uri "$baseUrl/app/responses/$($seed.submission_id)" -TimeoutSec 30
-    if (-not ($responseDetail -like "*Response Detail*") -or -not ($responseDetail -like "*Back to List*")) {
-        throw "Expected response detail HTML to include dedicated detail framing"
-    }
-    $responseNew = Invoke-RestMethod -Uri "$baseUrl/app/responses/new" -TimeoutSec 30
-    if (-not ($responseNew -like "*Start Response*") -or -not ($responseNew -like "*Submit*") -or -not ($responseNew -like "*Cancel*")) {
-        throw "Expected response create HTML to include dedicated form controls"
-    }
-    $reportDetailPage = Invoke-RestMethod -Uri "$baseUrl/app/reports/$($seed.report_id)" -TimeoutSec 30
+    $organizationDetail = Invoke-Html -Uri "$baseUrl/app/organization/$($seed.organization_node_id)" -CookieJarPath $adminBrowserSession
+    Assert-ProtectedShell -Content $organizationDetail -Needles @("Organization Detail") -Context "organization detail shell"
+    $organizationNew = Invoke-Html -Uri "$baseUrl/app/organization/new" -CookieJarPath $adminBrowserSession
+    Assert-ProtectedShell -Content $organizationNew -Needles @("Create Organization") -Context "organization create shell"
+    $formDetail = Invoke-Html -Uri "$baseUrl/app/forms/$($seed.form_id)" -CookieJarPath $adminBrowserSession
+    Assert-ProtectedShell -Content $formDetail -Needles @("Form Detail") -Context "form detail shell"
+    $formNew = Invoke-Html -Uri "$baseUrl/app/forms/new" -CookieJarPath $adminBrowserSession
+    Assert-ProtectedShell -Content $formNew -Needles @("Create Form") -Context "form create shell"
+    $formEdit = Invoke-Html -Uri "$baseUrl/app/forms/$($seed.form_id)/edit" -CookieJarPath $adminBrowserSession
+    Assert-ProtectedShell -Content $formEdit -Needles @("Edit Form") -Context "form edit shell"
+    $responseDetail = Invoke-Html -Uri "$baseUrl/app/responses/$($seed.submission_id)" -CookieJarPath $adminBrowserSession
+    Assert-ProtectedShell -Content $responseDetail -Needles @("Response Detail") -Context "response detail shell"
+    $responseNew = Invoke-Html -Uri "$baseUrl/app/responses/new" -CookieJarPath $adminBrowserSession
+    Assert-ProtectedShell -Content $responseNew -Needles @("New Response") -Context "response create shell"
+    $reportDetailPage = Invoke-Html -Uri "$baseUrl/app/reports/$($seed.report_id)" -CookieJarPath $adminBrowserSession
     if (-not ($reportDetailPage -like "*Report Detail*") -or -not ($reportDetailPage -like "*Run*")) {
         throw "Expected report detail HTML to include dedicated detail framing"
     }
-    $reportNew = Invoke-RestMethod -Uri "$baseUrl/app/reports/new" -TimeoutSec 30
+    $reportNew = Invoke-Html -Uri "$baseUrl/app/reports/new" -CookieJarPath $adminBrowserSession
     if (-not ($reportNew -like "*Create Report*") -or -not ($reportNew -like "*Bindings*") -or -not ($reportNew -like "*Submit*")) {
         throw "Expected report create HTML to include binding editor controls"
     }
-    $dashboardDetailPage = Invoke-RestMethod -Uri "$baseUrl/app/dashboards/$($seed.dashboard_id)" -TimeoutSec 30
-    if (-not ($dashboardDetailPage -like "*Dashboard Detail*") -or -not ($dashboardDetailPage -like "*View*")) {
-        throw "Expected dashboard detail HTML to include dedicated detail framing"
-    }
-    $dashboardNew = Invoke-RestMethod -Uri "$baseUrl/app/dashboards/new" -TimeoutSec 30
-    if (-not ($dashboardNew -like "*Create Dashboard*") -or -not ($dashboardNew -like "*Submit*") -or -not ($dashboardNew -like "*Cancel*")) {
-        throw "Expected dashboard create HTML to include dedicated form controls"
-    }
+    $dashboardDetailPage = Invoke-Html -Uri "$baseUrl/app/dashboards/$($seed.dashboard_id)" -CookieJarPath $adminBrowserSession
+    Assert-ProtectedShell -Content $dashboardDetailPage -Needles @("Dashboard Detail") -Context "dashboard detail shell"
+    $dashboardNew = Invoke-Html -Uri "$baseUrl/app/dashboards/new" -CookieJarPath $adminBrowserSession
+    Assert-ProtectedShell -Content $dashboardNew -Needles @("Create Dashboard") -Context "dashboard create shell"
 
     [pscustomobject]@{
         status = "passed"

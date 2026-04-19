@@ -1,5 +1,68 @@
 # Progress Report
 
+## 2026-04-19 - Sprint 2B Settled-Surface Session Contract (#52-#54)
+
+- Completed:
+  - added `GET /api/auth/session` and moved the native shell to a cookie-backed browser-session bootstrap so `/app/login` and `/app` render through the settled SSR shell without exposing demo credentials on the public sign-in surface
+  - updated native login success handling to redirect through the intended shell contract instead of relying on a JavaScript bearer bootstrap roundtrip
+  - shifted touched `forms` and `hierarchy` handlers onto `AuthenticatedRequest` and gated the settled `Forms`, `Organization`, and `Workflows` hydrate loaders on confirmed authenticated session state to avoid pre-session fetch races
+  - tightened the end-to-end auth/session suite so browser tests sign in through the cookie session contract, scripted token helpers stay isolated from browser sessions, and response/workflow route assertions target the hardened SSR behavior
+  - refreshed `scripts/smoke.ps1` and `scripts/uat-sprint.ps1` to validate the Sprint 2B auth/session contract against the rebuilt local app instead of the old bearer-driven expectations
+- Validation:
+  - `C:\Users\ericw\.cargo\bin\cargo.exe test -p tessara-web`
+  - `C:\Users\ericw\.cargo\bin\cargo.exe check -p tessara-web --no-default-features --features hydrate`
+  - `cd end2end; node .\node_modules\@playwright\test\cli.js test`
+  - `.\scripts\local-launch.ps1`
+  - `.\scripts\smoke.ps1 -KeepServices`
+  - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`
+- Notes:
+  - the full `cargo test -p tessara-api` command remains unusually slow in this environment, but the smoke matrix and touched API integration suites passed against the rebuilt Sprint 2B stack
+  - the workflow assignment-console regression exposed one more session-bootstrap race on `Workflows`; that loader is now gated the same way as `Forms` and `Organization`
+- Next:
+  - close the Sprint 2B issue set in GitHub and prepare the remaining sprint-closeout documentation once reviewer verification is complete
+
+## 2026-04-18 - Sprint 2B Auth Foundation (#46-#51)
+
+- Completed:
+  - added `018_auth_session_hardening.sql` to migrate `account_credentials` from raw passwords to Argon2-backed storage and to extend sessions with expiry, revocation, and last-seen tracking columns
+  - replaced the monolithic API auth module with bounded auth/session modules under `crates/tessara-api/src/auth/` covering DTOs, repository access, service logic, extractors, and handlers
+  - switched seeded/demo accounts and user create/edit flows to Argon2id password-hash persistence and added automatic legacy-password backfill during database startup
+  - moved browser `/app` authentication to same-origin cookie sessions by removing JavaScript bearer-token bootstrap from the native runtime and retained bridge compatibility fetch paths
+  - introduced `AuthenticatedRequest` and rolled it into the touched auth-facing handlers in `auth`, `users`, `demo`, and `app_summary`
+  - replaced raw auth/session error exposure with stable application error envelopes and traced server-side logging
+  - fixed demo seed runtime linkage so seeded submissions populate workflow runtime foreign keys and auth/session regression tests observe the true workflow state
+- Validation:
+  - `C:\Users\ericw\.cargo\bin\cargo.exe check -p tessara-api`
+  - `C:\Users\ericw\.cargo\bin\cargo.exe check -p tessara-web --no-default-features --features hydrate`
+  - `C:\Users\ericw\.cargo\bin\cargo.exe test -p tessara-api --test workflow_runtime -- --nocapture --test-threads=1`
+  - `C:\Users\ericw\.cargo\bin\cargo.exe test -p tessara-api --test demo_flow user_management_supports_create_edit_and_account_status -- --nocapture`
+  - `C:\Users\ericw\.cargo\bin\cargo.exe test -p tessara-web`
+- Notes:
+  - issue `#50` is complete for the touched auth/session handlers in this slice, but untargeted compatibility handlers still use older helper wrappers until later backend decomposition work
+  - the browser contract is now cookie-first for `/app`, while bearer tokens remain available for explicit test/script flows and API-oriented request helpers
+- Next:
+  - begin issue [#52](https://github.com/ericwburden/tessara/issues/52) for native SSR ownership of `/app/login` and `/app`
+  - follow with issue [#53](https://github.com/ericwburden/tessara/issues/53) for settled `Organization` and `Forms` route ownership under the hardened auth/session contract
+
+## 2026-04-18 - Sprint 2B Kickoff
+
+- Completed:
+  - confirmed `main` was clean and aligned with `origin/main` before sprint kickoff
+  - verified `Sprint 2B: Authentication Hardening And Settled-Surface Native SSR Slice` is the sole `(Next)` marker in `docs/roadmap.md`
+  - created the Sprint 2B worktree at `D:\Projects\tessara-sprint-2b` on branch `codex/sprint-2b`
+  - added the kickoff plan in `docs/sprints/sprint-2b-plan.md`
+  - assessed the live Sprint 2B GitHub issue chain and confirmed [#46](https://github.com/ericwburden/tessara/issues/46) through [#54](https://github.com/ericwburden/tessara/issues/54) all remain open
+- Assessment:
+  - the sprint is serialized through the auth/session foundation: `2B-01` -> `2B-02` -> `2B-03`
+  - `2B-04` depends on `2B-03`
+  - `2B-05` depends on `2B-02` and `2B-03`
+  - `2B-06` depends on `2B-02` through `2B-05`
+  - the first useful parallel frontend split is `2B-07` and `2B-08`, both of which depend on `2B-03`, `2B-05`, and `2B-06`
+  - `2B-09` remains the sprint closeout gate on top of the full stack
+- Next:
+  - begin implementation with [#46](https://github.com/ericwburden/tessara/issues/46) for password-hash schema and migration/backfill
+  - treat [#47](https://github.com/ericwburden/tessara/issues/47) and [#48](https://github.com/ericwburden/tessara/issues/48) as the immediate follow-on foundation issues before opening route migration work
+
 ## 2026-04-17 - Sprint 2A Final Closeout Verification
 
 - Completed:

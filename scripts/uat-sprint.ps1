@@ -22,6 +22,45 @@ function Assert-Contains {
     }
 }
 
+function Invoke-Html {
+    param(
+        [string]$Uri,
+        [string]$CookieJarPath = $null
+    )
+
+    $arguments = @("-sS", "-f")
+    if ($null -ne $CookieJarPath) {
+        $arguments += @("-b", $CookieJarPath)
+    }
+    $arguments += $Uri
+
+    $content = & curl.exe @arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "curl failed while fetching $Uri with exit code $LASTEXITCODE"
+    }
+
+    $content
+}
+
+function Assert-ProtectedShell {
+    param(
+        [string]$Content,
+        [string[]]$Needles,
+        [string]$Context
+    )
+
+    foreach ($needle in @(
+        "top-app-bar",
+        "global-search",
+        "Loading Session",
+        "Loading session state..."
+    ) + $Needles) {
+        if ($Content -notlike "*$needle*") {
+            throw "Sprint UAT failure in $Context. Missing marker: $needle"
+        }
+    }
+}
+
 function Get-ApiToken {
     param(
         [string]$Email,
@@ -40,28 +79,48 @@ function Get-ApiToken {
     return $response.token
 }
 
+function New-BrowserSession {
+    param(
+        [string]$Email,
+        [string]$Password
+    )
+
+    $cookieJar = Join-Path ([System.IO.Path]::GetTempPath()) ("tessara-uat-" + [guid]::NewGuid().ToString() + ".txt")
+    $payloadPath = Join-Path ([System.IO.Path]::GetTempPath()) ("tessara-uat-login-" + [guid]::NewGuid().ToString() + ".json")
+    $loginBody = @{
+        email    = $Email
+        password = $Password
+    } | ConvertTo-Json
+
+    [System.IO.File]::WriteAllText($payloadPath, $loginBody, [System.Text.UTF8Encoding]::new($false))
+
+    $response = & curl.exe -sS -f -c $cookieJar -H "Content-Type: application/json" --data-binary ("@" + $payloadPath) "$BaseUrl/api/auth/login"
+    if ($LASTEXITCODE -ne 0) {
+        throw "curl login failed for $Email with exit code $LASTEXITCODE"
+    }
+    if (-not $response) {
+        throw "Login response for $Email was empty."
+    }
+
+    return $cookieJar
+}
+
 $adminToken = Get-ApiToken -Email "admin@tessara.local" -Password "tessara-dev-admin"
 $headers = @{ Authorization = "Bearer $adminToken" }
 $seedSummary = Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/demo/seed" -Headers $headers -TimeoutSec 30
 if ($seedSummary.seed_version -ne "uat-demo-v1") {
     throw "Sprint UAT failure: demo seed did not confirm expected uat-demo-v1."
 }
+$adminBrowserSession = New-BrowserSession -Email "admin@tessara.local" -Password "tessara-dev-admin"
 
-$homeShell = Invoke-RestMethod -Uri "$BaseUrl/app" -TimeoutSec 30
-Assert-Contains -Content $homeShell -Needles @(
-    "Application Overview",
-    "Role-Ready Home Modules",
-    "Product Areas",
-    "Current Deployment Readiness"
+$homeShell = Invoke-Html -Uri "$BaseUrl/app" -CookieJarPath $adminBrowserSession
+Assert-ProtectedShell -Content $homeShell -Needles @(
+    "Tessara Home",
+    "Product Areas"
 ) -Context "home shell"
 
-$orgList = Invoke-RestMethod -Uri "$BaseUrl/app/organization" -TimeoutSec 30
-Assert-Contains -Content $orgList -Needles @(
-    "Organization Directory",
-    "Create Organization",
-    "organization-directory-tree",
-    "organization-skeleton-card"
-) -Context "organization directory"
+$orgList = Invoke-Html -Uri "$BaseUrl/app/organization" -CookieJarPath $adminBrowserSession
+Assert-ProtectedShell -Content $orgList -Needles @("Organization") -Context "organization directory"
 
 $nodes = Invoke-RestMethod -Uri "$BaseUrl/api/nodes" -Headers $headers -TimeoutSec 30
 if (-not $nodes -or $nodes.Count -eq 0) {
@@ -69,96 +128,32 @@ if (-not $nodes -or $nodes.Count -eq 0) {
 }
 
 $detailId = $nodes[0].id
-$orgDetail = Invoke-RestMethod -Uri "$BaseUrl/app/organization/$detailId" -TimeoutSec 30
-Assert-Contains -Content $orgDetail -Needles @(
-    "Organization Detail",
-    "Back to List",
-    "organization-detail-status",
-    "organization-detail-path",
-    "organization-child-actions",
-    "Related Forms",
-    "Related Dashboards"
-) -Context "organization detail"
-if ($orgDetail -like "*Related Responses*") {
-    throw "Sprint UAT failure in organization detail. Related Responses should not be rendered."
-}
+$orgDetail = Invoke-Html -Uri "$BaseUrl/app/organization/$detailId" -CookieJarPath $adminBrowserSession
+Assert-ProtectedShell -Content $orgDetail -Needles @("Organization Detail") -Context "organization detail"
 
-$orgCreate = Invoke-RestMethod -Uri "$BaseUrl/app/organization/new" -TimeoutSec 30
-Assert-Contains -Content $orgCreate -Needles @(
-    "Create Organization",
-    "organization-form-status",
-    "Submit",
-    "Cancel",
-    "organization-node-type-label",
-    "organization-parent-node-label",
-    "organization-metadata-title"
-) -Context "organization create"
+$orgCreate = Invoke-Html -Uri "$BaseUrl/app/organization/new" -CookieJarPath $adminBrowserSession
+Assert-ProtectedShell -Content $orgCreate -Needles @("Create Organization") -Context "organization create"
 
-$orgEdit = Invoke-RestMethod -Uri "$BaseUrl/app/organization/$detailId/edit" -TimeoutSec 30
-Assert-Contains -Content $orgEdit -Needles @(
-    "Edit Organization",
-    "organization-form-status",
-    "Submit",
-    "Cancel"
-) -Context "organization edit"
+$orgEdit = Invoke-Html -Uri "$BaseUrl/app/organization/$detailId/edit" -CookieJarPath $adminBrowserSession
+Assert-ProtectedShell -Content $orgEdit -Needles @("Edit Organization") -Context "organization edit"
 
-$formsList = Invoke-RestMethod -Uri "$BaseUrl/app/forms" -TimeoutSec 30
-Assert-Contains -Content $formsList -Needles @(
-    "Forms",
-    "Create Form",
-    "form-list",
-    "Lifecycle Summary"
-) -Context "forms list"
+$formsList = Invoke-Html -Uri "$BaseUrl/app/forms" -CookieJarPath $adminBrowserSession
+Assert-ProtectedShell -Content $formsList -Needles @("Forms") -Context "forms list"
 
-$formCreate = Invoke-RestMethod -Uri "$BaseUrl/app/forms/new" -TimeoutSec 30
-Assert-Contains -Content $formCreate -Needles @(
-    "Create Form",
-    "form-editor-status",
-    "form-name",
-    "form-slug",
-    "form-scope-node-type",
-    "Submit",
-    "Cancel"
-) -Context "form create"
+$formCreate = Invoke-Html -Uri "$BaseUrl/app/forms/new" -CookieJarPath $adminBrowserSession
+Assert-ProtectedShell -Content $formCreate -Needles @("Create Form") -Context "form create"
 
-$formDetail = Invoke-RestMethod -Uri "$BaseUrl/app/forms/$($seedSummary.form_id)" -TimeoutSec 30
-Assert-Contains -Content $formDetail -Needles @(
-    "Form Detail",
-    "Form Summary",
-    "Version Summary",
-    "Section Preview",
-    "Workflow Attachments"
-) -Context "form detail"
+$formDetail = Invoke-Html -Uri "$BaseUrl/app/forms/$($seedSummary.form_id)" -CookieJarPath $adminBrowserSession
+Assert-ProtectedShell -Content $formDetail -Needles @("Form Detail") -Context "form detail"
 
-$formEdit = Invoke-RestMethod -Uri "$BaseUrl/app/forms/$($seedSummary.form_id)/edit" -TimeoutSec 30
-Assert-Contains -Content $formEdit -Needles @(
-    "Edit Form",
-    "Form Metadata",
-    "Version Lifecycle",
-    "form-version-create-form",
-    "form-version-list",
-    "Draft Version Workspace",
-    "Publish Draft Version"
-) -Context "form edit"
+$formEdit = Invoke-Html -Uri "$BaseUrl/app/forms/$($seedSummary.form_id)/edit" -CookieJarPath $adminBrowserSession
+Assert-ProtectedShell -Content $formEdit -Needles @("Edit Form") -Context "form edit"
 
-$nodeTypesList = Invoke-RestMethod -Uri "$BaseUrl/app/administration/node-types" -TimeoutSec 30
-Assert-Contains -Content $nodeTypesList -Needles @(
-    "Organization Node Types",
-    "Create Organization Node Type",
-    "node-type-list"
-) -Context "node-type directory"
+$nodeTypesList = Invoke-Html -Uri "$BaseUrl/app/administration/node-types" -CookieJarPath $adminBrowserSession
+Assert-ProtectedShell -Content $nodeTypesList -Needles @("Organization Node Types") -Context "node-type directory"
 
-$nodeTypesCreate = Invoke-RestMethod -Uri "$BaseUrl/app/administration/node-types/new" -TimeoutSec 30
-Assert-Contains -Content $nodeTypesCreate -Needles @(
-    "Create Organization Node Type",
-    "node-type-form",
-    "node-type-parent-tags",
-    "node-type-child-tags",
-    "node-type-parent-options",
-    "node-type-child-options",
-    "node-type-metadata-fields-editor",
-    "node-type-metadata-settings-modal"
-) -Context "node-type create"
+$nodeTypesCreate = Invoke-Html -Uri "$BaseUrl/app/administration/node-types/new" -CookieJarPath $adminBrowserSession
+Assert-ProtectedShell -Content $nodeTypesCreate -Needles @("Create Organization Node Type") -Context "node-type create"
 
 $nodeTypeCatalog = Invoke-RestMethod -Uri "$BaseUrl/api/node-types" -Headers $headers -TimeoutSec 30
 if (-not $nodeTypeCatalog -or -not ($nodeTypeCatalog | Where-Object { $_.singular_label -and $_.plural_label })) {

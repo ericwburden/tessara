@@ -1617,7 +1617,9 @@ async fn role_based_access_respects_scope_and_respondent_context() {
 #[tokio::test]
 async fn user_management_supports_create_edit_and_account_status() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(state) = test_state().await else { return };
+    let Some(state) = test_state().await else {
+        return;
+    };
     let app = router(state.clone());
     let admin_token = login_token(app.clone()).await;
 
@@ -2147,7 +2149,7 @@ async fn role_management_updates_capabilities_and_scoped_access() {
         .as_array()
         .expect("operator node list should be an array")
         .iter()
-        .find(|node| node["name"] == "Demo Activity Job Coaching")
+        .find(|node| node["name"] == "Demo Activity Mentor Match")
         .and_then(|node| node["id"].as_str())
         .expect("operator scope should include a descendant activity node");
     let in_scope_node = request_json(
@@ -2160,7 +2162,7 @@ async fn role_management_updates_capabilities_and_scoped_access() {
         ),
     )
     .await;
-    assert_eq!(in_scope_node["name"], "Demo Activity Job Coaching");
+    assert_eq!(in_scope_node["name"], "Demo Activity Mentor Match");
 
     let operator_bridge_nodes = request_json(
         app.clone(),
@@ -3300,7 +3302,10 @@ async fn operator_cannot_access_admin_node_type_management_routes() {
     )
     .await;
     assert_eq!(forbidden.0, StatusCode::FORBIDDEN);
-    assert_eq!(forbidden.1["error"], "forbidden: admin:all");
+    assert_eq!(
+        forbidden.1["error"],
+        "The current account is missing required capability 'admin:all'."
+    );
 }
 
 #[tokio::test]

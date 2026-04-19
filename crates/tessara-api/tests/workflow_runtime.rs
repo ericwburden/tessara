@@ -331,12 +331,7 @@ async fn pending_work_excludes_assignments_with_submitted_responses_and_start_re
         other => panic!("unexpected submitted assignment account: {other}"),
     };
 
-    let respondent_token = login_token_for(
-        app.clone(),
-        account_email,
-        account_password,
-    )
-    .await;
+    let respondent_token = login_token_for(app.clone(), account_email, account_password).await;
 
     let pending = request_json(
         app.clone(),
@@ -767,6 +762,73 @@ async fn login_sets_cookie_session_for_browser_requests() {
 }
 
 #[tokio::test]
+async fn forms_and_hierarchy_endpoints_accept_cookie_sessions_without_authorization_headers() {
+    let _guard = TEST_DATABASE_LOCK.lock().await;
+    let Some(app) = test_app().await else { return };
+    let admin_token = login_token(app.clone()).await;
+
+    let _seed = request_json(
+        app.clone(),
+        authorized_request("POST", "/api/demo/seed", &admin_token, None),
+    )
+    .await;
+
+    let operator_cookie = login_cookie_for(
+        app.clone(),
+        "operator@tessara.local",
+        "tessara-dev-operator",
+    )
+    .await;
+    let readable_forms = request_json(
+        app.clone(),
+        cookie_authenticated_request("GET", "/api/forms", &operator_cookie, None),
+    )
+    .await;
+    assert!(
+        !readable_forms
+            .as_array()
+            .expect("forms response should be an array")
+            .is_empty()
+    );
+    let readable_nodes = request_json(
+        app.clone(),
+        cookie_authenticated_request("GET", "/api/nodes", &operator_cookie, None),
+    )
+    .await;
+    assert!(
+        !readable_nodes
+            .as_array()
+            .expect("nodes response should be an array")
+            .is_empty()
+    );
+
+    let admin_cookie =
+        login_cookie_for(app.clone(), "admin@tessara.local", "tessara-dev-admin").await;
+    let admin_forms = request_json(
+        app.clone(),
+        cookie_authenticated_request("GET", "/api/admin/forms", &admin_cookie, None),
+    )
+    .await;
+    assert!(
+        !admin_forms
+            .as_array()
+            .expect("admin forms response should be an array")
+            .is_empty()
+    );
+    let admin_node_types = request_json(
+        app,
+        cookie_authenticated_request("GET", "/api/admin/node-types", &admin_cookie, None),
+    )
+    .await;
+    assert!(
+        !admin_node_types
+            .as_array()
+            .expect("admin node types response should be an array")
+            .is_empty()
+    );
+}
+
+#[tokio::test]
 async fn invalid_login_uses_stable_error_payload() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
     let Some(app) = test_app().await else { return };
@@ -797,12 +859,18 @@ async fn invalid_login_uses_stable_error_payload() {
 #[tokio::test]
 async fn revoked_and_expired_sessions_return_stable_auth_codes() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(state) = test_state().await else { return };
+    let Some(state) = test_state().await else {
+        return;
+    };
     let app = router(state.clone());
 
     let revoked_token = login_token(app.clone()).await;
     sqlx::query("UPDATE auth_sessions SET revoked_at = now() WHERE token = $1")
-        .bind(revoked_token.parse::<uuid::Uuid>().expect("token should be uuid"))
+        .bind(
+            revoked_token
+                .parse::<uuid::Uuid>()
+                .expect("token should be uuid"),
+        )
         .execute(&state.pool)
         .await
         .expect("session should be revocable");
@@ -821,7 +889,11 @@ async fn revoked_and_expired_sessions_return_stable_auth_codes() {
 
     let expired_token = login_token(app.clone()).await;
     sqlx::query("UPDATE auth_sessions SET expires_at = $2, revoked_at = NULL WHERE token = $1")
-        .bind(expired_token.parse::<uuid::Uuid>().expect("token should be uuid"))
+        .bind(
+            expired_token
+                .parse::<uuid::Uuid>()
+                .expect("token should be uuid"),
+        )
         .bind(Utc::now() - Duration::minutes(5))
         .execute(&state.pool)
         .await
@@ -843,7 +915,9 @@ async fn revoked_and_expired_sessions_return_stable_auth_codes() {
 #[tokio::test]
 async fn authenticated_requests_update_last_seen_timestamp() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(state) = test_state().await else { return };
+    let Some(state) = test_state().await else {
+        return;
+    };
     let app = router(state.clone());
     let token = login_token(app.clone()).await;
     let token_uuid = token.parse::<uuid::Uuid>().expect("token should be uuid");
@@ -927,6 +1001,35 @@ async fn login_token_for(app: axum::Router, email: &str, password: &str) -> Stri
         .to_string()
 }
 
+async fn login_cookie_for(app: axum::Router, email: &str, password: &str) -> String {
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/login")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    json!({
+                        "email": email,
+                        "password": password
+                    })
+                    .to_string(),
+                ))
+                .expect("valid login request"),
+        )
+        .await
+        .expect("router should produce response");
+    assert_eq!(response.status(), StatusCode::OK);
+
+    response
+        .headers()
+        .get(header::SET_COOKIE)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.split(';').next())
+        .expect("login should set a browser session cookie")
+        .to_string()
+}
+
 async fn request_json(app: axum::Router, request: Request<Body>) -> Value {
     let (status, body) = request_status_and_json(app, request).await;
     assert_eq!(status, StatusCode::OK, "unexpected response: {body}");
@@ -968,6 +1071,29 @@ fn authorized_request(method: &str, uri: &str, token: &str, body: Option<Value>)
     };
 
     builder.body(body).expect("valid authorized request")
+}
+
+fn cookie_authenticated_request(
+    method: &str,
+    uri: &str,
+    cookie: &str,
+    body: Option<Value>,
+) -> Request<Body> {
+    let mut builder = Request::builder()
+        .method(method)
+        .uri(uri)
+        .header(header::COOKIE, cookie);
+
+    let body = if let Some(body) = body {
+        builder = builder.header(header::CONTENT_TYPE, "application/json");
+        Body::from(body.to_string())
+    } else {
+        Body::empty()
+    };
+
+    builder
+        .body(body)
+        .expect("valid cookie-authenticated request")
 }
 
 async fn reset_database(database_url: &str) {
