@@ -1128,7 +1128,14 @@ body.tessara-app .theme-toggle-button {
 }
 
 body.tessara-app .app-sidebar-backdrop {
-  display: none;
+  display: none !important;
+  position: fixed;
+  inset: 0;
+  padding: 0;
+  border: 0;
+  background: rgba(15, 23, 42, 0.36);
+  pointer-events: none;
+  opacity: 0;
 }
 
 body.tessara-app .shell-toast {
@@ -1593,6 +1600,62 @@ body.tessara-app .app-shell--migration .app-sidebar {
   border-color: rgba(100, 116, 139, 0.4);
 }
 
+@media (min-width: 1024px) {
+  body.tessara-app .app-layout {
+    grid-template-columns: 284px minmax(0, 1fr);
+    gap: 0;
+    align-items: stretch;
+    border: 1px solid var(--tessara-border);
+    border-radius: 24px;
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--tessara-surface) 94%, transparent), color-mix(in srgb, var(--tessara-soft-surface) 88%, transparent)),
+      linear-gradient(135deg, color-mix(in srgb, var(--tessara-link) 6%, transparent), transparent 30rem);
+    box-shadow: var(--tessara-shadow);
+  }
+
+  body.tessara-app aside.panel.box.app-sidebar,
+  body.tessara-app section.panel.box.app-main {
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent !important;
+    box-shadow: none;
+  }
+
+  body.tessara-app .app-sidebar {
+    position: relative;
+    top: auto;
+    max-width: none;
+    align-self: stretch;
+    min-height: 100%;
+    padding: 1.5rem 1.25rem;
+    border-inline-end: 1px solid var(--tessara-border);
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--tessara-surface) 96%, transparent), color-mix(in srgb, var(--tessara-soft-surface) 92%, transparent)),
+      linear-gradient(180deg, color-mix(in srgb, var(--tessara-link) 8%, transparent), transparent 18rem);
+  }
+
+  body.tessara-app .app-main {
+    padding: 1.5rem;
+  }
+
+  body.tessara-app .app-shell--administration .app-layout {
+    border-color: rgba(245, 158, 11, 0.35);
+  }
+
+  body.tessara-app .app-shell--administration .app-sidebar {
+    border-inline-end-color: rgba(245, 158, 11, 0.35);
+  }
+
+  body.tessara-app .app-shell--migration .app-layout {
+    border-color: rgba(100, 116, 139, 0.4);
+  }
+
+  body.tessara-app .app-shell--migration .app-sidebar {
+    border-inline-end-color: rgba(100, 116, 139, 0.4);
+  }
+}
+
 @media (min-width: 768px) {
   body.tessara-app main.shell.app-shell {
     padding: 1.5rem 1.5rem 3rem;
@@ -1733,8 +1796,7 @@ body.tessara-app .app-shell--migration .app-sidebar {
     position: fixed;
     inset: 0;
     z-index: 30;
-    display: block;
-    background: rgba(15, 23, 42, 0.36);
+    display: block !important;
     opacity: 0;
     pointer-events: none;
     transition: opacity 160ms ease-out;
