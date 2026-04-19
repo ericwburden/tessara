@@ -584,10 +584,13 @@ mod tests {
         assert!(html.contains("login-feedback"));
         assert!(html.contains("login-email"));
         assert!(html.contains("login-password"));
-        assert!(html.contains("Cookie session contract"));
+        assert!(html.contains("data-auth-surface"));
+        assert!(html.contains("Use your Tessara account to open the shared workspace."));
         assert!(!html.contains("operator@tessara.local"));
         assert!(html.contains("data-theme-preference=\"system\""));
-        assert!(html.contains("global-search"));
+        assert!(!html.contains("global-search"));
+        assert!(!html.contains("top-app-bar"));
+        assert!(!html.contains("app-sidebar"));
     }
 
     #[test]

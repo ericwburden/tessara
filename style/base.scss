@@ -1503,6 +1503,89 @@ body.tessara-app .ui-toolbar .ui-field {
   margin: 0;
 }
 
+body.tessara-app[data-page-key='login'] {
+  background:
+    radial-gradient(circle at top left, rgba(20, 184, 166, 0.14), transparent 34%),
+    radial-gradient(circle at bottom right, rgba(245, 158, 11, 0.12), transparent 28%),
+    var(--tessara-page-bg);
+}
+
+body.tessara-app .auth-shell {
+  min-height: calc(100dvh - 2rem);
+  display: grid;
+  place-items: center;
+  padding: clamp(1rem, 4vw, 2.5rem);
+}
+
+body.tessara-app .auth-shell__panel {
+  width: min(100%, 32rem);
+  display: grid;
+  gap: 1.5rem;
+  padding: clamp(1.5rem, 3vw, 2.25rem);
+  border: 1px solid var(--tessara-border);
+  border-radius: 24px;
+  background: color-mix(in srgb, var(--tessara-surface) 94%, var(--tessara-page-bg) 6%);
+  box-shadow: var(--tessara-shadow);
+}
+
+body.tessara-app .auth-shell__brand {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 1rem;
+  align-items: center;
+}
+
+body.tessara-app .auth-shell__mark {
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 1rem;
+  border: 1px solid var(--tessara-brand-mark-border);
+  background: var(--tessara-brand-mark-bg);
+  box-shadow: var(--tessara-brand-mark-shadow);
+  object-fit: contain;
+}
+
+body.tessara-app .auth-shell__copy {
+  display: grid;
+  gap: 0.35rem;
+}
+
+body.tessara-app .auth-shell__copy h1 {
+  margin: 0;
+  font-size: clamp(2rem, 4vw, 2.5rem);
+  line-height: 1.05;
+}
+
+body.tessara-app .auth-shell__copy p {
+  margin: 0;
+}
+
+body.tessara-app .auth-shell__form {
+  gap: 1rem;
+}
+
+body.tessara-app .auth-shell__form .form-grid {
+  grid-template-columns: 1fr;
+}
+
+body.tessara-app .auth-shell__form .field {
+  display: grid;
+  gap: 0.45rem;
+}
+
+body.tessara-app .auth-shell__form .actions {
+  justify-content: stretch;
+}
+
+body.tessara-app .auth-shell__form .actions .button {
+  width: 100%;
+}
+
+body.tessara-app .auth-shell__status {
+  margin: 0;
+  font-size: 0.92rem;
+}
+
 @media (max-width: 768px) {
   body.tessara-app .ui-toolbar {
     flex-direction: column;
@@ -1511,5 +1594,9 @@ body.tessara-app .ui-toolbar .ui-field {
 
   body.tessara-app .ui-toolbar__secondary {
     justify-content: flex-start;
+  }
+
+  body.tessara-app .auth-shell__brand {
+    grid-template-columns: 1fr;
   }
 }

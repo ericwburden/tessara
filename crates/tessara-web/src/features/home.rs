@@ -1,11 +1,14 @@
 use leptos::prelude::*;
 
 #[cfg(feature = "hydrate")]
+use serde::Deserialize;
+#[cfg(feature = "hydrate")]
 use serde_json::{Value, json};
 
 use crate::app::transitional::{TransitionalPage, render_transitional_route};
+use crate::features::native_runtime::set_page_context;
 #[cfg(feature = "hydrate")]
-use crate::features::native_runtime::{post_json, redirect};
+use crate::features::native_runtime::{get_json, post_json, redirect};
 use crate::features::native_shell::{
     ADMIN_LINKS, AccountContext, BreadcrumbItem, MetadataStrip, NativePage, NavLinkSpec,
     PRODUCT_LINKS, PageHeader, Panel, TRANSITIONAL_LINKS, use_account_session, visible_links,
@@ -67,6 +70,12 @@ fn home_visible_cards(loaded: bool, visible: Vec<&NavLinkSpec>) -> AnyView {
         </div>
     }
     .into_any()
+}
+
+#[cfg(feature = "hydrate")]
+#[derive(Clone, Deserialize)]
+struct LoginSessionStateResponse {
+    authenticated: bool,
 }
 
 #[component]
@@ -183,19 +192,22 @@ pub fn HomePage() -> impl IntoView {
 
 #[component]
 pub fn LoginPage() -> impl IntoView {
-    let session = use_account_session();
-    #[cfg(not(feature = "hydrate"))]
-    let _ = session;
+    let session_checked = RwSignal::new(false);
     let email = RwSignal::new(String::new());
     let password = RwSignal::new(String::new());
     let feedback = RwSignal::new(None::<String>);
     let busy = RwSignal::new(false);
 
+    set_page_context("login", "login", None);
+
     #[cfg(feature = "hydrate")]
     Effect::new(move |_| {
-        if session.loaded.get() && session.account.get().is_some() {
-            redirect("/app");
-        }
+        leptos::task::spawn_local(async move {
+            match get_json::<LoginSessionStateResponse>("/api/auth/session").await {
+                Ok(response) if response.authenticated => redirect("/app"),
+                Ok(_) | Err(_) => session_checked.set(true),
+            }
+        });
     });
 
     let submit = move |_| {
@@ -221,12 +233,7 @@ pub fn LoginPage() -> impl IntoView {
             });
 
             match post_json::<Value>("/api/auth/login", &body).await {
-                Ok(_) => {
-                    session.account.set(None);
-                    session.error.set(None);
-                    session.loaded.set(false);
-                    redirect("/app");
-                }
+                Ok(_) => redirect("/app"),
                 Err(error) => feedback.set(Some(error)),
             }
 
@@ -235,38 +242,32 @@ pub fn LoginPage() -> impl IntoView {
     };
 
     view! {
-        <NativePage
-            title="Tessara Sign In"
-            description="Sign in to the Tessara application shell."
-            page_key="login"
-            active_route="login"
-            workspace_label="Sign In"
-            allow_unauthenticated=true
-            breadcrumbs=vec![BreadcrumbItem::current("Sign In")]
-        >
-            <PageHeader
-                eyebrow="Access"
-                title="Sign In"
-                description="Use your Tessara account to open the native application shell."
-            />
-            <MetadataStrip items=vec![
-                ("Mode", "Authentication".into()),
-                ("Surface", "Native sign-in".into()),
-                ("State", "Cookie session contract".into()),
-            ]/>
-            <Panel
-                title="Application Sign-In"
-                description="Enter your account credentials to continue. Development credentials are documented outside the public sign-in surface."
-            >
+        <main class="auth-shell" data-auth-surface>
+            <section class="auth-shell__panel">
+                <div class="auth-shell__brand">
+                    <img class="auth-shell__mark" src="/assets/tessara-icon-256.svg" alt="" />
+                    <div class="auth-shell__copy">
+                        <p class="eyebrow">"Access"</p>
+                        <h1>"Sign In"</h1>
+                        <p class="muted">
+                            "Use your Tessara account to open the shared workspace."
+                        </p>
+                    </div>
+                </div>
                 <form
                     id="login-form"
-                    class="stacked-form"
+                    class="stacked-form auth-shell__form"
                     on:submit=move |event| {
                         event.prevent_default();
                         submit(());
                     }
                 >
-                    <div id="login-feedback" class="notification is-light" class:is-hidden=move || feedback.get().is_none()>
+                    <div
+                        id="login-feedback"
+                        class="notification is-danger is-light"
+                        class:is-hidden=move || feedback.get().is_none()
+                        role="alert"
+                    >
                         {move || feedback.get().unwrap_or_default()}
                     </div>
                     <div class="form-grid">
@@ -294,12 +295,15 @@ pub fn LoginPage() -> impl IntoView {
                         </label>
                     </div>
                     <div class="actions">
-                        <button class="button-link button is-light" type="submit" disabled=move || busy.get()>
+                        <button class="button-link button is-primary" type="submit" disabled=move || busy.get()>
                             {move || if busy.get() { "Signing In..." } else { "Sign In" }}
                         </button>
                     </div>
                 </form>
-            </Panel>
-        </NativePage>
+                <Show when=move || !session_checked.get()>
+                    <p class="auth-shell__status muted">"Checking your current session..."</p>
+                </Show>
+            </section>
+        </main>
     }
 }

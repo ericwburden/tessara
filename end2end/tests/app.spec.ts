@@ -3,6 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 const BENIGN_NAVIGATION_ABORT_ERRORS = [
   "WebAssembly compilation aborted: Network error: Response body loading was aborted",
 ];
+const THEME_STORAGE_KEY = "tessara.themePreference";
 
 type WorkflowAssignmentSummary = {
   workflow_version_id: string;
@@ -203,15 +204,38 @@ test("home route stays on the native SSR shell", async ({ page }) => {
 test("theme preference persists on the native shell", async ({ page }) => {
   const assertNoConsoleErrors = attachConsoleGuard(page);
 
+  await page.addInitScript((storageKey) => {
+    window.localStorage.setItem(storageKey, "dark");
+  }, THEME_STORAGE_KEY);
   await page.goto("/app/login");
-  await page.getByRole("button", { name: "Dark" }).click();
-
+  await expect(page.locator("html")).toHaveAttribute("data-theme-preference", "dark");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 
   await page.reload();
 
   await expect(page.locator("html")).toHaveAttribute("data-theme-preference", "dark");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+
+  await assertNoConsoleErrors();
+});
+
+test("sign-in route stays bare and redirects authenticated browsers home", async ({ page }) => {
+  const assertNoConsoleErrors = attachConsoleGuard(page);
+
+  await page.goto("/app/login");
+  await expect(page.getByRole("heading", { level: 1, name: "Sign In" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign In" })).toBeVisible();
+  await expect(page.locator("[data-auth-surface]")).toHaveCount(1);
+  await expect(page.locator(".top-app-bar")).toHaveCount(0);
+  await expect(page.locator("#app-sidebar")).toHaveCount(0);
+  await expect(page.locator("#global-search")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Sign Out" })).toHaveCount(0);
+
+  await signInAsAdmin(page);
+  await waitForAuthenticatedShell(page, "admin@tessara.local");
+  await page.goto("/app/login");
+  await expect(page).toHaveURL(/\/app$/);
+  await expect(page.getByRole("heading", { name: "Application Overview" })).toBeVisible();
 
   await assertNoConsoleErrors();
 });
