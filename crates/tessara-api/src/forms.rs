@@ -42,6 +42,10 @@ pub struct CreateFormVersionRequest {}
 pub struct CreateFormSectionRequest {
     title: String,
     position: i32,
+    #[serde(default = "default_form_section_description")]
+    description: String,
+    #[serde(default = "default_form_section_column_count")]
+    column_count: i32,
 }
 
 #[derive(Deserialize)]
@@ -58,6 +62,10 @@ pub struct CreateFormFieldRequest {
 pub struct UpdateFormSectionRequest {
     title: String,
     position: i32,
+    #[serde(default = "default_form_section_description")]
+    description: String,
+    #[serde(default = "default_form_section_column_count")]
+    column_count: i32,
 }
 
 #[derive(Deserialize)]
@@ -84,8 +92,18 @@ pub struct RenderedForm {
 pub struct RenderedSection {
     id: Uuid,
     title: String,
+    description: String,
+    column_count: i32,
     position: i32,
     fields: Vec<RenderedField>,
+}
+
+fn default_form_section_description() -> String {
+    String::new()
+}
+
+fn default_form_section_column_count() -> i32 {
+    1
 }
 
 #[derive(Serialize)]
@@ -887,12 +905,20 @@ pub async fn create_form_section(
     request.require_capability("forms:write")?;
     assert_form_version_draft(&state.pool, form_version_id).await?;
     require_text("section title", &payload.title)?;
+    let description = normalize_form_section_description(&payload.description);
+    let column_count = require_form_section_column_count(payload.column_count)?;
 
     let id = sqlx::query_scalar(
-        "INSERT INTO form_sections (form_version_id, title, position) VALUES ($1, $2, $3) RETURNING id",
+        r#"
+        INSERT INTO form_sections (form_version_id, title, description, column_count, position)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING id
+        "#,
     )
     .bind(form_version_id)
     .bind(payload.title)
+    .bind(description)
+    .bind(column_count)
     .bind(payload.position)
     .fetch_one(&state.pool)
     .await?;
@@ -947,9 +973,15 @@ pub async fn update_form_section(
     let form_version_id = require_section_form_version(&state.pool, section_id).await?;
     assert_form_version_draft(&state.pool, form_version_id).await?;
     require_text("section title", &payload.title)?;
+    let description = normalize_form_section_description(&payload.description);
+    let column_count = require_form_section_column_count(payload.column_count)?;
 
-    sqlx::query("UPDATE form_sections SET title = $1, position = $2 WHERE id = $3")
+    sqlx::query(
+        "UPDATE form_sections SET title = $1, description = $2, column_count = $3, position = $4 WHERE id = $5",
+    )
         .bind(payload.title)
+        .bind(description)
+        .bind(column_count)
         .bind(payload.position)
         .bind(section_id)
         .execute(&state.pool)
@@ -1148,7 +1180,7 @@ pub async fn render_form_version(
 
     let section_rows = sqlx::query(
         r#"
-        SELECT id, title, position
+        SELECT id, title, description, column_count, position
         FROM form_sections
         WHERE form_version_id = $1
         ORDER BY position, title
@@ -1191,6 +1223,8 @@ pub async fn render_form_version(
         sections.push(RenderedSection {
             id: section_id,
             title: section.try_get("title")?,
+            description: section.try_get("description")?,
+            column_count: section.try_get("column_count")?,
             position: section.try_get("position")?,
             fields,
         });
@@ -1230,6 +1264,20 @@ async fn require_form_field(pool: &sqlx::PgPool, field_id: Uuid) -> ApiResult<Ex
         form_version_id: row.try_get("form_version_id")?,
         key: row.try_get("key")?,
     })
+}
+
+fn normalize_form_section_description(description: &str) -> String {
+    description.trim().to_string()
+}
+
+fn require_form_section_column_count(column_count: i32) -> ApiResult<i32> {
+    if matches!(column_count, 1 | 2) {
+        Ok(column_count)
+    } else {
+        Err(ApiError::BadRequest(
+            "section column count must be 1 or 2".into(),
+        ))
+    }
 }
 
 async fn assert_form_version_draft(pool: &sqlx::PgPool, form_version_id: Uuid) -> ApiResult<()> {
@@ -1591,7 +1639,7 @@ async fn load_form_version_contract(
 ) -> ApiResult<FormVersionContract> {
     let sections = sqlx::query(
         r#"
-        SELECT title, position
+        SELECT title, description, column_count, position
         FROM form_sections
         WHERE form_version_id = $1
         ORDER BY position, title
@@ -1624,9 +1672,11 @@ async fn load_form_version_contract(
         .into_iter()
         .map(|row| {
             Ok(format!(
-                "{}:{}",
+                "{}:{}:{}:{}",
                 row.try_get::<i32, _>("position")?,
-                row.try_get::<String, _>("title")?
+                row.try_get::<String, _>("title")?,
+                row.try_get::<String, _>("description")?,
+                row.try_get::<i32, _>("column_count")?,
             ))
         })
         .collect::<Result<Vec<_>, sqlx::Error>>()?;

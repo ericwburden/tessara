@@ -12,6 +12,7 @@ mod hydrate {
     use crate::features::native_runtime::{
         by_id, delete_json, escape_html, get_json, input_value, post_json, put_json, redirect,
         select_value, set_html, set_input_value, set_page_context, set_select_value, set_text,
+        textarea_value,
     };
     use serde::Deserialize;
     use serde_json::json;
@@ -104,6 +105,8 @@ mod hydrate {
     struct RenderedSection {
         id: String,
         title: String,
+        description: String,
+        column_count: i32,
         position: i32,
         fields: Vec<RenderedField>,
     }
@@ -320,9 +323,18 @@ mod hydrate {
                             .join("")
                     };
                     format!(
-                        r#"<section class="page-panel nested-form-panel"><h3>{}</h3><p class="muted">Section order: {}</p><div class="record-list">{}</div></section>"#,
+                        r#"<section class="page-panel nested-form-panel"><h3>{}</h3>{}<p class="muted">Section order: {} | Layout: {}</p><div class="record-list">{}</div></section>"#,
                         escape_html(&section.title),
+                        if section.description.trim().is_empty() {
+                            String::new()
+                        } else {
+                            format!(
+                                r#"<p class="muted">{}</p>"#,
+                                escape_html(&section.description)
+                            )
+                        },
                         section.position,
+                        escape_html(&form_section_layout_label(section.column_count)),
                         fields,
                     )
                 })
@@ -493,6 +505,39 @@ mod hydrate {
             .join("")
     }
 
+    fn render_form_section_column_count_options(selected: i32) -> String {
+        [1, 2]
+            .into_iter()
+            .map(|column_count| {
+                format!(
+                    r#"<option value="{column_count}" {}>{column_count} {}</option>"#,
+                    if selected == column_count {
+                        "selected"
+                    } else {
+                        ""
+                    },
+                    if column_count == 1 {
+                        "column"
+                    } else {
+                        "columns"
+                    },
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("")
+    }
+
+    fn form_section_layout_label(column_count: i32) -> String {
+        format!(
+            "{column_count} {}",
+            if column_count == 1 {
+                "column"
+            } else {
+                "columns"
+            }
+        )
+    }
+
     fn render_form_version_lifecycle_summary(version: &FormVersionSummary) -> String {
         let preview = version
             .publish_preview
@@ -583,15 +628,22 @@ mod hydrate {
                             .join("")
                     };
                     format!(
-                        r#"<article class="record-card"><div class="page-title-row compact-title-row"><div><h4>{}</h4><p class="muted">Draft section {}</p></div><div class="actions"><button class="button is-light" type="button" data-form-section-move-up="{}">Move Up</button><button class="button is-light" type="button" data-form-section-move-down="{}">Move Down</button><button class="button is-light" type="button" data-form-section-delete="{}">Delete</button></div></div><div class="form-grid"><div class="form-field wide-field"><label for="form-section-title-{}">Section Title</label><input class="input" id="form-section-title-{}" type="text" value="{}" /></div><div class="form-field"><label for="form-section-position-{}">Display Order</label><input class="input" id="form-section-position-{}" type="number" value="{}" /></div></div><div class="actions"><button class="button is-light" type="button" data-form-section-save="{}">Save Section</button></div><div class="record-list">{}</div><section class="page-panel nested-form-panel"><div class="page-title-row compact-title-row"><div><h4>Add Field</h4><p class="muted">Create a new field inside this section.</p></div></div><div class="form-grid"><div class="form-field"><label for="new-form-field-key-{}">Field Key</label><input class="input" id="new-form-field-key-{}" type="text" /></div><div class="form-field"><label for="new-form-field-label-{}">Label</label><input class="input" id="new-form-field-label-{}" type="text" /></div><div class="form-field"><label for="new-form-field-type-{}">Field Type</label><select class="input" id="new-form-field-type-{}">{}</select></div><div class="form-field"><label for="new-form-field-required-{}">Required</label><select class="input" id="new-form-field-required-{}"><option value="false" selected>Optional</option><option value="true">Required</option></select></div></div><p class="muted">Option-set and lookup anchors remain informational until backend metadata support lands.</p><div class="actions"><button class="button is-light" type="button" data-form-field-create="{}">Add Field</button></div></section></article>"#,
+                        r#"<article class="record-card"><div class="page-title-row compact-title-row"><div><h4>{}</h4><p class="muted">Draft section {} | {}</p></div><div class="actions"><button class="button is-light" type="button" data-form-section-move-up="{}">Move Up</button><button class="button is-light" type="button" data-form-section-move-down="{}">Move Down</button><button class="button is-light" type="button" data-form-section-delete="{}">Delete</button></div></div><div class="form-grid"><div class="form-field wide-field"><label for="form-section-title-{}">Section Title</label><input class="input" id="form-section-title-{}" type="text" value="{}" /></div><div class="form-field wide-field"><label for="form-section-description-{}">Section Description</label><textarea class="textarea" id="form-section-description-{}" rows="3">{}</textarea></div><div class="form-field"><label for="form-section-column-count-{}">Columns</label><select class="input" id="form-section-column-count-{}">{}</select></div><div class="form-field"><label for="form-section-position-{}">Display Order</label><input class="input" id="form-section-position-{}" type="number" value="{}" /></div></div><div class="actions"><button class="button is-light" type="button" data-form-section-save="{}">Save Section</button></div><div class="record-list">{}</div><section class="page-panel nested-form-panel"><div class="page-title-row compact-title-row"><div><h4>Add Field</h4><p class="muted">Create a new field inside this section.</p></div></div><div class="form-grid"><div class="form-field"><label for="new-form-field-key-{}">Field Key</label><input class="input" id="new-form-field-key-{}" type="text" /></div><div class="form-field"><label for="new-form-field-label-{}">Label</label><input class="input" id="new-form-field-label-{}" type="text" /></div><div class="form-field"><label for="new-form-field-type-{}">Field Type</label><select class="input" id="new-form-field-type-{}">{}</select></div><div class="form-field"><label for="new-form-field-required-{}">Required</label><select class="input" id="new-form-field-required-{}"><option value="false" selected>Optional</option><option value="true">Required</option></select></div></div><p class="muted">Option-set and lookup anchors remain informational until backend metadata support lands.</p><div class="actions"><button class="button is-light" type="button" data-form-field-create="{}">Add Field</button></div></section></article>"#,
                         escape_html(&section.title),
                         section_index + 1,
+                        escape_html(&form_section_layout_label(section.column_count)),
                         escape_html(&section.id),
                         escape_html(&section.id),
                         escape_html(&section.id),
                         escape_html(&section.id),
                         escape_html(&section.id),
                         escape_html(&section.title),
+                        escape_html(&section.id),
+                        escape_html(&section.id),
+                        escape_html(&section.description),
+                        escape_html(&section.id),
+                        escape_html(&section.id),
+                        render_form_section_column_count_options(section.column_count),
                         escape_html(&section.id),
                         escape_html(&section.id),
                         section.position,
@@ -614,12 +666,13 @@ mod hydrate {
         };
 
         format!(
-            r#"<section class="page-panel nested-form-panel"><div class="page-title-row compact-title-row"><div><h3>{}</h3><p class="muted">Draft version workspace for {}</p></div><div class="actions"><button class="button is-light" type="button" data-publish-form-version="{}">Publish Draft Version</button></div></div><p class="muted">Compatibility: {}</p>{}<p class="muted">Publish attempts surface validation errors here before the route reloads.</p></section><section class="page-panel nested-form-panel"><div class="page-title-row compact-title-row"><div><h3>Add Section</h3><p class="muted">Create a new section for the selected draft version.</p></div></div><div class="form-grid"><div class="form-field wide-field"><label for="new-form-section-title">Section Title</label><input class="input" id="new-form-section-title" type="text" /></div></div><div class="actions"><button class="button is-light" type="button" id="form-section-create">Add Section</button></div></section>{}"#,
+            r#"<section class="page-panel nested-form-panel"><div class="page-title-row compact-title-row"><div><h3>{}</h3><p class="muted">Draft version workspace for {}</p></div><div class="actions"><button class="button is-light" type="button" data-publish-form-version="{}">Publish Draft Version</button></div></div><p class="muted">Compatibility: {}</p>{}<p class="muted">Publish attempts surface validation errors here before the route reloads.</p></section><section class="page-panel nested-form-panel"><div class="page-title-row compact-title-row"><div><h3>Add Section</h3><p class="muted">Create a new section for the selected draft version.</p></div></div><div class="form-grid"><div class="form-field wide-field"><label for="new-form-section-title">Section Title</label><input class="input" id="new-form-section-title" type="text" /></div><div class="form-field wide-field"><label for="new-form-section-description">Section Description</label><textarea class="textarea" id="new-form-section-description" rows="3"></textarea></div><div class="form-field"><label for="new-form-section-column-count">Columns</label><select class="input" id="new-form-section-column-count">{}</select></div></div><div class="actions"><button class="button is-light" type="button" id="form-section-create">Add Section</button></div></section>{}"#,
             escape_html(&form_version_label(version)),
             escape_html(&form.name),
             escape_html(&version.id),
             escape_html(&form_version_compatibility(version)),
             render_form_version_lifecycle_summary(version),
+            render_form_section_column_count_options(1),
             sections,
         )
     }
@@ -906,6 +959,10 @@ mod hydrate {
                     };
                     let payload = json!({
                         "title": input_value("new-form-section-title").unwrap_or_default(),
+                        "description": textarea_value("new-form-section-description").unwrap_or_default(),
+                        "column_count": select_value("new-form-section-column-count")
+                            .and_then(|value| value.parse::<i32>().ok())
+                            .unwrap_or(1),
                         "position": rendered.as_ref().map(next_section_position).unwrap_or(1),
                     });
                     match post_json::<IdResponse>(
@@ -941,6 +998,10 @@ mod hydrate {
                 let selected_version_id = state.borrow().selected_version_id.clone();
                 let payload = json!({
                     "title": input_value(&format!("form-section-title-{section_id}")).unwrap_or_default(),
+                    "description": textarea_value(&format!("form-section-description-{section_id}")).unwrap_or_default(),
+                    "column_count": select_value(&format!("form-section-column-count-{section_id}"))
+                        .and_then(|value| value.parse::<i32>().ok())
+                        .unwrap_or(1),
                     "position": input_value(&format!("form-section-position-{section_id}"))
                         .and_then(|value| value.parse::<i32>().ok())
                         .unwrap_or(0),
@@ -1021,10 +1082,14 @@ mod hydrate {
                     let target = &sections[target_index as usize];
                     let current_payload = json!({
                         "title": current.title,
+                        "description": current.description,
+                        "column_count": current.column_count,
                         "position": target.position,
                     });
                     let target_payload = json!({
                         "title": target.title,
+                        "description": target.description,
+                        "column_count": target.column_count,
                         "position": current.position,
                     });
                     let current_result = put_json::<IdResponse>(

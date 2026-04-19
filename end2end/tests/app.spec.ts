@@ -530,6 +530,9 @@ test("forms authoring routes stay native and console-clean", async ({ page }) =>
   await expect(page.getByRole("heading", { name: "Edit Form" }).first()).toBeVisible();
   await expect(page.locator("body")).toContainText("Draft Version Workspace");
   await expect(page.locator("#form-version-workspace")).toHaveCount(1);
+  await page.getByRole("button", { name: "Create Draft Version" }).click();
+  await expect(page.locator("#new-form-section-description")).toBeVisible();
+  await expect(page.locator("#new-form-section-column-count")).toBeVisible();
   await expectNoLegacyBridge(page);
 
   await page.reload();

@@ -2265,6 +2265,8 @@ async fn form_builder_guards_cross_version_sections_and_supersedes_previous_publ
             &token,
             Some(json!({
                 "title": "Updated Main",
+                "description": "Monthly service counts and staffing context.",
+                "column_count": 2,
                 "position": 1
             })),
         ),
@@ -2534,6 +2536,11 @@ async fn form_builder_guards_cross_version_sections_and_supersedes_previous_publ
     assert_eq!(version_one["form_name"], "Monthly Services Report");
     assert_eq!(version_one["sections"][0]["title"], "Updated Main");
     assert_eq!(
+        version_one["sections"][0]["description"],
+        "Monthly service counts and staffing context."
+    );
+    assert_eq!(version_one["sections"][0]["column_count"], 2);
+    assert_eq!(
         version_one["sections"][0]["fields"][0]["key"],
         "staff_count"
     );
@@ -2553,6 +2560,91 @@ async fn form_builder_guards_cross_version_sections_and_supersedes_previous_publ
     assert_eq!(version_one["sections"][0]["fields"][1]["required"], false);
     assert_eq!(version_two["status"], "published");
     assert_eq!(version_two["form_name"], "Monthly Services Report");
+}
+
+#[tokio::test]
+async fn form_publish_preview_treats_section_metadata_changes_as_patch() {
+    let _guard = TEST_DATABASE_LOCK.lock().await;
+    let Some(app) = test_app().await else { return };
+    let token = login_token(app.clone()).await;
+
+    let form = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/forms",
+            &token,
+            Some(json!({
+                "name": "Section Metadata Preview Form",
+                "slug": "section-metadata-preview-form",
+                "scope_node_type_id": null
+            })),
+        ),
+    )
+    .await;
+    let form_id = id_from(&form);
+
+    let version_one_id = create_form_version(app.clone(), &token, form_id, "v1").await;
+    let section_one_id = create_form_section(app.clone(), &token, version_one_id, "Main").await;
+    create_number_field(
+        app.clone(),
+        &token,
+        version_one_id,
+        section_one_id,
+        "participants",
+    )
+    .await;
+    request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            &format!("/api/admin/form-versions/{version_one_id}/publish"),
+            &token,
+            None,
+        ),
+    )
+    .await;
+
+    let version_two_id = create_form_version(app.clone(), &token, form_id, "v2").await;
+    let section_two_id = create_form_section(app.clone(), &token, version_two_id, "Main").await;
+    request_json(
+        app.clone(),
+        authorized_request(
+            "PUT",
+            &format!("/api/admin/form-sections/{section_two_id}"),
+            &token,
+            Some(json!({
+                "title": "Main",
+                "description": "Show monthly summary counts first.",
+                "column_count": 2,
+                "position": 0
+            })),
+        ),
+    )
+    .await;
+    create_number_field(
+        app.clone(),
+        &token,
+        version_two_id,
+        section_two_id,
+        "participants",
+    )
+    .await;
+
+    let definition = request_json(
+        app,
+        authorized_request("GET", &format!("/api/admin/forms/{form_id}"), &token, None),
+    )
+    .await;
+    let draft_version = definition["versions"]
+        .as_array()
+        .expect("form definition should include versions")
+        .iter()
+        .find(|version| version["id"] == version_two_id.to_string())
+        .expect("draft version should be present in form definition");
+
+    assert_eq!(draft_version["publish_preview"]["semantic_bump"], "PATCH");
+    assert_eq!(draft_version["publish_preview"]["version_label"], "1.0.1");
 }
 
 #[tokio::test]
@@ -5470,6 +5562,8 @@ async fn create_form_section(
             token,
             Some(json!({
                 "title": title,
+                "description": "",
+                "column_count": 1,
                 "position": 0
             })),
         ),
