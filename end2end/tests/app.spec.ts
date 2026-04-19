@@ -819,14 +819,21 @@ test("assignee pending start opens the matching draft directly and removes it fr
   await expect.poll(async () => pendingCards.count()).toBeGreaterThan(0);
 
   const pendingCard = pendingCards.last();
-  const expectedFormLabel = (await pendingCard.locator("p.muted").first().textContent())
-    ?.replace(/^Form:\s*/, "")
-    .trim();
-  expect(expectedFormLabel).toBeTruthy();
   const assignmentId = await pendingCard
     .locator("button[data-workflow-assignment-id]")
     .getAttribute("data-workflow-assignment-id");
   expect(assignmentId).toBeTruthy();
+  const pendingBeforeStartResponse = await page.request.get("/api/workflow-assignments/pending");
+  expect(pendingBeforeStartResponse.ok()).toBeTruthy();
+  const pendingBeforeStart = (await pendingBeforeStartResponse.json()) as Array<{
+    workflow_assignment_id: string;
+    form_name: string;
+    form_version_label: string | null;
+  }>;
+  const startedAssignment = pendingBeforeStart.find(
+    (item) => item.workflow_assignment_id === assignmentId,
+  );
+  expect(startedAssignment).toBeTruthy();
 
   await pendingCard.getByRole("button", { name: "Start" }).click();
 
@@ -838,7 +845,8 @@ test("assignee pending start opens the matching draft directly and removes it fr
   const submissionResponse = await page.request.get(`/api/submissions/${submissionId}`);
   expect(submissionResponse.ok()).toBeTruthy();
   const submission = await submissionResponse.json();
-  expect(`${submission.form_name} ${submission.version_label}`).toBe(expectedFormLabel);
+  expect(submission.form_name).toBe(startedAssignment?.form_name);
+  expect(submission.version_label).toBe(startedAssignment?.form_version_label);
 
   const inputs = page.locator("#response-edit-form input");
   const inputCount = await inputs.count();
@@ -859,9 +867,9 @@ test("assignee pending start opens the matching draft directly and removes it fr
   await page.getByRole("button", { name: "Submit" }).click();
   await expect(page).toHaveURL(new RegExp(`/app/responses/${submissionId}(?:/edit)?$`));
 
-  const pendingResponse = await page.request.get("/api/workflow-assignments/pending");
-  expect(pendingResponse.ok()).toBeTruthy();
-  const pendingAssignments = await pendingResponse.json();
+  const pendingAfterSubmitResponse = await page.request.get("/api/workflow-assignments/pending");
+  expect(pendingAfterSubmitResponse.ok()).toBeTruthy();
+  const pendingAssignments = await pendingAfterSubmitResponse.json();
   expect(
     pendingAssignments.some(
       (item: { workflow_assignment_id: string }) => item.workflow_assignment_id === assignmentId,
@@ -1011,7 +1019,7 @@ test("deeper routes show breadcrumbs and internal cues stay subtle", async ({ pa
   await expect(page.getByRole("heading", { name: "Administration" }).first()).toBeVisible();
   await expect(page.getByText("Administration Workspace")).toBeVisible();
   await expect(
-    page.getByRole("navigation", { name: "Internal navigation" }).getByRole("link", { name: "Migration" }),
+    page.getByRole("navigation", { name: "Admin navigation" }).getByRole("link", { name: "Migration" }),
   ).toBeVisible();
 
   await page.goto("/app/migration");
@@ -1022,11 +1030,16 @@ test("deeper routes show breadcrumbs and internal cues stay subtle", async ({ pa
 test("shell navigation collapses on tablet and overlays on mobile", async ({ page }) => {
   const assertNoConsoleErrors = attachConsoleGuard(page);
 
+  await signInAsAdmin(page);
+  await waitForAuthenticatedShell(page, "admin@tessara.local");
+
   await page.setViewportSize({ width: 900, height: 900 });
   await page.goto("/app");
+  await expect(page.locator("html")).toHaveAttribute("data-shell-ready", "true");
   await expect(page.locator("body")).toHaveAttribute("data-shell-viewport", "tablet");
   await expect(page.locator("body")).toHaveAttribute("data-sidebar-state", "collapsed");
   await expect(page.locator(".app-nav__label").first()).toBeHidden();
+  await expect(page.getByRole("button", { name: /expand navigation/i })).toBeVisible();
 
   await page.getByRole("button", { name: /expand navigation/i }).click();
   await expect(page.locator("body")).toHaveAttribute("data-sidebar-state", "expanded");
@@ -1034,8 +1047,10 @@ test("shell navigation collapses on tablet and overlays on mobile", async ({ pag
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-shell-ready", "true");
   await expect(page.locator("body")).toHaveAttribute("data-shell-viewport", "mobile");
   await expect(page.locator("body")).toHaveAttribute("data-sidebar-state", "overlay-closed");
+  await expect(page.getByRole("button", { name: /open navigation/i })).toBeVisible();
 
   await page.getByRole("button", { name: /open navigation/i }).click();
   await expect(page.locator("body")).toHaveAttribute("data-sidebar-state", "overlay-open");

@@ -488,6 +488,11 @@ fn apply_shell_chrome_state() {
     }
 
     if let Some(toggle) = document.get_element_by_id("app-nav-toggle") {
+        if viewport == "desktop" {
+            toggle.set_attribute("hidden", "").ok();
+        } else {
+            toggle.remove_attribute("hidden").ok();
+        }
         toggle
             .set_attribute(
                 "aria-expanded",
@@ -510,6 +515,14 @@ fn apply_shell_chrome_state() {
             "Collapse navigation"
         };
         toggle.set_attribute("aria-label", label).ok();
+    }
+
+    if let Ok(Some(backdrop)) = document.query_selector(".app-sidebar-backdrop") {
+        if viewport == "mobile" && state == "overlay-open" {
+            backdrop.remove_attribute("hidden").ok();
+        } else {
+            backdrop.set_attribute("hidden", "").ok();
+        }
     }
 }
 

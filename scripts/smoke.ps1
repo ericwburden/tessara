@@ -266,14 +266,15 @@ try {
     }
 
     $appShell = Invoke-Html -Uri "$baseUrl/app" -CookieJarPath $adminBrowserSession
-    Assert-ProtectedShell -Content $appShell -Needles @("Tessara Home", "Product Areas", "Product navigation") -Context "application home shell"
+    Assert-ProtectedShell -Content $appShell -Needles @("Tessara Home", "app-shell--home", "Shared Home", "Primary navigation") -Context "application home shell"
     $loginShell = Invoke-Html -Uri "$baseUrl/app/login"
     if (
-        -not ($loginShell -like "*Sign In*") `
+        -not ($loginShell -like "*Tessara Sign In*") `
+        -or -not ($loginShell -like "*data-auth-surface*") `
         -or -not ($loginShell -like "*login-form*") `
         -or -not ($loginShell -like "*login-email*") `
         -or -not ($loginShell -like "*login-password*") `
-        -or -not ($loginShell -like "*Cookie session contract*") `
+        -or -not ($loginShell -like "*Checking your current session...*") `
         -or ($loginShell -like "*operator@tessara.local*")
     ) {
         throw "Expected login HTML to expose native sign-in controls without public demo credentials"
@@ -283,9 +284,11 @@ try {
     $formsShell = Invoke-Html -Uri "$baseUrl/app/forms" -CookieJarPath $adminBrowserSession
     Assert-ProtectedShell -Content $formsShell -Needles @("Forms") -Context "forms list shell"
     $workflowsShell = Invoke-Html -Uri "$baseUrl/app/workflows" -CookieJarPath $adminBrowserSession
-    Assert-ProtectedShell -Content $workflowsShell -Needles @("Workflows") -Context "workflows list shell"
+    Assert-ProtectedShell -Content $workflowsShell -Needles @("Tessara Workflows", "app-shell--workflows", "Product Area") -Context "workflows list shell"
+    $workflowAssignmentsShell = Invoke-Html -Uri "$baseUrl/app/workflows/assignments" -CookieJarPath $adminBrowserSession
+    Assert-ProtectedShell -Content $workflowAssignmentsShell -Needles @("Workflow Assignments", "app-shell--workflows", "Assignment Console") -Context "workflow assignments shell"
     $responsesShell = Invoke-Html -Uri "$baseUrl/app/responses" -CookieJarPath $adminBrowserSession
-    Assert-ProtectedShell -Content $responsesShell -Needles @("Responses") -Context "responses list shell"
+    Assert-ProtectedShell -Content $responsesShell -Needles @("Tessara Responses", "app-shell--responses", "Product Area") -Context "responses list shell"
     $submissionAppShell = Invoke-Html -Uri "$baseUrl/app/submissions" -CookieJarPath $adminBrowserSession
     Assert-ProtectedShell -Content $submissionAppShell -Needles @("Responses") -Context "submissions compatibility shell"
     $administrationShell = Invoke-Html -Uri "$baseUrl/app/administration" -CookieJarPath $adminBrowserSession
@@ -413,7 +416,7 @@ try {
     $responseDetail = Invoke-Html -Uri "$baseUrl/app/responses/$($seed.submission_id)" -CookieJarPath $adminBrowserSession
     Assert-ProtectedShell -Content $responseDetail -Needles @("Response Detail") -Context "response detail shell"
     $responseNew = Invoke-Html -Uri "$baseUrl/app/responses/new" -CookieJarPath $adminBrowserSession
-    Assert-ProtectedShell -Content $responseNew -Needles @("New Response") -Context "response create shell"
+    Assert-ProtectedShell -Content $responseNew -Needles @("Start Response") -Context "response create shell"
     $reportDetailPage = Invoke-Html -Uri "$baseUrl/app/reports/$($seed.report_id)" -CookieJarPath $adminBrowserSession
     if (-not ($reportDetailPage -like "*Report Detail*") -or -not ($reportDetailPage -like "*Run*")) {
         throw "Expected report detail HTML to include dedicated detail framing"

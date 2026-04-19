@@ -116,7 +116,9 @@ $adminBrowserSession = New-BrowserSession -Email "admin@tessara.local" -Password
 $homeShell = Invoke-Html -Uri "$BaseUrl/app" -CookieJarPath $adminBrowserSession
 Assert-ProtectedShell -Content $homeShell -Needles @(
     "Tessara Home",
-    "Product Areas"
+    "app-shell--home",
+    "Shared Home",
+    "Primary navigation"
 ) -Context "home shell"
 
 $orgList = Invoke-Html -Uri "$BaseUrl/app/organization" -CookieJarPath $adminBrowserSession
@@ -148,6 +150,15 @@ Assert-ProtectedShell -Content $formDetail -Needles @("Form Detail") -Context "f
 
 $formEdit = Invoke-Html -Uri "$BaseUrl/app/forms/$($seedSummary.form_id)/edit" -CookieJarPath $adminBrowserSession
 Assert-ProtectedShell -Content $formEdit -Needles @("Edit Form") -Context "form edit"
+
+$workflowsList = Invoke-Html -Uri "$BaseUrl/app/workflows" -CookieJarPath $adminBrowserSession
+Assert-ProtectedShell -Content $workflowsList -Needles @("Tessara Workflows", "app-shell--workflows", "Product Area") -Context "workflow directory"
+
+$workflowAssignments = Invoke-Html -Uri "$BaseUrl/app/workflows/assignments" -CookieJarPath $adminBrowserSession
+Assert-ProtectedShell -Content $workflowAssignments -Needles @("Workflow Assignments", "app-shell--workflows", "Assignment Console") -Context "workflow assignments"
+
+$responsesList = Invoke-Html -Uri "$BaseUrl/app/responses" -CookieJarPath $adminBrowserSession
+Assert-ProtectedShell -Content $responsesList -Needles @("Tessara Responses", "app-shell--responses", "Product Area") -Context "responses queue"
 
 $nodeTypesList = Invoke-Html -Uri "$BaseUrl/app/administration/node-types" -CookieJarPath $adminBrowserSession
 Assert-ProtectedShell -Content $nodeTypesList -Needles @("Organization Node Types") -Context "node-type directory"
