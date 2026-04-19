@@ -9,10 +9,13 @@ ssr = ["tessara-web/ssr"]
 
 [dependencies]
 anyhow = { workspace = true }
+argon2 = { workspace = true }
 arrow = { workspace = true }
 axum = { workspace = true }
 chrono = { workspace = true }
 datafusion = { workspace = true }
+password-hash = { workspace = true }
+rand_core = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sqlx = { workspace = true }
