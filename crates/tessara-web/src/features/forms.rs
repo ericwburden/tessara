@@ -137,6 +137,8 @@ mod hydrate {
         form: Option<FormDefinition>,
         rendered_version: Option<RenderedForm>,
         selected_version_id: Option<String>,
+        selected_section_id: Option<String>,
+        selected_field_id: Option<String>,
     }
 
     fn options_html<T>(
@@ -565,10 +567,123 @@ mod hydrate {
         format!("{preview}{semantic_bump}")
     }
 
+    fn form_field_kind_label(field_type: &str) -> &str {
+        match field_type {
+            "text" => "Short answer",
+            "number" => "Number",
+            "boolean" => "Yes / No",
+            "date" => "Date",
+            "single_choice" => "Single choice",
+            "multi_choice" => "Multiple choice",
+            _ => field_type,
+        }
+    }
+
+    fn form_field_preview_copy(field_type: &str) -> &str {
+        match field_type {
+            "text" => "Respondents will see a single-line text input here.",
+            "number" => "Respondents will see a numeric input here.",
+            "boolean" => "Respondents will see a yes / no toggle here.",
+            "date" => "Respondents will see a date picker here.",
+            "single_choice" => "Respondents will choose one option from a list here.",
+            "multi_choice" => "Respondents will choose one or more options here.",
+            _ => "Respondents will complete this control from the generated response form.",
+        }
+    }
+
+    fn render_builder_section_navigation(
+        rendered: &RenderedForm,
+        selected_section_id: Option<&str>,
+    ) -> String {
+        if rendered.sections.is_empty() {
+            return r#"<p class="muted form-builder-rail-empty">Add a first section to activate the canvas rail.</p>"#
+                .into();
+        }
+
+        rendered
+            .sections
+            .iter()
+            .enumerate()
+            .map(|(section_index, section)| {
+                format!(
+                    r##"<a class="form-builder-section-link{}" href="#builder-section-{}" data-select-form-section="{}"><span>Section {}</span><strong>{}</strong><small>{}</small></a>"##,
+                    if Some(section.id.as_str()) == selected_section_id {
+                        " is-selected"
+                    } else {
+                        ""
+                    },
+                    escape_html(&section.id),
+                    escape_html(&section.id),
+                    section_index + 1,
+                    escape_html(&section.title),
+                    escape_html(&form_section_layout_label(section.column_count)),
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("")
+    }
+
+    fn render_builder_insert_rail(selected_section: Option<&RenderedSection>) -> String {
+        let add_field_button = if let Some(section) = selected_section {
+            format!(
+                r#"<button class="button is-light" type="button" data-form-field-create="{}">Add Field To Selected Section</button><p class="muted">New fields open in the properties panel with generated defaults so authors can refine them in context.</p>"#,
+                escape_html(&section.id),
+            )
+        } else {
+            r#"<button class="button is-light" type="button" disabled>Select A Section First</button><p class="muted">Choose a section from the rail or canvas before inserting a new field.</p>"#
+                .into()
+        };
+
+        format!(
+            r#"<aside class="page-panel form-builder-insert-rail"><p class="form-builder-eyebrow">Insert</p><h4>Quick Actions</h4><p class="muted">Keep the next authoring move near the canvas instead of in the global shell.</p><div class="actions form-builder-insert-actions"><button class="button" type="button" data-form-section-create="quick">Add Section</button>{}</div></aside>"#,
+            add_field_button
+        )
+    }
+
+    fn render_builder_properties_panel(
+        rendered: &RenderedForm,
+        selected_field_id: Option<&str>,
+    ) -> String {
+        let Some(selected_field_id) = selected_field_id else {
+            return String::new();
+        };
+        let Some((field, section)) = current_rendered_field(rendered, selected_field_id) else {
+            return String::new();
+        };
+
+        format!(
+            r#"<aside class="page-panel form-builder-properties" id="form-builder-properties"><div class="page-title-row compact-title-row"><div><p class="form-builder-eyebrow">Field Properties</p><h3>{}</h3><p class="muted">Edit deeper field configuration here while keeping the stacked section canvas in view.</p></div><div class="actions"><button class="button is-light" type="button" data-clear-form-field-selection="close">Close</button></div></div><div class="form-grid"><div class="form-field wide-field"><label for="form-field-label-{}">Field Label</label><input class="input" id="form-field-label-{}" type="text" value="{}" /></div><div class="form-field"><label for="form-field-key-{}">Field Key</label><input class="input" id="form-field-key-{}" type="text" value="{}" /></div><div class="form-field"><label for="form-field-type-{}">Field Type</label><select class="input" id="form-field-type-{}">{}</select></div><div class="form-field"><label for="form-field-required-{}">Required</label><select class="input" id="form-field-required-{}"><option value="true" {}>Required</option><option value="false" {}>Optional</option></select></div><div class="form-field"><label for="form-field-position-{}">Display Order</label><input class="input" id="form-field-position-{}" type="number" value="{}" /></div><div class="form-field"><label for="form-field-section-{}">Section</label><select class="input" id="form-field-section-{}">{}</select></div></div><p class="muted">Current section: {}. Choice-source and lookup metadata remain read-only until backend metadata support lands.</p><div class="actions"><button class="button" type="button" data-form-field-save="{}">Save Field</button></div></aside>"#,
+            escape_html(&field.label),
+            escape_html(&field.id),
+            escape_html(&field.id),
+            escape_html(&field.label),
+            escape_html(&field.id),
+            escape_html(&field.id),
+            escape_html(&field.key),
+            escape_html(&field.id),
+            escape_html(&field.id),
+            render_form_field_type_options(&field.field_type),
+            escape_html(&field.id),
+            escape_html(&field.id),
+            if field.required { "selected" } else { "" },
+            if field.required { "" } else { "selected" },
+            escape_html(&field.id),
+            escape_html(&field.id),
+            field.position,
+            escape_html(&field.id),
+            escape_html(&field.id),
+            render_form_section_options(rendered, &section.id),
+            escape_html(&section.title),
+            escape_html(&field.id),
+        )
+    }
+
     fn render_editable_form_workspace(
         form: &FormDefinition,
         version: &FormVersionSummary,
         rendered: &RenderedForm,
+        selected_section_id: Option<&str>,
+        selected_field_id: Option<&str>,
     ) -> String {
         if version.status != "draft" {
             return format!(
@@ -579,59 +694,87 @@ mod hydrate {
             );
         }
 
+        let resolved_field_id = resolve_selected_field_id(rendered, selected_field_id);
+        let resolved_section_id = resolve_selected_section_id(
+            rendered,
+            selected_section_id,
+            resolved_field_id.as_deref(),
+        );
+        let selected_section = resolved_section_id
+            .as_deref()
+            .and_then(|section_id| current_rendered_section(rendered, section_id));
+        let properties_panel =
+            render_builder_properties_panel(rendered, resolved_field_id.as_deref());
         let sections = if rendered.sections.is_empty() {
-            r#"<p class="muted">No sections were added to this draft yet.</p>"#.into()
+            r#"<section class="page-panel form-builder-empty-state"><p class="form-builder-eyebrow">Canvas</p><h4>Start with a section</h4><p class="muted">This draft has no authored sections yet. Add a section first, then use the insert rail to create fields inside the selected section.</p><div class="actions"><button class="button" type="button" data-form-section-create="empty">Add First Section</button></div></section>"#
+                .into()
         } else {
             rendered
                 .sections
                 .iter()
                 .enumerate()
                 .map(|(section_index, section)| {
+                    let section_is_selected = Some(section.id.as_str())
+                        == resolved_section_id.as_deref()
+                        || section
+                            .fields
+                            .iter()
+                            .any(|field| Some(field.id.as_str()) == resolved_field_id.as_deref());
                     let fields = if section.fields.is_empty() {
-                        r#"<p class="muted">No fields were added to this section yet.</p>"#.into()
+                        format!(
+                            r#"<section class="form-builder-empty-fields"><p class="muted">No fields were added to this section yet. Select the section, then use the insert rail to add the first field.</p><div class="actions"><button class="button is-light" type="button" data-select-form-section="{}">Select Section</button></div></section>"#,
+                            escape_html(&section.id),
+                        )
                     } else {
                         section
                             .fields
                             .iter()
                             .enumerate()
                             .map(|(field_index, field)| {
+                                let field_is_selected =
+                                    Some(field.id.as_str()) == resolved_field_id.as_deref();
                                 format!(
-                                    r#"<article class="record-card compact-record-card"><div class="page-title-row compact-title-row"><div><h4>{}</h4><p class="muted">Field {}</p></div><div class="actions"><button class="button is-light" type="button" data-form-field-move-up="{}">Move Up</button><button class="button is-light" type="button" data-form-field-move-down="{}">Move Down</button><button class="button is-light" type="button" data-form-field-delete="{}">Delete</button></div></div><div class="form-grid"><div class="form-field"><label for="form-field-key-{}">Field Key</label><input class="input" id="form-field-key-{}" type="text" value="{}" /></div><div class="form-field"><label for="form-field-label-{}">Label</label><input class="input" id="form-field-label-{}" type="text" value="{}" /></div><div class="form-field"><label for="form-field-type-{}">Field Type</label><select class="input" id="form-field-type-{}">{}</select></div><div class="form-field"><label for="form-field-required-{}">Required</label><select class="input" id="form-field-required-{}"><option value="true" {}>Required</option><option value="false" {}>Optional</option></select></div><div class="form-field"><label for="form-field-position-{}">Display Order</label><input class="input" id="form-field-position-{}" type="number" value="{}" /></div><div class="form-field"><label for="form-field-section-{}">Section</label><select class="input" id="form-field-section-{}">{}</select></div></div><p class="muted">Option-set and lookup touchpoints remain visible but read-only until backend metadata is available.</p><div class="actions"><button class="button is-light" type="button" data-form-field-save="{}">Save Field</button></div></article>"#,
+                                    r#"<article class="form-builder-field-card{}"><div class="page-title-row compact-title-row"><div><button class="button button-link form-builder-field-title" type="button" data-select-form-field="{}">{}</button><p class="muted">Field {} · {} · {}</p></div><div class="actions form-builder-field-actions"><button class="button is-light" type="button" data-form-field-move-up="{}">Up</button><button class="button is-light" type="button" data-form-field-move-down="{}">Down</button><button class="button is-light" type="button" data-form-field-delete="{}">Delete</button></div></div><p class="form-builder-field-key">Key: {}</p><p class="muted">{}</p></article>"#,
+                                    if field_is_selected {
+                                        " is-selected"
+                                    } else {
+                                        ""
+                                    },
+                                    escape_html(&field.id),
                                     escape_html(&field.label),
                                     field_index + 1,
-                                    escape_html(&field.id),
-                                    escape_html(&field.id),
+                                    escape_html(form_field_kind_label(&field.field_type)),
+                                    if field.required {
+                                        "Required"
+                                    } else {
+                                        "Optional"
+                                    },
                                     escape_html(&field.id),
                                     escape_html(&field.id),
                                     escape_html(&field.id),
                                     escape_html(&field.key),
-                                    escape_html(&field.id),
-                                    escape_html(&field.id),
-                                    escape_html(&field.label),
-                                    escape_html(&field.id),
-                                    escape_html(&field.id),
-                                    render_form_field_type_options(&field.field_type),
-                                    escape_html(&field.id),
-                                    escape_html(&field.id),
-                                    if field.required { "selected" } else { "" },
-                                    if field.required { "" } else { "selected" },
-                                    escape_html(&field.id),
-                                    escape_html(&field.id),
-                                    field.position,
-                                    escape_html(&field.id),
-                                    escape_html(&field.id),
-                                    render_form_section_options(rendered, &section.id),
-                                    escape_html(&field.id),
+                                    escape_html(form_field_preview_copy(&field.field_type)),
                                 )
                             })
                             .collect::<Vec<_>>()
                             .join("")
                     };
                     format!(
-                        r#"<article class="record-card"><div class="page-title-row compact-title-row"><div><h4>{}</h4><p class="muted">Draft section {} | {}</p></div><div class="actions"><button class="button is-light" type="button" data-form-section-move-up="{}">Move Up</button><button class="button is-light" type="button" data-form-section-move-down="{}">Move Down</button><button class="button is-light" type="button" data-form-section-delete="{}">Delete</button></div></div><div class="form-grid"><div class="form-field wide-field"><label for="form-section-title-{}">Section Title</label><input class="input" id="form-section-title-{}" type="text" value="{}" /></div><div class="form-field wide-field"><label for="form-section-description-{}">Section Description</label><textarea class="textarea" id="form-section-description-{}" rows="3">{}</textarea></div><div class="form-field"><label for="form-section-column-count-{}">Columns</label><select class="input" id="form-section-column-count-{}">{}</select></div><div class="form-field"><label for="form-section-position-{}">Display Order</label><input class="input" id="form-section-position-{}" type="number" value="{}" /></div></div><div class="actions"><button class="button is-light" type="button" data-form-section-save="{}">Save Section</button></div><div class="record-list">{}</div><section class="page-panel nested-form-panel"><div class="page-title-row compact-title-row"><div><h4>Add Field</h4><p class="muted">Create a new field inside this section.</p></div></div><div class="form-grid"><div class="form-field"><label for="new-form-field-key-{}">Field Key</label><input class="input" id="new-form-field-key-{}" type="text" /></div><div class="form-field"><label for="new-form-field-label-{}">Label</label><input class="input" id="new-form-field-label-{}" type="text" /></div><div class="form-field"><label for="new-form-field-type-{}">Field Type</label><select class="input" id="new-form-field-type-{}">{}</select></div><div class="form-field"><label for="new-form-field-required-{}">Required</label><select class="input" id="new-form-field-required-{}"><option value="false" selected>Optional</option><option value="true">Required</option></select></div></div><p class="muted">Option-set and lookup anchors remain informational until backend metadata support lands.</p><div class="actions"><button class="button is-light" type="button" data-form-field-create="{}">Add Field</button></div></section></article>"#,
-                        escape_html(&section.title),
+                        r##"<section class="page-panel form-builder-section{}" id="builder-section-{}"><div class="page-title-row compact-title-row"><div><p class="form-builder-eyebrow">Section {}</p><h3>{}</h3><p class="muted">Display order {} · {} · {} field(s)</p></div><div class="actions"><a class="button is-light" href="#builder-section-{}" data-select-form-section="{}">Focus</a><button class="button is-light" type="button" data-form-section-move-up="{}">Up</button><button class="button is-light" type="button" data-form-section-move-down="{}">Down</button><button class="button is-light" type="button" data-form-section-delete="{}">Delete</button><button class="button" type="button" data-form-section-save="{}">Save Section</button></div></div><div class="form-grid"><div class="form-field wide-field"><label for="form-section-title-{}">Section Title</label><input class="input" id="form-section-title-{}" type="text" value="{}" /></div><div class="form-field wide-field"><label for="form-section-description-{}">Section Description</label><textarea class="textarea" id="form-section-description-{}" rows="3">{}</textarea></div><div class="form-field"><label for="form-section-column-count-{}">Columns</label><select class="input" id="form-section-column-count-{}">{}</select></div><div class="form-field"><label for="form-section-position-{}">Display Order</label><input class="input" id="form-section-position-{}" type="number" value="{}" /></div></div><div class="form-builder-field-grid form-builder-field-grid--cols-{}">{}</div></section>"##,
+                        if section_is_selected {
+                            " is-selected"
+                        } else {
+                            ""
+                        },
+                        escape_html(&section.id),
                         section_index + 1,
+                        escape_html(&section.title),
+                        section.position,
                         escape_html(&form_section_layout_label(section.column_count)),
+                        section.fields.len(),
+                        escape_html(&section.id),
+                        escape_html(&section.id),
+                        escape_html(&section.id),
                         escape_html(&section.id),
                         escape_html(&section.id),
                         escape_html(&section.id),
@@ -647,33 +790,31 @@ mod hydrate {
                         escape_html(&section.id),
                         escape_html(&section.id),
                         section.position,
-                        escape_html(&section.id),
+                        section.column_count,
                         fields,
-                        escape_html(&section.id),
-                        escape_html(&section.id),
-                        escape_html(&section.id),
-                        escape_html(&section.id),
-                        escape_html(&section.id),
-                        escape_html(&section.id),
-                        render_form_field_type_options("text"),
-                        escape_html(&section.id),
-                        escape_html(&section.id),
-                        escape_html(&section.id),
                     )
                 })
                 .collect::<Vec<_>>()
                 .join("")
         };
 
+        let layout_class = if properties_panel.is_empty() {
+            "form-builder-layout"
+        } else {
+            "form-builder-layout form-builder-layout--with-properties"
+        };
         format!(
-            r#"<section class="page-panel nested-form-panel"><div class="page-title-row compact-title-row"><div><h3>{}</h3><p class="muted">Draft version workspace for {}</p></div><div class="actions"><button class="button is-light" type="button" data-publish-form-version="{}">Publish Draft Version</button></div></div><p class="muted">Compatibility: {}</p>{}<p class="muted">Publish attempts surface validation errors here before the route reloads.</p></section><section class="page-panel nested-form-panel"><div class="page-title-row compact-title-row"><div><h3>Add Section</h3><p class="muted">Create a new section for the selected draft version.</p></div></div><div class="form-grid"><div class="form-field wide-field"><label for="new-form-section-title">Section Title</label><input class="input" id="new-form-section-title" type="text" /></div><div class="form-field wide-field"><label for="new-form-section-description">Section Description</label><textarea class="textarea" id="new-form-section-description" rows="3"></textarea></div><div class="form-field"><label for="new-form-section-column-count">Columns</label><select class="input" id="new-form-section-column-count">{}</select></div></div><div class="actions"><button class="button is-light" type="button" id="form-section-create">Add Section</button></div></section>{}"#,
+            r#"<section class="page-panel nested-form-panel form-builder-shell"><div class="page-title-row compact-title-row form-builder-toolbar"><div><p class="form-builder-eyebrow">Draft Workspace</p><h3>{}</h3><p class="muted">Draft workspace for {}. Section settings stay in the canvas while deeper field settings move into the selection panel.</p></div><div class="actions"><button class="button" type="button" data-publish-form-version="{}">Publish Draft Version</button></div></div><p class="muted">Compatibility: {}</p>{}<div class="{}"><aside class="page-panel form-builder-rail"><p class="form-builder-eyebrow">Sections</p><h4>Jump Between Sections</h4><p class="muted">Use the rail to switch context without losing the stacked canvas flow.</p><div class="form-builder-section-links">{}</div></aside><div class="form-builder-main"><div class="form-builder-main-grid">{}<div class="form-builder-canvas">{}</div></div></div>{}</div></section>"#,
             escape_html(&form_version_label(version)),
             escape_html(&form.name),
             escape_html(&version.id),
             escape_html(&form_version_compatibility(version)),
             render_form_version_lifecycle_summary(version),
-            render_form_section_column_count_options(1),
+            layout_class,
+            render_builder_section_navigation(rendered, resolved_section_id.as_deref()),
+            render_builder_insert_rail(selected_section.as_ref()),
             sections,
+            properties_panel,
         )
     }
 
@@ -754,6 +895,67 @@ mod hydrate {
             }
         }
         None
+    }
+
+    fn current_rendered_section(
+        rendered: &RenderedForm,
+        section_id: &str,
+    ) -> Option<RenderedSection> {
+        rendered
+            .sections
+            .iter()
+            .find(|section| section.id == section_id)
+            .cloned()
+    }
+
+    fn resolve_selected_field_id(
+        rendered: &RenderedForm,
+        preferred_field_id: Option<&str>,
+    ) -> Option<String> {
+        preferred_field_id
+            .filter(|field_id| current_rendered_field(rendered, field_id).is_some())
+            .map(str::to_string)
+    }
+
+    fn resolve_selected_section_id(
+        rendered: &RenderedForm,
+        preferred_section_id: Option<&str>,
+        preferred_field_id: Option<&str>,
+    ) -> Option<String> {
+        if let Some(field_id) = preferred_field_id {
+            if let Some((_, section)) = current_rendered_field(rendered, field_id) {
+                return Some(section.id);
+            }
+        }
+
+        if let Some(section_id) = preferred_section_id {
+            if current_rendered_section(rendered, section_id).is_some() {
+                return Some(section_id.to_string());
+            }
+        }
+
+        rendered.sections.first().map(|section| section.id.clone())
+    }
+
+    fn next_inserted_field_identity(rendered: &RenderedForm) -> (String, String) {
+        let mut candidate = 1;
+        loop {
+            let key = format!("field_{candidate}");
+            if rendered
+                .sections
+                .iter()
+                .flat_map(|section| section.fields.iter())
+                .all(|field| field.key != key)
+            {
+                let label = if candidate == 1 {
+                    "Untitled Field".to_string()
+                } else {
+                    format!("Untitled Field {candidate}")
+                };
+                return (key, label);
+            }
+            candidate += 1;
+        }
     }
 
     async fn load_scope_node_types() -> Result<Vec<NodeTypeSummary>, String> {
@@ -941,53 +1143,95 @@ mod hydrate {
         });
     }
 
+    fn rerender_workspace(
+        form_id: String,
+        state: Rc<RefCell<FormBuilderState>>,
+    ) -> Result<(), String> {
+        let (form, rendered, selected_version_id, selected_section_id, selected_field_id) = {
+            let state_ref = state.borrow();
+            (
+                state_ref.form.clone(),
+                state_ref.rendered_version.clone(),
+                state_ref.selected_version_id.clone(),
+                state_ref.selected_section_id.clone(),
+                state_ref.selected_field_id.clone(),
+            )
+        };
+        let Some(form) = form else {
+            return Ok(());
+        };
+        let Some(rendered) = rendered else {
+            return Ok(());
+        };
+        let Some(selected_version_id) = selected_version_id else {
+            return Ok(());
+        };
+        let version = form
+            .versions
+            .iter()
+            .find(|version| version.id == selected_version_id)
+            .cloned()
+            .ok_or_else(|| "The selected form version is no longer available.".to_string())?;
+
+        set_html(
+            "form-version-workspace",
+            &render_editable_form_workspace(
+                &form,
+                &version,
+                &rendered,
+                selected_section_id.as_deref(),
+                selected_field_id.as_deref(),
+            ),
+        );
+        wire_workspace_actions(form_id, state);
+        Ok(())
+    }
+
     fn wire_workspace_actions(form_id: String, state: Rc<RefCell<FormBuilderState>>) {
         wire_editable_version_actions(form_id.clone(), state.clone());
 
-        if let Some(button) = by_id("form-section-create") {
-            let create_section_form_id = form_id.clone();
-            let create_section_state = state.clone();
-            let closure = Closure::wrap(Box::new(move |_event: web_sys::Event| {
-                let form_id = create_section_form_id.clone();
-                let state = create_section_state.clone();
-                spawn_local(async move {
-                    let selected_version_id = state.borrow().selected_version_id.clone();
-                    let rendered = state.borrow().rendered_version.clone();
-                    let Some(selected_version_id) = selected_version_id else {
-                        set_text("form-version-status", "Select a draft version first.");
-                        return;
-                    };
-                    let payload = json!({
-                        "title": input_value("new-form-section-title").unwrap_or_default(),
-                        "description": textarea_value("new-form-section-description").unwrap_or_default(),
-                        "column_count": select_value("new-form-section-column-count")
-                            .and_then(|value| value.parse::<i32>().ok())
-                            .unwrap_or(1),
-                        "position": rendered.as_ref().map(next_section_position).unwrap_or(1),
-                    });
-                    match post_json::<IdResponse>(
-                        &format!("/api/admin/form-versions/{selected_version_id}/sections"),
-                        &payload,
-                    )
-                    .await
-                    {
-                        Ok(_) => {
-                            set_text("form-version-status", "Section created.");
-                            if let Err(error) =
-                                load_edit_surface(form_id, state, Some(selected_version_id)).await
-                            {
-                                set_text("form-version-status", &error);
-                            }
-                        }
-                        Err(error) => set_text("form-version-status", &error),
-                    }
+        let create_section_form_id = form_id.clone();
+        let create_section_state = state.clone();
+        attach_click_handler_by_attr("data-form-section-create", move |_action| {
+            let form_id = create_section_form_id.clone();
+            let state = create_section_state.clone();
+            spawn_local(async move {
+                let selected_version_id = state.borrow().selected_version_id.clone();
+                let rendered = state.borrow().rendered_version.clone();
+                let Some(selected_version_id) = selected_version_id else {
+                    set_text("form-version-status", "Select a draft version first.");
+                    return;
+                };
+                let next_position = rendered.as_ref().map(next_section_position).unwrap_or(1);
+                let payload = json!({
+                    "title": format!("Section {next_position}"),
+                    "description": "",
+                    "column_count": 1,
+                    "position": next_position,
                 });
-            }) as Box<dyn FnMut(_)>);
-            button
-                .add_event_listener_with_callback("click", closure.as_ref().unchecked_ref())
-                .ok();
-            closure.forget();
-        }
+                match post_json::<IdResponse>(
+                    &format!("/api/admin/form-versions/{selected_version_id}/sections"),
+                    &payload,
+                )
+                .await
+                {
+                    Ok(response) => {
+                        {
+                            let mut state_mut = state.borrow_mut();
+                            state_mut.selected_section_id = Some(response.id.clone());
+                            state_mut.selected_field_id = None;
+                        }
+                        set_text("form-version-status", "Section created.");
+                        if let Err(error) =
+                            load_edit_surface(form_id, state, Some(selected_version_id)).await
+                        {
+                            set_text("form-version-status", &error);
+                        }
+                    }
+                    Err(error) => set_text("form-version-status", &error),
+                }
+            });
+        });
 
         let save_section_form_id = form_id.clone();
         let save_section_state = state.clone();
@@ -1013,6 +1257,11 @@ mod hydrate {
                 .await
                 {
                     Ok(_) => {
+                        {
+                            let mut state_mut = state.borrow_mut();
+                            state_mut.selected_section_id = Some(section_id.clone());
+                            state_mut.selected_field_id = None;
+                        }
                         set_text("form-version-status", "Section saved.");
                         if let Err(error) =
                             load_edit_surface(form_id, state, selected_version_id).await
@@ -1023,6 +1272,21 @@ mod hydrate {
                     Err(error) => set_text("form-version-status", &error),
                 }
             });
+        });
+
+        let select_section_form_id = form_id.clone();
+        let select_section_state = state.clone();
+        attach_click_handler_by_attr("data-select-form-section", move |section_id| {
+            let form_id = select_section_form_id.clone();
+            let state = select_section_state.clone();
+            {
+                let mut state_mut = state.borrow_mut();
+                state_mut.selected_section_id = Some(section_id);
+                state_mut.selected_field_id = None;
+            }
+            if let Err(error) = rerender_workspace(form_id, state) {
+                set_text("form-version-status", &error);
+            }
         });
 
         let delete_section_form_id = form_id.clone();
@@ -1036,6 +1300,14 @@ mod hydrate {
                     .await
                 {
                     Ok(_) => {
+                        {
+                            let mut state_mut = state.borrow_mut();
+                            if state_mut.selected_section_id.as_deref() == Some(section_id.as_str())
+                            {
+                                state_mut.selected_section_id = None;
+                                state_mut.selected_field_id = None;
+                            }
+                        }
                         set_text("form-version-status", "Section deleted.");
                         if let Err(error) =
                             load_edit_surface(form_id, state, selected_version_id).await
@@ -1131,16 +1403,18 @@ mod hydrate {
                     set_text("form-version-status", "Select a draft version first.");
                     return;
                 };
+                let Some(rendered) = rendered else {
+                    set_text("form-version-status", "Reload the form and try again.");
+                    return;
+                };
+                let (key, label) = next_inserted_field_identity(&rendered);
                 let payload = json!({
                     "section_id": section_id,
-                    "key": input_value(&format!("new-form-field-key-{section_id}")).unwrap_or_default(),
-                    "label": input_value(&format!("new-form-field-label-{section_id}")).unwrap_or_default(),
-                    "field_type": select_value(&format!("new-form-field-type-{section_id}")).unwrap_or_else(|| "text".into()),
-                    "required": select_value(&format!("new-form-field-required-{section_id}")).is_some_and(|value| value == "true"),
-                    "position": rendered
-                        .as_ref()
-                        .map(|rendered| next_field_position(rendered, &section_id))
-                        .unwrap_or(1),
+                    "key": key,
+                    "label": label,
+                    "field_type": "text",
+                    "required": false,
+                    "position": next_field_position(&rendered, &section_id),
                 });
                 match post_json::<IdResponse>(
                     &format!("/api/admin/form-versions/{selected_version_id}/fields"),
@@ -1148,7 +1422,12 @@ mod hydrate {
                 )
                 .await
                 {
-                    Ok(_) => {
+                    Ok(response) => {
+                        {
+                            let mut state_mut = state.borrow_mut();
+                            state_mut.selected_section_id = Some(section_id.clone());
+                            state_mut.selected_field_id = Some(response.id.clone());
+                        }
                         set_text("form-version-status", "Field created.");
                         if let Err(error) =
                             load_edit_surface(form_id, state, Some(selected_version_id)).await
@@ -1185,6 +1464,10 @@ mod hydrate {
                 .await
                 {
                     Ok(_) => {
+                        {
+                            let mut state_mut = state.borrow_mut();
+                            state_mut.selected_field_id = Some(field_id.clone());
+                        }
                         set_text("form-version-status", "Field saved.");
                         if let Err(error) =
                             load_edit_surface(form_id, state, selected_version_id).await
@@ -1197,6 +1480,38 @@ mod hydrate {
             });
         });
 
+        let select_field_form_id = form_id.clone();
+        let select_field_state = state.clone();
+        attach_click_handler_by_attr("data-select-form-field", move |field_id| {
+            let form_id = select_field_form_id.clone();
+            let state = select_field_state.clone();
+            let selected_section_id = state
+                .borrow()
+                .rendered_version
+                .as_ref()
+                .and_then(|rendered| current_rendered_field(rendered, &field_id))
+                .map(|(_, section)| section.id);
+            {
+                let mut state_mut = state.borrow_mut();
+                state_mut.selected_field_id = Some(field_id);
+                state_mut.selected_section_id = selected_section_id;
+            }
+            if let Err(error) = rerender_workspace(form_id, state) {
+                set_text("form-version-status", &error);
+            }
+        });
+
+        let clear_field_form_id = form_id.clone();
+        let clear_field_state = state.clone();
+        attach_click_handler_by_attr("data-clear-form-field-selection", move |_value| {
+            let form_id = clear_field_form_id.clone();
+            let state = clear_field_state.clone();
+            state.borrow_mut().selected_field_id = None;
+            if let Err(error) = rerender_workspace(form_id, state) {
+                set_text("form-version-status", &error);
+            }
+        });
+
         let delete_field_form_id = form_id.clone();
         let delete_field_state = state.clone();
         attach_click_handler_by_attr("data-form-field-delete", move |field_id| {
@@ -1204,9 +1519,20 @@ mod hydrate {
             let state = delete_field_state.clone();
             spawn_local(async move {
                 let selected_version_id = state.borrow().selected_version_id.clone();
+                let selected_section_id = state
+                    .borrow()
+                    .rendered_version
+                    .as_ref()
+                    .and_then(|rendered| current_rendered_field(rendered, &field_id))
+                    .map(|(_, section)| section.id);
                 match delete_json::<IdResponse>(&format!("/api/admin/form-fields/{field_id}")).await
                 {
                     Ok(_) => {
+                        {
+                            let mut state_mut = state.borrow_mut();
+                            state_mut.selected_field_id = None;
+                            state_mut.selected_section_id = selected_section_id;
+                        }
                         set_text("form-version-status", "Field deleted.");
                         if let Err(error) =
                             load_edit_surface(form_id, state, selected_version_id).await
@@ -1285,6 +1611,7 @@ mod hydrate {
                     .await;
                     match (current_result, target_result) {
                         (Ok(_), Ok(_)) => {
+                            state.borrow_mut().selected_field_id = Some(field_id.clone());
                             set_text("form-version-status", "Field order updated.");
                             if let Err(error) =
                                 load_edit_surface(form_id, state, selected_version_id).await
@@ -1339,19 +1666,46 @@ mod hydrate {
         }
 
         if let Some(version) = selected_version {
+            let (preferred_section_id, preferred_field_id) = {
+                let state_ref = state.borrow();
+                (
+                    state_ref.selected_section_id.clone(),
+                    state_ref.selected_field_id.clone(),
+                )
+            };
             let rendered =
                 get_json::<RenderedForm>(&format!("/api/form-versions/{}/render", version.id))
                     .await?;
+            let resolved_field_id =
+                resolve_selected_field_id(&rendered, preferred_field_id.as_deref());
+            let resolved_section_id = resolve_selected_section_id(
+                &rendered,
+                preferred_section_id.as_deref(),
+                resolved_field_id.as_deref(),
+            );
             set_html(
                 "form-version-workspace",
-                &render_editable_form_workspace(&form, &version, &rendered),
+                &render_editable_form_workspace(
+                    &form,
+                    &version,
+                    &rendered,
+                    resolved_section_id.as_deref(),
+                    resolved_field_id.as_deref(),
+                ),
             );
             {
                 let mut state_mut = state.borrow_mut();
+                state_mut.selected_section_id = resolved_section_id;
+                state_mut.selected_field_id = resolved_field_id;
                 state_mut.rendered_version = Some(rendered);
             }
             wire_workspace_actions(form_id, state);
         } else {
+            {
+                let mut state_mut = state.borrow_mut();
+                state_mut.selected_section_id = None;
+                state_mut.selected_field_id = None;
+            }
             set_html(
                 "form-version-workspace",
                 r#"<p class="muted">Create a draft version to start authoring sections and fields.</p>"#,

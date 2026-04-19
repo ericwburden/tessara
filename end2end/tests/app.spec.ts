@@ -531,8 +531,34 @@ test("forms authoring routes stay native and console-clean", async ({ page }) =>
   await expect(page.locator("body")).toContainText("Draft Version Workspace");
   await expect(page.locator("#form-version-workspace")).toHaveCount(1);
   await page.getByRole("button", { name: "Create Draft Version" }).click();
-  await expect(page.locator("#new-form-section-description")).toBeVisible();
-  await expect(page.locator("#new-form-section-column-count")).toBeVisible();
+  await expect(page.locator(".form-builder-shell")).toHaveCount(1);
+  await expect(page.locator(".form-builder-rail")).toContainText("Jump Between Sections");
+  await expect(page.locator(".form-builder-insert-rail")).toContainText("Quick Actions");
+  await expect(page.locator(".form-builder-canvas")).toBeVisible();
+
+  await page.locator('.form-builder-insert-rail [data-form-section-create="quick"]').click();
+  await expect(page.locator(".form-builder-section").last()).toBeVisible();
+  const sectionLinkCount = await page.locator(".form-builder-section-link").count();
+  expect(sectionLinkCount).toBeGreaterThan(0);
+
+  const railBox = await page.locator(".form-builder-rail").boundingBox();
+  const canvasBox = await page.locator(".form-builder-canvas").boundingBox();
+  expect(railBox).toBeTruthy();
+  expect(canvasBox).toBeTruthy();
+  expect(railBox!.x).toBeLessThan(canvasBox!.x);
+
+  await page.getByRole("button", { name: "Add Field To Selected Section" }).click();
+  await expect(page.locator("#form-builder-properties")).toBeVisible();
+  await expect(page.locator("#form-builder-properties")).toContainText("Field Properties");
+  await expect(page.locator(".form-builder-field-card.is-selected")).toContainText("Untitled Field");
+
+  const insertBox = await page.locator(".form-builder-insert-rail").boundingBox();
+  const propertiesBox = await page.locator("#form-builder-properties").boundingBox();
+  expect(insertBox).toBeTruthy();
+  expect(propertiesBox).toBeTruthy();
+  expect(insertBox!.x).toBeLessThan(canvasBox!.x);
+  expect(propertiesBox!.x).toBeGreaterThan(railBox!.x);
+  expect(propertiesBox!.x).toBeGreaterThan(insertBox!.x);
   await expectNoLegacyBridge(page);
 
   await page.reload();
