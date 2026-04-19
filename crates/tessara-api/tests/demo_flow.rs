@@ -8,10 +8,20 @@ use serde_json::{Value, json};
 use sqlx::{PgPool, postgres::PgPoolOptions};
 use tessara_api::{config::Config, db, legacy_import, router};
 use tower::ServiceExt;
+use tracing_subscriber::EnvFilter;
 use uuid::Uuid;
 
 static TEST_DATABASE_LOCK: LazyLock<tokio::sync::Mutex<()>> =
     LazyLock::new(|| tokio::sync::Mutex::new(()));
+static TEST_TRACING: LazyLock<()> = LazyLock::new(|| {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| EnvFilter::new("tessara_api=debug,sqlx=warn")),
+        )
+        .with_test_writer()
+        .try_init();
+});
 
 #[tokio::test]
 async fn demo_seed_report_and_dashboard_flow_works_against_database() {
@@ -1607,7 +1617,8 @@ async fn role_based_access_respects_scope_and_respondent_context() {
 #[tokio::test]
 async fn user_management_supports_create_edit_and_account_status() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let Some(app) = test_app().await else { return };
+    let Some(state) = test_state().await else { return };
+    let app = router(state.clone());
     let admin_token = login_token(app.clone()).await;
 
     let roles = request_json(
@@ -1643,6 +1654,20 @@ async fn user_management_supports_create_edit_and_account_status() {
         .as_str()
         .and_then(|value| Uuid::parse_str(value).ok())
         .expect("created user should expose id");
+    let created_credentials: (Option<String>, Option<String>, Option<String>) = sqlx::query_as(
+        r#"
+        SELECT legacy_password, password_hash, password_scheme
+        FROM account_credentials
+        WHERE account_id = $1
+        "#,
+    )
+    .bind(account_id)
+    .fetch_one(&state.pool)
+    .await
+    .expect("created account should have credential row");
+    assert!(created_credentials.0.is_none());
+    assert!(created_credentials.1.is_some());
+    assert_eq!(created_credentials.2.as_deref(), Some("argon2id-v1"));
 
     let users = request_json(
         app.clone(),
@@ -1707,6 +1732,7 @@ async fn user_management_supports_create_edit_and_account_status() {
     )
     .await;
     assert_eq!(wrong_password_login.0, StatusCode::UNAUTHORIZED);
+    assert_eq!(wrong_password_login.1["code"], "auth_invalid_credentials");
     assert!(
         wrong_password_login.1["error"]
             .as_str()
@@ -1754,6 +1780,7 @@ async fn user_management_supports_create_edit_and_account_status() {
     )
     .await;
     assert_eq!(inactive_login.0, StatusCode::UNAUTHORIZED);
+    assert_eq!(inactive_login.1["code"], "auth_invalid_credentials");
     assert!(
         inactive_login.1["error"]
             .as_str()
@@ -1794,6 +1821,20 @@ async fn user_management_supports_create_edit_and_account_status() {
     )
     .await;
     assert_eq!(old_password_login.0, StatusCode::UNAUTHORIZED);
+    let updated_credentials: (Option<String>, Option<String>, Option<String>) = sqlx::query_as(
+        r#"
+        SELECT legacy_password, password_hash, password_scheme
+        FROM account_credentials
+        WHERE account_id = $1
+        "#,
+    )
+    .bind(account_id)
+    .fetch_one(&state.pool)
+    .await
+    .expect("updated account should have credential row");
+    assert!(updated_credentials.0.is_none());
+    assert!(updated_credentials.1.is_some());
+    assert_eq!(updated_credentials.2.as_deref(), Some("argon2id-v1"));
 
     let reactivated_detail = request_json(
         app.clone(),
@@ -5294,10 +5335,12 @@ async fn legacy_inactive_locked_fixture_preserves_status_metadata() {
 }
 
 async fn test_app() -> Option<axum::Router> {
+    LazyLock::force(&TEST_TRACING);
     Some(router(test_state().await?))
 }
 
 async fn test_state() -> Option<db::AppState> {
+    LazyLock::force(&TEST_TRACING);
     let Some(database_url) = std::env::var("TEST_DATABASE_URL").ok() else {
         eprintln!("skipping database integration test; TEST_DATABASE_URL is not set");
         return None;
@@ -5309,6 +5352,9 @@ async fn test_state() -> Option<db::AppState> {
         bind_addr: "127.0.0.1:0".to_string(),
         dev_admin_email: "admin@tessara.local".to_string(),
         dev_admin_password: "tessara-dev-admin".to_string(),
+        auth_cookie_name: "tessara_session".to_string(),
+        auth_cookie_secure: false,
+        auth_session_ttl_hours: 12,
     };
     let pool = db::connect_and_prepare(&config)
         .await

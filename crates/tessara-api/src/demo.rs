@@ -2,14 +2,15 @@
 
 use std::collections::HashMap;
 
-use axum::{Json, extract::State, http::HeaderMap};
+use axum::{Json, extract::State};
 use serde::Serialize;
 use serde_json::{Value, json};
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
 use crate::{
-    analytics, auth,
+    analytics,
+    auth::{self, AuthenticatedRequest},
     db::AppState,
     error::{ApiError, ApiResult},
     workflows,
@@ -105,9 +106,9 @@ struct EnsuredForm {
 
 pub(crate) async fn seed_demo_endpoint(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    request: AuthenticatedRequest,
 ) -> ApiResult<Json<DemoSeedSummary>> {
-    auth::require_capability(&state.pool, &headers, "admin:all").await?;
+    request.require_capability("admin:all")?;
     Ok(Json(seed_demo(&state.pool).await?))
 }
 
@@ -1230,18 +1231,7 @@ async fn ensure_demo_account(
     .fetch_one(pool)
     .await?;
 
-    sqlx::query(
-        r#"
-        INSERT INTO account_credentials (account_id, password)
-        VALUES ($1, $2)
-        ON CONFLICT (account_id)
-        DO UPDATE SET password = EXCLUDED.password
-        "#,
-    )
-    .bind(account_id)
-    .bind(password)
-    .execute(pool)
-    .await?;
+    auth::store_password_hash(pool, account_id, password).await?;
 
     let role_id: Uuid = sqlx::query_scalar("SELECT id FROM roles WHERE name = $1")
         .bind(role_name)
@@ -1845,6 +1835,19 @@ async fn ensure_seed_submission(
         .execute(pool)
         .await?;
     }
+
+    let assignment_id = ensure_form_assignment(pool, form_version_id, node_id, account_id).await?;
+    let workflow_assignment_id =
+        workflows::ensure_workflow_assignment_for_form_assignment(pool, assignment_id).await?;
+
+    workflows::ensure_submission_runtime_linkage(
+        pool,
+        submission_id,
+        workflow_assignment_id,
+        account_id,
+        spec.status == "submitted",
+    )
+    .await?;
 
     Ok(submission_id)
 }

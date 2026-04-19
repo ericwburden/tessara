@@ -676,6 +676,135 @@ pub async fn ensure_workflow_assignment_for_form_assignment(
     Ok(workflow_assignment_id)
 }
 
+pub async fn ensure_submission_runtime_linkage(
+    pool: &sqlx::PgPool,
+    submission_id: Uuid,
+    workflow_assignment_id: Uuid,
+    started_by_account_id: Uuid,
+    is_completed: bool,
+) -> ApiResult<()> {
+    let mut tx = pool.begin().await?;
+    let assignment_row = sqlx::query(
+        r#"
+        SELECT
+            workflow_assignments.workflow_version_id,
+            workflow_assignments.workflow_step_id,
+            workflow_assignments.node_id,
+            workflow_assignments.account_id
+        FROM workflow_assignments
+        WHERE workflow_assignments.id = $1
+        "#,
+    )
+    .bind(workflow_assignment_id)
+    .fetch_optional(&mut *tx)
+    .await?
+    .ok_or_else(|| ApiError::NotFound(format!("workflow assignment {workflow_assignment_id}")))?;
+
+    let existing_runtime = sqlx::query(
+        r#"
+        SELECT workflow_instance_id, workflow_step_instance_id
+        FROM submissions
+        WHERE id = $1
+        "#,
+    )
+    .bind(submission_id)
+    .fetch_optional(&mut *tx)
+    .await?
+    .ok_or_else(|| ApiError::NotFound(format!("submission {submission_id}")))?;
+
+    let workflow_version_id: Uuid = assignment_row.try_get("workflow_version_id")?;
+    let workflow_step_id: Uuid = assignment_row.try_get("workflow_step_id")?;
+    let node_id: Uuid = assignment_row.try_get("node_id")?;
+    let assignee_account_id: Uuid = assignment_row.try_get("account_id")?;
+    let completed_at = if is_completed { Some(Utc::now()) } else { None };
+
+    let workflow_instance_id: Uuid = if let Some(existing) =
+        existing_runtime.try_get::<Option<Uuid>, _>("workflow_instance_id")?
+    {
+        existing
+    } else {
+        sqlx::query_scalar(
+            r#"
+            INSERT INTO workflow_instances (
+                workflow_assignment_id,
+                workflow_version_id,
+                node_id,
+                assignee_account_id,
+                started_by_account_id
+            )
+            VALUES ($1, $2, $3, $4, $5)
+            RETURNING id
+            "#,
+        )
+        .bind(workflow_assignment_id)
+        .bind(workflow_version_id)
+        .bind(node_id)
+        .bind(assignee_account_id)
+        .bind(started_by_account_id)
+        .fetch_one(&mut *tx)
+        .await?
+    };
+
+    let workflow_step_instance_id: Uuid = if let Some(existing) =
+        existing_runtime.try_get::<Option<Uuid>, _>("workflow_step_instance_id")?
+    {
+        sqlx::query(
+            r#"
+            UPDATE workflow_step_instances
+            SET status = $2,
+                completed_at = $3
+            WHERE id = $1
+            "#,
+        )
+        .bind(existing)
+        .bind(if is_completed { "completed" } else { "in_progress" })
+        .bind(completed_at)
+        .execute(&mut *tx)
+        .await?;
+        existing
+    } else {
+        sqlx::query_scalar(
+            r#"
+            INSERT INTO workflow_step_instances (
+                workflow_instance_id,
+                workflow_step_id,
+                submission_id,
+                status,
+                completed_at
+            )
+            VALUES ($1, $2, $3, $4, $5)
+            RETURNING id
+            "#,
+        )
+        .bind(workflow_instance_id)
+        .bind(workflow_step_id)
+        .bind(submission_id)
+        .bind(if is_completed { "completed" } else { "in_progress" })
+        .bind(completed_at)
+        .fetch_one(&mut *tx)
+        .await?
+    };
+
+    sqlx::query(
+        r#"
+        UPDATE submissions
+        SET workflow_assignment_id = $2,
+            workflow_instance_id = $3,
+            workflow_step_instance_id = $4
+        WHERE id = $1
+        "#,
+    )
+    .bind(submission_id)
+    .bind(workflow_assignment_id)
+    .bind(workflow_instance_id)
+    .bind(workflow_step_instance_id)
+    .execute(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
+    Ok(())
+}
+
 pub async fn start_workflow_assignment(
     pool: &sqlx::PgPool,
     account: &auth::AccountContext,

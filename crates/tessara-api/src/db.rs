@@ -2,7 +2,7 @@
 
 use sqlx::{PgPool, postgres::PgPoolOptions};
 
-use crate::config::Config;
+use crate::{auth, config::Config};
 
 /// Shared application state injected into Axum handlers.
 ///
@@ -29,6 +29,7 @@ pub async fn connect_and_prepare(config: &Config) -> anyhow::Result<PgPool> {
 
     sqlx::migrate!("./migrations").run(&pool).await?;
     seed_dev_admin(&pool, config).await?;
+    auth::backfill_legacy_password_hashes(&pool).await?;
 
     Ok(pool)
 }
@@ -128,17 +129,7 @@ async fn seed_dev_admin(pool: &PgPool, config: &Config) -> anyhow::Result<()> {
     .execute(pool)
     .await?;
 
-    sqlx::query(
-        r#"
-        INSERT INTO account_credentials (account_id, password)
-        VALUES ($1, $2)
-        ON CONFLICT (account_id) DO UPDATE SET password = EXCLUDED.password
-        "#,
-    )
-    .bind(admin_account_id)
-    .bind(&config.dev_admin_password)
-    .execute(pool)
-    .await?;
+    auth::store_password_hash(pool, admin_account_id, &config.dev_admin_password).await?;
 
     Ok(())
 }
