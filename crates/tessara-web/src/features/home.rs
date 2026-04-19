@@ -1,6 +1,11 @@
 use leptos::prelude::*;
 
-use crate::app::transitional::{TransitionalPage, extract_app_root, render_transitional_route};
+#[cfg(feature = "hydrate")]
+use serde_json::{Value, json};
+
+use crate::app::transitional::{TransitionalPage, render_transitional_route};
+#[cfg(feature = "hydrate")]
+use crate::features::native_runtime::{post_json, redirect};
 use crate::features::native_shell::{
     ANALYTICS_LINKS, AccountContext, BreadcrumbItem, INTERNAL_LINKS, MetadataStrip, NativePage,
     NavLinkSpec, PRODUCT_LINKS, PageHeader, Panel, TRANSITIONAL_LINKS, use_account_session,
@@ -70,7 +75,7 @@ pub fn AdminWorkbenchPage() -> impl IntoView {
     render_transitional_route(TransitionalPage {
         title: "Tessara",
         description: "Tessara local admin workbench for migration setup and workflow testing.",
-        body_html: extract_app_root(crate::admin_shell_html()),
+        body_html: crate::admin_shell_html(),
         page_key: "admin-shell",
         active_route: "administration",
         record_id: None,
@@ -182,12 +187,123 @@ pub fn HomePage() -> impl IntoView {
 
 #[component]
 pub fn LoginPage() -> impl IntoView {
-    render_transitional_route(TransitionalPage {
-        title: "Tessara Sign In",
-        description: "Sign in to the Tessara application shell.",
-        body_html: extract_app_root(crate::login_application_html()),
-        page_key: "login",
-        active_route: "login",
-        record_id: None,
-    })
+    let session = use_account_session();
+    #[cfg(not(feature = "hydrate"))]
+    let _ = session;
+    let email = RwSignal::new(String::new());
+    let password = RwSignal::new(String::new());
+    let feedback = RwSignal::new(None::<String>);
+    let busy = RwSignal::new(false);
+
+    #[cfg(feature = "hydrate")]
+    Effect::new(move |_| {
+        if session.loaded.get() && session.account.get().is_some() {
+            redirect("/app");
+        }
+    });
+
+    let submit = move |_| {
+        if busy.get_untracked() {
+            return;
+        }
+
+        let email_value = email.get_untracked().trim().to_string();
+        let password_value = password.get_untracked();
+        if email_value.is_empty() || password_value.is_empty() {
+            feedback.set(Some("Enter an email address and password.".into()));
+            return;
+        }
+
+        busy.set(true);
+        feedback.set(None);
+
+        #[cfg(feature = "hydrate")]
+        leptos::task::spawn_local(async move {
+            let body = json!({
+                "email": email_value,
+                "password": password_value,
+            });
+
+            match post_json::<Value>("/api/auth/login", &body).await {
+                Ok(_) => {
+                    session.account.set(None);
+                    session.error.set(None);
+                    session.loaded.set(false);
+                    redirect("/app");
+                }
+                Err(error) => feedback.set(Some(error)),
+            }
+
+            busy.set(false);
+        });
+    };
+
+    view! {
+        <NativePage
+            title="Tessara Sign In"
+            description="Sign in to the Tessara application shell."
+            page_key="login"
+            active_route="login"
+            workspace_label="Sign In"
+            allow_unauthenticated=true
+            breadcrumbs=vec![BreadcrumbItem::current("Sign In")]
+        >
+            <PageHeader
+                eyebrow="Access"
+                title="Sign In"
+                description="Use your Tessara account to open the native application shell."
+            />
+            <MetadataStrip items=vec![
+                ("Mode", "Authentication".into()),
+                ("Surface", "Native sign-in".into()),
+                ("State", "Cookie session contract".into()),
+            ]/>
+            <Panel
+                title="Application Sign-In"
+                description="Enter your account credentials to continue. Development credentials are documented outside the public sign-in surface."
+            >
+                <form
+                    id="login-form"
+                    class="stacked-form"
+                    on:submit=move |event| {
+                        event.prevent_default();
+                        submit(());
+                    }
+                >
+                    <div id="login-feedback" class="notification is-light" class:is-hidden=move || feedback.get().is_none()>
+                        {move || feedback.get().unwrap_or_default()}
+                    </div>
+                    <div class="form-grid">
+                        <label class="field">
+                            <span>"Email"</span>
+                            <input
+                                id="login-email"
+                                class="input"
+                                type="email"
+                                autocomplete="username"
+                                prop:value=email
+                                on:input=move |event| email.set(event_target_value(&event))
+                            />
+                        </label>
+                        <label class="field">
+                            <span>"Password"</span>
+                            <input
+                                id="login-password"
+                                class="input"
+                                type="password"
+                                autocomplete="current-password"
+                                prop:value=password
+                                on:input=move |event| password.set(event_target_value(&event))
+                            />
+                        </label>
+                    </div>
+                    <div class="actions">
+                        <button class="button-link button is-light" type="submit" disabled=move || busy.get()>
+                            {move || if busy.get() { "Signing In..." } else { "Sign In" }}
+                        </button>
+                    </div>
+                </form>
+            </Panel>
+        </NativePage>
+    }
 }

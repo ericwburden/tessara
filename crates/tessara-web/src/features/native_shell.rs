@@ -65,6 +65,12 @@ pub struct AccountContext {
     pub delegations: Vec<DelegationSummary>,
 }
 
+#[derive(Clone, Deserialize)]
+struct SessionStateResponse {
+    authenticated: bool,
+    account: Option<AccountContext>,
+}
+
 #[derive(Clone, Copy)]
 pub struct AccountSession {
     pub loaded: RwSignal<bool>,
@@ -885,6 +891,7 @@ pub fn NativePage(
     workspace_label: &'static str,
     #[prop(optional)] record_id: Option<String>,
     #[prop(optional)] required_capability: Option<&'static str>,
+    #[prop(optional)] allow_unauthenticated: bool,
     #[prop(optional)] breadcrumbs: Vec<BreadcrumbItem>,
     children: ChildrenFn,
 ) -> impl IntoView {
@@ -903,16 +910,14 @@ pub fn NativePage(
 
         let session = session;
         spawn_local(async move {
-            match get_json::<AccountContext>("/api/me").await {
-                Ok(account) => {
-                    session.account.set(Some(account));
+            match get_json::<SessionStateResponse>("/api/auth/session").await {
+                Ok(response) => {
+                    session.account.set(response.account);
                     session.error.set(None);
                     session.loaded.set(true);
-                }
-                Err(error) if error.contains("not signed in") || error.contains("401") => {
-                    session.account.set(None);
-                    session.error.set(None);
-                    session.loaded.set(true);
+                    if !allow_unauthenticated && !response.authenticated {
+                        redirect("/app/login");
+                    }
                 }
                 Err(error) => {
                     session.account.set(None);
@@ -1002,6 +1007,24 @@ pub fn NativePage(
                     <BreadcrumbTrail items=breadcrumbs/>
                     {move || {
                         let account = session.account.get();
+                        if !allow_unauthenticated && !session.loaded.get() {
+                            return view! {
+                                <Panel title="Loading Session" description="Confirming the current browser session before this screen loads.">
+                                    <p class="muted">"Loading session state..."</p>
+                                </Panel>
+                            }
+                            .into_any();
+                        }
+                        if !allow_unauthenticated && session.loaded.get() && account.is_none() {
+                            return view! {
+                                <Panel title="Redirecting To Sign In" description="This route requires an authenticated browser session.">
+                                    <div class="actions">
+                                        <a class="button-link button is-light" href="/app/login">"Open Sign In"</a>
+                                    </div>
+                                </Panel>
+                            }
+                            .into_any();
+                        }
                         if let Some(required_capability) = required_capability {
                             if account.is_some()
                                 && session.loaded.get()

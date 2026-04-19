@@ -6,6 +6,8 @@ use leptos::prelude::*;
 use gloo_net::http::Request;
 
 #[cfg(feature = "hydrate")]
+use serde::Deserialize;
+#[cfg(feature = "hydrate")]
 use serde::de::DeserializeOwned;
 
 #[cfg(feature = "hydrate")]
@@ -141,14 +143,49 @@ pub fn redirect(path: &str) {
 }
 
 #[cfg(feature = "hydrate")]
+#[derive(Deserialize)]
+struct ApiErrorBody {
+    code: Option<String>,
+    message: Option<String>,
+    error: Option<String>,
+}
+
+#[cfg(feature = "hydrate")]
+async fn decode_json_response<T: DeserializeOwned>(
+    response: gloo_net::http::Response,
+) -> Result<T, String> {
+    if response.ok() {
+        return response
+            .json::<T>()
+            .await
+            .map_err(|error| error.to_string());
+    }
+
+    let status = response.status();
+    let body = response.text().await.unwrap_or_default();
+    if let Ok(error) = serde_json::from_str::<ApiErrorBody>(&body) {
+        let code = error.code.unwrap_or_else(|| "unknown_error".into());
+        let message = error
+            .message
+            .or(error.error)
+            .unwrap_or_else(|| format!("HTTP {status}"));
+        return Err(format!("{status} {code}: {message}"));
+    }
+
+    if body.trim().is_empty() {
+        Err(format!("HTTP {status}"))
+    } else {
+        Err(format!("HTTP {status}: {body}"))
+    }
+}
+
+#[cfg(feature = "hydrate")]
 pub async fn get_json<T: DeserializeOwned>(path: &str) -> Result<T, String> {
-    Request::get(path)
+    let response = Request::get(path)
         .send()
         .await
-        .map_err(|error| error.to_string())?
-        .json::<T>()
-        .await
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+    decode_json_response(response).await
 }
 
 #[cfg(feature = "hydrate")]
@@ -167,15 +204,13 @@ pub async fn post_json<T: DeserializeOwned>(
     path: &str,
     body: &serde_json::Value,
 ) -> Result<T, String> {
-    Request::post(path)
+    let response = Request::post(path)
         .json(body)
         .map_err(|error| error.to_string())?
         .send()
         .await
-        .map_err(|error| error.to_string())?
-        .json::<T>()
-        .await
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+    decode_json_response(response).await
 }
 
 #[cfg(feature = "hydrate")]
@@ -183,26 +218,22 @@ pub async fn put_json<T: DeserializeOwned>(
     path: &str,
     body: &serde_json::Value,
 ) -> Result<T, String> {
-    Request::put(path)
+    let response = Request::put(path)
         .json(body)
         .map_err(|error| error.to_string())?
         .send()
         .await
-        .map_err(|error| error.to_string())?
-        .json::<T>()
-        .await
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+    decode_json_response(response).await
 }
 
 #[cfg(feature = "hydrate")]
 pub async fn delete_json<T: DeserializeOwned>(path: &str) -> Result<T, String> {
-    Request::delete(path)
+    let response = Request::delete(path)
         .send()
         .await
-        .map_err(|error| error.to_string())?
-        .json::<T>()
-        .await
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+    decode_json_response(response).await
 }
 
 #[cfg(feature = "hydrate")]

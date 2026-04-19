@@ -58,7 +58,11 @@ pub fn application_shell_html() -> String {
 }
 
 pub fn login_application_html() -> String {
-    application::login_application_html(app_script::APPLICATION_SCRIPT)
+    document::render_native_app_document(
+        "Tessara Sign In",
+        "Sign in to the Tessara application shell.",
+        "/app/login",
+    )
 }
 
 pub fn organization_application_shell_html() -> String {
@@ -524,6 +528,15 @@ mod tests {
         format!("{} List", normalize_type_label(&filtered[0].1))
     }
 
+    fn assert_protected_ssr_shell(html: &str) {
+        assert!(html.contains(r#"<div id="app-root">"#));
+        assert!(html.contains("top-app-bar"));
+        assert!(html.contains("global-search"));
+        assert!(html.contains("Loading Session"));
+        assert!(html.contains("Loading session state..."));
+        assert!(!html.contains(r#"/bridge/app-legacy.js"#));
+    }
+
     #[test]
     fn admin_shell_still_exposes_legacy_builder_contract() {
         let html = admin_shell_html();
@@ -547,13 +560,8 @@ mod tests {
     fn home_shell_exposes_shared_navigation() {
         let html = application_shell_html();
 
-        assert!(html.contains("Application Overview"));
-        assert!(html.contains("Role-Ready Home Modules"));
+        assert_protected_ssr_shell(&html);
         assert!(html.contains("Product Areas"));
-        assert!(html.contains("Transitional Reporting"));
-        assert!(html.contains("Current Deployment Readiness"));
-        assert!(html.contains("Current Workflow Context"));
-        assert!(html.contains("Internal Workspaces"));
         assert!(html.contains("top-app-bar"));
         assert!(html.contains("app-nav-toggle"));
         assert!(html.contains("global-search"));
@@ -569,13 +577,14 @@ mod tests {
 
         assert!(html.contains("Sign In"));
         assert!(html.contains("/pkg/tessara-web.css"));
-        assert!(html.contains("/bridge/app-legacy.js"));
+        assert!(!html.contains("/bridge/app-legacy.js"));
         assert!(html.contains("login-form"));
         assert!(html.contains("login-feedback"));
         assert!(html.contains("login-email"));
         assert!(html.contains("login-password"));
-        assert!(html.contains("operator@tessara.local"));
-        assert!(html.contains("data-theme-choice=\"system\""));
+        assert!(html.contains("Cookie session contract"));
+        assert!(!html.contains("operator@tessara.local"));
+        assert!(html.contains("data-theme-preference=\"system\""));
         assert!(html.contains("global-search"));
     }
 
@@ -589,28 +598,9 @@ mod tests {
         let reports = reporting_application_shell_html();
         let dashboards = dashboards_application_shell_html();
 
-        assert!(organization.contains("Organization"));
-        assert!(organization.contains("Hierarchy Navigator"));
-        assert!(organization.contains("organization-directory-tree"));
-        assert!(organization.contains("organization-list-title"));
-        assert!(organization.contains("organization-list-status"));
-        assert!(organization.contains("organization-selection-preview"));
-        assert!(organization.contains("Loading organization actions"));
-        assert!(!organization.contains("organization-skeleton-card"));
-        assert!(!organization.contains("organization-toggle-button"));
-        assert!(!organization.contains("Node ID"));
-
-        assert!(forms.contains("Forms"));
-        assert!(forms.contains("Create Form"));
-        assert!(forms.contains("form-list"));
-        assert!(!forms.contains("Form ID"));
-
-        assert!(responses.contains("Responses"));
-        assert!(responses.contains("Start New Response"));
-        assert!(responses.contains("response-start-actions"));
-        assert!(responses.contains("Draft Responses"));
-        assert!(responses.contains("Submitted Responses"));
-        assert!(!responses.contains("Draft submission ID"));
+        assert_protected_ssr_shell(&organization);
+        assert_protected_ssr_shell(&forms);
+        assert_protected_ssr_shell(&responses);
 
         assert!(datasets.contains("Datasets"));
         assert!(datasets.contains("Dataset Directory"));
@@ -624,9 +614,7 @@ mod tests {
         assert!(reports.contains("Create Report"));
         assert!(reports.contains("report-list"));
 
-        assert!(dashboards.contains("Dashboards"));
-        assert!(dashboards.contains("Dashboard Directory"));
-        assert!(dashboards.contains("dashboard-list"));
+        assert_protected_ssr_shell(&dashboards);
     }
 
     #[test]
@@ -663,54 +651,29 @@ mod tests {
             assert!(!html.contains(" ID"));
         }
 
-        assert!(dashboard_new.contains("Create Dashboard"));
-        assert!(dashboard_new.contains("dashboard-form"));
-        assert!(dashboard_new.contains("Cancel"));
-        assert!(dashboard_edit.contains("Edit Dashboard"));
-        assert!(dashboard_edit.contains("dashboard-form"));
-        assert!(dashboard_edit.contains("Save Dashboard"));
-        assert!(dashboard_edit.contains("Cancel"));
+        for html in [
+            dashboard_new.as_str(),
+            dashboard_detail.as_str(),
+            dashboard_edit.as_str(),
+            form_new.as_str(),
+            form_detail.as_str(),
+            form_edit.as_str(),
+            response_new.as_str(),
+            response_detail.as_str(),
+            response_edit.as_str(),
+            organization_new.as_str(),
+            organization_detail.as_str(),
+            organization_edit.as_str(),
+        ] {
+            assert_protected_ssr_shell(html);
+        }
 
-        assert!(form_new.contains("Create Form"));
-        assert!(form_new.contains("Cancel"));
-        assert!(form_new.contains("form-editor-status"));
-        assert!(!form_new.contains(" ID"));
-        assert!(form_edit.contains("Edit Form"));
-        assert!(form_edit.contains("Save Form"));
-        assert!(form_edit.contains("Draft Version Workspace"));
-        assert!(form_edit.contains("Cancel"));
-        assert!(!form_edit.contains(" ID"));
-
-        assert!(response_new.contains("Start Response"));
-        assert!(response_new.contains("Start Draft"));
-        assert!(response_new.contains("Cancel"));
-        assert!(response_edit.contains("Edit Response"));
-        assert!(response_edit.contains("Loading response form"));
-        assert!(response_edit.contains("response-edit-surface"));
-
-        assert!(organization_new.contains("Create Organization"));
-        assert!(organization_new.contains("Cancel"));
-        assert!(organization_new.contains("organization-form-status"));
-        assert!(organization_new.contains("organization-metadata-fields"));
-        assert!(organization_detail.contains("Organization Detail"));
-        assert!(organization_detail.contains("Back to List"));
-        assert!(organization_detail.contains("organization-detail"));
-        assert!(organization_detail.contains("organization-detail-path"));
-        assert!(organization_detail.contains("organization-child-actions"));
-        assert!(organization_detail.contains("organization-related"));
-        assert!(organization_edit.contains("Save Organization"));
-        assert!(organization_edit.contains("Cancel"));
-        assert!(organization_edit.contains("organization-metadata-fields"));
-        assert!(form_detail.contains("Form Detail"));
-        assert!(response_detail.contains("Response Detail"));
         assert!(dataset_detail.contains("Dataset Detail"));
         assert!(dataset_detail.contains("dataset-detail"));
         assert!(component_detail.contains("Component Detail"));
         assert!(component_detail.contains("component-detail"));
         assert!(report_detail.contains("Report Detail"));
         assert!(report_detail.contains("Run"));
-        assert!(dashboard_detail.contains("Dashboard Detail"));
-        assert!(dashboard_detail.contains("Component Summary"));
     }
 
     #[test]
@@ -720,31 +683,10 @@ mod tests {
         let roles = roles_application_shell_html();
         let migration = migration_application_shell_html();
 
-        assert!(administration.contains("Administration"));
-        assert!(administration.contains("Administration Workspace"));
-        assert!(administration.contains("User Management"));
-        assert!(administration.contains("/app/administration/users"));
-        assert!(administration.contains("Role Management"));
-        assert!(administration.contains("/app/administration/roles"));
-        assert!(administration.contains("Organization Node Types"));
-        assert!(administration.contains("/app/administration/node-types"));
-        assert!(administration.contains("Migration Workbench"));
-        assert!(administration.contains("/app/migration"));
-
-        assert!(users.contains("User Management"));
-        assert!(users.contains("admin-user-list"));
-        assert!(users.contains("Accounts"));
-
-        assert!(roles.contains("Roles"));
-        assert!(roles.contains("admin-role-list"));
-        assert!(roles.contains("Role Catalog"));
-
-        assert!(migration.contains("Migration Workbench"));
-        assert!(migration.contains("Fixture Examples"));
-        assert!(migration.contains("Validate Fixture"));
-        assert!(migration.contains("Dry Run"));
-        assert!(migration.contains("Import Fixture"));
-        assert!(migration.contains("Operator import flow"));
+        assert_protected_ssr_shell(&administration);
+        assert_protected_ssr_shell(&users);
+        assert_protected_ssr_shell(&roles);
+        assert_protected_ssr_shell(&migration);
     }
 
     #[test]
@@ -786,19 +728,14 @@ mod tests {
             assert!(!html.contains(r#"/bridge/app-legacy.js"#));
         }
 
-        assert!(organization.contains("organization-directory-tree"));
-        assert!(organization_create.contains("organization-form"));
-        assert!(organization_detail.contains("organization-detail"));
-        assert!(organization_edit.contains("organization-form"));
-
-        assert!(node_types.contains("Organization Node Types"));
-        assert!(node_types.contains("admin-node-type-list"));
-        assert!(node_type_create.contains("Create Organization Node Type"));
-        assert!(node_type_create.contains("node-type-form"));
-        assert!(node_type_detail.contains("Organization Node Type Detail"));
-        assert!(node_type_detail.contains("Loading node type detail"));
-        assert!(node_type_edit.contains("Edit Organization Node Type"));
-        assert!(node_type_edit.contains("node-type-form"));
+        assert_protected_ssr_shell(&organization);
+        assert_protected_ssr_shell(&organization_create);
+        assert_protected_ssr_shell(&organization_detail);
+        assert_protected_ssr_shell(&organization_edit);
+        assert_protected_ssr_shell(&node_types);
+        assert_protected_ssr_shell(&node_type_create);
+        assert_protected_ssr_shell(&node_type_detail);
+        assert_protected_ssr_shell(&node_type_edit);
     }
 
     #[test]
@@ -887,43 +824,20 @@ mod tests {
         let role_detail = role_detail_application_html("00000000-0000-0000-0000-000000000007");
         let role_edit = role_edit_application_html("00000000-0000-0000-0000-000000000007");
 
-        assert!(create.contains("Create User"));
-        assert!(create.contains("user-form"));
-        assert!(create.contains("user-form-status"));
-        assert!(create.contains("Active account"));
-
-        assert!(detail.contains("User Detail"));
-        assert!(detail.contains("Loading account detail"));
-
-        assert!(edit.contains("Edit User"));
-        assert!(edit.contains("Password (optional)"));
-        assert!(edit.contains("Save User"));
-        assert!(edit.contains("Cancel"));
-
-        assert!(access.contains("User Access"));
-        assert!(access.contains("Loading access assignments"));
-
-        assert!(node_types.contains("Organization Node Types"));
-        assert!(node_types.contains("admin-node-type-list"));
-        assert!(node_types.contains("Node Type Catalog"));
-        assert!(node_type_create.contains("node-type-form"));
-        assert!(node_type_create.contains("node-type-name"));
-        assert!(node_type_create.contains("node-type-slug"));
-        assert!(node_type_create.contains("node-type-plural-label"));
-        assert!(node_type_create.contains("node-type-form-status"));
-        assert!(node_type_detail.contains("Organization Node Type Detail"));
-        assert!(node_type_detail.contains("Loading node type detail"));
-        assert!(node_type_edit.contains("Edit Organization Node Type"));
-        assert!(node_type_edit.contains("node-type-plural-label"));
-        assert!(node_type_edit.contains("Save Node Type"));
-
-        assert!(role_create.contains("Create Role"));
-        assert!(role_create.contains("role-name"));
-        assert!(role_detail.contains("Role Detail"));
-        assert!(role_detail.contains("Loading role detail"));
-
-        assert!(role_edit.contains("Edit Role"));
-        assert!(role_edit.contains("Capabilities"));
-        assert!(role_edit.contains("Save Role"));
+        for html in [
+            create.as_str(),
+            detail.as_str(),
+            edit.as_str(),
+            access.as_str(),
+            node_types.as_str(),
+            node_type_create.as_str(),
+            node_type_detail.as_str(),
+            node_type_edit.as_str(),
+            role_create.as_str(),
+            role_detail.as_str(),
+            role_edit.as_str(),
+        ] {
+            assert_protected_ssr_shell(html);
+        }
     }
 }

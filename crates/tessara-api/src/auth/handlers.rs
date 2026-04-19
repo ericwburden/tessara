@@ -1,17 +1,15 @@
 use axum::{
     Json,
     extract::State,
+    http::HeaderMap,
     http::header,
     response::{IntoResponse, Response},
 };
 
-use crate::{
-    db::AppState,
-    error::ApiResult,
-};
+use crate::{db::AppState, error::ApiResult};
 
 use super::{
-    AuthenticatedRequest, LoginRequest, LoginResponse, LogoutResponse,
+    AuthenticatedRequest, LoginRequest, LoginResponse, LogoutResponse, SessionStateResponse,
     service,
 };
 
@@ -19,7 +17,13 @@ pub async fn login(
     State(state): State<AppState>,
     Json(payload): Json<LoginRequest>,
 ) -> ApiResult<Response> {
-    let (token, expires_at) = service::login(&state.pool, &state.config, &payload.email, &payload.password).await?;
+    let (token, expires_at) = service::login(
+        &state.pool,
+        &state.config,
+        &payload.email,
+        &payload.password,
+    )
+    .await?;
     let cookie = service::build_session_cookie(
         &state.config,
         token,
@@ -36,6 +40,27 @@ pub async fn login(
 
 pub async fn me(request: AuthenticatedRequest) -> ApiResult<Json<super::AccountContext>> {
     Ok(Json(request.account))
+}
+
+pub async fn session(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> ApiResult<Json<SessionStateResponse>> {
+    let response = match service::authenticate_request(&state.pool, &state.config, &headers).await {
+        Ok((account, _session)) => SessionStateResponse {
+            authenticated: true,
+            account: Some(account),
+        },
+        Err(crate::error::ApiError::Unauthorized)
+        | Err(crate::error::ApiError::SessionExpired)
+        | Err(crate::error::ApiError::SessionRevoked) => SessionStateResponse {
+            authenticated: false,
+            account: None,
+        },
+        Err(error) => return Err(error),
+    };
+
+    Ok(Json(response))
 }
 
 pub async fn logout(

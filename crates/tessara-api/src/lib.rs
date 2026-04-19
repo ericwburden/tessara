@@ -289,6 +289,7 @@ pub fn router(state: AppState) -> Router {
         .route("/health", get(|| async { "ok" }))
         .route("/api/app/summary", get(app_summary::get_summary))
         .route("/api/auth/login", post(auth::login))
+        .route("/api/auth/session", get(auth::session))
         .route("/api/auth/logout", delete(auth::logout))
         .route("/api/me", get(auth::me))
         .route("/api/admin/capabilities", get(users::list_capabilities))

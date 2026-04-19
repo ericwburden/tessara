@@ -1,6 +1,8 @@
 use leptos::prelude::*;
 
-use crate::features::native_shell::{BreadcrumbItem, MetadataStrip, NativePage, PageHeader, Panel};
+use crate::features::native_shell::{
+    BreadcrumbItem, MetadataStrip, NativePage, PageHeader, Panel, use_account_session,
+};
 use crate::infra::routing::{WorkflowRouteParams, require_route_params};
 
 #[cfg(feature = "hydrate")]
@@ -638,10 +640,16 @@ mod hydrate {
 
 #[component]
 pub fn WorkflowsPage() -> impl IntoView {
+    let session = use_account_session();
+    #[cfg(not(feature = "hydrate"))]
+    let _ = session;
     #[cfg(feature = "hydrate")]
-    hydrate::set_context("workflow-list", None);
-    #[cfg(feature = "hydrate")]
-    hydrate::load_list_page();
+    Effect::new(move |_| {
+        if session.loaded.get() && session.account.get().is_some() {
+            hydrate::set_context("workflow-list", None);
+            hydrate::load_list_page();
+        }
+    });
     view! {
         <NativePage
             title="Tessara Workflows"
@@ -684,10 +692,16 @@ pub fn WorkflowsPage() -> impl IntoView {
 
 #[component]
 pub fn WorkflowCreatePage() -> impl IntoView {
+    let session = use_account_session();
+    #[cfg(not(feature = "hydrate"))]
+    let _ = session;
     #[cfg(feature = "hydrate")]
-    hydrate::set_context("workflow-create", None);
-    #[cfg(feature = "hydrate")]
-    hydrate::load_create_page();
+    Effect::new(move |_| {
+        if session.loaded.get() && session.account.get().is_some() {
+            hydrate::set_context("workflow-create", None);
+            hydrate::load_create_page();
+        }
+    });
     view! {
         <NativePage
             title="Create Workflow"
@@ -763,10 +777,17 @@ pub fn WorkflowDetailPage() -> impl IntoView {
     let WorkflowRouteParams { workflow_id } = require_route_params();
     let record_id = workflow_id.clone();
     let assignment_console_workflow_id = RwSignal::new(workflow_id.clone());
+    let _workflow_id_for_load = workflow_id.clone();
+    let session = use_account_session();
+    #[cfg(not(feature = "hydrate"))]
+    let _ = session;
     #[cfg(feature = "hydrate")]
-    hydrate::set_context("workflow-detail", Some(workflow_id.clone()));
-    #[cfg(feature = "hydrate")]
-    hydrate::load_detail_page(workflow_id.clone());
+    Effect::new(move |_| {
+        if session.loaded.get() && session.account.get().is_some() {
+            hydrate::set_context("workflow-detail", Some(_workflow_id_for_load.clone()));
+            hydrate::load_detail_page(_workflow_id_for_load.clone());
+        }
+    });
     view! {
         <NativePage
             title="Workflow Detail"
@@ -822,10 +843,17 @@ pub fn WorkflowEditPage() -> impl IntoView {
     let record_id = workflow_id.clone();
     let workflow_detail_href = format!("/app/workflows/{workflow_id}");
     let assignment_console_workflow_id = RwSignal::new(workflow_id.clone());
+    let _workflow_id_for_load = workflow_id.clone();
+    let session = use_account_session();
+    #[cfg(not(feature = "hydrate"))]
+    let _ = session;
     #[cfg(feature = "hydrate")]
-    hydrate::set_context("workflow-edit", Some(workflow_id.clone()));
-    #[cfg(feature = "hydrate")]
-    hydrate::load_edit_page(workflow_id.clone());
+    Effect::new(move |_| {
+        if session.loaded.get() && session.account.get().is_some() {
+            hydrate::set_context("workflow-edit", Some(_workflow_id_for_load.clone()));
+            hydrate::load_edit_page(_workflow_id_for_load.clone());
+        }
+    });
     view! {
         <NativePage
             title="Edit Workflow"
@@ -901,10 +929,16 @@ pub fn WorkflowEditPage() -> impl IntoView {
 
 #[component]
 pub fn WorkflowAssignmentsPage() -> impl IntoView {
+    let session = use_account_session();
+    #[cfg(not(feature = "hydrate"))]
+    let _ = session;
     #[cfg(feature = "hydrate")]
-    hydrate::set_context("workflow-assignments", None);
-    #[cfg(feature = "hydrate")]
-    hydrate::load_assignment_page();
+    Effect::new(move |_| {
+        if session.loaded.get() && session.account.get().is_some() {
+            hydrate::set_context("workflow-assignments", None);
+            hydrate::load_assignment_page();
+        }
+    });
     view! {
         <NativePage
             title="Workflow Assignments"

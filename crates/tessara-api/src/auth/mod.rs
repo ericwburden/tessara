@@ -6,10 +6,10 @@ mod service;
 
 pub use dto::{
     AccountContext, DelegationSummary, LoginRequest, LoginResponse, LogoutResponse,
-    ScopeNodeSummary, SessionContext, UiAccessProfile,
+    ScopeNodeSummary, SessionContext, SessionStateResponse, UiAccessProfile,
 };
 pub use extractor::AuthenticatedRequest;
-pub use handlers::{login, logout, me};
+pub use handlers::{login, logout, me, session};
 pub use repo::{
     effective_scope_node_ids, load_delegations, load_effective_capabilities, load_scope_nodes,
 };

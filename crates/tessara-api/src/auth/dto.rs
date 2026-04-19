@@ -19,6 +19,12 @@ pub struct LogoutResponse {
     pub signed_out: bool,
 }
 
+#[derive(Clone, Serialize)]
+pub struct SessionStateResponse {
+    pub authenticated: bool,
+    pub account: Option<AccountContext>,
+}
+
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum UiAccessProfile {
