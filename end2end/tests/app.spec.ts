@@ -598,6 +598,25 @@ test("admins see the full authorized native navigation model", async ({ page }) 
   await assertNoConsoleErrors();
 });
 
+test("unauthorized deep links redirect home with transient shell feedback", async ({ page }) => {
+  const assertNoConsoleErrors = attachConsoleGuard(page);
+  await signInAsRespondent(page);
+  await waitForAuthenticatedShell(page, "respondent@tessara.local");
+
+  await page.goto("/app/forms");
+
+  await expect(page).toHaveURL(/\/app$/);
+  await expect(page.getByRole("heading", { name: "Application Overview" })).toBeVisible();
+  await expect(page.locator("[data-shell-toast]")).toContainText("You do not have access to that screen.");
+  await expect(page.locator("[data-shell-toast]")).toContainText("Tessara returned you to Home.");
+  await expect(page.locator("#app-sidebar").getByRole("link", { name: "Forms" })).toHaveCount(0);
+  await expect(page.locator("[data-shell-toast]")).toHaveCount(1);
+  await expect(page).not.toHaveURL(/notice=access-denied/);
+  await expect(page.locator("[data-shell-toast]")).toHaveCount(0, { timeout: 7000 });
+
+  await assertNoConsoleErrors();
+});
+
 test("assignee pending start opens the matching draft directly and removes it from pending after submit", async ({
   page,
 }) => {

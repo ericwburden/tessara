@@ -18,7 +18,7 @@ use wasm_bindgen::JsCast;
 #[cfg(feature = "hydrate")]
 use wasm_bindgen_futures::spawn_local;
 #[cfg(feature = "hydrate")]
-use web_sys::{KeyboardEvent, window};
+use web_sys::{KeyboardEvent, UrlSearchParams, window};
 
 #[cfg(not(feature = "hydrate"))]
 fn redirect(_path: &str) {}
@@ -244,6 +244,34 @@ pub(crate) const TRANSITIONAL_LINKS: &[NavLinkSpec] = &[NavLinkSpec {
     home_action_label: "Open Reports",
 }];
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ShellNotice {
+    AccessDenied,
+}
+
+impl ShellNotice {
+    fn from_key(key: &str) -> Option<Self> {
+        match key {
+            "access-denied" => Some(Self::AccessDenied),
+            _ => None,
+        }
+    }
+
+    fn title(self) -> &'static str {
+        match self {
+            Self::AccessDenied => "Access limited",
+        }
+    }
+
+    fn message(self) -> &'static str {
+        match self {
+            Self::AccessDenied => {
+                "You do not have access to that screen. Tessara returned you to Home."
+            }
+        }
+    }
+}
+
 pub fn has_capability(account: Option<&AccountContext>, capability: &str) -> bool {
     account.is_some_and(|account| {
         account
@@ -291,6 +319,61 @@ fn shell_viewport() -> &'static str {
     } else {
         "desktop"
     }
+}
+
+#[cfg(feature = "hydrate")]
+fn read_shell_notice() -> Option<ShellNotice> {
+    let location = window()?.location();
+    let search = location.search().ok()?;
+    let params = UrlSearchParams::new_with_str(&search).ok()?;
+    params
+        .get("notice")
+        .and_then(|value| ShellNotice::from_key(&value))
+}
+
+#[cfg(feature = "hydrate")]
+fn clear_shell_notice_query() {
+    let Some(window) = window() else {
+        return;
+    };
+    let location = window.location();
+    let pathname = location.pathname().ok().unwrap_or_else(|| "/app".into());
+    let search = location.search().ok().unwrap_or_default();
+    let hash = location.hash().ok().unwrap_or_default();
+    let Ok(params) = UrlSearchParams::new_with_str(&search) else {
+        return;
+    };
+    params.delete("notice");
+
+    let query = params.to_string().as_string().unwrap_or_default();
+    let mut next = pathname;
+    if !query.is_empty() {
+        next.push('?');
+        next.push_str(&query);
+    }
+    if !hash.is_empty() {
+        next.push_str(&hash);
+    }
+
+    if let Ok(history) = window.history() {
+        let _ = history.replace_state_with_url(&wasm_bindgen::JsValue::NULL, "", Some(&next));
+    }
+}
+
+#[cfg(feature = "hydrate")]
+fn queue_shell_notice_dismiss(notice: RwSignal<Option<ShellNotice>>) {
+    let closure = wasm_bindgen::closure::Closure::wrap(Box::new(move || {
+        notice.set(None);
+    }) as Box<dyn FnMut()>);
+
+    if let Some(window) = window() {
+        let _ = window.set_timeout_with_callback_and_timeout_and_arguments_0(
+            closure.as_ref().unchecked_ref(),
+            4200,
+        );
+    }
+
+    closure.forget();
 }
 
 #[cfg(feature = "hydrate")]
@@ -729,6 +812,26 @@ fn SidebarUtilityBlock(session: AccountSession) -> impl IntoView {
     }
 }
 
+#[component]
+fn ShellToast(notice: ShellNotice, on_dismiss: Callback<()>) -> impl IntoView {
+    view! {
+        <aside class="shell-toast shell-toast--warning" data-shell-toast role="alert" aria-live="assertive">
+            <div class="shell-toast__copy">
+                <strong class="shell-toast__title">{notice.title()}</strong>
+                <p class="shell-toast__message">{notice.message()}</p>
+            </div>
+            <button
+                class="shell-toast__dismiss"
+                type="button"
+                aria-label="Dismiss notification"
+                on:click=move |_| on_dismiss.run(())
+            >
+                <span aria-hidden="true"><i class="fa-solid fa-xmark"></i></span>
+            </button>
+        </aside>
+    }
+}
+
 #[derive(Clone, Deserialize)]
 struct LogoutResponse {
     signed_out: bool,
@@ -940,6 +1043,7 @@ pub fn NativePage(
 ) -> impl IntoView {
     let session = use_account_session();
     let location = use_location();
+    let notice = RwSignal::new(None::<ShellNotice>);
     let _ = title;
     let _ = description;
 
@@ -971,6 +1075,35 @@ pub fn NativePage(
         });
     });
 
+    #[cfg(feature = "hydrate")]
+    Effect::new(move |_| {
+        let _ = location.pathname.get();
+        let _ = location.search.read();
+
+        if let Some(next_notice) = read_shell_notice() {
+            notice.set(Some(next_notice));
+            clear_shell_notice_query();
+            queue_shell_notice_dismiss(notice);
+        }
+    });
+
+    #[cfg(feature = "hydrate")]
+    Effect::new(move |_| {
+        let _ = location.pathname.get();
+        let _ = location.search.read();
+
+        if allow_unauthenticated || !session.loaded.get() {
+            return;
+        }
+
+        let account = session.account.get();
+        if let Some(required_capability) = required_capability {
+            if account.is_some() && !has_capability(account.as_ref(), required_capability) {
+                redirect("/app?notice=access-denied");
+            }
+        }
+    });
+
     view! {
         <main class=format!("shell app-shell app-shell--{active_route}")>
             <header class="top-app-bar">
@@ -993,6 +1126,22 @@ pub fn NativePage(
                     <TopBarUtilityButton aria_label="Help" icon="fa-circle-question" disabled=true/>
                 </div>
             </header>
+            <Show when=move || notice.get().is_some()>
+                {move || {
+                    notice
+                        .get()
+                        .map(|next_notice| {
+                            view! {
+                                <ShellToast
+                                    notice=next_notice
+                                    on_dismiss=Callback::new(move |_| notice.set(None))
+                                />
+                            }
+                            .into_any()
+                        })
+                        .unwrap_or_else(|| view! { <></> }.into_any())
+                }}
+            </Show>
             <button class="app-sidebar-backdrop" type="button" aria-label="Close navigation" data-sidebar-dismiss tabindex="-1" hidden></button>
             <section class="app-layout">
                 <aside id="app-sidebar" class="panel box app-sidebar" aria-label="Application navigation">
@@ -1064,11 +1213,8 @@ pub fn NativePage(
                                 && !has_capability(account.as_ref(), required_capability)
                             {
                                 return view! {
-                                    <Panel title="Access Restricted" description="Your current role does not have access to this screen.">
-                                        <div class="actions">
-                                            <a class="button-link button is-light" href="/app/login">"Sign In"</a>
-                                            <a class="button-link button is-light" href="/app">"Go Home"</a>
-                                        </div>
+                                    <Panel title="Redirecting Home" description="Returning to Home with access feedback from the shared shell.">
+                                        <p class="muted">"Redirecting..."</p>
                                     </Panel>
                                 }
                                 .into_any();

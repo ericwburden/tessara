@@ -1025,6 +1025,49 @@ body.tessara-app .app-sidebar-backdrop {
   display: none;
 }
 
+body.tessara-app .shell-toast {
+  position: fixed;
+  top: 1.25rem;
+  right: 1.25rem;
+  z-index: 60;
+  width: min(24rem, calc(100vw - 2rem));
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.85rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid rgba(217, 119, 6, 0.28);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--tessara-surface) 92%, #f59e0b 8%);
+  box-shadow: var(--tessara-shadow);
+}
+
+body.tessara-app .shell-toast__copy {
+  display: grid;
+  gap: 0.25rem;
+}
+
+body.tessara-app .shell-toast__title {
+  color: var(--tessara-text-strong);
+}
+
+body.tessara-app .shell-toast__message {
+  color: var(--tessara-text);
+  font-size: 0.94rem;
+}
+
+body.tessara-app .shell-toast__dismiss {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  min-width: 2rem;
+  height: 2rem;
+  min-height: 2rem;
+  border: 1px solid var(--tessara-border);
+  border-radius: 999px;
+  background: var(--tessara-surface) !important;
+}
+
 body.tessara-app .app-layout {
   grid-template-columns: 256px minmax(0, 1fr);
   gap: 1rem;
@@ -1308,6 +1351,13 @@ body.tessara-app .app-shell--migration .app-sidebar {
 }
 
 @media (max-width: 767px) {
+  body.tessara-app .shell-toast {
+    top: 0.85rem;
+    right: 0.85rem;
+    left: 0.85rem;
+    width: auto;
+  }
+
   body.tessara-app .top-app-bar__context {
     border-left: 0;
     padding-left: 0;
