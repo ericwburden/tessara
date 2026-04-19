@@ -278,7 +278,7 @@
   - restored `crates/tessara-ui` as a real workspace crate and routed shared application markup through reusable primitives for page headers, action groups, cards, panels, metadata strips, fields, and toolbars
   - migrated the shared route scaffolding in `crates/tessara-web/src/application.rs` so home, directory, detail, and editor surfaces now share the same component layer instead of accumulating route-local markup drift
   - moved common authoring and filter surfaces for forms, reports, dashboards, users, roles, node types, and response-start onto shared field and toolbar wrappers
-  - added `docs/style-examples/tessara-ui-primitives.md` so the `ui-guidance.md` implementation reference now exists in the repo again
+  - added shared primitive-contract guidance that is now consolidated into `docs/ui-guidance.md`
   - fixed the analytics projection in `crates/tessara-api/src/analytics.rs` so unlabeled draft form versions no longer break demo seeding or local launch
 - Validation:
   - `cargo fmt --all`
@@ -330,7 +330,7 @@
   - engineers can add another authoring or filter surface without inventing a new local markup pattern for labels, controls, or action rows
 - Evidence location:
   - `crates/tessara-web/src/application.rs`
-  - `docs/style-examples/tessara-ui-primitives.md`
+  - primitive-contract guidance now consolidated into `docs/ui-guidance.md`
   - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`
 
 ### Role-Gated Validation
@@ -372,7 +372,7 @@
 
 - Decision:
   - keep the current `cargo-leptos` plus Sass pipeline and start an internal `tessara-ui` component library instead of switching CSS frameworks or continuing to hand-produce every route surface
-  - use `docs/ui-guidance.md` and `docs/style-examples/` as the component specification source for appearance and behavior
+  - use the consolidated `docs/ui-guidance.md` as the component specification source for appearance and behavior
   - if a component cannot be specified confidently from those sources, stop and resolve the spec gap before adding a new bespoke pattern
 - Completed:
   - created `crates/tessara-ui` and added it to the workspace
@@ -1245,8 +1245,8 @@
   - continue using the legacy product structure as a guide without reproducing the old UI exactly
 ## 2026-04-08
 
-- Created `D:\Projects\dms-migration\tessara\docs\ui-direction.md` as the near-term UI implementation charter.
-- The new direction document translates `user-interface-design.md` into a shorter, locked set of implementation decisions.
+- Created a near-term UI implementation charter that was later consolidated into `docs/ui-guidance.md`.
+- The new direction translated `user-interface-design.md` into a shorter, locked set of implementation decisions before later consolidation into `ui-guidance.md`.
 - Locked decisions recorded there:
   - split product areas are the primary information architecture
   - shared home first, role-aware variants later
@@ -1260,9 +1260,9 @@
   - the acceptance criteria for considering the UI catch-up direction settled
 - Current roadmap position:
   - UI-only catch-up remains active
-  - the next implementation work should follow `ui-direction.md` rather than continue route-by-route shell refinement without a locked direction
+  - the next implementation work should follow the guidance later consolidated into `ui-guidance.md` rather than continue route-by-route shell refinement without a locked direction
 - Next planned development focus:
-  - align the current route structure and screen composition to `ui-direction.md`
+  - align the current route structure and screen composition to the guidance later consolidated into `ui-guidance.md`
   - continue making the UI behave like product destinations instead of mixed control surfaces
 ## 2026-04-08
 
@@ -1284,12 +1284,12 @@
   - UI-only catch-up remains the active implementation focus
 - Next planned development focus:
   - begin Sprint 1 from the updated roadmap
-  - use `ui-direction.md` as the implementation charter for the next UI changes
+  - use the guidance later consolidated into `ui-guidance.md` as the implementation charter for the next UI changes
 ## 2026-04-08 - Sprint 1 UI Slice: Split Product-Area Shell
 
 Roadmap position:
 - Active focus remains Sprint 1: Shared Shell and Product-Area Navigation.
-- This slice moved the app from focused utility routes toward the ui-direction.md information architecture without extending beyond backend-supported workflows.
+- This slice moved the app from focused utility routes toward the information architecture later consolidated into `ui-guidance.md` without extending beyond backend-supported workflows.
 
 Completed in this slice:
 - Added canonical product-area routes for Home, Organization, Forms, Responses, Reports, Dashboards, Administration, and Migration.

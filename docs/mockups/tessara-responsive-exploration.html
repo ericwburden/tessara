@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tessara responsive shell mockups</title>
+    <link rel="stylesheet" href="./tessara-responsive-exploration.css" />
+  </head>
+  <body>
+    <main class="board">
+      <header class="board-header">
+        <div class="title-lockup">
+          <img
+            class="logo"
+            src="../../crates/tessara-web/assets/tessara-icon-256.svg"
+            alt="Tessara"
+          />
+          <div>
+            <p class="kicker">Responsive shell mockups</p>
+            <h1>Tablet defaults to a rail. Mobile uses an overlay drawer.</h1>
+            <p class="intro">
+              These variants preserve the unified shell model. Tablet keeps the
+              sidebar collapsed by default, mobile moves navigation into a
+              drawer, and sign-in remains outside the shell entirely.
+            </p>
+          </div>
+        </div>
+        <div class="legend">
+          <span>Shown with admin:all</span>
+          <span>dev-only hints omitted</span>
+          <span>Account stays in the sidebar footer</span>
+        </div>
+      </header>
+
+      <section class="screen-row">
+        <div class="row-heading">
+          <div>
+            <p class="kicker">Screen 01</p>
+            <h2>Home</h2>
+          </div>
+          <p>
+            Tablet keeps the queue first and explorer second within a collapsed
+            shell. Mobile shows the same home surface with the navigation drawer
+            opened over the content.
+          </p>
+        </div>
+        <div class="devices">
+          <article class="device tablet">
+            <div class="device-label">Tablet</div>
+            <div class="canvas shell-tablet">
+              <aside class="rail">
+                <span class="rail-icon active"><span class="nav-icon icon-home"></span></span>
+                <span class="rail-icon"><span class="nav-icon icon-organization"></span></span>
+                <span class="rail-icon"><span class="nav-icon icon-forms"></span></span>
+                <span class="rail-icon"><span class="nav-icon icon-workflows"></span></span>
+                <span class="rail-icon"><span class="nav-icon icon-responses"></span></span>
+                <span class="rail-icon"><span class="nav-icon icon-components"></span></span>
+                <span class="rail-icon"><span class="nav-icon icon-dashboards"></span></span>
+                <span class="rail-divider"></span>
+                <span class="rail-icon"><span class="nav-icon icon-administration"></span></span>
+                <span class="rail-avatar">ER</span>
+              </aside>
+              <div class="main">
+                <div class="topbar">
+                  <div>
+                    <p class="eyebrow">Home</p>
+                    <h3>Operational home</h3>
+                  </div>
+                  <div class="utility-row">
+                    <span class="pill search">Search</span>
+                    <span class="pill icon-only"><span class="nav-icon icon-bell"></span></span>
+                    <span class="pill">Help</span>
+                  </div>
+                </div>
+                <div class="metric-line">
+                  <span><strong>14</strong> assignments</span>
+                  <span><strong>8</strong> drafts</span>
+                  <span><strong>4</strong> blockers</span>
+                </div>
+                <div class="tablet-grid">
+                  <div class="panel">
+                    <div class="panel-head">
+                      <strong>Assignment queue</strong>
+                      <span>Open full queue</span>
+                    </div>
+                    <div class="table-row selected">
+                      <span>Partner 04</span>
+                      <span>Certification review</span>
+                      <span class="chip warn">Needs review</span>
+                    </div>
+                    <div class="table-row">
+                      <span>Partner 07</span>
+                      <span>Follow-up submission</span>
+                      <span class="chip">Draft exists</span>
+                    </div>
+                    <div class="table-row">
+                      <span>Partner 15</span>
+                      <span>Correction request</span>
+                      <span class="chip danger">Late</span>
+                    </div>
+                  </div>
+                  <div class="panel">
+                    <div class="panel-head">
+                      <strong>Scoped hierarchy</strong>
+                      <span>Region East</span>
+                    </div>
+                    <div class="list-row">Region East <b>6 open</b></div>
+                    <div class="list-row selected">Jefferson County <b>3 flagged</b></div>
+                    <div class="list-row">Partner 04 <b>Needs review</b></div>
+                    <div class="list-row">Partner 05 <b>1 draft</b></div>
+                  </div>
+                </div>
+                <div class="panel">
+                  <div class="panel-head">
+                    <strong>Selected node</strong>
+                    <span class="chip warn">Partner 04</span>
+                  </div>
+                  <div class="meta-grid">
+                    <span>Forms: 3 published</span>
+                    <span>Responses: 2 draft</span>
+                    <span>Dashboards: 1 stale publish</span>
+                    <span>Due today: 1</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <article class="device mobile">
+            <div class="device-label">Mobile</div>
+            <div class="canvas mobile-shell">
+              <div class="mobile-topbar">
+                <span class="menu-dot"></span>
+                <strong>Tessara</strong>
+                <span class="mini-pill"><span class="nav-icon icon-bell"></span></span>
+              </div>
+              <div class="title-stack">
+                <p class="eyebrow">Home</p>
+                <h3>Operational home</h3>
+              </div>
+              <div class="metric-line mobile-metrics">
+                <span><strong>14</strong> assigned</span>
+                <span><strong>8</strong> drafts</span>
+                <span><strong>4</strong> blockers</span>
+              </div>
+              <div class="panel">
+                <div class="panel-head">
+                  <strong>Assignment queue</strong>
+                  <span>See all</span>
+                </div>
+                <div class="record-card">
+                  <strong>Partner 04</strong>
+                  <p>Certification review</p>
+                  <span class="chip warn">Needs review</span>
+                </div>
+                <div class="record-card">
+                  <strong>Partner 07</strong>
+                  <p>Follow-up submission</p>
+                  <span class="chip">Draft exists</span>
+                </div>
+              </div>
+              <div class="drawer">
+                <div class="drawer-header">
+                  <img
+                    class="mini-logo"
+                    src="../../crates/tessara-web/assets/tessara-icon-256.svg"
+                    alt=""
+                  />
+                  <div>
+                    <strong>Tessara</strong>
+                    <span>Shared shell</span>
+                  </div>
+                </div>
+                <div class="drawer-nav">
+                  <span class="drawer-item active"><span class="nav-icon icon-home"></span>Home</span>
+                  <span class="drawer-item"><span class="nav-icon icon-organization"></span>Organization</span>
+                  <div class="drawer-tree">
+                    <span class="drawer-tree-item level-1">Regions</span>
+                    <span class="drawer-tree-item level-2">Counties</span>
+                    <span class="drawer-tree-item level-3">Partners</span>
+                    <span class="drawer-tree-item level-4">Sites</span>
+                  </div>
+                  <span class="drawer-item"><span class="nav-icon icon-forms"></span>Forms</span>
+                  <span class="drawer-item"><span class="nav-icon icon-workflows"></span>Workflows</span>
+                  <span class="drawer-item"><span class="nav-icon icon-responses"></span>Responses</span>
+                  <span class="drawer-item"><span class="nav-icon icon-components"></span>Components</span>
+                  <span class="drawer-item"><span class="nav-icon icon-dashboards"></span>Dashboards</span>
+                  <span class="drawer-label">Admin</span>
+                  <span class="drawer-item"><span class="nav-icon icon-datasets"></span>Datasets</span>
+                  <span class="drawer-item"><span class="nav-icon icon-administration"></span>Administration</span>
+                  <span class="drawer-item"><span class="nav-icon icon-migration"></span>Migration</span>
+                </div>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="screen-row">
+        <div class="row-heading">
+          <div>
+            <p class="kicker">Screen 02</p>
+            <h2>Workflows</h2>
+          </div>
+          <p>
+            Tablet opens on the workflow directory and keeps selected assignment
+            detail nearby. Mobile compresses the directory into cards and still
+            makes assignments obvious.
+          </p>
+        </div>
+        <div class="devices">
+          <article class="device tablet">
+            <div class="device-label">Tablet</div>
+            <div class="canvas shell-tablet">
+              <aside class="rail">
+                <span class="rail-icon"><span class="nav-icon icon-home"></span></span>
+                <span class="rail-icon"><span class="nav-icon icon-organization"></span></span>
+                <span class="rail-icon"><span class="nav-icon icon-forms"></span></span>
+                <span class="rail-icon active"><span class="nav-icon icon-workflows"></span></span>
+                <span class="rail-icon"><span class="nav-icon icon-responses"></span></span>
+                <span class="rail-icon"><span class="nav-icon icon-components"></span></span>
+                <span class="rail-icon"><span class="nav-icon icon-dashboards"></span></span>
+                <span class="rail-divider"></span>
+                <span class="rail-icon"><span class="nav-icon icon-administration"></span></span>
+                <span class="rail-avatar">ER</span>
+              </aside>
+              <div class="main">
+                <div class="topbar">
+                  <div>
+                    <p class="eyebrow">Workflows</p>
+                    <h3>Workflow directory</h3>
+                  </div>
+                  <div class="utility-row">
+                    <span class="pill search">Search</span>
+                    <span class="pill">Help</span>
+                  </div>
+                </div>
+                <div class="metric-line">
+                  <span><strong>12</strong> active</span>
+                  <span><strong>3</strong> draft</span>
+                  <span><strong>14</strong> due</span>
+                </div>
+                <div class="panel">
+                  <div class="panel-head">
+                    <strong>Directory</strong>
+                    <span>Create workflow</span>
+                  </div>
+                  <div class="table-row selected">
+                    <span>Spring readiness certification</span>
+                    <span>v1.3 draft</span>
+                    <span class="chip warn">Needs publish</span>
+                  </div>
+                  <div class="table-row">
+                    <span>Attendance exception follow-up</span>
+                    <span>v2.0 published</span>
+                    <span class="chip good">Healthy</span>
+                  </div>
+                </div>
+                <div class="panel">
+                  <div class="panel-head">
+                    <strong>Assignments</strong>
+                    <span>Selected workflow</span>
+                  </div>
+                  <div class="list-row">Jefferson County review <b>Due today</b></div>
+                  <div class="list-row">Pulaski County review <b>In progress</b></div>
+                  <div class="list-row">Benton County approval <b>Submitted</b></div>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <article class="device mobile">
+            <div class="device-label">Mobile</div>
+            <div class="canvas">
+              <div class="mobile-topbar">
+                <span class="menu-dot"></span>
+                <strong>Workflows</strong>
+                <span class="mini-pill">+</span>
+              </div>
+              <div class="title-stack">
+                <p class="eyebrow">Directory</p>
+                <h3>Workflow directory</h3>
+              </div>
+              <div class="scroll-chips">
+                <span class="chip active">Active 12</span>
+                <span class="chip">Draft 3</span>
+                <span class="chip">Needs publish 2</span>
+              </div>
+              <div class="record-card selected">
+                <strong>Spring readiness certification</strong>
+                <p>Annual certification cycle</p>
+                <div class="mini-meta">v1.3 draft</div>
+                <span class="chip warn">Needs publish</span>
+              </div>
+              <div class="record-card">
+                <strong>Attendance exception follow-up</strong>
+                <p>Follow-up workflow</p>
+                <div class="mini-meta">v2.0 published</div>
+                <span class="chip good">Healthy</span>
+              </div>
+              <div class="panel">
+                <div class="panel-head">
+                  <strong>Assignments on selected workflow</strong>
+                  <span>3 active</span>
+                </div>
+                <div class="activity-row">Jefferson County review</div>
+                <div class="activity-row">Pulaski County review</div>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="screen-row">
+        <div class="row-heading">
+          <div>
+            <p class="kicker">Screen 03</p>
+            <h2>Form builder</h2>
+          </div>
+          <p>
+            Tablet keeps the collapsed shell and uses the space for insert rail,
+            canvas, and properties. Mobile keeps the canvas primary and shifts
+            deeper settings into a lower sheet.
+          </p>
+        </div>
+        <div class="devices">
+          <article class="device tablet">
+            <div class="device-label">Tablet</div>
+            <div class="canvas shell-tablet">
+              <aside class="rail">
+                <span class="rail-icon"><span class="nav-icon icon-home"></span></span>
+                <span class="rail-icon"><span class="nav-icon icon-organization"></span></span>
+                <span class="rail-icon active"><span class="nav-icon icon-forms"></span></span>
+                <span class="rail-icon"><span class="nav-icon icon-workflows"></span></span>
+                <span class="rail-icon"><span class="nav-icon icon-responses"></span></span>
+                <span class="rail-icon"><span class="nav-icon icon-components"></span></span>
+                <span class="rail-icon"><span class="nav-icon icon-dashboards"></span></span>
+                <span class="rail-divider"></span>
+                <span class="rail-icon"><span class="nav-icon icon-administration"></span></span>
+                <span class="rail-avatar">ER</span>
+              </aside>
+              <div class="main">
+                <div class="topbar">
+                  <div>
+                    <p class="eyebrow">Forms</p>
+                    <h3>Form builder</h3>
+                  </div>
+                  <div class="utility-row">
+                    <span class="pill search">Search</span>
+                    <span class="pill">Help</span>
+                  </div>
+                </div>
+                <div class="builder-bar">
+                  <span class="chip active">Draft</span>
+                  <span class="chip">v1.3</span>
+                  <span class="chip">7 changes</span>
+                  <span class="pill">Preview</span>
+                </div>
+                <div class="builder-tablet-layout">
+                  <div class="section-list">
+                    <div class="section-item active">Short text</div>
+                    <div class="section-item">Choice list</div>
+                    <div class="section-item">Component</div>
+                  </div>
+                  <div class="builder-cards">
+                    <div class="field-card-mini selected">
+                      <strong>Program lead name</strong>
+                      <span>Short text</span>
+                    </div>
+                    <div class="field-card-mini">
+                      <strong>Submission confidence</strong>
+                      <span>Choice list</span>
+                    </div>
+                    <div class="sheet-panel">
+                      <div class="panel-head">
+                        <strong>Field properties</strong>
+                        <span>Selected</span>
+                      </div>
+                      <div class="property-line"></div>
+                      <div class="property-line short"></div>
+                      <div class="toggle-line"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <article class="device mobile">
+            <div class="device-label">Mobile</div>
+            <div class="canvas">
+              <div class="mobile-topbar">
+                <span class="menu-dot"></span>
+                <strong>Builder</strong>
+                <span class="mini-pill">Save</span>
+              </div>
+              <div class="title-stack">
+                <p class="eyebrow">Program snapshot</p>
+                <h3>Spring readiness certification</h3>
+              </div>
+              <div class="scroll-chips">
+                <span class="chip active">Draft</span>
+                <span class="chip">v1.3</span>
+                <span class="chip">Preview</span>
+              </div>
+              <div class="pill wide">Section: Program snapshot</div>
+              <div class="field-card-mini selected tall">
+                <strong>Program lead name</strong>
+                <span>Short text</span>
+                <div class="property-line"></div>
+              </div>
+              <div class="field-card-mini tall">
+                <strong>Submission confidence</strong>
+                <span>Choice list</span>
+                <div class="property-line short"></div>
+              </div>
+              <div class="sheet-panel">
+                <div class="panel-head">
+                  <strong>Properties sheet</strong>
+                  <span>Open</span>
+                </div>
+                <div class="toggle-line"></div>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="screen-row">
+        <div class="row-heading">
+          <div>
+            <p class="kicker">Screen 04</p>
+            <h2>Sign in</h2>
+          </div>
+          <p>
+            Tablet and mobile both stay bare. No shell chrome appears before the
+            user authenticates.
+          </p>
+        </div>
+        <div class="devices">
+          <article class="device tablet">
+            <div class="device-label">Tablet</div>
+            <div class="canvas auth-tablet">
+              <div class="auth-form">
+                <div class="auth-brand">
+                  <img
+                    class="mini-logo"
+                    src="../../crates/tessara-web/assets/tessara-icon-256.svg"
+                    alt=""
+                  />
+                  <div>
+                    <p class="eyebrow">Authentication</p>
+                    <h3>Sign in to Tessara</h3>
+                  </div>
+                </div>
+                <div class="form-line"></div>
+                <div class="form-line"></div>
+                <div class="button primary full">Sign In</div>
+                <div class="chip active full-chip">Remember this device</div>
+              </div>
+            </div>
+          </article>
+
+          <article class="device mobile">
+            <div class="device-label">Mobile</div>
+            <div class="canvas">
+              <div class="auth-brand mobile-auth">
+                <img
+                  class="mini-logo"
+                  src="../../crates/tessara-web/assets/tessara-icon-256.svg"
+                  alt=""
+                />
+                <div>
+                  <p class="eyebrow">Authentication</p>
+                  <h3>Sign in to Tessara</h3>
+                </div>
+              </div>
+              <div class="form-line"></div>
+              <div class="form-line"></div>
+              <div class="button primary full">Sign In</div>
+              <div class="chip active full-chip">Remember this device</div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="screen-row">
+        <div class="row-heading">
+          <div>
+            <p class="kicker">Screen 05</p>
+            <h2>Organization</h2>
+          </div>
+          <p>
+            Tablet keeps the explorer row-based and compact. Mobile turns nodes
+            into quick cards while still showing the selected node's related
+            work.
+          </p>
+        </div>
+        <div class="devices">
+          <article class="device tablet">
+            <div class="device-label">Tablet</div>
+            <div class="canvas shell-tablet">
+              <aside class="rail">
+                <span class="rail-icon"><span class="nav-icon icon-home"></span></span>
+                <span class="rail-icon active"><span class="nav-icon icon-organization"></span></span>
+                <span class="rail-icon"><span class="nav-icon icon-forms"></span></span>
+                <span class="rail-icon"><span class="nav-icon icon-workflows"></span></span>
+                <span class="rail-icon"><span class="nav-icon icon-responses"></span></span>
+                <span class="rail-icon"><span class="nav-icon icon-components"></span></span>
+                <span class="rail-icon"><span class="nav-icon icon-dashboards"></span></span>
+                <span class="rail-divider"></span>
+                <span class="rail-icon"><span class="nav-icon icon-administration"></span></span>
+                <span class="rail-avatar">ER</span>
+              </aside>
+              <div class="main">
+                <div class="topbar">
+                  <div>
+                    <p class="eyebrow">Organization</p>
+                    <h3>Partner Explorer</h3>
+                  </div>
+                  <div class="utility-row">
+                    <span class="pill search">Search</span>
+                    <span class="pill">Help</span>
+                  </div>
+                </div>
+                <div class="metric-line">
+                  <span><strong>28</strong> visible partners</span>
+                  <span><strong>6</strong> open responses</span>
+                </div>
+                <div class="org-tablet-layout">
+                  <div class="org-tree-tablet">
+                    <div class="org-tree-row level-0">
+                      <strong>Region East</strong>
+                      <span>2 counties open</span>
+                    </div>
+                    <div class="org-tree-row level-1 selected">
+                      <strong>Jefferson County</strong>
+                      <span>3 flagged</span>
+                    </div>
+                    <div class="org-tree-row level-2 selected">
+                      <strong>Partner 04</strong>
+                      <span>Needs attention</span>
+                    </div>
+                    <div class="org-tree-row level-2">
+                      <strong>Partner 05</strong>
+                      <span>1 draft</span>
+                    </div>
+                  </div>
+                  <div class="panel org-tablet-detail">
+                    <div class="panel-head">
+                      <strong>Partner 04</strong>
+                      <span class="chip warn">Needs attention</span>
+                    </div>
+                    <div class="list-row">Forms <b>3 published</b></div>
+                    <div class="list-row">Responses <b>2 draft</b></div>
+                    <div class="list-row">Dashboards <b>1 stale publish</b></div>
+                    <div class="activity-row">Metadata updated today; dashboard refresh queued.</div>
+                    <div class="button-row">
+                      <span class="button secondary">Edit node</span>
+                      <span class="button primary">Open responses</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <article class="device mobile">
+            <div class="device-label">Mobile</div>
+            <div class="canvas">
+              <div class="mobile-topbar">
+                <span class="menu-dot"></span>
+                <strong>Organization</strong>
+                <span class="mini-pill">+</span>
+              </div>
+              <div class="title-stack">
+                <p class="eyebrow">Organization</p>
+                <h3>Partner Explorer</h3>
+              </div>
+              <div class="metric-line mobile-metrics">
+                <span><strong>28</strong> visible partners</span>
+                <span><strong>6</strong> open responses</span>
+              </div>
+              <div class="hierarchy-control">
+                <div class="panel-head">
+                  <strong>Selected branch</strong>
+                  <span>Collapsed</span>
+                </div>
+                <div class="hierarchy-summary">
+                  <strong>Region East / Jefferson County / Partner 04</strong>
+                  <span>Tap to choose a different node</span>
+                </div>
+              </div>
+              <div class="hierarchy-sheet">
+                <div class="panel-head">
+                  <strong>Visible hierarchy</strong>
+                  <span>Expanded</span>
+                </div>
+                <div class="org-tree-mobile">
+                  <div class="org-tree-row level-0">
+                    <strong>Region East</strong>
+                    <span>2 counties open</span>
+                  </div>
+                  <div class="org-tree-row level-1 selected">
+                    <strong>Jefferson County</strong>
+                    <span>3 flagged</span>
+                  </div>
+                  <div class="org-tree-row level-2 selected">
+                    <strong>Partner 04</strong>
+                    <span>Needs attention</span>
+                  </div>
+                  <div class="org-tree-row level-2">
+                    <strong>Partner 05</strong>
+                    <span>1 draft</span>
+                  </div>
+                </div>
+              </div>
+              <div class="panel org-mobile-detail">
+                <div class="panel-head">
+                  <strong>Selected node work</strong>
+                  <span>Partner 04</span>
+                </div>
+                <div class="activity-row">Forms: Spring readiness, staffing update, corrective action.</div>
+                <div class="activity-row">Responses: 2 draft, 1 due today.</div>
+                <div class="activity-row">Dashboards: 1 stale publish still needs attention.</div>
+                <div class="button-row">
+                  <span class="button secondary">Edit node</span>
+                  <span class="button primary">Open responses</span>
+                </div>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

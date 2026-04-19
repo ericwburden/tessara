@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tessara unified shell mockups</title>
+    <link rel="stylesheet" href="./tessara-redesign-exploration.css" />
+  </head>
+  <body>
+    <main class="board">
+      <header class="board-header">
+        <div class="board-brand">
+          <img
+            class="board-logo"
+            src="../../crates/tessara-web/assets/tessara-icon-256.svg"
+            alt="Tessara"
+          />
+          <div>
+            <p class="board-kicker">Unified shell mockups</p>
+            <h1>One shared Tessara space, shaped by permissions</h1>
+            <p class="board-copy">
+              These mockups remove any admin/user shell split. The app uses one
+              shell, one navigation model, and one visual language. Routes,
+              sidebar groups, actions, and support panels appear only when the
+              user's permission set allows them.
+            </p>
+          </div>
+        </div>
+        <div class="influence-stack">
+          <span>Shown with admin:all</span>
+          <span>dev-only hints omitted</span>
+          <span>Sidebar footer owns account and theme</span>
+          <span>Top bar is search plus quiet utilities</span>
+        </div>
+      </header>
+
+      <section class="concept">
+        <div class="concept-heading">
+          <div>
+            <p class="concept-kicker">Screen 01</p>
+            <h2>Home keeps the queue first and the hierarchy second</h2>
+          </div>
+          <p class="concept-note">
+            The shell is nav-first, the header metrics are compact, and the main
+            width belongs to the assignment work surface rather than decorative
+            summary cards.
+          </p>
+        </div>
+        <div class="screen">
+          <aside class="sidebar">
+            <div class="brand-lockup">
+              <img
+                class="brand-mark"
+                src="../../crates/tessara-web/assets/tessara-icon-256.svg"
+                alt=""
+              />
+              <div>
+                <strong>Tessara</strong>
+                <p>Operational reporting platform</p>
+              </div>
+            </div>
+
+            <nav class="nav-block">
+              <p class="nav-label">Primary</p>
+              <a class="nav-item active" href="#"><span class="nav-icon icon-home"></span>Home</a>
+              <a class="nav-item" href="#"><span class="nav-icon icon-organization"></span>Organization</a>
+              <div class="nav-tree">
+                <span class="nav-tree-item level-1 active">Regions</span>
+                <span class="nav-tree-item level-2">Counties</span>
+                <span class="nav-tree-item level-3">Partners</span>
+                <span class="nav-tree-item level-4">Sites</span>
+              </div>
+              <a class="nav-item" href="#"><span class="nav-icon icon-forms"></span>Forms</a>
+              <a class="nav-item" href="#"><span class="nav-icon icon-workflows"></span>Workflows</a>
+              <a class="nav-item" href="#"><span class="nav-icon icon-responses"></span>Responses</a>
+              <a class="nav-item" href="#"><span class="nav-icon icon-components"></span>Components</a>
+              <a class="nav-item" href="#"><span class="nav-icon icon-dashboards"></span>Dashboards</a>
+            </nav>
+
+            <nav class="nav-block nav-block-admin">
+              <p class="nav-label">Admin</p>
+              <a class="nav-item" href="#"><span class="nav-icon icon-datasets"></span>Datasets</a>
+              <a class="nav-item" href="#"><span class="nav-icon icon-administration"></span>Administration</a>
+              <a class="nav-item" href="#"><span class="nav-icon icon-migration"></span>Migration</a>
+            </nav>
+
+            <section class="sidebar-footer">
+              <div class="account-card">
+                <span class="avatar">ER</span>
+                <div>
+                  <strong>Eric Walker</strong>
+                  <p>Current session</p>
+                </div>
+              </div>
+              <div class="context-list">
+                <div class="context-chip">
+                  <span>Delegation</span>
+                  <strong>Ashley Grant</strong>
+                </div>
+                <div class="context-chip context-chip-expandable">
+                  <span>Scope roots</span>
+                  <strong>3 top-level nodes</strong>
+                  <em>Region East, Region South, +1 more</em>
+                </div>
+              </div>
+              <div class="account-menu account-menu-theme">
+                <span class="nav-icon icon-theme"></span>
+                <strong>System</strong>
+                <em>Theme</em>
+              </div>
+            </section>
+          </aside>
+
+          <div class="workspace">
+            <div class="topbar">
+              <div>
+                <p class="eyebrow">Home</p>
+                <h3>Operational home</h3>
+              </div>
+              <div class="topbar-actions">
+                <div class="search-pill">
+                  Search forms, nodes, workflows, and dashboards
+                </div>
+                <span class="icon-pill icon-only"><span class="nav-icon icon-bell"></span></span>
+                <span class="icon-pill">Help</span>
+              </div>
+            </div>
+
+            <div class="metric-strip metric-strip-compact">
+              <span class="metric-inline"><strong>14</strong> assignments</span>
+              <span class="metric-inline"><strong>8</strong> draft responses</span>
+              <span class="metric-inline"><strong>4</strong> publish blockers</span>
+              <span class="metric-inline"><strong>5</strong> due today</span>
+            </div>
+
+            <div class="home-grid">
+              <article class="panel panel-large">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Assignment queue</p>
+                    <h3>What needs attention now</h3>
+                  </div>
+                  <button class="secondary">Open full queue</button>
+                </div>
+                <div class="panel-toolbar">
+                  <span class="chip active">Assigned to me</span>
+                  <span class="chip">Needs review</span>
+                  <span class="chip">Due today</span>
+                </div>
+                <div class="list-table">
+                  <div class="list-head">
+                    <span>Node</span>
+                    <span>Workflow step</span>
+                    <span>Form version</span>
+                    <span>Status</span>
+                  </div>
+                  <div class="list-row selected">
+                    <span><strong>Partner 04</strong><small>Jefferson County</small></span>
+                    <span>Certification review</span>
+                    <span>Spring readiness v1.3</span>
+                    <span class="badge badge-warn">Needs review</span>
+                  </div>
+                  <div class="list-row">
+                    <span><strong>Partner 07</strong><small>Pulaski County</small></span>
+                    <span>Follow-up submission</span>
+                    <span>Attendance exception v2.0</span>
+                    <span class="badge">Draft exists</span>
+                  </div>
+                  <div class="list-row">
+                    <span><strong>Partner 15</strong><small>Sebastian County</small></span>
+                    <span>Correction request</span>
+                    <span>Corrective action v1.0</span>
+                    <span class="badge badge-danger">Late</span>
+                  </div>
+                </div>
+                <div class="subtle-feed">
+                  <div><strong>Response submitted</strong><span>Partner 11 completed staffing update review.</span></div>
+                  <div><strong>Dashboard republished</strong><span>Readiness overview is back in sync with components.</span></div>
+                  <div><strong>Workflow published</strong><span>Attendance follow-up v1.3 is active.</span></div>
+                </div>
+              </article>
+
+              <article class="panel">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Partner explorer</p>
+                    <h3>Jefferson County partners</h3>
+                  </div>
+                  <span class="meta-link">Region East</span>
+                </div>
+                <div class="tree-list tree-minimal">
+                  <div class="tree-row level-0">
+                    <strong>Region East</strong>
+                    <span class="badge">2 counties open</span>
+                  </div>
+                  <div class="tree-row level-1 selected">
+                    <strong>Jefferson County</strong>
+                    <span class="badge badge-warn">3 flagged</span>
+                  </div>
+                  <div class="tree-row level-2">
+                    <strong>Partner 04</strong>
+                    <span class="badge badge-warn">Needs review</span>
+                  </div>
+                  <div class="tree-row level-2">
+                    <strong>Partner 05</strong>
+                    <span class="badge">1 draft</span>
+                  </div>
+                  <div class="tree-row level-1">
+                    <strong>Pulaski County</strong>
+                    <span class="badge badge-good">Healthy</span>
+                  </div>
+                  <div class="tree-row level-1">
+                    <strong>Benton County</strong>
+                    <span class="badge">2 updates</span>
+                  </div>
+                </div>
+              </article>
+
+              <article class="panel">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Selected node</p>
+                    <h3>Partner 04 related work</h3>
+                  </div>
+                  <span class="badge badge-warn">Needs attention</span>
+                </div>
+                <div class="detail-cards">
+                  <div class="detail-card">
+                    <span>Forms</span>
+                    <strong>3 published</strong>
+                  </div>
+                  <div class="detail-card">
+                    <span>Responses</span>
+                    <strong>2 draft, 1 due today</strong>
+                  </div>
+                  <div class="detail-card">
+                    <span>Dashboards</span>
+                    <strong>2 linked, 1 stale publish</strong>
+                  </div>
+                </div>
+                <ul class="note-list">
+                  <li>Saved draft values no longer match the latest dataset refresh.</li>
+                  <li>A linked dashboard still references the prior component revision.</li>
+                  <li>The staffing section needs review before the workflow can advance.</li>
+                </ul>
+              </article>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="concept">
+        <div class="concept-heading">
+          <div>
+            <p class="concept-kicker">Screen 02</p>
+            <h2>Workflows land in a directory, then drill into assignments</h2>
+          </div>
+          <p class="concept-note">
+            The top-level destination is a workflow directory, not a personal
+            inbox. Assignment management still exists directly on the selected
+            workflow and can also jump to a dedicated assignments view.
+          </p>
+        </div>
+        <div class="screen">
+          <aside class="sidebar">
+            <div class="brand-lockup">
+              <img
+                class="brand-mark"
+                src="../../crates/tessara-web/assets/tessara-icon-256.svg"
+                alt=""
+              />
+              <div>
+                <strong>Tessara</strong>
+                <p>Operational reporting platform</p>
+              </div>
+            </div>
+
+            <nav class="nav-block">
+              <p class="nav-label">Primary</p>
+              <a class="nav-item" href="#"><span class="nav-icon icon-home"></span>Home</a>
+              <a class="nav-item" href="#"><span class="nav-icon icon-organization"></span>Organization</a>
+              <div class="nav-tree">
+                <span class="nav-tree-item level-1 active">Regions</span>
+                <span class="nav-tree-item level-2">Counties</span>
+                <span class="nav-tree-item level-3">Partners</span>
+                <span class="nav-tree-item level-4">Sites</span>
+              </div>
+              <a class="nav-item" href="#"><span class="nav-icon icon-forms"></span>Forms</a>
+              <a class="nav-item active" href="#"><span class="nav-icon icon-workflows"></span>Workflows</a>
+              <a class="nav-item" href="#"><span class="nav-icon icon-responses"></span>Responses</a>
+              <a class="nav-item" href="#"><span class="nav-icon icon-components"></span>Components</a>
+              <a class="nav-item" href="#"><span class="nav-icon icon-dashboards"></span>Dashboards</a>
+            </nav>
+
+            <nav class="nav-block nav-block-admin">
+              <p class="nav-label">Admin</p>
+              <a class="nav-item" href="#"><span class="nav-icon icon-datasets"></span>Datasets</a>
+              <a class="nav-item" href="#"><span class="nav-icon icon-administration"></span>Administration</a>
+              <a class="nav-item" href="#"><span class="nav-icon icon-migration"></span>Migration</a>
+            </nav>
+
+            <section class="sidebar-footer">
+              <div class="account-card">
+                <span class="avatar">ER</span>
+                <div>
+                  <strong>Eric Walker</strong>
+                  <p>Current session</p>
+                </div>
+              </div>
+              <div class="context-list">
+                <div class="context-chip">
+                  <span>Delegation</span>
+                  <strong>Ashley Grant</strong>
+                </div>
+                <div class="context-chip context-chip-expandable">
+                  <span>Scope roots</span>
+                  <strong>3 top-level nodes</strong>
+                  <em>Region East, Region South, +1 more</em>
+                </div>
+              </div>
+              <div class="account-menu account-menu-theme">
+                <span class="nav-icon icon-theme"></span>
+                <strong>System</strong>
+                <em>Theme</em>
+              </div>
+            </section>
+          </aside>
+
+          <div class="workspace">
+            <div class="topbar">
+              <div>
+                <p class="eyebrow">Workflows</p>
+                <h3>Workflow directory</h3>
+              </div>
+              <div class="topbar-actions">
+                <div class="search-pill">
+                  Search workflow names, versions, and assignment rules
+                </div>
+                <span class="icon-pill icon-only"><span class="nav-icon icon-bell"></span></span>
+                <span class="icon-pill">Help</span>
+              </div>
+            </div>
+
+            <div class="metric-strip">
+              <span class="metric-chip"><label>Active</label><strong>12</strong></span>
+              <span class="metric-chip"><label>Draft</label><strong>3</strong></span>
+              <span class="metric-chip"><label>Needs publish</label><strong>2</strong></span>
+              <span class="metric-chip"><label>Assignment steps due</label><strong>14</strong></span>
+            </div>
+
+            <div class="workflow-grid">
+              <article class="panel panel-large">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Directory</p>
+                    <h3>Current workflow set</h3>
+                  </div>
+                  <div class="button-row">
+                    <button class="secondary">Open assignments view</button>
+                    <button class="primary">Create workflow</button>
+                  </div>
+                </div>
+                <div class="list-table">
+                  <div class="list-head workflow-head">
+                    <span>Workflow</span>
+                    <span>Current version</span>
+                    <span>Owner</span>
+                    <span>Assignment load</span>
+                    <span>Status</span>
+                  </div>
+                  <div class="list-row workflow-row selected">
+                    <span><strong>Spring readiness certification</strong><small>Annual certification cycle</small></span>
+                    <span>v1.3 draft</span>
+                    <span>Ashley Grant</span>
+                    <span>8 due this week</span>
+                    <span class="badge badge-warn">Needs publish</span>
+                  </div>
+                  <div class="list-row workflow-row">
+                    <span><strong>Attendance exception follow-up</strong><small>Follow-up workflow</small></span>
+                    <span>v2.0 published</span>
+                    <span>Martin Cole</span>
+                    <span>3 active</span>
+                    <span class="badge badge-good">Healthy</span>
+                  </div>
+                  <div class="list-row workflow-row">
+                    <span><strong>Corrective action review</strong><small>Escalation process</small></span>
+                    <span>v1.1 published</span>
+                    <span>Nina Flores</span>
+                    <span>5 active</span>
+                    <span class="badge">Monitoring</span>
+                  </div>
+                </div>
+              </article>
+
+              <aside class="panel">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Selected workflow</p>
+                    <h3>Spring readiness certification</h3>
+                  </div>
+                  <span class="badge badge-warn">Draft version</span>
+                </div>
+                <div class="tab-strip">
+                  <span class="tab">Summary</span>
+                  <span class="tab active">Assignments</span>
+                  <span class="tab">Versions</span>
+                </div>
+                <div class="assignment-stack">
+                  <div class="assignment-row">
+                    <div>
+                      <strong>Jefferson County review</strong>
+                      <span>Assigned to Ashley Grant</span>
+                    </div>
+                    <span class="badge badge-warn">Due today</span>
+                  </div>
+                  <div class="assignment-row">
+                    <div>
+                      <strong>Pulaski County review</strong>
+                      <span>Assigned to Martin Cole</span>
+                    </div>
+                    <span class="badge">In progress</span>
+                  </div>
+                  <div class="assignment-row">
+                    <div>
+                      <strong>Benton County approval</strong>
+                      <span>Assigned to Nina Flores</span>
+                    </div>
+                    <span class="badge badge-good">Submitted</span>
+                  </div>
+                </div>
+                <div class="detail-actions">
+                  <button class="primary">Manage assignments</button>
+                  <button class="secondary">Publish draft</button>
+                </div>
+              </aside>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="concept">
+        <div class="concept-heading">
+          <div>
+            <p class="concept-kicker">Screen 03</p>
+            <h2>Form builder uses the same shell, with the rail collapsed</h2>
+          </div>
+          <p class="concept-note">
+            Desktop keeps the sidebar persistent but collapsible. The builder
+            then uses the recovered width for a narrow insert rail, a dominant
+            canvas, and a properties panel that appears only when a field is
+            selected.
+          </p>
+        </div>
+        <div class="screen collapsed-shell">
+          <aside class="sidebar sidebar-collapsed">
+            <div class="rail-brand">
+              <img
+                class="brand-mark small-mark"
+                src="../../crates/tessara-web/assets/tessara-icon-256.svg"
+                alt=""
+              />
+            </div>
+            <div class="rail-stack">
+              <span class="rail-icon"><span class="nav-icon icon-home"></span></span>
+              <span class="rail-icon"><span class="nav-icon icon-organization"></span></span>
+              <span class="rail-icon active"><span class="nav-icon icon-forms"></span></span>
+              <span class="rail-icon"><span class="nav-icon icon-workflows"></span></span>
+              <span class="rail-icon"><span class="nav-icon icon-responses"></span></span>
+              <span class="rail-icon"><span class="nav-icon icon-components"></span></span>
+              <span class="rail-icon"><span class="nav-icon icon-dashboards"></span></span>
+            </div>
+            <div class="rail-divider"></div>
+            <div class="rail-stack">
+              <span class="rail-icon"><span class="nav-icon icon-datasets"></span></span>
+              <span class="rail-icon"><span class="nav-icon icon-administration"></span></span>
+              <span class="rail-icon"><span class="nav-icon icon-migration"></span></span>
+            </div>
+            <div class="rail-footer">
+              <span class="avatar">ER</span>
+            </div>
+          </aside>
+
+          <div class="workspace">
+            <div class="topbar">
+              <div>
+                <p class="eyebrow">Forms</p>
+                <h3>Form builder</h3>
+              </div>
+              <div class="topbar-actions">
+                <div class="search-pill">
+                  Search fields, reusable components, and datasets
+                </div>
+                <span class="icon-pill icon-only"><span class="nav-icon icon-bell"></span></span>
+                <span class="icon-pill">Help</span>
+              </div>
+            </div>
+
+            <div class="builder-header-bar">
+              <div>
+                <p class="eyebrow">Lifecycle</p>
+                <h3>Spring readiness certification</h3>
+              </div>
+              <div class="builder-header-meta">
+                <span class="metric-chip"><label>Status</label><strong>Draft</strong></span>
+                <span class="metric-chip"><label>Version</label><strong>v1.3</strong></span>
+                <span class="metric-chip"><label>Pending changes</label><strong>7</strong></span>
+              </div>
+              <div class="button-row">
+                <button class="secondary">Preview</button>
+                <button class="primary">Save draft</button>
+              </div>
+            </div>
+
+            <div class="builder-grid">
+              <aside class="panel insert-panel">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Insert rail</p>
+                    <h3>Add to section</h3>
+                  </div>
+                </div>
+                <div class="insert-list">
+                  <div class="insert-item active">
+                    <strong>Short text</strong>
+                    <span>Program lead, county notes, comments</span>
+                  </div>
+                  <div class="insert-item">
+                    <strong>Choice list</strong>
+                    <span>Single select with reusable sources</span>
+                  </div>
+                  <div class="insert-item">
+                    <strong>Repeating group</strong>
+                    <span>Site staffing or waiver collections</span>
+                  </div>
+                  <div class="insert-item">
+                    <strong>Reusable component</strong>
+                    <span>Bound to managed component definitions</span>
+                  </div>
+                </div>
+              </aside>
+
+              <section class="panel canvas-panel">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Section stack</p>
+                    <h3>Canvas</h3>
+                  </div>
+                  <span class="meta-link">2 sections shown</span>
+                </div>
+
+                <article class="builder-section-panel selected">
+                  <div class="section-panel-header">
+                    <div>
+                      <p class="eyebrow">Section 01</p>
+                      <h4>Program snapshot</h4>
+                    </div>
+                    <div class="section-tools">
+                      <span>Title</span>
+                      <span>Description</span>
+                      <span>2 columns</span>
+                    </div>
+                  </div>
+                  <p class="section-copy">
+                    Core ownership and reporting identity fields shown at the top of the form.
+                  </p>
+                  <article class="field-card selected">
+                    <div class="field-card-header">
+                      <div>
+                        <p class="field-type">Short text</p>
+                        <h4>Program lead name</h4>
+                      </div>
+                      <div class="field-tools">
+                        <span>Preview</span>
+                        <span>Duplicate</span>
+                        <span>Delete</span>
+                      </div>
+                    </div>
+                    <div class="field-preview">
+                      <label>Program lead name</label>
+                      <div class="preview-input">Enter a full name</div>
+                    </div>
+                  </article>
+                  <div class="insert-inline">+ Add field to Program snapshot</div>
+                </article>
+
+                <article class="builder-section-panel">
+                  <div class="section-panel-header">
+                    <div>
+                      <p class="eyebrow">Section 02</p>
+                      <h4>Submission details</h4>
+                    </div>
+                    <div class="section-tools">
+                      <span>Title</span>
+                      <span>Helper copy</span>
+                      <span>1 column</span>
+                    </div>
+                  </div>
+                  <p class="section-copy">
+                    Confidence and attestation fields that appear after the program snapshot.
+                  </p>
+                  <article class="field-card">
+                    <div class="field-card-header">
+                      <div>
+                        <p class="field-type">Choice list</p>
+                        <h4>Submission confidence</h4>
+                      </div>
+                      <div class="field-tools">
+                        <span>Preview</span>
+                        <span>Duplicate</span>
+                        <span>Delete</span>
+                      </div>
+                    </div>
+                    <div class="option-stack">
+                      <div class="option-row"><span></span>Fully verified</div>
+                      <div class="option-row"><span></span>Verified with follow-up needed</div>
+                      <div class="option-row"><span></span>Estimated</div>
+                    </div>
+                  </article>
+                  <div class="insert-inline">+ Add field to Submission details</div>
+                </article>
+              </section>
+
+              <aside class="panel properties-panel">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Properties</p>
+                    <h3>Program lead name</h3>
+                  </div>
+                  <span class="badge badge-good">Selected</span>
+                </div>
+                <div class="property-group">
+                  <label>Label</label>
+                  <div class="property-input">Program lead name</div>
+                </div>
+                <div class="property-group">
+                  <label>Helper text</label>
+                  <div class="property-input muted-input">
+                    Displayed below the input control
+                  </div>
+                </div>
+                <div class="property-group">
+                  <label>Validation</label>
+                  <div class="toggle-row">
+                    <span>Required field</span>
+                    <span class="toggle active"></span>
+                  </div>
+                  <div class="toggle-row">
+                    <span>Limit to 100 characters</span>
+                    <span class="toggle"></span>
+                  </div>
+                </div>
+                <div class="property-group">
+                  <label>Binding</label>
+                  <div class="property-code">component.programLeadName</div>
+                </div>
+              </aside>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="concept">
+        <div class="concept-heading">
+          <div>
+            <p class="concept-kicker">Screen 04</p>
+            <h2>Sign-in stays outside the shell and stays bare</h2>
+          </div>
+          <p class="concept-note">
+            No metrics, no support panels, and no preview of post-auth routes.
+            The only job here is authentication.
+          </p>
+        </div>
+        <div class="screen signin-screen">
+          <section class="signin-panel">
+            <div class="signin-brand">
+              <img
+                class="brand-mark"
+                src="../../crates/tessara-web/assets/tessara-icon-256.svg"
+                alt=""
+              />
+              <div>
+                <p class="eyebrow">Authentication</p>
+                <h3>Sign in to Tessara</h3>
+              </div>
+            </div>
+            <p class="signin-copy">
+              Use your account to load the navigation groups, routes, and actions
+              available to your permission set.
+            </p>
+            <div class="signin-form">
+              <label>Email address</label>
+              <div class="property-input">eric@agency.gov</div>
+              <label>Password</label>
+              <div class="property-input">............</div>
+              <div class="signin-row">
+                <span class="chip active">Remember this device</span>
+                <span class="meta-link">Forgot password?</span>
+              </div>
+              <button class="primary signin-button">Sign In</button>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="concept">
+        <div class="concept-heading">
+          <div>
+            <p class="concept-kicker">Screen 05</p>
+            <h2>Organization becomes an explorer with related work in context</h2>
+          </div>
+          <p class="concept-note">
+            The left side is a compact row-based tree, not a stack of large
+            filter cards. Selected nodes show their related forms, responses,
+            dashboards, and in-place management actions when permission allows.
+          </p>
+        </div>
+        <div class="screen">
+          <aside class="sidebar">
+            <div class="brand-lockup">
+              <img
+                class="brand-mark"
+                src="../../crates/tessara-web/assets/tessara-icon-256.svg"
+                alt=""
+              />
+              <div>
+                <strong>Tessara</strong>
+                <p>Operational reporting platform</p>
+              </div>
+            </div>
+
+            <nav class="nav-block">
+              <p class="nav-label">Primary</p>
+              <a class="nav-item" href="#"><span class="nav-icon icon-home"></span>Home</a>
+              <a class="nav-item active" href="#"><span class="nav-icon icon-organization"></span>Organization</a>
+              <div class="nav-tree nav-tree-active">
+                <span class="nav-tree-item level-1 active">Regions</span>
+                <span class="nav-tree-item level-2 active">Counties</span>
+                <span class="nav-tree-item level-3 active">Partners</span>
+                <span class="nav-tree-item level-4">Sites</span>
+              </div>
+              <a class="nav-item" href="#"><span class="nav-icon icon-forms"></span>Forms</a>
+              <a class="nav-item" href="#"><span class="nav-icon icon-workflows"></span>Workflows</a>
+              <a class="nav-item" href="#"><span class="nav-icon icon-responses"></span>Responses</a>
+              <a class="nav-item" href="#"><span class="nav-icon icon-components"></span>Components</a>
+              <a class="nav-item" href="#"><span class="nav-icon icon-dashboards"></span>Dashboards</a>
+            </nav>
+
+            <nav class="nav-block nav-block-admin">
+              <p class="nav-label">Admin</p>
+              <a class="nav-item" href="#"><span class="nav-icon icon-datasets"></span>Datasets</a>
+              <a class="nav-item" href="#"><span class="nav-icon icon-administration"></span>Administration</a>
+              <a class="nav-item" href="#"><span class="nav-icon icon-migration"></span>Migration</a>
+            </nav>
+
+            <section class="sidebar-footer">
+              <div class="account-card">
+                <span class="avatar">ER</span>
+                <div>
+                  <strong>Eric Walker</strong>
+                  <p>Current session</p>
+                </div>
+              </div>
+              <div class="context-list">
+                <div class="context-chip">
+                  <span>Delegation</span>
+                  <strong>Ashley Grant</strong>
+                </div>
+                <div class="context-chip context-chip-expandable">
+                  <span>Scope roots</span>
+                  <strong>3 top-level nodes</strong>
+                  <em>Region East, Region South, +1 more</em>
+                </div>
+              </div>
+              <div class="account-menu account-menu-theme">
+                <span class="nav-icon icon-theme"></span>
+                <strong>System</strong>
+                <em>Theme</em>
+              </div>
+            </section>
+          </aside>
+
+          <div class="workspace">
+            <div class="topbar">
+              <div>
+                <p class="eyebrow">Organization</p>
+                <h3>Partner Explorer</h3>
+              </div>
+              <div class="topbar-actions">
+                <div class="search-pill">
+                  Search node names, IDs, parents, and related work
+                </div>
+                <span class="icon-pill icon-only"><span class="nav-icon icon-bell"></span></span>
+                <span class="icon-pill">Help</span>
+              </div>
+            </div>
+
+            <div class="metric-strip metric-strip-compact">
+              <span class="metric-inline"><strong>28</strong> visible partner nodes</span>
+              <span class="metric-inline"><strong>6</strong> open responses</span>
+              <span class="metric-inline"><strong>9</strong> linked dashboards</span>
+              <span class="metric-inline"><strong>4</strong> flagged updates</span>
+            </div>
+
+            <div class="organization-grid">
+              <article class="panel">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Visible branch</p>
+                    <h3>Jefferson County partners</h3>
+                  </div>
+                  <span class="meta-link">Region East</span>
+                </div>
+                <div class="tree-list tree-minimal">
+                  <div class="tree-row level-0">
+                    <strong>Region East</strong>
+                    <span class="badge">2 counties open</span>
+                  </div>
+                  <div class="tree-row level-1 selected">
+                    <strong>Jefferson County</strong>
+                    <span class="badge badge-warn">3 flagged</span>
+                  </div>
+                  <div class="tree-row level-2 selected">
+                    <strong>Partner 04</strong>
+                    <span class="badge badge-warn">Needs attention</span>
+                  </div>
+                  <div class="tree-row level-2">
+                    <strong>Partner 05</strong>
+                    <span class="badge">1 draft</span>
+                  </div>
+                  <div class="tree-row level-1">
+                    <strong>Pulaski County</strong>
+                    <span class="badge badge-good">Healthy</span>
+                  </div>
+                  <div class="tree-row level-1">
+                    <strong>Sebastian County</strong>
+                    <span class="badge badge-danger">Escalated</span>
+                  </div>
+                </div>
+              </article>
+
+              <section class="panel panel-large">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Selected node</p>
+                    <h3>Partner 04</h3>
+                  </div>
+                  <span class="badge badge-warn">Needs attention</span>
+                </div>
+                <div class="detail-cards detail-cards-wide org-detail-cards">
+                  <div class="detail-card">
+                    <span>Forms</span>
+                    <strong>Spring readiness, staffing update, corrective action</strong>
+                  </div>
+                  <div class="detail-card">
+                    <span>Responses</span>
+                    <strong>2 draft, 1 submitted today</strong>
+                  </div>
+                  <div class="detail-card">
+                    <span>Dashboards</span>
+                    <strong>2 published, 1 needs republish</strong>
+                  </div>
+                  <div class="detail-card">
+                    <span>Recent changes</span>
+                    <strong>Metadata updated today, dashboard refresh queued</strong>
+                  </div>
+                </div>
+                <div class="org-compact-stack">
+                  <div class="note-panel">
+                    <h4>Open issues</h4>
+                    <ul class="note-list">
+                      <li>One related response is still in draft after the review deadline.</li>
+                      <li>A linked dashboard was not republished after a component update.</li>
+                    </ul>
+                  </div>
+                  <div class="org-action-strip">
+                    <button class="secondary">Edit node</button>
+                    <button class="secondary">Manage delegates</button>
+                    <button class="primary">Open related responses</button>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

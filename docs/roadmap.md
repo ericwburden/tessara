@@ -309,7 +309,7 @@ Before deeper application-surface replacement continues, the frontend platform s
 **Build:**
 
 - establish `tessara-ui` as the shared internal component library for Tessara
-- use `ui-guidance.md` and `docs/style-examples/` as the specification source for component appearance and behavior
+- use the consolidated `ui-guidance.md` as the specification source for component appearance and behavior
 - extract the first stable primitives for shared page headers, action groups, cards, panels, metadata strips, inputs, field wrappers, and table or list toolbar patterns
 - move touched route surfaces onto `tessara-ui` incrementally while keeping the shared shell stable and SSR-first
 - stop adding new bespoke route-level UI patterns when an approved component spec already exists
