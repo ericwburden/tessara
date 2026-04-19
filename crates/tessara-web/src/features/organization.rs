@@ -101,11 +101,11 @@ pub(crate) fn derive_destination_label(
         .filter(|(_, label)| !label.trim().is_empty())
         .collect::<Vec<_>>();
     if filtered.is_empty() {
-        return "Organization List".to_string();
+        return "Organization Explorer".to_string();
     }
 
     filtered.sort_by(|left, right| left.0.cmp(&right.0).then_with(|| left.1.cmp(&right.1)));
-    format!("{} List", normalize_type_label(&filtered[0].1))
+    format!("{} Explorer", normalize_type_label(&filtered[0].1))
 }
 
 #[cfg(feature = "hydrate")]
@@ -407,7 +407,7 @@ mod hydrate {
         format!(r#"<div class="actions organization-card-actions-visible">{actions}</div>"#)
     }
 
-    fn render_related_links(detail: &NodeDetail) -> String {
+    fn render_related_work(detail: &NodeDetail) -> String {
         let forms = if detail.related_forms.is_empty() {
             r#"<li class="muted">No related forms.</li>"#.into()
         } else {
@@ -421,6 +421,25 @@ mod hydrate {
                         escape_html(&form.form_name),
                         escape_html(&form.form_slug),
                         form.published_version_count,
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("")
+        };
+        let responses = if detail.related_responses.is_empty() {
+            r#"<li class="muted">No recent responses.</li>"#.into()
+        } else {
+            detail
+                .related_responses
+                .iter()
+                .map(|submission| {
+                    format!(
+                        r#"<li><a href="/app/responses/{}">{}</a> <span class="muted">{} | {} | {}</span></li>"#,
+                        escape_html(&submission.submission_id),
+                        escape_html(&submission.form_name),
+                        escape_html(&submission.version_label),
+                        escape_html(&submission.status),
+                        escape_html(&submission.created_at),
                     )
                 })
                 .collect::<Vec<_>>()
@@ -445,42 +464,69 @@ mod hydrate {
         };
 
         format!(
-            r#"<section class="detail-section box"><h4>Related Forms</h4><ul class="app-list">{forms}</ul></section><section class="detail-section box"><h4>Related Dashboards</h4><ul class="app-list">{dashboards}</ul></section>"#
+            r#"<section class="detail-section box organization-related-work"><div class="organization-section-heading"><h4>Related Work</h4><p class="muted">Forms, responses, and dashboards stay primary for the selected node.</p></div><div class="organization-related-work__metrics"><div class="organization-related-work__metric"><span>Forms</span><strong>{}</strong></div><div class="organization-related-work__metric"><span>Responses</span><strong>{}</strong></div><div class="organization-related-work__metric"><span>Dashboards</span><strong>{}</strong></div></div><div class="organization-related-work__grid"><section class="organization-related-work__card"><h5>Forms</h5><ul id="organization-related-forms" class="app-list">{forms}</ul></section><section class="organization-related-work__card"><h5>Responses</h5><ul id="organization-related-responses" class="app-list">{responses}</ul></section><section class="organization-related-work__card"><h5>Dashboards</h5><ul id="organization-related-dashboards" class="app-list">{dashboards}</ul></section></div></section>"#,
+            detail.related_forms.len(),
+            detail.related_responses.len(),
+            detail.related_dashboards.len(),
         )
     }
 
     fn render_selection_preview(
         detail: &NodeDetail,
+        nodes: &[NodeSummary],
         node_types: &HashMap<String, NodeTypeCatalogEntry>,
         can_write: bool,
     ) -> String {
         let child_actions =
             render_child_actions(&detail.id, &detail.node_type_id, node_types, can_write);
+        let path = render_path(&build_path(&detail.id, nodes));
+        let management_actions = format!(
+            r#"<div class="actions organization-selected-work__actions"><a class="button-link button is-light" href="/app/organization/{}">Open Detail</a>{}</div>"#,
+            escape_html(&detail.id),
+            if can_write {
+                format!(
+                    r#"<a class="button-link button is-light" href="/app/organization/{}/edit">Edit</a>"#,
+                    escape_html(&detail.id)
+                )
+            } else {
+                String::new()
+            }
+        );
+        let management_note = if can_write && child_actions.is_empty() {
+            r#"<p class="muted">No child record types are configured for this node.</p>"#
+                .to_string()
+        } else if !can_write {
+            r#"<p class="muted">Read-only scope. Management actions stay on the detail route.</p>"#
+                .to_string()
+        } else {
+            String::new()
+        };
         format!(
-            r#"<section class="page-panel nested-form-panel"><h3>{}</h3><p class="muted">{} · Parent: {}</p><p class="muted">Type: {} | Plural: {}</p>{}<section class="detail-section box"><h4>Metadata</h4>{}</section>{}</section>"#,
+            r#"<section class="page-panel nested-form-panel organization-selected-work"><div class="organization-selected-work__header"><p class="eyebrow">{}</p><h3>{}</h3><p class="muted">{} · Parent: {}</p><div class="organization-selected-work__path">{}</div></div>{}<section class="detail-section box organization-selected-work__summary"><h4>Node Summary</h4><p class="muted">Type: {} | Plural label: {}</p><p class="muted">Related forms: {} | Related responses: {} | Related dashboards: {}</p></section><section class="detail-section box organization-selected-work__metadata"><h4>Metadata</h4>{}</section><section class="detail-section box organization-selected-work__management"><h4>Management</h4>{}{}{}</section></section>"#,
+            escape_html(&detail.node_type_singular_label),
             escape_html(&detail.name),
             escape_html(&detail.node_type_singular_label),
             escape_html(detail.parent_node_name.as_deref().unwrap_or("Top-level")),
+            path,
+            render_related_work(detail),
             escape_html(&detail.node_type_name),
             escape_html(&detail.node_type_plural_label),
-            child_actions,
+            detail.related_forms.len(),
+            detail.related_responses.len(),
+            detail.related_dashboards.len(),
             render_metadata_list(&detail.metadata),
-            render_related_links(detail),
+            management_actions,
+            child_actions,
+            management_note,
         )
     }
 
-    fn render_node_tree(
-        nodes: &[NodeSummary],
-        node_types: &HashMap<String, NodeTypeCatalogEntry>,
-        selected_node_id: Option<&str>,
-        can_write: bool,
-    ) -> String {
+    fn render_node_tree(nodes: &[NodeSummary], selected_node_id: Option<&str>) -> String {
         fn render_branch(
             node: &NodeSummary,
             by_parent: &HashMap<String, Vec<NodeSummary>>,
-            node_types: &HashMap<String, NodeTypeCatalogEntry>,
             selected_node_id: Option<&str>,
-            can_write: bool,
+            depth: usize,
         ) -> String {
             let children = by_parent
                 .get(&parent_key(Some(node.id.as_str())))
@@ -490,27 +536,25 @@ mod hydrate {
                 String::new()
             } else {
                 format!(
-                    r#"<div class="organization-tree-children">{}</div>"#,
+                    r#"<div class="organization-explorer-children">{}</div>"#,
                     children
                         .iter()
-                        .map(|child| {
-                            render_branch(child, by_parent, node_types, selected_node_id, can_write)
-                        })
+                        .map(|child| render_branch(child, by_parent, selected_node_id, depth + 1))
                         .collect::<Vec<_>>()
                         .join("")
                 )
             };
             let child_count = children.len();
-            let selected_class = if Some(node.id.as_str()) == selected_node_id {
-                " compact-record-card"
-            } else {
-                ""
-            };
-            let child_actions =
-                render_child_actions(&node.id, &node.node_type_id, node_types, can_write);
 
             format!(
-                r#"<article class="organization-disclosure-card app-screen box{selected_class}"><div class="organization-card-shell"><div class="organization-card-header"><div class="organization-tree-heading"><p class="eyebrow">{}</p><h4>{}</h4><p class="muted">{}</p><p class="muted">{} visible {}</p></div><div class="actions organization-card-actions organization-card-actions-visible"><button class="button-link button is-light is-small organization-action-button" type="button" data-select-node-id="{}">Select</button><a class="button-link button is-light is-small organization-action-button" href="/app/organization/{}">View</a>{}</div></div>{}{}</div></article>"#,
+                r#"<div class="organization-explorer-branch" style="--organization-depth:{}"><button class="organization-explorer-row" type="button" data-select-node-id="{}" data-selected="{}"><span class="organization-explorer-row__type">{}</span><span class="organization-explorer-row__name">{}</span><span class="organization-explorer-row__meta">{}{} visible {}</span></button>{}</div>"#,
+                depth,
+                escape_html(&node.id),
+                if Some(node.id.as_str()) == selected_node_id {
+                    "true"
+                } else {
+                    "false"
+                },
                 escape_html(&node.node_type_singular_label),
                 escape_html(&node.name),
                 escape_html(&metadata_preview(&node.metadata)),
@@ -520,17 +564,6 @@ mod hydrate {
                 } else {
                     "children"
                 },
-                escape_html(&node.id),
-                escape_html(&node.id),
-                if can_write {
-                    format!(
-                        r#"<a class="button-link button is-light is-small organization-action-button" href="/app/organization/{}/edit">Edit</a>"#,
-                        escape_html(&node.id)
-                    )
-                } else {
-                    String::new()
-                },
-                child_actions,
                 child_html,
             )
         }
@@ -567,7 +600,7 @@ mod hydrate {
 
         roots
             .iter()
-            .map(|node| render_branch(node, &by_parent, node_types, selected_node_id, can_write))
+            .map(|node| render_branch(node, &by_parent, selected_node_id, 0))
             .collect::<Vec<_>>()
             .join("")
     }
@@ -785,17 +818,18 @@ mod hydrate {
         {
             let mut state_mut = state.borrow_mut();
             state_mut.selected_node_id = Some(node_id.clone());
-            let tree_html = render_node_tree(
-                &state_mut.nodes,
-                &state_mut.node_types,
-                state_mut.selected_node_id.as_deref(),
-                state_mut.can_write,
-            );
+            let tree_html =
+                render_node_tree(&state_mut.nodes, state_mut.selected_node_id.as_deref());
             set_html("organization-directory-tree", &tree_html);
         }
 
         let snapshot = state.borrow().clone();
-        let preview = render_selection_preview(&detail, &snapshot.node_types, snapshot.can_write);
+        let preview = render_selection_preview(
+            &detail,
+            &snapshot.nodes,
+            &snapshot.node_types,
+            snapshot.can_write,
+        );
         set_html("organization-selection-preview", &preview);
         set_text(
             "organization-list-status",
@@ -868,19 +902,27 @@ mod hydrate {
                         .iter()
                         .map(|node_type| (node_type.id.clone(), node_type.clone()))
                         .collect::<HashMap<_, _>>();
-                    let tree_html = render_node_tree(&nodes, &node_type_map, None, can_write);
+                    let tree_html = render_node_tree(&nodes, None);
 
-                    set_text("organization-list-title", &title);
+                    set_text("organization-page-title", &title);
+                    set_text(
+                        "organization-page-description",
+                        &format!(
+                            "{} keeps hierarchy traversal quiet and related work close at hand.",
+                            title
+                        ),
+                    );
+                    set_text("organization-list-title", "Visible Hierarchy");
                     set_text(
                         "organization-list-context",
                         &format!(
-                            "Signed in as {}. Browse your visible hierarchy from this navigator-first surface.",
+                            "Signed in as {}. Traverse your visible hierarchy and keep selected-node work in context.",
                             account.display_name
                         ),
                     );
                     set_text(
                         "organization-list-status",
-                        &format!("Showing {} visible organization records.", nodes.len()),
+                        &format!("Showing {} visible hierarchy records.", nodes.len()),
                     );
                     set_html("organization-directory-tree", &tree_html);
                     if can_write {
@@ -894,16 +936,16 @@ mod hydrate {
                             })
                             .unwrap_or_else(|| "/app/organization/new".into());
                         set_html(
-                            "organization-list-actions",
+                            "organization-page-actions",
                             &format!(
-                                r#"<a id="organization-create-link" class="button-link button is-primary" href="{}">Create Organization</a>"#,
+                                r#"<a id="organization-create-link" class="button-link button is-primary" href="{}">Create Record</a>"#,
                                 escape_html(&href)
                             ),
                         );
                     } else {
                         set_html(
-                            "organization-list-actions",
-                            r#"<p class="muted">Read-only scope. Organization creation is not available.</p>"#,
+                            "organization-page-actions",
+                            r#"<p class="muted">Read-only scope. Record creation is not available.</p>"#,
                         );
                     }
 
@@ -1142,7 +1184,7 @@ mod hydrate {
                         "organization-metadata",
                         &render_metadata_list(&detail.metadata),
                     );
-                    set_html("organization-related", &render_related_links(&detail));
+                    set_html("organization-related", &render_related_work(&detail));
                     set_html(
                         "organization-child-actions",
                         &render_child_actions(
@@ -1262,48 +1304,56 @@ pub fn OrganizationListPage() -> impl IntoView {
                 BreadcrumbItem::current("Organization"),
             ]
         >
-            <PageHeader
-                eyebrow="Organization"
-                title="Organization"
-                description="Browse the visible hierarchy from a navigator-first organization surface."
-            />
-            <MetadataStrip items=vec![
-                ("Mode", "Directory".into()),
-                ("Surface", "Hierarchy navigator".into()),
-                ("State", "Loading scoped nodes".into()),
-            ]/>
-            <Panel
-                title="Hierarchy Navigator"
-                description="Browse your visible hierarchy, select records for quick preview, and move into record detail or edit routes."
-            >
-                <div id="organization-list-actions" class="actions">
-                    <p class="muted">"Loading organization actions..."</p>
+            <section class="app-screen box entity-page ui-page-header">
+                <p class="eyebrow ui-page-header__eyebrow">"Organization"</p>
+                <div class="page-title-row ui-page-header__row">
+                    <div class="ui-page-header__copy">
+                        <h1 id="organization-page-title">"Organization Explorer"</h1>
+                        <p id="organization-page-description" class="muted ui-page-header__description">
+                            "Loading scope-aware explorer context."
+                        </p>
+                    </div>
+                    <div id="organization-page-actions" class="actions ui-action-group">
+                        <p class="muted">"Loading organization actions..."</p>
+                    </div>
                 </div>
-                <section class="page-panel nested-form-panel">
-                    <div class="page-title-row">
-                        <div>
-                            <h2 id="organization-list-title">"Organization List"</h2>
-                            <p id="organization-list-context" class="muted">
-                                "Loading scope-aware hierarchy context."
-                            </p>
+            </section>
+            <div class="organization-explorer-layout">
+                <Panel
+                    title="Explorer"
+                    description="Traverse the visible hierarchy with a quiet indented explorer instead of card-per-node navigation."
+                >
+                    <section class="page-panel nested-form-panel organization-explorer-panel">
+                        <div class="page-title-row">
+                            <div>
+                                <h2 id="organization-list-title">"Visible Hierarchy"</h2>
+                                <p id="organization-list-context" class="muted">
+                                    "Loading scope-aware hierarchy context."
+                                </p>
+                            </div>
                         </div>
+                        <p id="organization-list-status" class="muted">
+                            "Loading organization hierarchy..."
+                        </p>
+                        <div id="organization-directory-tree" class="organization-explorer-tree">
+                            <p class="muted">"Loading scoped organization records..."</p>
+                        </div>
+                    </section>
+                </Panel>
+                <Panel
+                    title="Selected Node"
+                    description="Related work leads here so the explorer stays connected to forms, responses, dashboards, and management actions."
+                >
+                    <div
+                        id="organization-selection-preview"
+                        class="record-detail organization-selected-panel"
+                    >
+                        <p class="muted">
+                            "Select an organization record to open its lower detail sheet and related work."
+                        </p>
                     </div>
-                    <p id="organization-list-status" class="muted">
-                        "Loading organization hierarchy..."
-                    </p>
-                    <div id="organization-directory-tree" class="organization-disclosure-list">
-                        <p class="muted">"Loading scoped organization records..."</p>
-                    </div>
-                </section>
-            </Panel>
-            <Panel
-                title="Selection Preview"
-                description="Selecting a node in the hierarchy synchronizes this preview with related records and available child actions."
-            >
-                <div id="organization-selection-preview" class="record-detail">
-                    <p class="muted">"Select an organization record to preview it here."</p>
-                </div>
-            </Panel>
+                </Panel>
+            </div>
         </NativePage>
     }
 }
@@ -1338,7 +1388,7 @@ pub fn OrganizationCreatePage() -> impl IntoView {
             <PageHeader
                 eyebrow="Organization"
                 title="Create Organization"
-                description="Create a runtime hierarchy record and land directly on its detail route."
+                description="Create a scoped hierarchy record and return to the explorer with the new node in context."
             />
             <MetadataStrip items=vec![
                 ("Mode", "Create".into()),
@@ -1347,7 +1397,7 @@ pub fn OrganizationCreatePage() -> impl IntoView {
             ]/>
             <Panel
                 title="Organization Record"
-                description="Choose a node type, set a parent when required, and provide metadata for the new hierarchy record."
+                description="Choose a node type, set a parent when required, and provide metadata without leaving the explorer workflow."
             >
                 <p id="organization-form-status" class="muted">
                     "Loading organization schema."
@@ -1381,7 +1431,7 @@ pub fn OrganizationCreatePage() -> impl IntoView {
                         </div>
                     </section>
                     <div class="actions">
-                        <button class="button is-primary" type="submit">"Create Organization"</button>
+                        <button class="button is-primary" type="submit">"Create Record"</button>
                         <a class="button-link button is-light" href="/app/organization">"Cancel"</a>
                     </div>
                 </form>
@@ -1424,7 +1474,7 @@ pub fn OrganizationDetailPage() -> impl IntoView {
             <PageHeader
                 eyebrow="Organization"
                 title="Organization Detail"
-                description="Review the selected organization record and its visible hierarchy context."
+                description="Review the selected hierarchy record, its visible path, and related work from the explorer model."
             />
             <MetadataStrip items=vec![
                 ("Mode", "Detail".into()),
@@ -1433,10 +1483,10 @@ pub fn OrganizationDetailPage() -> impl IntoView {
             ]/>
             <Panel
                 title="Organization Detail"
-                description="Summary, path, metadata, and related records for the selected organization record load here."
+                description="Summary, path, metadata, and related work for the selected organization record load here."
             >
                 <div class="actions">
-                    <a class="button-link button is-light" href="/app/organization">"Back to List"</a>
+                    <a class="button-link button is-light" href="/app/organization">"Back to Explorer"</a>
                     <a
                         class="button-link button is-light"
                         href=move || format!("/app/organization/{}/edit", node_id_value.get_value())
@@ -1525,7 +1575,7 @@ pub fn OrganizationEditPage() -> impl IntoView {
             <PageHeader
                 eyebrow="Organization"
                 title="Edit Organization"
-                description="Update the selected hierarchy record from the native organization form surface."
+                description="Update the selected hierarchy record and return to the explorer with changes in context."
             />
             <MetadataStrip items=vec![
                 ("Mode", "Edit".into()),
@@ -1534,7 +1584,7 @@ pub fn OrganizationEditPage() -> impl IntoView {
             ]/>
             <Panel
                 title="Organization Record"
-                description="Update the selected hierarchy record and save changes from this dedicated edit surface."
+                description="Update the selected hierarchy record from a calmer edit surface that stays aligned with the explorer flow."
             >
                 <p id="organization-form-status" class="muted">"Loading organization schema."</p>
                 <form id="organization-form" class="entity-form">
@@ -1566,7 +1616,7 @@ pub fn OrganizationEditPage() -> impl IntoView {
                         </div>
                     </section>
                     <div class="actions">
-                        <button class="button is-primary" type="submit">"Save Organization"</button>
+                        <button class="button is-primary" type="submit">"Save Record"</button>
                         <a
                             class="button-link button is-light"
                             href=move || format!("/app/organization/{}", node_id_value.get_value())
@@ -1618,7 +1668,7 @@ mod tests {
 
         let label = derive_destination_label(&scopes, &nodes);
 
-        assert_eq!(label, "Partner List");
+        assert_eq!(label, "Partner Explorer");
     }
 
     #[test]
@@ -1643,6 +1693,6 @@ mod tests {
 
         let label = derive_destination_label(&scopes, &nodes);
 
-        assert_eq!(label, "Partner List");
+        assert_eq!(label, "Partner Explorer");
     }
 }

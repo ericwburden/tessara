@@ -401,13 +401,17 @@ test("organization routes stay readable and console-clean on the native shell", 
   const nodeId = nodes[0]!.id;
 
   await page.goto("/app/organization");
-  await expect(page.getByRole("heading", { name: "Organization" }).first()).toBeVisible();
+  await expect(page.locator("#organization-page-title")).toHaveText(/Explorer$/);
   await expect(page.locator("#organization-directory-tree")).toHaveCount(1);
-  await expect(page.locator("body")).toContainText("Hierarchy Navigator");
+  await expect
+    .poll(async () => page.locator('#organization-directory-tree button[data-select-node-id]').count())
+    .toBeGreaterThan(0);
+  await expect(page.locator("article.organization-disclosure-card")).toHaveCount(0);
+  await expect(page.locator("#organization-selection-preview")).toContainText("Related Work");
   await expectNoLegacyBridge(page);
 
   await page.reload();
-  await expect(page.getByRole("heading", { name: "Organization" }).first()).toBeVisible();
+  await expect(page.locator("#organization-page-title")).toHaveText(/Explorer$/);
   await expectNoLegacyBridge(page);
 
   await page.goto("/app/organization/new");
@@ -449,20 +453,44 @@ test("organization navigator uses scope-aware labels and selection sync for scop
   await waitForAuthenticatedShell(page, "operator@tessara.local");
 
   await page.goto("/app/organization");
-  await expect(page.getByRole("heading", { name: "Organization" }).first()).toBeVisible();
-  await expect(page.locator("#organization-list-title")).toHaveText("Activity List");
+  await expect(page.locator("#organization-page-title")).toHaveText("Activity Explorer");
+  await expect(page.locator("#organization-list-title")).toHaveText("Visible Hierarchy");
 
   const tree = page.locator("#organization-directory-tree");
   await expect(tree).toContainText("Demo Activity Job Coaching");
   await expect(tree).toContainText("Demo Program Family Outreach");
   await expect(tree).not.toContainText("Demo Partner Community Bridge");
+  await expect(page.locator("article.organization-disclosure-card")).toHaveCount(0);
 
-  const firstCard = tree.locator("article.organization-disclosure-card").first();
-  const selectedName = (await firstCard.locator("h4").first().textContent())?.trim();
+  const firstRow = tree.locator("button[data-select-node-id]").first();
+  const selectedName = (await firstRow.locator(".organization-explorer-row__name").textContent())?.trim();
   expect(selectedName).toBeTruthy();
 
-  await firstCard.locator("button[data-select-node-id]").first().click();
+  await firstRow.click();
   await expect(page.locator("#organization-selection-preview")).toContainText(selectedName!);
+  await expect(page.locator("#organization-selection-preview")).toContainText("Related Work");
+
+  await assertNoConsoleErrors();
+});
+
+test("organization explorer stacks the selected detail below the tree on mobile", async ({ page }) => {
+  const assertNoConsoleErrors = attachConsoleGuard(page);
+  await signInAsOperator(page);
+  await waitForAuthenticatedShell(page, "operator@tessara.local");
+  await page.setViewportSize({ width: 390, height: 844 });
+
+  await page.goto("/app/organization");
+  await expect(page.locator("#organization-page-title")).toHaveText("Activity Explorer");
+
+  const firstRow = page.locator('#organization-directory-tree button[data-select-node-id]').first();
+  await firstRow.click();
+  await expect(page.locator("#organization-selection-preview")).toContainText("Related Work");
+
+  const treeBox = await page.locator("#organization-directory-tree").boundingBox();
+  const previewBox = await page.locator("#organization-selection-preview").boundingBox();
+  expect(treeBox).toBeTruthy();
+  expect(previewBox).toBeTruthy();
+  expect(previewBox!.y).toBeGreaterThan(treeBox!.y);
 
   await assertNoConsoleErrors();
 });

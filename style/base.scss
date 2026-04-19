@@ -433,6 +433,109 @@ body.tessara-app .organization-disclosure-list {
   display: grid;
   gap: 1.2rem;
 }
+body.tessara-app .organization-explorer-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(19rem, 0.9fr);
+  gap: 1rem;
+  align-items: start;
+}
+body.tessara-app .organization-explorer-panel,
+body.tessara-app .organization-selected-panel,
+body.tessara-app .organization-selected-work {
+  display: grid;
+  gap: 1rem;
+}
+body.tessara-app .organization-explorer-tree {
+  display: grid;
+  gap: 0.35rem;
+}
+body.tessara-app .organization-explorer-branch {
+  display: grid;
+  gap: 0.35rem;
+  padding-left: calc(var(--organization-depth, 0) * 0.9rem);
+}
+body.tessara-app .organization-explorer-children {
+  display: grid;
+  gap: 0.35rem;
+}
+body.tessara-app .organization-explorer-row {
+  width: 100%;
+  display: grid;
+  gap: 0.2rem;
+  justify-items: start;
+  padding: 0.8rem 0.95rem;
+  border: 1px solid var(--tessara-border);
+  border-radius: 14px;
+  background: transparent;
+  text-align: left;
+  transition: background 120ms ease-out, border-color 120ms ease-out, transform 120ms ease-out;
+}
+body.tessara-app .organization-explorer-row:hover,
+body.tessara-app .organization-explorer-row[data-selected='true'] {
+  border-color: color-mix(in srgb, var(--tessara-link) 30%, var(--tessara-border));
+  background: var(--tessara-inline-surface);
+  transform: translateX(1px);
+}
+body.tessara-app .organization-explorer-row__type,
+body.tessara-app .organization-related-work__metric span {
+  color: var(--tessara-text-muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+body.tessara-app .organization-explorer-row__name {
+  color: var(--tessara-text-strong);
+  font-size: 0.98rem;
+  font-weight: 700;
+}
+body.tessara-app .organization-explorer-row__meta,
+body.tessara-app .organization-selected-work__path,
+body.tessara-app .organization-section-heading p {
+  color: var(--tessara-text-muted);
+  font-size: 0.84rem;
+}
+body.tessara-app .organization-section-heading {
+  display: grid;
+  gap: 0.3rem;
+}
+body.tessara-app .organization-section-heading h4,
+body.tessara-app .organization-related-work__card h5,
+body.tessara-app .organization-selected-work__header h3 {
+  margin: 0;
+}
+body.tessara-app .organization-selected-work__header {
+  display: grid;
+  gap: 0.45rem;
+}
+body.tessara-app .organization-selected-work__header p {
+  margin: 0;
+}
+body.tessara-app .organization-related-work__metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+  gap: 0.65rem;
+}
+body.tessara-app .organization-related-work__metric,
+body.tessara-app .organization-related-work__card {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid var(--tessara-border);
+  border-radius: 14px;
+  background: var(--tessara-inline-surface);
+}
+body.tessara-app .organization-related-work__metric strong {
+  color: var(--tessara-text-strong);
+  font-size: 1.1rem;
+}
+body.tessara-app .organization-related-work__grid {
+  display: grid;
+  gap: 0.75rem;
+}
+body.tessara-app .organization-selected-work__actions {
+  margin-bottom: 0.75rem;
+}
 body.tessara-app .organization-disclosure-card {
   padding: 0;
   overflow: hidden;
@@ -891,6 +994,9 @@ body.tessara-app .button-link.button.is-primary:hover {
   }
   body.tessara-app .organization-card-actions-visible {
     margin-top: 0;
+  }
+  body.tessara-app .organization-explorer-layout {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -1590,6 +1696,15 @@ body.tessara-app .app-shell--migration .app-sidebar {
 
   body.tessara-app .home-queue-card {
     grid-template-columns: 1fr;
+  }
+
+  body.tessara-app .organization-selected-panel {
+    border-radius: 24px 24px 18px 18px;
+    background: color-mix(in srgb, var(--tessara-surface) 96%, var(--tessara-page-bg) 4%);
+  }
+
+  body.tessara-app .organization-related-work__metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   html[data-shell-ready='true'] body.tessara-app[data-shell-viewport='mobile'] .app-sidebar {
