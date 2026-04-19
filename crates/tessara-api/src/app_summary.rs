@@ -1,8 +1,12 @@
-use axum::{Json, extract::State, http::HeaderMap};
+use axum::{Json, extract::State};
 use serde::Serialize;
 use sqlx::Row;
 
-use crate::{auth, db::AppState, error::ApiResult};
+use crate::{
+    auth::{self, AuthenticatedRequest},
+    db::AppState,
+    error::ApiResult,
+};
 
 /// High-level counters used by focused application screens.
 ///
@@ -26,9 +30,9 @@ pub struct ApplicationSummary {
 /// Returns app-readiness counters for the current deployment.
 pub async fn get_summary(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    request: AuthenticatedRequest,
 ) -> ApiResult<Json<ApplicationSummary>> {
-    let account = auth::require_authenticated(&state.pool, &headers).await?;
+    let account = request.account;
 
     if account.is_admin() {
         let row = sqlx::query(

@@ -1,14 +1,15 @@
 use axum::{
     Json,
     extract::{Path, State},
-    http::HeaderMap,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::{PgPool, Postgres, Row, Transaction};
 use uuid::Uuid;
 
 use crate::{
-    auth::{self, DelegationSummary, ScopeNodeSummary, UiAccessProfile},
+    auth::{
+        self, AuthenticatedRequest, DelegationSummary, ScopeNodeSummary, UiAccessProfile,
+    },
     db::AppState,
     error::{ApiError, ApiResult},
     hierarchy::require_text,
@@ -124,18 +125,18 @@ pub struct UpdateUserAccessRequest {
 
 pub async fn list_capabilities(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    request: AuthenticatedRequest,
 ) -> ApiResult<Json<Vec<CapabilitySummary>>> {
-    auth::require_capability(&state.pool, &headers, "admin:all").await?;
+    request.require_capability("admin:all")?;
 
     Ok(Json(load_capabilities(&state.pool).await?))
 }
 
 pub async fn list_roles(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    request: AuthenticatedRequest,
 ) -> ApiResult<Json<Vec<RoleSummary>>> {
-    auth::require_capability(&state.pool, &headers, "admin:all").await?;
+    request.require_capability("admin:all")?;
 
     let roles = sqlx::query(
         r#"
@@ -169,10 +170,10 @@ pub async fn list_roles(
 
 pub async fn create_role(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    request: AuthenticatedRequest,
     Json(payload): Json<CreateRoleRequest>,
 ) -> ApiResult<Json<IdResponse>> {
-    auth::require_capability(&state.pool, &headers, "admin:all").await?;
+    request.require_capability("admin:all")?;
     require_text("role name", &payload.name)?;
     ensure_capability_ids_exist(&state.pool, &payload.capability_ids).await?;
 
@@ -198,20 +199,20 @@ pub async fn create_role(
 
 pub async fn get_role(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    request: AuthenticatedRequest,
     Path(role_id): Path<Uuid>,
 ) -> ApiResult<Json<RoleDetail>> {
-    auth::require_capability(&state.pool, &headers, "admin:all").await?;
+    request.require_capability("admin:all")?;
     Ok(Json(load_role_detail(&state.pool, role_id).await?))
 }
 
 pub async fn update_role(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    request: AuthenticatedRequest,
     Path(role_id): Path<Uuid>,
     Json(payload): Json<UpdateRoleRequest>,
 ) -> ApiResult<Json<IdResponse>> {
-    auth::require_capability(&state.pool, &headers, "admin:all").await?;
+    request.require_capability("admin:all")?;
     ensure_capability_ids_exist(&state.pool, &payload.capability_ids).await?;
 
     let role_name: String = sqlx::query_scalar("SELECT name FROM roles WHERE id = $1")
@@ -266,9 +267,9 @@ pub async fn update_role(
 
 pub async fn list_users(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    request: AuthenticatedRequest,
 ) -> ApiResult<Json<Vec<UserSummary>>> {
-    auth::require_capability(&state.pool, &headers, "admin:all").await?;
+    request.require_capability("admin:all")?;
 
     let rows = sqlx::query(
         r#"
@@ -297,19 +298,19 @@ pub async fn list_users(
 
 pub async fn get_user(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    request: AuthenticatedRequest,
     Path(account_id): Path<Uuid>,
 ) -> ApiResult<Json<UserDetail>> {
-    auth::require_capability(&state.pool, &headers, "admin:all").await?;
+    request.require_capability("admin:all")?;
     Ok(Json(load_user_detail(&state.pool, account_id).await?))
 }
 
 pub async fn create_user(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    request: AuthenticatedRequest,
     Json(payload): Json<CreateUserRequest>,
 ) -> ApiResult<Json<IdResponse>> {
-    auth::require_capability(&state.pool, &headers, "admin:all").await?;
+    request.require_capability("admin:all")?;
     validate_user_payload(
         &payload.email,
         &payload.display_name,
@@ -334,14 +335,16 @@ pub async fn create_user(
     .fetch_one(&mut *tx)
     .await?;
 
+    let password_hash = auth::hash_password_for_storage(payload.password.trim())?;
     sqlx::query(
         r#"
-        INSERT INTO account_credentials (account_id, password)
-        VALUES ($1, $2)
+        INSERT INTO account_credentials (account_id, legacy_password, password_hash, password_scheme, password_updated_at)
+        VALUES ($1, NULL, $2, $3, now())
         "#,
     )
     .bind(account_id)
-    .bind(payload.password.trim())
+    .bind(password_hash)
+    .bind(auth::password_scheme())
     .execute(&mut *tx)
     .await?;
 
@@ -353,11 +356,11 @@ pub async fn create_user(
 
 pub async fn update_user(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    request: AuthenticatedRequest,
     Path(account_id): Path<Uuid>,
     Json(payload): Json<UpdateUserRequest>,
 ) -> ApiResult<Json<IdResponse>> {
-    auth::require_capability(&state.pool, &headers, "admin:all").await?;
+    request.require_capability("admin:all")?;
     require_account_exists(&state.pool, account_id).await?;
     validate_user_payload(
         &payload.email,
@@ -389,15 +392,21 @@ pub async fn update_user(
     if let Some(password) = payload.password.as_deref() {
         let trimmed = password.trim();
         if !trimmed.is_empty() {
+            let password_hash = auth::hash_password_for_storage(trimmed)?;
             sqlx::query(
                 r#"
-                INSERT INTO account_credentials (account_id, password)
-                VALUES ($1, $2)
-                ON CONFLICT (account_id) DO UPDATE SET password = EXCLUDED.password
+                INSERT INTO account_credentials (account_id, legacy_password, password_hash, password_scheme, password_updated_at)
+                VALUES ($1, NULL, $2, $3, now())
+                ON CONFLICT (account_id) DO UPDATE SET
+                    legacy_password = NULL,
+                    password_hash = EXCLUDED.password_hash,
+                    password_scheme = EXCLUDED.password_scheme,
+                    password_updated_at = now()
                 "#,
             )
             .bind(account_id)
-            .bind(trimmed)
+            .bind(password_hash)
+            .bind(auth::password_scheme())
             .execute(&mut *tx)
             .await?;
         }
@@ -411,10 +420,10 @@ pub async fn update_user(
 
 pub async fn get_user_access(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    request: AuthenticatedRequest,
     Path(account_id): Path<Uuid>,
 ) -> ApiResult<Json<UserAccessDetail>> {
-    auth::require_capability(&state.pool, &headers, "admin:all").await?;
+    request.require_capability("admin:all")?;
     require_account_exists(&state.pool, account_id).await?;
 
     let capabilities = auth::load_effective_capabilities(&state.pool, account_id).await?;
@@ -447,11 +456,11 @@ pub async fn get_user_access(
 
 pub async fn update_user_access(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    request: AuthenticatedRequest,
     Path(account_id): Path<Uuid>,
     Json(payload): Json<UpdateUserAccessRequest>,
 ) -> ApiResult<Json<IdResponse>> {
-    auth::require_capability(&state.pool, &headers, "admin:all").await?;
+    request.require_capability("admin:all")?;
     require_account_exists(&state.pool, account_id).await?;
     ensure_node_ids_exist(&state.pool, &payload.scope_node_ids).await?;
     ensure_delegate_account_ids_exist(&state.pool, account_id, &payload.delegate_account_ids)
