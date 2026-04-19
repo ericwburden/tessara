@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Tessara responsive exploration</title>
+    <title>Tessara responsive shell mockups</title>
     <link rel="stylesheet" href="./tessara-responsive-exploration.css" />
   </head>
   <body>
@@ -16,15 +16,19 @@
             alt="Tessara"
           />
           <div>
-            <p class="kicker">Responsive mockups</p>
-            <h1>Tablet and mobile behavior for all explored screens</h1>
+            <p class="kicker">Responsive shell mockups</p>
+            <h1>Tablet defaults to a rail. Mobile uses an overlay drawer.</h1>
             <p class="intro">
-              These mockups show how the redesign direction compresses without
-              breaking Tessara’s UI guidance: no shell-level horizontal scroll,
-              one-column mobile stacks, drawer-style secondary context, and
-              calmer density instead of collapsed chaos.
+              These variants preserve the unified shell model. Tablet keeps the
+              sidebar collapsed by default, mobile moves navigation into a
+              drawer, and sign-in remains outside the shell entirely.
             </p>
           </div>
+        </div>
+        <div class="legend">
+          <span>Shown with admin:all</span>
+          <span>dev-only hints omitted</span>
+          <span>Account stays in the sidebar footer</span>
         </div>
       </header>
 
@@ -32,59 +36,91 @@
         <div class="row-heading">
           <div>
             <p class="kicker">Screen 01</p>
-            <h2>Operations home</h2>
+            <h2>Home</h2>
           </div>
           <p>
-            Tablet keeps the utility rail and two-column body. Mobile turns
-            workflow assignments, draft responses, and publish blockers into a
-            deliberate single flow with navigation behind a menu.
+            Tablet keeps the queue first and explorer second within a collapsed
+            shell. Mobile shows the same home surface with the navigation drawer
+            opened over the content.
           </p>
         </div>
         <div class="devices">
           <article class="device tablet">
             <div class="device-label">Tablet</div>
-            <div class="canvas">
-              <div class="topbar">
-                <div>
-                  <p class="eyebrow">Shared home</p>
-                  <h3>Good morning, regional operations</h3>
+            <div class="canvas shell-tablet">
+              <aside class="rail">
+                <span class="rail-icon active"><span class="nav-icon icon-home"></span></span>
+                <span class="rail-icon"><span class="nav-icon icon-organization"></span></span>
+                <span class="rail-icon"><span class="nav-icon icon-forms"></span></span>
+                <span class="rail-icon"><span class="nav-icon icon-workflows"></span></span>
+                <span class="rail-icon"><span class="nav-icon icon-responses"></span></span>
+                <span class="rail-icon"><span class="nav-icon icon-components"></span></span>
+                <span class="rail-icon"><span class="nav-icon icon-dashboards"></span></span>
+                <span class="rail-divider"></span>
+                <span class="rail-icon"><span class="nav-icon icon-administration"></span></span>
+                <span class="rail-avatar">ER</span>
+              </aside>
+              <div class="main">
+                <div class="topbar">
+                  <div>
+                    <p class="eyebrow">Home</p>
+                    <h3>Operational home</h3>
+                  </div>
+                  <div class="utility-row">
+                    <span class="pill search">Search</span>
+                    <span class="pill icon-only"><span class="nav-icon icon-bell"></span></span>
+                    <span class="pill">Help</span>
+                  </div>
                 </div>
-                <div class="utility-row">
-                  <span class="pill search">Search</span>
-                  <span class="avatar">ER</span>
+                <div class="metric-line">
+                  <span><strong>14</strong> assignments</span>
+                  <span><strong>8</strong> drafts</span>
+                  <span><strong>4</strong> blockers</span>
                 </div>
-              </div>
-              <div class="stat-grid three">
-                <div class="stat"><span>Assigned workflow steps</span><strong>128</strong></div>
-                <div class="stat"><span>Published dashboards</span><strong>12</strong></div>
-                <div class="stat"><span>Release blockers</span><strong>7</strong></div>
-              </div>
-              <div class="hero-card">
-                <div>
-                  <p class="eyebrow">Portfolio pulse</p>
-                  <h4>Workflow coverage is steady, but two partner branches are lagging on submitted responses</h4>
-                  <p>Most assigned steps are moving. Risk remains in draft responses and unpublished dashboard changes.</p>
+                <div class="tablet-grid">
+                  <div class="panel">
+                    <div class="panel-head">
+                      <strong>Assignment queue</strong>
+                      <span>Open full queue</span>
+                    </div>
+                    <div class="table-row selected">
+                      <span>Partner 04</span>
+                      <span>Certification review</span>
+                      <span class="chip warn">Needs review</span>
+                    </div>
+                    <div class="table-row">
+                      <span>Partner 07</span>
+                      <span>Follow-up submission</span>
+                      <span class="chip">Draft exists</span>
+                    </div>
+                    <div class="table-row">
+                      <span>Partner 15</span>
+                      <span>Correction request</span>
+                      <span class="chip danger">Late</span>
+                    </div>
+                  </div>
+                  <div class="panel">
+                    <div class="panel-head">
+                      <strong>Scoped hierarchy</strong>
+                      <span>Region East</span>
+                    </div>
+                    <div class="list-row">Region East <b>6 open</b></div>
+                    <div class="list-row selected">Jefferson County <b>3 flagged</b></div>
+                    <div class="list-row">Partner 04 <b>Needs review</b></div>
+                    <div class="list-row">Partner 05 <b>1 draft</b></div>
+                  </div>
                 </div>
-                <div class="sparkline"></div>
-              </div>
-              <div class="panel-grid">
                 <div class="panel">
                   <div class="panel-head">
-                    <strong>Assigned queues</strong>
-                    <span>3 active</span>
+                    <strong>Selected node</strong>
+                    <span class="chip warn">Partner 04</span>
                   </div>
-                  <div class="list-row"><span>Workflow assignments ready to start</span><b>14</b></div>
-                  <div class="list-row"><span>Draft responses needing review</span><b>8</b></div>
-                  <div class="list-row"><span>Dashboards awaiting republish</span><b>3</b></div>
-                </div>
-                <div class="panel">
-                  <div class="panel-head">
-                    <strong>Recent signals</strong>
-                    <span>Last hour</span>
+                  <div class="meta-grid">
+                    <span>Forms: 3 published</span>
+                    <span>Responses: 2 draft</span>
+                    <span>Dashboards: 1 stale publish</span>
+                    <span>Due today: 1</span>
                   </div>
-                  <div class="activity-row">Workflow version published</div>
-                  <div class="activity-row">Response submitted</div>
-                  <div class="activity-row">Migration rehearsal rerun</div>
                 </div>
               </div>
             </div>
@@ -92,45 +128,68 @@
 
           <article class="device mobile">
             <div class="device-label">Mobile</div>
-            <div class="canvas">
+            <div class="canvas mobile-shell">
               <div class="mobile-topbar">
                 <span class="menu-dot"></span>
                 <strong>Tessara</strong>
-                <span class="avatar">ER</span>
+                <span class="mini-pill"><span class="nav-icon icon-bell"></span></span>
               </div>
               <div class="title-stack">
-                <p class="eyebrow">Shared home</p>
-                <h3>Operations overview</h3>
+                <p class="eyebrow">Home</p>
+                <h3>Operational home</h3>
               </div>
-              <div class="stat-grid one">
-                <div class="stat"><span>Assigned workflow steps</span><strong>128</strong></div>
-                <div class="stat"><span>Draft responses</span><strong>34</strong></div>
-                <div class="stat"><span>Release blockers</span><strong>7</strong></div>
-              </div>
-              <div class="hero-card compact">
-                <p class="eyebrow">Portfolio pulse</p>
-                <h4>Two partner branches are still lagging on submitted responses</h4>
-                <div class="sparkline"></div>
-                <div class="button-row">
-                  <span class="button primary">Open queue</span>
-                  <span class="button secondary">Dashboard</span>
-                </div>
+              <div class="metric-line mobile-metrics">
+                <span><strong>14</strong> assigned</span>
+                <span><strong>8</strong> drafts</span>
+                <span><strong>4</strong> blockers</span>
               </div>
               <div class="panel">
                 <div class="panel-head">
-                  <strong>Next queues</strong>
+                  <strong>Assignment queue</strong>
                   <span>See all</span>
                 </div>
-                <div class="list-row"><span>Workflow assignments ready to start</span><b>14</b></div>
-                <div class="list-row"><span>Draft responses needing review</span><b>8</b></div>
-              </div>
-              <div class="panel">
-                <div class="panel-head">
-                  <strong>Recent signals</strong>
-                  <span>3</span>
+                <div class="record-card">
+                  <strong>Partner 04</strong>
+                  <p>Certification review</p>
+                  <span class="chip warn">Needs review</span>
                 </div>
-                <div class="activity-row">Workflow version published</div>
-                <div class="activity-row">Migration rehearsal rerun</div>
+                <div class="record-card">
+                  <strong>Partner 07</strong>
+                  <p>Follow-up submission</p>
+                  <span class="chip">Draft exists</span>
+                </div>
+              </div>
+              <div class="drawer">
+                <div class="drawer-header">
+                  <img
+                    class="mini-logo"
+                    src="../../crates/tessara-web/assets/tessara-icon-256.svg"
+                    alt=""
+                  />
+                  <div>
+                    <strong>Tessara</strong>
+                    <span>Shared shell</span>
+                  </div>
+                </div>
+                <div class="drawer-nav">
+                  <span class="drawer-item active"><span class="nav-icon icon-home"></span>Home</span>
+                  <span class="drawer-item"><span class="nav-icon icon-organization"></span>Organization</span>
+                  <div class="drawer-tree">
+                    <span class="drawer-tree-item level-1">Regions</span>
+                    <span class="drawer-tree-item level-2">Counties</span>
+                    <span class="drawer-tree-item level-3">Partners</span>
+                    <span class="drawer-tree-item level-4">Sites</span>
+                  </div>
+                  <span class="drawer-item"><span class="nav-icon icon-forms"></span>Forms</span>
+                  <span class="drawer-item"><span class="nav-icon icon-workflows"></span>Workflows</span>
+                  <span class="drawer-item"><span class="nav-icon icon-responses"></span>Responses</span>
+                  <span class="drawer-item"><span class="nav-icon icon-components"></span>Components</span>
+                  <span class="drawer-item"><span class="nav-icon icon-dashboards"></span>Dashboards</span>
+                  <span class="drawer-label">Admin</span>
+                  <span class="drawer-item"><span class="nav-icon icon-datasets"></span>Datasets</span>
+                  <span class="drawer-item"><span class="nav-icon icon-administration"></span>Administration</span>
+                  <span class="drawer-item"><span class="nav-icon icon-migration"></span>Migration</span>
+                </div>
               </div>
             </div>
           </article>
@@ -141,70 +200,70 @@
         <div class="row-heading">
           <div>
             <p class="kicker">Screen 02</p>
-            <h2>Workflow assignment workspace</h2>
+            <h2>Workflows</h2>
           </div>
           <p>
-            Tablet preserves a table-first layout with a compressed inspector.
-            Mobile converts the queue to record cards with strong status chips
-            and keeps selected-record details as a lower section rather than a
-            side panel.
+            Tablet opens on the workflow directory and keeps selected assignment
+            detail nearby. Mobile compresses the directory into cards and still
+            makes assignments obvious.
           </p>
         </div>
         <div class="devices">
           <article class="device tablet">
             <div class="device-label">Tablet</div>
-            <div class="canvas">
-              <div class="topbar">
-                <div>
-                  <p class="eyebrow">Responses</p>
-                  <h3>Workflow assignments queue</h3>
+            <div class="canvas shell-tablet">
+              <aside class="rail">
+                <span class="rail-icon"><span class="nav-icon icon-home"></span></span>
+                <span class="rail-icon"><span class="nav-icon icon-organization"></span></span>
+                <span class="rail-icon"><span class="nav-icon icon-forms"></span></span>
+                <span class="rail-icon active"><span class="nav-icon icon-workflows"></span></span>
+                <span class="rail-icon"><span class="nav-icon icon-responses"></span></span>
+                <span class="rail-icon"><span class="nav-icon icon-components"></span></span>
+                <span class="rail-icon"><span class="nav-icon icon-dashboards"></span></span>
+                <span class="rail-divider"></span>
+                <span class="rail-icon"><span class="nav-icon icon-administration"></span></span>
+                <span class="rail-avatar">ER</span>
+              </aside>
+              <div class="main">
+                <div class="topbar">
+                  <div>
+                    <p class="eyebrow">Workflows</p>
+                    <h3>Workflow directory</h3>
+                  </div>
+                  <div class="utility-row">
+                    <span class="pill search">Search</span>
+                    <span class="pill">Help</span>
+                  </div>
                 </div>
-                <div class="utility-row">
-                  <span class="chip active">Assigned to me</span>
+                <div class="metric-line">
+                  <span><strong>12</strong> active</span>
+                  <span><strong>3</strong> draft</span>
+                  <span><strong>14</strong> due</span>
                 </div>
-              </div>
-              <div class="stat-grid four compact-stats">
-                <div class="stat"><span>Assignments</span><strong>42</strong></div>
-                <div class="stat"><span>Drafts</span><strong>6</strong></div>
-                <div class="stat"><span>Submitted today</span><strong>11</strong></div>
-                <div class="stat"><span>Late reviews</span><strong>9</strong></div>
-              </div>
-              <div class="table-card">
-                <div class="table-toolbar">
-                  <span class="pill search">Search queue</span>
-                  <span class="pill">Status</span>
+                <div class="panel">
+                  <div class="panel-head">
+                    <strong>Directory</strong>
+                    <span>Create workflow</span>
+                  </div>
+                  <div class="table-row selected">
+                    <span>Spring readiness certification</span>
+                    <span>v1.3 draft</span>
+                    <span class="chip warn">Needs publish</span>
+                  </div>
+                  <div class="table-row">
+                    <span>Attendance exception follow-up</span>
+                    <span>v2.0 published</span>
+                    <span class="chip good">Healthy</span>
+                  </div>
                 </div>
-                <div class="table-head">
-                  <span>Node</span>
-                  <span>Form version</span>
-                  <span>Status</span>
-                </div>
-                <div class="table-row selected">
-                  <span>Partner 04</span>
-                  <span>Spring readiness certification v1.3</span>
-                  <span class="chip warn">Needs review</span>
-                </div>
-                <div class="table-row">
-                  <span>Partner 07</span>
-                  <span>Attendance exception log v2.0</span>
-                  <span class="chip">Draft exists</span>
-                </div>
-                <div class="table-row">
-                  <span>Partner 11</span>
-                  <span>Site staffing update v1.1</span>
-                  <span class="chip good">Submitted</span>
-                </div>
-              </div>
-              <div class="panel">
-                <div class="panel-head">
-                  <strong>Selected record</strong>
-                  <span class="chip warn">Needs review</span>
-                </div>
-                <div class="two-col-meta">
-                  <span>Node: Partner 04</span>
-                  <span>Workflow: Certification review</span>
-                  <span>Form: v1.3</span>
-                  <span>Blockers: 2</span>
+                <div class="panel">
+                  <div class="panel-head">
+                    <strong>Assignments</strong>
+                    <span>Selected workflow</span>
+                  </div>
+                  <div class="list-row">Jefferson County review <b>Due today</b></div>
+                  <div class="list-row">Pulaski County review <b>In progress</b></div>
+                  <div class="list-row">Benton County approval <b>Submitted</b></div>
                 </div>
               </div>
             </div>
@@ -215,45 +274,37 @@
             <div class="canvas">
               <div class="mobile-topbar">
                 <span class="menu-dot"></span>
-                <strong>Queue</strong>
-                <span class="avatar">42</span>
+                <strong>Workflows</strong>
+                <span class="mini-pill">+</span>
               </div>
               <div class="title-stack">
-                <p class="eyebrow">Responses</p>
-                <h3>Workflow assignments queue</h3>
+                <p class="eyebrow">Directory</p>
+                <h3>Workflow directory</h3>
               </div>
               <div class="scroll-chips">
-                <span class="chip active">Assigned</span>
-                <span class="chip">Late</span>
-                <span class="chip">Due this week</span>
+                <span class="chip active">Active 12</span>
+                <span class="chip">Draft 3</span>
+                <span class="chip">Needs publish 2</span>
+              </div>
+              <div class="record-card selected">
+                <strong>Spring readiness certification</strong>
+                <p>Annual certification cycle</p>
+                <div class="mini-meta">v1.3 draft</div>
+                <span class="chip warn">Needs publish</span>
               </div>
               <div class="record-card">
-                <div class="panel-head">
-                  <strong>Partner 04</strong>
-                  <span class="chip warn">Needs review</span>
-                </div>
-                <p>Spring readiness certification v1.3</p>
-                <div class="mini-meta">Certification review • Ashley Grant</div>
-              </div>
-              <div class="record-card">
-                <div class="panel-head">
-                  <strong>Partner 07</strong>
-                  <span class="chip">Draft exists</span>
-                </div>
-                <p>Attendance exception log v2.0</p>
-                <div class="mini-meta">Follow-up submission • Martin Cole</div>
+                <strong>Attendance exception follow-up</strong>
+                <p>Follow-up workflow</p>
+                <div class="mini-meta">v2.0 published</div>
+                <span class="chip good">Healthy</span>
               </div>
               <div class="panel">
                 <div class="panel-head">
-                  <strong>Selected record details</strong>
-                  <span>Open</span>
+                  <strong>Assignments on selected workflow</strong>
+                  <span>3 active</span>
                 </div>
-                <div class="activity-row">Saved draft values no longer match the latest published dataset</div>
-                <div class="activity-row">The staffing section still uses a retired reusable option source</div>
-                <div class="button-row">
-                  <span class="button primary">Open response</span>
-                  <span class="button secondary">Return</span>
-                </div>
+                <div class="activity-row">Jefferson County review</div>
+                <div class="activity-row">Pulaski County review</div>
               </div>
             </div>
           </article>
@@ -267,51 +318,70 @@
             <h2>Form builder</h2>
           </div>
           <p>
-            Tablet keeps the section rail and canvas, while the properties panel
-            becomes a bottom sheet style module. Mobile makes section selection
-            a dropdown and preserves the canvas as the main editing surface.
+            Tablet keeps the collapsed shell and uses the space for insert rail,
+            canvas, and properties. Mobile keeps the canvas primary and shifts
+            deeper settings into a lower sheet.
           </p>
         </div>
         <div class="devices">
           <article class="device tablet">
             <div class="device-label">Tablet</div>
-            <div class="canvas">
-              <div class="builder-top">
-                <div>
-                  <p class="eyebrow">Draft authoring</p>
-                  <h3>Program snapshot</h3>
-                </div>
-                <div class="button-row">
-                  <span class="button secondary">Preview</span>
-                  <span class="button primary">Save</span>
-                </div>
-              </div>
-              <div class="builder-tablet-layout">
-                <div class="section-list">
-                  <div class="section-item active">1. Program snapshot</div>
-                  <div class="section-item">2. Staffing</div>
-                  <div class="section-item">3. Funding</div>
-                </div>
-                <div class="builder-cards">
-                  <div class="field-card-mini selected">
-                    <strong>Program lead name</strong>
-                    <span>Short text</span>
+            <div class="canvas shell-tablet">
+              <aside class="rail">
+                <span class="rail-icon"><span class="nav-icon icon-home"></span></span>
+                <span class="rail-icon"><span class="nav-icon icon-organization"></span></span>
+                <span class="rail-icon active"><span class="nav-icon icon-forms"></span></span>
+                <span class="rail-icon"><span class="nav-icon icon-workflows"></span></span>
+                <span class="rail-icon"><span class="nav-icon icon-responses"></span></span>
+                <span class="rail-icon"><span class="nav-icon icon-components"></span></span>
+                <span class="rail-icon"><span class="nav-icon icon-dashboards"></span></span>
+                <span class="rail-divider"></span>
+                <span class="rail-icon"><span class="nav-icon icon-administration"></span></span>
+                <span class="rail-avatar">ER</span>
+              </aside>
+              <div class="main">
+                <div class="topbar">
+                  <div>
+                    <p class="eyebrow">Forms</p>
+                    <h3>Form builder</h3>
                   </div>
-                  <div class="field-card-mini">
-                    <strong>Submission confidence</strong>
-                    <span>Choice list</span>
+                  <div class="utility-row">
+                    <span class="pill search">Search</span>
+                    <span class="pill">Help</span>
                   </div>
-                  <div class="add-field">+ Add field</div>
                 </div>
-              </div>
-              <div class="sheet-panel">
-                <div class="panel-head">
-                  <strong>Field properties</strong>
-                  <span>Selected</span>
+                <div class="builder-bar">
+                  <span class="chip active">Draft</span>
+                  <span class="chip">v1.3</span>
+                  <span class="chip">7 changes</span>
+                  <span class="pill">Preview</span>
                 </div>
-                <div class="property-line"></div>
-                <div class="property-line short"></div>
-                <div class="toggle-line"></div>
+                <div class="builder-tablet-layout">
+                  <div class="section-list">
+                    <div class="section-item active">Short text</div>
+                    <div class="section-item">Choice list</div>
+                    <div class="section-item">Component</div>
+                  </div>
+                  <div class="builder-cards">
+                    <div class="field-card-mini selected">
+                      <strong>Program lead name</strong>
+                      <span>Short text</span>
+                    </div>
+                    <div class="field-card-mini">
+                      <strong>Submission confidence</strong>
+                      <span>Choice list</span>
+                    </div>
+                    <div class="sheet-panel">
+                      <div class="panel-head">
+                        <strong>Field properties</strong>
+                        <span>Selected</span>
+                      </div>
+                      <div class="property-line"></div>
+                      <div class="property-line short"></div>
+                      <div class="toggle-line"></div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </article>
@@ -322,13 +392,18 @@
               <div class="mobile-topbar">
                 <span class="menu-dot"></span>
                 <strong>Builder</strong>
-                <span class="avatar">✓</span>
+                <span class="mini-pill">Save</span>
               </div>
               <div class="title-stack">
-                <p class="eyebrow">Draft authoring</p>
-                <h3>Program snapshot</h3>
+                <p class="eyebrow">Program snapshot</p>
+                <h3>Spring readiness certification</h3>
               </div>
-              <div class="pill wide">Section: Program snapshot ▾</div>
+              <div class="scroll-chips">
+                <span class="chip active">Draft</span>
+                <span class="chip">v1.3</span>
+                <span class="chip">Preview</span>
+              </div>
+              <div class="pill wide">Section: Program snapshot</div>
               <div class="field-card-mini selected tall">
                 <strong>Program lead name</strong>
                 <span>Short text</span>
@@ -337,14 +412,14 @@
               <div class="field-card-mini tall">
                 <strong>Submission confidence</strong>
                 <span>Choice list</span>
-                <div class="option-dots">
-                  <i></i><i></i><i></i>
-                </div>
+                <div class="property-line short"></div>
               </div>
-              <div class="add-field">+ Add field</div>
-              <div class="bottom-action-bar">
-                <span class="button secondary">Preview</span>
-                <span class="button primary">Save draft</span>
+              <div class="sheet-panel">
+                <div class="panel-head">
+                  <strong>Properties sheet</strong>
+                  <span>Open</span>
+                </div>
+                <div class="toggle-line"></div>
               </div>
             </div>
           </article>
@@ -355,19 +430,19 @@
         <div class="row-heading">
           <div>
             <p class="kicker">Screen 04</p>
-            <h2>Sign-in</h2>
+            <h2>Sign in</h2>
           </div>
           <p>
-            Tablet and mobile both stay bare: just brand, form, and auth
-            actions, with no dashboard metrics or supporting promo content.
+            Tablet and mobile both stay bare. No shell chrome appears before the
+            user authenticates.
           </p>
         </div>
         <div class="devices">
           <article class="device tablet">
             <div class="device-label">Tablet</div>
-            <div class="canvas auth-tablet auth-simple">
-              <div class="auth-form auth-form-standalone">
-                <div class="auth-brand auth-brand-centered">
+            <div class="canvas auth-tablet">
+              <div class="auth-form">
+                <div class="auth-brand">
                   <img
                     class="mini-logo"
                     src="../../crates/tessara-web/assets/tessara-icon-256.svg"
@@ -389,18 +464,16 @@
           <article class="device mobile">
             <div class="device-label">Mobile</div>
             <div class="canvas">
-              <div class="mobile-topbar">
+              <div class="auth-brand mobile-auth">
                 <img
                   class="mini-logo"
                   src="../../crates/tessara-web/assets/tessara-icon-256.svg"
                   alt=""
                 />
-                <strong>Tessara</strong>
-                <span></span>
-              </div>
-              <div class="title-stack">
-                <p class="eyebrow">Authentication</p>
-                <h3>Sign in to Tessara</h3>
+                <div>
+                  <p class="eyebrow">Authentication</p>
+                  <h3>Sign in to Tessara</h3>
+                </div>
               </div>
               <div class="form-line"></div>
               <div class="form-line"></div>
@@ -415,58 +488,77 @@
         <div class="row-heading">
           <div>
             <p class="kicker">Screen 05</p>
-            <h2>Organization listing</h2>
+            <h2>Organization</h2>
           </div>
           <p>
-            Tablet preserves scoped filters and a real listing. Mobile collapses
-            scope filters into chips and turns each node into a summary card
-            showing related forms, responses, and dashboards.
+            Tablet keeps the explorer row-based and compact. Mobile turns nodes
+            into quick cards while still showing the selected node's related
+            work.
           </p>
         </div>
         <div class="devices">
           <article class="device tablet">
             <div class="device-label">Tablet</div>
-            <div class="canvas">
-              <div class="topbar">
-                <div>
-                  <p class="eyebrow">Organization</p>
-                  <h3>Partner list</h3>
+            <div class="canvas shell-tablet">
+              <aside class="rail">
+                <span class="rail-icon"><span class="nav-icon icon-home"></span></span>
+                <span class="rail-icon active"><span class="nav-icon icon-organization"></span></span>
+                <span class="rail-icon"><span class="nav-icon icon-forms"></span></span>
+                <span class="rail-icon"><span class="nav-icon icon-workflows"></span></span>
+                <span class="rail-icon"><span class="nav-icon icon-responses"></span></span>
+                <span class="rail-icon"><span class="nav-icon icon-components"></span></span>
+                <span class="rail-icon"><span class="nav-icon icon-dashboards"></span></span>
+                <span class="rail-divider"></span>
+                <span class="rail-icon"><span class="nav-icon icon-administration"></span></span>
+                <span class="rail-avatar">ER</span>
+              </aside>
+              <div class="main">
+                <div class="topbar">
+                  <div>
+                    <p class="eyebrow">Organization</p>
+                    <h3>Partner Explorer</h3>
+                  </div>
+                  <div class="utility-row">
+                    <span class="pill search">Search</span>
+                    <span class="pill">Help</span>
+                  </div>
                 </div>
-                <div class="button-row">
-                  <span class="button secondary">Export</span>
-                  <span class="button primary">Add node</span>
+                <div class="metric-line">
+                  <span><strong>28</strong> visible partners</span>
+                  <span><strong>6</strong> open responses</span>
                 </div>
-              </div>
-              <div class="org-tablet-layout">
-                <div class="section-list">
-                  <div class="section-item active">All partners</div>
-                  <div class="section-item">Open responses</div>
-                  <div class="section-item">Recently updated</div>
-                </div>
-                <div class="table-card">
-                  <div class="table-toolbar">
-                    <span class="pill search">Search partners</span>
-                    <span class="pill">Status</span>
+                <div class="org-tablet-layout">
+                  <div class="org-tree-tablet">
+                    <div class="org-tree-row level-0">
+                      <strong>Region East</strong>
+                      <span>2 counties open</span>
+                    </div>
+                    <div class="org-tree-row level-1 selected">
+                      <strong>Jefferson County</strong>
+                      <span>3 flagged</span>
+                    </div>
+                    <div class="org-tree-row level-2 selected">
+                      <strong>Partner 04</strong>
+                      <span>Needs attention</span>
+                    </div>
+                    <div class="org-tree-row level-2">
+                      <strong>Partner 05</strong>
+                      <span>1 draft</span>
+                    </div>
                   </div>
-                  <div class="table-head">
-                    <span>Partner</span>
-                    <span>Forms</span>
-                    <span>Status</span>
-                  </div>
-                  <div class="table-row selected">
-                    <span>Partner 04</span>
-                    <span>3 published</span>
-                    <span class="chip warn">Needs attention</span>
-                  </div>
-                  <div class="table-row">
-                    <span>Partner 07</span>
-                    <span>2 published</span>
-                    <span class="chip good">Healthy</span>
-                  </div>
-                  <div class="table-row">
-                    <span>Partner 15</span>
-                    <span>1 published</span>
-                    <span class="chip danger">Escalated</span>
+                  <div class="panel org-tablet-detail">
+                    <div class="panel-head">
+                      <strong>Partner 04</strong>
+                      <span class="chip warn">Needs attention</span>
+                    </div>
+                    <div class="list-row">Forms <b>3 published</b></div>
+                    <div class="list-row">Responses <b>2 draft</b></div>
+                    <div class="list-row">Dashboards <b>1 stale publish</b></div>
+                    <div class="activity-row">Metadata updated today; dashboard refresh queued.</div>
+                    <div class="button-row">
+                      <span class="button secondary">Edit node</span>
+                      <span class="button primary">Open responses</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -479,40 +571,62 @@
               <div class="mobile-topbar">
                 <span class="menu-dot"></span>
                 <strong>Organization</strong>
-                <span class="avatar">+</span>
+                <span class="mini-pill">+</span>
               </div>
               <div class="title-stack">
-                <p class="eyebrow">Partner list</p>
-                <h3>Region East</h3>
+                <p class="eyebrow">Organization</p>
+                <h3>Partner Explorer</h3>
               </div>
-              <div class="scroll-chips">
-                <span class="chip active">All partners</span>
-                <span class="chip">Needs attention</span>
-                <span class="chip">Updated</span>
+              <div class="metric-line mobile-metrics">
+                <span><strong>28</strong> visible partners</span>
+                <span><strong>6</strong> open responses</span>
               </div>
-              <div class="record-card">
+              <div class="hierarchy-control">
                 <div class="panel-head">
-                  <strong>Partner 04</strong>
-                  <span class="chip warn">Needs attention</span>
+                  <strong>Selected branch</strong>
+                  <span>Collapsed</span>
                 </div>
-                <p>Jefferson County</p>
-                <div class="mini-meta">3 forms • 2 dashboards • 1 open draft response</div>
+                <div class="hierarchy-summary">
+                  <strong>Region East / Jefferson County / Partner 04</strong>
+                  <span>Tap to choose a different node</span>
+                </div>
               </div>
-              <div class="record-card">
+              <div class="hierarchy-sheet">
                 <div class="panel-head">
-                  <strong>Partner 07</strong>
-                  <span class="chip good">Healthy</span>
+                  <strong>Visible hierarchy</strong>
+                  <span>Expanded</span>
                 </div>
-                <p>Pulaski County</p>
-                <div class="mini-meta">2 forms • 1 dashboard • 0 open draft responses</div>
+                <div class="org-tree-mobile">
+                  <div class="org-tree-row level-0">
+                    <strong>Region East</strong>
+                    <span>2 counties open</span>
+                  </div>
+                  <div class="org-tree-row level-1 selected">
+                    <strong>Jefferson County</strong>
+                    <span>3 flagged</span>
+                  </div>
+                  <div class="org-tree-row level-2 selected">
+                    <strong>Partner 04</strong>
+                    <span>Needs attention</span>
+                  </div>
+                  <div class="org-tree-row level-2">
+                    <strong>Partner 05</strong>
+                    <span>1 draft</span>
+                  </div>
+                </div>
               </div>
-              <div class="record-card">
+              <div class="panel org-mobile-detail">
                 <div class="panel-head">
-                  <strong>Partner 15</strong>
-                  <span class="chip danger">Escalated</span>
+                  <strong>Selected node work</strong>
+                  <span>Partner 04</span>
                 </div>
-                <p>Sebastian County</p>
-                <div class="mini-meta">1 form • 1 dashboard • unpublished dashboard change</div>
+                <div class="activity-row">Forms: Spring readiness, staffing update, corrective action.</div>
+                <div class="activity-row">Responses: 2 draft, 1 due today.</div>
+                <div class="activity-row">Dashboards: 1 stale publish still needs attention.</div>
+                <div class="button-row">
+                  <span class="button secondary">Edit node</span>
+                  <span class="button primary">Open responses</span>
+                </div>
               </div>
             </div>
           </article>
