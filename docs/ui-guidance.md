@@ -7,13 +7,15 @@
 
 ## Purpose, authority, and interpretation
 
-This document is the canonical source for Tessara UI decisions. It consolidates the active guidance that was previously split across `brand-design.md`, `ui-design-language.md`, and `ui-direction.md`.
+This document is the canonical source for Tessara UI decisions. It consolidates the active guidance that was previously split across separate brand, design-language, direction, and primitive-contract UI documents.
 
 Use this document to:
 
 1. guide future UI implementation
 2. audit current screens against the intended standard
 3. resolve design questions without needing to cross-reference multiple UI planning documents
+4. find the current shared primitive contracts and adoption notes in the appendices at the end of this file
+5. pair the prose guidance here with [ui-guidance-spec.md](./ui-guidance-spec.md) when a formal Allium behavior contract is useful
 
 Authority rules:
 
@@ -126,6 +128,7 @@ This should reinforce the product themes of:
 The shell-level theme selector MUST:
 
 - appear in the shared shell chrome rather than inside individual page actions
+- live in the sidebar account/footer context area rather than as a full theme control group in the top app bar
 - offer `System`, `Light`, and `Dark`
 - follow system theme by default
 - persist explicit user choice between sessions
@@ -165,15 +168,16 @@ When app metadata is updated, prefer:
 
 ### Primary information architecture
 
-The application MUST use a single coherent shell with role-aware navigation across these main areas:
+The application MUST use a single coherent shell with permission-gated navigation across these main areas:
 
 - Home
 - Organization
 - Forms
+- Workflows
 - Responses
-- Datasets
 - Components
 - Dashboards
+- Datasets
 - Administration
 - Migration
 
@@ -181,6 +185,8 @@ Guiding rules:
 
 - product-facing areas should read as real application destinations
 - internal or operator areas should stay available but not define the tone of the whole app
+- access to routes, navigation groups, and actions SHOULD be governed by permissions rather than role names
+- `admin:all` SHOULD unlock a small secondary `Admin` sidebar group rather than a separate mode or shell
 - IDs and workbench-style shortcuts should not be required for common user-testing flows
 - the shell should respect the active theme through shared shell chrome
 
@@ -209,20 +215,21 @@ Internal surfaces SHOULD still feel like part of the same application, but remai
 
 ### Home strategy
 
-Home SHOULD remain a shared entry surface that supports different user roles without route-tree fragmentation.
+Home SHOULD remain a shared entry surface that supports different permission sets without route-tree fragmentation.
 
 Home SHOULD provide:
 
 - current context
-- readiness or system summary where useful
-- clear entry points into the user's next likely tasks
+- the user's next queue or assignment work as the primary surface
+- a compact hierarchy explorer as the secondary surface
+- selected-node related work when hierarchy context is active
+- compact glanceable metrics rather than a full row of summary cards
 - obvious distinction between product destinations and internal areas
-- shared theme controls that belong to the shell rather than individual page actions
 
 ### Screen families
 
 1. **Home / workspace**  
-   Shared entry and role-aware orientation.
+   Shared entry and permission-aware orientation.
 2. **Directory**  
    Browseable lists of users, roles, organization nodes, forms, datasets, components, and dashboards.
 3. **Detail**  
@@ -289,6 +296,23 @@ Behavior:
 - Collapsed state MUST show icons, active state, and tooltips or reveal behavior.
 - Sidebar nav groups SHOULD be separated by spacing rather than heavy dividers.
 - Avoid deep always-expanded trees in main navigation.
+- The Organization nav item MAY expose a quiet node-type ladder beneath it when hierarchy context is important.
+
+Navigation structure:
+
+- Primary order SHOULD be:
+  - Home
+  - Organization
+  - Forms
+  - Workflows
+  - Responses
+  - Components
+  - Dashboards
+- Secondary `Admin` group SHOULD contain:
+  - Datasets
+  - Administration
+  - Migration
+- Transitional `Reports` SHOULD NOT appear in the default sidebar contract.
 
 Navigation item style:
 
@@ -303,8 +327,10 @@ Top app bar:
 
 - height: `56px`
 - purpose: global utilities only
-- suitable contents: mobile nav toggle, user or account menu, notifications or help, organization or workspace context, global search
+- suitable contents: mobile nav toggle, notifications, help, and global search
 - page-specific actions MUST NOT live here by default
+- account or session controls SHOULD NOT be duplicated in the top app bar
+- notifications SHOULD default to a bell-icon treatment rather than a labeled control
 
 Page header:
 
@@ -315,6 +341,13 @@ Global search:
 
 - MUST be a static field in the top app bar
 - SHOULD remain visible and stable rather than hidden behind a launcher
+
+Sidebar footer/context block:
+
+- SHOULD combine account identity, acting-as/delegation context, scope roots, and a compact theme selector trigger
+- SHOULD show the specific user being acted as when delegation is active
+- SHOULD represent scope as top-level visible organization nodes rather than a vague single branch label
+- MAY collapse longer scope-root lists behind an expandable affordance
 
 ### Page widths and spacing
 
@@ -390,16 +423,30 @@ Breadcrumbs SHOULD be used selectively, not universally.
 
 Administration contexts MUST be visually distinct in a subtle way.
 
-- Use a restrained admin indicator, such as an accent treatment, badge, or header or sidebar cue.
+- Use a restrained admin indicator, such as an accent treatment or sidebar-group cue.
 - Do not create a completely separate visual theme.
 
 ### Hierarchy navigation direction
 
 Organization browsing SHOULD become more scope-aware and less generic.
 
-- When a user's highest assigned scope is `Partner`, the primary destination should read as `Partner List` rather than `Organization List`.
+- Keep `Organization` as the sidebar destination label.
+- When a user's highest assigned scope is `Partner`, the page title should read as `Partner Explorer` rather than a generic `Organization List`.
 - Higher-level scoped hierarchy screens should present the assigned tree structure directly instead of flattening everything into disconnected cards.
+- The canonical desktop and tablet pattern is `Explorer + Selected Node Detail`.
+- The explorer SHOULD use indented rows, minimal separators, and restrained selection styling rather than connector-line trees or card-per-node treatments.
+- The selected-node panel SHOULD remain a compact summary surface that leads with related forms, responses, dashboards, open issues, and recent changes.
+- Management actions SHOULD appear in the selected-node panel but remain secondary to related-work context.
 - Capability bundles and scope assignments in Administration should use accessible data-grid layouts once those surfaces need to support larger data sets.
+
+Responsive Organization behavior:
+
+- On tablet, preserve the same explorer/detail model with the sidebar rail collapsed by default.
+- On mobile, use a `Tree + Sheet` model:
+  - a compact branch selector in the main flow
+  - an expandable hierarchy list for choosing a node
+  - a lower sheet or lower-panel detail surface for selected-node work
+- After a node selection, the hierarchy control SHOULD be able to collapse so selected-node work becomes primary again.
 
 When tabular interaction is required, prefer an accessible data-grid pattern over a static table so keyboard navigation, row and column focus, and dense editing behavior remain coherent.
 
@@ -932,6 +979,7 @@ Desktop builder layout:
 - floating insert rail stays reachable while authoring fields and sections
 - right contextual properties panel appears only when a section or field is selected
 - sticky page-level builder actions hold save, publish, and version-lifecycle actions separately from field-card controls
+- multiple authored sections SHOULD appear as vertically stacked section panels in the canvas flow
 
 Rules:
 
@@ -945,6 +993,7 @@ Section model:
 
 - sections are the primary authoring containers
 - section headers expose title, optional description, order context, and section-level actions
+- section-level settings SHOULD include title, description, and configured column count within the section container itself
 - section navigation SHOULD support direct jump between sections on desktop
 - blank builders SHOULD use guided first actions such as `Add section` and `Add field`, not a drag-only empty state
 
@@ -1308,14 +1357,16 @@ Out of scope for this UI guidance:
 
 ### Shell and information architecture
 
-- [ ] The product uses a single coherent shell with role-aware navigation.
-- [ ] Main areas include Home, Organization, Forms, Responses, Datasets, Components, Dashboards, Administration, and Migration.
+- [ ] The product uses a single coherent shell with permission-gated navigation.
+- [ ] Main areas include Home, Organization, Forms, Workflows, Responses, Components, Dashboards, Datasets, Administration, and Migration.
 - [ ] Product and internal surfaces are distinct but visually related.
 - [ ] The top app bar is global-utility-only and `56px` high.
 - [ ] Global search is a static field in the top app bar.
 - [ ] Sidebar widths and collapse behavior match the standard.
 - [ ] Right contextual panels use `360px` or `420px` widths and become drawers below desktop.
 - [ ] Breadcrumbs appear only when they add real hierarchical value.
+- [ ] Account, delegation, scope roots, and theme selection live in the sidebar footer/context block.
+- [ ] The top app bar does not duplicate account or session controls.
 
 ### Rendering and frontend delivery
 
@@ -1348,6 +1399,7 @@ Out of scope for this UI guidance:
 - [ ] Tabs are text-first and `40px` high.
 - [ ] Tab overflow becomes a dropdown rather than wrapped rows.
 - [ ] Badges and chips are not used interchangeably.
+- [ ] Notifications use a quiet bell-icon treatment.
 
 ### Surfaces, tables, and forms
 
@@ -1368,6 +1420,7 @@ Out of scope for this UI guidance:
 - [ ] Field and section insertion uses a persistent canvas-adjacent affordance.
 - [ ] The right properties panel is selection-driven and does not stay open unnecessarily.
 - [ ] Save, publish, and version actions are separated from field-card actions.
+- [ ] Authored sections render as stacked section panels with section-level settings visible in the canvas flow.
 - [ ] Field cards expose only core direct actions: reorder, required, duplicate, delete, overflow.
 - [ ] Choice fields enforce one option source mode at a time: inline field-owned options or reusable option source/lookup.
 - [ ] Draft version authoring is editable and published versions are clearly read-only.
@@ -1394,6 +1447,8 @@ Out of scope for this UI guidance:
 - [ ] No screen forces shell-level horizontal scrolling.
 - [ ] Tables, tabs, forms, and drawers adapt intentionally on smaller screens.
 - [ ] Mobile remains usable for viewing, review, lookup, lightweight edits, and shorter forms.
+- [ ] Home metrics remain compact and glanceable rather than consuming full-width summary panels.
+- [ ] Organization uses explorer-plus-detail on desktop/tablet and tree-plus-sheet on mobile.
 
 ## Practical implementation note
 
@@ -1410,3 +1465,246 @@ When in doubt, favor:
 - context-preserving patterns over unnecessary page switches
 - explicit state communication over visual ambiguity
 - fewer, stronger patterns over many custom ones
+
+## Appendix A: Shared Primitive Contracts
+
+These appendices describe the shared primitive contracts that exist in the repo today. They do not override the design rules above. When a primitive contract conflicts with the main body of this document, the main body wins.
+
+### Current primitive layers
+
+There are two real primitive layers in the repo today:
+
+1. `crates/tessara-web/src/features/native_shell.rs`
+   - Leptos-native wrappers for shared SSR route structure.
+   - Current stable surface primitives:
+     - `NativePage`
+     - `PageHeader`
+     - `MetadataStrip`
+     - `Panel`
+   - These are the default choice for native `/app` routes.
+2. `crates/tessara-ui/src/lib.rs`
+   - HTML helper primitives used by compatibility surfaces and older string-rendered route builders.
+   - Current stable helpers:
+     - `action_group`
+     - `page_header`
+     - `panel`
+     - `panel_with_header`
+     - `card`
+     - `field_wrapper`
+     - `checkbox_field`
+     - `toolbar`
+
+These layers are not fully converged yet. New native SSR route work SHOULD prefer the `native_shell` components. Use raw `tessara-ui` HTML helpers only when extending a compatibility surface or when extracting a shared contract that does not yet have a Leptos-native wrapper.
+
+### Native page shell
+
+Use `NativePage` as the outer frame for product-facing SSR routes.
+
+```rust
+view! {
+    <NativePage
+        title="Tessara Home"
+        description="Tessara application home for local replacement workflow testing."
+        page_key="home"
+        active_route="home"
+        workspace_label="Shared Home"
+        breadcrumbs=vec![BreadcrumbItem::current("Home")]
+    >
+        // page content
+    </NativePage>
+}
+```
+
+Contract:
+
+- route title, active route, and page key are explicit
+- shared shell chrome comes from the native application shell, not page-local markup
+- product routes should not rebuild sidebar or top-bar structure locally
+
+### Page header
+
+Use `PageHeader` once per route as the top route summary.
+
+```rust
+view! {
+    <PageHeader
+        eyebrow="Workflows"
+        title="Workflow Directory"
+        description="Current workflow records, linked forms, and assignment counts appear here."
+    />
+}
+```
+
+Contract:
+
+- one eyebrow
+- one page title
+- one concise route summary
+- page-level actions belong in the header area, not repeated in later panels
+
+### Metadata strip
+
+Use `MetadataStrip` for compact route state.
+
+```rust
+view! {
+    <MetadataStrip items=vec![
+        ("Mode", "Directory".into()),
+        ("Surface", "Workflow runtime shell".into()),
+        ("State", "Loading workflow records".into()),
+    ]/>
+}
+```
+
+Contract:
+
+- use short label/value pairs only
+- route mode, surface, and state are the common first choices
+- do not turn this into a general-purpose detail grid
+
+### Panel
+
+Use `Panel` for substantive route sections.
+
+```rust
+view! {
+    <Panel
+        title="Product Areas"
+        description="These are the primary destinations for top-level entity browsing and workflow entry."
+    >
+        // section content
+    </Panel>
+}
+```
+
+Contract:
+
+- title is required
+- description is short and explanatory
+- body holds the route-local content
+- use multiple panels instead of one oversized page body
+
+### Action group
+
+Use `tessara_ui::action_group` when a string-rendered or compatibility-owned surface needs shared action markup.
+
+```rust
+let actions = tessara_ui::action_group(&[
+    ActionItem::link("Create Workflow", "/app/workflows/new", ActionStyle::Primary),
+    ActionItem::link(
+        "Open Assignment Console",
+        "/app/workflows/assignments",
+        ActionStyle::Light,
+    ),
+]);
+```
+
+Contract:
+
+- group route-level or section-level actions only
+- prefer links for navigation and buttons for in-place operations
+- do not create page-local action wrappers when this shared shape is sufficient
+
+### Card
+
+`tessara_ui::card` exists, but native route adoption is incomplete. Today it is best treated as the compatibility-layer card contract, not as a fully adopted native route primitive.
+
+```rust
+let card_html = tessara_ui::card(
+    "directory-card",
+    "Forms",
+    r#"<p>Browse forms, inspect lifecycle state, and review workflow attachments.</p>"#,
+);
+```
+
+Contract:
+
+- use for concise summary or navigation blocks
+- keep content short
+- do not invent a new card class family when `record-card`, `directory-card`, or `home-card` already covers the need
+
+### Field wrapper and checkbox field
+
+Use `field_wrapper` or `checkbox_field` when a shared form control block is sufficient.
+
+```rust
+let name_field = tessara_ui::field_wrapper(
+    "form-name",
+    "Name",
+    &tessara_ui::text_input("form-name", "text", "off", "Form name", ""),
+    Some("Use the top-level label shown in navigation."),
+    "wide-field",
+);
+
+let active_field =
+    tessara_ui::checkbox_field("assignment-active", "Assignment is active", true, None);
+```
+
+Contract:
+
+- label above control
+- helper text only when it adds meaning
+- `wide-field` is the current shared full-width modifier
+
+### Toolbar
+
+Use `toolbar` for compact filter/search/action rows.
+
+```rust
+let toolbar_html = tessara_ui::toolbar(
+    &tessara_ui::field_wrapper(
+        "delegate-context-select",
+        "Acting For",
+        r#"<select id="delegate-context-select"></select>"#,
+        None,
+        "",
+    ),
+    "",
+);
+```
+
+Contract:
+
+- primary zone holds the main filter/search control
+- secondary zone is optional
+- do not create new ad hoc filter-row wrappers when this layout works
+
+## Appendix B: Current Primitive Adoption Notes
+
+Current strong adoption:
+
+- native shared page shell on `Home`, `Forms`, `Workflows`, and `Responses`
+- permission-gated navigation driven from shared link specifications in `native_shell.rs`
+- shared route framing through `NativePage`, `PageHeader`, `MetadataStrip`, and `Panel`
+
+Current partial adoption:
+
+- cards, field grids, and action rows inside `Forms`, `Workflows`, and `Responses` still rely heavily on page-local `record-card`, `form-field`, `button-link`, and `page-title-row` markup
+- `Home` still uses route-local `home-card` and `directory-card` markup for destination tiles
+
+Current non-adoption:
+
+- `Organization` routes still render through `inner_html` and retained application-shell builders
+- `Administration`, `Reporting`, `Dashboards`, and `Migration` remain compatibility surfaces
+
+Review rule:
+
+- use an approved primitive if one already exists
+- if no approved primitive exists, reuse the existing shared class family instead of inventing a new one
+- if a bespoke structure is unavoidable, document the reason and the intended replacement target in the PR or issue
+
+## Appendix C: Implementation Notes And Known Gaps
+
+These notes are implementation-facing and remain subordinate to the main policy sections above.
+
+Known gaps that are not redefined here and must be mapped from existing assets or handled elsewhere:
+
+- color token values beyond the approved palette names
+- the iconography set itself, beyond the behavior rules in this document
+- a globally ratified number-formatting standard beyond the rules already stated above
+
+When auditing or implementing against this document:
+
+- use the main body for policy and design decisions
+- use Appendices A and B for current shared primitive and adoption contracts
+- treat transitional implementation details as temporary unless they are explicitly promoted into the main body

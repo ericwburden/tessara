@@ -16,7 +16,7 @@ The product must support distinct but connected surfaces:
 - scoped operators who work within assigned organization scope
 - respondents, parents, clients, or equivalent end users who complete and review response work
 
-The application should use one coherent shell with role-aware navigation rather than separate unrelated tools.
+The application should use one coherent shared shell and one shared user space, with navigation and controls revealed by permission rather than role-specific modes or separate unrelated tools.
 
 ## Identity And Access Requirements
 
