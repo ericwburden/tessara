@@ -4,13 +4,24 @@ use axum::{
     body::{Body, to_bytes},
     http::{Request, StatusCode, header},
 };
+use chrono::{Duration, Utc};
 use serde_json::{Value, json};
 use sqlx::{PgPool, postgres::PgPoolOptions};
 use tessara_api::{config::Config, db, router};
 use tower::ServiceExt;
+use tracing_subscriber::EnvFilter;
 
 static TEST_DATABASE_LOCK: LazyLock<tokio::sync::Mutex<()>> =
     LazyLock::new(|| tokio::sync::Mutex::new(()));
+static TEST_TRACING: LazyLock<()> = LazyLock::new(|| {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| EnvFilter::new("tessara_api=debug,sqlx=warn")),
+        )
+        .with_test_writer()
+        .try_init();
+});
 
 #[tokio::test]
 async fn demo_seed_backfills_workflows_and_form_links() {
@@ -127,16 +138,16 @@ async fn assignee_pending_work_can_start_workflow_response() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
     let Some(app) = test_app().await else { return };
     let admin_token = login_token(app.clone()).await;
-    let respondent_token = login_token_for(
-        app.clone(),
-        "respondent@tessara.local",
-        "tessara-dev-respondent",
-    )
-    .await;
 
     let _seed = request_json(
         app.clone(),
         authorized_request("POST", "/api/demo/seed", &admin_token, None),
+    )
+    .await;
+    let respondent_token = login_token_for(
+        app.clone(),
+        "respondent@tessara.local",
+        "tessara-dev-respondent",
     )
     .await;
 
@@ -206,16 +217,16 @@ async fn pending_work_excludes_assignments_with_existing_drafts() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
     let Some(app) = test_app().await else { return };
     let admin_token = login_token(app.clone()).await;
-    let respondent_token = login_token_for(
-        app.clone(),
-        "respondent@tessara.local",
-        "tessara-dev-respondent",
-    )
-    .await;
 
     let _seed = request_json(
         app.clone(),
         authorized_request("POST", "/api/demo/seed", &admin_token, None),
+    )
+    .await;
+    let respondent_token = login_token_for(
+        app.clone(),
+        "respondent@tessara.local",
+        "tessara-dev-respondent",
     )
     .await;
 
@@ -297,18 +308,33 @@ async fn pending_work_excludes_assignments_with_submitted_responses_and_start_re
         .expect("assignment list should be an array")
         .iter()
         .find(|item| {
-            item["has_submitted"] == true && item["account_email"] == "respondent@tessara.local"
+            item["has_submitted"] == true
+                && matches!(
+                    item["account_email"].as_str(),
+                    Some("respondent@tessara.local")
+                        | Some("delegate@tessara.local")
+                        | Some("delegator@tessara.local")
+                )
         })
         .cloned()
-        .expect("seed should create a respondent assignment with a submitted response");
+        .expect("seed should create a submitted workflow assignment");
     let assignment_id = submitted_assignment["id"]
         .as_str()
         .expect("submitted assignment should include id");
+    let account_email = submitted_assignment["account_email"]
+        .as_str()
+        .expect("submitted assignment should include account email");
+    let account_password = match account_email {
+        "respondent@tessara.local" => "tessara-dev-respondent",
+        "delegate@tessara.local" => "tessara-dev-delegate",
+        "delegator@tessara.local" => "tessara-dev-delegator",
+        other => panic!("unexpected submitted assignment account: {other}"),
+    };
 
     let respondent_token = login_token_for(
         app.clone(),
-        "respondent@tessara.local",
-        "tessara-dev-respondent",
+        account_email,
+        account_password,
     )
     .await;
 
@@ -343,7 +369,7 @@ async fn pending_work_excludes_assignments_with_submitted_responses_and_start_re
     assert_eq!(rejected.0, StatusCode::BAD_REQUEST);
     assert_eq!(
         rejected.1["error"],
-        "bad request: submitted workflow assignments cannot start new response work"
+        "submitted workflow assignments cannot start new response work"
     );
 }
 
@@ -352,48 +378,42 @@ async fn starting_distinct_assignments_returns_distinct_submission_ids() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
     let Some(app) = test_app().await else { return };
     let admin_token = login_token(app.clone()).await;
-    let respondent_token = login_token_for(
-        app.clone(),
-        "respondent@tessara.local",
-        "tessara-dev-respondent",
-    )
-    .await;
 
     let _seed = request_json(
         app.clone(),
         authorized_request("POST", "/api/demo/seed", &admin_token, None),
     )
     .await;
-
-    let pending = request_json(
+    let assignments = request_json(
         app.clone(),
-        authorized_request(
-            "GET",
-            "/api/workflow-assignments/pending",
-            &respondent_token,
-            None,
-        ),
+        authorized_request("GET", "/api/workflow-assignments", &admin_token, None),
     )
     .await;
-    let pending_items = pending.as_array().expect("pending work should be an array");
+    let pending_items = assignments
+        .as_array()
+        .expect("assignment list should be an array")
+        .iter()
+        .filter(|item| item["has_draft"] == false && item["has_submitted"] == false)
+        .cloned()
+        .collect::<Vec<_>>();
     assert!(
         pending_items.len() >= 2,
-        "seed should expose at least two pending assignments"
+        "seed should expose at least two startable assignments"
     );
 
-    let first_assignment_id = pending_items[0]["workflow_assignment_id"]
+    let first_assignment_id = pending_items[0]["id"]
         .as_str()
-        .expect("pending work should include assignment id");
-    let second_assignment_id = pending_items[1]["workflow_assignment_id"]
+        .expect("assignment list should include assignment id");
+    let second_assignment_id = pending_items[1]["id"]
         .as_str()
-        .expect("pending work should include assignment id");
+        .expect("assignment list should include assignment id");
 
     let first_started = request_json(
         app.clone(),
         authorized_request(
             "POST",
             &format!("/api/workflow-assignments/{first_assignment_id}/start"),
-            &respondent_token,
+            &admin_token,
             Some(json!({})),
         ),
     )
@@ -403,7 +423,7 @@ async fn starting_distinct_assignments_returns_distinct_submission_ids() {
         authorized_request(
             "POST",
             &format!("/api/workflow-assignments/{second_assignment_id}/start"),
-            &respondent_token,
+            &admin_token,
             Some(json!({})),
         ),
     )
@@ -693,11 +713,170 @@ async fn logout_revokes_the_current_session_token() {
     assert_eq!(me.0, StatusCode::UNAUTHORIZED);
 }
 
+#[tokio::test]
+async fn login_sets_cookie_session_for_browser_requests() {
+    let _guard = TEST_DATABASE_LOCK.lock().await;
+    let Some(app) = test_app().await else { return };
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/login")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    json!({
+                        "email": "admin@tessara.local",
+                        "password": "tessara-dev-admin"
+                    })
+                    .to_string(),
+                ))
+                .expect("valid login request"),
+        )
+        .await
+        .expect("router should produce response");
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let set_cookie = response
+        .headers()
+        .get(header::SET_COOKIE)
+        .and_then(|value| value.to_str().ok())
+        .expect("login should set a browser session cookie")
+        .to_string();
+    assert!(set_cookie.contains("tessara_session="));
+    assert!(set_cookie.contains("HttpOnly"));
+
+    let cookie = set_cookie
+        .split(';')
+        .next()
+        .expect("cookie pair should be present")
+        .to_string();
+
+    let me = request_json(
+        app,
+        Request::builder()
+            .method("GET")
+            .uri("/api/me")
+            .header(header::COOKIE, cookie)
+            .body(Body::empty())
+            .expect("valid cookie-authenticated request"),
+    )
+    .await;
+    assert_eq!(me["email"], "admin@tessara.local");
+}
+
+#[tokio::test]
+async fn invalid_login_uses_stable_error_payload() {
+    let _guard = TEST_DATABASE_LOCK.lock().await;
+    let Some(app) = test_app().await else { return };
+
+    let login = request_status_and_json(
+        app,
+        Request::builder()
+            .method("POST")
+            .uri("/api/auth/login")
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(
+                json!({
+                    "email": "admin@tessara.local",
+                    "password": "wrong-password"
+                })
+                .to_string(),
+            ))
+            .expect("valid invalid-login request"),
+    )
+    .await;
+
+    assert_eq!(login.0, StatusCode::UNAUTHORIZED);
+    assert_eq!(login.1["code"], "auth_invalid_credentials");
+    assert_eq!(login.1["message"], "Email or password is incorrect.");
+    assert_eq!(login.1["error"], "Email or password is incorrect.");
+}
+
+#[tokio::test]
+async fn revoked_and_expired_sessions_return_stable_auth_codes() {
+    let _guard = TEST_DATABASE_LOCK.lock().await;
+    let Some(state) = test_state().await else { return };
+    let app = router(state.clone());
+
+    let revoked_token = login_token(app.clone()).await;
+    sqlx::query("UPDATE auth_sessions SET revoked_at = now() WHERE token = $1")
+        .bind(revoked_token.parse::<uuid::Uuid>().expect("token should be uuid"))
+        .execute(&state.pool)
+        .await
+        .expect("session should be revocable");
+
+    let revoked = request_status_and_json(
+        app.clone(),
+        authorized_request("GET", "/api/me", &revoked_token, None),
+    )
+    .await;
+    assert_eq!(revoked.0, StatusCode::UNAUTHORIZED);
+    assert_eq!(revoked.1["code"], "auth_session_revoked");
+    assert_eq!(
+        revoked.1["message"],
+        "Your session is no longer active. Sign in again."
+    );
+
+    let expired_token = login_token(app.clone()).await;
+    sqlx::query("UPDATE auth_sessions SET expires_at = $2, revoked_at = NULL WHERE token = $1")
+        .bind(expired_token.parse::<uuid::Uuid>().expect("token should be uuid"))
+        .bind(Utc::now() - Duration::minutes(5))
+        .execute(&state.pool)
+        .await
+        .expect("session should be expirable");
+
+    let expired = request_status_and_json(
+        app,
+        authorized_request("GET", "/api/me", &expired_token, None),
+    )
+    .await;
+    assert_eq!(expired.0, StatusCode::UNAUTHORIZED);
+    assert_eq!(expired.1["code"], "auth_session_expired");
+    assert_eq!(
+        expired.1["message"],
+        "Your session has expired. Sign in again."
+    );
+}
+
+#[tokio::test]
+async fn authenticated_requests_update_last_seen_timestamp() {
+    let _guard = TEST_DATABASE_LOCK.lock().await;
+    let Some(state) = test_state().await else { return };
+    let app = router(state.clone());
+    let token = login_token(app.clone()).await;
+    let token_uuid = token.parse::<uuid::Uuid>().expect("token should be uuid");
+
+    let initial_last_seen: chrono::DateTime<Utc> =
+        sqlx::query_scalar("SELECT last_seen_at FROM auth_sessions WHERE token = $1")
+            .bind(token_uuid)
+            .fetch_one(&state.pool)
+            .await
+            .expect("session should exist");
+
+    tokio::time::sleep(std::time::Duration::from_millis(15)).await;
+
+    let me = request_json(app, authorized_request("GET", "/api/me", &token, None)).await;
+    assert_eq!(me["email"], "admin@tessara.local");
+
+    let updated_last_seen: chrono::DateTime<Utc> =
+        sqlx::query_scalar("SELECT last_seen_at FROM auth_sessions WHERE token = $1")
+            .bind(token_uuid)
+            .fetch_one(&state.pool)
+            .await
+            .expect("session should still exist");
+
+    assert!(updated_last_seen > initial_last_seen);
+}
+
 async fn test_app() -> Option<axum::Router> {
+    LazyLock::force(&TEST_TRACING);
     Some(router(test_state().await?))
 }
 
 async fn test_state() -> Option<db::AppState> {
+    LazyLock::force(&TEST_TRACING);
     let Some(database_url) = std::env::var("TEST_DATABASE_URL").ok() else {
         eprintln!("skipping database integration test; TEST_DATABASE_URL is not set");
         return None;
@@ -709,6 +888,9 @@ async fn test_state() -> Option<db::AppState> {
         bind_addr: "127.0.0.1:0".to_string(),
         dev_admin_email: "admin@tessara.local".to_string(),
         dev_admin_password: "tessara-dev-admin".to_string(),
+        auth_cookie_name: "tessara_session".to_string(),
+        auth_cookie_secure: false,
+        auth_session_ttl_hours: 12,
     };
     let pool = db::connect_and_prepare(&config)
         .await
