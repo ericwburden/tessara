@@ -166,24 +166,27 @@ mod hydrate {
         )
     }
 
-    fn render_pending_cards(items: &[PendingWork], delegate_account_id: Option<&str>) -> String {
+    fn render_pending_cards(items: &[PendingWork]) -> String {
         if items.is_empty() {
             return r#"<p class="muted">No assigned responses are ready to start.</p>"#.into();
         }
-        let delegate_label = delegate_account_id
-            .map(|value| format!(r#" data-delegate-account-id="{}""#, escape_html(value)))
-            .unwrap_or_default();
         items.iter()
             .map(|item| {
+                let form_version = item.form_version_label.as_deref().unwrap_or("Published version");
+                let workflow_version = item
+                    .workflow_version_label
+                    .as_deref()
+                    .unwrap_or("Current runtime");
                 format!(
-                    r#"<article class="record-card"><h4>{}</h4><p>{}</p><p class="muted">Form: {} {}</p><p class="muted">Acting for: {}</p><div class="actions"><button class="button-link" type="button" data-workflow-assignment-id="{}"{}>Start</button></div></article>"#,
+                    r#"<article class="record-card response-queue-card"><div class="page-title-row compact-title-row"><div><p class="eyebrow">Assigned Start</p><h4>{}</h4><p class="muted">{}</p></div><p class="response-queue-card__status">{}</p></div><div class="response-queue-card__meta"><p><strong>Form:</strong> {} {}</p><p><strong>Step:</strong> {}</p><p><strong>Assigned To:</strong> {}</p></div><div class="actions"><button class="button-link" type="button" data-workflow-assignment-id="{}">Start</button></div></article>"#,
                     escape_html(&item.workflow_name),
                     escape_html(&item.node_name),
                     escape_html(&item.form_name),
-                    escape_html(item.form_version_label.as_deref().unwrap_or("")),
+                    escape_html(form_version),
+                    escape_html(&item.workflow_step_title),
+                    escape_html(workflow_version),
                     escape_html(&item.account_display_name),
                     escape_html(&item.workflow_assignment_id),
-                    delegate_label,
                 )
             })
             .collect::<Vec<_>>()
@@ -202,8 +205,9 @@ mod hydrate {
                     String::new()
                 };
                 format!(
-                    r#"<article class="record-card"><h4>{} {}</h4><p>{}</p><p class="muted">{}</p><div class="actions"><a class="button-link" href="/app/responses/{}">View</a>{}</div></article>"#,
+                    r#"<article class="record-card response-queue-card"><div class="page-title-row compact-title-row"><div><p class="eyebrow">Response</p><h4>{}</h4><p class="muted">{}</p></div><p class="response-queue-card__status">{}</p></div><div class="response-queue-card__meta"><p><strong>Version:</strong> {}</p><p><strong>Node:</strong> {}</p></div><div class="actions"><a class="button-link" href="/app/responses/{}">View</a>{}</div></article>"#,
                     escape_html(&item.form_name),
+                    escape_html(&item.status),
                     escape_html(&item.version_label),
                     escape_html(&item.node_name),
                     escape_html(&item.status),
@@ -423,7 +427,7 @@ mod hydrate {
             return String::new();
         }
         format!(
-            r#"<section class="app-screen page-panel compact-panel"><h3>Delegated Response Context</h3><p class="muted">Choose which delegated account's assigned responses you are currently viewing.</p><div class="form-field"><label for="delegate-context-select">Acting For</label><select id="delegate-context-select">{}</select></div></section>"#,
+            r#"<section class="ui-toolbar response-context-toolbar"><div class="ui-toolbar__primary"><div class="ui-field"><label class="ui-field__label" for="delegate-context-select">Viewing Work For</label><div class="ui-field__control"><select class="input" id="delegate-context-select">{}</select></div></div></div><div class="ui-toolbar__secondary"><p class="muted">Switch the response queue without repeating delegation context on every card.</p></div></section>"#,
             options
                 .iter()
                 .map(|(id, label)| {
@@ -446,7 +450,7 @@ mod hydrate {
     fn render_start_actions(account: &AccountContext) -> String {
         match account.ui_access_profile {
             UiAccessProfile::Admin | UiAccessProfile::Operator => {
-                r#"<a class="button-link button is-light" href="/app/responses/new">Start Response</a>"#
+                r#"<a class="button-link button is-light" href="/app/responses/new">Manual Start</a>"#
                     .into()
             }
             UiAccessProfile::ResponseUser => String::new(),
@@ -506,10 +510,7 @@ mod hydrate {
         match (pending, drafts, submitted) {
             (Ok(pending), Ok(drafts), Ok(submitted)) => {
                 set_text("response-pending-feedback", "");
-                set_html(
-                    "response-pending-list",
-                    &render_pending_cards(&pending, delegate_account_id.as_deref()),
-                );
+                set_html("response-pending-list", &render_pending_cards(&pending));
                 set_html(
                     "response-draft-list",
                     &render_submission_cards(&drafts, true),
@@ -880,7 +881,7 @@ pub fn ResponsesListPage() -> impl IntoView {
             <PageHeader
                 eyebrow="Responses"
                 title="Responses"
-                description="This list screen separates pending work, drafts, and submitted responses."
+                description="Review assigned starts, resume draft work, and inspect submitted responses from one queue-oriented route."
             />
             <MetadataStrip items=vec![
                 ("Mode", "Directory".into()),
@@ -889,8 +890,8 @@ pub fn ResponsesListPage() -> impl IntoView {
             ]/>
             <div id="response-context-switcher"></div>
             <Panel
-                title="Pending Work"
-                description="Start New Response items assigned through the workflow runtime appear here."
+                title="Assigned Starts"
+                description="Assignment-backed starts appear here, with manual start available only where the current access profile allows it."
             >
                 <div id="response-start-actions" class="actions"></div>
                 <p id="response-pending-feedback" class="muted"></p>
@@ -899,8 +900,8 @@ pub fn ResponsesListPage() -> impl IntoView {
                 </div>
             </Panel>
             <Panel
-                title="Draft Responses"
-                description="Draft responses link to detail and edit screens."
+                title="Draft Queue"
+                description="Draft responses stay resumable from this route and keep the edit surface separate from queue browsing."
             >
                 <div id="response-draft-list" class="record-list">
                     <p class="muted">"Loading draft responses..."</p>

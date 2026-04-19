@@ -1843,6 +1843,52 @@ body.tessara-app .ui-toolbar .ui-field {
   margin: 0;
 }
 
+body.tessara-app .workflow-directory-card,
+body.tessara-app .workflow-assignment-card,
+body.tessara-app .response-queue-card {
+  display: grid;
+  gap: 0.9rem;
+}
+
+body.tessara-app .workflow-directory-card__meta,
+body.tessara-app .response-queue-card__meta {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--tessara-detail-rule);
+  border-radius: 16px;
+  background: var(--tessara-inline-surface);
+}
+
+body.tessara-app .workflow-directory-card__meta p,
+body.tessara-app .response-queue-card__meta p,
+body.tessara-app .workflow-directory-card__status,
+body.tessara-app .response-queue-card__status {
+  margin: 0;
+}
+
+body.tessara-app .workflow-directory-card__status,
+body.tessara-app .response-queue-card__status {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tessara-link) 10%, var(--tessara-surface));
+  color: var(--tessara-link);
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+body.tessara-app .workflow-assignment-toolbar__grid {
+  width: 100%;
+}
+
+body.tessara-app .response-context-toolbar {
+  margin-bottom: 1rem;
+}
+
 body.tessara-app .form-builder-shell,
 body.tessara-app .form-builder-rail,
 body.tessara-app .form-builder-main,
@@ -2139,6 +2185,11 @@ body.tessara-app .auth-shell__status {
 
   body.tessara-app .auth-shell__brand {
     grid-template-columns: 1fr;
+  }
+
+  body.tessara-app .workflow-directory-card__status,
+  body.tessara-app .response-queue-card__status {
+    width: fit-content;
   }
 
   body.tessara-app .form-builder-shell {

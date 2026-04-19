@@ -342,6 +342,8 @@ test("sidebar footer surfaces the active delegated account when delegation is in
   await expect(page.locator("#shell-delegation-context [data-active-delegate]")).toContainText(
     delegate.email,
   );
+  await expect(page.locator("body")).not.toContainText("Delegated Response Context");
+  await expect(page.locator("#response-pending-list")).not.toContainText("Acting for:");
 
   await assertNoConsoleErrors();
 });
@@ -680,13 +682,14 @@ test("workflows route stays readable and console-clean on the native shell", asy
 
   await page.goto("/app/workflows");
 
-  await expect(page.getByRole("heading", { name: "Workflows" }).first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Workflow Directory" }).first()).toBeVisible();
   await expect(page.locator("#workflow-list")).toHaveCount(1);
   await expect(page.locator("body")).toContainText("Workflow Directory");
+  await expect(page.getByRole("link", { name: "Open Assignment Management" })).toBeVisible();
   await expectNoLegacyBridge(page);
 
   await page.reload();
-  await expect(page.getByRole("heading", { name: "Workflows" }).first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Workflow Directory" }).first()).toBeVisible();
   await expectNoLegacyBridge(page);
 
   await assertNoConsoleErrors();
@@ -701,9 +704,10 @@ test("responses route stays readable and console-clean on the native shell", asy
 
   await expect(page.getByRole("heading", { name: "Responses" }).first()).toBeVisible();
   await expect(page.locator("#response-pending-list")).toHaveCount(1);
-  await expect(page.locator("body")).toContainText("Draft Responses");
+  await expect(page.locator("body")).toContainText("Assigned Starts");
+  await expect(page.locator("body")).toContainText("Draft Queue");
   await expect(page.locator("body")).toContainText("Submitted Responses");
-  await expect(page.getByRole("link", { name: "Start Response" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Manual Start" })).toHaveCount(0);
   await expectNoLegacyBridge(page);
 
   await page.reload();
@@ -942,7 +946,7 @@ test("workflow assignment deep links preserve workflow context in the assignment
   await waitForAuthenticatedShell(page, "admin@tessara.local");
 
   await page.goto("/app/workflows", { waitUntil: "domcontentloaded" });
-  await expect(page.getByRole("heading", { name: "Workflows" }).first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Workflow Directory" }).first()).toBeVisible();
   await expect(page.locator("#workflow-list")).not.toContainText("Loading workflow records...", {
     timeout: 30000,
   });
@@ -962,6 +966,7 @@ test("workflow assignment deep links preserve workflow context in the assignment
   await assignmentLink.click();
 
   await expect(page).toHaveURL(new RegExp(`/app/workflows/assignments\\?workflowId=${workflowId}`));
+  await expect(page.getByRole("heading", { name: "Assignment Management" }).first()).toBeVisible();
   await expect(page.locator("#workflow-assignment-workflow")).toHaveValue(workflowId!);
   await expect(page.locator("#workflow-assignment-node")).not.toHaveValue("");
 
@@ -980,7 +985,7 @@ test("left nav updates visible content across touched Sprint 2A routes", async (
 
   await productNav.getByRole("link", { name: "Workflows" }).click();
   await expect(page).toHaveURL(/\/app\/workflows$/);
-  await expect(page.getByRole("heading", { name: "Workflows" }).first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Workflow Directory" }).first()).toBeVisible();
 
   await productNav.getByRole("link", { name: "Responses" }).click();
   await expect(page).toHaveURL(/\/app\/responses$/);

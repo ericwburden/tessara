@@ -149,13 +149,20 @@ mod hydrate {
         }
         items.iter()
             .map(|item| {
+                let current_version = item.current_version_label.as_deref().unwrap_or("Not published");
+                let runtime_status = item.current_status.as_deref().unwrap_or("Draft only");
+                let description = if item.description.trim().is_empty() {
+                    "This workflow is ready to link form versions into assignment-backed response work."
+                } else {
+                    item.description.as_str()
+                };
                 format!(
-                    r#"<article class="record-card"><h4>{}</h4><p>{}</p><p class="muted">Linked form: {}</p><p class="muted">Current version: {}</p><p class="muted">Status: {}</p><p class="muted">Assignments: {}</p><div class="actions"><a class="button-link" href="/app/workflows/{}">View</a><a class="button-link" href="/app/workflows/{}/edit">Edit</a><a class="button-link" href="/app/workflows/assignments?workflowId={}">Assignments</a></div></article>"#,
+                    r#"<article class="record-card workflow-directory-card"><div class="page-title-row compact-title-row"><div><p class="eyebrow">Workflow</p><h4>{}</h4><p class="muted">{}</p></div><p class="workflow-directory-card__status">{}</p></div><div class="workflow-directory-card__meta"><p><strong>Linked Form:</strong> {}</p><p><strong>Current Version:</strong> {}</p><p><strong>Assignments:</strong> {}</p></div><div class="actions"><a class="button-link" href="/app/workflows/{}">Open</a><a class="button-link" href="/app/workflows/{}/edit">Edit</a><a class="button-link" href="/app/workflows/assignments?workflowId={}">Manage Assignments</a></div></article>"#,
                     escape_html(&item.name),
-                    escape_html(&item.description),
+                    escape_html(description),
+                    escape_html(runtime_status),
                     escape_html(&item.form_name),
-                    escape_html(item.current_version_label.as_deref().unwrap_or("None")),
-                    escape_html(item.current_status.as_deref().unwrap_or("draft")),
+                    escape_html(current_version),
                     item.assignment_count,
                     item.id,
                     item.id,
@@ -226,12 +233,14 @@ mod hydrate {
                 };
                 let toggle_label = if item.is_active { "Deactivate" } else { "Activate" };
                 format!(
-                    r#"<article class="record-card"><h4>{}</h4><p>{}</p><p class="muted">{}</p><p class="muted">State: {} | Work: {}</p><div class="actions"><button class="button is-light" type="button" data-toggle-workflow-assignment="{}">{}</button></div></article>"#,
+                    r#"<article class="record-card workflow-assignment-card"><div class="page-title-row compact-title-row"><div><p class="eyebrow">Assignment</p><h4>{}</h4><p class="muted">{}</p></div><p class="workflow-directory-card__status">{}</p></div><div class="workflow-directory-card__meta"><p><strong>Assignee:</strong> {} ({})</p><p><strong>Node:</strong> {}</p><p><strong>Work State:</strong> {}</p></div><div class="actions"><button class="button is-light" type="button" data-toggle-workflow-assignment="{}">{}</button></div></article>"#,
                     escape_html(&item.workflow_name),
+                    escape_html("Assignment-backed response entry point"),
+                    escape_html(state),
+                    escape_html(&item.account_display_name),
+                    escape_html(&item.account_email),
                     escape_html(&item.node_name),
-                    escape_html(&format!("{} ({})", item.account_display_name, item.account_email)),
-                    state,
-                    work_state,
+                    escape_html(work_state),
                     item.id,
                     toggle_label
                 )
@@ -510,7 +519,7 @@ mod hydrate {
                     set_html(
                         "workflow-assignment-toolbar",
                         &format!(
-                            r#"<p id="workflow-assignment-status" class="muted">Assignment changes save here.</p><div class="form-grid"><div class="form-field"><label for="workflow-assignment-workflow">Workflow</label><select class="input" id="workflow-assignment-workflow">{}</select></div><div class="form-field"><label for="workflow-assignment-node">Node</label><select class="input" id="workflow-assignment-node">{}</select></div><div class="form-field"><label for="workflow-assignment-account">Assignee</label><select class="input" id="workflow-assignment-account">{}</select></div></div><div class="actions"><button class="button is-primary" type="button" id="workflow-assignment-create">Create Assignment</button></div>"#,
+                            r#"<p id="workflow-assignment-status" class="muted">Assignment changes save here.</p><div class="ui-toolbar workflow-assignment-toolbar"><div class="ui-toolbar__primary"><div class="form-grid workflow-assignment-toolbar__grid"><div class="form-field"><label for="workflow-assignment-workflow">Workflow</label><select class="input" id="workflow-assignment-workflow">{}</select></div><div class="form-field"><label for="workflow-assignment-node">Node</label><select class="input" id="workflow-assignment-node">{}</select></div><div class="form-field"><label for="workflow-assignment-account">Assignee</label><select class="input" id="workflow-assignment-account">{}</select></div></div></div><div class="ui-toolbar__secondary"><button class="button is-primary" type="button" id="workflow-assignment-create">Create Assignment</button></div></div>"#,
                             options_html_selected(
                                 &workflows,
                                 |item| &item.id,
@@ -665,12 +674,12 @@ pub fn WorkflowsPage() -> impl IntoView {
         >
             <PageHeader
                 eyebrow="Workflows"
-                title="Workflows"
-                description="Create, publish, and inspect form-backed workflow shells from the native runtime surface."
+                title="Workflow Directory"
+                description="Browse workflow records, inspect linked form runtime status, and branch into assignment management from one directory-first route."
             />
             <MetadataStrip items=vec![
                 ("Mode", "Directory".into()),
-                ("Surface", "Workflow runtime shell".into()),
+                ("Surface", "Workflow directory".into()),
                 ("State", "Loading workflow records".into()),
             ]/>
             <Panel
@@ -680,6 +689,9 @@ pub fn WorkflowsPage() -> impl IntoView {
                 <div class="actions">
                     <a class="button-link button is-primary" href="/app/workflows/new">
                         "Create Workflow"
+                    </a>
+                    <a class="button-link button is-light" href="/app/workflows/assignments">
+                        "Open Assignment Management"
                     </a>
                 </div>
                 <div id="workflow-list" class="record-list">
@@ -955,17 +967,17 @@ pub fn WorkflowAssignmentsPage() -> impl IntoView {
         >
             <PageHeader
                 eyebrow="Workflows"
-                title="Assignment Console"
-                description="Use one shared surface to assign workflow work to any active user."
+                title="Assignment Management"
+                description="Create and update assignment-backed workflow work from a dedicated management route."
             />
             <MetadataStrip items=vec![
-                ("Mode", "Console".into()),
-                ("Surface", "Assignment management".into()),
+                ("Mode", "Management".into()),
+                ("Surface", "Workflow assignments".into()),
                 ("State", "Loading workflow assignments".into()),
             ]/>
             <Panel
-                title="Assignment Toolbar"
-                description="Create and update workflow assignments in one shared console, with optional workflow or form deep links."
+                title="Assignment Filters"
+                description="Choose the workflow, target node, and assignee before creating new work assignments."
             >
                 <div class="actions">
                     <a class="button-link button is-light" href="/app/workflows">"Back to Workflows"</a>
@@ -973,8 +985,8 @@ pub fn WorkflowAssignmentsPage() -> impl IntoView {
                 <div id="workflow-assignment-toolbar"></div>
             </Panel>
             <Panel
-                title="Workflow Assignments"
-                description="Assignments show the current workflow, assignee, node context, and whether draft or submitted work already exists."
+                title="Assignment Directory"
+                description="Assignments stay on this route so activation state and work-progress signals remain easy to scan."
             >
                 <div id="workflow-assignment-list" class="record-list">
                     <p class="muted">"Loading workflow assignments..."</p>
