@@ -561,11 +561,13 @@ mod tests {
         let html = application_shell_html();
 
         assert_protected_ssr_shell(&html);
-        assert!(html.contains("Product Areas"));
         assert!(html.contains("top-app-bar"));
         assert!(html.contains("app-nav-toggle"));
         assert!(html.contains("global-search"));
-        assert!(html.contains("Product navigation"));
+        assert!(html.contains("Primary navigation"));
+        assert!(!html.contains("Admin navigation"));
+        assert!(html.contains("Notifications"));
+        assert!(html.contains("Help"));
         assert!(html.contains("/app"));
         assert!(!html.contains("Create Shortcuts"));
         assert!(!html.contains("breadcrumb-item"));

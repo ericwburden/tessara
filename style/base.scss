@@ -983,6 +983,30 @@ body.tessara-app .top-app-bar__search {
   min-width: min(22rem, 38vw);
 }
 
+body.tessara-app .app-utility-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  min-width: 2.5rem;
+  height: 2.5rem;
+  min-height: 2.5rem;
+  border: 1px solid var(--tessara-border);
+  border-radius: 999px;
+  background: var(--tessara-soft-surface) !important;
+  color: var(--tessara-text) !important;
+}
+
+body.tessara-app .app-utility-button:disabled {
+  opacity: 1;
+}
+
+body.tessara-app .app-utility-button__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 body.tessara-app .app-search-input {
   min-width: 100%;
   min-height: 2.5rem;
@@ -1012,6 +1036,7 @@ body.tessara-app .app-sidebar {
   top: 0;
   width: 100%;
   max-width: 256px;
+  display: grid;
   gap: 1rem;
   padding: 1rem;
   box-shadow: none;
@@ -1021,7 +1046,20 @@ body.tessara-app .app-sidebar__header {
   display: none;
 }
 
+body.tessara-app .app-sidebar__title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--tessara-text-muted);
+}
+
 body.tessara-app .app-sidebar__content {
+  display: grid;
+  gap: 1rem;
+}
+
+body.tessara-app .app-sidebar__footer {
   display: grid;
   gap: 1rem;
 }
@@ -1032,7 +1070,6 @@ body.tessara-app .nav-panel {
 }
 
 body.tessara-app .nav-panel-analytics,
-body.tessara-app .nav-panel-transitional,
 body.tessara-app .nav-panel-secondary {
   padding-top: 0.75rem;
   border-top: 1px solid var(--tessara-border);
@@ -1077,6 +1114,15 @@ body.tessara-app .app-nav__label {
 body.tessara-app .selection-panel {
   padding-top: 0.75rem;
   border-top: 1px solid var(--tessara-border);
+}
+
+body.tessara-app .app-sidebar__utility-block {
+  gap: 0.85rem;
+}
+
+body.tessara-app .app-sidebar__utility-header {
+  display: grid;
+  gap: 0.35rem;
 }
 
 body.tessara-app .app-main {
@@ -1237,7 +1283,8 @@ body.tessara-app .app-shell--migration .app-sidebar {
 
   html[data-shell-ready='true'] body.tessara-app[data-shell-viewport='tablet'][data-sidebar-state='collapsed'] .menu-label,
   html[data-shell-ready='true'] body.tessara-app[data-shell-viewport='tablet'][data-sidebar-state='collapsed'] .app-nav__label,
-  html[data-shell-ready='true'] body.tessara-app[data-shell-viewport='tablet'][data-sidebar-state='collapsed'] .app-sidebar__supplemental {
+  html[data-shell-ready='true'] body.tessara-app[data-shell-viewport='tablet'][data-sidebar-state='collapsed'] .app-sidebar__supplemental,
+  html[data-shell-ready='true'] body.tessara-app[data-shell-viewport='tablet'][data-sidebar-state='collapsed'] .app-sidebar__footer {
     display: none;
   }
 

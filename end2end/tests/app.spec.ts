@@ -179,9 +179,12 @@ test("home route stays on the native SSR shell", async ({ page }) => {
 
   await expect(page.getByRole("heading", { name: "Application Overview" })).toBeVisible();
   await expect(page.locator("#global-search")).toBeVisible();
-  await expect(page.getByText("Transitional Reporting")).toBeVisible();
-  await expect(page.getByRole("navigation", { name: "Data and component navigation" }).getByRole("link", { name: "Datasets" })).toBeVisible();
-  await expect(page.getByRole("navigation", { name: "Data and component navigation" }).getByRole("link", { name: "Components" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Primary navigation" }).getByRole("link", { name: "Components" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Primary navigation" }).getByRole("link", { name: "Dashboards" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Admin navigation" }).getByRole("link", { name: "Datasets" })).toBeVisible();
+  await expect(page.locator("#app-sidebar").getByRole("link", { name: "Reports" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Notifications" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Help" })).toBeVisible();
   await expectNoLegacyBridge(page);
   await expect(page.locator('link[href="/pkg/tessara-web.css"]')).toHaveCount(1);
   await expect(page.locator(".breadcrumb-item")).toHaveCount(0);
@@ -552,7 +555,7 @@ test("response users only see sidebar areas they can access", async ({ page }) =
 
   await expect(page).toHaveURL(/\/app$/);
 
-  const productNav = page.getByRole("navigation", { name: "Product navigation" });
+  const productNav = page.getByRole("navigation", { name: "Primary navigation" });
   await expect(productNav.getByRole("link", { name: "Home" })).toBeVisible();
   await expect(productNav.getByRole("link", { name: "Responses" })).toBeVisible();
   await expect(productNav.getByRole("link", { name: "Organization" })).toHaveCount(0);
@@ -574,12 +577,18 @@ test("admins see the full authorized native navigation model", async ({ page }) 
 
   await expect(page).toHaveURL(/\/app$/);
 
-  const productNav = page.getByRole("navigation", { name: "Product navigation" });
+  const productNav = page.getByRole("navigation", { name: "Primary navigation" });
   await expect(productNav.getByRole("link", { name: "Home" })).toBeVisible();
   await expect(productNav.getByRole("link", { name: "Organization" })).toBeVisible();
   await expect(productNav.getByRole("link", { name: "Forms" })).toBeVisible();
   await expect(productNav.getByRole("link", { name: "Workflows" })).toBeVisible();
   await expect(productNav.getByRole("link", { name: "Responses" })).toBeVisible();
+  await expect(productNav.getByRole("link", { name: "Components" })).toBeVisible();
+  await expect(productNav.getByRole("link", { name: "Dashboards" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Admin navigation" }).getByRole("link", { name: "Datasets" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Admin navigation" }).getByRole("link", { name: "Administration" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Admin navigation" }).getByRole("link", { name: "Migration" })).toBeVisible();
+  await expect(page.locator("#app-sidebar").getByRole("link", { name: "Reports" })).toHaveCount(0);
 
   await expect(page.getByRole("link", { name: "Go to Forms" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Go to Workflows" })).toBeVisible();
@@ -764,7 +773,7 @@ test("left nav updates visible content across touched Sprint 2A routes", async (
   await page.goto("/app/forms/new");
   await expect(page.getByRole("heading", { name: "Create Form" }).first()).toBeVisible();
 
-  const productNav = page.getByRole("navigation", { name: "Product navigation" });
+  const productNav = page.getByRole("navigation", { name: "Primary navigation" });
 
   await productNav.getByRole("link", { name: "Workflows" }).click();
   await expect(page).toHaveURL(/\/app\/workflows$/);

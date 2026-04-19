@@ -7,9 +7,8 @@ use crate::app::transitional::{TransitionalPage, render_transitional_route};
 #[cfg(feature = "hydrate")]
 use crate::features::native_runtime::{post_json, redirect};
 use crate::features::native_shell::{
-    ANALYTICS_LINKS, AccountContext, BreadcrumbItem, INTERNAL_LINKS, MetadataStrip, NativePage,
-    NavLinkSpec, PRODUCT_LINKS, PageHeader, Panel, TRANSITIONAL_LINKS, use_account_session,
-    visible_links,
+    ADMIN_LINKS, AccountContext, BreadcrumbItem, MetadataStrip, NativePage, NavLinkSpec,
+    PRODUCT_LINKS, PageHeader, Panel, TRANSITIONAL_LINKS, use_account_session, visible_links,
 };
 
 fn directory_card(spec: &NavLinkSpec) -> AnyView {
@@ -171,13 +170,10 @@ pub fn HomePage() -> impl IntoView {
                 {move || {
                     let account = session.account.get();
                     let loaded = session.loaded.get();
-                    let mut visible = visible_links(loaded, account.as_ref(), ANALYTICS_LINKS);
-                    visible.extend(
-                        visible_links(loaded, account.as_ref(), PRODUCT_LINKS)
-                            .into_iter()
-                            .filter(|link| link.key == "dashboards"),
-                    );
-                    visible.extend(visible_links(loaded, account.as_ref(), INTERNAL_LINKS));
+                    let mut visible = visible_links(loaded, account.as_ref(), ADMIN_LINKS);
+                    visible.extend(visible_links(loaded, account.as_ref(), PRODUCT_LINKS)
+                        .into_iter()
+                        .filter(|link| link.key == "dashboards" || link.key == "components"));
                     home_visible_cards(loaded, visible)
                 }}
             </Panel>

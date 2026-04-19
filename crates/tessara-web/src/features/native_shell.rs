@@ -179,6 +179,16 @@ pub(crate) const PRODUCT_LINKS: &[NavLinkSpec] = &[
         home_action_label: "Go to Responses",
     },
     NavLinkSpec {
+        key: "components",
+        href: "/app/components",
+        label: "Components",
+        icon: "fa-cubes",
+        native: false,
+        required_capability: Some("reports:read"),
+        home_description: "Inspect dashboard component definitions and their linked charts.",
+        home_action_label: "Open Components",
+    },
+    NavLinkSpec {
         key: "dashboards",
         href: "/app/dashboards",
         label: "Dashboards",
@@ -190,7 +200,7 @@ pub(crate) const PRODUCT_LINKS: &[NavLinkSpec] = &[
     },
 ];
 
-pub(crate) const ANALYTICS_LINKS: &[NavLinkSpec] = &[
+pub(crate) const ADMIN_LINKS: &[NavLinkSpec] = &[
     NavLinkSpec {
         key: "datasets",
         href: "/app/datasets",
@@ -201,19 +211,6 @@ pub(crate) const ANALYTICS_LINKS: &[NavLinkSpec] = &[
         home_description: "Review dataset definitions, source structure, and current read-ready status.",
         home_action_label: "Open Datasets",
     },
-    NavLinkSpec {
-        key: "components",
-        href: "/app/components",
-        label: "Components",
-        icon: "fa-cubes",
-        native: false,
-        required_capability: Some("reports:read"),
-        home_description: "Inspect dashboard component definitions and their linked charts.",
-        home_action_label: "Open Components",
-    },
-];
-
-pub(crate) const INTERNAL_LINKS: &[NavLinkSpec] = &[
     NavLinkSpec {
         key: "administration",
         href: "/app/administration",
@@ -619,7 +616,14 @@ fn NavSection(
     loaded: bool,
     account: Option<AccountContext>,
     section_class: &'static str,
+    #[prop(optional)] required_capability: Option<&'static str>,
 ) -> impl IntoView {
+    if let Some(required_capability) = required_capability {
+        if !route_visible(loaded, account.as_ref(), Some(required_capability)) {
+            return view! { <></> }.into_any();
+        }
+    }
+
     let visible_links = visible_links(loaded, account.as_ref(), links);
 
     if visible_links.is_empty() {
@@ -640,6 +644,27 @@ fn NavSection(
         </section>
     }
     .into_any()
+}
+
+#[component]
+fn TopBarUtilityButton(
+    aria_label: &'static str,
+    icon: &'static str,
+    #[prop(optional)] disabled: bool,
+) -> impl IntoView {
+    view! {
+        <button
+            class="app-utility-button"
+            type="button"
+            aria-label=aria_label
+            title=aria_label
+            disabled=disabled
+        >
+            <span class="app-utility-button__icon" aria-hidden="true">
+                <i class=format!("fa-solid {}", icon)></i>
+            </span>
+        </button>
+    }
 }
 
 #[component]
@@ -682,6 +707,24 @@ fn SessionSummary(account: Option<AccountContext>, error: Option<String>) -> imp
             {error
                 .map(|error| view! { <p class="muted">{error}</p> }.into_any())
                 .unwrap_or_else(|| view! { <></> }.into_any())}
+        </section>
+    }
+}
+
+#[component]
+fn SidebarUtilityBlock(session: AccountSession) -> impl IntoView {
+    view! {
+        <section class="selection-panel app-sidebar__supplemental app-sidebar__utility-block">
+            <div class="app-sidebar__utility-header">
+                <h3>"Shell Tools"</h3>
+                <p class="muted">
+                    "Theme and sign-out stay in the sidebar while the top bar is limited to quiet utilities."
+                </p>
+            </div>
+            <ThemeToggle/>
+            <Show when=move || session.account.get().is_some()>
+                <SignOutButton session=session/>
+            </Show>
         </section>
     }
 }
@@ -946,15 +989,19 @@ pub fn NativePage(
                         <label class="is-sr-only" for="global-search">"Global search"</label>
                         <input id="global-search" class="input app-search-input" type="search" placeholder="Search Tessara" autocomplete="off" />
                     </div>
-                    <Show when=move || session.account.get().is_some()>
-                        <SignOutButton session=session/>
-                    </Show>
-                    <ThemeToggle/>
+                    <TopBarUtilityButton aria_label="Notifications" icon="fa-bell" disabled=true/>
+                    <TopBarUtilityButton aria_label="Help" icon="fa-circle-question" disabled=true/>
                 </div>
             </header>
             <button class="app-sidebar-backdrop" type="button" aria-label="Close navigation" data-sidebar-dismiss tabindex="-1" hidden></button>
             <section class="app-layout">
                 <aside id="app-sidebar" class="panel box app-sidebar" aria-label="Application navigation">
+                    <div class="app-sidebar__header">
+                        <span class="app-sidebar__title">"Navigation"</span>
+                        <button class="app-sidebar-close" type="button" aria-label="Close navigation" data-sidebar-dismiss>
+                            <span aria-hidden="true"><i class="fa-solid fa-xmark"></i></span>
+                        </button>
+                    </div>
                     {move || {
                         let loaded = session.loaded.get();
                         let account = session.account.get();
@@ -963,8 +1010,8 @@ pub fn NativePage(
                         view! {
                             <div class="app-sidebar__content">
                                 <NavSection
-                                    heading="Product Areas"
-                                    aria_label="Product navigation"
+                                    heading="Main"
+                                    aria_label="Primary navigation"
                                     links=PRODUCT_LINKS
                                     active_route=active_route
                                     loaded=loaded
@@ -972,33 +1019,19 @@ pub fn NativePage(
                                     section_class="nav-panel-primary"
                                 />
                                 <NavSection
-                                    heading="Data And Components"
-                                    aria_label="Data and component navigation"
-                                    links=ANALYTICS_LINKS
+                                    heading="Admin"
+                                    aria_label="Admin navigation"
+                                    links=ADMIN_LINKS
                                     active_route=active_route
                                     loaded=loaded
                                     account=account.clone()
                                     section_class="nav-panel-analytics"
+                                    required_capability="admin:all"
                                 />
-                                <NavSection
-                                    heading="Transitional Analytics"
-                                    aria_label="Transitional reporting navigation"
-                                    links=TRANSITIONAL_LINKS
-                                    active_route=active_route
-                                    loaded=loaded
-                                    account=account.clone()
-                                    section_class="nav-panel-transitional"
-                                />
-                                <NavSection
-                                    heading="Internal Areas"
-                                    aria_label="Internal navigation"
-                                    links=INTERNAL_LINKS
-                                    active_route=active_route
-                                    loaded=loaded
-                                    account=account.clone()
-                                    section_class="nav-panel-secondary"
-                                />
-                                <SessionSummary account=account error=error/>
+                                <div class="app-sidebar__footer">
+                                    <SessionSummary account=account error=error/>
+                                    <SidebarUtilityBlock session=session/>
+                                </div>
                             </div>
                         }
                     }}
