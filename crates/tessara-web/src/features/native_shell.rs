@@ -305,6 +305,63 @@ pub(crate) fn visible_links<'a>(
         .collect()
 }
 
+fn query_value(search: &str, key: &str) -> Option<String> {
+    search
+        .trim_start_matches('?')
+        .split('&')
+        .filter(|segment| !segment.is_empty())
+        .find_map(|segment| {
+            let mut parts = segment.splitn(2, '=');
+            let name = parts.next()?;
+            let value = parts.next().unwrap_or_default();
+            (name == key && !value.is_empty()).then(|| value.to_string())
+        })
+}
+
+fn preferred_account_label(display_name: &str, email: &str) -> String {
+    let trimmed = display_name.trim();
+    if trimmed.is_empty() {
+        email.to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+fn ui_profile_label(profile: UiAccessProfile) -> &'static str {
+    match profile {
+        UiAccessProfile::Admin => "Administrator",
+        UiAccessProfile::Operator => "Scoped operator",
+        UiAccessProfile::ResponseUser => "Response user",
+    }
+}
+
+fn active_delegate(account: &AccountContext, search: &str) -> Option<DelegationSummary> {
+    let delegate_account_id = query_value(search, "delegateAccountId")?;
+    account
+        .delegations
+        .iter()
+        .find(|delegate| delegate.account_id == delegate_account_id)
+        .cloned()
+}
+
+fn scope_root_labels(account: &AccountContext) -> Vec<String> {
+    let mut labels = account
+        .scope_nodes
+        .iter()
+        .filter(|node| {
+            !account
+                .scope_nodes
+                .iter()
+                .any(|candidate| Some(candidate.node_id.as_str()) == node.parent_node_id.as_deref())
+        })
+        .map(|node| format!("{}: {}", node.node_type_name, node.node_name))
+        .collect::<Vec<_>>();
+
+    labels.sort();
+    labels.dedup();
+    labels
+}
+
 #[cfg(feature = "hydrate")]
 fn shell_viewport() -> &'static str {
     let width = window()
@@ -751,64 +808,217 @@ fn TopBarUtilityButton(
 }
 
 #[component]
-fn SessionSummary(account: Option<AccountContext>, error: Option<String>) -> impl IntoView {
-    let status = match account.as_ref() {
-        Some(account) => format!(
-            "Signed in as {} ({}).",
-            account.email,
-            match account.ui_access_profile {
-                UiAccessProfile::Admin => "admin",
-                UiAccessProfile::Operator => "operator",
-                UiAccessProfile::ResponseUser => "response user",
+fn SidebarFooterContext(
+    account: Option<AccountContext>,
+    error: Option<String>,
+    search: String,
+    session: AccountSession,
+) -> impl IntoView {
+    match account {
+        Some(account) => {
+            let scope_expanded = RwSignal::new(false);
+            let delegation_expanded = RwSignal::new(false);
+            let active_delegate = active_delegate(&account, &search);
+            let has_active_delegate = active_delegate.is_some();
+            let active_delegate_name = active_delegate
+                .as_ref()
+                .map(|delegate| preferred_account_label(&delegate.display_name, &delegate.email));
+            let active_delegate_email = active_delegate
+                .as_ref()
+                .map(|delegate| delegate.email.clone())
+                .unwrap_or_default();
+            let scope_labels = StoredValue::new(scope_root_labels(&account));
+            let scope_count = scope_labels.get_value().len();
+            let has_scoped_roots = scope_count > 0;
+            let has_scope_overflow = scope_count > 2;
+            let available_delegations = StoredValue::new(
+                account
+                .delegations
+                .iter()
+                .map(|delegate| preferred_account_label(&delegate.display_name, &delegate.email))
+                .collect::<Vec<_>>(),
+            );
+            let delegation_count = available_delegations.get_value().len();
+            let has_delegations = delegation_count > 0;
+            let has_delegation_overflow = delegation_count > 2;
+            let identity_label = preferred_account_label(&account.display_name, &account.email);
+            let active_delegate_name = StoredValue::new(active_delegate_name.unwrap_or_default());
+            let active_delegate_email = StoredValue::new(active_delegate_email);
+            let footer_error = StoredValue::new(error.unwrap_or_default());
+            let has_footer_error = !footer_error.get_value().is_empty();
+
+            view! {
+                <section class="app-sidebar__footer-context" id="shell-footer-context">
+                    <section id="shell-account-context" class="selection-panel app-sidebar__supplemental app-sidebar__context-card">
+                        <p class="app-sidebar__context-label">"Account"</p>
+                        <div class="app-sidebar__identity">
+                            <strong class="app-sidebar__identity-name">{identity_label}</strong>
+                            <span class="app-sidebar__identity-email">{account.email.clone()}</span>
+                        </div>
+                        <p class="muted app-sidebar__context-caption">
+                            {ui_profile_label(account.ui_access_profile)}
+                        </p>
+                    </section>
+
+                    <Show when=move || has_delegations>
+                        <section id="shell-delegation-context" class="selection-panel app-sidebar__supplemental app-sidebar__context-card">
+                            <div class="app-sidebar__context-header">
+                                <p class="app-sidebar__context-label">
+                                    {if has_active_delegate {
+                                        "Acting for"
+                                    } else {
+                                        "Delegation"
+                                    }}
+                                </p>
+                                <Show when=move || has_active_delegate>
+                                    <span class="app-sidebar__context-badge">"Active"</span>
+                                </Show>
+                            </div>
+                            <Show when=move || has_active_delegate fallback=move || view! {
+                                <p class="muted app-sidebar__context-caption">
+                                    {format!(
+                                        "{} delegated account{} available from this shell.",
+                                        delegation_count,
+                                        if delegation_count == 1 { "" } else { "s" }
+                                    )}
+                                </p>
+                            }>
+                                <div class="app-sidebar__identity" data-active-delegate>
+                                    <strong class="app-sidebar__identity-name">
+                                        {move || active_delegate_name.get_value()}
+                                    </strong>
+                                    <span class="app-sidebar__identity-email">
+                                        {move || active_delegate_email.get_value()}
+                                    </span>
+                                </div>
+                            </Show>
+                            <ul id="shell-delegation-options" class="app-sidebar__context-list">
+                                {move || {
+                                    let visible = if delegation_expanded.get() || delegation_count <= 2 {
+                                        available_delegations.get_value()
+                                    } else {
+                                        available_delegations
+                                            .get_value()
+                                            .into_iter()
+                                            .take(2)
+                                            .collect::<Vec<_>>()
+                                    };
+                                    visible
+                                        .into_iter()
+                                        .map(|label| {
+                                            let is_active = active_delegate_name.get_value() == label;
+                                            view! {
+                                                <li class="app-sidebar__context-item">
+                                                    <span data-active=if is_active { "true" } else { "false" }>
+                                                        {label}
+                                                    </span>
+                                                </li>
+                                            }
+                                        })
+                                        .collect_view()
+                                }}
+                            </ul>
+                            <Show when=move || has_delegation_overflow>
+                                <button
+                                    id="shell-delegation-toggle"
+                                    class="app-sidebar__context-toggle"
+                                    type="button"
+                                    on:click=move |_| delegation_expanded.update(|expanded| *expanded = !*expanded)
+                                >
+                                    {move || {
+                                        if delegation_expanded.get() {
+                                            "Show fewer delegated accounts"
+                                        } else {
+                                            "Show all delegated accounts"
+                                        }
+                                    }}
+                                </button>
+                            </Show>
+                        </section>
+                    </Show>
+
+                    <section id="shell-scope-context" class="selection-panel app-sidebar__supplemental app-sidebar__context-card">
+                        <div class="app-sidebar__context-header">
+                            <p class="app-sidebar__context-label">"Scope"</p>
+                            <Show when=move || has_scoped_roots>
+                                <span class="app-sidebar__context-badge">{format!("{scope_count} root{}", if scope_count == 1 { "" } else { "s" })}</span>
+                            </Show>
+                        </div>
+                        <Show when=move || has_scoped_roots fallback=move || view! {
+                            <p class="muted app-sidebar__context-caption">"Full application access"</p>
+                        }>
+                            <ul id="shell-scope-roots" class="app-sidebar__context-list">
+                                {move || {
+                                    let visible = if scope_expanded.get() || scope_count <= 2 {
+                                        scope_labels.get_value()
+                                    } else {
+                                        scope_labels
+                                            .get_value()
+                                            .into_iter()
+                                            .take(2)
+                                            .collect::<Vec<_>>()
+                                    };
+                                    visible
+                                        .into_iter()
+                                        .map(|label| view! {
+                                            <li class="app-sidebar__context-item">{label}</li>
+                                        })
+                                        .collect_view()
+                                }}
+                            </ul>
+                            <Show when=move || has_scope_overflow>
+                                <button
+                                    id="shell-scope-toggle"
+                                    class="app-sidebar__context-toggle"
+                                    type="button"
+                                    on:click=move |_| scope_expanded.update(|expanded| *expanded = !*expanded)
+                                >
+                                    {move || {
+                                        if scope_expanded.get() {
+                                            "Show fewer scope roots"
+                                        } else {
+                                            "Show all scope roots"
+                                        }
+                                    }}
+                                </button>
+                            </Show>
+                        </Show>
+                    </section>
+
+                    <section id="shell-theme-context" class="selection-panel app-sidebar__supplemental app-sidebar__context-card">
+                        <p class="app-sidebar__context-label">"Theme"</p>
+                        <p class="muted app-sidebar__context-caption">
+                            "Choose how Tessara appears in this browser."
+                        </p>
+                        <ThemeToggle/>
+                    </section>
+
+                    <Show when=move || has_footer_error>
+                        <p class="muted app-sidebar__footer-error">
+                            {move || footer_error.get_value()}
+                        </p>
+                    </Show>
+
+                    <SignOutButton session=session/>
+                </section>
             }
-        ),
-        None if error.is_some() => "Session load failed.".to_string(),
-        None => "Not signed in.".to_string(),
-    };
-
-    view! {
-        <section class="selection-panel app-sidebar__supplemental">
-            <h3>"Session And Selections"</h3>
-            <p class="muted">"The current signed-in account and your selected records appear here."</p>
-            <p id="session-status" class="muted">{status}</p>
-            <div id="current-user-summary" class="selection-grid">
-                {match account {
-                    Some(account) => view! {
-                        <article class="selection-item box">
-                            <h3>{account.display_name}</h3>
-                            <p>{account.email}</p>
-                            <p class="muted">{format!("Delegations: {}", account.delegations.len())}</p>
-                        </article>
-                    }
-                    .into_any(),
-                    None => view! { <p class="muted">"Sign in to load account context."</p> }.into_any(),
-                }}
-            </div>
-            <div id="selection-state" class="selection-grid">
-                <p class="muted">"No records selected yet."</p>
-            </div>
-            {error
-                .map(|error| view! { <p class="muted">{error}</p> }.into_any())
-                .unwrap_or_else(|| view! { <></> }.into_any())}
-        </section>
-    }
-}
-
-#[component]
-fn SidebarUtilityBlock(session: AccountSession) -> impl IntoView {
-    view! {
-        <section class="selection-panel app-sidebar__supplemental app-sidebar__utility-block">
-            <div class="app-sidebar__utility-header">
-                <h3>"Shell Tools"</h3>
-                <p class="muted">
-                    "Theme and sign-out stay in the sidebar while the top bar is limited to quiet utilities."
-                </p>
-            </div>
-            <ThemeToggle/>
-            <Show when=move || session.account.get().is_some()>
-                <SignOutButton session=session/>
-            </Show>
-        </section>
+            .into_any()
+        }
+        None => view! {
+            <section class="app-sidebar__footer-context" id="shell-footer-context">
+                <section id="shell-account-context" class="selection-panel app-sidebar__supplemental app-sidebar__context-card">
+                    <p class="app-sidebar__context-label">"Account"</p>
+                    <p class="muted app-sidebar__context-caption">
+                        {error.unwrap_or_else(|| "Account context loads after session verification.".into())}
+                    </p>
+                </section>
+                <section id="shell-theme-context" class="selection-panel app-sidebar__supplemental app-sidebar__context-card">
+                    <p class="app-sidebar__context-label">"Theme"</p>
+                    <ThemeToggle/>
+                </section>
+            </section>
+        }
+        .into_any(),
     }
 }
 
@@ -1178,8 +1388,12 @@ pub fn NativePage(
                                     required_capability="admin:all"
                                 />
                                 <div class="app-sidebar__footer">
-                                    <SessionSummary account=account error=error/>
-                                    <SidebarUtilityBlock session=session/>
+                                    <SidebarFooterContext
+                                        account=account
+                                        error=error
+                                        search=location.search.read().to_string()
+                                        session=session
+                                    />
                                 </div>
                             </div>
                         }

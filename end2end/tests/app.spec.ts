@@ -3,7 +3,6 @@ import { expect, test, type Page } from "@playwright/test";
 const BENIGN_NAVIGATION_ABORT_ERRORS = [
   "WebAssembly compilation aborted: Network error: Response body loading was aborted",
 ];
-const THEME_STORAGE_KEY = "tessara.themePreference";
 
 type WorkflowAssignmentSummary = {
   workflow_version_id: string;
@@ -13,6 +12,27 @@ type WorkflowAssignmentSummary = {
   is_active: boolean;
   has_draft: boolean;
   has_submitted: boolean;
+};
+
+type SessionScopeNode = {
+  node_id: string;
+  node_name: string;
+  node_type_name: string;
+  parent_node_id: string | null;
+};
+
+type SessionDelegation = {
+  account_id: string;
+  display_name: string;
+  email: string;
+};
+
+type SessionAccountContext = {
+  account_id: string;
+  display_name: string;
+  email: string;
+  scope_nodes: SessionScopeNode[];
+  delegations: SessionDelegation[];
 };
 
 function isBenignNavigationAbort(message: string) {
@@ -55,6 +75,27 @@ async function signOut(page: Page) {
   await expect(page).toHaveURL(/\/app\/login$/);
   await expect(page.getByRole("button", { name: "Sign In" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Sign Out" })).toHaveCount(0);
+}
+
+async function fetchSessionAccount(page: Page) {
+  const response = await page.request.get("/api/me");
+  expect(response.ok()).toBeTruthy();
+  return (await response.json()) as SessionAccountContext;
+}
+
+function preferredAccountLabel(displayName: string, email: string) {
+  return displayName.trim() || email;
+}
+
+function scopeRootLabels(account: SessionAccountContext) {
+  const labels = account.scope_nodes
+    .filter(
+      (node) =>
+        !account.scope_nodes.some((candidate) => candidate.node_id === node.parent_node_id),
+    )
+    .map((node) => `${node.node_type_name}: ${node.node_name}`)
+    .sort();
+  return [...new Set(labels)];
 }
 
 async function pkgScripts(page: Page) {
@@ -204,17 +245,21 @@ test("home route stays on the native SSR shell", async ({ page }) => {
 test("theme preference persists on the native shell", async ({ page }) => {
   const assertNoConsoleErrors = attachConsoleGuard(page);
 
-  await page.addInitScript((storageKey) => {
-    window.localStorage.setItem(storageKey, "dark");
-  }, THEME_STORAGE_KEY);
-  await page.goto("/app/login");
+  await signInAsAdmin(page);
+  await waitForAuthenticatedShell(page, "admin@tessara.local");
+
+  await page.locator("#shell-theme-context").getByRole("button", { name: "Dark" }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme-preference", "dark");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 
   await page.reload();
+  await waitForAuthenticatedShell(page, "admin@tessara.local");
 
   await expect(page.locator("html")).toHaveAttribute("data-theme-preference", "dark");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await expect(page.locator("#shell-theme-context").getByRole("button", { name: "System" })).toBeVisible();
+  await expect(page.locator("#shell-theme-context").getByRole("button", { name: "Light" })).toBeVisible();
+  await expect(page.locator("#shell-theme-context").getByRole("button", { name: "Dark" })).toBeVisible();
 
   await assertNoConsoleErrors();
 });
@@ -234,8 +279,54 @@ test("sign-in route stays bare and redirects authenticated browsers home", async
   await signInAsAdmin(page);
   await waitForAuthenticatedShell(page, "admin@tessara.local");
   await page.goto("/app/login");
+  await waitForAuthenticatedShell(page, "admin@tessara.local");
   await expect(page).toHaveURL(/\/app$/);
   await expect(page.getByRole("heading", { name: "Application Overview" })).toBeVisible();
+  await expect(page.locator("#shell-account-context")).toContainText("admin@tessara.local");
+
+  await assertNoConsoleErrors();
+});
+
+test("sidebar footer carries account and scope context on authenticated routes", async ({ page }) => {
+  const assertNoConsoleErrors = attachConsoleGuard(page);
+  await signInAsOperator(page);
+  await waitForAuthenticatedShell(page, "operator@tessara.local");
+
+  const account = await fetchSessionAccount(page);
+  const roots = scopeRootLabels(account);
+  expect(roots.length).toBeGreaterThan(0);
+
+  await page.goto("/app");
+  await expect(page.locator("#shell-account-context")).toContainText(
+    preferredAccountLabel(account.display_name, account.email),
+  );
+  await expect(page.locator("#shell-account-context")).toContainText(account.email);
+  await expect(page.locator("#shell-scope-context")).toBeVisible();
+  await expect(page.locator("#shell-scope-roots")).toContainText(roots[0]!);
+  await expect(page.locator("#shell-theme-context")).toBeVisible();
+
+  await assertNoConsoleErrors();
+});
+
+test("sidebar footer surfaces the active delegated account when delegation is in use", async ({
+  page,
+}) => {
+  const assertNoConsoleErrors = attachConsoleGuard(page);
+  await signInAsDelegator(page);
+  await waitForAuthenticatedShell(page, "delegator@tessara.local");
+
+  const account = await fetchSessionAccount(page);
+  expect(account.delegations.length).toBeGreaterThan(0);
+  const delegate = account.delegations[0]!;
+
+  await page.goto(`/app/responses?delegateAccountId=${delegate.account_id}`);
+  await expect(page.locator("#shell-delegation-context")).toContainText("Acting for");
+  await expect(page.locator("#shell-delegation-context [data-active-delegate]")).toContainText(
+    preferredAccountLabel(delegate.display_name, delegate.email),
+  );
+  await expect(page.locator("#shell-delegation-context [data-active-delegate]")).toContainText(
+    delegate.email,
+  );
 
   await assertNoConsoleErrors();
 });
