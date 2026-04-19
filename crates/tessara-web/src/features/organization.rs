@@ -1,6 +1,8 @@
 use leptos::prelude::*;
 
-use crate::features::native_shell::{BreadcrumbItem, MetadataStrip, NativePage, PageHeader, Panel};
+use crate::features::native_shell::{
+    BreadcrumbItem, MetadataStrip, NativePage, PageHeader, Panel, use_account_session,
+};
 use crate::infra::routing::{NodeRouteParams, require_route_params};
 
 #[derive(Clone)]
@@ -424,25 +426,6 @@ mod hydrate {
                 .collect::<Vec<_>>()
                 .join("")
         };
-        let responses = if detail.related_responses.is_empty() {
-            r#"<li class="muted">No related responses.</li>"#.into()
-        } else {
-            detail
-                .related_responses
-                .iter()
-                .map(|response| {
-                    format!(
-                        r#"<li><a href="/app/responses/{}">{} {}</a> <span class="muted">{} | {}</span></li>"#,
-                        escape_html(&response.submission_id),
-                        escape_html(&response.form_name),
-                        escape_html(&response.version_label),
-                        escape_html(&response.status),
-                        escape_html(&response.created_at),
-                    )
-                })
-                .collect::<Vec<_>>()
-                .join("")
-        };
         let dashboards = if detail.related_dashboards.is_empty() {
             r#"<li class="muted">No related dashboards.</li>"#.into()
         } else {
@@ -462,7 +445,7 @@ mod hydrate {
         };
 
         format!(
-            r#"<section class="detail-section box"><h4>Related Forms</h4><ul class="app-list">{forms}</ul></section><section class="detail-section box"><h4>Related Responses</h4><ul class="app-list">{responses}</ul></section><section class="detail-section box"><h4>Related Dashboards</h4><ul class="app-list">{dashboards}</ul></section>"#
+            r#"<section class="detail-section box"><h4>Related Forms</h4><ul class="app-list">{forms}</ul></section><section class="detail-section box"><h4>Related Dashboards</h4><ul class="app-list">{dashboards}</ul></section>"#
         )
     }
 
@@ -1255,10 +1238,16 @@ mod hydrate {
 
 #[component]
 pub fn OrganizationListPage() -> impl IntoView {
+    let session = use_account_session();
+    #[cfg(not(feature = "hydrate"))]
+    let _ = session;
     #[cfg(feature = "hydrate")]
-    hydrate::set_context("organization-list", None);
-    #[cfg(feature = "hydrate")]
-    hydrate::load_list_page();
+    Effect::new(move |_| {
+        if session.loaded.get() && session.account.get().is_some() {
+            hydrate::set_context("organization-list", None);
+            hydrate::load_list_page();
+        }
+    });
 
     view! {
         <NativePage
@@ -1321,10 +1310,16 @@ pub fn OrganizationListPage() -> impl IntoView {
 
 #[component]
 pub fn OrganizationCreatePage() -> impl IntoView {
+    let session = use_account_session();
+    #[cfg(not(feature = "hydrate"))]
+    let _ = session;
     #[cfg(feature = "hydrate")]
-    hydrate::set_context("organization-create", None);
-    #[cfg(feature = "hydrate")]
-    hydrate::load_create_page();
+    Effect::new(move |_| {
+        if session.loaded.get() && session.account.get().is_some() {
+            hydrate::set_context("organization-create", None);
+            hydrate::load_create_page();
+        }
+    });
 
     view! {
         <NativePage
@@ -1398,11 +1393,18 @@ pub fn OrganizationCreatePage() -> impl IntoView {
 #[component]
 pub fn OrganizationDetailPage() -> impl IntoView {
     let NodeRouteParams { node_id } = require_route_params();
+    let _node_id_for_load = node_id.clone();
     let node_id_value = StoredValue::new(node_id.clone());
+    let session = use_account_session();
+    #[cfg(not(feature = "hydrate"))]
+    let _ = session;
     #[cfg(feature = "hydrate")]
-    hydrate::set_context("organization-detail", Some(node_id.clone()));
-    #[cfg(feature = "hydrate")]
-    hydrate::load_detail_page(node_id.clone());
+    Effect::new(move |_| {
+        if session.loaded.get() && session.account.get().is_some() {
+            hydrate::set_context("organization-detail", Some(_node_id_for_load.clone()));
+            hydrate::load_detail_page(_node_id_for_load.clone());
+        }
+    });
 
     view! {
         <NativePage
@@ -1491,11 +1493,18 @@ pub fn OrganizationDetailPage() -> impl IntoView {
 #[component]
 pub fn OrganizationEditPage() -> impl IntoView {
     let NodeRouteParams { node_id } = require_route_params();
+    let _node_id_for_load = node_id.clone();
     let node_id_value = StoredValue::new(node_id.clone());
+    let session = use_account_session();
+    #[cfg(not(feature = "hydrate"))]
+    let _ = session;
     #[cfg(feature = "hydrate")]
-    hydrate::set_context("organization-edit", Some(node_id.clone()));
-    #[cfg(feature = "hydrate")]
-    hydrate::load_edit_page(node_id.clone());
+    Effect::new(move |_| {
+        if session.loaded.get() && session.account.get().is_some() {
+            hydrate::set_context("organization-edit", Some(_node_id_for_load.clone()));
+            hydrate::load_edit_page(_node_id_for_load.clone());
+        }
+    });
 
     view! {
         <NativePage

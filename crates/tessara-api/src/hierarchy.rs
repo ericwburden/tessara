@@ -3,7 +3,6 @@ use std::{collections::HashMap, str::FromStr};
 use axum::{
     Json,
     extract::{Path, Query, State},
-    http::HeaderMap,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -13,7 +12,7 @@ use tessara_hierarchy::validate_node_type_relationship;
 use uuid::Uuid;
 
 use crate::{
-    auth,
+    auth::{self, AuthenticatedRequest},
     db::AppState,
     error::{ApiError, ApiResult},
 };
@@ -224,10 +223,10 @@ pub struct NodeTypeFormLink {
 
 pub async fn create_node_type(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    request: AuthenticatedRequest,
     Json(payload): Json<CreateNodeTypeRequest>,
 ) -> ApiResult<Json<IdResponse>> {
-    auth::require_capability(&state.pool, &headers, "admin:all").await?;
+    request.require_capability("admin:all")?;
     require_text("node type name", &payload.name)?;
     require_text("node type slug", &payload.slug)?;
     require_node_type_slug_available(&state.pool, &payload.slug).await?;
@@ -269,11 +268,11 @@ pub async fn create_node_type(
 /// Updates node-type display metadata used by hierarchy and form-builder screens.
 pub async fn update_node_type(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    request: AuthenticatedRequest,
     Path(node_type_id): Path<Uuid>,
     Json(payload): Json<UpdateNodeTypeRequest>,
 ) -> ApiResult<Json<IdResponse>> {
-    auth::require_capability(&state.pool, &headers, "admin:all").await?;
+    request.require_capability("admin:all")?;
     require_text("node type name", &payload.name)?;
     require_text("node type slug", &payload.slug)?;
     require_node_type_exists(&state.pool, node_type_id).await?;
@@ -316,9 +315,9 @@ pub async fn update_node_type(
 /// Lists configured hierarchy node types for the admin builder shell.
 pub async fn list_node_types(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    request: AuthenticatedRequest,
 ) -> ApiResult<Json<Vec<NodeTypeSummary>>> {
-    auth::require_capability(&state.pool, &headers, "admin:all").await?;
+    request.require_capability("admin:all")?;
 
     let node_types = load_node_type_catalog(&state.pool)
         .await?
@@ -339,19 +338,19 @@ pub async fn list_node_types(
 
 pub async fn list_readable_node_types(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    request: AuthenticatedRequest,
 ) -> ApiResult<Json<Vec<NodeTypeCatalogEntry>>> {
-    auth::require_capability(&state.pool, &headers, "hierarchy:read").await?;
+    request.require_capability("hierarchy:read")?;
     Ok(Json(load_node_type_catalog(&state.pool).await?))
 }
 
 /// Returns one node type with linked relationships, metadata fields, and scoped forms.
 pub async fn get_node_type(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    request: AuthenticatedRequest,
     Path(node_type_id): Path<Uuid>,
 ) -> ApiResult<Json<NodeTypeDefinition>> {
-    auth::require_capability(&state.pool, &headers, "admin:all").await?;
+    request.require_capability("admin:all")?;
     let catalog_entry = load_node_type_catalog_entry(&state.pool, node_type_id).await?;
 
     let metadata_fields = sqlx::query(
@@ -426,9 +425,9 @@ pub async fn get_node_type(
 /// Lists configured parent/child hierarchy relationships for admin screens.
 pub async fn list_node_type_relationships(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    request: AuthenticatedRequest,
 ) -> ApiResult<Json<Vec<NodeTypeRelationshipSummary>>> {
-    auth::require_capability(&state.pool, &headers, "admin:all").await?;
+    request.require_capability("admin:all")?;
 
     let rows = sqlx::query(
         r#"
@@ -465,10 +464,10 @@ pub async fn list_node_type_relationships(
 
 pub async fn create_node_type_relationship(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    request: AuthenticatedRequest,
     Json(payload): Json<CreateNodeTypeRelationshipRequest>,
 ) -> ApiResult<Json<IdResponse>> {
-    auth::require_capability(&state.pool, &headers, "admin:all").await?;
+    request.require_capability("admin:all")?;
     require_node_type_exists(&state.pool, payload.parent_node_type_id).await?;
     require_node_type_exists(&state.pool, payload.child_node_type_id).await?;
     assert_relationship_is_acyclic(
@@ -498,10 +497,10 @@ pub async fn create_node_type_relationship(
 /// Removes a parent/child node-type relationship if no existing nodes depend on it.
 pub async fn delete_node_type_relationship(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    request: AuthenticatedRequest,
     Path((parent_node_type_id, child_node_type_id)): Path<(Uuid, Uuid)>,
 ) -> ApiResult<Json<IdResponse>> {
-    auth::require_capability(&state.pool, &headers, "admin:all").await?;
+    request.require_capability("admin:all")?;
     require_node_type_relationship_exists(&state.pool, parent_node_type_id, child_node_type_id)
         .await?;
     assert_relationship_unused(&state.pool, parent_node_type_id, child_node_type_id).await?;
@@ -525,9 +524,9 @@ pub async fn delete_node_type_relationship(
 /// Lists node metadata field definitions for admin screens.
 pub async fn list_node_metadata_fields(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    request: AuthenticatedRequest,
 ) -> ApiResult<Json<Vec<NodeMetadataFieldSummary>>> {
-    auth::require_capability(&state.pool, &headers, "admin:all").await?;
+    request.require_capability("admin:all")?;
 
     let rows = sqlx::query(
         r#"
@@ -567,10 +566,10 @@ pub async fn list_node_metadata_fields(
 
 pub async fn create_node_metadata_field(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    request: AuthenticatedRequest,
     Json(payload): Json<CreateNodeMetadataFieldRequest>,
 ) -> ApiResult<Json<IdResponse>> {
-    auth::require_capability(&state.pool, &headers, "admin:all").await?;
+    request.require_capability("admin:all")?;
     require_node_type_exists(&state.pool, payload.node_type_id).await?;
     require_text("metadata key", &payload.key)?;
     require_text("metadata label", &payload.label)?;
@@ -620,11 +619,11 @@ struct NodeTypeRelationshipSelection {
 /// Updates metadata field display and safe schema settings for a node type.
 pub async fn update_node_metadata_field(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    request: AuthenticatedRequest,
     Path(field_id): Path<Uuid>,
     Json(payload): Json<UpdateNodeMetadataFieldRequest>,
 ) -> ApiResult<Json<IdResponse>> {
-    auth::require_capability(&state.pool, &headers, "admin:all").await?;
+    request.require_capability("admin:all")?;
     let existing = require_node_metadata_field(&state.pool, field_id).await?;
     require_text("metadata key", &payload.key)?;
     require_text("metadata label", &payload.label)?;
@@ -677,10 +676,10 @@ pub async fn update_node_metadata_field(
 /// Deletes a node metadata field definition and any collected values for that field.
 pub async fn delete_node_metadata_field(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    request: AuthenticatedRequest,
     Path(field_id): Path<Uuid>,
 ) -> ApiResult<Json<IdResponse>> {
-    auth::require_capability(&state.pool, &headers, "admin:all").await?;
+    request.require_capability("admin:all")?;
     require_node_metadata_field(&state.pool, field_id).await?;
 
     sqlx::query(
@@ -698,10 +697,10 @@ pub async fn delete_node_metadata_field(
 
 pub async fn create_node(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    request: AuthenticatedRequest,
     Json(payload): Json<CreateNodeRequest>,
 ) -> ApiResult<Json<IdResponse>> {
-    auth::require_capability(&state.pool, &headers, "hierarchy:write").await?;
+    request.require_capability("hierarchy:write")?;
     require_node_type_exists(&state.pool, payload.node_type_id).await?;
     require_text("node name", &payload.name)?;
 
@@ -733,11 +732,11 @@ pub async fn create_node(
 /// Updates a hierarchy node name, parent, and provided metadata values.
 pub async fn update_node(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    request: AuthenticatedRequest,
     Path(node_id): Path<Uuid>,
     Json(payload): Json<UpdateNodeRequest>,
 ) -> ApiResult<Json<IdResponse>> {
-    auth::require_capability(&state.pool, &headers, "hierarchy:write").await?;
+    request.require_capability("hierarchy:write")?;
     require_text("node name", &payload.name)?;
     let node_type_id = require_node_type_for_node(&state.pool, node_id).await?;
     assert_parent_allowed(
@@ -765,10 +764,10 @@ pub async fn update_node(
 
 pub async fn list_nodes(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    request: AuthenticatedRequest,
     Query(query): Query<ListNodesQuery>,
 ) -> ApiResult<Json<Vec<NodeResponse>>> {
-    let account = auth::require_capability(&state.pool, &headers, "hierarchy:read").await?;
+    let account = request.require_capability("hierarchy:read")?;
     let search = query
         .q
         .as_deref()
@@ -899,10 +898,10 @@ pub async fn list_nodes(
 
 pub async fn get_node(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    request: AuthenticatedRequest,
     Path(node_id): Path<Uuid>,
 ) -> ApiResult<Json<NodeDetail>> {
-    let account = auth::require_capability(&state.pool, &headers, "hierarchy:read").await?;
+    let account = request.require_capability("hierarchy:read")?;
     if account.is_operator() {
         let scope_ids = auth::effective_scope_node_ids(&state.pool, account.account_id).await?;
         if !scope_ids.contains(&node_id) {

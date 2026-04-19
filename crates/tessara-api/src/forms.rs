@@ -13,7 +13,7 @@ use tessara_forms::{
 use uuid::Uuid;
 
 use crate::{
-    auth,
+    auth::{self, AuthenticatedRequest},
     db::AppState,
     error::{ApiError, ApiResult},
     hierarchy::{IdResponse, parse_field_type, require_text},
@@ -203,10 +203,10 @@ pub struct PublishedFormVersionSummary {
 
 pub async fn create_form(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    request: AuthenticatedRequest,
     Json(payload): Json<CreateFormRequest>,
 ) -> ApiResult<Json<IdResponse>> {
-    auth::require_capability(&state.pool, &headers, "forms:write").await?;
+    request.require_capability("forms:write")?;
     require_text("form name", &payload.name)?;
     require_text("form slug", &payload.slug)?;
     require_form_slug_available(&state.pool, &payload.slug).await?;
@@ -229,11 +229,11 @@ pub async fn create_form(
 /// Updates form-level metadata used by the admin builder and report context.
 pub async fn update_form(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    request: AuthenticatedRequest,
     Path(form_id): Path<Uuid>,
     Json(payload): Json<UpdateFormRequest>,
 ) -> ApiResult<Json<IdResponse>> {
-    auth::require_capability(&state.pool, &headers, "forms:write").await?;
+    request.require_capability("forms:write")?;
     require_text("form name", &payload.name)?;
     require_text("form slug", &payload.slug)?;
     require_form_exists(&state.pool, form_id).await?;
@@ -263,9 +263,9 @@ pub async fn update_form(
 /// Lists forms and their versions for the admin builder shell.
 pub async fn list_forms(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    request: AuthenticatedRequest,
 ) -> ApiResult<Json<Vec<FormSummary>>> {
-    auth::require_capability(&state.pool, &headers, "forms:write").await?;
+    request.require_capability("forms:write")?;
 
     let form_rows = sqlx::query(
         r#"
@@ -359,10 +359,10 @@ pub async fn list_forms(
 /// Returns a form definition with versions plus downstream reporting links.
 pub async fn get_form(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    request: AuthenticatedRequest,
     Path(form_id): Path<Uuid>,
 ) -> ApiResult<Json<FormDefinition>> {
-    auth::require_capability(&state.pool, &headers, "forms:write").await?;
+    request.require_capability("forms:write")?;
     Ok(Json(get_form_definition(&state.pool, form_id).await?))
 }
 
@@ -443,9 +443,9 @@ pub async fn list_published_form_versions(
 
 pub async fn list_readable_forms(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    request: AuthenticatedRequest,
 ) -> ApiResult<Json<Vec<FormSummary>>> {
-    let account = auth::require_capability(&state.pool, &headers, "forms:read").await?;
+    let account = request.require_capability("forms:read")?;
     let form_rows = if account.is_operator() {
         let scope_ids = auth::effective_scope_node_ids(&state.pool, account.account_id).await?;
         sqlx::query(
@@ -571,10 +571,10 @@ pub async fn list_readable_forms(
 
 pub async fn get_readable_form(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    request: AuthenticatedRequest,
     Path(form_id): Path<Uuid>,
 ) -> ApiResult<Json<FormDefinition>> {
-    let account = auth::require_capability(&state.pool, &headers, "forms:read").await?;
+    let account = request.require_capability("forms:read")?;
     if account.is_operator() {
         let scope_ids = auth::effective_scope_node_ids(&state.pool, account.account_id).await?;
         let visible: bool = sqlx::query_scalar(
@@ -795,11 +795,11 @@ async fn get_form_definition(pool: &sqlx::PgPool, form_id: Uuid) -> ApiResult<Fo
 
 pub async fn create_form_version(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    request: AuthenticatedRequest,
     Path(form_id): Path<Uuid>,
     Json(_payload): Json<CreateFormVersionRequest>,
 ) -> ApiResult<Json<IdResponse>> {
-    auth::require_capability(&state.pool, &headers, "forms:write").await?;
+    request.require_capability("forms:write")?;
     require_form_exists(&state.pool, form_id).await?;
 
     let id = sqlx::query_scalar(
@@ -880,11 +880,11 @@ async fn require_form_slug_available_for_form(
 
 pub async fn create_form_section(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    request: AuthenticatedRequest,
     Path(form_version_id): Path<Uuid>,
     Json(payload): Json<CreateFormSectionRequest>,
 ) -> ApiResult<Json<IdResponse>> {
-    auth::require_capability(&state.pool, &headers, "forms:write").await?;
+    request.require_capability("forms:write")?;
     assert_form_version_draft(&state.pool, form_version_id).await?;
     require_text("section title", &payload.title)?;
 
@@ -902,11 +902,11 @@ pub async fn create_form_section(
 
 pub async fn create_form_field(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    request: AuthenticatedRequest,
     Path(form_version_id): Path<Uuid>,
     Json(payload): Json<CreateFormFieldRequest>,
 ) -> ApiResult<Json<IdResponse>> {
-    auth::require_capability(&state.pool, &headers, "forms:write").await?;
+    request.require_capability("forms:write")?;
     assert_form_version_draft(&state.pool, form_version_id).await?;
     require_text("field key", &payload.key)?;
     require_text("field label", &payload.label)?;
@@ -939,11 +939,11 @@ pub async fn create_form_field(
 /// Updates an editable form section in a draft form version.
 pub async fn update_form_section(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    request: AuthenticatedRequest,
     Path(section_id): Path<Uuid>,
     Json(payload): Json<UpdateFormSectionRequest>,
 ) -> ApiResult<Json<IdResponse>> {
-    auth::require_capability(&state.pool, &headers, "forms:write").await?;
+    request.require_capability("forms:write")?;
     let form_version_id = require_section_form_version(&state.pool, section_id).await?;
     assert_form_version_draft(&state.pool, form_version_id).await?;
     require_text("section title", &payload.title)?;
@@ -961,10 +961,10 @@ pub async fn update_form_section(
 /// Deletes an editable form section and its fields from a draft form version.
 pub async fn delete_form_section(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    request: AuthenticatedRequest,
     Path(section_id): Path<Uuid>,
 ) -> ApiResult<Json<IdResponse>> {
-    auth::require_capability(&state.pool, &headers, "forms:write").await?;
+    request.require_capability("forms:write")?;
     let form_version_id = require_section_form_version(&state.pool, section_id).await?;
     assert_form_version_draft(&state.pool, form_version_id).await?;
 
@@ -979,11 +979,11 @@ pub async fn delete_form_section(
 /// Updates an editable form field in a draft form version.
 pub async fn update_form_field(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    request: AuthenticatedRequest,
     Path(field_id): Path<Uuid>,
     Json(payload): Json<UpdateFormFieldRequest>,
 ) -> ApiResult<Json<IdResponse>> {
-    auth::require_capability(&state.pool, &headers, "forms:write").await?;
+    request.require_capability("forms:write")?;
     let existing = require_form_field(&state.pool, field_id).await?;
     assert_form_version_draft(&state.pool, existing.form_version_id).await?;
     require_text("field key", &payload.key)?;
@@ -1028,10 +1028,10 @@ pub async fn update_form_field(
 /// Deletes an editable form field from a draft form version.
 pub async fn delete_form_field(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    request: AuthenticatedRequest,
     Path(field_id): Path<Uuid>,
 ) -> ApiResult<Json<IdResponse>> {
-    auth::require_capability(&state.pool, &headers, "forms:write").await?;
+    request.require_capability("forms:write")?;
     let existing = require_form_field(&state.pool, field_id).await?;
     assert_form_version_draft(&state.pool, existing.form_version_id).await?;
 
@@ -1045,10 +1045,10 @@ pub async fn delete_form_field(
 
 pub async fn publish_form_version(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    request: AuthenticatedRequest,
     Path(form_version_id): Path<Uuid>,
 ) -> ApiResult<Json<PublishFormVersionResponse>> {
-    auth::require_capability(&state.pool, &headers, "forms:write").await?;
+    request.require_capability("forms:write")?;
 
     let preview = build_publish_computation(&state.pool, form_version_id).await?;
     let mut tx = state.pool.begin().await?;

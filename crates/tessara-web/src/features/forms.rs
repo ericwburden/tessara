@@ -1,6 +1,8 @@
 use leptos::prelude::*;
 
-use crate::features::native_shell::{BreadcrumbItem, MetadataStrip, NativePage, PageHeader, Panel};
+use crate::features::native_shell::{
+    BreadcrumbItem, MetadataStrip, NativePage, PageHeader, Panel, use_account_session,
+};
 use crate::infra::routing::{FormRouteParams, require_route_params};
 
 #[cfg(feature = "hydrate")]
@@ -1377,10 +1379,16 @@ mod hydrate {
 
 #[component]
 pub fn FormsListPage() -> impl IntoView {
+    let session = use_account_session();
+    #[cfg(not(feature = "hydrate"))]
+    let _ = session;
     #[cfg(feature = "hydrate")]
-    hydrate::set_context("form-list", None);
-    #[cfg(feature = "hydrate")]
-    hydrate::load_list_page();
+    Effect::new(move |_| {
+        if session.loaded.get() && session.account.get().is_some() {
+            hydrate::set_context("form-list", None);
+            hydrate::load_list_page();
+        }
+    });
 
     view! {
         <NativePage
@@ -1435,10 +1443,16 @@ pub fn FormsListPage() -> impl IntoView {
 
 #[component]
 pub fn FormCreatePage() -> impl IntoView {
+    let session = use_account_session();
+    #[cfg(not(feature = "hydrate"))]
+    let _ = session;
     #[cfg(feature = "hydrate")]
-    hydrate::set_context("form-create", None);
-    #[cfg(feature = "hydrate")]
-    hydrate::load_create_page();
+    Effect::new(move |_| {
+        if session.loaded.get() && session.account.get().is_some() {
+            hydrate::set_context("form-create", None);
+            hydrate::load_create_page();
+        }
+    });
 
     view! {
         <NativePage
@@ -1512,10 +1526,17 @@ pub fn FormCreatePage() -> impl IntoView {
 #[component]
 pub fn FormDetailPage() -> impl IntoView {
     let FormRouteParams { form_id } = require_route_params();
+    let _form_id_for_load = form_id.clone();
+    let session = use_account_session();
+    #[cfg(not(feature = "hydrate"))]
+    let _ = session;
     #[cfg(feature = "hydrate")]
-    hydrate::set_context("form-detail", Some(form_id.clone()));
-    #[cfg(feature = "hydrate")]
-    hydrate::load_detail_page(form_id.clone());
+    Effect::new(move |_| {
+        if session.loaded.get() && session.account.get().is_some() {
+            hydrate::set_context("form-detail", Some(_form_id_for_load.clone()));
+            hydrate::load_detail_page(_form_id_for_load.clone());
+        }
+    });
 
     view! {
         <NativePage
@@ -1578,10 +1599,17 @@ pub fn FormDetailPage() -> impl IntoView {
 #[component]
 pub fn FormEditPage() -> impl IntoView {
     let FormRouteParams { form_id } = require_route_params();
+    let _form_id_for_load = form_id.clone();
+    let session = use_account_session();
+    #[cfg(not(feature = "hydrate"))]
+    let _ = session;
     #[cfg(feature = "hydrate")]
-    hydrate::set_context("form-edit", Some(form_id.clone()));
-    #[cfg(feature = "hydrate")]
-    hydrate::load_edit_page(form_id.clone());
+    Effect::new(move |_| {
+        if session.loaded.get() && session.account.get().is_some() {
+            hydrate::set_context("form-edit", Some(_form_id_for_load.clone()));
+            hydrate::load_edit_page(_form_id_for_load.clone());
+        }
+    });
 
     view! {
         <NativePage
