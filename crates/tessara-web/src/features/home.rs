@@ -1,7 +1,4 @@
 use leptos::prelude::*;
-
-#[cfg(feature = "hydrate")]
-use serde::Deserialize;
 #[cfg(feature = "hydrate")]
 use serde_json::{Value, json};
 
@@ -10,72 +7,51 @@ use crate::features::native_runtime::set_page_context;
 #[cfg(feature = "hydrate")]
 use crate::features::native_runtime::{get_json, post_json, redirect};
 use crate::features::native_shell::{
-    ADMIN_LINKS, AccountContext, BreadcrumbItem, MetadataStrip, NativePage, NavLinkSpec,
-    PRODUCT_LINKS, PageHeader, Panel, TRANSITIONAL_LINKS, use_account_session, visible_links,
+    AccountContext, BreadcrumbItem, NativePage, PageHeader, Panel, has_capability,
+    use_account_session,
 };
 
-fn directory_card(spec: &NavLinkSpec) -> AnyView {
-    view! {
-        <article class="directory-card card">
-            <div class="card-content">
-                <h3>{spec.label}</h3>
-                <p>{spec.home_description}</p>
-                <a class="button-link button is-light" href=spec.href>{spec.home_action_label}</a>
-            </div>
-        </article>
-    }
-    .into_any()
-}
-
-fn home_section_cards(
-    loaded: bool,
-    account: Option<&AccountContext>,
-    links: &'static [NavLinkSpec],
-) -> AnyView {
-    if !loaded {
-        return view! { <p class="muted">"Loading available destinations..."</p> }.into_any();
-    }
-
-    let visible = visible_links(loaded, account, links);
-
-    if visible.is_empty() {
-        return view! { <p class="muted">"No destinations are available for the current account."</p> }
-            .into_any();
-    }
-
-    view! {
-        <div class="home-grid">
-            {visible
-                .into_iter()
-                .map(|link| directory_card(link))
-                .collect_view()}
-        </div>
-    }
-    .into_any()
-}
-
-fn home_visible_cards(loaded: bool, visible: Vec<&NavLinkSpec>) -> AnyView {
-    if !loaded {
-        return view! { <p class="muted">"Loading available destinations..."</p> }.into_any();
-    }
-
-    if visible.is_empty() {
-        return view! { <p class="muted">"No destinations are available for the current account."</p> }
-            .into_any();
-    }
-
-    view! {
-        <div class="home-grid">
-            {visible.into_iter().map(directory_card).collect_view()}
-        </div>
-    }
-    .into_any()
-}
-
-#[cfg(feature = "hydrate")]
-#[derive(Clone, Deserialize)]
+#[cfg_attr(feature = "hydrate", derive(serde::Deserialize))]
+#[derive(Clone)]
 struct LoginSessionStateResponse {
     authenticated: bool,
+}
+
+#[cfg_attr(feature = "hydrate", derive(serde::Deserialize))]
+#[derive(Clone)]
+struct HomeSummaryResponse {
+    published_form_versions: i64,
+    draft_submissions: i64,
+    submitted_submissions: i64,
+    dashboards: i64,
+}
+
+#[cfg_attr(feature = "hydrate", derive(serde::Deserialize))]
+#[derive(Clone)]
+struct HomePendingAssignmentSummary {
+    workflow_assignment_id: String,
+    workflow_name: String,
+    form_name: String,
+    form_version_label: Option<String>,
+    node_name: String,
+    account_display_name: String,
+}
+
+fn scope_root_labels(account: &AccountContext) -> Vec<(String, String)> {
+    let mut roots = account
+        .scope_nodes
+        .iter()
+        .filter(|node| {
+            !account
+                .scope_nodes
+                .iter()
+                .any(|candidate| Some(candidate.node_id.as_str()) == node.parent_node_id.as_deref())
+        })
+        .map(|node| (node.node_type_name.clone(), node.node_name.clone()))
+        .collect::<Vec<_>>();
+    roots.sort_by(|left, right| left.0.cmp(&right.0).then_with(|| left.1.cmp(&right.1)));
+    roots.dedup();
+    roots
 }
 
 #[component]
@@ -93,6 +69,44 @@ pub fn AdminWorkbenchPage() -> impl IntoView {
 #[component]
 pub fn HomePage() -> impl IntoView {
     let session = use_account_session();
+    let home_summary = RwSignal::new(None::<HomeSummaryResponse>);
+    let pending_assignments = RwSignal::new(None::<Vec<HomePendingAssignmentSummary>>);
+    let home_summary_error = RwSignal::new(None::<String>);
+    let home_queue_error = RwSignal::new(None::<String>);
+
+    #[cfg(feature = "hydrate")]
+    Effect::new(move |_| {
+        if !session.loaded.get() || session.account.get().is_none() {
+            return;
+        }
+
+        leptos::task::spawn_local(async move {
+            match get_json::<HomeSummaryResponse>("/api/app/summary").await {
+                Ok(summary) => {
+                    home_summary.set(Some(summary));
+                    home_summary_error.set(None);
+                }
+                Err(error) => {
+                    home_summary.set(None);
+                    home_summary_error.set(Some(error));
+                }
+            }
+
+            match get_json::<Vec<HomePendingAssignmentSummary>>("/api/workflow-assignments/pending")
+                .await
+            {
+                Ok(items) => {
+                    pending_assignments.set(Some(items));
+                    home_queue_error.set(None);
+                }
+                Err(error) => {
+                    pending_assignments.set(None);
+                    home_queue_error.set(Some(error));
+                }
+            }
+        });
+    });
+
     view! {
         <NativePage
             title="Tessara Home"
@@ -104,88 +118,248 @@ pub fn HomePage() -> impl IntoView {
         >
             <PageHeader
                 eyebrow="Shared Home"
-                title="Application Overview"
-                description="Use this shared home as the entry point for product areas, workflow queues, and internal workspaces."
+                title="Current Work"
+                description="Start from pending response work, compact operational totals, and current hierarchy context."
             />
-            <MetadataStrip items=vec![
-                ("Mode", "Shared Home".into()),
-                ("Surface", "Role-aware overview".into()),
-                ("State", "Native SSR shell".into()),
-            ]/>
-            <Panel
-                title="Role-Ready Home Modules"
-                description="These modules define the shared home shape for admin, scoped-operator, and respondent variants."
-            >
-                <div class="home-grid">
-                    <article class="home-card">
-                        <h3>"Scoped Operations"</h3>
-                        <p>"Organization and form access for partner, program, activity, and session-style work."</p>
-                    </article>
-                    <article class="home-card">
-                        <h3>"Response Delivery"</h3>
-                        <p>"Start, edit, submit, and review response work without exposing builder-first navigation."</p>
-                    </article>
-                    <article class="home-card">
-                        <h3>"Oversight and Insight"</h3>
-                        <p>"Dashboards, reports, datasets, and internal oversight remain available without collapsing back into a control console."</p>
-                    </article>
+            {move || {
+                let summary = home_summary.get();
+                if let Some(summary) = summary {
+                    return view! {
+                        <section id="home-metric-strip" class="home-metric-strip">
+                            <article class="home-metric">
+                                <strong>{pending_assignments.get().map(|items| items.len()).unwrap_or(0)}</strong>
+                                <span>"Pending"</span>
+                            </article>
+                            <article class="home-metric">
+                                <strong>{summary.draft_submissions}</strong>
+                                <span>"Drafts"</span>
+                            </article>
+                            <article class="home-metric">
+                                <strong>{summary.submitted_submissions}</strong>
+                                <span>"Submitted"</span>
+                            </article>
+                            <article class="home-metric">
+                                <strong>{if summary.dashboards > 0 { summary.dashboards } else { summary.published_form_versions }}</strong>
+                                <span>{if summary.dashboards > 0 { "Dashboards" } else { "Published forms" }}</span>
+                            </article>
+                        </section>
+                    }
+                    .into_any();
+                }
+
+                if let Some(error) = home_summary_error.get() {
+                    return view! { <p id="home-metric-feedback" class="muted">{error}</p> }.into_any();
+                }
+
+                view! { <p id="home-metric-feedback" class="muted">"Loading home metrics..."</p> }
+                    .into_any()
+            }}
+            <div class="home-workspace-grid">
+                <Panel
+                    title="Current Work"
+                    description="Pending response assignments stay primary on Home so the route starts with work rather than destination launchers."
+                >
+                    <div id="home-current-work" class="home-queue-panel">
+                        {move || {
+                            if let Some(error) = home_queue_error.get() {
+                                return view! {
+                                    <p id="home-queue-feedback" class="muted">{error}</p>
+                                }
+                                .into_any();
+                            }
+
+                            if let Some(items) = pending_assignments.get() {
+                                if items.is_empty() {
+                                    let draft_count = home_summary
+                                        .get()
+                                        .map(|summary| summary.draft_submissions)
+                                        .unwrap_or_default();
+                                    let submitted_count = home_summary
+                                        .get()
+                                        .map(|summary| summary.submitted_submissions)
+                                        .unwrap_or_default();
+                                    return view! {
+                                        <div class="home-empty-state" id="home-queue-feedback">
+                                            <strong>"No assignments are waiting right now."</strong>
+                                            <p class="muted">
+                                                {if draft_count > 0 {
+                                                    format!("You still have {draft_count} draft response{} ready to continue in Responses.", if draft_count == 1 { "" } else { "s" })
+                                                } else if submitted_count > 0 {
+                                                    "The active queue is clear. Responses still holds your submitted history.".into()
+                                                } else {
+                                                    "Responses becomes the next stop when new assignments arrive.".into()
+                                                }}
+                                            </p>
+                                        </div>
+                                    }
+                                    .into_any();
+                                }
+
+                                return view! {
+                                    <div class="home-queue-list" id="home-queue-list">
+                                        {items
+                                            .into_iter()
+                                            .take(4)
+                                            .map(|item| {
+                                                let assignee_label = item.account_display_name.clone();
+                                                let show_assignee = !assignee_label.trim().is_empty();
+                                                view! {
+                                                    <article class="record-card home-queue-card">
+                                                        <div class="home-queue-card__copy">
+                                                            <h3>{item.workflow_name}</h3>
+                                                            <p>{item.node_name}</p>
+                                                            <p class="muted">
+                                                                {format!(
+                                                                    "Form: {} {}",
+                                                                    item.form_name,
+                                                                    item.form_version_label.unwrap_or_default()
+                                                                )}
+                                                            </p>
+                                                            <Show when=move || show_assignee>
+                                                                <p class="muted">
+                                                                    {format!("Assigned to {}", assignee_label)}
+                                                                </p>
+                                                            </Show>
+                                                        </div>
+                                                        <div class="actions">
+                                                            <a
+                                                                class="button-link button is-light"
+                                                                href=format!(
+                                                                    "/app/responses?workflowAssignmentId={}",
+                                                                    item.workflow_assignment_id
+                                                                )
+                                                            >
+                                                                "Start"
+                                                            </a>
+                                                        </div>
+                                                    </article>
+                                                }
+                                            })
+                                            .collect_view()}
+                                    </div>
+                                }
+                                .into_any();
+                            }
+
+                            view! {
+                                <p id="home-queue-feedback" class="muted">"Loading current work..."</p>
+                            }
+                            .into_any()
+                        }}
+                        <div class="home-next-step">
+                            <a class="button-link button is-primary" href="/app/responses">"Open Responses"</a>
+                            {move || {
+                                let account = session.account.get();
+                                if account.as_ref().is_some_and(|account| !account.delegations.is_empty()) {
+                                    return view! {
+                                        <p class="muted">
+                                            "Delegated response context remains available from Responses when you switch acting account."
+                                        </p>
+                                    }
+                                    .into_any();
+                                }
+
+                                view! { <></> }.into_any()
+                            }}
+                        </div>
+                    </div>
+                </Panel>
+                <div class="home-workspace-secondary">
+                    <Panel
+                        title="Hierarchy Context"
+                        description="Home keeps hierarchy awareness visible without turning the body back into a second navigation launcher."
+                    >
+                        <div id="home-hierarchy-context" class="home-hierarchy-panel">
+                            {move || {
+                                let account = session.account.get();
+                                let Some(account) = account else {
+                                    return view! { <p class="muted">"Loading hierarchy context..."</p> }.into_any();
+                                };
+
+                                if !has_capability(Some(&account), "hierarchy:read") {
+                                    return view! {
+                                        <p class="muted">
+                                            "This account does not currently have Organization access."
+                                        </p>
+                                    }
+                                    .into_any();
+                                }
+
+                                let roots = scope_root_labels(&account);
+                                if roots.is_empty() {
+                                    return view! {
+                                        <>
+                                            <p class="muted">"Full application access across the organization tree."</p>
+                                            <div class="actions">
+                                                <a class="button-link button is-light" href="/app/organization">"Open Organization"</a>
+                                            </div>
+                                        </>
+                                    }
+                                    .into_any();
+                                }
+
+                                view! {
+                                    <>
+                                        <ul id="home-hierarchy-list" class="home-hierarchy-list">
+                                            {roots
+                                                .into_iter()
+                                                .map(|(node_type, node_name)| view! {
+                                                    <li class="home-hierarchy-item">
+                                                        <span class="home-hierarchy-item__type">{node_type}</span>
+                                                        <span class="home-hierarchy-item__name">{node_name}</span>
+                                                    </li>
+                                                })
+                                                .collect_view()}
+                                        </ul>
+                                        <div class="actions">
+                                            <a class="button-link button is-light" href="/app/organization">"Open Organization"</a>
+                                        </div>
+                                    </>
+                                }
+                                .into_any()
+                            }}
+                        </div>
+                    </Panel>
+                    <Panel
+                        title="Operational Snapshot"
+                        description="Compact totals stay glanceable here instead of expanding into a second dashboard row."
+                    >
+                        <div id="home-operational-snapshot" class="home-snapshot-list">
+                            {move || {
+                                if let Some(summary) = home_summary.get() {
+                                    return view! {
+                                        <>
+                                            <div class="home-snapshot-item">
+                                                <span>"Draft responses"</span>
+                                                <strong>{summary.draft_submissions}</strong>
+                                            </div>
+                                            <div class="home-snapshot-item">
+                                                <span>"Submitted responses"</span>
+                                                <strong>{summary.submitted_submissions}</strong>
+                                            </div>
+                                            <div class="home-snapshot-item">
+                                                <span>"Published forms"</span>
+                                                <strong>{summary.published_form_versions}</strong>
+                                            </div>
+                                            <div class="home-snapshot-item">
+                                                <span>"Dashboards"</span>
+                                                <strong>{summary.dashboards}</strong>
+                                            </div>
+                                        </>
+                                    }
+                                    .into_any();
+                                }
+
+                                if let Some(error) = home_summary_error.get() {
+                                    return view! { <p class="muted">{error}</p> }.into_any();
+                                }
+
+                                view! { <p class="muted">"Loading operational totals..."</p> }.into_any()
+                            }}
+                        </div>
+                    </Panel>
                 </div>
-            </Panel>
-            <Panel
-                title="Product Areas"
-                description="These are the primary destinations for top-level entity browsing and workflow entry."
-            >
-                {move || {
-                    let account = session.account.get();
-                    let visible = visible_links(session.loaded.get(), account.as_ref(), PRODUCT_LINKS)
-                        .into_iter()
-                        .filter(|link| link.key != "home" && link.key != "dashboards")
-                        .collect::<Vec<_>>();
-                    home_visible_cards(session.loaded.get(), visible)
-                }}
-            </Panel>
-            <Panel
-                title="Transitional Reporting"
-                description="Reporting remains reachable while dashboards stay in the primary navigation and the target component model continues to replace the older asset shape."
-            >
-                {move || {
-                    let account = session.account.get();
-                    home_section_cards(session.loaded.get(), account.as_ref(), TRANSITIONAL_LINKS)
-                }}
-            </Panel>
-            <Panel
-                title="Current Deployment Readiness"
-                description="Refresh Summary confirms the current stack has enough configured data for response, reporting, and dashboard workflows."
-            >
-                <div class="record-list">
-                    <article class="record-card compact-record-card">
-                        <h4>"Current Counters"</h4>
-                        <p class="muted">"Runtime counters and readiness checks load after hydration."</p>
-                    </article>
-                </div>
-            </Panel>
-            <Panel
-                title="Current Workflow Context"
-                description="Current selections appear here and in the shared sidebar."
-            >
-                <div class="selection-grid">
-                    <p class="muted">"No records selected yet."</p>
-                </div>
-            </Panel>
-            <Panel
-                title="Internal Workspaces"
-                description="Internal Areas and reporting destinations remain available, but secondary to the main product journey."
-            >
-                {move || {
-                    let account = session.account.get();
-                    let loaded = session.loaded.get();
-                    let mut visible = visible_links(loaded, account.as_ref(), ADMIN_LINKS);
-                    visible.extend(visible_links(loaded, account.as_ref(), PRODUCT_LINKS)
-                        .into_iter()
-                        .filter(|link| link.key == "dashboards" || link.key == "components"));
-                    home_visible_cards(loaded, visible)
-                }}
-            </Panel>
+            </div>
         </NativePage>
     }
 }

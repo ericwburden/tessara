@@ -70,6 +70,21 @@ async function waitForAuthenticatedShell(page: Page, email?: string) {
   }
 }
 
+async function expectQueueFirstHome(page: Page) {
+  await expect(page.getByRole("heading", { level: 1, name: "Current Work" })).toBeVisible();
+  await expect(page.locator("#home-current-work")).toBeVisible();
+  await expect(page.locator("#home-hierarchy-context")).toBeVisible();
+  await expect(page.locator("#home-operational-snapshot")).toBeVisible();
+  await expect(page.locator("#home-metric-strip")).toBeVisible();
+  await expect(page.locator("body")).not.toContainText("Product Areas");
+  await expect(page.locator("body")).not.toContainText("Internal Workspaces");
+  await expect(page.locator("body")).not.toContainText("Transitional Reporting");
+  await expect(page.getByRole("link", { name: "Go to Forms" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Go to Workflows" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Go to Responses" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Go to Organization" })).toHaveCount(0);
+}
+
 async function signOut(page: Page) {
   await page.getByRole("button", { name: "Sign Out" }).click();
   await expect(page).toHaveURL(/\/app\/login$/);
@@ -219,7 +234,7 @@ test("home route stays on the native SSR shell", async ({ page }) => {
 
   await page.goto("/app");
 
-  await expect(page.getByRole("heading", { name: "Application Overview" })).toBeVisible();
+  await expectQueueFirstHome(page);
   await expect(page.locator("#global-search")).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Primary navigation" }).getByRole("link", { name: "Components" })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Primary navigation" }).getByRole("link", { name: "Dashboards" })).toBeVisible();
@@ -233,7 +248,7 @@ test("home route stays on the native SSR shell", async ({ page }) => {
 
   await page.reload();
   await waitForAuthenticatedShell(page, "admin@tessara.local");
-  await expect(page.getByRole("heading", { name: "Application Overview" })).toBeVisible();
+  await expectQueueFirstHome(page);
   await expectNoLegacyBridge(page);
 
   const scripts = await pkgScripts(page);
@@ -281,7 +296,7 @@ test("sign-in route stays bare and redirects authenticated browsers home", async
   await page.goto("/app/login");
   await waitForAuthenticatedShell(page, "admin@tessara.local");
   await expect(page).toHaveURL(/\/app$/);
-  await expect(page.getByRole("heading", { name: "Application Overview" })).toBeVisible();
+  await expectQueueFirstHome(page);
   await expect(page.locator("#shell-account-context")).toContainText("admin@tessara.local");
 
   await assertNoConsoleErrors();
@@ -646,11 +661,11 @@ test("post-login home entry persists across refresh and clears on logout", async
   await signInAsAdmin(page);
   await waitForAuthenticatedShell(page, "admin@tessara.local");
   await expect(page).toHaveURL(/\/app$/);
-  await expect(page.getByRole("heading", { name: "Application Overview" })).toBeVisible();
+  await expectQueueFirstHome(page);
 
   await page.reload();
   await waitForAuthenticatedShell(page, "admin@tessara.local");
-  await expect(page.getByRole("heading", { name: "Application Overview" })).toBeVisible();
+  await expectQueueFirstHome(page);
 
   await signOut(page);
   await expect(page).toHaveURL(/\/app\/login$/);
@@ -669,6 +684,7 @@ test("response users only see sidebar areas they can access", async ({ page }) =
   await waitForAuthenticatedShell(page, "respondent@tessara.local");
 
   await expect(page).toHaveURL(/\/app$/);
+  await expectQueueFirstHome(page);
 
   const productNav = page.getByRole("navigation", { name: "Primary navigation" });
   await expect(productNav.getByRole("link", { name: "Home" })).toBeVisible();
@@ -677,10 +693,7 @@ test("response users only see sidebar areas they can access", async ({ page }) =
   await expect(productNav.getByRole("link", { name: "Forms" })).toHaveCount(0);
   await expect(productNav.getByRole("link", { name: "Workflows" })).toHaveCount(0);
   await expect(productNav.getByRole("link", { name: "Dashboards" })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Go to Forms" })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Go to Workflows" })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Go to Organization" })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Go to Responses" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open Responses" })).toBeVisible();
 
   await assertNoConsoleErrors();
 });
@@ -691,6 +704,7 @@ test("admins see the full authorized native navigation model", async ({ page }) 
   await waitForAuthenticatedShell(page, "admin@tessara.local");
 
   await expect(page).toHaveURL(/\/app$/);
+  await expectQueueFirstHome(page);
 
   const productNav = page.getByRole("navigation", { name: "Primary navigation" });
   await expect(productNav.getByRole("link", { name: "Home" })).toBeVisible();
@@ -705,10 +719,8 @@ test("admins see the full authorized native navigation model", async ({ page }) 
   await expect(page.getByRole("navigation", { name: "Admin navigation" }).getByRole("link", { name: "Migration" })).toBeVisible();
   await expect(page.locator("#app-sidebar").getByRole("link", { name: "Reports" })).toHaveCount(0);
 
-  await expect(page.getByRole("link", { name: "Go to Forms" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Go to Workflows" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Go to Responses" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Go to Organization" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open Responses" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open Organization" })).toBeVisible();
 
   await assertNoConsoleErrors();
 });
@@ -721,7 +733,7 @@ test("unauthorized deep links redirect home with transient shell feedback", asyn
   await page.goto("/app/forms");
 
   await expect(page).toHaveURL(/\/app$/);
-  await expect(page.getByRole("heading", { name: "Application Overview" })).toBeVisible();
+  await expectQueueFirstHome(page);
   await expect(page.locator("[data-shell-toast]")).toContainText("You do not have access to that screen.");
   await expect(page.locator("[data-shell-toast]")).toContainText("Tessara returned you to Home.");
   await expect(page.locator("#app-sidebar").getByRole("link", { name: "Forms" })).toHaveCount(0);
