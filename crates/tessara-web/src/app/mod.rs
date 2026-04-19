@@ -1,6 +1,6 @@
 use leptos::prelude::*;
 use leptos_router::components::{Route, Router, Routes};
-use leptos_router::{Lazy, SsrMode, path};
+use leptos_router::{SsrMode, path};
 #[cfg(feature = "hydrate")]
 use wasm_bindgen::{JsCast, prelude::wasm_bindgen};
 
@@ -105,13 +105,9 @@ pub fn hydrate_app(root_id: &str) {
 
 #[component]
 pub fn App() -> impl IntoView {
-    let migration_route = Lazy::<migration::MigrationLazyRoute>::new();
-
     // Route inventory note:
-    // `/app/login`, `/app/organization/*`, and `/app/administration/*` have
-    // explicit route ownership. Organization now runs through the native
-    // hierarchy-first shell while the broader internal administration area
-    // still uses the retained bridge controller for body-level behavior.
+    // `/app/login`, `/app/organization/*`, `/app/administration/*`,
+    // `/app/dashboards/*`, and `/app/migration` have explicit route ownership.
     view! {
         <Router>
             <Routes fallback=|| view! { <p>"Not found."</p> }>
@@ -159,7 +155,7 @@ pub fn App() -> impl IntoView {
                 <Route path=path!("/app/administration/roles/:role_id") view=administration::RoleDetailPage ssr=PRIMARY_SSR_MODE />
                 <Route path=path!("/app/administration/roles/:role_id/edit") view=administration::RoleEditPage ssr=PRIMARY_SSR_MODE />
                 <Route path=path!("/app/admin") view=administration::LegacyAdminPage ssr=PRIMARY_SSR_MODE />
-                <Route path=path!("/app/migration") view=migration_route.clone() ssr=PRIMARY_SSR_MODE />
+                <Route path=path!("/app/migration") view=migration::MigrationPage ssr=PRIMARY_SSR_MODE />
             </Routes>
         </Router>
     }

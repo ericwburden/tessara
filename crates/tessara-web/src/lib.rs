@@ -202,7 +202,11 @@ pub fn response_edit_application_html(submission_id: &str) -> String {
 }
 
 pub fn dashboards_application_shell_html() -> String {
-    application::dashboards_application_shell_html(app_script::APPLICATION_SCRIPT)
+    document::render_native_app_document(
+        "Tessara Dashboards",
+        "Tessara dashboards list screen.",
+        "/app/dashboards",
+    )
 }
 
 pub fn datasets_application_shell_html() -> String {
@@ -222,79 +226,155 @@ pub fn component_detail_application_html(component_ref: &str) -> String {
 }
 
 pub fn dashboard_create_application_html() -> String {
-    application::dashboard_create_application_html(app_script::APPLICATION_SCRIPT)
+    document::render_native_app_document(
+        "Create Dashboard",
+        "Create a Tessara dashboard.",
+        "/app/dashboards/new",
+    )
 }
 
 pub fn dashboard_detail_application_html(dashboard_id: &str) -> String {
-    application::dashboard_detail_application_html(app_script::APPLICATION_SCRIPT, dashboard_id)
+    document::render_native_app_document(
+        "Dashboard Detail",
+        "Inspect a Tessara dashboard.",
+        &format!("/app/dashboards/{dashboard_id}"),
+    )
 }
 
 pub fn dashboard_edit_application_html(dashboard_id: &str) -> String {
-    application::dashboard_edit_application_html(app_script::APPLICATION_SCRIPT, dashboard_id)
+    document::render_native_app_document(
+        "Edit Dashboard",
+        "Edit a Tessara dashboard.",
+        &format!("/app/dashboards/{dashboard_id}/edit"),
+    )
 }
 
 pub fn administration_application_shell_html() -> String {
-    application::administration_application_shell_html(app_script::APPLICATION_SCRIPT)
+    document::render_native_app_document(
+        "Tessara Administration",
+        "Tessara internal administration landing page.",
+        "/app/administration",
+    )
 }
 
 pub fn users_application_shell_html() -> String {
-    application::users_application_shell_html(app_script::APPLICATION_SCRIPT)
+    document::render_native_app_document(
+        "Tessara User Management",
+        "Browse and manage Tessara user accounts.",
+        "/app/administration/users",
+    )
 }
 
 pub fn user_create_application_html() -> String {
-    application::user_create_application_html(app_script::APPLICATION_SCRIPT)
+    document::render_native_app_document(
+        "Create User",
+        "Create a Tessara application account.",
+        "/app/administration/users/new",
+    )
 }
 
 pub fn user_detail_application_html(account_id: &str) -> String {
-    application::user_detail_application_html(app_script::APPLICATION_SCRIPT, account_id)
+    document::render_native_app_document(
+        "User Detail",
+        "Inspect a Tessara application account.",
+        &format!("/app/administration/users/{account_id}"),
+    )
 }
 
 pub fn user_edit_application_html(account_id: &str) -> String {
-    application::user_edit_application_html(app_script::APPLICATION_SCRIPT, account_id)
+    document::render_native_app_document(
+        "Edit User",
+        "Edit a Tessara application account.",
+        &format!("/app/administration/users/{account_id}/edit"),
+    )
 }
 
 pub fn user_access_application_html(account_id: &str) -> String {
-    application::user_access_application_html(app_script::APPLICATION_SCRIPT, account_id)
+    document::render_native_app_document(
+        "User Access",
+        "Manage scoped access assignments for a Tessara application account.",
+        &format!("/app/administration/users/{account_id}/access"),
+    )
 }
 
 pub fn node_types_application_shell_html() -> String {
-    application::node_types_application_shell_html(app_script::APPLICATION_SCRIPT)
+    document::render_native_app_document(
+        "Tessara Organization Node Types",
+        "Browse and manage Tessara organization node types.",
+        "/app/administration/node-types",
+    )
 }
 
 pub fn node_type_create_application_html() -> String {
-    application::node_type_create_application_html(app_script::APPLICATION_SCRIPT)
+    document::render_native_app_document(
+        "Create Organization Node Type",
+        "Create a Tessara organization node type.",
+        "/app/administration/node-types/new",
+    )
 }
 
 pub fn node_type_detail_application_html(node_type_id: &str) -> String {
-    application::node_type_detail_application_html(app_script::APPLICATION_SCRIPT, node_type_id)
+    document::render_native_app_document(
+        "Organization Node Type Detail",
+        "Inspect a Tessara organization node type.",
+        &format!("/app/administration/node-types/{node_type_id}"),
+    )
 }
 
 pub fn node_type_edit_application_html(node_type_id: &str) -> String {
-    application::node_type_edit_application_html(app_script::APPLICATION_SCRIPT, node_type_id)
+    document::render_native_app_document(
+        "Edit Organization Node Type",
+        "Edit a Tessara organization node type.",
+        &format!("/app/administration/node-types/{node_type_id}/edit"),
+    )
 }
 
 pub fn roles_application_shell_html() -> String {
-    application::roles_application_shell_html(app_script::APPLICATION_SCRIPT)
+    document::render_native_app_document(
+        "Tessara Roles",
+        "Browse and inspect Tessara role bundles.",
+        "/app/administration/roles",
+    )
 }
 
 pub fn role_create_application_html() -> String {
-    application::role_create_application_html(app_script::APPLICATION_SCRIPT)
+    document::render_native_app_document(
+        "Create Role",
+        "Create a Tessara role bundle.",
+        "/app/administration/roles/new",
+    )
 }
 
 pub fn role_detail_application_html(role_id: &str) -> String {
-    application::role_detail_application_html(app_script::APPLICATION_SCRIPT, role_id)
+    document::render_native_app_document(
+        "Role Detail",
+        "Inspect a Tessara role bundle.",
+        &format!("/app/administration/roles/{role_id}"),
+    )
 }
 
 pub fn role_edit_application_html(role_id: &str) -> String {
-    application::role_edit_application_html(app_script::APPLICATION_SCRIPT, role_id)
+    document::render_native_app_document(
+        "Edit Role",
+        "Edit a Tessara role bundle.",
+        &format!("/app/administration/roles/{role_id}/edit"),
+    )
 }
 
 pub fn admin_application_shell_html() -> String {
-    shell::admin_shell_html(shell_script::SCRIPT)
+    document::render_native_app_document(
+        "Tessara Admin Console",
+        "Tessara internal admin workbench summary.",
+        "/app/admin",
+    )
 }
 
 pub fn migration_application_shell_html() -> String {
-    application::migration_application_shell_html(app_script::APPLICATION_SCRIPT)
+    document::render_native_app_document(
+        "Tessara Migration",
+        "Tessara migration workbench.",
+        "/app/migration",
+    )
 }
 
 pub fn reporting_application_shell_html() -> String {
@@ -545,7 +625,7 @@ mod tests {
         assert!(reports.contains("report-list"));
 
         assert!(dashboards.contains("Dashboards"));
-        assert!(dashboards.contains("Create Dashboard"));
+        assert!(dashboards.contains("Dashboard Directory"));
         assert!(dashboards.contains("dashboard-list"));
     }
 
@@ -577,16 +657,19 @@ mod tests {
         let dashboard_edit =
             dashboard_edit_application_html("00000000-0000-0000-0000-000000000005");
 
-        for html in [
-            report_new.as_str(),
-            report_edit.as_str(),
-            dashboard_new.as_str(),
-            dashboard_edit.as_str(),
-        ] {
+        for html in [report_new.as_str(), report_edit.as_str()] {
             assert!(html.contains("Submit"));
             assert!(html.contains("Cancel"));
             assert!(!html.contains(" ID"));
         }
+
+        assert!(dashboard_new.contains("Create Dashboard"));
+        assert!(dashboard_new.contains("dashboard-form"));
+        assert!(dashboard_new.contains("Cancel"));
+        assert!(dashboard_edit.contains("Edit Dashboard"));
+        assert!(dashboard_edit.contains("dashboard-form"));
+        assert!(dashboard_edit.contains("Save Dashboard"));
+        assert!(dashboard_edit.contains("Cancel"));
 
         assert!(form_new.contains("Create Form"));
         assert!(form_new.contains("Cancel"));
@@ -627,7 +710,7 @@ mod tests {
         assert!(report_detail.contains("Report Detail"));
         assert!(report_detail.contains("Run"));
         assert!(dashboard_detail.contains("Dashboard Detail"));
-        assert!(dashboard_detail.contains("View"));
+        assert!(dashboard_detail.contains("Component Summary"));
     }
 
     #[test]
@@ -638,33 +721,30 @@ mod tests {
         let migration = migration_application_shell_html();
 
         assert!(administration.contains("Administration"));
-        assert!(administration.contains("Advanced Configuration"));
-        assert!(administration.contains("User Accounts"));
+        assert!(administration.contains("Administration Workspace"));
+        assert!(administration.contains("User Management"));
         assert!(administration.contains("/app/administration/users"));
-        assert!(administration.contains("Role Catalog"));
+        assert!(administration.contains("Role Management"));
         assert!(administration.contains("/app/administration/roles"));
-        assert!(administration.contains("Organization Schema"));
+        assert!(administration.contains("Organization Node Types"));
         assert!(administration.contains("/app/administration/node-types"));
-        assert!(administration.contains("Open Legacy Builder"));
-        assert!(administration.contains("/app/admin"));
-        assert!(administration.contains("/app/datasets"));
-        assert!(administration.contains("/app/components"));
+        assert!(administration.contains("Migration Workbench"));
+        assert!(administration.contains("/app/migration"));
 
         assert!(users.contains("User Management"));
-        assert!(users.contains("Create User"));
-        assert!(users.contains("user-list"));
+        assert!(users.contains("admin-user-list"));
+        assert!(users.contains("Accounts"));
 
         assert!(roles.contains("Roles"));
-        assert!(roles.contains("role-list"));
-        assert!(roles.contains("Create Role"));
+        assert!(roles.contains("admin-role-list"));
+        assert!(roles.contains("Role Catalog"));
 
         assert!(migration.contains("Migration Workbench"));
-        assert!(migration.contains("Load Fixture Examples"));
+        assert!(migration.contains("Fixture Examples"));
         assert!(migration.contains("Validate Fixture"));
-        assert!(migration.contains("Dry-Run Fixture"));
+        assert!(migration.contains("Dry Run"));
         assert!(migration.contains("Import Fixture"));
-        assert!(administration.contains("Administration Workspace"));
-        assert!(migration.contains("Migration Workspace"));
+        assert!(migration.contains("Operator import flow"));
     }
 
     #[test]
@@ -711,14 +791,14 @@ mod tests {
         assert!(organization_detail.contains("organization-detail"));
         assert!(organization_edit.contains("organization-form"));
 
-        assert!(node_types.contains(r#"data-page-key="node-type-list""#));
-        assert!(node_types.contains(r#"data-active-route="administration""#));
-        assert!(node_type_create.contains(r#"data-page-key="node-type-create""#));
-        assert!(node_type_detail.contains(r#"data-page-key="node-type-detail""#));
-        assert!(
-            node_type_detail.contains(r#"data-record-id="00000000-0000-0000-0000-000000000010""#)
-        );
-        assert!(node_type_edit.contains(r#"data-page-key="node-type-edit""#));
+        assert!(node_types.contains("Organization Node Types"));
+        assert!(node_types.contains("admin-node-type-list"));
+        assert!(node_type_create.contains("Create Organization Node Type"));
+        assert!(node_type_create.contains("node-type-form"));
+        assert!(node_type_detail.contains("Organization Node Type Detail"));
+        assert!(node_type_detail.contains("Loading node type detail"));
+        assert!(node_type_edit.contains("Edit Organization Node Type"));
+        assert!(node_type_edit.contains("node-type-form"));
     }
 
     #[test]
@@ -809,48 +889,41 @@ mod tests {
 
         assert!(create.contains("Create User"));
         assert!(create.contains("user-form"));
-        assert!(create.contains("user-role-options"));
-        assert!(create.contains("Account is active"));
+        assert!(create.contains("user-form-status"));
+        assert!(create.contains("Active account"));
 
         assert!(detail.contains("User Detail"));
-        assert!(detail.contains("Back to List"));
+        assert!(detail.contains("Loading account detail"));
 
         assert!(edit.contains("Edit User"));
-        assert!(edit.contains("Leave blank to keep the current password."));
-        assert!(edit.contains("Submit"));
+        assert!(edit.contains("Password (optional)"));
+        assert!(edit.contains("Save User"));
         assert!(edit.contains("Cancel"));
 
         assert!(access.contains("User Access"));
-        assert!(access.contains("user-access-form"));
-        assert!(access.contains("user-scope-options"));
-        assert!(access.contains("user-delegation-options"));
+        assert!(access.contains("Loading access assignments"));
 
         assert!(node_types.contains("Organization Node Types"));
-        assert!(node_types.contains("node-type-list"));
-        assert!(node_types.contains("Create Organization Node Type"));
+        assert!(node_types.contains("admin-node-type-list"));
+        assert!(node_types.contains("Node Type Catalog"));
         assert!(node_type_create.contains("node-type-form"));
-        assert!(!node_type_create.contains("node-type-singular-label"));
-        assert!(node_type_create.contains("node-type-parent-tags"));
-        assert!(node_type_create.contains("node-type-parent-filter"));
-        assert!(node_type_create.contains("node-type-parent-options"));
-        assert!(node_type_create.contains("node-type-child-tags"));
-        assert!(node_type_create.contains("node-type-child-filter"));
-        assert!(node_type_create.contains("node-type-child-options"));
-        assert!(node_type_create.contains("node-type-metadata-fields-editor"));
-        assert!(node_type_create.contains("node-type-metadata-settings-modal"));
+        assert!(node_type_create.contains("node-type-name"));
+        assert!(node_type_create.contains("node-type-slug"));
+        assert!(node_type_create.contains("node-type-plural-label"));
+        assert!(node_type_create.contains("node-type-form-status"));
         assert!(node_type_detail.contains("Organization Node Type Detail"));
-        assert!(node_type_detail.contains("Back to List"));
+        assert!(node_type_detail.contains("Loading node type detail"));
         assert!(node_type_edit.contains("Edit Organization Node Type"));
         assert!(node_type_edit.contains("node-type-plural-label"));
-        assert!(node_type_edit.contains("Submit"));
+        assert!(node_type_edit.contains("Save Node Type"));
 
         assert!(role_create.contains("Create Role"));
         assert!(role_create.contains("role-name"));
         assert!(role_detail.contains("Role Detail"));
-        assert!(role_detail.contains("Back to List"));
+        assert!(role_detail.contains("Loading role detail"));
 
         assert!(role_edit.contains("Edit Role"));
-        assert!(role_edit.contains("role-capability-options"));
-        assert!(role_edit.contains("Submit"));
+        assert!(role_edit.contains("Capabilities"));
+        assert!(role_edit.contains("Save Role"));
     }
 }

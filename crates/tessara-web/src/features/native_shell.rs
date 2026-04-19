@@ -179,7 +179,7 @@ pub(crate) const PRODUCT_LINKS: &[NavLinkSpec] = &[
         href: "/app/dashboards",
         label: "Dashboards",
         icon: "fa-table-columns",
-        native: false,
+        native: true,
         required_capability: Some("reports:read"),
         home_description: "Browse dashboards and previews from the shared application shell.",
         home_action_label: "Open Dashboards",
@@ -215,7 +215,7 @@ pub(crate) const INTERNAL_LINKS: &[NavLinkSpec] = &[
         href: "/app/administration",
         label: "Administration",
         icon: "fa-sliders",
-        native: false,
+        native: true,
         required_capability: Some("admin:all"),
         home_description: "Internal configuration and legacy builder access stay here.",
         home_action_label: "Open Administration",
@@ -225,7 +225,7 @@ pub(crate) const INTERNAL_LINKS: &[NavLinkSpec] = &[
         href: "/app/migration",
         label: "Migration",
         icon: "fa-truck-fast",
-        native: false,
+        native: true,
         required_capability: Some("admin:all"),
         home_description: "Validate and import representative legacy fixtures from the operator workbench.",
         home_action_label: "Open Migration",
@@ -808,6 +808,12 @@ fn is_native_href(href: &str) -> bool {
         || href.starts_with("/app/workflows/")
         || href == "/app/responses"
         || href.starts_with("/app/responses/")
+        || href == "/app/dashboards"
+        || href.starts_with("/app/dashboards/")
+        || href == "/app/administration"
+        || href.starts_with("/app/administration/")
+        || href == "/app/admin"
+        || href == "/app/migration"
 }
 
 #[component]

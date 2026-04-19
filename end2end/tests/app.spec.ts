@@ -190,20 +190,27 @@ test("theme preference persists on the native shell", async ({ page }) => {
   await assertNoConsoleErrors();
 });
 
-test("migration route remains isolated and reachable", async ({ page }) => {
-  await page.goto("/app");
-  const homeScripts = new Set(await pkgScripts(page));
+test("migration route stays readable and console-clean on the native shell", async ({ page }) => {
+  const assertNoConsoleErrors = attachConsoleGuard(page);
   await signInAsAdmin(page);
+  await waitForAuthenticatedShell(page, "admin@tessara.local");
 
   await page.goto("/app/migration");
-  await page.waitForLoadState("networkidle");
-  await expect(page.locator("h1").filter({ hasText: "Migration Workbench" })).toBeVisible();
-  await expect(page.getByText("Migration Workspace")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Migration Workbench" }).first()).toBeVisible();
+  await expect(page.locator("#migration-list")).toHaveCount(1);
+  await expect(page.locator("#migration-fixture-json")).toHaveCount(1);
+  await expect(page.locator("#migration-results")).toHaveCount(1);
+  await expect(page.locator("body")).toContainText("Operator import flow");
+  await expectNoLegacyBridge(page);
 
-  const migrationScripts = new Set(await pkgScripts(page));
-  expect([...homeScripts]).toContainEqual(expect.stringContaining("/pkg/tessara-web.js"));
-  expect([...migrationScripts]).toContainEqual(expect.stringContaining("/pkg/tessara-web.js"));
-  await expect(page.locator('script[src="/bridge/app-legacy.js"]')).toHaveCount(1);
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Migration Workbench" }).first()).toBeVisible();
+  await expectNoLegacyBridge(page);
+
+  const scripts = await pkgScripts(page);
+  expect(scripts).toContainEqual(expect.stringContaining("/pkg/tessara-web.js"));
+
+  await assertNoConsoleErrors();
 });
 
 test("forms list route stays readable and console-clean on the native shell", async ({ page }) => {
@@ -341,6 +348,96 @@ test("forms authoring routes stay native and console-clean", async ({ page }) =>
   await page.reload();
   await expect(page.getByRole("heading", { name: "Edit Form" }).first()).toBeVisible();
   await expect(page.locator("#form-version-workspace")).toHaveCount(1);
+  await expectNoLegacyBridge(page);
+
+  await assertNoConsoleErrors();
+});
+
+test("dashboards routes stay readable and console-clean on the native shell", async ({ page }) => {
+  const assertNoConsoleErrors = attachConsoleGuard(page);
+  await signInAsAdmin(page);
+  await waitForAuthenticatedShell(page, "admin@tessara.local");
+
+  await page.goto("/app/dashboards");
+  await expect(page.getByRole("heading", { name: "Dashboards" }).first()).toBeVisible();
+  await expect(page.locator("#dashboard-list")).toHaveCount(1);
+  await expect(page.locator("body")).toContainText("Dashboard Directory");
+  await expectNoLegacyBridge(page);
+
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Dashboards" }).first()).toBeVisible();
+  await expectNoLegacyBridge(page);
+
+  await page.goto("/app/dashboards/new");
+  await expect(page.getByRole("heading", { name: "Create Dashboard" }).first()).toBeVisible();
+  await expect(page.locator("#dashboard-form")).toHaveCount(1);
+  await expect(page.locator("#dashboard-form-status")).toHaveCount(1);
+  await expectNoLegacyBridge(page);
+
+  await page.goto("/app/dashboards");
+  const dashboardDetailHref = await page.locator('a[href^="/app/dashboards/"]').filter({ hasText: "View" }).first().getAttribute("href");
+  expect(dashboardDetailHref).toBeTruthy();
+
+  await page.goto(dashboardDetailHref!);
+  await expect(page.getByRole("heading", { name: "Dashboard Detail" }).first()).toBeVisible();
+  await expect(page.locator("#dashboard-detail")).toHaveCount(1);
+  await expect(page.locator("#dashboard-component-summary")).toHaveCount(1);
+  await expectNoLegacyBridge(page);
+
+  await page.goto(`${dashboardDetailHref!}/edit`);
+  await expect(page.getByRole("heading", { name: "Edit Dashboard" }).first()).toBeVisible();
+  await expect(page.locator("#dashboard-form")).toHaveCount(1);
+  await expectNoLegacyBridge(page);
+
+  await assertNoConsoleErrors();
+});
+
+test("administration routes stay readable and console-clean on the native shell", async ({ page }) => {
+  const assertNoConsoleErrors = attachConsoleGuard(page);
+  await signInAsAdmin(page);
+  await waitForAuthenticatedShell(page, "admin@tessara.local");
+
+  await page.goto("/app/administration");
+  await expect(page.getByRole("heading", { name: "Administration" }).first()).toBeVisible();
+  await expect(page.locator("body")).toContainText("Administration Workspace");
+  await expectNoLegacyBridge(page);
+
+  await page.goto("/app/administration/users");
+  await expect(page.getByRole("heading", { name: "User Management" }).first()).toBeVisible();
+  await expect(page.locator("#admin-user-list")).toHaveCount(1);
+  await expectNoLegacyBridge(page);
+
+  await page.goto("/app/administration/users/new");
+  await expect(page.getByRole("heading", { name: "Create User" }).first()).toBeVisible();
+  await expect(page.locator("#user-form")).toHaveCount(1);
+  await expectNoLegacyBridge(page);
+
+  await page.goto("/app/administration/users");
+  const userDetailHref = await page.locator('a[href^="/app/administration/users/"]').filter({ hasText: "View" }).first().getAttribute("href");
+  expect(userDetailHref).toBeTruthy();
+  await page.goto(userDetailHref!);
+  await expect(page.getByRole("heading", { name: "User Detail" }).first()).toBeVisible();
+  await expect(page.locator("#user-detail-summary")).toHaveCount(1);
+  await expectNoLegacyBridge(page);
+
+  await page.goto(`${userDetailHref!}/edit`);
+  await expect(page.getByRole("heading", { name: "Edit User" }).first()).toBeVisible();
+  await expect(page.locator("#user-form")).toHaveCount(1);
+  await expectNoLegacyBridge(page);
+
+  await page.goto(`${userDetailHref!}/access`);
+  await expect(page.getByRole("heading", { name: "User Access" }).first()).toBeVisible();
+  await expect(page.locator("#user-access-form")).toHaveCount(1);
+  await expectNoLegacyBridge(page);
+
+  await page.goto("/app/administration/roles");
+  await expect(page.getByRole("heading", { name: "Roles" }).first()).toBeVisible();
+  await expect(page.locator("#admin-role-list")).toHaveCount(1);
+  await expectNoLegacyBridge(page);
+
+  await page.goto("/app/administration/node-types");
+  await expect(page.getByRole("heading", { name: "Organization Node Types" }).first()).toBeVisible();
+  await expect(page.locator("#admin-node-type-list")).toHaveCount(1);
   await expectNoLegacyBridge(page);
 
   await assertNoConsoleErrors();
