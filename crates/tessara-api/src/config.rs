@@ -14,6 +14,12 @@ pub struct Config {
     pub dev_admin_email: String,
     /// Development administrator password accepted by the temporary login flow.
     pub dev_admin_password: String,
+    /// Cookie name used for browser `/app` sessions.
+    pub auth_cookie_name: String,
+    /// Whether auth cookies should be marked `Secure`.
+    pub auth_cookie_secure: bool,
+    /// Browser/API session lifetime in hours.
+    pub auth_session_ttl_hours: i64,
 }
 
 impl Config {
@@ -28,6 +34,17 @@ impl Config {
                 .unwrap_or_else(|_| "admin@tessara.local".into()),
             dev_admin_password: std::env::var("TESSARA_DEV_ADMIN_PASSWORD")
                 .unwrap_or_else(|_| "tessara-dev-admin".into()),
+            auth_cookie_name: std::env::var("TESSARA_AUTH_COOKIE_NAME")
+                .unwrap_or_else(|_| "tessara_session".into()),
+            auth_cookie_secure: std::env::var("TESSARA_AUTH_COOKIE_SECURE")
+                .ok()
+                .as_deref()
+                .is_some_and(|value| matches!(value, "1" | "true" | "TRUE" | "True")),
+            auth_session_ttl_hours: std::env::var("TESSARA_AUTH_SESSION_TTL_HOURS")
+                .ok()
+                .and_then(|value| value.parse::<i64>().ok())
+                .filter(|value| *value > 0)
+                .unwrap_or(12),
         })
     }
 }

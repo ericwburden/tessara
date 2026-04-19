@@ -1,5 +1,5 @@
 
-      let token = window.sessionStorage.getItem('tessara.devToken');
+      let token = null;
       let currentAccount = null;
       const THEME_STORAGE_KEY = 'tessara.themePreference';
       const LIGHT_THEME_COLOR = '#F8FAFC';
@@ -576,7 +576,7 @@
         if (token) {
           headers.Authorization = `Bearer ${token}`;
         }
-        const response = await fetch(path, { ...options, headers });
+        const response = await fetch(path, { ...options, credentials: 'same-origin', headers });
         const text = await response.text();
         let payload = null;
         try {
@@ -603,8 +603,7 @@
             password
           })
         });
-        token = payload.token;
-        window.sessionStorage.setItem('tessara.devToken', token);
+        token = null;
         currentAccount = await request('/api/me');
         if (!canUseDelegatedResponses()) {
           setDelegateContext('');
@@ -619,17 +618,19 @@
       }
 
       async function ensureAuthenticated() {
-        if (!token) {
+        if (!currentAccount) {
+          await bootstrapCurrentAccount();
+        }
+        if (!currentAccount) {
           throw new Error('Sign in required.');
         }
-        return token;
+        return currentAccount.account_id;
       }
 
       function logout() {
         token = null;
         currentAccount = null;
         setDelegateContext('');
-        window.sessionStorage.removeItem('tessara.devToken');
         updateSessionStatus();
         renderCurrentUserSummary();
         show({ authenticated: false });
@@ -637,14 +638,6 @@
       }
 
       async function bootstrapCurrentAccount() {
-        if (!token) {
-          currentAccount = null;
-          updateSessionStatus();
-          renderCurrentUserSummary();
-          applyRoleVisibility();
-          return null;
-        }
-
         try {
           currentAccount = await request('/api/me');
           if (!canUseDelegatedResponses()) {
@@ -665,7 +658,6 @@
         } catch (error) {
           token = null;
           currentAccount = null;
-          window.sessionStorage.removeItem('tessara.devToken');
           setDelegateContext('');
           updateSessionStatus();
           renderCurrentUserSummary();

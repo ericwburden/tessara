@@ -3,7 +3,7 @@
 use leptos::prelude::*;
 
 #[cfg(feature = "hydrate")]
-use gloo_net::http::{Request, RequestBuilder};
+use gloo_net::http::Request;
 
 #[cfg(feature = "hydrate")]
 use serde::de::DeserializeOwned;
@@ -16,8 +16,6 @@ use web_sys::{
     Document, HtmlElement, HtmlInputElement, HtmlSelectElement, HtmlTextAreaElement,
     UrlSearchParams, window,
 };
-
-pub const DEV_TOKEN_STORAGE_KEY: &str = "tessara.devToken";
 
 pub fn escape_html(input: &str) -> String {
     input
@@ -143,38 +141,8 @@ pub fn redirect(path: &str) {
 }
 
 #[cfg(feature = "hydrate")]
-fn authorized_request(request: RequestBuilder) -> Result<RequestBuilder, String> {
-    let storage = window()
-        .and_then(|window| window.session_storage().ok().flatten())
-        .ok_or_else(|| "session storage is not available".to_string())?;
-    let token = storage
-        .get_item(DEV_TOKEN_STORAGE_KEY)
-        .map_err(|error| format!("{error:?}"))?
-        .ok_or_else(|| "not signed in".to_string())?;
-    Ok(request.header("Authorization", &format!("Bearer {token}")))
-}
-
-#[cfg(feature = "hydrate")]
-pub fn auth_token_present() -> bool {
-    window()
-        .and_then(|window| window.session_storage().ok().flatten())
-        .and_then(|storage| storage.get_item(DEV_TOKEN_STORAGE_KEY).ok().flatten())
-        .is_some()
-}
-
-#[cfg(feature = "hydrate")]
-pub fn clear_auth_token() -> Result<(), String> {
-    let storage = window()
-        .and_then(|window| window.session_storage().ok().flatten())
-        .ok_or_else(|| "session storage is not available".to_string())?;
-    storage
-        .remove_item(DEV_TOKEN_STORAGE_KEY)
-        .map_err(|error| format!("{error:?}"))
-}
-
-#[cfg(feature = "hydrate")]
 pub async fn get_json<T: DeserializeOwned>(path: &str) -> Result<T, String> {
-    authorized_request(Request::get(path))?
+    Request::get(path)
         .send()
         .await
         .map_err(|error| error.to_string())?
@@ -185,7 +153,7 @@ pub async fn get_json<T: DeserializeOwned>(path: &str) -> Result<T, String> {
 
 #[cfg(feature = "hydrate")]
 pub async fn get_text(path: &str) -> Result<String, String> {
-    authorized_request(Request::get(path))?
+    Request::get(path)
         .send()
         .await
         .map_err(|error| error.to_string())?
@@ -199,7 +167,7 @@ pub async fn post_json<T: DeserializeOwned>(
     path: &str,
     body: &serde_json::Value,
 ) -> Result<T, String> {
-    authorized_request(Request::post(path))?
+    Request::post(path)
         .json(body)
         .map_err(|error| error.to_string())?
         .send()
@@ -215,7 +183,7 @@ pub async fn put_json<T: DeserializeOwned>(
     path: &str,
     body: &serde_json::Value,
 ) -> Result<T, String> {
-    authorized_request(Request::put(path))?
+    Request::put(path)
         .json(body)
         .map_err(|error| error.to_string())?
         .send()
@@ -228,7 +196,7 @@ pub async fn put_json<T: DeserializeOwned>(
 
 #[cfg(feature = "hydrate")]
 pub async fn delete_json<T: DeserializeOwned>(path: &str) -> Result<T, String> {
-    authorized_request(Request::delete(path))?
+    Request::delete(path)
         .send()
         .await
         .map_err(|error| error.to_string())?

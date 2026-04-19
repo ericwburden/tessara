@@ -9,9 +9,7 @@ use serde::Deserialize;
 
 use crate::features::native_runtime::set_page_context;
 #[cfg(feature = "hydrate")]
-use crate::features::native_runtime::{
-    auth_token_present, clear_auth_token, delete_json, get_json, redirect,
-};
+use crate::features::native_runtime::{delete_json, get_json, redirect};
 
 #[cfg(feature = "hydrate")]
 use std::cell::Cell;
@@ -706,7 +704,6 @@ fn SignOutButton(session: AccountSession) -> impl IntoView {
             let session = session;
             spawn_local(async move {
                 let result = delete_json::<LogoutResponse>("/api/auth/logout").await;
-                let _ = clear_auth_token();
 
                 session.account.set(None);
                 session.error.set(None);
@@ -906,13 +903,6 @@ pub fn NativePage(
 
         let session = session;
         spawn_local(async move {
-            if !auth_token_present() {
-                session.account.set(None);
-                session.error.set(None);
-                session.loaded.set(true);
-                return;
-            }
-
             match get_json::<AccountContext>("/api/me").await {
                 Ok(account) => {
                     session.account.set(Some(account));
