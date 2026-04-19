@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tessara redesign exploration</title>
+    <link rel="stylesheet" href="./tessara-redesign-exploration.css" />
+  </head>
+  <body>
+    <main class="board">
+      <header class="board-header">
+        <div class="board-brand">
+          <img
+            class="board-logo"
+            src="../../crates/tessara-web/assets/tessara-icon-256.svg"
+            alt="Tessara"
+          />
+          <div>
+            <p class="board-kicker">Tessara redesign exploration</p>
+            <h1>Calmer brand, stronger composition</h1>
+            <p class="board-copy">
+              This mockup keeps Tessara’s UI guidance intact while borrowing the
+              spatial confidence of the reference dashboards: cleaner metric
+              rails, stronger table rhythm, and a more intentional builder
+              canvas.
+            </p>
+          </div>
+        </div>
+        <div class="influence-stack">
+          <span>Purity: asymmetrical overview</span>
+          <span>CRM: table-first workspace</span>
+          <span>Horizon/Crypto: higher-contrast framing</span>
+        </div>
+      </header>
+
+      <section class="concept">
+        <div class="concept-heading">
+          <div>
+            <p class="concept-kicker">Concept 01</p>
+            <h2>Operations home that feels like a product, not a utility shell</h2>
+          </div>
+          <p class="concept-note">
+            Uses the Purity-style stacked overview and the CRM-style top utility
+            line, but keeps Tessara’s border-first restraint and information
+            density.
+          </p>
+        </div>
+        <div class="screen">
+          <aside class="sidebar">
+            <div class="brand-lockup">
+              <img
+                class="brand-mark"
+                src="../../crates/tessara-web/assets/tessara-icon-256.svg"
+                alt=""
+              />
+              <div>
+                <strong>Tessara</strong>
+                <p>State reporting platform</p>
+              </div>
+            </div>
+            <nav class="nav-block">
+              <p class="nav-label">Product</p>
+              <a class="nav-item active" href="#">Home</a>
+              <a class="nav-item" href="#">Organization</a>
+              <a class="nav-item" href="#">Forms</a>
+              <a class="nav-item" href="#">Responses</a>
+              <a class="nav-item" href="#">Dashboards</a>
+            </nav>
+            <nav class="nav-block">
+              <p class="nav-label">Internal</p>
+              <a class="nav-item" href="#">Datasets</a>
+              <a class="nav-item" href="#">Components</a>
+              <a class="nav-item" href="#">Administration</a>
+              <a class="nav-item" href="#">Migration</a>
+            </nav>
+            <section class="sidebar-callout">
+              <p class="nav-label">Readiness</p>
+              <h3>Spring submission cycle</h3>
+              <p>4 queues need operator review before county rollout opens.</p>
+              <button>Review blockers</button>
+            </section>
+          </aside>
+
+          <div class="workspace">
+            <div class="topbar">
+              <div>
+                <p class="eyebrow">Shared home</p>
+                <h3>Good morning, regional operations</h3>
+              </div>
+              <div class="topbar-actions">
+                <div class="search-pill">Search forms, nodes, and dashboards</div>
+                <div class="user-pill">ER</div>
+              </div>
+            </div>
+
+            <div class="stats-row">
+              <article class="stat-card">
+                <p class="stat-label">Assigned workflow steps</p>
+                <strong>128</strong>
+                <span class="stat-meta good">18 started since 8:00 AM</span>
+              </article>
+              <article class="stat-card">
+                <p class="stat-label">Draft responses</p>
+                <strong>34</strong>
+                <span class="stat-meta">9 edited in the last 24 hours</span>
+              </article>
+              <article class="stat-card">
+                <p class="stat-label">Published dashboards</p>
+                <strong>12</strong>
+                <span class="stat-meta good">3 changed since last publish</span>
+              </article>
+              <article class="stat-card">
+                <p class="stat-label">Release blockers</p>
+                <strong>7</strong>
+                <span class="stat-meta warn">2 dependency warnings on draft assets</span>
+              </article>
+            </div>
+
+            <div class="hero-grid">
+              <article class="hero-card">
+                <div class="hero-copy">
+                  <p class="eyebrow">Portfolio pulse</p>
+                  <h3>Workflow coverage is steady, but two partner branches are still lagging on submitted responses</h3>
+                  <p>
+                    Most assigned workflow steps are moving. The risk is now in
+                    draft responses and unpublished dashboard changes tied to the
+                    East region certification cycle.
+                  </p>
+                  <div class="hero-actions">
+                    <button class="primary">Open response queue</button>
+                    <button class="secondary">View dashboard</button>
+                  </div>
+                </div>
+                <div class="hero-chart">
+                  <svg viewBox="0 0 420 190" aria-hidden="true">
+                    <path
+                      d="M20 148 C55 144, 68 86, 106 90 S162 136, 201 118 S270 44, 316 58 S374 99, 400 50"
+                    />
+                    <path
+                      class="baseline"
+                      d="M20 136 C60 126, 98 128, 144 118 S214 98, 258 104 S332 96, 400 84"
+                    />
+                    <g class="hero-gridlines">
+                      <line x1="20" y1="150" x2="400" y2="150" />
+                      <line x1="20" y1="110" x2="400" y2="110" />
+                      <line x1="20" y1="70" x2="400" y2="70" />
+                      <line x1="20" y1="30" x2="400" y2="30" />
+                    </g>
+                  </svg>
+                </div>
+              </article>
+
+              <article class="signal-card">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Readiness</p>
+                    <h3>Publishing blockers</h3>
+                  </div>
+                  <span class="badge badge-warn">4 open</span>
+                </div>
+                <ul class="signal-list">
+                  <li>
+                    <strong>Draft form dependency warnings</strong>
+                    <span>Two form versions still reference retired lookup sources.</span>
+                  </li>
+                  <li>
+                    <strong>Workflow version not published</strong>
+                    <span>Attendance exception follow-up is ready but still draft-only.</span>
+                  </li>
+                  <li>
+                    <strong>Dashboard component drift</strong>
+                    <span>Readiness dashboard references a component updated after the last publish.</span>
+                  </li>
+                </ul>
+              </article>
+            </div>
+
+            <div class="content-grid">
+              <article class="panel">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Assigned queues</p>
+                    <h3>Where operators should go next</h3>
+                  </div>
+                  <span class="meta-link">See all queues</span>
+                </div>
+                <div class="queue-list">
+                  <div class="queue-item">
+                    <div>
+                      <strong>Workflow assignments ready to start</strong>
+                      <p>14 node assignments are waiting on the next response step</p>
+                    </div>
+                    <span class="queue-count">14</span>
+                  </div>
+                  <div class="queue-item">
+                    <div>
+                      <strong>Draft responses needing review</strong>
+                      <p>8 saved drafts still need operator review before submission</p>
+                    </div>
+                    <span class="queue-count">8</span>
+                  </div>
+                  <div class="queue-item">
+                    <div>
+                      <strong>Dashboards awaiting republish</strong>
+                      <p>3 published dashboards changed after a component update</p>
+                    </div>
+                    <span class="queue-count">3</span>
+                  </div>
+                </div>
+              </article>
+
+              <article class="panel">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Recent signals</p>
+                    <h3>What changed in the last hour</h3>
+                  </div>
+                  <span class="meta-link">Activity stream</span>
+                </div>
+                <ul class="timeline">
+                  <li><span class="dot"></span><strong>Workflow version published</strong><p>Attendance follow-up v1.3 is now active for county reviewers.</p></li>
+                  <li><span class="dot"></span><strong>Response submitted</strong><p>Partner 07 completed Spring readiness certification for Region East.</p></li>
+                  <li><span class="dot"></span><strong>Migration rehearsal rerun</strong><p>Legacy fixture validation dropped from 23 mismatches to 4.</p></li>
+                </ul>
+              </article>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="concept">
+        <div class="concept-heading">
+          <div>
+            <p class="concept-kicker">Concept 02</p>
+            <h2>A workflow assignment workspace built around table rhythm and context</h2>
+          </div>
+          <p class="concept-note">
+            Heavily informed by the CRM layout: the table stays primary, while
+            the selected record lives in a dedicated right panel rather than
+            dissolving into card clutter.
+          </p>
+        </div>
+        <div class="screen screen-table">
+          <div class="workspace full">
+            <div class="topbar">
+              <div>
+                <p class="eyebrow">Responses</p>
+                <h3>Workflow assignments queue</h3>
+              </div>
+              <div class="topbar-actions">
+                <div class="chip-strip">
+                  <span class="chip active">Assigned to me</span>
+                  <span class="chip">Needs review</span>
+                  <span class="chip">Due this week</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="queue-summary">
+              <article class="summary-pill">
+                <span>Assignments</span>
+                <strong>42</strong>
+              </article>
+              <article class="summary-pill">
+                <span>Drafts</span>
+                <strong>6</strong>
+              </article>
+              <article class="summary-pill">
+                <span>Submitted today</span>
+                <strong>11</strong>
+              </article>
+              <article class="summary-pill">
+                <span>Late reviews</span>
+                <strong>9</strong>
+              </article>
+            </div>
+
+            <div class="table-layout">
+              <article class="table-panel">
+                <div class="table-toolbar">
+                  <div class="search-pill compact">Search by respondent, node, or form</div>
+                  <div class="toolbar-actions">
+                    <span class="toolbar-link">Status</span>
+                    <span class="toolbar-link">Node</span>
+                    <span class="toolbar-link">Due date</span>
+                  </div>
+                </div>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Node</th>
+                      <th>Workflow step</th>
+                      <th>Form version</th>
+                      <th>Assigned</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr class="selected">
+                      <td>
+                        <strong>Partner 04</strong>
+                        <span>Region East / Jefferson County</span>
+                      </td>
+                      <td>Certification review</td>
+                      <td>Spring readiness certification v1.3</td>
+                      <td>Ashley Grant</td>
+                      <td><span class="badge badge-warn">Needs review</span></td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <strong>Partner 07</strong>
+                        <span>Region East / Pulaski County</span>
+                      </td>
+                      <td>Follow-up submission</td>
+                      <td>Attendance exception log v2.0</td>
+                      <td>Martin Cole</td>
+                      <td><span class="badge">Draft exists</span></td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <strong>Partner 11</strong>
+                        <span>Region North / Benton County</span>
+                      </td>
+                      <td>Operator approval</td>
+                      <td>Site staffing update v1.1</td>
+                      <td>Nina Flores</td>
+                      <td><span class="badge badge-good">Submitted</span></td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <strong>Partner 15</strong>
+                        <span>Region West / Sebastian County</span>
+                      </td>
+                      <td>Correction request</td>
+                      <td>Corrective action follow-up v1.0</td>
+                      <td>Edward Neal</td>
+                      <td><span class="badge badge-danger">Late</span></td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <strong>Partner 18</strong>
+                        <span>Region South / Garland County</span>
+                      </td>
+                      <td>Reassignment review</td>
+                      <td>Workflow reassignment request v0.4</td>
+                      <td>Jasmine Rhodes</td>
+                      <td><span class="badge">In progress</span></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </article>
+
+              <aside class="detail-panel">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Selected record</p>
+                    <h3>Partner 04 assignment</h3>
+                  </div>
+                  <span class="badge badge-warn">Needs review</span>
+                </div>
+                <dl class="detail-grid">
+                  <div><dt>Node</dt><dd>Partner 04 / Region East</dd></div>
+                  <div><dt>Workflow</dt><dd>Certification review</dd></div>
+                  <div><dt>Form version</dt><dd>Spring readiness certification v1.3</dd></div>
+                  <div><dt>Open blockers</dt><dd>Lookup source, staffing narrative</dd></div>
+                </dl>
+                <div class="divider"></div>
+                <h4>Reviewer notes</h4>
+                <ul class="note-list">
+                  <li>Published dataset totals and saved draft values no longer match after the latest refresh.</li>
+                  <li>The staffing section still uses a retired reusable option source.</li>
+                  <li>Recommend returning for edits before the response advances to final approval.</li>
+                </ul>
+                <div class="detail-actions">
+                  <button class="primary">Open response</button>
+                  <button class="secondary">Return for edits</button>
+                </div>
+              </aside>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="concept">
+        <div class="concept-heading">
+          <div>
+            <p class="concept-kicker">Concept 03</p>
+            <h2>A builder that makes the canvas the star</h2>
+          </div>
+          <p class="concept-note">
+            This uses the stronger creator-product framing from the dashboard
+            builder references, but applies Tessara’s explicit builder guidance:
+            section rail on the left, canvas in the middle, properties only when
+            selected.
+          </p>
+        </div>
+        <div class="screen builder-screen">
+          <div class="builder-shell">
+            <aside class="builder-rail">
+              <div class="builder-rail-header">
+                <p class="eyebrow">Draft sections</p>
+                <h3>Spring readiness certification</h3>
+              </div>
+              <div class="section-pill active">
+                <strong>1. Program snapshot</strong>
+                <span>4 fields</span>
+              </div>
+              <div class="section-pill">
+                <strong>2. Staffing</strong>
+                <span>6 fields</span>
+              </div>
+              <div class="section-pill">
+                <strong>3. Funding and waivers</strong>
+                <span>5 fields</span>
+              </div>
+              <div class="section-pill add">+ Add section</div>
+            </aside>
+
+            <section class="builder-canvas">
+              <div class="builder-header">
+                <div>
+                  <p class="eyebrow">Draft authoring</p>
+                  <h3>Program snapshot</h3>
+                </div>
+                <div class="builder-actions">
+                  <button class="secondary">Preview</button>
+                  <button class="primary">Save draft</button>
+                </div>
+              </div>
+
+              <article class="field-card selected">
+                <div class="field-card-header">
+                  <div>
+                    <p class="field-type">Short text</p>
+                    <h4>Program lead name</h4>
+                  </div>
+                  <div class="field-tools">
+                    <span>Required</span>
+                    <span>Duplicate</span>
+                    <span>Delete</span>
+                  </div>
+                </div>
+                <div class="field-preview">
+                  <label>Program lead name</label>
+                  <div class="preview-input">Enter a full name</div>
+                </div>
+              </article>
+
+              <article class="field-card">
+                <div class="field-card-header">
+                  <div>
+                    <p class="field-type">Choice list</p>
+                    <h4>Submission confidence</h4>
+                  </div>
+                  <div class="field-tools">
+                    <span>Required</span>
+                    <span>Duplicate</span>
+                    <span>Delete</span>
+                  </div>
+                </div>
+                <div class="option-stack">
+                  <div class="option-row"><span></span>Fully verified</div>
+                  <div class="option-row"><span></span>Verified with follow-up needed</div>
+                  <div class="option-row"><span></span>Estimated</div>
+                </div>
+              </article>
+
+              <div class="insert-rail">
+                <span>+ Add field</span>
+              </div>
+            </section>
+
+            <aside class="properties-panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Properties</p>
+                  <h3>Program lead name</h3>
+                </div>
+              </div>
+              <div class="property-group">
+                <label>Label</label>
+                <div class="property-input">Program lead name</div>
+              </div>
+              <div class="property-group">
+                <label>Helper text</label>
+                <div class="property-input muted-input">Shown beneath the control</div>
+              </div>
+              <div class="property-group">
+                <label>Validation</label>
+                <div class="toggle-row">
+                  <span>Required field</span>
+                  <span class="toggle active"></span>
+                </div>
+                <div class="toggle-row">
+                  <span>Limit to 100 characters</span>
+                  <span class="toggle"></span>
+                </div>
+              </div>
+              <div class="property-group">
+                <label>Binding</label>
+                <div class="property-code">component.programLeadName</div>
+              </div>
+            </aside>
+          </div>
+        </div>
+      </section>
+
+      <section class="concept">
+        <div class="concept-heading">
+          <div>
+            <p class="concept-kicker">Concept 04</p>
+            <h2>A bare sign-in screen that stays branded without adding extra content</h2>
+          </div>
+          <p class="concept-note">
+            This is intentionally minimal: product mark, plain auth form, and no
+            surrounding dashboard or marketing content competing with sign-in.
+          </p>
+        </div>
+        <div class="screen signin-screen">
+          <section class="signin-panel signin-panel-standalone">
+            <div class="signin-brand signin-brand-compact">
+              <img
+                class="brand-mark"
+                src="../../crates/tessara-web/assets/tessara-icon-256.svg"
+                alt=""
+              />
+              <div>
+                <p class="eyebrow">Tessara</p>
+                <h3>Sign in</h3>
+              </div>
+            </div>
+            <div class="signin-panel-head">
+              <p class="eyebrow">Authentication</p>
+              <h3>Access the application shell</h3>
+              <p>
+                Sign in with a local account to load the routes and data
+                available to that role.
+              </p>
+            </div>
+
+            <div class="signin-form">
+              <label>Email address</label>
+              <div class="property-input">eric@agency.gov</div>
+
+              <label>Password</label>
+              <div class="property-input">••••••••••••</div>
+
+              <div class="signin-row">
+                <span class="chip active">Remember this device</span>
+                <span class="meta-link">Forgot password?</span>
+              </div>
+
+              <button class="primary signin-button">Sign In</button>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="concept">
+        <div class="concept-heading">
+          <div>
+            <p class="concept-kicker">Concept 05</p>
+            <h2>An organization listing built around scope and related work</h2>
+          </div>
+          <p class="concept-note">
+            This takes the stronger browse posture from the CRM reference, but
+            avoids feeling like a generic customer table. The left side remains
+            scoped filters; the list itself stays hierarchy-aware.
+          </p>
+        </div>
+        <div class="screen screen-table">
+          <div class="workspace full">
+            <div class="topbar">
+              <div>
+                <p class="eyebrow">Organization</p>
+                <h3>Partner list</h3>
+              </div>
+              <div class="topbar-actions">
+                <button class="secondary">Export view</button>
+                <button class="primary">Add node</button>
+              </div>
+            </div>
+
+            <div class="organization-layout">
+              <aside class="org-filter-panel">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Current scope</p>
+                    <h3>Region East</h3>
+                  </div>
+                </div>
+                <div class="scope-stack">
+                  <div class="scope-pill active">
+                    <strong>All partners</strong>
+                    <span>28 nodes</span>
+                  </div>
+                  <div class="scope-pill">
+                    <strong>Nodes with open responses</strong>
+                    <span>6 nodes</span>
+                  </div>
+                  <div class="scope-pill">
+                    <strong>Recently updated</strong>
+                    <span>9 nodes</span>
+                  </div>
+                </div>
+                <div class="property-group">
+                  <label>Node type</label>
+                  <div class="property-input">Partner</div>
+                </div>
+                <div class="property-group">
+                  <label>Status</label>
+                  <div class="property-input">All statuses</div>
+                </div>
+                <div class="property-group">
+                  <label>Related form</label>
+                  <div class="property-input muted-input">Any published form</div>
+                </div>
+              </aside>
+
+              <section class="org-main-panel">
+                <div class="table-toolbar">
+                  <div class="search-pill compact">Search partner name, node ID, or parent county</div>
+                  <div class="toolbar-actions">
+                    <span class="toolbar-link">Status</span>
+                    <span class="toolbar-link">Forms</span>
+                    <span class="toolbar-link">Dashboards</span>
+                  </div>
+                </div>
+
+                <div class="org-summary-row">
+                  <article class="summary-pill">
+                    <span>Partners</span>
+                    <strong>28</strong>
+                  </article>
+                  <article class="summary-pill">
+                    <span>Related forms</span>
+                    <strong>17</strong>
+                  </article>
+                  <article class="summary-pill">
+                    <span>Flagged nodes</span>
+                    <strong>6</strong>
+                  </article>
+                </div>
+
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Partner</th>
+                      <th>Parent</th>
+                      <th>Forms</th>
+                      <th>Dashboards</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr class="selected">
+                      <td>
+                        <strong>Partner 04</strong>
+                        <span>Node ID: P-004</span>
+                      </td>
+                      <td>Region East / Jefferson County</td>
+                      <td>3 published</td>
+                      <td>2 related</td>
+                      <td><span class="badge badge-warn">Needs attention</span></td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <strong>Partner 07</strong>
+                        <span>Node ID: P-007</span>
+                      </td>
+                      <td>Region East / Pulaski County</td>
+                      <td>2 published</td>
+                      <td>1 related</td>
+                      <td><span class="badge badge-good">Healthy</span></td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <strong>Partner 11</strong>
+                        <span>Node ID: P-011</span>
+                      </td>
+                      <td>Region East / Benton County</td>
+                      <td>4 published</td>
+                      <td>3 related</td>
+                      <td><span class="badge">Monitoring</span></td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <strong>Partner 15</strong>
+                        <span>Node ID: P-015</span>
+                      </td>
+                      <td>Region East / Sebastian County</td>
+                      <td>1 published</td>
+                      <td>1 related</td>
+                      <td><span class="badge badge-danger">Escalated</span></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </section>
+
+              <aside class="detail-panel">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Selected node</p>
+                    <h3>Partner 04</h3>
+                  </div>
+                  <span class="badge badge-warn">Needs attention</span>
+                </div>
+                <dl class="detail-grid">
+                  <div><dt>Parent county</dt><dd>Jefferson County</dd></div>
+                  <div><dt>Related forms</dt><dd>Spring readiness, staffing update, corrective action</dd></div>
+                  <div><dt>Open responses</dt><dd>2 draft / 1 submitted today</dd></div>
+                  <div><dt>Linked dashboards</dt><dd>2 published dashboards</dd></div>
+                </dl>
+                <div class="divider"></div>
+                <h4>Why it is flagged</h4>
+                <ul class="note-list">
+                  <li>One related response is still saved as a draft after the review deadline.</li>
+                  <li>A linked dashboard was not republished after a component revision.</li>
+                  <li>The latest organization metadata update changed the parent path and needs verification.</li>
+                </ul>
+                <div class="detail-actions">
+                  <button class="primary">Open details</button>
+                  <button class="secondary">View dashboards</button>
+                </div>
+              </aside>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
