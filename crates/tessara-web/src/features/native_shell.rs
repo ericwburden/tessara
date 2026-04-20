@@ -362,6 +362,41 @@ fn scope_root_labels(account: &AccountContext) -> Vec<String> {
     labels
 }
 
+fn account_initials(label: &str) -> String {
+    let initials = label
+        .split_whitespace()
+        .filter_map(|part| part.chars().find(|character| character.is_alphanumeric()))
+        .take(2)
+        .collect::<String>();
+
+    if initials.is_empty() {
+        "TS".into()
+    } else {
+        initials.to_uppercase()
+    }
+}
+
+fn summarize_scope_preview(labels: &[String]) -> String {
+    match labels {
+        [] => "Full application access".into(),
+        [label] => label.clone(),
+        _ => {
+            let preview = labels
+                .iter()
+                .take(2)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(" · ");
+            let remaining = labels.len().saturating_sub(2);
+            if remaining == 0 {
+                preview
+            } else {
+                format!("{preview} · +{remaining} more")
+            }
+        }
+    }
+}
+
 #[cfg(feature = "hydrate")]
 fn shell_viewport() -> &'static str {
     let width = window()
@@ -532,7 +567,10 @@ fn apply_shell_chrome_state() {
     }
 
     if let Ok(Some(close_button)) = document.query_selector(".app-sidebar-close") {
-        sync_shell_control_visibility(&close_button, viewport == "mobile" && state == "overlay-open");
+        sync_shell_control_visibility(
+            &close_button,
+            viewport == "mobile" && state == "overlay-open",
+        );
     }
 
     if let Ok(Some(backdrop)) = document.query_selector(".app-sidebar-backdrop") {
@@ -631,7 +669,7 @@ fn ThemeToggle() -> impl IntoView {
 
     let preference = RwSignal::new(String::from("system"));
 
-    let apply_preference = move |choice: &'static str| {
+    let apply_preference = move |choice: String| {
         let Some(window) = window() else {
             return;
         };
@@ -647,9 +685,9 @@ fn ThemeToggle() -> impl IntoView {
                 _ => "light",
             }
         } else {
-            choice
+            choice.as_str()
         };
-        root.set_attribute("data-theme-preference", choice).ok();
+        root.set_attribute("data-theme-preference", &choice).ok();
         root.set_attribute("data-theme", theme).ok();
         if let Ok(Some(meta)) = document.query_selector("meta[name=\"theme-color\"]") {
             meta.set_attribute(
@@ -663,9 +701,9 @@ fn ThemeToggle() -> impl IntoView {
             .ok();
         }
         if let Ok(Some(storage)) = window.local_storage() {
-            let _ = storage.set_item(STORAGE_KEY, choice);
+            let _ = storage.set_item(STORAGE_KEY, &choice);
         }
-        preference.set(choice.to_string());
+        preference.set(choice);
     };
 
     Effect::new(move |_| {
@@ -682,26 +720,27 @@ fn ThemeToggle() -> impl IntoView {
         preference.set(choice);
     });
 
-    let button = move |choice: &'static str, label: &'static str| {
-        let apply_preference = apply_preference.clone();
-        view! {
-            <button
-                class="theme-toggle-button"
-                type="button"
-                aria-pressed=move || if preference.get() == choice { "true" } else { "false" }
-                data-active=move || if preference.get() == choice { "true" } else { "false" }
-                on:click=move |_| apply_preference(choice)
-            >
-                {label}
-            </button>
-        }
-    };
-
     view! {
-        <div class="theme-toggle" role="group" aria-label="Theme preference">
-            {button("system", "System")}
-            {button("light", "Light")}
-            {button("dark", "Dark")}
+        <div class="theme-toggle theme-toggle--compact">
+            <label class="theme-toggle__label" for="shell-theme-select">
+                <span class="theme-toggle__icon" aria-hidden="true">
+                    <i class="fa-solid fa-swatchbook"></i>
+                </span>
+                <span>"Theme"</span>
+            </label>
+            <div class="theme-toggle__control">
+                <select
+                    id="shell-theme-select"
+                    class="input theme-toggle__select"
+                    aria-label="Theme preference"
+                    prop:value=move || preference.get()
+                    on:change=move |event| apply_preference(event_target_value(&event))
+                >
+                    <option value="system">"System"</option>
+                    <option value="light">"Light"</option>
+                    <option value="dark">"Dark"</option>
+                </select>
+            </div>
         </div>
     }
 }
@@ -710,10 +749,24 @@ fn ThemeToggle() -> impl IntoView {
 #[component]
 fn ThemeToggle() -> impl IntoView {
     view! {
-        <div class="theme-toggle" role="group" aria-label="Theme preference">
-            <button class="theme-toggle-button" type="button" aria-pressed="true">"System"</button>
-            <button class="theme-toggle-button" type="button" aria-pressed="false">"Light"</button>
-            <button class="theme-toggle-button" type="button" aria-pressed="false">"Dark"</button>
+        <div class="theme-toggle theme-toggle--compact">
+            <label class="theme-toggle__label" for="shell-theme-select">
+                <span class="theme-toggle__icon" aria-hidden="true">
+                    <i class="fa-solid fa-swatchbook"></i>
+                </span>
+                <span>"Theme"</span>
+            </label>
+            <div class="theme-toggle__control">
+                <select
+                    id="shell-theme-select"
+                    class="input theme-toggle__select"
+                    aria-label="Theme preference"
+                >
+                    <option value="system" selected>"System"</option>
+                    <option value="light">"Light"</option>
+                    <option value="dark">"Dark"</option>
+                </select>
+            </div>
         </div>
     }
 }
@@ -843,205 +896,110 @@ fn SidebarFooterContext(
 ) -> impl IntoView {
     match account {
         Some(account) => {
-            let scope_expanded = RwSignal::new(false);
-            let delegation_expanded = RwSignal::new(false);
             let active_delegate = active_delegate(&account, &search);
             let has_active_delegate = active_delegate.is_some();
             let active_delegate_name = active_delegate
                 .as_ref()
                 .map(|delegate| preferred_account_label(&delegate.display_name, &delegate.email));
-            let active_delegate_email = active_delegate
-                .as_ref()
-                .map(|delegate| delegate.email.clone())
-                .unwrap_or_default();
-            let scope_labels = StoredValue::new(scope_root_labels(&account));
-            let scope_count = scope_labels.get_value().len();
+            let scope_labels = scope_root_labels(&account);
+            let scope_preview = summarize_scope_preview(&scope_labels);
+            let scope_count = scope_labels.len();
             let has_scoped_roots = scope_count > 0;
-            let has_scope_overflow = scope_count > 2;
-            let available_delegations = StoredValue::new(
-                account
+            let delegation_count = account
                 .delegations
                 .iter()
                 .map(|delegate| preferred_account_label(&delegate.display_name, &delegate.email))
-                .collect::<Vec<_>>(),
-            );
-            let delegation_count = available_delegations.get_value().len();
+                .count();
             let has_delegations = delegation_count > 0;
-            let has_delegation_overflow = delegation_count > 2;
             let identity_label = preferred_account_label(&account.display_name, &account.email);
+            let identity_initials = account_initials(&identity_label);
+            let profile_label = ui_profile_label(account.ui_access_profile.clone());
             let active_delegate_name = StoredValue::new(active_delegate_name.unwrap_or_default());
-            let active_delegate_email = StoredValue::new(active_delegate_email);
+            let scope_preview = StoredValue::new(scope_preview);
             let footer_error = StoredValue::new(error.unwrap_or_default());
             let has_footer_error = !footer_error.get_value().is_empty();
+            let delegation_chip = StoredValue::new(if has_active_delegate {
+                format!("Acting for {}", active_delegate_name.get_value())
+            } else {
+                format!(
+                    "{delegation_count} delegation{} available",
+                    if delegation_count == 1 { "" } else { "s" }
+                )
+            });
+            let scope_chip = StoredValue::new(if has_scoped_roots {
+                format!(
+                    "{scope_count} scoped root{}",
+                    if scope_count == 1 { "" } else { "s" }
+                )
+            } else {
+                "Full access".into()
+            });
 
             view! {
                 <section class="app-sidebar__footer-context" id="shell-footer-context">
-                    <section id="shell-account-context" class="selection-panel app-sidebar__supplemental app-sidebar__context-card">
-                        <p class="app-sidebar__context-label">"Account"</p>
-                        <div class="app-sidebar__identity">
-                            <strong class="app-sidebar__identity-name">{identity_label}</strong>
-                            <span class="app-sidebar__identity-email">{account.email.clone()}</span>
-                        </div>
-                        <p class="muted app-sidebar__context-caption">
-                            {ui_profile_label(account.ui_access_profile)}
-                        </p>
-                    </section>
-
-                    <Show when=move || has_delegations>
-                        <section id="shell-delegation-context" class="selection-panel app-sidebar__supplemental app-sidebar__context-card">
-                            <div class="app-sidebar__context-header">
-                                <p class="app-sidebar__context-label">
-                                    {if has_active_delegate {
-                                        "Acting for"
-                                    } else {
-                                        "Delegation"
-                                    }}
-                                </p>
-                                <Show when=move || has_active_delegate>
-                                    <span class="app-sidebar__context-badge">"Active"</span>
-                                </Show>
-                            </div>
-                            <Show when=move || has_active_delegate fallback=move || view! {
-                                <p class="muted app-sidebar__context-caption">
-                                    {format!(
-                                        "{} delegated account{} available from this shell.",
-                                        delegation_count,
-                                        if delegation_count == 1 { "" } else { "s" }
-                                    )}
-                                </p>
-                            }>
-                                <div class="app-sidebar__identity" data-active-delegate>
-                                    <strong class="app-sidebar__identity-name">
-                                        {move || active_delegate_name.get_value()}
-                                    </strong>
-                                    <span class="app-sidebar__identity-email">
-                                        {move || active_delegate_email.get_value()}
-                                    </span>
+                    <section id="shell-account-context" class="selection-panel app-sidebar__supplemental app-sidebar__context-composite">
+                        <div class="app-sidebar__account-summary">
+                            <span class="app-sidebar__avatar" aria-hidden="true">{identity_initials}</span>
+                            <div class="app-sidebar__identity">
+                                <div class="app-sidebar__identity-row">
+                                    <strong class="app-sidebar__identity-name">{identity_label}</strong>
+                                    <span class="app-sidebar__context-badge">{profile_label}</span>
                                 </div>
-                            </Show>
-                            <ul id="shell-delegation-options" class="app-sidebar__context-list">
-                                {move || {
-                                    let visible = if delegation_expanded.get() || delegation_count <= 2 {
-                                        available_delegations.get_value()
-                                    } else {
-                                        available_delegations
-                                            .get_value()
-                                            .into_iter()
-                                            .take(2)
-                                            .collect::<Vec<_>>()
-                                    };
-                                    visible
-                                        .into_iter()
-                                        .map(|label| {
-                                            let is_active = active_delegate_name.get_value() == label;
-                                            view! {
-                                                <li class="app-sidebar__context-item">
-                                                    <span data-active=if is_active { "true" } else { "false" }>
-                                                        {label}
-                                                    </span>
-                                                </li>
-                                            }
-                                        })
-                                        .collect_view()
-                                }}
-                            </ul>
-                            <Show when=move || has_delegation_overflow>
-                                <button
-                                    id="shell-delegation-toggle"
-                                    class="app-sidebar__context-toggle"
-                                    type="button"
-                                    on:click=move |_| delegation_expanded.update(|expanded| *expanded = !*expanded)
-                                >
-                                    {move || {
-                                        if delegation_expanded.get() {
-                                            "Show fewer delegated accounts"
-                                        } else {
-                                            "Show all delegated accounts"
-                                        }
-                                    }}
-                                </button>
-                            </Show>
-                        </section>
-                    </Show>
-
-                    <section id="shell-scope-context" class="selection-panel app-sidebar__supplemental app-sidebar__context-card">
-                        <div class="app-sidebar__context-header">
-                            <p class="app-sidebar__context-label">"Scope"</p>
-                            <Show when=move || has_scoped_roots>
-                                <span class="app-sidebar__context-badge">{format!("{scope_count} root{}", if scope_count == 1 { "" } else { "s" })}</span>
-                            </Show>
+                                <span class="app-sidebar__identity-email">{account.email.clone()}</span>
+                            </div>
                         </div>
-                        <Show when=move || has_scoped_roots fallback=move || view! {
-                            <p class="muted app-sidebar__context-caption">"Full application access"</p>
-                        }>
-                            <ul id="shell-scope-roots" class="app-sidebar__context-list">
-                                {move || {
-                                    let visible = if scope_expanded.get() || scope_count <= 2 {
-                                        scope_labels.get_value()
-                                    } else {
-                                        scope_labels
-                                            .get_value()
-                                            .into_iter()
-                                            .take(2)
-                                            .collect::<Vec<_>>()
-                                    };
-                                    visible
-                                        .into_iter()
-                                        .map(|label| view! {
-                                            <li class="app-sidebar__context-item">{label}</li>
-                                        })
-                                        .collect_view()
-                                }}
-                            </ul>
-                            <Show when=move || has_scope_overflow>
-                                <button
-                                    id="shell-scope-toggle"
-                                    class="app-sidebar__context-toggle"
-                                    type="button"
-                                    on:click=move |_| scope_expanded.update(|expanded| *expanded = !*expanded)
-                                >
-                                    {move || {
-                                        if scope_expanded.get() {
-                                            "Show fewer scope roots"
-                                        } else {
-                                            "Show all scope roots"
-                                        }
-                                    }}
-                                </button>
+                        <div class="app-sidebar__context-stack">
+                            <Show when=move || has_active_delegate>
+                                <p class="muted app-sidebar__context-note">
+                                    <strong>"Acting for "</strong>
+                                    {move || active_delegate_name.get_value()}
+                                </p>
                             </Show>
+                            <p class="muted app-sidebar__context-note">
+                                {move || scope_preview.get_value()}
+                            </p>
+                            <div class="app-sidebar__context-chip-row">
+                                <Show when=move || has_delegations>
+                                    <span class="app-sidebar__context-chip">
+                                        {move || delegation_chip.get_value()}
+                                    </span>
+                                </Show>
+                                <span class="app-sidebar__context-chip">
+                                    {move || scope_chip.get_value()}
+                                </span>
+                            </div>
+                        </div>
+                        <div class="app-sidebar__footer-toolbar">
+                            <ThemeToggle/>
+                            <SignOutButton session=session/>
+                        </div>
+                        <Show when=move || has_footer_error>
+                            <p class="muted app-sidebar__footer-error">
+                                {move || footer_error.get_value()}
+                            </p>
                         </Show>
                     </section>
-
-                    <section id="shell-theme-context" class="selection-panel app-sidebar__supplemental app-sidebar__context-card">
-                        <p class="app-sidebar__context-label">"Theme"</p>
-                        <p class="muted app-sidebar__context-caption">
-                            "Choose how Tessara appears in this browser."
-                        </p>
-                        <ThemeToggle/>
-                    </section>
-
-                    <Show when=move || has_footer_error>
-                        <p class="muted app-sidebar__footer-error">
-                            {move || footer_error.get_value()}
-                        </p>
-                    </Show>
-
-                    <SignOutButton session=session/>
                 </section>
             }
             .into_any()
         }
         None => view! {
             <section class="app-sidebar__footer-context" id="shell-footer-context">
-                <section id="shell-account-context" class="selection-panel app-sidebar__supplemental app-sidebar__context-card">
-                    <p class="app-sidebar__context-label">"Account"</p>
-                    <p class="muted app-sidebar__context-caption">
-                        {error.unwrap_or_else(|| "Account context loads after session verification.".into())}
-                    </p>
-                </section>
-                <section id="shell-theme-context" class="selection-panel app-sidebar__supplemental app-sidebar__context-card">
-                    <p class="app-sidebar__context-label">"Theme"</p>
-                    <ThemeToggle/>
+                <section id="shell-account-context" class="selection-panel app-sidebar__supplemental app-sidebar__context-composite">
+                    <div class="app-sidebar__account-summary">
+                        <span class="app-sidebar__avatar" aria-hidden="true">"TS"</span>
+                        <div class="app-sidebar__identity">
+                            <div class="app-sidebar__identity-row">
+                                <strong class="app-sidebar__identity-name">"Account Context"</strong>
+                            </div>
+                            <span class="app-sidebar__identity-email">
+                                {error.unwrap_or_else(|| "Account context loads after session verification.".into())}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="app-sidebar__footer-toolbar">
+                        <ThemeToggle/>
+                    </div>
                 </section>
             </section>
         }
@@ -1343,26 +1301,6 @@ pub fn NativePage(
 
     view! {
         <main class=format!("shell app-shell app-shell--{active_route}")>
-            <header class="top-app-bar">
-                <div class="top-app-bar__brand">
-                    <button id="app-nav-toggle" class="app-nav-toggle" type="button" aria-label="Toggle navigation" aria-controls="app-sidebar" aria-expanded="false" hidden>
-                        <span class="app-nav-toggle__icon" aria-hidden="true"><i class="fa-solid fa-bars"></i></span>
-                    </button>
-                    <a class="top-app-home-link" href="/app">
-                        <img class="top-app-bar__mark" src="/assets/tessara-icon-256.svg" alt="" />
-                        <span class="top-app-bar__name">"Tessara"</span>
-                    </a>
-                    <span class="top-app-bar__context">{workspace_label}</span>
-                </div>
-                <div class="top-app-bar__utilities">
-                    <div class="top-app-bar__search">
-                        <label class="is-sr-only" for="global-search">"Global search"</label>
-                        <input id="global-search" class="input app-search-input" type="search" placeholder="Search Tessara" autocomplete="off" />
-                    </div>
-                    <TopBarUtilityButton aria_label="Notifications" icon="fa-bell" disabled=true/>
-                    <TopBarUtilityButton aria_label="Help" icon="fa-circle-question" disabled=true/>
-                </div>
-            </header>
             <Show when=move || notice.get().is_some()>
                 {move || {
                     notice
@@ -1427,6 +1365,29 @@ pub fn NativePage(
                     }}
                 </aside>
                 <section class="panel box app-main">
+                    <header class="top-app-bar">
+                        <div class="top-app-bar__brand">
+                            <button id="app-nav-toggle" class="app-nav-toggle" type="button" aria-label="Toggle navigation" aria-controls="app-sidebar" aria-expanded="false" hidden>
+                                <span class="app-nav-toggle__icon" aria-hidden="true"><i class="fa-solid fa-bars"></i></span>
+                            </button>
+                            <a class="top-app-home-link" href="/app" aria-label="Tessara home">
+                                <img class="top-app-bar__mark" src="/assets/tessara-icon-256.svg" alt="" />
+                                <span class="is-sr-only">"Tessara"</span>
+                            </a>
+                            <div class="top-app-bar__context-group">
+                                <span class="top-app-bar__context-label">"Workspace"</span>
+                                <span class="top-app-bar__context">{workspace_label}</span>
+                            </div>
+                        </div>
+                        <div class="top-app-bar__utilities">
+                            <div class="top-app-bar__search">
+                                <label class="is-sr-only" for="global-search">"Global search"</label>
+                                <input id="global-search" class="input app-search-input" type="search" placeholder="Search Tessara" autocomplete="off" />
+                            </div>
+                            <TopBarUtilityButton aria_label="Notifications" icon="fa-bell" disabled=true/>
+                            <TopBarUtilityButton aria_label="Help" icon="fa-circle-question" disabled=true/>
+                        </div>
+                    </header>
                     <BreadcrumbTrail items=breadcrumbs/>
                     {move || {
                         let account = session.account.get();

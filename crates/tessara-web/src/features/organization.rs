@@ -501,7 +501,7 @@ mod hydrate {
         };
 
         format!(
-            r#"<section class="detail-section box organization-related-work"><div class="organization-section-heading"><h4>Related Work</h4><p class="muted">Forms, responses, and dashboards stay primary for the selected node.</p></div><div class="organization-related-work__metrics"><div class="organization-related-work__metric"><span>Forms</span><strong>{}</strong></div><div class="organization-related-work__metric"><span>Responses</span><strong>{}</strong></div><div class="organization-related-work__metric"><span>Dashboards</span><strong>{}</strong></div></div><div class="organization-related-work__grid"><section class="organization-related-work__card"><h5>Forms</h5><ul id="organization-related-forms" class="app-list">{forms}</ul></section><section class="organization-related-work__card"><h5>Responses</h5><ul id="organization-related-responses" class="app-list">{responses}</ul></section><section class="organization-related-work__card"><h5>Dashboards</h5><ul id="organization-related-dashboards" class="app-list">{dashboards}</ul></section></div></section>"#,
+            r#"<section class="organization-related-work"><div class="organization-section-heading"><h4>Related Work</h4><p class="muted">Forms, responses, and dashboards stay primary for the selected node.</p></div><div class="organization-related-work__metrics"><div class="organization-related-work__metric"><span>Forms</span><strong>{}</strong></div><div class="organization-related-work__metric"><span>Responses</span><strong>{}</strong></div><div class="organization-related-work__metric"><span>Dashboards</span><strong>{}</strong></div></div><div class="organization-related-work__lists"><section class="organization-related-work__group"><h5>Forms</h5><ul id="organization-related-forms" class="app-list">{forms}</ul></section><section class="organization-related-work__group"><h5>Responses</h5><ul id="organization-related-responses" class="app-list">{responses}</ul></section><section class="organization-related-work__group"><h5>Dashboards</h5><ul id="organization-related-dashboards" class="app-list">{dashboards}</ul></section></div></section>"#,
             detail.related_forms.len(),
             detail.related_responses.len(),
             detail.related_dashboards.len(),
@@ -539,18 +539,18 @@ mod hydrate {
             String::new()
         };
         format!(
-            r#"<section class="organization-selected-work"><div class="organization-selected-work__header"><p class="eyebrow">{}</p><h3>{}</h3><p class="muted">{} · Parent: {}</p><div class="organization-selected-work__path">{}</div></div>{}<section class="detail-section box organization-selected-work__summary"><h4>Node Summary</h4><p class="muted">Type: {} | Plural label: {}</p><p class="muted">Related forms: {} | Related responses: {} | Related dashboards: {}</p></section><section class="detail-section box organization-selected-work__metadata"><h4>Metadata</h4>{}</section><section class="detail-section box organization-selected-work__management"><h4>Management</h4>{}{}{}</section></section>"#,
+            r#"<section class="organization-selected-work"><div class="organization-selected-work__header"><p class="eyebrow">{}</p><h3>{}</h3><p class="muted">{} · Parent: {}</p><div class="organization-selected-work__path">{}</div></div><div class="organization-selected-work__summary-strip"><div class="organization-selected-work__summary-item"><span>Type</span><strong>{}</strong></div><div class="organization-selected-work__summary-item"><span>Plural Label</span><strong>{}</strong></div><div class="organization-selected-work__summary-item"><span>Forms</span><strong>{}</strong></div><div class="organization-selected-work__summary-item"><span>Responses</span><strong>{}</strong></div><div class="organization-selected-work__summary-item"><span>Dashboards</span><strong>{}</strong></div></div>{}<section class="organization-selected-work__section organization-selected-work__metadata"><div class="organization-section-heading"><h4>Metadata</h4><p class="muted">Current node metadata stays visible without expanding a separate detail card.</p></div>{}</section><section class="organization-selected-work__section organization-selected-work__management"><div class="organization-section-heading"><h4>Management</h4><p class="muted">Open the detail route for deeper edits, or continue directly into child-record actions from here.</p></div>{}{}{}</section></section>"#,
             escape_html(&detail.node_type_singular_label),
             escape_html(&detail.name),
             escape_html(&detail.node_type_singular_label),
             escape_html(detail.parent_node_name.as_deref().unwrap_or("Top-level")),
             path,
-            render_related_work(detail),
             escape_html(&detail.node_type_name),
             escape_html(&detail.node_type_plural_label),
             detail.related_forms.len(),
             detail.related_responses.len(),
             detail.related_dashboards.len(),
+            render_related_work(detail),
             render_metadata_list(&detail.metadata),
             management_actions,
             child_actions,
