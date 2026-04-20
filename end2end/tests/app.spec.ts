@@ -1033,30 +1033,71 @@ test("shell navigation collapses on tablet and overlays on mobile", async ({ pag
   await signInAsAdmin(page);
   await waitForAuthenticatedShell(page, "admin@tessara.local");
 
-  await page.setViewportSize({ width: 900, height: 900 });
+  const navToggle = page.locator("#app-nav-toggle");
+  const sidebarClose = page.locator(".app-sidebar-close");
+  const sidebarBackdrop = page.locator(".app-sidebar-backdrop");
+
+  await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/app");
   await expect(page.locator("html")).toHaveAttribute("data-shell-ready", "true");
+  await expect(page.locator("body")).toHaveAttribute("data-shell-viewport", "desktop");
+  await expect(page.locator("body")).toHaveAttribute("data-sidebar-state", "expanded");
+  await expect(navToggle).toHaveAttribute("hidden", "");
+  await expect(sidebarClose).toHaveAttribute("hidden", "");
+  await expect(sidebarBackdrop).toHaveAttribute("hidden", "");
+
+  await page.setViewportSize({ width: 900, height: 900 });
   await expect(page.locator("body")).toHaveAttribute("data-shell-viewport", "tablet");
   await expect(page.locator("body")).toHaveAttribute("data-sidebar-state", "collapsed");
+  await expect(navToggle).not.toHaveAttribute("hidden", "");
+  await expect(navToggle).toHaveAttribute("aria-label", /expand navigation/i);
   await expect(page.locator(".app-nav__label").first()).toBeHidden();
-  await expect(page.getByRole("button", { name: /expand navigation/i })).toBeVisible();
+  await expect(sidebarClose).toHaveAttribute("hidden", "");
+  await expect(sidebarBackdrop).toHaveAttribute("hidden", "");
 
-  await page.getByRole("button", { name: /expand navigation/i }).click();
+  await navToggle.click();
   await expect(page.locator("body")).toHaveAttribute("data-sidebar-state", "expanded");
+  await expect(navToggle).toHaveAttribute("aria-label", /collapse navigation/i);
   await expect(page.locator(".app-nav__label").first()).toBeVisible();
+  await expect(sidebarClose).toHaveAttribute("hidden", "");
+  await expect(sidebarBackdrop).toHaveAttribute("hidden", "");
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.reload();
-  await expect(page.locator("html")).toHaveAttribute("data-shell-ready", "true");
   await expect(page.locator("body")).toHaveAttribute("data-shell-viewport", "mobile");
   await expect(page.locator("body")).toHaveAttribute("data-sidebar-state", "overlay-closed");
-  await expect(page.getByRole("button", { name: /open navigation/i })).toBeVisible();
+  await expect(navToggle).not.toHaveAttribute("hidden", "");
+  await expect(navToggle).toHaveAttribute("aria-label", /open navigation/i);
+  await expect(sidebarClose).toHaveAttribute("hidden", "");
+  await expect(sidebarBackdrop).toHaveAttribute("hidden", "");
 
-  await page.getByRole("button", { name: /open navigation/i }).click();
+  await navToggle.click();
   await expect(page.locator("body")).toHaveAttribute("data-sidebar-state", "overlay-open");
+  await expect(navToggle).toHaveAttribute("aria-label", /close navigation/i);
+  await expect(sidebarClose).not.toHaveAttribute("hidden", "");
+  await expect(sidebarBackdrop).not.toHaveAttribute("hidden", "");
 
-  await page.locator(".app-sidebar-backdrop").click();
+  await sidebarBackdrop.click();
   await expect(page.locator("body")).toHaveAttribute("data-sidebar-state", "overlay-closed");
+  await expect(sidebarClose).toHaveAttribute("hidden", "");
+  await expect(sidebarBackdrop).toHaveAttribute("hidden", "");
+
+  await navToggle.click();
+  await expect(page.locator("body")).toHaveAttribute("data-sidebar-state", "overlay-open");
+  await expect(sidebarClose).not.toHaveAttribute("hidden", "");
+
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await expect(page.locator("body")).toHaveAttribute("data-shell-viewport", "desktop");
+  await expect(page.locator("body")).toHaveAttribute("data-sidebar-state", "expanded");
+  await expect(navToggle).toHaveAttribute("hidden", "");
+  await expect(sidebarClose).toHaveAttribute("hidden", "");
+  await expect(sidebarBackdrop).toHaveAttribute("hidden", "");
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator("body")).toHaveAttribute("data-shell-viewport", "mobile");
+  await expect(page.locator("body")).toHaveAttribute("data-sidebar-state", "overlay-closed");
+  await expect(navToggle).toHaveAttribute("aria-label", /open navigation/i);
+  await expect(sidebarClose).toHaveAttribute("hidden", "");
+  await expect(sidebarBackdrop).toHaveAttribute("hidden", "");
 
   await assertNoConsoleErrors();
 });

@@ -455,6 +455,19 @@ fn shell_sidebar_state(viewport: &str) -> &'static str {
 }
 
 #[cfg(feature = "hydrate")]
+fn sync_shell_control_visibility(element: &web_sys::Element, visible: bool) {
+    if visible {
+        element.remove_attribute("hidden").ok();
+        element.set_attribute("aria-hidden", "false").ok();
+        element.remove_attribute("tabindex").ok();
+    } else {
+        element.set_attribute("hidden", "").ok();
+        element.set_attribute("aria-hidden", "true").ok();
+        element.set_attribute("tabindex", "-1").ok();
+    }
+}
+
+#[cfg(feature = "hydrate")]
 fn apply_shell_chrome_state() {
     let Some(document) = window().and_then(|window| window.document()) else {
         return;
@@ -467,6 +480,11 @@ fn apply_shell_chrome_state() {
     };
 
     let viewport = shell_viewport();
+
+    if viewport != "mobile" {
+        MOBILE_SIDEBAR_OPEN.with(|open| open.set(false));
+    }
+
     let state = shell_sidebar_state(viewport);
 
     root.set_attribute("data-shell-ready", "true").ok();
@@ -488,11 +506,7 @@ fn apply_shell_chrome_state() {
     }
 
     if let Some(toggle) = document.get_element_by_id("app-nav-toggle") {
-        if viewport == "desktop" {
-            toggle.set_attribute("hidden", "").ok();
-        } else {
-            toggle.remove_attribute("hidden").ok();
-        }
+        sync_shell_control_visibility(&toggle, viewport != "desktop");
         toggle
             .set_attribute(
                 "aria-expanded",
@@ -517,12 +531,12 @@ fn apply_shell_chrome_state() {
         toggle.set_attribute("aria-label", label).ok();
     }
 
+    if let Ok(Some(close_button)) = document.query_selector(".app-sidebar-close") {
+        sync_shell_control_visibility(&close_button, viewport == "mobile" && state == "overlay-open");
+    }
+
     if let Ok(Some(backdrop)) = document.query_selector(".app-sidebar-backdrop") {
-        if viewport == "mobile" && state == "overlay-open" {
-            backdrop.remove_attribute("hidden").ok();
-        } else {
-            backdrop.set_attribute("hidden", "").ok();
-        }
+        sync_shell_control_visibility(&backdrop, viewport == "mobile" && state == "overlay-open");
     }
 }
 
@@ -1365,12 +1379,12 @@ pub fn NativePage(
                         .unwrap_or_else(|| view! { <></> }.into_any())
                 }}
             </Show>
-            <button class="app-sidebar-backdrop" type="button" aria-label="Close navigation" data-sidebar-dismiss tabindex="-1" hidden></button>
+            <button class="app-sidebar-backdrop" type="button" aria-label="Close navigation" aria-hidden="true" data-sidebar-dismiss tabindex="-1" hidden></button>
             <section class="app-layout">
                 <aside id="app-sidebar" class="panel box app-sidebar" aria-label="Application navigation">
                     <div class="app-sidebar__header">
                         <span class="app-sidebar__title">"Navigation"</span>
-                        <button class="app-sidebar-close" type="button" aria-label="Close navigation" data-sidebar-dismiss>
+                        <button class="app-sidebar-close" type="button" aria-label="Close navigation" aria-hidden="true" data-sidebar-dismiss tabindex="-1" hidden>
                             <span aria-hidden="true"><i class="fa-solid fa-xmark"></i></span>
                         </button>
                     </div>

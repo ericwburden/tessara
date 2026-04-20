@@ -1036,6 +1036,12 @@ body.tessara-app .app-sidebar-close {
   color: var(--tessara-button-fg) !important;
 }
 
+body.tessara-app .app-nav-toggle[hidden],
+body.tessara-app .app-sidebar-close[hidden],
+body.tessara-app .app-sidebar-backdrop[hidden] {
+  display: none !important;
+}
+
 body.tessara-app .top-app-bar__brand,
 body.tessara-app .top-app-bar__utilities,
 body.tessara-app .top-app-bar__search,
