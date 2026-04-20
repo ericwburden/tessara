@@ -1489,22 +1489,24 @@ body.tessara-app .home-metric {
   padding: 0;
   border: 0;
   background: transparent;
+  white-space: nowrap;
 }
 
 body.tessara-app .home-metric strong {
   color: var(--tessara-text-strong);
-  font-size: clamp(1.4rem, 2.1vw, 1.85rem);
+  font-size: clamp(1rem, 1.35vw, 1.1rem);
+  font-weight: 800;
   line-height: 1;
 }
 
 body.tessara-app .home-metric span,
 body.tessara-app .home-hierarchy-item__type,
 body.tessara-app .home-snapshot-item span {
-  color: var(--tessara-text-muted);
-  font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  color: var(--tessara-text);
+  font-size: 0.88rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 body.tessara-app .home-workspace-grid {

@@ -36,6 +36,14 @@ struct HomePendingAssignmentSummary {
     account_display_name: String,
 }
 
+fn quantify(count: i64, singular: &'static str, plural: &'static str) -> String {
+    if count == 1 {
+        singular.to_string()
+    } else {
+        plural.to_string()
+    }
+}
+
 fn scope_root_labels(account: &AccountContext) -> Vec<(String, String)> {
     let mut roots = account
         .scope_nodes
@@ -127,23 +135,44 @@ pub fn HomePage() -> impl IntoView {
             {move || {
                 let summary = home_summary.get();
                 if let Some(summary) = summary {
+                    let pending_count = pending_assignments.get().map(|items| items.len()).unwrap_or(0);
+                    let pending_label = if pending_count == 1 {
+                        "assignment".to_string()
+                    } else {
+                        "assignments".to_string()
+                    };
+                    let dashboard_count = if summary.dashboards > 0 {
+                        summary.dashboards
+                    } else {
+                        summary.published_form_versions
+                    };
+                    let dashboard_label = if summary.dashboards > 0 {
+                        quantify(summary.dashboards, "dashboard", "dashboards")
+                    } else {
+                        quantify(
+                            summary.published_form_versions,
+                            "published form",
+                            "published forms",
+                        )
+                    };
+
                     return view! {
                         <section id="home-metric-strip" class="home-metric-strip">
                             <article class="home-metric">
-                                <strong>{pending_assignments.get().map(|items| items.len()).unwrap_or(0)}</strong>
-                                <span>"Pending"</span>
+                                <strong>{pending_count}</strong>
+                                <span>{pending_label}</span>
                             </article>
                             <article class="home-metric">
                                 <strong>{summary.draft_submissions}</strong>
-                                <span>"Drafts"</span>
+                                <span>{quantify(summary.draft_submissions, "draft response", "draft responses")}</span>
                             </article>
                             <article class="home-metric">
                                 <strong>{summary.submitted_submissions}</strong>
-                                <span>"Submitted"</span>
+                                <span>{quantify(summary.submitted_submissions, "submitted response", "submitted responses")}</span>
                             </article>
                             <article class="home-metric">
-                                <strong>{if summary.dashboards > 0 { summary.dashboards } else { summary.published_form_versions }}</strong>
-                                <span>{if summary.dashboards > 0 { "Dashboards" } else { "Published forms" }}</span>
+                                <strong>{dashboard_count}</strong>
+                                <span>{dashboard_label}</span>
                             </article>
                         </section>
                     }
