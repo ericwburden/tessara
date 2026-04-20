@@ -14,7 +14,7 @@ mod hydrate {
     };
     use serde::Deserialize;
     use serde_json::json;
-    use wasm_bindgen::{JsCast, closure::Closure};
+    use wasm_bindgen::{JsCast, JsValue, closure::Closure};
     use wasm_bindgen_futures::spawn_local;
 
     #[derive(Clone, Deserialize)]
@@ -143,30 +143,103 @@ mod hydrate {
         html
     }
 
-    fn render_workflow_cards(items: &[WorkflowSummary]) -> String {
+    fn workflow_summary_description(summary: &WorkflowSummary) -> &str {
+        if summary.description.trim().is_empty() {
+            "This workflow is ready to link form versions into assignment-backed response work."
+        } else {
+            summary.description.as_str()
+        }
+    }
+
+    fn workflow_summary_status(summary: &WorkflowSummary) -> &str {
+        summary.current_status.as_deref().unwrap_or("Draft only")
+    }
+
+    fn workflow_summary_version(summary: &WorkflowSummary) -> &str {
+        summary
+            .current_version_label
+            .as_deref()
+            .unwrap_or("Not published")
+    }
+
+    fn workflow_list_path(selected_workflow_id: Option<&str>) -> String {
+        selected_workflow_id
+            .filter(|value| !value.is_empty())
+            .map(|value| format!("/app/workflows?workflowId={value}"))
+            .unwrap_or_else(|| "/app/workflows".into())
+    }
+
+    fn replace_workflow_list_location(selected_workflow_id: Option<&str>) {
+        let Some(window) = web_sys::window() else {
+            return;
+        };
+        let Ok(history) = window.history() else {
+            return;
+        };
+        let path = workflow_list_path(selected_workflow_id);
+        let _ = history.replace_state_with_url(&JsValue::NULL, "", Some(&path));
+    }
+
+    fn select_directory_workflow_id(
+        items: &[WorkflowSummary],
+        requested_workflow_id: Option<&str>,
+    ) -> Option<String> {
+        requested_workflow_id
+            .filter(|requested| items.iter().any(|item| item.id == *requested))
+            .map(str::to_owned)
+            .or_else(|| items.first().map(|item| item.id.clone()))
+    }
+
+    fn render_workflow_directory_metrics(items: &[WorkflowSummary]) -> String {
+        if items.is_empty() {
+            return r#"<p class="muted">No workflows are available yet.</p>"#.into();
+        }
+
+        let draft_only = items
+            .iter()
+            .filter(|item| workflow_summary_status(item).eq_ignore_ascii_case("draft only"))
+            .count();
+        let assignment_total: i64 = items.iter().map(|item| item.assignment_count).sum();
+        let published = items
+            .iter()
+            .filter(|item| !workflow_summary_version(item).eq_ignore_ascii_case("not published"))
+            .count();
+
+        format!(
+            r#"<div class="binding-row workflow-directory-overview__metrics"><p><strong>{}</strong> workflows in the directory.</p><p><strong>{}</strong> currently have a published version.</p><p><strong>{}</strong> are draft-only and still need a publishable runtime version.</p><p><strong>{}</strong> assignment-backed work items are attached across the directory.</p></div>"#,
+            items.len(),
+            published,
+            draft_only,
+            assignment_total
+        )
+    }
+
+    fn render_workflow_directory(
+        items: &[WorkflowSummary],
+        selected_workflow_id: Option<&str>,
+    ) -> String {
         if items.is_empty() {
             return r#"<p class="muted">No workflow records found.</p>"#.into();
         }
         items.iter()
             .map(|item| {
-                let current_version = item.current_version_label.as_deref().unwrap_or("Not published");
-                let runtime_status = item.current_status.as_deref().unwrap_or("Draft only");
-                let description = if item.description.trim().is_empty() {
-                    "This workflow is ready to link form versions into assignment-backed response work."
-                } else {
-                    item.description.as_str()
-                };
+                let is_selected = selected_workflow_id == Some(item.id.as_str());
                 format!(
-                    r#"<article class="record-card workflow-directory-card"><div class="page-title-row compact-title-row"><div><p class="eyebrow">Workflow</p><h4>{}</h4><p class="muted">{}</p></div><p class="workflow-directory-card__status">{}</p></div><div class="workflow-directory-card__meta"><p><strong>Linked Form:</strong> {}</p><p><strong>Current Version:</strong> {}</p><p><strong>Assignments:</strong> {}</p></div><div class="actions"><a class="button-link" href="/app/workflows/{}">Open</a><a class="button-link" href="/app/workflows/{}/edit">Edit</a><a class="button-link" href="/app/workflows/assignments?workflowId={}">Manage Assignments</a></div></article>"#,
+                    r#"<button class="record-card compact-record-card workflow-directory-card workflow-directory-row{}" type="button" data-workflow-directory-select="{}" aria-pressed="{}"><div class="page-title-row compact-title-row"><div><p class="eyebrow">Workflow</p><h4>{}</h4><p class="muted">{}</p></div><p class="workflow-directory-card__status">{}</p></div><div class="workflow-directory-card__meta workflow-directory-row__meta"><p><strong>Linked Form:</strong> {}</p><p><strong>Current Version:</strong> {}</p><p><strong>Assignments:</strong> {}</p><p><strong>Slug:</strong> {}</p></div></button>"#,
+                    if is_selected {
+                        " workflow-directory-row--selected"
+                    } else {
+                        ""
+                    },
+                    escape_html(&item.id),
+                    if is_selected { "true" } else { "false" },
                     escape_html(&item.name),
-                    escape_html(description),
-                    escape_html(runtime_status),
+                    escape_html(workflow_summary_description(item)),
+                    escape_html(workflow_summary_status(item)),
                     escape_html(&item.form_name),
-                    escape_html(current_version),
+                    escape_html(workflow_summary_version(item)),
                     item.assignment_count,
-                    item.id,
-                    item.id,
-                    item.id,
+                    escape_html(&item.slug),
                 )
             })
             .collect::<Vec<_>>()
@@ -190,6 +263,109 @@ mod hydrate {
             detail.assignments.len(),
             escape_html(&detail.description),
         )
+    }
+
+    fn render_workflow_assignment_snapshot(items: &[WorkflowAssignmentSummary]) -> String {
+        if items.is_empty() {
+            return r#"<p class="muted">No assignments are attached to this workflow yet.</p>"#
+                .into();
+        }
+        items.iter()
+            .take(3)
+            .map(|assignment| {
+                let work_state = if assignment.has_draft {
+                    "Draft exists"
+                } else if assignment.has_submitted {
+                    "Submitted"
+                } else {
+                    "Pending"
+                };
+                let active_state = if assignment.is_active { "Active" } else { "Inactive" };
+                format!(
+                    r#"<article class="record-card compact-record-card workflow-assignment-card"><div class="page-title-row compact-title-row"><div><h4>{}</h4><p class="muted">Assigned to {} ({})</p></div><p class="workflow-directory-card__status">{}</p></div><div class="workflow-directory-card__meta"><p><strong>Node:</strong> {}</p><p><strong>Work State:</strong> {}</p></div></article>"#,
+                    escape_html(&assignment.node_name),
+                    escape_html(&assignment.account_display_name),
+                    escape_html(&assignment.account_email),
+                    escape_html(active_state),
+                    escape_html(&assignment.node_name),
+                    escape_html(work_state),
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("")
+    }
+
+    fn render_workflow_directory_detail(detail: &WorkflowDefinition) -> String {
+        let publish_button = detail
+            .versions
+            .iter()
+            .find(|version| version.status != "published")
+            .map(|version| {
+                format!(
+                    r#"<button class="button is-light" type="button" data-publish-workflow-version="{}">Publish Draft Version</button>"#,
+                    escape_html(&version.id)
+                )
+            })
+            .unwrap_or_default();
+
+        let versions = if detail.versions.is_empty() {
+            r#"<p class="muted">No workflow versions exist yet.</p>"#.into()
+        } else {
+            detail
+                .versions
+                .iter()
+                .take(3)
+                .map(|version| {
+                    format!(
+                        r#"<article class="record-card compact-record-card"><div class="page-title-row compact-title-row"><div><h4>{}</h4><p class="muted">{}</p></div><p class="workflow-directory-card__status">{}</p></div><div class="workflow-directory-card__meta"><p><strong>Linked Form Version:</strong> {}</p></div></article>"#,
+                        escape_html(&version.title),
+                        escape_html(
+                            version
+                                .form_version_label
+                                .as_deref()
+                                .unwrap_or("Draft version")
+                        ),
+                        escape_html(&version.status),
+                        escape_html(
+                            version
+                                .form_version_label
+                                .as_deref()
+                                .unwrap_or("Draft version")
+                        ),
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("")
+        };
+
+        format!(
+            r#"<article class="record-detail workflow-selected-detail"><div class="page-title-row compact-title-row"><div><p class="eyebrow">Selected Workflow</p><h3>{}</h3><p>{}</p></div><p class="workflow-directory-card__status">{}</p></div><div class="workflow-directory-card__meta workflow-selected-detail__meta"><p><strong>Linked Form:</strong> <a href="/app/forms/{}">{}</a></p><p><strong>Slug:</strong> {}</p><p><strong>Assignments:</strong> {}</p><p><strong>Versions:</strong> {}</p></div><div class="actions"><a class="button-link button is-light" href="/app/workflows/{}">Open Detail</a><a class="button-link button is-light" href="/app/workflows/{}/edit">Edit Workflow</a><a class="button-link button is-primary" href="{}">Manage Assignments</a>{}</div><section class="record-detail workflow-selected-detail__section"><div><p class="eyebrow">Assignments</p><h4>Current assignment footprint</h4></div><div class="record-list workflow-selected-detail__assignments">{}</div></section><section class="record-detail workflow-selected-detail__section"><div><p class="eyebrow">Versions</p><h4>Workflow version lifecycle</h4></div><div class="record-list workflow-selected-detail__versions">{}</div></section></article>"#,
+            escape_html(&detail.name),
+            escape_html(&detail.description),
+            escape_html(
+                detail
+                    .versions
+                    .iter()
+                    .find(|version| version.status == "published")
+                    .and_then(|version| version.form_version_label.as_deref())
+                    .unwrap_or("Draft only")
+            ),
+            escape_html(&detail.form_id),
+            escape_html(&detail.form_name),
+            escape_html(&detail.slug),
+            detail.assignments.len(),
+            detail.versions.len(),
+            escape_html(&detail.id),
+            escape_html(&detail.id),
+            escape_html(&assignment_console_path(Some(&detail.id))),
+            publish_button,
+            render_workflow_assignment_snapshot(&detail.assignments),
+            versions,
+        )
+    }
+
+    fn render_workflow_directory_empty_detail() -> String {
+        r#"<div class="record-detail workflow-selected-detail"><p class="muted">Select a workflow from the directory to inspect its linked form, assignments, and versions.</p></div>"#.into()
     }
 
     fn render_versions(detail: &WorkflowDefinition) -> String {
@@ -289,14 +465,103 @@ mod hydrate {
         }
     }
 
+    fn bind_workflow_directory_selection(items: Vec<WorkflowSummary>) {
+        attach_click_handler_by_attr("data-workflow-directory-select", move |workflow_id| {
+            let items = items.clone();
+            render_workflow_directory_surface(items, Some(workflow_id));
+        });
+    }
+
+    fn render_workflow_directory_surface(
+        items: Vec<WorkflowSummary>,
+        requested_workflow_id: Option<String>,
+    ) {
+        let selected_workflow_id =
+            select_directory_workflow_id(&items, requested_workflow_id.as_deref());
+        set_html(
+            "workflow-directory-metrics",
+            &render_workflow_directory_metrics(&items),
+        );
+        set_html(
+            "workflow-list",
+            &render_workflow_directory(&items, selected_workflow_id.as_deref()),
+        );
+        bind_workflow_directory_selection(items.clone());
+
+        let Some(selected_workflow_id) = selected_workflow_id else {
+            replace_workflow_list_location(None);
+            set_html(
+                "workflow-directory-detail",
+                &render_workflow_directory_empty_detail(),
+            );
+            return;
+        };
+
+        replace_workflow_list_location(Some(&selected_workflow_id));
+        set_html(
+            "workflow-directory-detail",
+            r#"<div class="record-detail workflow-selected-detail"><p class="muted">Loading selected workflow...</p></div>"#,
+        );
+
+        spawn_local(async move {
+            match get_json::<WorkflowDefinition>(&format!("/api/workflows/{selected_workflow_id}"))
+                .await
+            {
+                Ok(detail) => {
+                    set_html(
+                        "workflow-directory-detail",
+                        &render_workflow_directory_detail(&detail),
+                    );
+                    attach_click_handler_by_attr(
+                        "data-publish-workflow-version",
+                        move |version_id| {
+                            let selected_workflow_id = selected_workflow_id.clone();
+                            spawn_local(async move {
+                                let _ = post_json::<IdResponse>(
+                                    &format!("/api/workflow-versions/{version_id}/publish"),
+                                    &json!({}),
+                                )
+                                .await;
+                                redirect(&workflow_list_path(Some(&selected_workflow_id)));
+                            });
+                        },
+                    );
+                }
+                Err(error) => set_html(
+                    "workflow-directory-detail",
+                    &format!(
+                        r#"<div class="record-detail workflow-selected-detail"><p class="muted">{}</p></div>"#,
+                        escape_html(&error)
+                    ),
+                ),
+            }
+        });
+    }
+
     pub fn load_list_page() {
         spawn_local(async move {
             match get_json::<Vec<WorkflowSummary>>("/api/workflows").await {
-                Ok(items) => set_html("workflow-list", &render_workflow_cards(&items)),
-                Err(error) => set_html(
-                    "workflow-list",
-                    &format!(r#"<p class="muted">{}</p>"#, escape_html(&error)),
-                ),
+                Ok(items) => {
+                    let selected_workflow_id = current_search_param("workflowId");
+                    render_workflow_directory_surface(items, selected_workflow_id);
+                }
+                Err(error) => {
+                    set_html(
+                        "workflow-directory-metrics",
+                        &format!(r#"<p class="muted">{}</p>"#, escape_html(&error)),
+                    );
+                    set_html(
+                        "workflow-list",
+                        &format!(r#"<p class="muted">{}</p>"#, escape_html(&error)),
+                    );
+                    set_html(
+                        "workflow-directory-detail",
+                        &format!(
+                            r#"<div class="record-detail workflow-selected-detail"><p class="muted">{}</p></div>"#,
+                            escape_html(&error)
+                        ),
+                    );
+                }
             }
         });
     }
@@ -684,18 +949,37 @@ pub fn WorkflowsPage() -> impl IntoView {
             ]/>
             <Panel
                 title="Workflow Directory"
-                description="Current workflow records, linked forms, and assignment counts appear here."
+                description="Select a workflow from the directory, inspect the active runtime shell, and branch into assignment management from the selected detail rail."
             >
-                <div class="actions">
-                    <a class="button-link button is-primary" href="/app/workflows/new">
-                        "Create Workflow"
-                    </a>
-                    <a class="button-link button is-light" href="/app/workflows/assignments">
-                        "Open Assignment Management"
-                    </a>
+                <div id="workflow-directory-metrics" class="record-detail workflow-directory-overview">
+                    <p class="muted">"Loading workflow summary..."</p>
                 </div>
-                <div id="workflow-list" class="record-list">
-                    <p class="muted">"Loading workflow records..."</p>
+                <div class="form-grid workflow-directory-layout">
+                    <section class="record-detail workflow-directory-panel">
+                        <div class="page-title-row compact-title-row">
+                            <div>
+                                <p class="eyebrow">"Directory"</p>
+                                <h3>"Current workflow set"</h3>
+                                <p class="muted">
+                                    "Choose a workflow to inspect its linked form, version posture, and assignment load without leaving the directory."
+                                </p>
+                            </div>
+                            <div class="actions">
+                                <a class="button-link button is-light" href="/app/workflows/assignments">
+                                    "Open Assignment Management"
+                                </a>
+                                <a class="button-link button is-primary" href="/app/workflows/new">
+                                    "Create Workflow"
+                                </a>
+                            </div>
+                        </div>
+                        <div id="workflow-list" class="record-list workflow-directory-list">
+                            <p class="muted">"Loading workflow records..."</p>
+                        </div>
+                    </section>
+                    <aside id="workflow-directory-detail" class="record-detail workflow-directory-detail-panel">
+                        <p class="muted">"Loading selected workflow..."</p>
+                    </aside>
                 </div>
             </Panel>
         </NativePage>
