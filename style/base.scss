@@ -137,10 +137,14 @@ body.tessara-app .theme-toggle {
   align-items: center;
   gap: 0;
   min-width: 0;
+  position: relative;
 }
 body.tessara-app .theme-toggle--compact {
   justify-content: flex-end;
   width: auto;
+}
+body.tessara-app .theme-toggle--popover {
+  justify-content: flex-end;
 }
 body.tessara-app .theme-toggle__label {
   display: none;
@@ -153,6 +157,49 @@ body.tessara-app .theme-toggle__control {
 }
 body.tessara-app .theme-toggle__select {
   display: none;
+}
+body.tessara-app .theme-toggle__popover {
+  position: absolute;
+  right: calc(100% + 0.6rem);
+  bottom: 0;
+  z-index: 6;
+  display: grid;
+  gap: 0.3rem;
+  min-width: 9rem;
+  padding: 0.35rem;
+  border: 1px solid var(--tessara-border);
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--tessara-surface) 94%, var(--tessara-inline-surface) 6%);
+  box-shadow: var(--tessara-shadow);
+}
+body.tessara-app .theme-toggle__option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.55rem;
+  min-height: 2.25rem;
+  padding: 0.45rem 0.7rem;
+  border: 0;
+  border-radius: 0.8rem;
+  background: transparent !important;
+  color: var(--tessara-text) !important;
+  font-size: 0.86rem;
+  font-weight: 700;
+  text-align: left;
+}
+body.tessara-app .theme-toggle__option:hover,
+body.tessara-app .theme-toggle__option.is-active {
+  background: var(--tessara-nav-active-bg) !important;
+  color: var(--tessara-nav-active-fg) !important;
+}
+body.tessara-app .theme-toggle__option-icon {
+  width: 1rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+body.tessara-app .theme-toggle__option-label {
+  white-space: nowrap;
 }
 body.tessara-app .brand-lockup {
   display: inline-flex;
@@ -1291,6 +1338,7 @@ body.tessara-app .app-sidebar-backdrop {
   inset: 0;
   padding: 0;
   border: 0;
+  border-radius: 0 !important;
   background: rgba(15, 23, 42, 0.36);
   pointer-events: none;
   opacity: 0;
@@ -1362,6 +1410,7 @@ body.tessara-app .app-sidebar__brand {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  min-height: 2.75rem;
   padding: 0 0 1rem;
   margin-bottom: 0.25rem;
   border-bottom: 1px solid var(--tessara-border);
@@ -1436,13 +1485,13 @@ body.tessara-app .app-sidebar__footer {
   display: grid;
   gap: 0.9rem;
   margin-top: auto;
-  padding-top: 1rem;
-  border-top: 1px solid var(--tessara-border);
+  padding-top: 0.75rem;
+  border-top: 0;
 }
 
 body.tessara-app .app-sidebar__footer-context {
   display: grid;
-  gap: 0;
+  gap: 0.5rem;
 }
 
 body.tessara-app .app-sidebar__context-card,
@@ -1652,6 +1701,11 @@ body.tessara-app .app-nav__label {
 body.tessara-app .selection-panel {
   padding-top: 0.75rem;
   border-top: 1px solid var(--tessara-border);
+}
+
+body.tessara-app .app-sidebar__context-composite.selection-panel {
+  padding-top: 0;
+  border-top: 0;
 }
 
 body.tessara-app .app-sidebar__utility-block {
@@ -2183,17 +2237,36 @@ body.tessara-app .app-shell--migration .app-sidebar {
   }
 
   html[data-shell-ready='true'] body.tessara-app[data-shell-viewport='tablet'][data-sidebar-state='collapsed'] .app-sidebar__brand {
-    padding-bottom: 0.75rem;
+    min-height: 2.5rem;
+    padding: 0;
+    margin: 0;
+    border: 0;
   }
 
   html[data-shell-ready='true'] body.tessara-app[data-shell-viewport='tablet'][data-sidebar-state='collapsed'] .app-sidebar__footer {
     margin-top: auto;
-    gap: 0.75rem;
-    padding-top: 0.75rem;
+    position: sticky;
+    bottom: 0;
+    gap: 0.5rem;
+    padding-top: 0.5rem;
+    padding-bottom: 0.25rem;
+    background: inherit;
   }
 
   html[data-shell-ready='true'] body.tessara-app[data-shell-viewport='tablet'][data-sidebar-state='collapsed'] .app-sidebar__rail-profile {
-    display: inline-flex;
+    display: inline-flex !important;
+  }
+
+  html[data-shell-ready='true'] body.tessara-app[data-shell-viewport='tablet'][data-sidebar-state='collapsed'] .app-sidebar__brand-mark {
+    width: 2.5rem;
+    min-width: 2.5rem;
+    height: 2.5rem;
+    min-height: 2.5rem;
+    border-radius: 0.9rem;
+  }
+
+  html[data-shell-ready='true'] body.tessara-app[data-shell-viewport='tablet'][data-sidebar-state='collapsed'] .app-sidebar__footer-context {
+    justify-items: center;
   }
 
   html[data-shell-ready='true'] body.tessara-app[data-shell-viewport='tablet'][data-sidebar-state='collapsed'] .nav-panel {
@@ -2304,11 +2377,6 @@ body.tessara-app .app-shell--migration .app-sidebar {
     transition: transform 160ms ease-out;
   }
 
-  html[data-shell-ready='true'] body.tessara-app[data-shell-viewport='mobile'] .app-sidebar__header,
-  html[data-shell-ready='true'] body.tessara-app[data-shell-viewport='mobile'] .app-sidebar-close {
-    display: flex;
-  }
-
   html[data-shell-ready='true'] body.tessara-app[data-shell-viewport='mobile'][data-sidebar-state='overlay-open'] .app-sidebar {
     transform: translateX(0);
   }
@@ -2320,6 +2388,7 @@ body.tessara-app .app-shell--migration .app-sidebar {
     display: block !important;
     opacity: 0;
     pointer-events: none;
+    border-radius: 0 !important;
     transition: opacity 160ms ease-out;
   }
 
@@ -2340,6 +2409,15 @@ body.tessara-app .ui-page-header {
   border: 0;
   border-radius: 0;
   background: transparent !important;
+}
+
+body.tessara-app .app-screen.box.ui-page-header,
+body.tessara-app .entity-page.ui-page-header {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent !important;
+  box-shadow: none;
 }
 
 body.tessara-app .ui-page-header__copy,

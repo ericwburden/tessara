@@ -629,8 +629,9 @@ fn ThemeToggle() -> impl IntoView {
     use web_sys::window;
 
     let preference = RwSignal::new(String::from("system"));
+    let popover_open = RwSignal::new(false);
 
-    let apply_preference = move |choice: String| {
+    let apply_preference = Callback::new(move |choice: String| {
         let Some(window) = window() else {
             return;
         };
@@ -665,7 +666,7 @@ fn ThemeToggle() -> impl IntoView {
             let _ = storage.set_item(STORAGE_KEY, &choice);
         }
         preference.set(choice);
-    };
+    });
 
     Effect::new(move |_| {
         let Some(window) = window() else {
@@ -681,58 +682,91 @@ fn ThemeToggle() -> impl IntoView {
         preference.set(choice);
     });
 
-    let theme_is_dark = Memo::new(move |_| {
+    let theme_choice_icon = Memo::new(move |_| {
         let choice = preference.get();
         match choice.as_str() {
-            "dark" => true,
-            "light" => false,
-            _ => window()
-                .and_then(|window| window.match_media("(prefers-color-scheme: dark)").ok())
-                .flatten()
-                .map(|query| query.matches())
-                .unwrap_or(false),
+            "dark" => "fa-solid fa-moon".to_string(),
+            "light" => "fa-solid fa-sun".to_string(),
+            _ => "fa-solid fa-circle-half-stroke".to_string(),
         }
     });
 
     view! {
-        <button
-            class="app-sidebar__icon-button theme-toggle-button"
-            type="button"
-            aria-label=move || if theme_is_dark.get() {
-                "Switch to light theme"
-            } else {
-                "Switch to dark theme"
-            }
-            title=move || if theme_is_dark.get() {
-                "Switch to light theme"
-            } else {
-                "Switch to dark theme"
-            }
-            on:click=move |_| {
-                let current = preference.get_untracked();
-                let next = match current.as_str() {
-                    "dark" => "light",
-                    "light" => "dark",
-                    _ => {
-                        let system_dark = window()
-                            .and_then(|window| window.match_media("(prefers-color-scheme: dark)").ok())
-                            .flatten()
-                            .map(|query| query.matches())
-                            .unwrap_or(false);
-                        if system_dark { "light" } else { "dark" }
-                    }
-                };
-                apply_preference(next.to_string());
-            }
-        >
-            <span aria-hidden="true">
-                <i class=move || if theme_is_dark.get() {
-                    "fa-solid fa-sun".to_string()
-                } else {
-                    "fa-solid fa-moon".to_string()
-                }></i>
-            </span>
-        </button>
+        <div class="theme-toggle theme-toggle--popover">
+            <button
+                class="app-sidebar__icon-button theme-toggle-button"
+                type="button"
+                aria-label="Theme options"
+                title=move || {
+                    let current = preference.get();
+                    let label = match current.as_str() {
+                        "light" => "Light",
+                        "dark" => "Dark",
+                        _ => "System",
+                    };
+                    format!("Theme: {label}")
+                }
+                aria-haspopup="menu"
+                aria-expanded=move || if popover_open.get() { "true" } else { "false" }
+                on:click=move |_| popover_open.update(|open| *open = !*open)
+            >
+                <span aria-hidden="true">
+                    <i class=move || theme_choice_icon.get()></i>
+                </span>
+            </button>
+            <Show when=move || popover_open.get()>
+                <div class="theme-toggle__popover" role="menu" aria-label="Theme options">
+                    <button
+                        class="theme-toggle__option"
+                        class:is-active=move || preference.get() == "system"
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked=move || if preference.get() == "system" { "true" } else { "false" }
+                        on:click=move |_| {
+                            apply_preference.run("system".into());
+                            popover_open.set(false);
+                        }
+                    >
+                        <span class="theme-toggle__option-icon" aria-hidden="true">
+                            <i class="fa-solid fa-circle-half-stroke"></i>
+                        </span>
+                        <span class="theme-toggle__option-label">"System"</span>
+                    </button>
+                    <button
+                        class="theme-toggle__option"
+                        class:is-active=move || preference.get() == "light"
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked=move || if preference.get() == "light" { "true" } else { "false" }
+                        on:click=move |_| {
+                            apply_preference.run("light".into());
+                            popover_open.set(false);
+                        }
+                    >
+                        <span class="theme-toggle__option-icon" aria-hidden="true">
+                            <i class="fa-solid fa-sun"></i>
+                        </span>
+                        <span class="theme-toggle__option-label">"Light"</span>
+                    </button>
+                    <button
+                        class="theme-toggle__option"
+                        class:is-active=move || preference.get() == "dark"
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked=move || if preference.get() == "dark" { "true" } else { "false" }
+                        on:click=move |_| {
+                            apply_preference.run("dark".into());
+                            popover_open.set(false);
+                        }
+                    >
+                        <span class="theme-toggle__option-icon" aria-hidden="true">
+                            <i class="fa-solid fa-moon"></i>
+                        </span>
+                        <span class="theme-toggle__option-label">"Dark"</span>
+                    </button>
+                </div>
+            </Show>
+        </div>
     }
 }
 
@@ -740,16 +774,20 @@ fn ThemeToggle() -> impl IntoView {
 #[component]
 fn ThemeToggle() -> impl IntoView {
     view! {
-        <button
-            class="app-sidebar__icon-button theme-toggle-button"
-            type="button"
-            aria-label="Switch to dark theme"
-            title="Switch to dark theme"
-        >
-            <span aria-hidden="true">
-                <i class="fa-solid fa-moon"></i>
-            </span>
-        </button>
+        <div class="theme-toggle theme-toggle--popover">
+            <button
+                class="app-sidebar__icon-button theme-toggle-button"
+                type="button"
+                aria-label="Theme options"
+                title="Theme: System"
+                aria-haspopup="menu"
+                aria-expanded="false"
+            >
+                <span aria-hidden="true">
+                    <i class="fa-solid fa-circle-half-stroke"></i>
+                </span>
+            </button>
+        </div>
     }
 }
 
@@ -1294,12 +1332,6 @@ pub fn NativePage(
             <button class="app-sidebar-backdrop" type="button" aria-label="Close navigation" aria-hidden="true" data-sidebar-dismiss tabindex="-1" hidden></button>
             <section class="app-layout">
                 <aside id="app-sidebar" class="panel box app-sidebar" aria-label="Application navigation">
-                    <div class="app-sidebar__header">
-                        <span class="app-sidebar__title">"Navigation"</span>
-                        <button class="app-sidebar-close" type="button" aria-label="Close navigation" aria-hidden="true" data-sidebar-dismiss tabindex="-1" hidden>
-                            <span aria-hidden="true"><i class="fa-solid fa-xmark"></i></span>
-                        </button>
-                    </div>
                     <a class="app-sidebar__brand" href="/app" aria-label="Tessara home">
                         <span class="app-sidebar__brand-mark" aria-hidden="true">
                             <img class="app-sidebar__brand-mark-image" src="/assets/tessara-icon-256.svg" alt="" />
