@@ -482,16 +482,16 @@ test("forms list route stays readable and console-clean on the native shell", as
   await page.goto("/app/forms");
 
   await expect(
-    page.getByRole("heading", { name: "Forms" }).first(),
+    page.getByRole("heading", { name: "Form Directory" }).first(),
   ).toBeVisible();
   await expect(page.locator("#form-list")).toHaveCount(1);
-  await expect(page.locator("body")).toContainText("Lifecycle Summary");
+  await expect(page.locator("body")).toContainText("Published line");
   await expect(page.locator(".breadcrumb-item")).toHaveCount(0);
   await expectNoLegacyBridge(page);
 
   await page.reload();
   await expect(
-    page.getByRole("heading", { name: "Forms" }).first(),
+    page.getByRole("heading", { name: "Form Directory" }).first(),
   ).toBeVisible();
   await expectNoLegacyBridge(page);
 
@@ -715,7 +715,7 @@ test("forms authoring routes stay native and console-clean", async ({
   await page.goto("/app/forms");
   const detailHref = await page
     .locator('a[href^="/app/forms/"]:not([href$="/edit"])')
-    .filter({ hasText: "View" })
+    .filter({ hasText: "Open" })
     .first()
     .getAttribute("href");
   expect(detailHref).toBeTruthy();
@@ -732,9 +732,9 @@ test("forms authoring routes stay native and console-clean", async ({
 
   await page.goto(editHref!);
   await expect(
-    page.getByRole("heading", { name: "Edit Form" }).first(),
+    page.getByRole("heading", { name: "Draft Authoring" }).first(),
   ).toBeVisible();
-  await expect(page.locator("body")).toContainText("Draft Version Workspace");
+  await expect(page.locator("body")).toContainText("Draft Workspace");
   await expect(page.locator("#form-version-workspace")).toHaveCount(1);
   await page.getByRole("button", { name: "Create Draft Version" }).click();
   await expect(page.locator(".form-builder-shell")).toHaveCount(1);
@@ -742,7 +742,7 @@ test("forms authoring routes stay native and console-clean", async ({
     "Jump Between Sections",
   );
   await expect(page.locator(".form-builder-insert-rail")).toContainText(
-    "Quick Actions",
+    "Insert Rail",
   );
   await expect(page.locator(".form-builder-canvas")).toBeVisible();
 
@@ -766,7 +766,7 @@ test("forms authoring routes stay native and console-clean", async ({
     .click();
   await expect(page.locator("#form-builder-properties")).toBeVisible();
   await expect(page.locator("#form-builder-properties")).toContainText(
-    "Field Properties",
+    "Properties",
   );
   await expect(
     page.locator(".form-builder-field-card.is-selected"),
@@ -787,7 +787,7 @@ test("forms authoring routes stay native and console-clean", async ({
 
   await page.reload();
   await expect(
-    page.getByRole("heading", { name: "Edit Form" }).first(),
+    page.getByRole("heading", { name: "Draft Authoring" }).first(),
   ).toBeVisible();
   await expect(page.locator("#form-version-workspace")).toHaveCount(1);
   await expectNoLegacyBridge(page);
@@ -981,7 +981,7 @@ test("responses route stays readable and console-clean on the native shell", asy
   await page.goto("/app/responses");
 
   await expect(
-    page.getByRole("heading", { name: "Responses" }).first(),
+    page.getByRole("heading", { name: "Operational Queue" }).first(),
   ).toBeVisible();
   await expect(page.locator("#response-pending-list")).toHaveCount(1);
   await expect(page.locator("body")).toContainText("Assigned Starts");
@@ -993,7 +993,7 @@ test("responses route stays readable and console-clean on the native shell", asy
   await page.reload();
   await waitForAuthenticatedShell(page, "respondent@tessara.local");
   await expect(
-    page.getByRole("heading", { name: "Responses" }).first(),
+    page.getByRole("heading", { name: "Operational Queue" }).first(),
   ).toBeVisible();
   await expectNoLegacyBridge(page);
 
@@ -1341,12 +1341,12 @@ test("workflow assignment deep links preserve workflow context in the assignment
   );
   await expect(
     page.locator(
-      '#workflow-list a[href^="/app/workflows/assignments?workflowId="]',
+      '.workflow-selected-detail a[href^="/app/workflows/assignments?workflowId="]',
     ),
   ).not.toHaveCount(0);
 
   const assignmentLink = page
-    .locator('#workflow-list a[href^="/app/workflows/assignments?workflowId="]')
+    .locator('.workflow-selected-detail a[href^="/app/workflows/assignments?workflowId="]')
     .first();
   const href = await assignmentLink.getAttribute("href");
   expect(href).toBeTruthy();
