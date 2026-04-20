@@ -236,14 +236,14 @@ mod hydrate {
                     .filter(|version| version.status == "draft")
                     .count();
                 format!(
-                    r#"<article class="record-card"><h4>{}</h4><p>{}</p><p class="muted">Scope: {}</p><p class="muted">Published: {}</p><p class="muted">Draft versions: {}</p><div class="actions"><a class="button-link" href="/app/forms/{}">View</a><a class="button-link" href="/app/forms/{}/edit">Edit</a></div></article>"#,
+                    r#"<article class="record-card form-directory-card"><div class="page-title-row compact-title-row"><div><p class="eyebrow">Form</p><h4>{}</h4><p class="muted">/{}</p></div><div class="actions"><a class="button-link" href="/app/forms/{}">Open</a><a class="button-link" href="/app/forms/{}/edit">Edit Drafts</a></div></div><div class="record-detail form-directory-card__meta"><p class="muted">Scope root: {}</p><p class="muted">Published line: {}</p><p class="muted">Draft versions ready: {}</p></div></article>"#,
                     escape_html(&form.name),
                     escape_html(&form.slug),
+                    escape_html(&form.id),
+                    escape_html(&form.id),
                     escape_html(form.scope_node_type_name.as_deref().unwrap_or("Unscoped")),
                     escape_html(&published),
                     draft_count,
-                    escape_html(&form.id),
-                    escape_html(&form.id),
                 )
             })
             .collect::<Vec<_>>()
@@ -272,7 +272,7 @@ mod hydrate {
                     })
                     .unwrap_or_default();
                 format!(
-                    r#"<article class="record-card {}"><h4>{}</h4><p class="muted">Status: {}</p><p class="muted">Compatibility: {}</p><p class="muted">Fields: {}</p><p class="muted">Published: {}</p>{}{}</article>"#,
+                    r#"<article class="record-card form-version-summary-card {}"><div class="page-title-row compact-title-row"><div><p class="eyebrow">Version</p><h4>{}</h4><p class="muted">Status: {} · Compatibility: {}</p></div></div><div class="record-detail"><p class="muted">Fields authored: {}</p><p class="muted">Published: {}</p>{}{}</div></article>"#,
                     if Some(version.id.as_str()) == selected_id {
                         "compact-record-card"
                     } else {
@@ -305,7 +305,8 @@ mod hydrate {
             rendered
                 .sections
                 .iter()
-                .map(|section| {
+                .enumerate()
+                .map(|(section_index, section)| {
                     let fields = if section.fields.is_empty() {
                         r#"<p class="muted">No fields in this section yet.</p>"#.into()
                     } else {
@@ -314,7 +315,7 @@ mod hydrate {
                             .iter()
                             .map(|field| {
                                 format!(
-                                    r#"<article class="record-card compact-record-card"><h4>{}</h4><p class="muted">Key: {}</p><p class="muted">Type: {}</p><p class="muted">{}</p></article>"#,
+                                    r#"<article class="record-card compact-record-card form-preview-field"><h4>{}</h4><p class="muted">Key: {}</p><p class="muted">Type: {}</p><p class="muted">{}</p></article>"#,
                                     escape_html(&field.label),
                                     escape_html(&field.key),
                                     escape_html(&field.field_type),
@@ -325,15 +326,13 @@ mod hydrate {
                             .join("")
                     };
                     format!(
-                        r#"<section class="page-panel nested-form-panel"><h3>{}</h3>{}<p class="muted">Section order: {} | Layout: {}</p><div class="record-list">{}</div></section>"#,
+                        r#"<section class="nested-form-panel form-preview-section"><div class="page-title-row compact-title-row"><div><p class="eyebrow">Section {}</p><h3>{}</h3>{}</div><div class="actions"><span class="muted">Display order {}</span><span class="muted">{}</span></div></div><div class="record-list">{}</div></section>"#,
+                        section_index + 1,
                         escape_html(&section.title),
                         if section.description.trim().is_empty() {
                             String::new()
                         } else {
-                            format!(
-                                r#"<p class="muted">{}</p>"#,
-                                escape_html(&section.description)
-                            )
+                            format!(r#"<p class="muted">{}</p>"#, escape_html(&section.description))
                         },
                         section.position,
                         escape_html(&form_section_layout_label(section.column_count)),
@@ -345,7 +344,7 @@ mod hydrate {
         };
 
         format!(
-            r#"<article class="record-card"><h4>{}</h4><p class="muted">Status: {}</p><p class="muted">Compatibility: {}</p></article>{}"#,
+            r#"<article class="record-card form-version-preview-card"><div class="page-title-row compact-title-row"><div><p class="eyebrow">Preview</p><h4>{}</h4><p class="muted">Status: {} · Compatibility: {}</p></div></div></article>{}"#,
             escape_html(&form_version_label(version)),
             escape_html(&version.status),
             escape_html(&form_version_compatibility(version)),
@@ -406,9 +405,9 @@ mod hydrate {
         };
 
         format!(
-            r#"<section class="detail-section box"><h4>Related Workflows</h4><ul class="app-list">{}</ul><p><a class="button-link" href="/app/workflows/assignments?formId={}">Open Assignment Console</a></p></section><section class="detail-section box"><h4>Related Reports</h4><ul class="app-list">{}</ul></section><section class="detail-section box"><h4>Related Dataset Sources</h4><ul class="app-list">{}</ul></section>"#,
-            workflows,
+            r#"<section class="detail-section form-related-work-group"><div class="page-title-row compact-title-row"><div><p class="eyebrow">Related Work</p><h4>Workflows</h4></div><div class="actions"><a class="button-link" href="/app/workflows/assignments?formId={}">Open Assignment Console</a></div></div><ul class="app-list">{}</ul></section><section class="detail-section form-related-work-group"><div class="page-title-row compact-title-row"><div><p class="eyebrow">Related Work</p><h4>Reports</h4></div></div><ul class="app-list">{}</ul></section><section class="detail-section form-related-work-group"><div class="page-title-row compact-title-row"><div><p class="eyebrow">Related Work</p><h4>Dataset Sources</h4></div></div><ul class="app-list">{}</ul></section>"#,
             escape_html(&form.id),
+            workflows,
             reports,
             datasets,
         )
@@ -447,7 +446,7 @@ mod hydrate {
                     })
                     .unwrap_or_default();
                 format!(
-                    r#"<article class="record-card {}"><h4>{}</h4><p class="muted">Status: {}</p><p class="muted">Compatibility: {}</p><p class="muted">Published: {}</p><p class="muted">Fields: {}</p>{}<div class="actions"><button class="button is-light" type="button" data-preview-form-version="{}">{}</button>{}</div></article>"#,
+                    r#"<article class="record-card form-version-card {}"><div class="page-title-row compact-title-row"><div><p class="eyebrow">Version</p><h4>{}</h4><p class="muted">Status: {} · Compatibility: {}</p></div><div class="actions"><button class="button is-light" type="button" data-preview-form-version="{}">{}</button>{}</div></div><div class="record-detail"><p class="muted">Published: {}</p><p class="muted">Fields authored: {}</p>{}</div></article>"#,
                     if Some(version.id.as_str()) == selected_version_id {
                         "compact-record-card"
                     } else {
@@ -456,12 +455,12 @@ mod hydrate {
                     escape_html(&form_version_label(version)),
                     escape_html(&version.status),
                     escape_html(&form_version_compatibility(version)),
-                    escape_html(version.published_at.as_deref().unwrap_or("Not published")),
-                    version.field_count,
-                    preview,
                     escape_html(&version.id),
                     if editable { "Open Workspace" } else { "Preview" },
                     publish,
+                    escape_html(version.published_at.as_deref().unwrap_or("Not published")),
+                    version.field_count,
+                    preview,
                 )
             })
             .collect::<Vec<_>>()
@@ -635,7 +634,7 @@ mod hydrate {
         };
 
         format!(
-            r#"<aside class="page-panel form-builder-insert-rail"><p class="form-builder-eyebrow">Insert</p><h4>Quick Actions</h4><p class="muted">Keep the next authoring move near the canvas instead of in the global shell.</p><div class="actions form-builder-insert-actions"><button class="button" type="button" data-form-section-create="quick">Add Section</button>{}</div></aside>"#,
+            r#"<aside class="detail-section box form-builder-insert-rail"><div class="page-title-row compact-title-row"><div><p class="form-builder-eyebrow">Insert Rail</p><h4>Add To Draft</h4><p class="muted">Keep the next authoring move near the canvas instead of in the global shell.</p></div></div><ul class="app-list form-builder-insert-catalog"><li><strong>Short answer</strong><span class="muted">Single-line response fields and short notes</span></li><li><strong>Number</strong><span class="muted">Quantities, counts, and numeric checks</span></li><li><strong>Date</strong><span class="muted">Schedule and reporting-period inputs</span></li><li><strong>Multiple choice</strong><span class="muted">Inline option lists until reusable sources land</span></li></ul><div class="actions form-builder-insert-actions"><button class="button" type="button" data-form-section-create="quick">Add Section</button>{}</div></aside>"#,
             add_field_button
         )
     }
@@ -652,7 +651,7 @@ mod hydrate {
         };
 
         format!(
-            r#"<aside class="page-panel form-builder-properties" id="form-builder-properties"><div class="page-title-row compact-title-row"><div><p class="form-builder-eyebrow">Field Properties</p><h3>{}</h3><p class="muted">Edit deeper field configuration here while keeping the stacked section canvas in view.</p></div><div class="actions"><button class="button is-light" type="button" data-clear-form-field-selection="close">Close</button></div></div><div class="form-grid"><div class="form-field wide-field"><label for="form-field-label-{}">Field Label</label><input class="input" id="form-field-label-{}" type="text" value="{}" /></div><div class="form-field"><label for="form-field-key-{}">Field Key</label><input class="input" id="form-field-key-{}" type="text" value="{}" /></div><div class="form-field"><label for="form-field-type-{}">Field Type</label><select class="input" id="form-field-type-{}">{}</select></div><div class="form-field"><label for="form-field-required-{}">Required</label><select class="input" id="form-field-required-{}"><option value="true" {}>Required</option><option value="false" {}>Optional</option></select></div><div class="form-field"><label for="form-field-position-{}">Display Order</label><input class="input" id="form-field-position-{}" type="number" value="{}" /></div><div class="form-field"><label for="form-field-section-{}">Section</label><select class="input" id="form-field-section-{}">{}</select></div></div><p class="muted">Current section: {}. Choice-source and lookup metadata remain read-only until backend metadata support lands.</p><div class="actions"><button class="button" type="button" data-form-field-save="{}">Save Field</button></div></aside>"#,
+            r#"<aside class="detail-section box form-builder-properties" id="form-builder-properties"><div class="page-title-row compact-title-row"><div><p class="form-builder-eyebrow">Properties</p><h3>{}</h3><p class="muted">Edit deeper field configuration here while keeping the stacked section canvas in view.</p></div><div class="actions"><button class="button is-light" type="button" data-clear-form-field-selection="close">Close</button></div></div><div class="form-grid"><div class="form-field wide-field"><label for="form-field-label-{}">Field Label</label><input class="input" id="form-field-label-{}" type="text" value="{}" /></div><div class="form-field"><label for="form-field-key-{}">Field Key</label><input class="input" id="form-field-key-{}" type="text" value="{}" /></div><div class="form-field"><label for="form-field-type-{}">Field Type</label><select class="input" id="form-field-type-{}">{}</select></div><div class="form-field"><label for="form-field-required-{}">Required</label><select class="input" id="form-field-required-{}"><option value="true" {}>Required</option><option value="false" {}>Optional</option></select></div><div class="form-field"><label for="form-field-position-{}">Display Order</label><input class="input" id="form-field-position-{}" type="number" value="{}" /></div><div class="form-field"><label for="form-field-section-{}">Section</label><select class="input" id="form-field-section-{}">{}</select></div></div><p class="muted">Current section: {}. Choice-source and lookup metadata remain read-only until backend metadata support lands.</p><div class="actions"><button class="button" type="button" data-form-field-save="{}">Save Field</button></div></aside>"#,
             escape_html(&field.label),
             escape_html(&field.id),
             escape_html(&field.id),
@@ -687,7 +686,7 @@ mod hydrate {
     ) -> String {
         if version.status != "draft" {
             return format!(
-                r#"<article class="record-card"><h4>{}</h4><p class="muted">This version is {} and is read-only.</p><p class="muted">Create a new draft version to change sections, fields, or ordering.</p></article>{}"#,
+                r#"<section class="detail-section box form-builder-readonly"><div class="page-title-row compact-title-row"><div><p class="form-builder-eyebrow">Read-only version</p><h3>{}</h3><p class="muted">This version is {} and is read-only.</p></div></div><p class="muted">Create a new draft version to change sections, fields, or ordering.</p>{}</section>"#,
                 escape_html(&form_version_label(version)),
                 escape_html(&version.status),
                 render_form_preview(version, rendered),
@@ -706,7 +705,7 @@ mod hydrate {
         let properties_panel =
             render_builder_properties_panel(rendered, resolved_field_id.as_deref());
         let sections = if rendered.sections.is_empty() {
-            r#"<section class="page-panel form-builder-empty-state"><p class="form-builder-eyebrow">Canvas</p><h4>Start with a section</h4><p class="muted">This draft has no authored sections yet. Add a section first, then use the insert rail to create fields inside the selected section.</p><div class="actions"><button class="button" type="button" data-form-section-create="empty">Add First Section</button></div></section>"#
+            r#"<section class="detail-section box form-builder-empty-state"><div class="page-title-row compact-title-row"><div><p class="form-builder-eyebrow">Canvas</p><h4>Start with a section</h4><p class="muted">This draft has no authored sections yet. Add a section first, then use the insert rail to create fields inside the selected section.</p></div></div><div class="actions"><button class="button" type="button" data-form-section-create="empty">Add First Section</button></div></section>"#
                 .into()
         } else {
             rendered
@@ -734,16 +733,16 @@ mod hydrate {
                                 let field_is_selected =
                                     Some(field.id.as_str()) == resolved_field_id.as_deref();
                                 format!(
-                                    r#"<article class="form-builder-field-card{}"><div class="page-title-row compact-title-row"><div><button class="button button-link form-builder-field-title" type="button" data-select-form-field="{}">{}</button><p class="muted">Field {} · {} · {}</p></div><div class="actions form-builder-field-actions"><button class="button is-light" type="button" data-form-field-move-up="{}">Up</button><button class="button is-light" type="button" data-form-field-move-down="{}">Down</button><button class="button is-light" type="button" data-form-field-delete="{}">Delete</button></div></div><p class="form-builder-field-key">Key: {}</p><p class="muted">{}</p></article>"#,
+                                    r#"<article class="record-card form-builder-field-card{}"><div class="page-title-row compact-title-row"><div><p class="eyebrow">{}</p><button class="button button-link form-builder-field-title" type="button" data-select-form-field="{}">{}</button><p class="muted">Field {} · {}</p></div><div class="actions form-builder-field-actions"><button class="button is-light" type="button" data-form-field-move-up="{}">Up</button><button class="button is-light" type="button" data-form-field-move-down="{}">Down</button><button class="button is-light" type="button" data-form-field-delete="{}">Delete</button></div></div><p class="form-builder-field-key">Key: {}</p><p class="muted">{}</p></article>"#,
                                     if field_is_selected {
                                         " is-selected"
                                     } else {
                                         ""
                                     },
+                                    escape_html(form_field_kind_label(&field.field_type)),
                                     escape_html(&field.id),
                                     escape_html(&field.label),
                                     field_index + 1,
-                                    escape_html(form_field_kind_label(&field.field_type)),
                                     if field.required {
                                         "Required"
                                     } else {
@@ -760,7 +759,7 @@ mod hydrate {
                             .join("")
                     };
                     format!(
-                        r##"<section class="page-panel form-builder-section{}" id="builder-section-{}"><div class="page-title-row compact-title-row"><div><p class="form-builder-eyebrow">Section {}</p><h3>{}</h3><p class="muted">Display order {} · {} · {} field(s)</p></div><div class="actions"><a class="button is-light" href="#builder-section-{}" data-select-form-section="{}">Focus</a><button class="button is-light" type="button" data-form-section-move-up="{}">Up</button><button class="button is-light" type="button" data-form-section-move-down="{}">Down</button><button class="button is-light" type="button" data-form-section-delete="{}">Delete</button><button class="button" type="button" data-form-section-save="{}">Save Section</button></div></div><div class="form-grid"><div class="form-field wide-field"><label for="form-section-title-{}">Section Title</label><input class="input" id="form-section-title-{}" type="text" value="{}" /></div><div class="form-field wide-field"><label for="form-section-description-{}">Section Description</label><textarea class="textarea" id="form-section-description-{}" rows="3">{}</textarea></div><div class="form-field"><label for="form-section-column-count-{}">Columns</label><select class="input" id="form-section-column-count-{}">{}</select></div><div class="form-field"><label for="form-section-position-{}">Display Order</label><input class="input" id="form-section-position-{}" type="number" value="{}" /></div></div><div class="form-builder-field-grid form-builder-field-grid--cols-{}">{}</div></section>"##,
+                        r##"<section class="detail-section box form-builder-section{}" id="builder-section-{}"><div class="page-title-row compact-title-row"><div><p class="form-builder-eyebrow">Section {}</p><h3>{}</h3><p class="muted">Display order {} · {} · {} field(s)</p></div><div class="actions"><a class="button is-light" href="#builder-section-{}" data-select-form-section="{}">Focus</a><button class="button is-light" type="button" data-form-section-move-up="{}">Up</button><button class="button is-light" type="button" data-form-section-move-down="{}">Down</button><button class="button is-light" type="button" data-form-section-delete="{}">Delete</button><button class="button" type="button" data-form-section-save="{}">Save Section</button></div></div><div class="form-grid"><div class="form-field wide-field"><label for="form-section-title-{}">Section Title</label><input class="input" id="form-section-title-{}" type="text" value="{}" /></div><div class="form-field wide-field"><label for="form-section-description-{}">Section Description</label><textarea class="textarea" id="form-section-description-{}" rows="3">{}</textarea></div><div class="form-field"><label for="form-section-column-count-{}">Columns</label><select class="input" id="form-section-column-count-{}">{}</select></div><div class="form-field"><label for="form-section-position-{}">Display Order</label><input class="input" id="form-section-position-{}" type="number" value="{}" /></div></div><div class="form-builder-field-grid form-builder-field-grid--cols-{}">{}</div></section>"##,
                         if section_is_selected {
                             " is-selected"
                         } else {
@@ -803,12 +802,20 @@ mod hydrate {
         } else {
             "form-builder-layout form-builder-layout--with-properties"
         };
+        let field_count = rendered
+            .sections
+            .iter()
+            .map(|section| section.fields.len())
+            .sum::<usize>();
         format!(
-            r#"<section class="page-panel nested-form-panel form-builder-shell"><div class="page-title-row compact-title-row form-builder-toolbar"><div><p class="form-builder-eyebrow">Draft Workspace</p><h3>{}</h3><p class="muted">Draft workspace for {}. Section settings stay in the canvas while deeper field settings move into the selection panel.</p></div><div class="actions"><button class="button" type="button" data-publish-form-version="{}">Publish Draft Version</button></div></div><p class="muted">Compatibility: {}</p>{}<div class="{}"><aside class="page-panel form-builder-rail"><p class="form-builder-eyebrow">Sections</p><h4>Jump Between Sections</h4><p class="muted">Use the rail to switch context without losing the stacked canvas flow.</p><div class="form-builder-section-links">{}</div></aside><div class="form-builder-main"><div class="form-builder-main-grid">{}<div class="form-builder-canvas">{}</div></div></div>{}</div></section>"#,
+            r#"<section class="form-builder-shell"><header class="detail-section box form-builder-header"><div class="page-title-row compact-title-row form-builder-toolbar"><div><p class="form-builder-eyebrow">Lifecycle</p><h3>{}</h3><p class="muted">Draft workspace for {}. Section settings stay in the canvas while deeper field settings move into the selection panel.</p></div><div class="actions"><button class="button" type="button" data-publish-form-version="{}">Publish Draft Version</button></div></div><div class="record-detail form-builder-header-meta"><p class="muted">Status: Draft</p><p class="muted">Version line: {}</p><p class="muted">Compatibility: {}</p><p class="muted">Sections: {} · Fields: {}</p>{}</div></header><div class="{}"><aside class="detail-section box form-builder-rail"><div class="page-title-row compact-title-row"><div><p class="form-builder-eyebrow">Sections</p><h4>Jump Between Sections</h4><p class="muted">Use the rail to switch context without losing the stacked canvas flow.</p></div></div><div class="form-builder-section-links">{}</div></aside><div class="form-builder-main"><div class="form-builder-main-grid">{}<section class="detail-section box form-builder-canvas"><div class="page-title-row compact-title-row"><div><p class="form-builder-eyebrow">Section Stack</p><h4>Canvas</h4><p class="muted">Draft sections stay stacked in one authoring flow.</p></div></div>{}</section></div></div>{}</div></section>"#,
             escape_html(&form_version_label(version)),
             escape_html(&form.name),
             escape_html(&version.id),
+            escape_html(&form_version_label(version)),
             escape_html(&form_version_compatibility(version)),
+            rendered.sections.len(),
+            field_count,
             render_form_version_lifecycle_summary(version),
             layout_class,
             render_builder_section_navigation(rendered, resolved_section_id.as_deref()),
@@ -1002,9 +1009,10 @@ mod hydrate {
                     set_html(
                         "form-detail",
                         &format!(
-                            r#"<section class="detail-section box"><h4>Summary</h4><p>{}</p><p>{}</p><p class="muted">Scope: {}</p><p class="muted">Published version: {}</p><p class="muted">Draft versions: {}</p></section>"#,
+                            r#"<article class="record-card form-detail-summary-card"><div class="page-title-row compact-title-row"><div><p class="eyebrow">Selected form</p><h3>{}</h3><p class="muted">/{}</p></div><div class="actions"><a class="button-link" href="/app/forms/{}/edit">Open Draft Authoring</a></div></div><div class="record-detail"><p class="muted">Scope root: {}</p><p class="muted">Published version: {}</p><p class="muted">Draft versions available: {}</p></div></article>"#,
                             escape_html(&form.name),
                             escape_html(&form.slug),
+                            escape_html(&form.id),
                             escape_html(form.scope_node_type_name.as_deref().unwrap_or("Unscoped")),
                             escape_html(&published),
                             draft_count,
@@ -1822,40 +1830,41 @@ pub fn FormsListPage() -> impl IntoView {
                 BreadcrumbItem::current("Forms"),
             ]
         >
-            <PageHeader
-                eyebrow="Forms"
-                title="Forms"
-                description="Browse forms, inspect lifecycle state, and move into version details without using the legacy builder shell."
-            />
-            <MetadataStrip items=vec![
-                ("Mode", "Directory".into()),
-                ("Surface", "Form catalog".into()),
-                ("State", "Loading form records".into()),
-            ]/>
-            <Panel
-                title="Form Directory"
-                description="Current form records and their version status appear here."
-            >
-                <div class="actions">
-                    <a class="button-link button is-primary" href="/app/forms/new">"Create Form"</a>
-                </div>
-                <div id="form-list" class="record-list">
-                    <p class="muted">"Loading form records..."</p>
-                </div>
-            </Panel>
-            <Panel
-                title="Lifecycle Summary"
-                description="Each form card shows scope, published pointers, and draft counts so testers can choose the right record quickly."
-            >
-                <div class="record-list">
-                    <article class="record-card compact-record-card">
-                        <h4>"Published and Draft Status"</h4>
+            <section class="forms-route forms-catalog-screen">
+                <header class="detail-section box forms-screen-header">
+                    <div class="page-title-row">
+                        <div>
+                            <p class="eyebrow">"Forms"</p>
+                            <h1>"Form Directory"</h1>
+                            <p class="muted">
+                                "Browse forms by lifecycle state, then move directly into detail or draft authoring without a metadata-first detour."
+                            </p>
+                        </div>
+                        <div class="actions">
+                            <a class="button-link button is-primary" href="/app/forms/new">"Create Form"</a>
+                        </div>
+                    </div>
+                    <div class="record-detail">
                         <p class="muted">
-                            "Version lifecycle status and compatibility details appear inline on each form card."
+                            "Use this screen as the directory. Each record should make scope, published line, and available draft work visible before you drill in."
                         </p>
-                    </article>
-                </div>
-            </Panel>
+                    </div>
+                </header>
+                <section class="detail-section box forms-directory-shell">
+                    <div class="page-title-row compact-title-row">
+                        <div>
+                            <p class="eyebrow">"Directory"</p>
+                            <h3>"Current Form Set"</h3>
+                            <p class="muted">
+                                "Current form records and their version posture appear here."
+                            </p>
+                        </div>
+                    </div>
+                    <div id="form-list" class="record-list forms-directory-list">
+                        <p class="muted">"Loading form records..."</p>
+                    </div>
+                </section>
+            </section>
         </NativePage>
     }
 }
@@ -1972,45 +1981,74 @@ pub fn FormDetailPage() -> impl IntoView {
                 BreadcrumbItem::current("Form Detail"),
             ]
         >
-            <PageHeader
-                eyebrow="Forms"
-                title="Form Detail"
-                description="Review the selected form, its version lifecycle, and downstream workflow attachments."
-            />
-            <MetadataStrip items=vec![
-                ("Mode", "Detail".into()),
-                ("Surface", "Form lifecycle".into()),
-                ("State", "Loading record".into()),
-            ]/>
-            <Panel title="Form Summary" description="Top-level form metadata appears here.">
-                <div id="form-detail" class="record-detail">
-                    <p class="muted">"Loading form summary..."</p>
-                </div>
-            </Panel>
-            <Panel
-                title="Version Summary"
-                description="Draft, published, and superseded versions load here with semantic and compatibility context."
-            >
-                <div id="form-version-summary" class="record-list">
-                    <p class="muted">"Loading version summary..."</p>
-                </div>
-            </Panel>
-            <Panel
-                title="Section Preview"
-                description="The selected version's sections and fields appear here."
-            >
-                <div id="form-version-preview" class="record-detail">
-                    <p class="muted">"Loading section preview..."</p>
-                </div>
-            </Panel>
-            <Panel
-                title="Workflow Attachments"
-                description="Related workflows, reports, and dataset sources stay visible from the form detail route."
-            >
-                <div id="form-workflow-links" class="record-detail">
-                    <p class="muted">"Loading workflow attachments..."</p>
-                </div>
-            </Panel>
+            <section class="forms-route form-detail-screen">
+                <header class="detail-section box forms-screen-header">
+                    <div class="page-title-row">
+                        <div>
+                            <p class="eyebrow">"Forms"</p>
+                            <h1>"Form Detail"</h1>
+                            <p class="muted">
+                                "Review the selected form, its active version history, and the downstream work attached to it."
+                            </p>
+                        </div>
+                        <div class="actions">
+                            <a class="button-link button is-light" href="/app/forms">"Back To Directory"</a>
+                            <a class="button-link button is-primary" href=format!("/app/forms/{form_id}/edit")>
+                                "Open Draft Authoring"
+                            </a>
+                        </div>
+                    </div>
+                </header>
+                <section class="form-detail-layout">
+                    <section class="detail-section box form-detail-primary">
+                        <div class="page-title-row compact-title-row">
+                            <div>
+                                <p class="eyebrow">"Selected Form"</p>
+                                <h3>"Summary And Versions"</h3>
+                                <p class="muted">
+                                    "Keep the form summary and lifecycle together before branching into preview and related work."
+                                </p>
+                            </div>
+                        </div>
+                        <div id="form-detail" class="record-detail form-detail-summary">
+                            <p class="muted">"Loading form summary..."</p>
+                        </div>
+                        <div id="form-version-summary" class="record-list form-detail-version-list">
+                            <p class="muted">"Loading version summary..."</p>
+                        </div>
+                    </section>
+                    <aside class="form-detail-secondary">
+                        <section class="detail-section box form-detail-preview-shell">
+                            <div class="page-title-row compact-title-row">
+                                <div>
+                                    <p class="eyebrow">"Preview"</p>
+                                    <h3>"Section Stack"</h3>
+                                    <p class="muted">
+                                        "Preview the preferred version's sections and fields without switching routes."
+                                    </p>
+                                </div>
+                            </div>
+                            <div id="form-version-preview" class="record-detail form-detail-preview">
+                                <p class="muted">"Loading section preview..."</p>
+                            </div>
+                        </section>
+                        <section class="detail-section box form-detail-related-shell">
+                            <div class="page-title-row compact-title-row">
+                                <div>
+                                    <p class="eyebrow">"Attachments"</p>
+                                    <h3>"Related Work"</h3>
+                                    <p class="muted">
+                                        "Workflow, report, and dataset links stay visible from the form detail route."
+                                    </p>
+                                </div>
+                            </div>
+                            <div id="form-workflow-links" class="record-detail form-detail-related-work">
+                                <p class="muted">"Loading workflow attachments..."</p>
+                            </div>
+                        </section>
+                    </aside>
+                </section>
+            </section>
         </NativePage>
     }
 }
@@ -2046,76 +2084,106 @@ pub fn FormEditPage() -> impl IntoView {
                 BreadcrumbItem::current("Edit Form"),
             ]
         >
-            <PageHeader
-                eyebrow="Forms"
-                title="Edit Form"
-                description="Edit form metadata, create draft versions, author sections and fields, and publish valid draft versions from this route."
-            />
-            <MetadataStrip items=vec![
-                ("Mode", "Edit".into()),
-                ("Surface", "Form authoring".into()),
-                ("State", "Metadata and draft workspace".into()),
-            ]/>
-            <Panel
-                title="Form Metadata"
-                description="Update the top-level form record here. Metadata saves stay separate from draft version authoring."
-            >
-                <div class="actions">
-                    <a class="button-link button is-light" href="/app/forms">
-                        "Back to Detail"
-                    </a>
-                </div>
-                <p id="form-editor-status" class="muted">"Loading form metadata..."</p>
-                <form id="form-entity-form" class="entity-form">
-                    <div class="form-grid">
-                        <div class="form-field wide-field">
-                            <label for="form-name">"Name"</label>
-                            <input class="input" id="form-name" type="text" autocomplete="off" />
+            <section class="forms-route form-edit-screen">
+                <header class="detail-section box forms-screen-header">
+                    <div class="page-title-row">
+                        <div>
+                            <p class="eyebrow">"Forms"</p>
+                            <h1>"Draft Authoring"</h1>
+                            <p class="muted">
+                                "Create draft versions, author sections and fields, and publish valid drafts from the same route."
+                            </p>
                         </div>
-                        <div class="form-field">
-                            <label for="form-slug">"Slug"</label>
-                            <input class="input" id="form-slug" type="text" autocomplete="off" />
-                        </div>
-                        <div class="form-field">
-                            <label for="form-scope-node-type">"Scope Node Type"</label>
-                            <select class="input" id="form-scope-node-type"></select>
+                        <div class="actions">
+                            <a class="button-link button is-light" href=format!("/app/forms/{form_id}")>
+                                "Back To Detail"
+                            </a>
+                            <a class="button-link button is-light" href="/app/forms">
+                                "All Forms"
+                            </a>
                         </div>
                     </div>
-                    <div class="actions">
-                        <button class="button is-primary" type="submit">"Save Form"</button>
-                        <a class="button-link button is-light" href="/app/forms">
-                            "Cancel"
-                        </a>
-                    </div>
-                </form>
-            </Panel>
-            <Panel
-                title="Version Lifecycle"
-                description="Create draft versions, review publish-time semantic version previews, and choose which version to author."
-            >
-                <p id="form-version-status" class="muted">
-                    "Select or create a version to start authoring."
-                </p>
-                <form id="form-version-create-form" class="entity-form">
-                    <p class="muted">
-                        "Draft versions stay unlabeled until publish. Semantic version and major-line compatibility are assigned automatically when you publish."
-                    </p>
-                    <div class="actions">
-                        <button class="button is-primary" type="submit">"Create Draft Version"</button>
-                    </div>
-                </form>
-                <div id="form-version-list" class="record-list">
-                    <p class="muted">"Loading form versions..."</p>
-                </div>
-            </Panel>
-            <Panel
-                title="Draft Version Workspace"
-                description="Publish draft versions, manage sections and fields, and review semantic-version impact from the native form authoring surface."
-            >
-                <div id="form-version-workspace" class="record-detail">
-                    <p class="muted">"Loading draft workspace..."</p>
-                </div>
-            </Panel>
+                </header>
+                <section class="form-edit-layout">
+                    <section class="form-edit-primary">
+                        <section class="detail-section box form-edit-lifecycle-shell">
+                            <div class="page-title-row compact-title-row">
+                                <div>
+                                    <p class="eyebrow">"Lifecycle"</p>
+                                    <h3>"Draft Versions"</h3>
+                                    <p class="muted">
+                                        "Choose the draft you want to author, or create a new one before entering the canvas."
+                                    </p>
+                                </div>
+                            </div>
+                            <p id="form-version-status" class="muted">
+                                "Select or create a version to start authoring."
+                            </p>
+                            <form id="form-version-create-form" class="entity-form">
+                                <p class="muted">
+                                    "Draft versions stay unlabeled until publish. Semantic version and major-line compatibility are assigned automatically when you publish."
+                                </p>
+                                <div class="actions">
+                                    <button class="button is-primary" type="submit">"Create Draft Version"</button>
+                                </div>
+                            </form>
+                            <div id="form-version-list" class="record-list form-edit-version-list">
+                                <p class="muted">"Loading form versions..."</p>
+                            </div>
+                        </section>
+                        <section class="detail-section box form-edit-workspace-shell">
+                            <div class="page-title-row compact-title-row">
+                                <div>
+                                    <p class="eyebrow">"Builder"</p>
+                                    <h3>"Draft Workspace"</h3>
+                                    <p class="muted">
+                                        "The authoring canvas stays primary. Metadata remains available, but secondary."
+                                    </p>
+                                </div>
+                            </div>
+                            <div id="form-version-workspace" class="record-detail form-edit-workspace">
+                                <p class="muted">"Loading draft workspace..."</p>
+                            </div>
+                        </section>
+                    </section>
+                    <aside class="form-edit-secondary">
+                        <section class="detail-section box form-edit-metadata-shell">
+                            <div class="page-title-row compact-title-row">
+                                <div>
+                                    <p class="eyebrow">"Form Record"</p>
+                                    <h3>"Metadata"</h3>
+                                    <p class="muted">
+                                        "Top-level form metadata stays editable here without taking over the authoring surface."
+                                    </p>
+                                </div>
+                            </div>
+                            <p id="form-editor-status" class="muted">"Loading form metadata..."</p>
+                            <form id="form-entity-form" class="entity-form">
+                                <div class="form-grid">
+                                    <div class="form-field wide-field">
+                                        <label for="form-name">"Name"</label>
+                                        <input class="input" id="form-name" type="text" autocomplete="off" />
+                                    </div>
+                                    <div class="form-field">
+                                        <label for="form-slug">"Slug"</label>
+                                        <input class="input" id="form-slug" type="text" autocomplete="off" />
+                                    </div>
+                                    <div class="form-field">
+                                        <label for="form-scope-node-type">"Scope Node Type"</label>
+                                        <select class="input" id="form-scope-node-type"></select>
+                                    </div>
+                                </div>
+                                <div class="actions">
+                                    <button class="button is-primary" type="submit">"Save Form"</button>
+                                    <a class="button-link button is-light" href=format!("/app/forms/{form_id}")>
+                                        "Cancel"
+                                    </a>
+                                </div>
+                            </form>
+                        </section>
+                    </aside>
+                </section>
+            </section>
         </NativePage>
     }
 }
