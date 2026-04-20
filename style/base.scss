@@ -1428,29 +1428,78 @@ body.tessara-app .home-grid {
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 }
 
-body.tessara-app .home-metric-strip {
+body.tessara-app .home-summary,
+body.tessara-app .home-summary__copy,
+body.tessara-app .home-panel-header__copy,
+body.tessara-app .home-queue-panel,
+body.tessara-app .home-secondary-panel,
+body.tessara-app .home-secondary-section,
+body.tessara-app .home-hierarchy-panel,
+body.tessara-app .home-next-step {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
-  gap: 0.75rem;
+}
+
+body.tessara-app .home-summary,
+body.tessara-app .home-secondary-panel {
+  gap: 0.9rem;
+}
+
+body.tessara-app .home-summary__copy,
+body.tessara-app .home-panel-header__copy,
+body.tessara-app .home-queue-panel,
+body.tessara-app .home-secondary-section,
+body.tessara-app .home-hierarchy-panel,
+body.tessara-app .home-next-step {
+  gap: 0.55rem;
+}
+
+body.tessara-app .home-summary h1,
+body.tessara-app .home-panel-header__copy h2 {
+  margin: 0;
+  color: var(--tessara-text-strong);
+  line-height: 1.08;
+}
+
+body.tessara-app .home-summary h1 {
+  font-size: clamp(1.9rem, 2.8vw, 2.6rem);
+}
+
+body.tessara-app .home-panel-header__copy h2 {
+  font-size: clamp(1.1rem, 1.8vw, 1.4rem);
+}
+
+body.tessara-app .home-summary__description,
+body.tessara-app .home-panel-header__copy p,
+body.tessara-app .home-queue-row__copy p,
+body.tessara-app .home-queue-row__meta p {
+  margin: 0;
+}
+
+body.tessara-app .home-metric-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding-inline: 0.1rem;
 }
 
 body.tessara-app .home-metric {
-  display: grid;
+  display: inline-flex;
+  align-items: baseline;
   gap: 0.35rem;
-  padding: 0.95rem 1rem;
-  border: 1px solid var(--tessara-border);
-  border-radius: 16px;
-  background: var(--tessara-inline-surface);
+  padding: 0;
+  border: 0;
+  background: transparent;
 }
 
 body.tessara-app .home-metric strong {
   color: var(--tessara-text-strong);
-  font-size: clamp(1.35rem, 2vw, 1.7rem);
+  font-size: clamp(1.4rem, 2.1vw, 1.85rem);
   line-height: 1;
 }
 
 body.tessara-app .home-metric span,
-body.tessara-app .home-hierarchy-item__type {
+body.tessara-app .home-hierarchy-item__type,
+body.tessara-app .home-snapshot-item span {
   color: var(--tessara-text-muted);
   font-size: 0.72rem;
   font-weight: 800;
@@ -1460,22 +1509,24 @@ body.tessara-app .home-hierarchy-item__type {
 
 body.tessara-app .home-workspace-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.65fr) minmax(18rem, 1fr);
+  grid-template-columns: minmax(0, 1.5fr) minmax(19rem, 0.92fr);
   gap: 1rem;
   align-items: start;
 }
 
-body.tessara-app .home-workspace-secondary,
-body.tessara-app .home-queue-panel {
-  display: grid;
-  gap: 1rem;
+body.tessara-app .home-primary-panel,
+body.tessara-app .home-secondary-panel {
+  padding: 1.25rem 1.35rem;
+  border: 1px solid var(--tessara-border);
+  border-radius: 24px;
+  background: color-mix(in srgb, var(--tessara-surface) 96%, transparent);
 }
 
 body.tessara-app .home-queue-list,
 body.tessara-app .home-hierarchy-list,
 body.tessara-app .home-snapshot-list {
   display: grid;
-  gap: 0.75rem;
+  gap: 0.1rem;
 }
 
 body.tessara-app .home-queue-list,
@@ -1485,74 +1536,100 @@ body.tessara-app .home-hierarchy-list {
   list-style: none;
 }
 
-body.tessara-app .home-queue-card {
+body.tessara-app .home-panel-header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+body.tessara-app .home-panel-header .actions {
+  flex: 0 0 auto;
+}
+
+body.tessara-app .home-queue-row,
+body.tessara-app .home-hierarchy-item {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.9fr) auto;
   gap: 1rem;
   align-items: start;
-  padding: 1rem 1.05rem;
-  border: 1px solid var(--tessara-border);
-  background: var(--tessara-inline-surface);
+  padding: 0.95rem 0;
+  border-top: 1px solid var(--tessara-border);
 }
 
-body.tessara-app .home-queue-card__copy {
+body.tessara-app .home-queue-row:first-child,
+body.tessara-app .home-hierarchy-item:first-child {
+  border-top: 0;
+  padding-top: 0.1rem;
+}
+
+body.tessara-app .home-queue-row__copy,
+body.tessara-app .home-queue-row__meta {
   display: grid;
-  gap: 0.35rem;
+  gap: 0.25rem;
 }
 
-body.tessara-app .home-queue-card__copy h3,
-body.tessara-app .home-queue-card__copy p,
-body.tessara-app .home-hierarchy-item__name {
-  margin: 0;
-}
-
-body.tessara-app .home-queue-card__copy h3,
-body.tessara-app .home-hierarchy-item__name {
+body.tessara-app .home-queue-row__copy strong,
+body.tessara-app .home-hierarchy-item__name,
+body.tessara-app .home-snapshot-item strong {
   color: var(--tessara-text-strong);
 }
 
+body.tessara-app .home-queue-row__meta {
+  min-width: 0;
+}
+
+body.tessara-app .home-queue-row .actions {
+  align-self: center;
+}
+
 body.tessara-app .home-next-step {
-  display: grid;
-  gap: 0.65rem;
-  align-items: start;
+  gap: 0.4rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--tessara-border);
 }
 
 body.tessara-app .home-empty-state {
   display: grid;
   gap: 0.45rem;
-  padding: 1rem 1.05rem;
+  padding: 1rem 0 0.2rem;
   border: 1px dashed var(--tessara-border);
   border-radius: 16px;
-  background: color-mix(in srgb, var(--tessara-inline-surface) 84%, transparent);
+  background: transparent;
 }
 
 body.tessara-app .home-empty-state p {
   margin: 0;
 }
 
-body.tessara-app .home-hierarchy-panel {
-  display: grid;
-  gap: 0.9rem;
+body.tessara-app .home-secondary-section + .home-secondary-section {
+  padding-top: 1rem;
+  border-top: 1px solid var(--tessara-border);
 }
 
-body.tessara-app .home-hierarchy-item,
+body.tessara-app .home-hierarchy-item {
+  grid-template-columns: 5.5rem minmax(0, 1fr);
+  gap: 0.85rem;
+}
+
 body.tessara-app .home-snapshot-item {
   display: grid;
-  gap: 0.25rem;
+  gap: 0.3rem;
   padding: 0.85rem 0.95rem;
   border: 1px solid var(--tessara-border);
   border-radius: 14px;
-  background: var(--tessara-inline-surface);
+  background: color-mix(in srgb, var(--tessara-inline-surface) 72%, transparent);
+}
+
+body.tessara-app .home-snapshot-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
 }
 
 body.tessara-app .home-hierarchy-item__name,
 body.tessara-app .home-snapshot-item strong {
   font-size: 0.98rem;
-}
-
-body.tessara-app .home-snapshot-item span {
-  color: var(--tessara-text-muted);
-  font-size: 0.84rem;
 }
 
 body.tessara-app .record-card,
@@ -1821,7 +1898,21 @@ body.tessara-app .app-shell--migration .app-sidebar {
     padding: 1rem;
   }
 
-  body.tessara-app .home-queue-card {
+  body.tessara-app .home-panel-header,
+  body.tessara-app .home-queue-row {
+    grid-template-columns: 1fr;
+  }
+
+  body.tessara-app .home-panel-header {
+    display: grid;
+  }
+
+  body.tessara-app .home-hierarchy-item {
+    grid-template-columns: 1fr;
+    gap: 0.25rem;
+  }
+
+  body.tessara-app .home-snapshot-grid {
     grid-template-columns: 1fr;
   }
 

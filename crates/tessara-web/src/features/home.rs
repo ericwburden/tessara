@@ -7,8 +7,7 @@ use crate::features::native_runtime::set_page_context;
 #[cfg(feature = "hydrate")]
 use crate::features::native_runtime::{get_json, post_json, redirect};
 use crate::features::native_shell::{
-    AccountContext, BreadcrumbItem, NativePage, PageHeader, Panel, has_capability,
-    use_account_session,
+    AccountContext, BreadcrumbItem, NativePage, has_capability, use_account_session,
 };
 
 #[cfg_attr(feature = "hydrate", derive(serde::Deserialize))]
@@ -116,11 +115,15 @@ pub fn HomePage() -> impl IntoView {
             workspace_label="Shared Home"
             breadcrumbs=vec![BreadcrumbItem::current("Home")]
         >
-            <PageHeader
-                eyebrow="Shared Home"
-                title="Current Work"
-                description="Start from pending response work, compact operational totals, and current hierarchy context."
-            />
+            <section id="home-summary" class="home-summary">
+                <div class="home-summary__copy">
+                    <p class="eyebrow">"Shared Home"</p>
+                    <h1>"Current Work"</h1>
+                    <p class="muted home-summary__description">
+                        "Start from pending response work, compact operational totals, and current hierarchy context."
+                    </p>
+                </div>
+            </section>
             {move || {
                 let summary = home_summary.get();
                 if let Some(summary) = summary {
@@ -155,10 +158,19 @@ pub fn HomePage() -> impl IntoView {
                     .into_any()
             }}
             <div class="home-workspace-grid">
-                <Panel
-                    title="Current Work"
-                    description="Pending response assignments stay primary on Home so the route starts with work rather than destination launchers."
-                >
+                <section class="home-primary-panel">
+                    <div class="home-panel-header">
+                        <div class="home-panel-header__copy">
+                            <p class="eyebrow">"Assignment queue"</p>
+                            <h2>"What needs attention now"</h2>
+                            <p class="muted">
+                                "Pending response assignments stay primary on Home so the route starts with work rather than destination launchers."
+                            </p>
+                        </div>
+                        <div class="actions">
+                            <a class="button-link button is-light" href="/app/responses">"Open full queue"</a>
+                        </div>
+                    </div>
                     <div id="home-current-work" class="home-queue-panel">
                         {move || {
                             if let Some(error) = home_queue_error.get() {
@@ -204,10 +216,12 @@ pub fn HomePage() -> impl IntoView {
                                                 let assignee_label = item.account_display_name.clone();
                                                 let show_assignee = !assignee_label.trim().is_empty();
                                                 view! {
-                                                    <article class="record-card home-queue-card">
-                                                        <div class="home-queue-card__copy">
-                                                            <h3>{item.workflow_name}</h3>
+                                                    <article class="home-queue-row">
+                                                        <div class="home-queue-row__copy">
+                                                            <strong>{item.workflow_name}</strong>
                                                             <p>{item.node_name}</p>
+                                                        </div>
+                                                        <div class="home-queue-row__meta">
                                                             <p class="muted">
                                                                 {format!(
                                                                     "Form: {} {}",
@@ -263,13 +277,17 @@ pub fn HomePage() -> impl IntoView {
                             }}
                         </div>
                     </div>
-                </Panel>
-                <div class="home-workspace-secondary">
-                    <Panel
-                        title="Hierarchy Context"
-                        description="Home keeps hierarchy awareness visible without turning the body back into a second navigation launcher."
-                    >
-                        <div id="home-hierarchy-context" class="home-hierarchy-panel">
+                </section>
+                <aside class="home-secondary-panel">
+                    <section id="home-hierarchy-context" class="home-secondary-section">
+                        <div class="home-panel-header__copy">
+                            <p class="eyebrow">"Hierarchy context"</p>
+                            <h2>"Organization scope"</h2>
+                            <p class="muted">
+                                "Home keeps hierarchy awareness visible without turning the body back into a second navigation launcher."
+                            </p>
+                        </div>
+                        <div class="home-hierarchy-panel">
                             {move || {
                                 let account = session.account.get();
                                 let Some(account) = account else {
@@ -319,16 +337,20 @@ pub fn HomePage() -> impl IntoView {
                                 .into_any()
                             }}
                         </div>
-                    </Panel>
-                    <Panel
-                        title="Operational Snapshot"
-                        description="Compact totals stay glanceable here instead of expanding into a second dashboard row."
-                    >
-                        <div id="home-operational-snapshot" class="home-snapshot-list">
+                    </section>
+                    <section id="home-operational-snapshot" class="home-secondary-section">
+                        <div class="home-panel-header__copy">
+                            <p class="eyebrow">"Operational snapshot"</p>
+                            <h2>"Current totals"</h2>
+                            <p class="muted">
+                                "Compact totals stay glanceable here instead of expanding into a second dashboard row."
+                            </p>
+                        </div>
+                        <div class="home-snapshot-list">
                             {move || {
                                 if let Some(summary) = home_summary.get() {
                                     return view! {
-                                        <>
+                                        <div class="home-snapshot-grid">
                                             <div class="home-snapshot-item">
                                                 <span>"Draft responses"</span>
                                                 <strong>{summary.draft_submissions}</strong>
@@ -345,7 +367,7 @@ pub fn HomePage() -> impl IntoView {
                                                 <span>"Dashboards"</span>
                                                 <strong>{summary.dashboards}</strong>
                                             </div>
-                                        </>
+                                        </div>
                                     }
                                     .into_any();
                                 }
@@ -357,8 +379,8 @@ pub fn HomePage() -> impl IntoView {
                                 view! { <p class="muted">"Loading operational totals..."</p> }.into_any()
                             }}
                         </div>
-                    </Panel>
-                </div>
+                    </section>
+                </aside>
             </div>
         </NativePage>
     }
