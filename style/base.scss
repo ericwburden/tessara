@@ -453,10 +453,43 @@ body.tessara-app .organization-explorer-tree {
 body.tessara-app .organization-explorer-branch {
   display: grid;
   gap: 0.1rem;
+  padding-left: calc(var(--organization-depth, 0) * 0.9rem);
 }
 body.tessara-app .organization-explorer-children {
   display: grid;
   gap: 0.1rem;
+}
+body.tessara-app .organization-explorer-branch-header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.35rem;
+  align-items: stretch;
+}
+body.tessara-app .organization-explorer-toggle,
+body.tessara-app .organization-explorer-toggle-spacer {
+  width: 1.5rem;
+  min-width: 1.5rem;
+  margin-top: 0.1rem;
+}
+body.tessara-app .organization-explorer-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 1.5rem !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  background: transparent !important;
+  color: var(--tessara-text-muted) !important;
+  box-shadow: none !important;
+}
+body.tessara-app .organization-explorer-toggle:hover {
+  background: color-mix(in srgb, var(--tessara-link) 10%, transparent) !important;
+  color: var(--tessara-text-strong) !important;
+}
+body.tessara-app .organization-explorer-toggle__glyph {
+  font-size: 0.9rem;
+  line-height: 1;
 }
 body.tessara-app button.organization-explorer-row {
   width: 100%;
@@ -465,7 +498,6 @@ body.tessara-app button.organization-explorer-row {
   gap: 0.75rem;
   align-items: center;
   justify-items: stretch;
-  margin-left: calc(var(--organization-depth, 0) * 0.9rem);
   min-height: 0 !important;
   padding: 0.6rem 0.7rem !important;
   border: 0 !important;

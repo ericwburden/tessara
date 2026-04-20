@@ -110,7 +110,11 @@ pub(crate) fn derive_destination_label(
 
 #[cfg(feature = "hydrate")]
 mod hydrate {
-    use std::{cell::RefCell, collections::HashMap, rc::Rc};
+    use std::{
+        cell::RefCell,
+        collections::{HashMap, HashSet},
+        rc::Rc,
+    };
 
     use crate::features::native_runtime::{
         by_id, current_search_param, escape_html, get_json, input_value, post_json, put_json,
@@ -237,6 +241,7 @@ mod hydrate {
         nodes: Vec<NodeSummary>,
         node_types: HashMap<String, NodeTypeCatalogEntry>,
         selected_node_id: Option<String>,
+        expanded_node_ids: HashSet<String>,
         can_write: bool,
     }
 
@@ -257,6 +262,57 @@ mod hydrate {
 
     fn parent_key(parent_node_id: Option<&str>) -> String {
         parent_node_id.unwrap_or("__root__").to_string()
+    }
+
+    fn tree_by_parent(nodes: &[NodeSummary]) -> HashMap<String, Vec<NodeSummary>> {
+        let mut by_parent = HashMap::new();
+        for node in nodes {
+            by_parent
+                .entry(parent_key(node.parent_node_id.as_deref()))
+                .or_insert_with(Vec::new)
+                .push(node.clone());
+        }
+        for children in by_parent.values_mut() {
+            children.sort_by(|left, right| left.name.cmp(&right.name).then(left.id.cmp(&right.id)));
+        }
+        by_parent
+    }
+
+    fn collapse_branch(
+        expanded_node_ids: &mut HashSet<String>,
+        by_parent: &HashMap<String, Vec<NodeSummary>>,
+        node_id: &str,
+    ) {
+        expanded_node_ids.remove(node_id);
+        if let Some(children) = by_parent.get(&parent_key(Some(node_id))) {
+            for child in children {
+                collapse_branch(expanded_node_ids, by_parent, &child.id);
+            }
+        }
+    }
+
+    fn expand_path_to_node(
+        expanded_node_ids: &mut HashSet<String>,
+        nodes: &[NodeSummary],
+        node_id: &str,
+    ) {
+        let by_id = nodes
+            .iter()
+            .map(|node| (node.id.as_str(), node))
+            .collect::<HashMap<_, _>>();
+        let mut current = by_id.get(node_id).copied();
+        while let Some(node) = current {
+            if nodes
+                .iter()
+                .any(|candidate| candidate.parent_node_id.as_deref() == Some(node.id.as_str()))
+            {
+                expanded_node_ids.insert(node.id.clone());
+            }
+            current = node
+                .parent_node_id
+                .as_deref()
+                .and_then(|parent_id| by_id.get(parent_id).copied());
+        }
     }
 
     fn format_metadata_value(value: &Value) -> String {
@@ -502,25 +558,39 @@ mod hydrate {
         )
     }
 
-    fn render_node_tree(nodes: &[NodeSummary], selected_node_id: Option<&str>) -> String {
+    fn render_node_tree(
+        nodes: &[NodeSummary],
+        selected_node_id: Option<&str>,
+        expanded_node_ids: &HashSet<String>,
+    ) -> String {
         fn render_branch(
             node: &NodeSummary,
             by_parent: &HashMap<String, Vec<NodeSummary>>,
             selected_node_id: Option<&str>,
+            expanded_node_ids: &HashSet<String>,
             depth: usize,
         ) -> String {
             let children = by_parent
                 .get(&parent_key(Some(node.id.as_str())))
                 .cloned()
                 .unwrap_or_default();
-            let child_html = if children.is_empty() {
+            let is_expanded = expanded_node_ids.contains(&node.id);
+            let child_html = if children.is_empty() || !is_expanded {
                 String::new()
             } else {
                 format!(
                     r#"<div class="organization-explorer-children">{}</div>"#,
                     children
                         .iter()
-                        .map(|child| render_branch(child, by_parent, selected_node_id, depth + 1))
+                        .map(|child| {
+                            render_branch(
+                                child,
+                                by_parent,
+                                selected_node_id,
+                                expanded_node_ids,
+                                depth + 1,
+                            )
+                        })
                         .collect::<Vec<_>>()
                         .join("")
                 )
@@ -539,11 +609,32 @@ mod hydrate {
                     }
                 )
             };
+            let toggle = if child_count == 0 {
+                r#"<span class="organization-explorer-toggle-spacer" aria-hidden="true"></span>"#
+                    .to_string()
+            } else {
+                format!(
+                    r#"<button class="organization-explorer-toggle" type="button" data-toggle-node-id="{}" data-tree-depth="{}" aria-label="{} {}" aria-expanded="{}"><span class="organization-explorer-toggle__glyph" aria-hidden="true">{}</span></button>"#,
+                    escape_html(&node.id),
+                    depth,
+                    if is_expanded { "Collapse" } else { "Expand" },
+                    escape_html(&node.name),
+                    if is_expanded { "true" } else { "false" },
+                    if is_expanded { "▾" } else { "▸" },
+                )
+            };
 
             format!(
-                r#"<div class="organization-explorer-branch" style="--organization-depth:{}"><button class="organization-explorer-row" type="button" data-select-node-id="{}" data-selected="{}"><span class="organization-explorer-row__copy"><span class="organization-explorer-row__type">{}</span><span class="organization-explorer-row__name">{}</span></span><span class="organization-explorer-row__summary">{}</span></button>{}</div>"#,
+                r#"<div class="organization-explorer-branch" style="--organization-depth:{}"><div class="organization-explorer-branch-header">{}<button class="organization-explorer-row" type="button" data-select-node-id="{}" data-selected="{}" data-tree-depth="{}" aria-selected="{}"><span class="organization-explorer-row__copy"><span class="organization-explorer-row__type">{}</span><span class="organization-explorer-row__name">{}</span></span><span class="organization-explorer-row__summary">{}</span></button></div>{}</div>"#,
                 depth,
+                toggle,
                 escape_html(&node.id),
+                if Some(node.id.as_str()) == selected_node_id {
+                    "true"
+                } else {
+                    "false"
+                },
+                depth,
                 if Some(node.id.as_str()) == selected_node_id {
                     "true"
                 } else {
@@ -556,16 +647,7 @@ mod hydrate {
             )
         }
 
-        let mut by_parent = HashMap::new();
-        for node in nodes {
-            by_parent
-                .entry(parent_key(node.parent_node_id.as_deref()))
-                .or_insert_with(Vec::new)
-                .push(node.clone());
-        }
-        for children in by_parent.values_mut() {
-            children.sort_by(|left, right| left.name.cmp(&right.name).then(left.id.cmp(&right.id)));
-        }
+        let by_parent = tree_by_parent(nodes);
 
         let visible_ids = nodes
             .iter()
@@ -588,7 +670,7 @@ mod hydrate {
 
         roots
             .iter()
-            .map(|node| render_branch(node, &by_parent, selected_node_id, 0))
+            .map(|node| render_branch(node, &by_parent, selected_node_id, expanded_node_ids, 0))
             .collect::<Vec<_>>()
             .join("")
     }
@@ -805,9 +887,14 @@ mod hydrate {
         let detail = get_json::<NodeDetail>(&format!("/api/nodes/{node_id}")).await?;
         {
             let mut state_mut = state.borrow_mut();
+            let nodes = state_mut.nodes.clone();
             state_mut.selected_node_id = Some(node_id.clone());
-            let tree_html =
-                render_node_tree(&state_mut.nodes, state_mut.selected_node_id.as_deref());
+            expand_path_to_node(&mut state_mut.expanded_node_ids, &nodes, &node_id);
+            let tree_html = render_node_tree(
+                &nodes,
+                state_mut.selected_node_id.as_deref(),
+                &state_mut.expanded_node_ids,
+            );
             set_html("organization-directory-tree", &tree_html);
         }
 
@@ -827,6 +914,37 @@ mod hydrate {
         Ok(())
     }
 
+    fn toggle_list_node(node_id: String, state: Rc<RefCell<OrganizationListState>>) {
+        let mut state_mut = state.borrow_mut();
+        let by_parent = tree_by_parent(&state_mut.nodes);
+        let parent_node_id = state_mut
+            .nodes
+            .iter()
+            .find(|node| node.id == node_id)
+            .and_then(|node| node.parent_node_id.clone());
+        if state_mut.expanded_node_ids.contains(&node_id) {
+            collapse_branch(&mut state_mut.expanded_node_ids, &by_parent, &node_id);
+            set_text("organization-list-status", "Collapsed hierarchy branch.");
+        } else {
+            let sibling_key = parent_key(parent_node_id.as_deref());
+            if let Some(siblings) = by_parent.get(&sibling_key) {
+                for sibling in siblings {
+                    if sibling.id != node_id {
+                        collapse_branch(&mut state_mut.expanded_node_ids, &by_parent, &sibling.id);
+                    }
+                }
+            }
+            state_mut.expanded_node_ids.insert(node_id.clone());
+            set_text("organization-list-status", "Expanded hierarchy branch.");
+        }
+        let tree_html = render_node_tree(
+            &state_mut.nodes,
+            state_mut.selected_node_id.as_deref(),
+            &state_mut.expanded_node_ids,
+        );
+        set_html("organization-directory-tree", &tree_html);
+    }
+
     fn wire_list_actions(state: Rc<RefCell<OrganizationListState>>) {
         let Some(tree_root) = by_id("organization-directory-tree") else {
             return;
@@ -838,6 +956,12 @@ mod hydrate {
             let Ok(target) = target.dyn_into::<web_sys::Element>() else {
                 return;
             };
+            if let Ok(Some(toggle)) = target.closest("[data-toggle-node-id]") {
+                if let Some(node_id) = toggle.get_attribute("data-toggle-node-id") {
+                    toggle_list_node(node_id, state.clone());
+                }
+                return;
+            }
             let Ok(Some(button)) = target.closest("[data-select-node-id]") else {
                 return;
             };
@@ -890,7 +1014,17 @@ mod hydrate {
                         .iter()
                         .map(|node_type| (node_type.id.clone(), node_type.clone()))
                         .collect::<HashMap<_, _>>();
-                    let tree_html = render_node_tree(&nodes, None);
+                    let initial_selection = account
+                        .scope_nodes
+                        .first()
+                        .map(|scope| scope.node_id.clone())
+                        .or_else(|| nodes.first().map(|node| node.id.clone()));
+                    let mut expanded_node_ids = HashSet::new();
+                    if let Some(node_id) = initial_selection.as_deref() {
+                        expand_path_to_node(&mut expanded_node_ids, &nodes, node_id);
+                    }
+                    let tree_html =
+                        render_node_tree(&nodes, initial_selection.as_deref(), &expanded_node_ids);
 
                     set_text("organization-page-title", &title);
                     set_text(
@@ -941,15 +1075,12 @@ mod hydrate {
                         let mut state_mut = state.borrow_mut();
                         state_mut.nodes = nodes.clone();
                         state_mut.node_types = node_type_map;
+                        state_mut.selected_node_id = initial_selection.clone();
+                        state_mut.expanded_node_ids = expanded_node_ids;
                         state_mut.can_write = can_write;
                     }
                     wire_list_actions(state.clone());
 
-                    let initial_selection = account
-                        .scope_nodes
-                        .first()
-                        .map(|scope| scope.node_id.clone())
-                        .or_else(|| nodes.first().map(|node| node.id.clone()));
                     if let Some(node_id) = initial_selection {
                         let _ = select_list_node(node_id, state).await;
                     } else {

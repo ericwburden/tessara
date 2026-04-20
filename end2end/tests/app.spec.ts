@@ -526,6 +526,25 @@ test("organization routes stay readable and console-clean on the native shell", 
         .count(),
     )
     .toBeGreaterThan(0);
+  const rootToggle = page
+    .locator(
+      '#organization-directory-tree button[data-toggle-node-id][data-tree-depth="0"][aria-expanded="true"]',
+    )
+    .first();
+  const childRows = page.locator(
+    '#organization-directory-tree button[data-select-node-id][data-tree-depth="1"]',
+  );
+  await expect(rootToggle).toBeVisible();
+  await expect.poll(async () => childRows.count()).toBeGreaterThan(0);
+  await rootToggle.click();
+  await expect.poll(async () => childRows.count()).toBe(0);
+  await page
+    .locator(
+      '#organization-directory-tree button[data-toggle-node-id][data-tree-depth="0"][aria-expanded="false"]',
+    )
+    .first()
+    .click();
+  await expect.poll(async () => childRows.count()).toBeGreaterThan(0);
   await expect(
     page.locator("article.organization-disclosure-card"),
   ).toHaveCount(0);
