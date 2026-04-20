@@ -870,11 +870,18 @@ fn NavSection(
 fn TopBarUtilityButton(
     aria_label: &'static str,
     icon: &'static str,
+    #[prop(optional)] class_name: &'static str,
     #[prop(optional)] disabled: bool,
 ) -> impl IntoView {
+    let button_class = if class_name.is_empty() {
+        "app-utility-button".to_string()
+    } else {
+        format!("app-utility-button {class_name}")
+    };
+
     view! {
         <button
-            class="app-utility-button"
+            class=button_class
             type="button"
             aria-label=aria_label
             title=aria_label
@@ -914,6 +921,7 @@ fn SidebarFooterContext(
             let identity_label = preferred_account_label(&account.display_name, &account.email);
             let identity_initials = account_initials(&identity_label);
             let profile_label = ui_profile_label(account.ui_access_profile.clone());
+            let rail_profile_label = format!("{identity_label} profile");
             let active_delegate_name = StoredValue::new(active_delegate_name.unwrap_or_default());
             let scope_preview = StoredValue::new(scope_preview);
             let footer_error = StoredValue::new(error.unwrap_or_default());
@@ -937,6 +945,15 @@ fn SidebarFooterContext(
 
             view! {
                 <section class="app-sidebar__footer-context" id="shell-footer-context">
+                    <div
+                        class="app-sidebar__rail-profile"
+                        title=identity_label.clone()
+                        aria-label=rail_profile_label
+                    >
+                        <span class="app-sidebar__rail-profile-avatar" aria-hidden="true">
+                            <i class="fa-solid fa-circle-user"></i>
+                        </span>
+                    </div>
                     <section id="shell-account-context" class="selection-panel app-sidebar__supplemental app-sidebar__context-composite">
                         <div class="app-sidebar__account-summary">
                             <span class="app-sidebar__avatar" aria-hidden="true">{identity_initials}</span>
@@ -985,6 +1002,15 @@ fn SidebarFooterContext(
         }
         None => view! {
             <section class="app-sidebar__footer-context" id="shell-footer-context">
+                <div
+                    class="app-sidebar__rail-profile"
+                    title="Account context"
+                    aria-label="Account profile"
+                >
+                    <span class="app-sidebar__rail-profile-avatar" aria-hidden="true">
+                        <i class="fa-solid fa-circle-user"></i>
+                    </span>
+                </div>
                 <section id="shell-account-context" class="selection-panel app-sidebar__supplemental app-sidebar__context-composite">
                     <div class="app-sidebar__account-summary">
                         <span class="app-sidebar__avatar" aria-hidden="true">"TS"</span>
@@ -1326,6 +1352,15 @@ pub fn NativePage(
                             <span aria-hidden="true"><i class="fa-solid fa-xmark"></i></span>
                         </button>
                     </div>
+                    <a class="app-sidebar__brand" href="/app" aria-label="Tessara home">
+                        <span class="app-sidebar__brand-mark" aria-hidden="true">
+                            <img class="app-sidebar__brand-mark-image" src="/assets/tessara-icon-256.svg" alt="" />
+                        </span>
+                        <span class="app-sidebar__brand-copy">
+                            <strong class="app-sidebar__brand-name">"Tessara"</strong>
+                            <span class="app-sidebar__brand-tag">"Shared workspace"</span>
+                        </span>
+                    </a>
                     {move || {
                         let loaded = session.loaded.get();
                         let account = session.account.get();
@@ -1370,10 +1405,6 @@ pub fn NativePage(
                             <button id="app-nav-toggle" class="app-nav-toggle" type="button" aria-label="Toggle navigation" aria-controls="app-sidebar" aria-expanded="false" hidden>
                                 <span class="app-nav-toggle__icon" aria-hidden="true"><i class="fa-solid fa-bars"></i></span>
                             </button>
-                            <a class="top-app-home-link" href="/app" aria-label="Tessara home">
-                                <img class="top-app-bar__mark" src="/assets/tessara-icon-256.svg" alt="" />
-                                <span class="is-sr-only">"Tessara"</span>
-                            </a>
                             <div class="top-app-bar__context-group">
                                 <span class="top-app-bar__context-label">"Workspace"</span>
                                 <span class="top-app-bar__context">{workspace_label}</span>
@@ -1384,6 +1415,7 @@ pub fn NativePage(
                                 <label class="is-sr-only" for="global-search">"Global search"</label>
                                 <input id="global-search" class="input app-search-input" type="search" placeholder="Search Tessara" autocomplete="off" />
                             </div>
+                            <TopBarUtilityButton aria_label="Search Tessara" icon="fa-magnifying-glass" class_name="app-utility-button--search" disabled=true/>
                             <TopBarUtilityButton aria_label="Notifications" icon="fa-bell" disabled=true/>
                             <TopBarUtilityButton aria_label="Help" icon="fa-circle-question" disabled=true/>
                         </div>
