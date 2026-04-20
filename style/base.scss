@@ -488,8 +488,36 @@ body.tessara-app .organization-explorer-toggle:hover {
   color: var(--tessara-text-strong) !important;
 }
 body.tessara-app .organization-explorer-toggle__glyph {
-  font-size: 0.9rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 0.85rem;
+  height: 0.85rem;
   line-height: 1;
+}
+body.tessara-app .organization-explorer-toggle__glyph::before {
+  content: "";
+  width: 0.42rem;
+  height: 0.42rem;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 120ms ease-out;
+}
+body.tessara-app .organization-explorer-toggle[aria-expanded="true"]
+  .organization-explorer-toggle__glyph::before {
+  transform: rotate(45deg) translateY(-0.04rem);
+}
+body.tessara-app .organization-explorer-toggle-spacer {
+  display: block;
+}
+body.tessara-app .app-sidebar__content,
+body.tessara-app .nav-panel,
+body.tessara-app .app-nav {
+  align-content: start;
+}
+body.tessara-app .menu-label {
+  align-self: start;
 }
 body.tessara-app button.organization-explorer-row {
   width: 100%;

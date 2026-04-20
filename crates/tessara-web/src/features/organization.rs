@@ -614,13 +614,12 @@ mod hydrate {
                     .to_string()
             } else {
                 format!(
-                    r#"<button class="organization-explorer-toggle" type="button" data-toggle-node-id="{}" data-tree-depth="{}" aria-label="{} {}" aria-expanded="{}"><span class="organization-explorer-toggle__glyph" aria-hidden="true">{}</span></button>"#,
+                    r#"<button class="organization-explorer-toggle" type="button" data-toggle-node-id="{}" data-tree-depth="{}" aria-label="{} {}" aria-expanded="{}"><span class="organization-explorer-toggle__glyph" aria-hidden="true"></span></button>"#,
                     escape_html(&node.id),
                     depth,
                     if is_expanded { "Collapse" } else { "Expand" },
                     escape_html(&node.name),
                     if is_expanded { "true" } else { "false" },
-                    if is_expanded { "▾" } else { "▸" },
                 )
             };
 
