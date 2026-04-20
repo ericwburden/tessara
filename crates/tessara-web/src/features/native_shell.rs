@@ -344,24 +344,6 @@ fn active_delegate(account: &AccountContext, search: &str) -> Option<DelegationS
         .cloned()
 }
 
-fn scope_root_labels(account: &AccountContext) -> Vec<String> {
-    let mut labels = account
-        .scope_nodes
-        .iter()
-        .filter(|node| {
-            !account
-                .scope_nodes
-                .iter()
-                .any(|candidate| Some(candidate.node_id.as_str()) == node.parent_node_id.as_deref())
-        })
-        .map(|node| format!("{}: {}", node.node_type_name, node.node_name))
-        .collect::<Vec<_>>();
-
-    labels.sort();
-    labels.dedup();
-    labels
-}
-
 fn account_initials(label: &str) -> String {
     let initials = label
         .split_whitespace()
@@ -373,27 +355,6 @@ fn account_initials(label: &str) -> String {
         "TS".into()
     } else {
         initials.to_uppercase()
-    }
-}
-
-fn summarize_scope_preview(labels: &[String]) -> String {
-    match labels {
-        [] => "Full application access".into(),
-        [label] => label.clone(),
-        _ => {
-            let preview = labels
-                .iter()
-                .take(2)
-                .cloned()
-                .collect::<Vec<_>>()
-                .join(" · ");
-            let remaining = labels.len().saturating_sub(2);
-            if remaining == 0 {
-                preview
-            } else {
-                format!("{preview} · +{remaining} more")
-            }
-        }
     }
 }
 
@@ -720,28 +681,58 @@ fn ThemeToggle() -> impl IntoView {
         preference.set(choice);
     });
 
+    let theme_is_dark = Memo::new(move |_| {
+        let choice = preference.get();
+        match choice.as_str() {
+            "dark" => true,
+            "light" => false,
+            _ => window()
+                .and_then(|window| window.match_media("(prefers-color-scheme: dark)").ok())
+                .flatten()
+                .map(|query| query.matches())
+                .unwrap_or(false),
+        }
+    });
+
     view! {
-        <div class="theme-toggle theme-toggle--compact">
-            <label class="theme-toggle__label" for="shell-theme-select">
-                <span class="theme-toggle__icon" aria-hidden="true">
-                    <i class="fa-solid fa-swatchbook"></i>
-                </span>
-                <span>"Theme"</span>
-            </label>
-            <div class="theme-toggle__control">
-                <select
-                    id="shell-theme-select"
-                    class="input theme-toggle__select"
-                    aria-label="Theme preference"
-                    prop:value=move || preference.get()
-                    on:change=move |event| apply_preference(event_target_value(&event))
-                >
-                    <option value="system">"System"</option>
-                    <option value="light">"Light"</option>
-                    <option value="dark">"Dark"</option>
-                </select>
-            </div>
-        </div>
+        <button
+            class="app-sidebar__icon-button theme-toggle-button"
+            type="button"
+            aria-label=move || if theme_is_dark.get() {
+                "Switch to light theme"
+            } else {
+                "Switch to dark theme"
+            }
+            title=move || if theme_is_dark.get() {
+                "Switch to light theme"
+            } else {
+                "Switch to dark theme"
+            }
+            on:click=move |_| {
+                let current = preference.get_untracked();
+                let next = match current.as_str() {
+                    "dark" => "light",
+                    "light" => "dark",
+                    _ => {
+                        let system_dark = window()
+                            .and_then(|window| window.match_media("(prefers-color-scheme: dark)").ok())
+                            .flatten()
+                            .map(|query| query.matches())
+                            .unwrap_or(false);
+                        if system_dark { "light" } else { "dark" }
+                    }
+                };
+                apply_preference(next.to_string());
+            }
+        >
+            <span aria-hidden="true">
+                <i class=move || if theme_is_dark.get() {
+                    "fa-solid fa-sun".to_string()
+                } else {
+                    "fa-solid fa-moon".to_string()
+                }></i>
+            </span>
+        </button>
     }
 }
 
@@ -749,25 +740,16 @@ fn ThemeToggle() -> impl IntoView {
 #[component]
 fn ThemeToggle() -> impl IntoView {
     view! {
-        <div class="theme-toggle theme-toggle--compact">
-            <label class="theme-toggle__label" for="shell-theme-select">
-                <span class="theme-toggle__icon" aria-hidden="true">
-                    <i class="fa-solid fa-swatchbook"></i>
-                </span>
-                <span>"Theme"</span>
-            </label>
-            <div class="theme-toggle__control">
-                <select
-                    id="shell-theme-select"
-                    class="input theme-toggle__select"
-                    aria-label="Theme preference"
-                >
-                    <option value="system" selected>"System"</option>
-                    <option value="light">"Light"</option>
-                    <option value="dark">"Dark"</option>
-                </select>
-            </div>
-        </div>
+        <button
+            class="app-sidebar__icon-button theme-toggle-button"
+            type="button"
+            aria-label="Switch to dark theme"
+            title="Switch to dark theme"
+        >
+            <span aria-hidden="true">
+                <i class="fa-solid fa-moon"></i>
+            </span>
+        </button>
     }
 }
 
@@ -908,40 +890,13 @@ fn SidebarFooterContext(
             let active_delegate_name = active_delegate
                 .as_ref()
                 .map(|delegate| preferred_account_label(&delegate.display_name, &delegate.email));
-            let scope_labels = scope_root_labels(&account);
-            let scope_preview = summarize_scope_preview(&scope_labels);
-            let scope_count = scope_labels.len();
-            let has_scoped_roots = scope_count > 0;
-            let delegation_count = account
-                .delegations
-                .iter()
-                .map(|delegate| preferred_account_label(&delegate.display_name, &delegate.email))
-                .count();
-            let has_delegations = delegation_count > 0;
             let identity_label = preferred_account_label(&account.display_name, &account.email);
             let identity_initials = account_initials(&identity_label);
             let profile_label = ui_profile_label(account.ui_access_profile.clone());
             let rail_profile_label = format!("{identity_label} profile");
             let active_delegate_name = StoredValue::new(active_delegate_name.unwrap_or_default());
-            let scope_preview = StoredValue::new(scope_preview);
             let footer_error = StoredValue::new(error.unwrap_or_default());
             let has_footer_error = !footer_error.get_value().is_empty();
-            let delegation_chip = StoredValue::new(if has_active_delegate {
-                format!("Acting for {}", active_delegate_name.get_value())
-            } else {
-                format!(
-                    "{delegation_count} delegation{} available",
-                    if delegation_count == 1 { "" } else { "s" }
-                )
-            });
-            let scope_chip = StoredValue::new(if has_scoped_roots {
-                format!(
-                    "{scope_count} scoped root{}",
-                    if scope_count == 1 { "" } else { "s" }
-                )
-            } else {
-                "Full access".into()
-            });
 
             view! {
                 <section class="app-sidebar__footer-context" id="shell-footer-context">
@@ -951,7 +906,7 @@ fn SidebarFooterContext(
                         aria-label=rail_profile_label
                     >
                         <span class="app-sidebar__rail-profile-avatar" aria-hidden="true">
-                            <i class="fa-solid fa-circle-user"></i>
+                            {identity_initials.clone()}
                         </span>
                     </div>
                     <section id="shell-account-context" class="selection-panel app-sidebar__supplemental app-sidebar__context-composite">
@@ -965,27 +920,14 @@ fn SidebarFooterContext(
                                 <span class="app-sidebar__identity-email">{account.email.clone()}</span>
                             </div>
                         </div>
-                        <div class="app-sidebar__context-stack">
-                            <Show when=move || has_active_delegate>
+                        <Show when=move || has_active_delegate>
+                            <div class="app-sidebar__context-stack">
                                 <p class="muted app-sidebar__context-note">
                                     <strong>"Acting for "</strong>
                                     {move || active_delegate_name.get_value()}
                                 </p>
-                            </Show>
-                            <p class="muted app-sidebar__context-note">
-                                {move || scope_preview.get_value()}
-                            </p>
-                            <div class="app-sidebar__context-chip-row">
-                                <Show when=move || has_delegations>
-                                    <span class="app-sidebar__context-chip">
-                                        {move || delegation_chip.get_value()}
-                                    </span>
-                                </Show>
-                                <span class="app-sidebar__context-chip">
-                                    {move || scope_chip.get_value()}
-                                </span>
                             </div>
-                        </div>
+                        </Show>
                         <div class="app-sidebar__footer-toolbar">
                             <ThemeToggle/>
                             <SignOutButton session=session/>
@@ -1007,9 +949,7 @@ fn SidebarFooterContext(
                     title="Account context"
                     aria-label="Account profile"
                 >
-                    <span class="app-sidebar__rail-profile-avatar" aria-hidden="true">
-                        <i class="fa-solid fa-circle-user"></i>
-                    </span>
+                    <span class="app-sidebar__rail-profile-avatar" aria-hidden="true">"TS"</span>
                 </div>
                 <section id="shell-account-context" class="selection-panel app-sidebar__supplemental app-sidebar__context-composite">
                     <div class="app-sidebar__account-summary">
@@ -1102,12 +1042,20 @@ fn SignOutButton(session: AccountSession) -> impl IntoView {
     view! {
         <div class="app-session-actions">
             <button
-                class="button is-light"
+                class="button is-light app-sidebar__icon-button app-session-actions__button"
                 type="button"
+                aria-label=move || if busy.get() { "Signing out" } else { "Sign out" }
+                title=move || if busy.get() { "Signing out" } else { "Sign out" }
                 on:click=sign_out
                 disabled=move || busy.get()
             >
-                {move || if busy.get() { "Signing Out..." } else { "Sign Out" }}
+                <span aria-hidden="true">
+                    <i class=move || if busy.get() {
+                        "fa-solid fa-spinner fa-spin".to_string()
+                    } else {
+                        "fa-solid fa-right-from-bracket".to_string()
+                    }></i>
+                </span>
             </button>
             <Show when=move || feedback.get().is_some()>
                 <p class="muted">{move || feedback.get().unwrap_or_default()}</p>
@@ -1401,23 +1349,25 @@ pub fn NativePage(
                 </aside>
                 <section class="panel box app-main">
                     <header class="top-app-bar">
-                        <div class="top-app-bar__brand">
-                            <button id="app-nav-toggle" class="app-nav-toggle" type="button" aria-label="Toggle navigation" aria-controls="app-sidebar" aria-expanded="false" hidden>
-                                <span class="app-nav-toggle__icon" aria-hidden="true"><i class="fa-solid fa-bars"></i></span>
-                            </button>
-                            <div class="top-app-bar__context-group">
-                                <span class="top-app-bar__context-label">"Workspace"</span>
-                                <span class="top-app-bar__context">{workspace_label}</span>
+                        <div class="top-app-bar__row">
+                            <div class="top-app-bar__brand">
+                                <button id="app-nav-toggle" class="app-nav-toggle" type="button" aria-label="Toggle navigation" aria-controls="app-sidebar" aria-expanded="false" hidden>
+                                    <span class="app-nav-toggle__icon" aria-hidden="true"><i class="fa-solid fa-bars"></i></span>
+                                </button>
+                                <div class="top-app-bar__context-group">
+                                    <span class="top-app-bar__context-label">"Workspace"</span>
+                                    <span class="top-app-bar__context">{workspace_label}</span>
+                                </div>
                             </div>
-                        </div>
-                        <div class="top-app-bar__utilities">
-                            <div class="top-app-bar__search">
-                                <label class="is-sr-only" for="global-search">"Global search"</label>
-                                <input id="global-search" class="input app-search-input" type="search" placeholder="Search Tessara" autocomplete="off" />
+                            <div class="top-app-bar__utilities">
+                                <div class="top-app-bar__search">
+                                    <label class="is-sr-only" for="global-search">"Global search"</label>
+                                    <input id="global-search" class="input app-search-input" type="search" placeholder="Search Tessara" autocomplete="off" />
+                                </div>
+                                <TopBarUtilityButton aria_label="Search Tessara" icon="fa-magnifying-glass" class_name="app-utility-button--search" disabled=true/>
+                                <TopBarUtilityButton aria_label="Notifications" icon="fa-bell" disabled=true/>
+                                <TopBarUtilityButton aria_label="Help" icon="fa-circle-question" disabled=true/>
                             </div>
-                            <TopBarUtilityButton aria_label="Search Tessara" icon="fa-magnifying-glass" class_name="app-utility-button--search" disabled=true/>
-                            <TopBarUtilityButton aria_label="Notifications" icon="fa-bell" disabled=true/>
-                            <TopBarUtilityButton aria_label="Help" icon="fa-circle-question" disabled=true/>
                         </div>
                     </header>
                     <BreadcrumbTrail items=breadcrumbs/>
