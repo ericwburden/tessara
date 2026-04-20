@@ -1451,7 +1451,6 @@ test("shell navigation collapses on tablet and overlays on mobile", async ({
   await waitForAuthenticatedShell(page, "admin@tessara.local");
 
   const navToggle = page.locator("#app-nav-toggle");
-  const sidebarClose = page.locator(".app-sidebar-close");
   const sidebarBackdrop = page.locator(".app-sidebar-backdrop");
 
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -1469,7 +1468,7 @@ test("shell navigation collapses on tablet and overlays on mobile", async ({
     "expanded",
   );
   await expect(navToggle).toHaveAttribute("hidden", "");
-  await expect(sidebarClose).toHaveAttribute("hidden", "");
+  await expect(page.locator(".app-sidebar-close")).toHaveCount(0);
   await expect(sidebarBackdrop).toHaveAttribute("hidden", "");
 
   await page.setViewportSize({ width: 900, height: 900 });
@@ -1484,7 +1483,7 @@ test("shell navigation collapses on tablet and overlays on mobile", async ({
   await expect(navToggle).not.toHaveAttribute("hidden", "");
   await expect(navToggle).toHaveAttribute("aria-label", /expand navigation/i);
   await expect(page.locator(".app-nav__label").first()).toBeHidden();
-  await expect(sidebarClose).toHaveAttribute("hidden", "");
+  await expect(page.locator(".app-sidebar-close")).toHaveCount(0);
   await expect(sidebarBackdrop).toHaveAttribute("hidden", "");
 
   await navToggle.click();
@@ -1494,7 +1493,7 @@ test("shell navigation collapses on tablet and overlays on mobile", async ({
   );
   await expect(navToggle).toHaveAttribute("aria-label", /collapse navigation/i);
   await expect(page.locator(".app-nav__label").first()).toBeVisible();
-  await expect(sidebarClose).toHaveAttribute("hidden", "");
+  await expect(page.locator(".app-sidebar-close")).toHaveCount(0);
   await expect(sidebarBackdrop).toHaveAttribute("hidden", "");
 
   await page.setViewportSize({ width: 390, height: 844 });
@@ -1508,7 +1507,7 @@ test("shell navigation collapses on tablet and overlays on mobile", async ({
   );
   await expect(navToggle).not.toHaveAttribute("hidden", "");
   await expect(navToggle).toHaveAttribute("aria-label", /open navigation/i);
-  await expect(sidebarClose).toHaveAttribute("hidden", "");
+  await expect(page.locator(".app-sidebar-close")).toHaveCount(0);
   await expect(sidebarBackdrop).toHaveAttribute("hidden", "");
 
   await navToggle.click();
@@ -1517,7 +1516,7 @@ test("shell navigation collapses on tablet and overlays on mobile", async ({
     "overlay-open",
   );
   await expect(navToggle).toHaveAttribute("aria-label", /close navigation/i);
-  await expect(sidebarClose).not.toHaveAttribute("hidden", "");
+  await expect(page.locator(".app-sidebar-close")).toHaveCount(0);
   await expect(sidebarBackdrop).not.toHaveAttribute("hidden", "");
 
   await sidebarBackdrop.click();
@@ -1525,7 +1524,7 @@ test("shell navigation collapses on tablet and overlays on mobile", async ({
     "data-sidebar-state",
     "overlay-closed",
   );
-  await expect(sidebarClose).toHaveAttribute("hidden", "");
+  await expect(page.locator(".app-sidebar-close")).toHaveCount(0);
   await expect(sidebarBackdrop).toHaveAttribute("hidden", "");
 
   await navToggle.click();
@@ -1533,7 +1532,7 @@ test("shell navigation collapses on tablet and overlays on mobile", async ({
     "data-sidebar-state",
     "overlay-open",
   );
-  await expect(sidebarClose).not.toHaveAttribute("hidden", "");
+  await expect(page.locator(".app-sidebar-close")).toHaveCount(0);
 
   await page.setViewportSize({ width: 1280, height: 900 });
   await expect(page.locator("body")).toHaveAttribute(
@@ -1545,7 +1544,7 @@ test("shell navigation collapses on tablet and overlays on mobile", async ({
     "expanded",
   );
   await expect(navToggle).toHaveAttribute("hidden", "");
-  await expect(sidebarClose).toHaveAttribute("hidden", "");
+  await expect(page.locator(".app-sidebar-close")).toHaveCount(0);
   await expect(sidebarBackdrop).toHaveAttribute("hidden", "");
 
   await page.setViewportSize({ width: 390, height: 844 });
@@ -1558,7 +1557,7 @@ test("shell navigation collapses on tablet and overlays on mobile", async ({
     "overlay-closed",
   );
   await expect(navToggle).toHaveAttribute("aria-label", /open navigation/i);
-  await expect(sidebarClose).toHaveAttribute("hidden", "");
+  await expect(page.locator(".app-sidebar-close")).toHaveCount(0);
   await expect(sidebarBackdrop).toHaveAttribute("hidden", "");
 
   await assertNoConsoleErrors();

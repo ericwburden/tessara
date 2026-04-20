@@ -172,6 +172,12 @@ body.tessara-app .theme-toggle__popover {
   background: color-mix(in srgb, var(--tessara-surface) 94%, var(--tessara-inline-surface) 6%);
   box-shadow: var(--tessara-shadow);
 }
+body.tessara-app .theme-toggle__popover[hidden] {
+  display: none !important;
+}
+body.tessara-app .theme-toggle__popover.is-open {
+  display: grid;
+}
 body.tessara-app .theme-toggle__option {
   display: inline-flex;
   align-items: center;
@@ -1400,6 +1406,7 @@ body.tessara-app .app-sidebar {
   width: 100%;
   max-width: 256px;
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 1rem;
   padding: 1rem;
   box-shadow: none;
@@ -1409,6 +1416,7 @@ body.tessara-app .app-sidebar {
 body.tessara-app .app-sidebar__brand {
   display: flex;
   align-items: center;
+  align-self: start;
   gap: 0.75rem;
   min-height: 2.75rem;
   padding: 0 0 1rem;
@@ -2217,6 +2225,7 @@ body.tessara-app .app-shell--migration .app-sidebar {
 
   html[data-shell-ready='true'] body.tessara-app[data-shell-viewport='tablet'][data-sidebar-state='collapsed'] .app-sidebar {
     max-width: none;
+    grid-template-rows: 2.5rem minmax(0, 1fr);
     padding-inline: 0.625rem;
   }
 
@@ -2237,10 +2246,13 @@ body.tessara-app .app-shell--migration .app-sidebar {
   }
 
   html[data-shell-ready='true'] body.tessara-app[data-shell-viewport='tablet'][data-sidebar-state='collapsed'] .app-sidebar__brand {
+    width: 100%;
+    align-self: start;
     min-height: 2.5rem;
     padding: 0;
     margin: 0;
     border: 0;
+    justify-content: center;
   }
 
   html[data-shell-ready='true'] body.tessara-app[data-shell-viewport='tablet'][data-sidebar-state='collapsed'] .app-sidebar__footer {
@@ -2335,6 +2347,17 @@ body.tessara-app .app-shell--migration .app-sidebar {
 
   body.tessara-app .app-main {
     padding: 1rem;
+  }
+
+  body.tessara-app .app-layout {
+    gap: 0;
+  }
+
+  body.tessara-app section.panel.box.app-main {
+    border: 0;
+    border-radius: 0;
+    background: transparent !important;
+    box-shadow: none;
   }
 
   body.tessara-app .home-panel-header,

@@ -578,30 +578,30 @@ fn install_shell_chrome() {
         return;
     };
 
-    if let Some(toggle) = document.get_element_by_id("app-nav-toggle") {
-        let closure =
-            wasm_bindgen::closure::Closure::wrap(Box::new(move |_event: web_sys::Event| {
-                toggle_shell_sidebar();
-            }) as Box<dyn FnMut(_)>);
-        let _ = toggle.add_event_listener_with_callback("click", closure.as_ref().unchecked_ref());
-        closure.forget();
-    }
+    let click = wasm_bindgen::closure::Closure::wrap(Box::new(move |event: web_sys::Event| {
+        let Some(target) = event.target() else {
+            return;
+        };
+        let Some(element) = target.dyn_into::<web_sys::Element>().ok() else {
+            return;
+        };
 
-    let dismiss_buttons = document.query_selector_all("[data-sidebar-dismiss]").ok();
-    if let Some(buttons) = dismiss_buttons {
-        for index in 0..buttons.length() {
-            if let Some(button) = buttons.item(index) {
-                let closure =
-                    wasm_bindgen::closure::Closure::wrap(Box::new(move |_event: web_sys::Event| {
-                        close_shell_sidebar();
-                    })
-                        as Box<dyn FnMut(_)>);
-                let _ = button
-                    .add_event_listener_with_callback("click", closure.as_ref().unchecked_ref());
-                closure.forget();
-            }
+        if element.closest("#app-nav-toggle").ok().flatten().is_some() {
+            toggle_shell_sidebar();
+            return;
         }
-    }
+
+        if element
+            .closest("[data-sidebar-dismiss]")
+            .ok()
+            .flatten()
+            .is_some()
+        {
+            close_shell_sidebar();
+        }
+    }) as Box<dyn FnMut(_)>);
+    let _ = document.add_event_listener_with_callback("click", click.as_ref().unchecked_ref());
+    click.forget();
 
     if let Some(window) = window() {
         let resize = wasm_bindgen::closure::Closure::wrap(Box::new(move |_event: web_sys::Event| {
