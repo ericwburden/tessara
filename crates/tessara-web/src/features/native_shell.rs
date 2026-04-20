@@ -606,6 +606,16 @@ fn close_shell_sidebar() {
 }
 
 #[cfg(feature = "hydrate")]
+fn close_mobile_search() {
+    if shell_viewport() != "mobile" {
+        return;
+    }
+
+    MOBILE_SEARCH_OPEN.with(|open| open.set(false));
+    apply_shell_chrome_state();
+}
+
+#[cfg(feature = "hydrate")]
 fn toggle_mobile_search() {
     if shell_viewport() != "mobile" {
         return;
@@ -679,7 +689,20 @@ fn install_shell_chrome() {
             .is_some()
         {
             if shell_viewport() == "tablet" {
-                TABLET_SIDEBAR_EXPANDED.with(|expanded| expanded.set(true));
+                TABLET_SIDEBAR_EXPANDED.with(|expanded| expanded.set(!expanded.get()));
+                apply_shell_chrome_state();
+            }
+            return;
+        }
+
+        if element
+            .closest(".app-sidebar__account-summary-toggle")
+            .ok()
+            .flatten()
+            .is_some()
+        {
+            if shell_viewport() == "tablet" {
+                TABLET_SIDEBAR_EXPANDED.with(|expanded| expanded.set(!expanded.get()));
                 apply_shell_chrome_state();
             }
             return;
@@ -692,6 +715,24 @@ fn install_shell_chrome() {
             .is_some()
         {
             close_shell_sidebar();
+            return;
+        }
+
+        let search_open = MOBILE_SEARCH_OPEN.with(|open| open.get());
+        if shell_viewport() == "mobile"
+            && search_open
+            && element
+                .closest(".top-app-bar__search")
+                .ok()
+                .flatten()
+                .is_none()
+            && element
+                .closest(".app-utility-button--search")
+                .ok()
+                .flatten()
+                .is_none()
+        {
+            close_mobile_search();
         }
     }) as Box<dyn FnMut(_)>);
     let _ = document.add_event_listener_with_callback("click", click.as_ref().unchecked_ref());
@@ -1082,22 +1123,28 @@ fn SidebarFooterContext(
                         title=identity_label.clone()
                         aria-label=rail_profile_label
                         data-sidebar-profile
+                        style="display:inline-flex;width:2.5rem;min-width:2.5rem;height:2.5rem;min-height:2.5rem;padding:0;border:0;background:transparent;appearance:none;box-shadow:none;"
                     >
                         <span class="app-sidebar__rail-profile-avatar" aria-hidden="true">
                             {identity_initials.clone()}
                         </span>
                     </button>
                     <section id="shell-account-context" class="selection-panel app-sidebar__supplemental app-sidebar__context-composite">
-                        <div class="app-sidebar__account-summary">
+                        <button
+                            class="app-sidebar__account-summary app-sidebar__account-summary-toggle"
+                            type="button"
+                            aria-label="Toggle account context"
+                            data-sidebar-profile
+                        >
                             <span class="app-sidebar__avatar" aria-hidden="true">{identity_initials}</span>
-                            <div class="app-sidebar__identity">
-                                <div class="app-sidebar__identity-row">
+                            <span class="app-sidebar__identity">
+                                <span class="app-sidebar__identity-row">
                                     <strong class="app-sidebar__identity-name">{identity_label}</strong>
                                     <span class="app-sidebar__context-badge">{profile_label}</span>
-                                </div>
+                                </span>
                                 <span class="app-sidebar__identity-email">{account.email.clone()}</span>
-                            </div>
-                        </div>
+                            </span>
+                        </button>
                         <Show when=move || has_active_delegate>
                             <div class="app-sidebar__context-stack">
                                 <p class="muted app-sidebar__context-note">
@@ -1128,21 +1175,27 @@ fn SidebarFooterContext(
                     title="Account context"
                     aria-label="Account profile"
                     data-sidebar-profile
+                    style="display:inline-flex;width:2.5rem;min-width:2.5rem;height:2.5rem;min-height:2.5rem;padding:0;border:0;background:transparent;appearance:none;box-shadow:none;"
                 >
                     <span class="app-sidebar__rail-profile-avatar" aria-hidden="true">"TS"</span>
                 </button>
                 <section id="shell-account-context" class="selection-panel app-sidebar__supplemental app-sidebar__context-composite">
-                    <div class="app-sidebar__account-summary">
+                    <button
+                        class="app-sidebar__account-summary app-sidebar__account-summary-toggle"
+                        type="button"
+                        aria-label="Toggle account context"
+                        data-sidebar-profile
+                    >
                         <span class="app-sidebar__avatar" aria-hidden="true">"TS"</span>
-                        <div class="app-sidebar__identity">
-                            <div class="app-sidebar__identity-row">
+                        <span class="app-sidebar__identity">
+                            <span class="app-sidebar__identity-row">
                                 <strong class="app-sidebar__identity-name">"Account Context"</strong>
-                            </div>
+                            </span>
                             <span class="app-sidebar__identity-email">
                                 {error.unwrap_or_else(|| "Account context loads after session verification.".into())}
                             </span>
-                        </div>
-                    </div>
+                        </span>
+                    </button>
                     <div class="app-sidebar__footer-toolbar">
                         <ThemeToggle/>
                     </div>

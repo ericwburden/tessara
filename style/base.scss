@@ -1528,6 +1528,16 @@ body.tessara-app .app-sidebar__account-summary {
   align-items: center;
 }
 
+body.tessara-app .app-sidebar__account-summary-toggle {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent !important;
+  box-shadow: none;
+  color: inherit;
+  text-align: left;
+}
+
 body.tessara-app .app-sidebar__identity,
 body.tessara-app .app-sidebar__context-stack,
 body.tessara-app .app-sidebar__footer-toolbar {
@@ -1588,9 +1598,32 @@ body.tessara-app .app-sidebar__identity-email {
   font-size: 0.82rem;
 }
 
-body.tessara-app .app-sidebar__rail-profile {
+body.tessara-app button.app-sidebar__rail-profile {
+  display: inline-flex;
+  width: 2.5rem;
+  min-width: 2.5rem;
+  height: 2.5rem !important;
+  min-height: 2.5rem !important;
+  padding: 0 !important;
+  border: 0 !important;
+  appearance: none;
+  background: none !important;
+  background-color: transparent !important;
+  box-shadow: none;
   align-items: center;
   justify-content: center;
+}
+
+body.tessara-app button.app-sidebar__rail-profile:hover,
+body.tessara-app button.app-sidebar__rail-profile:active,
+body.tessara-app button.app-sidebar__rail-profile:focus-visible,
+body.tessara-app .app-sidebar__account-summary-toggle:hover,
+body.tessara-app .app-sidebar__account-summary-toggle:active,
+body.tessara-app .app-sidebar__account-summary-toggle:focus-visible {
+  border: 0;
+  outline: none;
+  background: transparent !important;
+  box-shadow: none;
 }
 
 body.tessara-app .app-sidebar__rail-profile-avatar {
@@ -2278,6 +2311,9 @@ body.tessara-app .app-shell--migration .app-sidebar {
 
   html[data-shell-ready='true'] body.tessara-app[data-shell-viewport='tablet'][data-sidebar-state='collapsed'] .app-sidebar__rail-profile {
     display: inline-flex !important;
+    width: 2.5rem;
+    min-width: 2.5rem;
+    justify-self: center;
   }
 
   html[data-shell-ready='true'] body.tessara-app[data-shell-viewport='tablet'][data-sidebar-state='collapsed'] .app-sidebar__brand-mark {
@@ -2352,15 +2388,15 @@ body.tessara-app .app-shell--migration .app-sidebar {
     display: none;
   }
 
-  html[data-shell-ready='true'] body.tessara-app[data-shell-viewport='mobile'][data-search-state='open'] .top-app-bar__row {
-    align-items: flex-start;
-  }
-
   html[data-shell-ready='true'] body.tessara-app[data-shell-viewport='mobile'][data-search-state='open'] .top-app-bar__search {
     display: block;
-    order: 3;
-    flex: 1 0 100%;
-    min-width: 100%;
+    position: fixed;
+    top: 1rem;
+    left: 1rem;
+    right: 1rem;
+    z-index: 60;
+    min-width: 0;
+    flex: none;
   }
 
   body.tessara-app .app-utility-button.app-utility-button--search {
