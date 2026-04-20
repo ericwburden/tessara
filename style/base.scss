@@ -495,18 +495,14 @@ body.tessara-app .organization-explorer-toggle__glyph {
   height: 0.85rem;
   line-height: 1;
 }
-body.tessara-app .organization-explorer-toggle__glyph::before {
-  content: "";
-  width: 0.42rem;
-  height: 0.42rem;
-  border-right: 2px solid currentColor;
-  border-bottom: 2px solid currentColor;
-  transform: rotate(-45deg);
+body.tessara-app .organization-explorer-toggle__glyph > i {
+  font-size: 0.75rem;
+  line-height: 1;
   transition: transform 120ms ease-out;
 }
 body.tessara-app .organization-explorer-toggle[aria-expanded="true"]
-  .organization-explorer-toggle__glyph::before {
-  transform: rotate(45deg) translateY(-0.04rem);
+  .organization-explorer-toggle__glyph > i {
+  transform: rotate(90deg);
 }
 body.tessara-app .organization-explorer-toggle-spacer {
   display: block;
