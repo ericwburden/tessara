@@ -259,25 +259,6 @@ mod hydrate {
         parent_node_id.unwrap_or("__root__").to_string()
     }
 
-    fn metadata_preview(metadata: &Value) -> String {
-        let Some(values) = metadata.as_object() else {
-            return "No metadata values".into();
-        };
-        if values.is_empty() {
-            return "No metadata values".into();
-        }
-        let keys = values.keys().take(3).cloned().collect::<Vec<_>>();
-        if values.len() > 3 {
-            format!(
-                "Metadata: {} and {} more",
-                keys.join(", "),
-                values.len() - 3
-            )
-        } else {
-            format!("Metadata: {}", keys.join(", "))
-        }
-    }
-
     fn format_metadata_value(value: &Value) -> String {
         if let Some(boolean) = value.as_bool() {
             return if boolean { "Yes".into() } else { "No".into() };
@@ -502,7 +483,7 @@ mod hydrate {
             String::new()
         };
         format!(
-            r#"<section class="page-panel nested-form-panel organization-selected-work"><div class="organization-selected-work__header"><p class="eyebrow">{}</p><h3>{}</h3><p class="muted">{} · Parent: {}</p><div class="organization-selected-work__path">{}</div></div>{}<section class="detail-section box organization-selected-work__summary"><h4>Node Summary</h4><p class="muted">Type: {} | Plural label: {}</p><p class="muted">Related forms: {} | Related responses: {} | Related dashboards: {}</p></section><section class="detail-section box organization-selected-work__metadata"><h4>Metadata</h4>{}</section><section class="detail-section box organization-selected-work__management"><h4>Management</h4>{}{}{}</section></section>"#,
+            r#"<section class="organization-selected-work"><div class="organization-selected-work__header"><p class="eyebrow">{}</p><h3>{}</h3><p class="muted">{} · Parent: {}</p><div class="organization-selected-work__path">{}</div></div>{}<section class="detail-section box organization-selected-work__summary"><h4>Node Summary</h4><p class="muted">Type: {} | Plural label: {}</p><p class="muted">Related forms: {} | Related responses: {} | Related dashboards: {}</p></section><section class="detail-section box organization-selected-work__metadata"><h4>Metadata</h4>{}</section><section class="detail-section box organization-selected-work__management"><h4>Management</h4>{}{}{}</section></section>"#,
             escape_html(&detail.node_type_singular_label),
             escape_html(&detail.name),
             escape_html(&detail.node_type_singular_label),
@@ -545,9 +526,22 @@ mod hydrate {
                 )
             };
             let child_count = children.len();
+            let summary = if child_count == 0 {
+                "No visible children".to_string()
+            } else {
+                format!(
+                    "{} visible {}",
+                    child_count,
+                    if child_count == 1 {
+                        "child"
+                    } else {
+                        "children"
+                    }
+                )
+            };
 
             format!(
-                r#"<div class="organization-explorer-branch" style="--organization-depth:{}"><button class="organization-explorer-row" type="button" data-select-node-id="{}" data-selected="{}"><span class="organization-explorer-row__type">{}</span><span class="organization-explorer-row__name">{}</span><span class="organization-explorer-row__meta">{}{} visible {}</span></button>{}</div>"#,
+                r#"<div class="organization-explorer-branch" style="--organization-depth:{}"><button class="organization-explorer-row" type="button" data-select-node-id="{}" data-selected="{}"><span class="organization-explorer-row__copy"><span class="organization-explorer-row__type">{}</span><span class="organization-explorer-row__name">{}</span></span><span class="organization-explorer-row__summary">{}</span></button>{}</div>"#,
                 depth,
                 escape_html(&node.id),
                 if Some(node.id.as_str()) == selected_node_id {
@@ -557,13 +551,7 @@ mod hydrate {
                 },
                 escape_html(&node.node_type_singular_label),
                 escape_html(&node.name),
-                escape_html(&metadata_preview(&node.metadata)),
-                child_count,
-                if child_count == 1 {
-                    "child"
-                } else {
-                    "children"
-                },
+                escape_html(&summary),
                 child_html,
             )
         }
@@ -1323,14 +1311,12 @@ pub fn OrganizationListPage() -> impl IntoView {
                     title="Explorer"
                     description="Traverse the visible hierarchy with a quiet indented explorer instead of card-per-node navigation."
                 >
-                    <section class="page-panel nested-form-panel organization-explorer-panel">
-                        <div class="page-title-row">
-                            <div>
-                                <h2 id="organization-list-title">"Visible Hierarchy"</h2>
-                                <p id="organization-list-context" class="muted">
-                                    "Loading scope-aware hierarchy context."
-                                </p>
-                            </div>
+                    <div class="organization-explorer-panel">
+                        <div class="organization-section-heading organization-explorer-panel__header">
+                            <h2 id="organization-list-title">"Visible Hierarchy"</h2>
+                            <p id="organization-list-context" class="muted">
+                                "Loading scope-aware hierarchy context."
+                            </p>
                         </div>
                         <p id="organization-list-status" class="muted">
                             "Loading organization hierarchy..."
@@ -1338,7 +1324,7 @@ pub fn OrganizationListPage() -> impl IntoView {
                         <div id="organization-directory-tree" class="organization-explorer-tree">
                             <p class="muted">"Loading scoped organization records..."</p>
                         </div>
-                    </section>
+                    </div>
                 </Panel>
                 <Panel
                     title="Selected Node"
