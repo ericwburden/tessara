@@ -28,6 +28,7 @@ std::thread_local! {
     static SHELL_CHROME_BOUND: Cell<bool> = const { Cell::new(false) };
     static TABLET_SIDEBAR_EXPANDED: Cell<bool> = const { Cell::new(false) };
     static MOBILE_SIDEBAR_OPEN: Cell<bool> = const { Cell::new(false) };
+    static MOBILE_SEARCH_OPEN: Cell<bool> = const { Cell::new(false) };
 }
 
 #[derive(Clone, Deserialize, PartialEq, Eq)]
@@ -479,13 +480,22 @@ fn apply_shell_chrome_state() {
 
     if viewport != "mobile" {
         MOBILE_SIDEBAR_OPEN.with(|open| open.set(false));
+        MOBILE_SEARCH_OPEN.with(|open| open.set(false));
     }
 
     let state = shell_sidebar_state(viewport);
+    let search_state = MOBILE_SEARCH_OPEN.with(|open| {
+        if viewport == "mobile" && open.get() {
+            "open"
+        } else {
+            "closed"
+        }
+    });
 
     root.set_attribute("data-shell-ready", "true").ok();
     body.set_attribute("data-shell-viewport", viewport).ok();
     body.set_attribute("data-sidebar-state", state).ok();
+    body.set_attribute("data-search-state", search_state).ok();
 
     if let Some(sidebar) = document.get_element_by_id("app-sidebar") {
         sidebar.set_attribute("data-sidebar-state", state).ok();
@@ -527,6 +537,39 @@ fn apply_shell_chrome_state() {
         toggle.set_attribute("aria-label", label).ok();
     }
 
+    if let Ok(Some(search_toggle)) = document.query_selector(".app-utility-button--search") {
+        search_toggle
+            .set_attribute(
+                "aria-expanded",
+                if search_state == "open" {
+                    "true"
+                } else {
+                    "false"
+                },
+            )
+            .ok();
+        search_toggle
+            .set_attribute(
+                "aria-label",
+                if search_state == "open" {
+                    "Close search"
+                } else {
+                    "Open search"
+                },
+            )
+            .ok();
+        search_toggle
+            .set_attribute(
+                "title",
+                if search_state == "open" {
+                    "Close search"
+                } else {
+                    "Open search"
+                },
+            )
+            .ok();
+    }
+
     if let Ok(Some(close_button)) = document.query_selector(".app-sidebar-close") {
         sync_shell_control_visibility(
             &close_button,
@@ -542,7 +585,10 @@ fn apply_shell_chrome_state() {
 #[cfg(feature = "hydrate")]
 fn toggle_shell_sidebar() {
     match shell_viewport() {
-        "mobile" => MOBILE_SIDEBAR_OPEN.with(|open| open.set(!open.get())),
+        "mobile" => {
+            MOBILE_SEARCH_OPEN.with(|open| open.set(false));
+            MOBILE_SIDEBAR_OPEN.with(|open| open.set(!open.get()));
+        }
         "tablet" => TABLET_SIDEBAR_EXPANDED.with(|expanded| expanded.set(!expanded.get())),
         _ => {}
     }
@@ -557,6 +603,31 @@ fn close_shell_sidebar() {
         _ => {}
     }
     apply_shell_chrome_state();
+}
+
+#[cfg(feature = "hydrate")]
+fn toggle_mobile_search() {
+    if shell_viewport() != "mobile" {
+        return;
+    }
+
+    let should_focus = MOBILE_SEARCH_OPEN.with(|open| {
+        let next = !open.get();
+        open.set(next);
+        next
+    });
+    MOBILE_SIDEBAR_OPEN.with(|open| open.set(false));
+    apply_shell_chrome_state();
+
+    if should_focus {
+        if let Some(document) = window().and_then(|window| window.document()) {
+            if let Some(input) = document.get_element_by_id("global-search") {
+                if let Ok(input) = input.dyn_into::<web_sys::HtmlInputElement>() {
+                    input.focus().ok();
+                }
+            }
+        }
+    }
 }
 
 #[cfg(feature = "hydrate")]
@@ -588,6 +659,29 @@ fn install_shell_chrome() {
 
         if element.closest("#app-nav-toggle").ok().flatten().is_some() {
             toggle_shell_sidebar();
+            return;
+        }
+
+        if element
+            .closest(".app-utility-button--search")
+            .ok()
+            .flatten()
+            .is_some()
+        {
+            toggle_mobile_search();
+            return;
+        }
+
+        if element
+            .closest(".app-sidebar__rail-profile")
+            .ok()
+            .flatten()
+            .is_some()
+        {
+            if shell_viewport() == "tablet" {
+                TABLET_SIDEBAR_EXPANDED.with(|expanded| expanded.set(true));
+                apply_shell_chrome_state();
+            }
             return;
         }
 
@@ -982,15 +1076,17 @@ fn SidebarFooterContext(
 
             view! {
                 <section class="app-sidebar__footer-context" id="shell-footer-context">
-                    <div
+                    <button
                         class="app-sidebar__rail-profile"
+                        type="button"
                         title=identity_label.clone()
                         aria-label=rail_profile_label
+                        data-sidebar-profile
                     >
                         <span class="app-sidebar__rail-profile-avatar" aria-hidden="true">
                             {identity_initials.clone()}
                         </span>
-                    </div>
+                    </button>
                     <section id="shell-account-context" class="selection-panel app-sidebar__supplemental app-sidebar__context-composite">
                         <div class="app-sidebar__account-summary">
                             <span class="app-sidebar__avatar" aria-hidden="true">{identity_initials}</span>
@@ -1026,13 +1122,15 @@ fn SidebarFooterContext(
         }
         None => view! {
             <section class="app-sidebar__footer-context" id="shell-footer-context">
-                <div
+                <button
                     class="app-sidebar__rail-profile"
+                    type="button"
                     title="Account context"
                     aria-label="Account profile"
+                    data-sidebar-profile
                 >
                     <span class="app-sidebar__rail-profile-avatar" aria-hidden="true">"TS"</span>
-                </div>
+                </button>
                 <section id="shell-account-context" class="selection-panel app-sidebar__supplemental app-sidebar__context-composite">
                     <div class="app-sidebar__account-summary">
                         <span class="app-sidebar__avatar" aria-hidden="true">"TS"</span>
@@ -1440,7 +1538,7 @@ pub fn NativePage(
                                     <label class="is-sr-only" for="global-search">"Global search"</label>
                                     <input id="global-search" class="input app-search-input" type="search" placeholder="Search Tessara" autocomplete="off" />
                                 </div>
-                                <TopBarUtilityButton aria_label="Search Tessara" icon="fa-magnifying-glass" class_name="app-utility-button--search" disabled=true/>
+                                <TopBarUtilityButton aria_label="Open search" icon="fa-magnifying-glass" class_name="app-utility-button--search"/>
                                 <TopBarUtilityButton aria_label="Notifications" icon="fa-bell" disabled=true/>
                                 <TopBarUtilityButton aria_label="Help" icon="fa-circle-question" disabled=true/>
                             </div>

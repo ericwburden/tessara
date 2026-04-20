@@ -1076,7 +1076,7 @@ body.tessara-app .button,
 body.tessara-app .button.is-light,
 body.tessara-app .button-link.button,
 body.tessara-app .button-link:not(.button),
-body.tessara-app button:not(.button):not(.theme-toggle-button) {
+body.tessara-app button:not(.button):not(.theme-toggle-button):not(.app-sidebar-backdrop) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1109,7 +1109,7 @@ body.tessara-app .button-link.button.is-light {
 body.tessara-app .button:hover,
 body.tessara-app .button-link.button:hover,
 body.tessara-app .button-link:not(.button):hover,
-body.tessara-app button:not(.button):not(.theme-toggle-button):hover {
+body.tessara-app button:not(.button):not(.theme-toggle-button):not(.app-sidebar-backdrop):hover {
   border-color: var(--tessara-button-hover-border);
   background: var(--tessara-button-hover-bg) !important;
   color: var(--tessara-button-hover-fg) !important;
@@ -1348,6 +1348,17 @@ body.tessara-app .app-sidebar-backdrop {
   background: rgba(15, 23, 42, 0.36);
   pointer-events: none;
   opacity: 0;
+  box-shadow: none;
+  cursor: pointer;
+}
+
+body.tessara-app .app-sidebar-backdrop:hover,
+body.tessara-app .app-sidebar-backdrop:active,
+body.tessara-app .app-sidebar-backdrop:focus-visible {
+  border: 0;
+  outline: none;
+  background: rgba(15, 23, 42, 0.36) !important;
+  box-shadow: none;
 }
 
 body.tessara-app .shell-toast {
@@ -2341,6 +2352,17 @@ body.tessara-app .app-shell--migration .app-sidebar {
     display: none;
   }
 
+  html[data-shell-ready='true'] body.tessara-app[data-shell-viewport='mobile'][data-search-state='open'] .top-app-bar__row {
+    align-items: flex-start;
+  }
+
+  html[data-shell-ready='true'] body.tessara-app[data-shell-viewport='mobile'][data-search-state='open'] .top-app-bar__search {
+    display: block;
+    order: 3;
+    flex: 1 0 100%;
+    min-width: 100%;
+  }
+
   body.tessara-app .app-utility-button.app-utility-button--search {
     display: inline-flex !important;
   }
@@ -2406,7 +2428,7 @@ body.tessara-app .app-shell--migration .app-sidebar {
 
   html[data-shell-ready='true'] body.tessara-app[data-shell-viewport='mobile'] .app-sidebar-backdrop {
     position: fixed;
-    inset: 0 0 0 min(288px, 100vw);
+    inset: 0;
     z-index: 30;
     display: block !important;
     opacity: 0;
