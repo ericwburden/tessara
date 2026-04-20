@@ -27,6 +27,7 @@ fn redirect(_path: &str) {}
 std::thread_local! {
     static SHELL_CHROME_BOUND: Cell<bool> = const { Cell::new(false) };
     static TABLET_SIDEBAR_EXPANDED: Cell<bool> = const { Cell::new(false) };
+    static TABLET_PROFILE_OPEN: Cell<bool> = const { Cell::new(false) };
     static MOBILE_SIDEBAR_OPEN: Cell<bool> = const { Cell::new(false) };
     static MOBILE_SEARCH_OPEN: Cell<bool> = const { Cell::new(false) };
 }
@@ -482,10 +483,20 @@ fn apply_shell_chrome_state() {
         MOBILE_SIDEBAR_OPEN.with(|open| open.set(false));
         MOBILE_SEARCH_OPEN.with(|open| open.set(false));
     }
+    if viewport != "tablet" {
+        TABLET_PROFILE_OPEN.with(|open| open.set(false));
+    }
 
     let state = shell_sidebar_state(viewport);
     let search_state = MOBILE_SEARCH_OPEN.with(|open| {
         if viewport == "mobile" && open.get() {
+            "open"
+        } else {
+            "closed"
+        }
+    });
+    let profile_state = TABLET_PROFILE_OPEN.with(|open| {
+        if viewport == "tablet" && state == "collapsed" && open.get() {
             "open"
         } else {
             "closed"
@@ -496,6 +507,7 @@ fn apply_shell_chrome_state() {
     body.set_attribute("data-shell-viewport", viewport).ok();
     body.set_attribute("data-sidebar-state", state).ok();
     body.set_attribute("data-search-state", search_state).ok();
+    body.set_attribute("data-profile-state", profile_state).ok();
 
     if let Some(sidebar) = document.get_element_by_id("app-sidebar") {
         sidebar.set_attribute("data-sidebar-state", state).ok();
@@ -578,7 +590,19 @@ fn apply_shell_chrome_state() {
     }
 
     if let Ok(Some(backdrop)) = document.query_selector(".app-sidebar-backdrop") {
-        sync_shell_control_visibility(&backdrop, viewport == "mobile" && state == "overlay-open");
+        let backdrop_visible = (viewport == "mobile" && state == "overlay-open")
+            || (viewport == "tablet" && profile_state == "open");
+        sync_shell_control_visibility(&backdrop, backdrop_visible);
+        backdrop
+            .set_attribute(
+                "aria-label",
+                if viewport == "tablet" && profile_state == "open" {
+                    "Close account menu"
+                } else {
+                    "Close navigation"
+                },
+            )
+            .ok();
     }
 }
 
@@ -589,7 +613,10 @@ fn toggle_shell_sidebar() {
             MOBILE_SEARCH_OPEN.with(|open| open.set(false));
             MOBILE_SIDEBAR_OPEN.with(|open| open.set(!open.get()));
         }
-        "tablet" => TABLET_SIDEBAR_EXPANDED.with(|expanded| expanded.set(!expanded.get())),
+        "tablet" => {
+            TABLET_PROFILE_OPEN.with(|open| open.set(false));
+            TABLET_SIDEBAR_EXPANDED.with(|expanded| expanded.set(!expanded.get()));
+        }
         _ => {}
     }
     apply_shell_chrome_state();
@@ -599,7 +626,14 @@ fn toggle_shell_sidebar() {
 fn close_shell_sidebar() {
     match shell_viewport() {
         "mobile" => MOBILE_SIDEBAR_OPEN.with(|open| open.set(false)),
-        "tablet" => TABLET_SIDEBAR_EXPANDED.with(|expanded| expanded.set(false)),
+        "tablet" => {
+            let profile_open = TABLET_PROFILE_OPEN.with(|open| open.get());
+            if profile_open {
+                TABLET_PROFILE_OPEN.with(|open| open.set(false));
+            } else {
+                TABLET_SIDEBAR_EXPANDED.with(|expanded| expanded.set(false));
+            }
+        }
         _ => {}
     }
     apply_shell_chrome_state();
@@ -689,20 +723,10 @@ fn install_shell_chrome() {
             .is_some()
         {
             if shell_viewport() == "tablet" {
-                TABLET_SIDEBAR_EXPANDED.with(|expanded| expanded.set(!expanded.get()));
-                apply_shell_chrome_state();
-            }
-            return;
-        }
-
-        if element
-            .closest(".app-sidebar__account-summary-toggle")
-            .ok()
-            .flatten()
-            .is_some()
-        {
-            if shell_viewport() == "tablet" {
-                TABLET_SIDEBAR_EXPANDED.with(|expanded| expanded.set(!expanded.get()));
+                let sidebar_expanded = TABLET_SIDEBAR_EXPANDED.with(|expanded| expanded.get());
+                if !sidebar_expanded {
+                    TABLET_PROFILE_OPEN.with(|open| open.set(!open.get()));
+                }
                 apply_shell_chrome_state();
             }
             return;
@@ -748,6 +772,7 @@ fn install_shell_chrome() {
 
     let keydown = wasm_bindgen::closure::Closure::wrap(Box::new(move |event: KeyboardEvent| {
         if event.key() == "Escape" {
+            close_mobile_search();
             close_shell_sidebar();
         }
     }) as Box<dyn FnMut(_)>);
@@ -1130,21 +1155,16 @@ fn SidebarFooterContext(
                         </span>
                     </button>
                     <section id="shell-account-context" class="selection-panel app-sidebar__supplemental app-sidebar__context-composite">
-                        <button
-                            class="app-sidebar__account-summary app-sidebar__account-summary-toggle"
-                            type="button"
-                            aria-label="Toggle account context"
-                            data-sidebar-profile
-                        >
+                        <div class="app-sidebar__account-summary">
                             <span class="app-sidebar__avatar" aria-hidden="true">{identity_initials}</span>
-                            <span class="app-sidebar__identity">
-                                <span class="app-sidebar__identity-row">
+                            <div class="app-sidebar__identity">
+                                <div class="app-sidebar__identity-row">
                                     <strong class="app-sidebar__identity-name">{identity_label}</strong>
                                     <span class="app-sidebar__context-badge">{profile_label}</span>
-                                </span>
+                                </div>
                                 <span class="app-sidebar__identity-email">{account.email.clone()}</span>
-                            </span>
-                        </button>
+                            </div>
+                        </div>
                         <Show when=move || has_active_delegate>
                             <div class="app-sidebar__context-stack">
                                 <p class="muted app-sidebar__context-note">
@@ -1180,22 +1200,17 @@ fn SidebarFooterContext(
                     <span class="app-sidebar__rail-profile-avatar" aria-hidden="true">"TS"</span>
                 </button>
                 <section id="shell-account-context" class="selection-panel app-sidebar__supplemental app-sidebar__context-composite">
-                    <button
-                        class="app-sidebar__account-summary app-sidebar__account-summary-toggle"
-                        type="button"
-                        aria-label="Toggle account context"
-                        data-sidebar-profile
-                    >
+                    <div class="app-sidebar__account-summary">
                         <span class="app-sidebar__avatar" aria-hidden="true">"TS"</span>
-                        <span class="app-sidebar__identity">
-                            <span class="app-sidebar__identity-row">
+                        <div class="app-sidebar__identity">
+                            <div class="app-sidebar__identity-row">
                                 <strong class="app-sidebar__identity-name">"Account Context"</strong>
-                            </span>
+                            </div>
                             <span class="app-sidebar__identity-email">
                                 {error.unwrap_or_else(|| "Account context loads after session verification.".into())}
                             </span>
-                        </span>
-                    </button>
+                        </div>
+                    </div>
                     <div class="app-sidebar__footer-toolbar">
                         <ThemeToggle/>
                     </div>
