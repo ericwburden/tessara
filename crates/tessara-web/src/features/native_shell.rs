@@ -714,58 +714,62 @@ fn ThemeToggle() -> impl IntoView {
                     <i class=move || theme_choice_icon.get()></i>
                 </span>
             </button>
-            <Show when=move || popover_open.get()>
-                <div class="theme-toggle__popover" role="menu" aria-label="Theme options">
-                    <button
-                        class="theme-toggle__option"
-                        class:is-active=move || preference.get() == "system"
-                        type="button"
-                        role="menuitemradio"
-                        aria-checked=move || if preference.get() == "system" { "true" } else { "false" }
-                        on:click=move |_| {
-                            apply_preference.run("system".into());
-                            popover_open.set(false);
-                        }
-                    >
-                        <span class="theme-toggle__option-icon" aria-hidden="true">
-                            <i class="fa-solid fa-circle-half-stroke"></i>
-                        </span>
-                        <span class="theme-toggle__option-label">"System"</span>
-                    </button>
-                    <button
-                        class="theme-toggle__option"
-                        class:is-active=move || preference.get() == "light"
-                        type="button"
-                        role="menuitemradio"
-                        aria-checked=move || if preference.get() == "light" { "true" } else { "false" }
-                        on:click=move |_| {
-                            apply_preference.run("light".into());
-                            popover_open.set(false);
-                        }
-                    >
-                        <span class="theme-toggle__option-icon" aria-hidden="true">
-                            <i class="fa-solid fa-sun"></i>
-                        </span>
-                        <span class="theme-toggle__option-label">"Light"</span>
-                    </button>
-                    <button
-                        class="theme-toggle__option"
-                        class:is-active=move || preference.get() == "dark"
-                        type="button"
-                        role="menuitemradio"
-                        aria-checked=move || if preference.get() == "dark" { "true" } else { "false" }
-                        on:click=move |_| {
-                            apply_preference.run("dark".into());
-                            popover_open.set(false);
-                        }
-                    >
-                        <span class="theme-toggle__option-icon" aria-hidden="true">
-                            <i class="fa-solid fa-moon"></i>
-                        </span>
-                        <span class="theme-toggle__option-label">"Dark"</span>
-                    </button>
-                </div>
-            </Show>
+            <div
+                class="theme-toggle__popover"
+                class:is-open=move || popover_open.get()
+                role="menu"
+                aria-label="Theme options"
+                hidden=move || !popover_open.get()
+            >
+                <button
+                    class="theme-toggle__option"
+                    class:is-active=move || preference.get() == "system"
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked=move || if preference.get() == "system" { "true" } else { "false" }
+                    on:click=move |_| {
+                        apply_preference.run("system".into());
+                        popover_open.set(false);
+                    }
+                >
+                    <span class="theme-toggle__option-icon" aria-hidden="true">
+                        <i class="fa-solid fa-circle-half-stroke"></i>
+                    </span>
+                    <span class="theme-toggle__option-label">"System"</span>
+                </button>
+                <button
+                    class="theme-toggle__option"
+                    class:is-active=move || preference.get() == "light"
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked=move || if preference.get() == "light" { "true" } else { "false" }
+                    on:click=move |_| {
+                        apply_preference.run("light".into());
+                        popover_open.set(false);
+                    }
+                >
+                    <span class="theme-toggle__option-icon" aria-hidden="true">
+                        <i class="fa-solid fa-sun"></i>
+                    </span>
+                    <span class="theme-toggle__option-label">"Light"</span>
+                </button>
+                <button
+                    class="theme-toggle__option"
+                    class:is-active=move || preference.get() == "dark"
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked=move || if preference.get() == "dark" { "true" } else { "false" }
+                    on:click=move |_| {
+                        apply_preference.run("dark".into());
+                        popover_open.set(false);
+                    }
+                >
+                    <span class="theme-toggle__option-icon" aria-hidden="true">
+                        <i class="fa-solid fa-moon"></i>
+                    </span>
+                    <span class="theme-toggle__option-label">"Dark"</span>
+                </button>
+            </div>
         </div>
     }
 }
@@ -787,6 +791,46 @@ fn ThemeToggle() -> impl IntoView {
                     <i class="fa-solid fa-circle-half-stroke"></i>
                 </span>
             </button>
+            <div
+                class="theme-toggle__popover"
+                role="menu"
+                aria-label="Theme options"
+                hidden
+            >
+                <button
+                    class="theme-toggle__option is-active"
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked="true"
+                >
+                    <span class="theme-toggle__option-icon" aria-hidden="true">
+                        <i class="fa-solid fa-circle-half-stroke"></i>
+                    </span>
+                    <span class="theme-toggle__option-label">"System"</span>
+                </button>
+                <button
+                    class="theme-toggle__option"
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked="false"
+                >
+                    <span class="theme-toggle__option-icon" aria-hidden="true">
+                        <i class="fa-solid fa-sun"></i>
+                    </span>
+                    <span class="theme-toggle__option-label">"Light"</span>
+                </button>
+                <button
+                    class="theme-toggle__option"
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked="false"
+                >
+                    <span class="theme-toggle__option-icon" aria-hidden="true">
+                        <i class="fa-solid fa-moon"></i>
+                    </span>
+                    <span class="theme-toggle__option-label">"Dark"</span>
+                </button>
+            </div>
         </div>
     }
 }
