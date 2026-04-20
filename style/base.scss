@@ -1139,7 +1139,8 @@ body.tessara-app .button-link.button.is-primary:hover {
 }
 
 body.tessara-app main.shell.app-shell {
-  max-width: 1440px;
+  width: 100%;
+  max-width: none;
   padding: 1rem 1rem 2.5rem;
   display: grid;
   gap: 1rem;
@@ -1339,6 +1340,7 @@ body.tessara-app .app-layout {
   grid-template-columns: 256px minmax(0, 1fr);
   gap: 1rem;
   align-items: start;
+  min-height: 0;
 }
 
 body.tessara-app .app-sidebar {
@@ -1350,6 +1352,7 @@ body.tessara-app .app-sidebar {
   gap: 1rem;
   padding: 1rem;
   box-shadow: none;
+  min-height: 0;
 }
 
 body.tessara-app .app-sidebar__header {
@@ -1367,7 +1370,7 @@ body.tessara-app .app-sidebar__title {
 body.tessara-app .app-sidebar__content {
   display: grid;
   gap: 1rem;
-  min-height: 100%;
+  min-height: 0;
   align-content: stretch;
 }
 
@@ -1560,6 +1563,7 @@ body.tessara-app .app-main {
   display: grid;
   gap: 1.25rem;
   padding: 1rem;
+  min-height: 0;
 }
 
 body.tessara-app .app-main > * {
@@ -1868,12 +1872,15 @@ body.tessara-app .app-shell--migration .app-sidebar {
     grid-template-columns: 284px minmax(0, 1fr);
     gap: 0;
     align-items: stretch;
+    min-height: 100%;
+    height: 100%;
     border: 1px solid var(--tessara-border);
-    border-radius: 24px;
+    border-radius: 0;
     background:
       linear-gradient(180deg, color-mix(in srgb, var(--tessara-surface) 94%, transparent), color-mix(in srgb, var(--tessara-soft-surface) 88%, transparent)),
       linear-gradient(135deg, color-mix(in srgb, var(--tessara-link) 6%, transparent), transparent 30rem);
-    box-shadow: var(--tessara-shadow);
+    box-shadow: none;
+    overflow: hidden;
   }
 
   body.tessara-app aside.panel.box.app-sidebar,
@@ -1890,8 +1897,10 @@ body.tessara-app .app-shell--migration .app-sidebar {
     top: auto;
     max-width: none;
     align-self: stretch;
-    min-height: 100%;
+    min-height: 0;
+    height: 100%;
     padding: 1.5rem 1.25rem;
+    overflow: hidden;
   }
 
   body.tessara-app aside.panel.box.app-sidebar {
@@ -1903,6 +1912,9 @@ body.tessara-app .app-shell--migration .app-sidebar {
 
   body.tessara-app .app-main {
     padding: 1.5rem;
+    height: 100%;
+    overflow: auto;
+    align-content: start;
   }
 
   body.tessara-app .app-shell--administration .app-layout {
@@ -1924,30 +1936,58 @@ body.tessara-app .app-shell--migration .app-sidebar {
 
 @media (min-width: 768px) {
   body.tessara-app main.shell.app-shell {
-    padding: 1.5rem 1.5rem 3rem;
-    gap: 1.5rem;
+    min-height: 100dvh;
+    height: 100dvh;
+    padding: 0;
+    gap: 0;
   }
 
   body.tessara-app .app-main {
     padding: 1.5rem;
   }
+
+  body.tessara-app .app-layout {
+    min-height: 100%;
+    height: 100%;
+  }
+
+  body.tessara-app .app-sidebar {
+    min-height: 0;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  body.tessara-app .app-sidebar__content {
+    min-height: 0;
+    height: 100%;
+    overflow: auto;
+  }
+
+  body.tessara-app .app-main {
+    min-height: 0;
+    height: 100%;
+    overflow: auto;
+    align-content: start;
+  }
 }
 
 @media (min-width: 1408px) {
-  body.tessara-app main.shell.app-shell {
-    padding: 2rem 2.5rem 3rem;
-  }
-
   body.tessara-app .app-main {
     padding: 2rem;
   }
 }
 
 @media (max-width: 1023px) {
-  body.tessara-app .top-app-bar,
   body.tessara-app .top-app-bar__brand,
   body.tessara-app .top-app-bar__utilities {
     flex-wrap: wrap;
+  }
+
+  body.tessara-app .top-app-bar {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    align-content: stretch;
   }
 
   body.tessara-app .top-app-bar__search {
@@ -1974,12 +2014,14 @@ body.tessara-app .app-shell--migration .app-sidebar {
   html[data-shell-ready='true'] body.tessara-app[data-shell-viewport='tablet'] .app-layout {
     gap: 0;
     align-items: stretch;
+    min-height: 100%;
+    height: 100%;
     border: 1px solid var(--tessara-border);
-    border-radius: 24px;
+    border-radius: 0;
     background:
       linear-gradient(180deg, color-mix(in srgb, var(--tessara-surface) 94%, transparent), color-mix(in srgb, var(--tessara-soft-surface) 88%, transparent)),
       linear-gradient(135deg, color-mix(in srgb, var(--tessara-link) 6%, transparent), transparent 30rem);
-    box-shadow: var(--tessara-shadow);
+    box-shadow: none;
     overflow: hidden;
     grid-template-columns: 72px minmax(0, 1fr);
   }
@@ -1999,7 +2041,8 @@ body.tessara-app .app-shell--migration .app-sidebar {
 
   html[data-shell-ready='true'] body.tessara-app[data-shell-viewport='tablet'] .app-sidebar {
     align-self: stretch;
-    min-height: 100%;
+    min-height: 0;
+    height: 100%;
     padding-block: 1rem;
   }
 
@@ -2129,7 +2172,7 @@ body.tessara-app .app-shell--migration .app-sidebar {
 
   html[data-shell-ready='true'] body.tessara-app[data-shell-viewport='mobile'] .app-sidebar-backdrop {
     position: fixed;
-    inset: 0;
+    inset: 0 0 0 min(288px, 100vw);
     z-index: 30;
     display: block !important;
     opacity: 0;
