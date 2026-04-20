@@ -166,9 +166,45 @@ mod hydrate {
         )
     }
 
+    fn render_queue_metric(count: usize, singular: &str, plural: &str) -> String {
+        let label = if count == 1 { singular } else { plural };
+        format!(
+            r#"<article class="home-metric response-metric"><strong>{count}</strong><span>{label}</span></article>"#
+        )
+    }
+
+    fn render_queue_metrics(
+        pending_count: usize,
+        draft_count: usize,
+        submitted_count: usize,
+    ) -> String {
+        [
+            render_queue_metric(pending_count, "assigned start", "assigned starts"),
+            render_queue_metric(draft_count, "draft response", "draft responses"),
+            render_queue_metric(submitted_count, "submitted response", "submitted responses"),
+            render_queue_metric(
+                pending_count + draft_count,
+                "item in flight",
+                "items in flight",
+            ),
+        ]
+        .join("")
+    }
+
+    fn render_queue_empty_state(title: &str, detail: &str) -> String {
+        format!(
+            r#"<div class="home-empty-state response-empty-state"><p><strong>{}</strong></p><p class="muted">{}</p></div>"#,
+            escape_html(title),
+            escape_html(detail)
+        )
+    }
+
     fn render_pending_cards(items: &[PendingWork]) -> String {
         if items.is_empty() {
-            return r#"<p class="muted">No assigned responses are ready to start.</p>"#.into();
+            return render_queue_empty_state(
+                "No assigned responses are ready to start.",
+                "New assignment-backed work will appear here when a workflow step is waiting on this queue.",
+            );
         }
         items.iter()
             .map(|item| {
@@ -178,7 +214,7 @@ mod hydrate {
                     .as_deref()
                     .unwrap_or("Current runtime");
                 format!(
-                    r#"<article class="record-card response-queue-card"><div class="page-title-row compact-title-row"><div><p class="eyebrow">Assigned Start</p><h4>{}</h4><p class="muted">{}</p></div><p class="response-queue-card__status">{}</p></div><div class="response-queue-card__meta"><p><strong>Form:</strong> {} {}</p><p><strong>Step:</strong> {}</p><p><strong>Assigned To:</strong> {}</p></div><div class="actions"><button class="button-link" type="button" data-workflow-assignment-id="{}">Start</button></div></article>"#,
+                    r#"<article class="home-queue-row response-queue-row response-queue-row--pending"><div class="home-queue-row__copy response-queue-row__copy"><p class="eyebrow">Assigned Start</p><strong>{}</strong><p class="muted">{}</p></div><div class="home-queue-row__meta response-queue-row__meta"><p><strong>Form:</strong> {} {}</p><p><strong>Step:</strong> {}</p><p><strong>Runtime:</strong> {}</p><p><strong>Assigned To:</strong> {}</p></div><div class="actions response-queue-row__actions"><button class="button-link" type="button" data-workflow-assignment-id="{}">Start</button></div></article>"#,
                     escape_html(&item.workflow_name),
                     escape_html(&item.node_name),
                     escape_html(&item.form_name),
@@ -195,7 +231,18 @@ mod hydrate {
 
     fn render_submission_cards(items: &[SubmissionSummary], show_edit: bool) -> String {
         if items.is_empty() {
-            return r#"<p class="muted">No responses found.</p>"#.into();
+            let (title, detail) = if show_edit {
+                (
+                    "No draft responses are waiting.",
+                    "Draft work will collect here once a response has been started and not yet submitted.",
+                )
+            } else {
+                (
+                    "No submitted responses found.",
+                    "Completed responses stay available here for read-only review and audit lookup.",
+                )
+            };
+            return render_queue_empty_state(title, detail);
         }
         items.iter()
             .map(|item| {
@@ -204,13 +251,24 @@ mod hydrate {
                 } else {
                     String::new()
                 };
+                let queue_label = if show_edit {
+                    "Draft Queue"
+                } else {
+                    "Submitted Response"
+                };
                 format!(
-                    r#"<article class="record-card response-queue-card"><div class="page-title-row compact-title-row"><div><p class="eyebrow">Response</p><h4>{}</h4><p class="muted">{}</p></div><p class="response-queue-card__status">{}</p></div><div class="response-queue-card__meta"><p><strong>Version:</strong> {}</p><p><strong>Node:</strong> {}</p></div><div class="actions"><a class="button-link" href="/app/responses/{}">View</a>{}</div></article>"#,
+                    r#"<article class="home-queue-row response-queue-row {}"><div class="home-queue-row__copy response-queue-row__copy"><p class="eyebrow">{}</p><strong>{}</strong><p class="muted">{}</p></div><div class="home-queue-row__meta response-queue-row__meta"><p><strong>Status:</strong> {}</p><p><strong>Version:</strong> {}</p><p><strong>Node:</strong> {}</p></div><div class="actions response-queue-row__actions"><a class="button-link" href="/app/responses/{}">View</a>{}</div></article>"#,
+                    if show_edit {
+                        "response-queue-row--draft"
+                    } else {
+                        "response-queue-row--submitted"
+                    },
+                    queue_label,
                     escape_html(&item.form_name),
+                    escape_html(&format!("{} · {}", item.version_label, item.node_name)),
                     escape_html(&item.status),
                     escape_html(&item.version_label),
                     escape_html(&item.node_name),
-                    escape_html(&item.status),
                     escape_html(&item.id),
                     edit
                 )
@@ -510,6 +568,10 @@ mod hydrate {
         match (pending, drafts, submitted) {
             (Ok(pending), Ok(drafts), Ok(submitted)) => {
                 set_text("response-pending-feedback", "");
+                set_html(
+                    "response-metric-strip",
+                    &render_queue_metrics(pending.len(), drafts.len(), submitted.len()),
+                );
                 set_html("response-pending-list", &render_pending_cards(&pending));
                 set_html(
                     "response-draft-list",
@@ -523,6 +585,10 @@ mod hydrate {
                 Ok(())
             }
             (Err(error), _, _) | (_, Err(error), _) | (_, _, Err(error)) => {
+                set_html(
+                    "response-metric-strip",
+                    &format!(r#"<p class="muted">{}</p>"#, escape_html(&error)),
+                );
                 set_html(
                     "response-pending-list",
                     &format!(r#"<p class="muted">{}</p>"#, escape_html(&error)),
@@ -617,6 +683,10 @@ mod hydrate {
                     }
                 }
                 Err(error) => {
+                    set_html(
+                        "response-metric-strip",
+                        &format!(r#"<p class="muted">{}</p>"#, escape_html(&error)),
+                    );
                     set_html(
                         "response-pending-list",
                         &format!(r#"<p class="muted">{}</p>"#, escape_html(&error)),
@@ -878,43 +948,88 @@ pub fn ResponsesListPage() -> impl IntoView {
                 BreadcrumbItem::current("Responses"),
             ]
         >
-            <PageHeader
-                eyebrow="Responses"
-                title="Responses"
-                description="Review assigned starts, resume draft work, and inspect submitted responses from one queue-oriented route."
-            />
-            <MetadataStrip items=vec![
-                ("Mode", "Directory".into()),
-                ("Surface", "Response work queue".into()),
-                ("State", "Loading drafts and submitted work".into()),
-            ]/>
-            <div id="response-context-switcher"></div>
-            <Panel
-                title="Assigned Starts"
-                description="Assignment-backed starts appear here, with manual start available only where the current access profile allows it."
-            >
-                <div id="response-start-actions" class="actions"></div>
-                <p id="response-pending-feedback" class="muted"></p>
-                <div id="response-pending-list" class="record-list">
-                    <p class="muted">"Loading published forms..."</p>
+            <section id="response-summary" class="home-summary response-summary">
+                <div class="home-summary__copy response-summary__copy">
+                    <p class="eyebrow">"Responses"</p>
+                    <h1>"Operational Queue"</h1>
+                    <p class="muted home-summary__description">
+                        "Start assigned work, resume drafts, and review submitted responses from one queue-first route."
+                    </p>
                 </div>
-            </Panel>
-            <Panel
-                title="Draft Queue"
-                description="Draft responses stay resumable from this route and keep the edit surface separate from queue browsing."
-            >
-                <div id="response-draft-list" class="record-list">
-                    <p class="muted">"Loading draft responses..."</p>
-                </div>
-            </Panel>
-            <Panel
-                title="Submitted Responses"
-                description="Submitted responses remain read-only and link to their detail screens."
-            >
-                <div id="response-submitted-list" class="record-list">
-                    <p class="muted">"Loading submitted responses..."</p>
-                </div>
-            </Panel>
+            </section>
+            <section id="response-metric-strip" class="home-metric-strip response-metric-strip">
+                <article class="home-metric response-metric">
+                    <strong>"--"</strong>
+                    <span>"assigned starts"</span>
+                </article>
+                <article class="home-metric response-metric">
+                    <strong>"--"</strong>
+                    <span>"draft responses"</span>
+                </article>
+                <article class="home-metric response-metric">
+                    <strong>"--"</strong>
+                    <span>"submitted responses"</span>
+                </article>
+                <article class="home-metric response-metric">
+                    <strong>"--"</strong>
+                    <span>"items in flight"</span>
+                </article>
+            </section>
+            <div class="home-workspace-grid response-workspace-grid">
+                <section class="home-primary-panel response-primary-panel">
+                    <div class="home-panel-header response-panel-header">
+                        <div class="home-panel-header__copy response-panel-header__copy">
+                            <p class="eyebrow">"Current Work"</p>
+                            <h2>"Queue by next action"</h2>
+                            <p class="muted">
+                                "Assigned starts and drafts stay primary so this route behaves like an operational inbox instead of a stack of management panels."
+                            </p>
+                        </div>
+                        <div id="response-start-actions" class="actions response-panel-actions"></div>
+                    </div>
+                    <div id="response-context-switcher"></div>
+                    <p id="response-pending-feedback" class="muted response-queue-feedback"></p>
+                    <section class="home-queue-panel response-queue-section">
+                        <div class="response-queue-section__header">
+                            <p class="eyebrow">"Assigned Starts"</p>
+                            <h3>"Ready to begin"</h3>
+                        </div>
+                        <div id="response-pending-list" class="home-queue-list response-queue-list">
+                            <p class="muted">"Loading assigned response work..."</p>
+                        </div>
+                    </section>
+                    <section class="home-queue-panel response-queue-section">
+                        <div class="response-queue-section__header">
+                            <p class="eyebrow">"Draft Queue"</p>
+                            <h3>"Resume saved work"</h3>
+                        </div>
+                        <div id="response-draft-list" class="home-queue-list response-queue-list">
+                            <p class="muted">"Loading draft responses..."</p>
+                        </div>
+                    </section>
+                </section>
+                <aside class="home-secondary-panel response-secondary-panel">
+                    <section class="home-secondary-section response-secondary-section">
+                        <div class="response-queue-section__header">
+                            <p class="eyebrow">"Submitted Responses"</p>
+                            <h3>"Read-only review"</h3>
+                            <p class="muted">
+                                "Completed responses stay available here for audit lookup without competing with active work."
+                            </p>
+                        </div>
+                        <div id="response-submitted-list" class="home-queue-list response-queue-list">
+                            <p class="muted">"Loading submitted responses..."</p>
+                        </div>
+                    </section>
+                    <section class="home-secondary-section response-secondary-section">
+                        <p class="eyebrow">"Queue Discipline"</p>
+                        <h3>"Delegation stays in the route, not on every row"</h3>
+                        <p class="muted">
+                            "The account context switcher stays above the active queue so delegated work remains visible without repeating the same ownership metadata on every response."
+                        </p>
+                    </section>
+                </aside>
+            </div>
         </NativePage>
     }
 }
