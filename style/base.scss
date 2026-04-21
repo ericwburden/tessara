@@ -2750,10 +2750,58 @@ body.tessara-app .form-builder-shell {
   padding: 1.2rem;
 }
 
-body.tessara-app .form-builder-toolbar {
+body.tessara-app .form-builder-lifecycle-strip,
+body.tessara-app .form-builder-lifecycle-strip__copy,
+body.tessara-app .form-builder-lifecycle-strip__meta,
+body.tessara-app .form-builder-lifecycle-strip__actions,
+body.tessara-app .form-builder-lifecycle-strip__summary {
+  display: grid;
+  gap: 0.75rem;
+}
+
+body.tessara-app .form-builder-lifecycle-strip {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  margin-bottom: 1rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--tessara-detail-rule);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--tessara-surface) 94%, var(--tessara-page-bg));
+}
+
+body.tessara-app .form-builder-lifecycle-strip h3,
+body.tessara-app .form-builder-lifecycle-strip p {
+  margin: 0;
+}
+
+body.tessara-app .form-builder-lifecycle-strip__meta {
+  grid-template-columns: repeat(auto-fit, minmax(10rem, max-content));
+  align-items: center;
+}
+
+body.tessara-app .form-builder-lifecycle-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.35rem 0.75rem;
+  border: 1px solid var(--tessara-detail-rule);
+  border-radius: 999px;
+  background: var(--tessara-inline-surface);
+  color: var(--tessara-text-muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+body.tessara-app .form-builder-lifecycle-strip__actions {
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: start;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid var(--tessara-detail-rule);
+  padding-top: 0.25rem;
+  border-top: 1px solid var(--tessara-detail-rule);
+}
+
+body.tessara-app .form-builder-lifecycle-strip__summary p {
+  margin: 0;
 }
 
 body.tessara-app .form-builder-layout {
@@ -3040,6 +3088,14 @@ body.tessara-app .auth-shell__status {
     padding: 1rem;
   }
 
+  body.tessara-app .form-builder-lifecycle-strip {
+    position: static;
+  }
+
+  body.tessara-app .form-builder-lifecycle-strip__actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   body.tessara-app .form-builder-main-grid,
   body.tessara-app .form-builder-field-grid--cols-2,
   body.tessara-app .form-builder-shell .form-grid {
@@ -3080,6 +3136,10 @@ body.tessara-app .auth-shell__status {
 }
 
 @media (max-width: 900px) {
+  body.tessara-app .form-builder-lifecycle-strip__meta {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   body.tessara-app .form-builder-main-grid {
     grid-template-columns: minmax(0, 1fr);
   }
