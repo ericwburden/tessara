@@ -7,8 +7,8 @@ use wasm_bindgen::{JsCast, prelude::wasm_bindgen};
 pub(crate) mod transitional;
 
 use crate::features::{
-    administration, dashboards, forms, home, migration, organization, reporting, responses,
-    workflows,
+    administration, components, dashboards, datasets, forms, home, migration, organization,
+    reporting, responses, workflows,
 };
 
 const PRIMARY_SSR_MODE: SsrMode = SsrMode::InOrder;
@@ -106,8 +106,9 @@ pub fn hydrate_app(root_id: &str) {
 #[component]
 pub fn App() -> impl IntoView {
     // Route inventory note:
-    // `/app/login`, `/app/organization/*`, `/app/administration/*`,
-    // `/app/dashboards/*`, and `/app/migration` have explicit route ownership.
+    // `/app/login`, `/app/organization/*`, `/app/datasets/*`, `/app/components/*`,
+    // `/app/administration/*`, `/app/dashboards/*`, and `/app/migration`
+    // have explicit route ownership.
     view! {
         <Router>
             <Routes fallback=|| view! { <p>"Not found."</p> }>
@@ -136,10 +137,14 @@ pub fn App() -> impl IntoView {
                 <Route path=path!("/app/reports/new") view=reporting::ReportCreatePage ssr=PRIMARY_SSR_MODE />
                 <Route path=path!("/app/reports/:report_id") view=reporting::ReportDetailPage ssr=PRIMARY_SSR_MODE />
                 <Route path=path!("/app/reports/:report_id/edit") view=reporting::ReportEditPage ssr=PRIMARY_SSR_MODE />
+                <Route path=path!("/app/components") view=components::ComponentsPage ssr=PRIMARY_SSR_MODE />
+                <Route path=path!("/app/components/:component_ref") view=components::ComponentDetailPage ssr=PRIMARY_SSR_MODE />
                 <Route path=path!("/app/dashboards") view=dashboards::DashboardsPage ssr=PRIMARY_SSR_MODE />
                 <Route path=path!("/app/dashboards/new") view=dashboards::DashboardCreatePage ssr=PRIMARY_SSR_MODE />
                 <Route path=path!("/app/dashboards/:dashboard_id") view=dashboards::DashboardDetailPage ssr=PRIMARY_SSR_MODE />
                 <Route path=path!("/app/dashboards/:dashboard_id/edit") view=dashboards::DashboardEditPage ssr=PRIMARY_SSR_MODE />
+                <Route path=path!("/app/datasets") view=datasets::DatasetsPage ssr=PRIMARY_SSR_MODE />
+                <Route path=path!("/app/datasets/:dataset_id") view=datasets::DatasetDetailPage ssr=PRIMARY_SSR_MODE />
                 <Route path=path!("/app/administration") view=administration::AdministrationPage ssr=PRIMARY_SSR_MODE />
                 <Route path=path!("/app/administration/users") view=administration::UsersPage ssr=PRIMARY_SSR_MODE />
                 <Route path=path!("/app/administration/users/new") view=administration::UserCreatePage ssr=PRIMARY_SSR_MODE />

@@ -498,6 +498,34 @@ test("forms list route stays readable and console-clean on the native shell", as
   await assertNoConsoleErrors();
 });
 
+test("components and datasets routes stay on the native shell", async ({
+  page,
+}) => {
+  const assertNoConsoleErrors = attachConsoleGuard(page);
+  await signInAsAdmin(page);
+  await waitForAuthenticatedShell(page, "admin@tessara.local");
+
+  await page.goto("/app/components");
+  await expect(page.getByRole("heading", { name: "Components" })).toBeVisible();
+  await expect(page.locator("#component-list")).toHaveCount(1);
+  await expect(page.locator("header.top-app-bar")).not.toContainText(
+    "SystemLightDark",
+  );
+  await expect(page.locator("body")).not.toContainText("Component Workspace");
+  await expectNoLegacyBridge(page);
+
+  await page.goto("/app/datasets");
+  await expect(page.getByRole("heading", { name: "Datasets" })).toBeVisible();
+  await expect(page.locator("#dataset-list")).toHaveCount(1);
+  await expect(page.locator("header.top-app-bar")).not.toContainText(
+    "SystemLightDark",
+  );
+  await expect(page.locator("body")).not.toContainText("Dataset Workspace");
+  await expectNoLegacyBridge(page);
+
+  await assertNoConsoleErrors();
+});
+
 test("organization routes stay readable and console-clean on the native shell", async ({
   page,
 }) => {

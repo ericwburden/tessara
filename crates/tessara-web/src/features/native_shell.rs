@@ -185,7 +185,7 @@ pub(crate) const PRODUCT_LINKS: &[NavLinkSpec] = &[
         href: "/app/components",
         label: "Components",
         icon: "fa-cubes",
-        native: false,
+        native: true,
         required_capability: Some("reports:read"),
         home_description: "Inspect dashboard component definitions and their linked charts.",
         home_action_label: "Open Components",
@@ -208,7 +208,7 @@ pub(crate) const ADMIN_LINKS: &[NavLinkSpec] = &[
         href: "/app/datasets",
         label: "Datasets",
         icon: "fa-database",
-        native: false,
+        native: true,
         required_capability: Some("datasets:read"),
         home_description: "Review dataset definitions, source structure, and current read-ready status.",
         home_action_label: "Open Datasets",
@@ -1374,8 +1374,12 @@ fn is_native_href(href: &str) -> bool {
         || href.starts_with("/app/workflows/")
         || href == "/app/responses"
         || href.starts_with("/app/responses/")
+        || href == "/app/components"
+        || href.starts_with("/app/components/")
         || href == "/app/dashboards"
         || href.starts_with("/app/dashboards/")
+        || href == "/app/datasets"
+        || href.starts_with("/app/datasets/")
         || href == "/app/administration"
         || href.starts_with("/app/administration/")
         || href == "/app/admin"

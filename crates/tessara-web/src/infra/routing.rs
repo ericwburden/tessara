@@ -33,6 +33,16 @@ pub struct DashboardRouteParams {
 }
 
 #[derive(Params, PartialEq, Clone, Debug)]
+pub struct DatasetRouteParams {
+    pub dataset_id: String,
+}
+
+#[derive(Params, PartialEq, Clone, Debug)]
+pub struct ComponentRouteParams {
+    pub component_ref: String,
+}
+
+#[derive(Params, PartialEq, Clone, Debug)]
 pub struct AccountRouteParams {
     pub account_id: String,
 }

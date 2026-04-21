@@ -214,19 +214,35 @@ pub fn dashboards_application_shell_html() -> String {
 }
 
 pub fn datasets_application_shell_html() -> String {
-    application::datasets_application_shell_html(app_script::APPLICATION_SCRIPT)
+    document::render_native_app_document(
+        "Tessara Datasets",
+        "Tessara datasets list screen.",
+        "/app/datasets",
+    )
 }
 
 pub fn dataset_detail_application_html(dataset_id: &str) -> String {
-    application::dataset_detail_application_html(app_script::APPLICATION_SCRIPT, dataset_id)
+    document::render_native_app_document(
+        "Dataset Detail",
+        "Inspect a Tessara dataset definition.",
+        &format!("/app/datasets/{dataset_id}"),
+    )
 }
 
 pub fn components_application_shell_html() -> String {
-    application::components_application_shell_html(app_script::APPLICATION_SCRIPT)
+    document::render_native_app_document(
+        "Tessara Components",
+        "Tessara components list screen.",
+        "/app/components",
+    )
 }
 
 pub fn component_detail_application_html(component_ref: &str) -> String {
-    application::component_detail_application_html(app_script::APPLICATION_SCRIPT, component_ref)
+    document::render_native_app_document(
+        "Component Detail",
+        "Inspect a Tessara component definition.",
+        &format!("/app/components/{component_ref}"),
+    )
 }
 
 pub fn dashboard_create_application_html() -> String {

@@ -1,5 +1,7 @@
 pub mod administration;
+pub mod components;
 pub mod dashboards;
+pub mod datasets;
 pub mod forms;
 pub mod home;
 pub mod migration;
