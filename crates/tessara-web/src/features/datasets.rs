@@ -96,7 +96,7 @@ pub fn DatasetsPage() -> impl IntoView {
 
     view! {
         <NativePage
-            title="Tessara Datasets"
+            title="Datasets"
             description="Tessara datasets list screen."
             page_key="dataset-list"
             active_route="datasets"
@@ -109,7 +109,7 @@ pub fn DatasetsPage() -> impl IntoView {
         >
             <PageHeader
                 eyebrow="Internal Area"
-                title="Datasets"
+                title="Readable Dataset Directory"
                 description="Browse readable dataset definitions and inspect source and field structure from the shared shell."
                 actions=Arc::new(|| {
                     view! {

@@ -926,7 +926,7 @@ pub fn WorkflowsPage() -> impl IntoView {
     });
     view! {
         <NativePage
-            title="Tessara Workflows"
+            title="Workflows"
             description="Tessara workflows list screen."
             page_key="workflow-list"
             active_route="workflows"

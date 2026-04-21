@@ -58,7 +58,7 @@ pub fn ComponentsPage() -> impl IntoView {
 
     view! {
         <NativePage
-            title="Tessara Components"
+            title="Components"
             description="Tessara components list screen."
             page_key="component-list"
             active_route="components"
@@ -71,7 +71,7 @@ pub fn ComponentsPage() -> impl IntoView {
         >
             <PageHeader
                 eyebrow="Product Area"
-                title="Components"
+                title="Internal Component Directory"
                 description="Browse dashboard component definitions and inspect how each component maps to a dashboard, chart, and report surface."
                 actions=Arc::new(|| {
                     view! {

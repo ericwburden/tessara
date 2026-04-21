@@ -1819,7 +1819,7 @@ pub fn FormsListPage() -> impl IntoView {
 
     view! {
         <NativePage
-            title="Tessara Forms"
+            title="Forms"
             description="Tessara forms list screen."
             page_key="form-list"
             active_route="forms"

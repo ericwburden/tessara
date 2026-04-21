@@ -878,7 +878,7 @@ fn ThemeToggle() -> impl IntoView {
     });
 
     view! {
-        <div class="theme-toggle theme-toggle--popover">
+        <div id="shell-theme-context" class="theme-toggle theme-toggle--popover">
             <button
                 class="app-sidebar__icon-button theme-toggle-button"
                 type="button"
@@ -964,7 +964,7 @@ fn ThemeToggle() -> impl IntoView {
 #[component]
 fn ThemeToggle() -> impl IntoView {
     view! {
-        <div class="theme-toggle theme-toggle--popover">
+        <div id="shell-theme-context" class="theme-toggle theme-toggle--popover">
             <button
                 class="app-sidebar__icon-button theme-toggle-button"
                 type="button"
@@ -1155,17 +1155,31 @@ fn SidebarFooterContext(
         Some(account) => {
             let active_delegate = active_delegate(&account, &search);
             let has_active_delegate = active_delegate.is_some();
+            let signed_in_label = preferred_account_label(&account.display_name, &account.email);
             let active_delegate_name = active_delegate
                 .as_ref()
                 .map(|delegate| preferred_account_label(&delegate.display_name, &delegate.email));
-            let identity_label = preferred_account_label(&account.display_name, &account.email);
+            let active_delegate_email = active_delegate
+                .as_ref()
+                .map(|delegate| delegate.email.clone())
+                .unwrap_or_default();
+            let identity_label = active_delegate_name
+                .clone()
+                .unwrap_or_else(|| signed_in_label.clone());
             let identity_initials = account_initials(&identity_label);
             let profile_label = ui_profile_label(account.ui_access_profile.clone());
             let rail_profile_label = format!("{identity_label} profile");
+            let identity_meta = if has_active_delegate {
+                format!("Signed in as {signed_in_label}")
+            } else {
+                account.email.clone()
+            };
             let scope_roots = scope_root_labels(&account);
             let has_scope_roots = !scope_roots.is_empty();
             let scope_roots = StoredValue::new(scope_roots);
             let active_delegate_name = StoredValue::new(active_delegate_name.unwrap_or_default());
+            let active_delegate_email = StoredValue::new(active_delegate_email);
+            let identity_meta = StoredValue::new(identity_meta);
             let footer_error = StoredValue::new(error.unwrap_or_default());
             let has_footer_error = !footer_error.get_value().is_empty();
 
@@ -1191,25 +1205,31 @@ fn SidebarFooterContext(
                                     <strong class="app-sidebar__identity-name">{identity_label}</strong>
                                     <span class="app-sidebar__context-badge">{profile_label}</span>
                                 </div>
-                                <span class="app-sidebar__identity-email">{account.email.clone()}</span>
+                                <span class="app-sidebar__identity-email">{move || identity_meta.get_value()}</span>
                             </div>
                         </div>
                         <Show when=move || has_active_delegate || has_scope_roots>
                             <div class="app-sidebar__context-stack">
                                 <Show when=move || has_active_delegate>
-                                    <div class="app-sidebar__context-block">
+                                    <div id="shell-delegation-context" class="app-sidebar__context-block">
                                         <p class="muted app-sidebar__context-caption">"Delegation"</p>
                                         <div class="app-sidebar__context-chip-row">
-                                            <span class="app-sidebar__context-chip">
-                                                {move || format!("Acting for {}", active_delegate_name.get_value())}
+                                            <span class="app-sidebar__context-chip" data-active-delegate>
+                                                {move || {
+                                                    format!(
+                                                        "Acting for {} ({})",
+                                                        active_delegate_name.get_value(),
+                                                        active_delegate_email.get_value()
+                                                    )
+                                                }}
                                             </span>
                                         </div>
                                     </div>
                                 </Show>
                                 <Show when=move || has_scope_roots>
-                                    <div class="app-sidebar__context-block">
+                                    <div id="shell-scope-context" class="app-sidebar__context-block">
                                         <p class="muted app-sidebar__context-caption">"Visible scope"</p>
-                                        <div class="app-sidebar__context-chip-row">
+                                        <div id="shell-scope-roots" class="app-sidebar__context-chip-row">
                                             {move || {
                                                 let roots = scope_roots.get_value();
                                                 roots

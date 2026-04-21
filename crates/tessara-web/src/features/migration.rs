@@ -115,7 +115,7 @@ pub fn MigrationPage() -> impl IntoView {
 
     view! {
         <NativePage
-            title="Tessara Migration"
+            title="Migration"
             description="Tessara migration workbench."
             page_key="migration"
             active_route="migration"

@@ -505,7 +505,9 @@ test("components and datasets routes stay on the native shell", async ({
   await waitForAuthenticatedShell(page, "admin@tessara.local");
 
   await page.goto("/app/components");
-  await expect(page.getByRole("heading", { name: "Components" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Internal Component Directory" }),
+  ).toBeVisible();
   await expect(page.locator("#component-list")).toHaveCount(1);
   await expect(page.locator("header.top-app-bar")).not.toContainText(
     "SystemLightDark",
@@ -514,7 +516,9 @@ test("components and datasets routes stay on the native shell", async ({
   await expectNoLegacyBridge(page);
 
   await page.goto("/app/datasets");
-  await expect(page.getByRole("heading", { name: "Datasets" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Readable Dataset Directory" }),
+  ).toBeVisible();
   await expect(page.locator("#dataset-list")).toHaveCount(1);
   await expect(page.locator("header.top-app-bar")).not.toContainText(
     "SystemLightDark",

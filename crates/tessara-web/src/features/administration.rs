@@ -260,7 +260,7 @@ pub fn UsersPage() -> impl IntoView {
 
     view! {
         <NativePage
-            title="Tessara User Management"
+            title="Users"
             description="Browse and manage Tessara user accounts."
             page_key="user-list"
             active_route="administration"
@@ -712,7 +712,7 @@ pub fn RolesPage() -> impl IntoView {
 
     view! {
         <NativePage
-            title="Tessara Roles"
+            title="Roles"
             description="Browse and inspect Tessara role bundles."
             page_key="role-list"
             active_route="administration"
@@ -796,7 +796,7 @@ pub fn NodeTypesPage() -> impl IntoView {
 
     view! {
         <NativePage
-            title="Tessara Organization Node Types"
+            title="Node Types"
             description="Browse and manage Tessara organization node types."
             page_key="node-type-list"
             active_route="administration"
@@ -1105,7 +1105,7 @@ pub fn RoleEditPage() -> impl IntoView {
 pub fn LegacyAdminPage() -> impl IntoView {
     view! {
         <NativePage
-            title="Tessara Admin Console"
+            title="Administration"
             description="Tessara internal admin workbench summary."
             page_key="admin-shell"
             active_route="administration"

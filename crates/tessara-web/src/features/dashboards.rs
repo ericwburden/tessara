@@ -69,7 +69,7 @@ pub fn DashboardsPage() -> impl IntoView {
 
     view! {
         <NativePage
-            title="Tessara Dashboards"
+            title="Dashboards"
             description="Tessara dashboards list screen."
             page_key="dashboard-list"
             active_route="dashboards"
@@ -79,7 +79,7 @@ pub fn DashboardsPage() -> impl IntoView {
         >
             <PageHeader
                 eyebrow="Product Area"
-                title="Dashboards"
+                title="Dashboard Directory"
                 description="Browse dashboards and inspect the current component footprint without leaving the native application shell."
             />
             <MetadataStrip items=vec![

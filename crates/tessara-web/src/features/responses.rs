@@ -937,7 +937,7 @@ pub fn ResponsesListPage() -> impl IntoView {
     hydrate::load_list_page();
     view! {
         <NativePage
-            title="Tessara Responses"
+            title="Responses"
             description="Tessara responses list screen."
             page_key="native-response-list"
             active_route="responses"
