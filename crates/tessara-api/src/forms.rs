@@ -820,6 +820,26 @@ pub async fn create_form_version(
     request.require_capability("forms:write")?;
     require_form_exists(&state.pool, form_id).await?;
 
+    let draft_exists: bool = sqlx::query_scalar(
+        r#"
+        SELECT EXISTS (
+            SELECT 1
+            FROM form_versions
+            WHERE form_id = $1
+              AND status = 'draft'
+        )
+        "#,
+    )
+    .bind(form_id)
+    .fetch_one(&state.pool)
+    .await?;
+
+    if draft_exists {
+        return Err(ApiError::BadRequest(
+            "only one draft form version may exist at a time".into(),
+        ));
+    }
+
     let id = sqlx::query_scalar(
         r#"
         INSERT INTO form_versions (form_id)

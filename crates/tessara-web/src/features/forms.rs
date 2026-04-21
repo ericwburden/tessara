@@ -217,6 +217,14 @@ mod hydrate {
             .or_else(|| form.versions.last().cloned())
     }
 
+    fn active_draft_version(form: &FormDefinition) -> Option<FormVersionSummary> {
+        form.versions
+            .iter()
+            .rev()
+            .find(|version| version.status == "draft")
+            .cloned()
+    }
+
     fn render_form_cards(forms: &[FormSummary]) -> String {
         if forms.is_empty() {
             return r#"<p class="muted">No form records found.</p>"#.into();
@@ -566,6 +574,18 @@ mod hydrate {
         format!("{preview}{semantic_bump}")
     }
 
+    fn render_form_version_create_panel(form: &FormDefinition) -> String {
+        if let Some(draft) = active_draft_version(form) {
+            return format!(
+                r#"<p class="muted">One draft version is allowed at a time. Open the active draft workspace or publish it before creating another.</p><div class="actions"><button class="button is-primary" type="submit" disabled>Draft Already Open ({})</button></div>"#,
+                escape_html(&form_version_label(&draft))
+            );
+        }
+
+        r#"<p class="muted">Draft versions stay unlabeled until publish. Semantic version and major-line compatibility are assigned automatically when you publish.</p><div class="actions"><button class="button is-primary" type="submit">Create Draft Version</button></div>"#
+            .into()
+    }
+
     fn form_field_kind_label(field_type: &str) -> &str {
         match field_type {
             "text" => "Short answer",
@@ -808,11 +828,10 @@ mod hydrate {
             .map(|section| section.fields.len())
             .sum::<usize>();
         format!(
-            r#"<section class="form-builder-shell"><section class="form-builder-lifecycle-strip"><div class="form-builder-lifecycle-strip__copy"><p class="form-builder-eyebrow">Lifecycle</p><h3>{}</h3><p class="muted">Draft workspace for {}. Publish and version status stay visible here while the canvas remains primary.</p></div><div class="form-builder-lifecycle-strip__meta"><span class="form-builder-lifecycle-chip">Draft</span><span class="form-builder-lifecycle-chip">Version line: {}</span><span class="form-builder-lifecycle-chip">Compatibility: {}</span><span class="form-builder-lifecycle-chip">Sections: {}</span><span class="form-builder-lifecycle-chip">Fields: {}</span></div><div class="form-builder-lifecycle-strip__actions"><div class="form-builder-lifecycle-strip__summary">{}</div><div class="actions"><button class="button" type="button" data-publish-form-version="{}">Publish Draft Version</button></div></div></section><div class="{}"><aside class="detail-section box form-builder-rail"><div class="page-title-row compact-title-row"><div><p class="form-builder-eyebrow">Sections</p><h4>Jump Between Sections</h4><p class="muted">Use the rail to switch context without losing the stacked canvas flow.</p></div></div><div class="form-builder-section-links">{}</div></aside><div class="form-builder-main"><div class="form-builder-main-grid">{}<section class="detail-section box form-builder-canvas"><div class="page-title-row compact-title-row"><div><p class="form-builder-eyebrow">Section Stack</p><h4>Canvas</h4><p class="muted">Draft sections stay stacked in one authoring flow.</p></div></div>{}</section></div></div>{}</div></section>"#,
+            r#"<section class="form-builder-shell"><section class="form-builder-lifecycle-strip"><div class="form-builder-lifecycle-strip__copy"><p class="form-builder-eyebrow">Lifecycle</p><h3>{}</h3><p class="muted">Draft workspace for {}. Publish and version status stay visible here while the canvas remains primary.</p></div><div class="form-builder-lifecycle-strip__meta"><span class="form-builder-lifecycle-chip">Draft</span><span class="form-builder-lifecycle-chip">Version line: {}</span><span class="form-builder-lifecycle-chip">Sections: {}</span><span class="form-builder-lifecycle-chip">Fields: {}</span></div><div class="form-builder-lifecycle-strip__actions"><div class="form-builder-lifecycle-strip__summary">{}</div><div class="actions"><button class="button" type="button" data-publish-form-version="{}">Publish Draft Version</button></div></div></section><div class="{}"><aside class="detail-section box form-builder-rail"><div class="page-title-row compact-title-row"><div><p class="form-builder-eyebrow">Sections</p><h4>Jump Between Sections</h4><p class="muted">Use the rail to switch context without losing the stacked canvas flow.</p></div></div><div class="form-builder-section-links">{}</div></aside><div class="form-builder-main"><div class="form-builder-main-grid">{}<section class="detail-section box form-builder-canvas"><div class="page-title-row compact-title-row"><div><p class="form-builder-eyebrow">Section Stack</p><h4>Canvas</h4><p class="muted">Draft sections stay stacked in one authoring flow.</p></div></div>{}</section></div></div>{}</div></section>"#,
             escape_html(&form_version_label(version)),
             escape_html(&form.name),
             escape_html(&form_version_label(version)),
-            escape_html(&form_version_compatibility(version)),
             rendered.sections.len(),
             field_count,
             render_form_version_lifecycle_summary(version),
@@ -1663,6 +1682,10 @@ mod hydrate {
                 selected_version.as_ref().map(|version| version.id.as_str()),
                 true,
             ),
+        );
+        set_html(
+            "form-version-create-form",
+            &render_form_version_create_panel(&form),
         );
 
         {
