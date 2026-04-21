@@ -78,9 +78,8 @@ async function waitForAuthenticatedShell(page: Page, email?: string) {
 }
 
 async function expectQueueFirstHome(page: Page) {
-  await expect(
-    page.getByRole("heading", { level: 1, name: "Current Work" }),
-  ).toBeVisible();
+  await expect(page.locator("#home-summary")).toBeVisible();
+  await expect(page.locator("#home-summary")).toContainText("Shared Home");
   await expect(page.locator("#home-current-work")).toBeVisible();
   await expect(page.locator("#home-hierarchy-context")).toBeVisible();
   await expect(page.locator("#home-operational-snapshot")).toBeVisible();

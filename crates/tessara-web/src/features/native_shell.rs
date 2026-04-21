@@ -346,6 +346,32 @@ fn active_delegate(account: &AccountContext, search: &str) -> Option<DelegationS
         .cloned()
 }
 
+fn scope_root_labels(account: &AccountContext) -> Vec<(String, String)> {
+    let mut roots = account
+        .scope_nodes
+        .iter()
+        .filter(|node| {
+            !account
+                .scope_nodes
+                .iter()
+                .any(|candidate| Some(candidate.node_id.as_str()) == node.parent_node_id.as_deref())
+        })
+        .map(|node| (node.node_type_name.clone(), node.node_name.clone()))
+        .collect::<Vec<_>>();
+    roots.sort_by(|left, right| left.0.cmp(&right.0).then_with(|| left.1.cmp(&right.1)));
+    roots.dedup();
+    roots
+}
+
+fn route_context_label(active_route: &str) -> &'static str {
+    PRODUCT_LINKS
+        .iter()
+        .chain(ADMIN_LINKS.iter())
+        .find(|link| link.key == active_route)
+        .map(|link| link.label)
+        .unwrap_or("Workspace")
+}
+
 fn account_initials(label: &str) -> String {
     let initials = label
         .split_whitespace()
@@ -1136,6 +1162,9 @@ fn SidebarFooterContext(
             let identity_initials = account_initials(&identity_label);
             let profile_label = ui_profile_label(account.ui_access_profile.clone());
             let rail_profile_label = format!("{identity_label} profile");
+            let scope_roots = scope_root_labels(&account);
+            let has_scope_roots = !scope_roots.is_empty();
+            let scope_roots = StoredValue::new(scope_roots);
             let active_delegate_name = StoredValue::new(active_delegate_name.unwrap_or_default());
             let footer_error = StoredValue::new(error.unwrap_or_default());
             let has_footer_error = !footer_error.get_value().is_empty();
@@ -1165,12 +1194,44 @@ fn SidebarFooterContext(
                                 <span class="app-sidebar__identity-email">{account.email.clone()}</span>
                             </div>
                         </div>
-                        <Show when=move || has_active_delegate>
+                        <Show when=move || has_active_delegate || has_scope_roots>
                             <div class="app-sidebar__context-stack">
-                                <p class="muted app-sidebar__context-note">
-                                    <strong>"Acting for "</strong>
-                                    {move || active_delegate_name.get_value()}
-                                </p>
+                                <Show when=move || has_active_delegate>
+                                    <div class="app-sidebar__context-block">
+                                        <p class="muted app-sidebar__context-caption">"Delegation"</p>
+                                        <div class="app-sidebar__context-chip-row">
+                                            <span class="app-sidebar__context-chip">
+                                                {move || format!("Acting for {}", active_delegate_name.get_value())}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </Show>
+                                <Show when=move || has_scope_roots>
+                                    <div class="app-sidebar__context-block">
+                                        <p class="muted app-sidebar__context-caption">"Visible scope"</p>
+                                        <div class="app-sidebar__context-chip-row">
+                                            {move || {
+                                                let roots = scope_roots.get_value();
+                                                roots
+                                                    .into_iter()
+                                                    .take(2)
+                                                    .map(|(node_type, node_name)| {
+                                                        view! {
+                                                            <span class="app-sidebar__context-chip">
+                                                                {format!("{node_type}: {node_name}")}
+                                                            </span>
+                                                        }
+                                                    })
+                                                    .collect_view()
+                                            }}
+                                            <Show when=move || { scope_roots.get_value().len() > 2 }>
+                                                <span class="app-sidebar__context-chip app-sidebar__context-chip--muted">
+                                                    {move || format!("+{} more", scope_roots.get_value().len().saturating_sub(2))}
+                                                </span>
+                                            </Show>
+                                        </div>
+                                    </div>
+                                </Show>
                             </div>
                         </Show>
                         <div class="app-sidebar__footer-toolbar">
@@ -1465,8 +1526,8 @@ pub fn NativePage(
     let session = use_account_session();
     let location = use_location();
     let notice = RwSignal::new(None::<ShellNotice>);
-    let _ = title;
-    let _ = description;
+    let top_bar_label = route_context_label(active_route);
+    let _ = (&description, &workspace_label);
 
     set_page_context(page_key, active_route, record_id);
 
@@ -1601,8 +1662,8 @@ pub fn NativePage(
                                     <span class="app-nav-toggle__icon" aria-hidden="true"><i class="fa-solid fa-bars"></i></span>
                                 </button>
                                 <div class="top-app-bar__context-group">
-                                    <span class="top-app-bar__context-label">"Workspace"</span>
-                                    <span class="top-app-bar__context">{workspace_label}</span>
+                                    <span class="top-app-bar__context-label">{top_bar_label}</span>
+                                    <span class="top-app-bar__context">{title}</span>
                                 </div>
                             </div>
                             <div class="top-app-bar__utilities">
