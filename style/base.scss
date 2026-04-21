@@ -2345,7 +2345,7 @@ body.tessara-app .app-shell--migration .app-sidebar {
     padding: 1rem;
     border: 1px solid var(--tessara-border);
     border-radius: 1rem;
-    overflow: hidden;
+    overflow: visible;
     isolation: isolate;
     contain: paint;
     mix-blend-mode: normal;
@@ -2460,9 +2460,10 @@ body.tessara-app .app-shell--migration .app-sidebar {
     inset: 0 0 auto 0;
     z-index: 70;
     display: grid;
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
     justify-content: stretch;
-    gap: 0;
+    gap: 0.5rem;
     width: 100vw;
     padding: 1rem;
     background: var(--tessara-surface);
@@ -2482,8 +2483,13 @@ body.tessara-app .app-shell--migration .app-sidebar {
     min-height: 2.85rem;
   }
 
-  html[data-shell-ready='true'] body.tessara-app[data-shell-viewport='mobile'][data-search-state='open'] .top-app-bar__utilities > .app-utility-button {
+  html[data-shell-ready='true'] body.tessara-app[data-shell-viewport='mobile'][data-search-state='open'] .top-app-bar__utilities > .app-utility-button:not(.app-utility-button--search) {
     display: none;
+  }
+
+  html[data-shell-ready='true'] body.tessara-app[data-shell-viewport='mobile'][data-search-state='open'] .top-app-bar__utilities > .app-utility-button--search {
+    display: inline-flex !important;
+    justify-self: end;
   }
 
   html[data-shell-ready='true'] body.tessara-app[data-shell-viewport='mobile'][data-search-state='open'] .top-app-bar__brand {
