@@ -2734,9 +2734,9 @@ body.tessara-app .response-context-toolbar {
 }
 
 body.tessara-app .form-builder-shell,
+body.tessara-app .form-builder-sidebar,
 body.tessara-app .form-builder-rail,
 body.tessara-app .form-builder-main,
-body.tessara-app .form-builder-insert-rail,
 body.tessara-app .form-builder-canvas,
 body.tessara-app .form-builder-properties,
 body.tessara-app .form-builder-section,
@@ -2812,6 +2812,10 @@ body.tessara-app .form-builder-layout--with-properties {
   grid-template-columns: minmax(14rem, 16rem) minmax(0, 1fr) minmax(19rem, 23rem);
 }
 
+body.tessara-app .form-builder-sidebar {
+  align-content: start;
+}
+
 body.tessara-app .form-builder-rail,
 body.tessara-app .form-builder-insert-rail,
 body.tessara-app .form-builder-properties {
@@ -2882,13 +2886,6 @@ body.tessara-app .form-builder-section-link.is-active {
   color: var(--tessara-text);
   text-decoration: none;
   transform: translateX(1px);
-}
-
-body.tessara-app .form-builder-main-grid {
-  display: grid;
-  grid-template-columns: minmax(13rem, 15rem) minmax(0, 1fr);
-  gap: 1rem;
-  align-items: start;
 }
 
 body.tessara-app .form-builder-section > .page-title-row,
@@ -3106,7 +3103,6 @@ body.tessara-app .auth-shell__status {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  body.tessara-app .form-builder-main-grid,
   body.tessara-app .form-builder-field-grid--cols-2,
   body.tessara-app .form-builder-shell .form-grid {
     grid-template-columns: minmax(0, 1fr);
@@ -3146,14 +3142,36 @@ body.tessara-app .auth-shell__status {
 }
 
 @media (max-width: 1320px) {
-  body.tessara-app .form-builder-main-grid {
-    grid-template-columns: minmax(0, 1fr);
+  body.tessara-app .form-builder-layout,
+  body.tessara-app .form-builder-layout--with-properties {
+    grid-template-columns: minmax(14rem, 16rem) minmax(0, 1fr);
+  }
+
+  body.tessara-app .form-builder-layout--with-properties {
+    grid-template-columns: minmax(14rem, 16rem) minmax(0, 1fr) minmax(18rem, 21rem);
   }
 }
 
 @media (max-width: 900px) {
   body.tessara-app .form-builder-lifecycle-strip__meta {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  body.tessara-app .form-builder-layout,
+  body.tessara-app .form-builder-layout--with-properties {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  body.tessara-app .form-builder-sidebar {
+    order: -2;
+  }
+
+  body.tessara-app .form-builder-main {
+    order: -1;
+  }
+
+  body.tessara-app .form-builder-properties {
+    order: 1;
   }
 
   body.tessara-app .form-builder-section > .page-title-row .actions,
