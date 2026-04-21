@@ -116,7 +116,7 @@ pub fn HomePage() -> impl IntoView {
 
     view! {
         <NativePage
-            title="Tessara Home"
+            title="Current Work"
             description="Tessara application home for local replacement workflow testing."
             page_key="home"
             active_route="home"
@@ -126,9 +126,8 @@ pub fn HomePage() -> impl IntoView {
             <section id="home-summary" class="home-summary">
                 <div class="home-summary__copy">
                     <p class="eyebrow">"Shared Home"</p>
-                    <h1>"Current Work"</h1>
                     <p class="muted home-summary__description">
-                        "Start from pending response work, compact operational totals, and current hierarchy context."
+                        "Start from pending response work, keep hierarchy context nearby, and avoid turning Home back into a launcher dashboard."
                     </p>
                 </div>
             </section>
@@ -308,14 +307,14 @@ pub fn HomePage() -> impl IntoView {
                     </div>
                 </section>
                 <aside class="home-secondary-panel">
-                    <section id="home-hierarchy-context" class="home-secondary-section">
-                        <div class="home-panel-header__copy">
-                            <p class="eyebrow">"Hierarchy context"</p>
-                            <h2>"Organization scope"</h2>
-                            <p class="muted">
-                                "Home keeps hierarchy awareness visible without turning the body back into a second navigation launcher."
-                            </p>
-                        </div>
+                    <div class="home-panel-header__copy home-secondary-panel__intro">
+                        <p class="eyebrow">"Hierarchy context"</p>
+                        <h2>"Scope and totals"</h2>
+                        <p class="muted">
+                            "Keep visible scope and current totals nearby without letting the right rail turn back into a card stack."
+                        </p>
+                    </div>
+                    <section id="home-hierarchy-context" class="home-secondary-section home-secondary-section--explorer">
                         <div class="home-hierarchy-panel">
                             {move || {
                                 let account = session.account.get();
@@ -367,36 +366,33 @@ pub fn HomePage() -> impl IntoView {
                             }}
                         </div>
                     </section>
-                    <section id="home-operational-snapshot" class="home-secondary-section">
-                        <div class="home-panel-header__copy">
+                    <section id="home-operational-snapshot" class="home-secondary-section home-secondary-section--snapshot">
+                        <div class="home-secondary-section__heading">
                             <p class="eyebrow">"Operational snapshot"</p>
-                            <h2>"Current totals"</h2>
-                            <p class="muted">
-                                "Compact totals stay glanceable here instead of expanding into a second dashboard row."
-                            </p>
+                            <h3>"Current totals"</h3>
                         </div>
                         <div class="home-snapshot-list">
                             {move || {
                                 if let Some(summary) = home_summary.get() {
                                     return view! {
-                                        <div class="home-snapshot-grid">
-                                            <div class="home-snapshot-item">
+                                        <ul class="home-snapshot-rows">
+                                            <li class="home-snapshot-row">
                                                 <span>"Draft responses"</span>
                                                 <strong>{summary.draft_submissions}</strong>
-                                            </div>
-                                            <div class="home-snapshot-item">
+                                            </li>
+                                            <li class="home-snapshot-row">
                                                 <span>"Submitted responses"</span>
                                                 <strong>{summary.submitted_submissions}</strong>
-                                            </div>
-                                            <div class="home-snapshot-item">
+                                            </li>
+                                            <li class="home-snapshot-row">
                                                 <span>"Published forms"</span>
                                                 <strong>{summary.published_form_versions}</strong>
-                                            </div>
-                                            <div class="home-snapshot-item">
+                                            </li>
+                                            <li class="home-snapshot-row">
                                                 <span>"Dashboards"</span>
                                                 <strong>{summary.dashboards}</strong>
-                                            </div>
-                                        </div>
+                                            </li>
+                                        </ul>
                                     }
                                     .into_any();
                                 }

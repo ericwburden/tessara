@@ -174,7 +174,11 @@ pub async fn touch_session(pool: &PgPool, token: Uuid, seen_at: DateTime<Utc>) -
     Ok(())
 }
 
-pub async fn revoke_session(pool: &PgPool, token: Uuid, revoked_at: DateTime<Utc>) -> ApiResult<bool> {
+pub async fn revoke_session(
+    pool: &PgPool,
+    token: Uuid,
+    revoked_at: DateTime<Utc>,
+) -> ApiResult<bool> {
     let result = sqlx::query(
         r#"
         UPDATE auth_sessions

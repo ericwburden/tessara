@@ -37,10 +37,7 @@ where
 {
     type Rejection = ApiError;
 
-    async fn from_request_parts(
-        parts: &mut Parts,
-        state: &S,
-    ) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         let app_state = AppState::from_ref(state);
         let (account, session) =
             service::authenticate_request(&app_state.pool, &app_state.config, &parts.headers)

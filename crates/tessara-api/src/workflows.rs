@@ -757,7 +757,11 @@ pub async fn ensure_submission_runtime_linkage(
             "#,
         )
         .bind(existing)
-        .bind(if is_completed { "completed" } else { "in_progress" })
+        .bind(if is_completed {
+            "completed"
+        } else {
+            "in_progress"
+        })
         .bind(completed_at)
         .execute(&mut *tx)
         .await?;
@@ -779,7 +783,11 @@ pub async fn ensure_submission_runtime_linkage(
         .bind(workflow_instance_id)
         .bind(workflow_step_id)
         .bind(submission_id)
-        .bind(if is_completed { "completed" } else { "in_progress" })
+        .bind(if is_completed {
+            "completed"
+        } else {
+            "in_progress"
+        })
         .bind(completed_at)
         .fetch_one(&mut *tx)
         .await?

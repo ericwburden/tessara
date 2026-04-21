@@ -7,9 +7,7 @@ use sqlx::{PgPool, Postgres, Row, Transaction};
 use uuid::Uuid;
 
 use crate::{
-    auth::{
-        self, AuthenticatedRequest, DelegationSummary, ScopeNodeSummary, UiAccessProfile,
-    },
+    auth::{self, AuthenticatedRequest, DelegationSummary, ScopeNodeSummary, UiAccessProfile},
     db::AppState,
     error::{ApiError, ApiResult},
     hierarchy::require_text,

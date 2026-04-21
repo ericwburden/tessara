@@ -65,7 +65,8 @@ pub fn MigrationPage() -> impl IntoView {
     Effect::new(move |_| {
         spawn_local(async move {
             loading.set(true);
-            match get_json::<Vec<LegacyFixtureExample>>("/api/admin/legacy-fixtures/examples").await {
+            match get_json::<Vec<LegacyFixtureExample>>("/api/admin/legacy-fixtures/examples").await
+            {
                 Ok(items) => examples.set(items),
                 Err(message) => result.set(Some(MigrationResult::Error(message))),
             }
@@ -86,15 +87,21 @@ pub fn MigrationPage() -> impl IntoView {
             spawn_local(async move {
                 let body = json!({ "fixture_json": payload });
                 let outcome = match _path {
-                    "/api/admin/legacy-fixtures/validate" => post_json::<LegacyImportValidationReport>(_path, &body)
-                        .await
-                        .map(MigrationResult::Validation),
-                    "/api/admin/legacy-fixtures/dry-run" => post_json::<LegacyImportDryRunReport>(_path, &body)
-                        .await
-                        .map(MigrationResult::DryRun),
-                    "/api/admin/legacy-fixtures/import" => post_json::<LegacyImportSummary>(_path, &body)
-                        .await
-                        .map(MigrationResult::Import),
+                    "/api/admin/legacy-fixtures/validate" => {
+                        post_json::<LegacyImportValidationReport>(_path, &body)
+                            .await
+                            .map(MigrationResult::Validation)
+                    }
+                    "/api/admin/legacy-fixtures/dry-run" => {
+                        post_json::<LegacyImportDryRunReport>(_path, &body)
+                            .await
+                            .map(MigrationResult::DryRun)
+                    }
+                    "/api/admin/legacy-fixtures/import" => {
+                        post_json::<LegacyImportSummary>(_path, &body)
+                            .await
+                            .map(MigrationResult::Import)
+                    }
                     _ => Err("unsupported migration action".into()),
                 };
                 match outcome {

@@ -271,7 +271,9 @@ fn dashboard_form_page(dashboard_id: Option<String>) -> impl IntoView {
             let dashboard_id = dashboard_id.clone();
             spawn_local(async move {
                 loading.set(true);
-                match get_json::<DashboardResponse>(&format!("/api/dashboards/{dashboard_id}")).await {
+                match get_json::<DashboardResponse>(&format!("/api/dashboards/{dashboard_id}"))
+                    .await
+                {
                     Ok(dashboard) => {
                         name.set(dashboard.name);
                         error.set(None);
@@ -285,45 +287,55 @@ fn dashboard_form_page(dashboard_id: Option<String>) -> impl IntoView {
 
     let cancel_href = StoredValue::new("/app/dashboards".to_string());
     let _dashboard_id_for_submit = dashboard_id.clone();
-    let submit = StoredValue::new(std::sync::Arc::new(move |event: leptos::ev::SubmitEvent| {
-        event.prevent_default();
-        if busy.get_untracked() {
-            return;
-        }
+    let submit = StoredValue::new(std::sync::Arc::new(
+        move |event: leptos::ev::SubmitEvent| {
+            event.prevent_default();
+            if busy.get_untracked() {
+                return;
+            }
 
-        busy.set(true);
-        error.set(None);
-        form_status.set(Some(if is_edit {
-            "Saving dashboard changes...".into()
-        } else {
-            "Creating dashboard...".into()
-        }));
+            busy.set(true);
+            error.set(None);
+            form_status.set(Some(if is_edit {
+                "Saving dashboard changes...".into()
+            } else {
+                "Creating dashboard...".into()
+            }));
 
-        #[cfg(feature = "hydrate")]
-        {
-            let dashboard_id = _dashboard_id_for_submit.clone();
-            let payload_name = name.get_untracked();
-            spawn_local(async move {
-                let payload = json!({ "name": payload_name.trim() });
-                let result = match dashboard_id {
-                    Some(dashboard_id) => {
-                        put_json::<IdResponse>(&format!("/api/admin/dashboards/{dashboard_id}"), &payload).await
+            #[cfg(feature = "hydrate")]
+            {
+                let dashboard_id = _dashboard_id_for_submit.clone();
+                let payload_name = name.get_untracked();
+                spawn_local(async move {
+                    let payload = json!({ "name": payload_name.trim() });
+                    let result = match dashboard_id {
+                        Some(dashboard_id) => {
+                            put_json::<IdResponse>(
+                                &format!("/api/admin/dashboards/{dashboard_id}"),
+                                &payload,
+                            )
+                            .await
+                        }
+                        None => post_json::<IdResponse>("/api/admin/dashboards", &payload).await,
+                    };
+                    match result {
+                        Ok(response) => redirect(&format!("/app/dashboards/{}", response.id)),
+                        Err(message) => {
+                            error.set(Some(message));
+                            form_status.set(Some("Unable to save the dashboard.".into()));
+                        }
                     }
-                    None => post_json::<IdResponse>("/api/admin/dashboards", &payload).await,
-                };
-                match result {
-                    Ok(response) => redirect(&format!("/app/dashboards/{}", response.id)),
-                    Err(message) => {
-                        error.set(Some(message));
-                        form_status.set(Some("Unable to save the dashboard.".into()));
-                    }
-                }
-                busy.set(false);
-            });
-        }
-    }));
+                    busy.set(false);
+                });
+            }
+        },
+    ));
 
-    let title = if is_edit { "Edit Dashboard" } else { "Create Dashboard" };
+    let title = if is_edit {
+        "Edit Dashboard"
+    } else {
+        "Create Dashboard"
+    };
     let description = if is_edit {
         "Edit the selected dashboard from a dedicated native form screen."
     } else {

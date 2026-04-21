@@ -148,7 +148,10 @@ fn access_profile_label(profile: &UiAccessProfile) -> &'static str {
 
 fn node_scope_label(node: &ScopeNodeSummary) -> String {
     match node.parent_node_name.as_deref() {
-        Some(parent) => format!("{} ({}, under {})", node.node_name, node.node_type_name, parent),
+        Some(parent) => format!(
+            "{} ({}, under {})",
+            node.node_name, node.node_type_name, parent
+        ),
         None => format!("{} ({})", node.node_name, node.node_type_name),
     }
 }
@@ -171,7 +174,7 @@ fn toggle_selection(values: &mut Vec<String>, id: &str, checked: bool) {
 pub fn AdministrationPage() -> impl IntoView {
     view! {
         <NativePage
-            title="Tessara Administration"
+            title="Administration Workspace"
             description="Tessara internal administration landing page."
             page_key="administration"
             active_route="administration"
@@ -182,48 +185,54 @@ pub fn AdministrationPage() -> impl IntoView {
                 BreadcrumbItem::current("Administration"),
             ]
         >
-            <PageHeader
-                eyebrow="Internal Area"
-                title="Administration"
-                description="Administration stays internal. Use it for advanced configuration and scoped access management."
-            />
-            <MetadataStrip items=vec![
-                ("Mode", "Directory".into()),
-                ("Surface", "Administrative controls".into()),
-                ("State", "Native SSR shell".into()),
-            ]/>
-            <Panel title="Administration Workspace" description="Dedicated native routes now own the administration bundle.">
-                <div class="record-list">
-                    <article class="record-card">
-                        <h4>"User Management"</h4>
+            <section class="app-screen box entity-page admin-workspace-shell">
+                <div class="admin-workspace-intro">
+                    <div class="admin-workspace-intro__copy">
+                        <p class="eyebrow">"Internal Area"</p>
+                        <h1>"Administration Workspace"</h1>
+                        <p class="muted">
+                            "Keep account access, role bundles, hierarchy definitions, and migration entry points together in one deliberate internal workspace."
+                        </p>
+                    </div>
+                    <div class="actions">
+                        <a class="button-link button is-light" href="/app/migration">"Open Migration"</a>
+                    </div>
+                </div>
+                <div class="admin-workspace-grid">
+                    <article class="admin-workspace-card">
+                        <p class="eyebrow">"Accounts"</p>
+                        <h3>"User Management"</h3>
                         <p>"Manage application accounts, assigned roles, and scoped access."</p>
                         <div class="actions">
                             <a class="button-link" href="/app/administration/users">"Open Users"</a>
                         </div>
                     </article>
-                    <article class="record-card">
-                        <h4>"Role Management"</h4>
+                    <article class="admin-workspace-card">
+                        <p class="eyebrow">"Authorization"</p>
+                        <h3>"Role Management"</h3>
                         <p>"Review capability bundles and the accounts currently assigned to them."</p>
                         <div class="actions">
                             <a class="button-link" href="/app/administration/roles">"Open Roles"</a>
                         </div>
                     </article>
-                    <article class="record-card">
-                        <h4>"Organization Node Types"</h4>
+                    <article class="admin-workspace-card">
+                        <p class="eyebrow">"Hierarchy"</p>
+                        <h3>"Organization Node Types"</h3>
                         <p>"Inspect hierarchy rules, metadata fields, and form scoping constraints."</p>
                         <div class="actions">
                             <a class="button-link" href="/app/administration/node-types">"Open Node Types"</a>
                         </div>
                     </article>
-                    <article class="record-card">
-                        <h4>"Migration Workbench"</h4>
-                        <p>"Legacy fixture validation and import rehearsal now run under a separate native internal route."</p>
+                    <article class="admin-workspace-card admin-workspace-card--subtle">
+                        <p class="eyebrow">"Migration"</p>
+                        <h3>"Legacy Validation"</h3>
+                        <p>"Legacy fixture validation and import rehearsal stay available as a subordinate internal route."</p>
                         <div class="actions">
                             <a class="button-link button is-light" href="/app/migration">"Open Migration"</a>
                         </div>
                     </article>
                 </div>
-            </Panel>
+            </section>
         </NativePage>
     }
 }
@@ -485,10 +494,24 @@ pub fn UserAccessPage() -> impl IntoView {
         let account_id = _account_id_for_load.clone();
         spawn_local(async move {
             loading.set(true);
-            match get_json::<UserAccessDetail>(&format!("/api/admin/users/{account_id}/access")).await {
+            match get_json::<UserAccessDetail>(&format!("/api/admin/users/{account_id}/access"))
+                .await
+            {
                 Ok(payload) => {
-                    selected_scope_ids.set(payload.scope_nodes.iter().map(|node| node.node_id.clone()).collect());
-                    selected_delegate_ids.set(payload.delegations.iter().map(|item| item.account_id.clone()).collect());
+                    selected_scope_ids.set(
+                        payload
+                            .scope_nodes
+                            .iter()
+                            .map(|node| node.node_id.clone())
+                            .collect(),
+                    );
+                    selected_delegate_ids.set(
+                        payload
+                            .delegations
+                            .iter()
+                            .map(|item| item.account_id.clone())
+                            .collect(),
+                    );
                     detail.set(Some(payload));
                     error.set(None);
                     status.set(Some("Access assignments loaded.".into()));
@@ -501,36 +524,43 @@ pub fn UserAccessPage() -> impl IntoView {
 
     let cancel_href = StoredValue::new(format!("/app/administration/users/{record_id}"));
     let _account_id_for_submit = account_id.clone();
-    let submit = StoredValue::new(std::sync::Arc::new(move |event: leptos::ev::SubmitEvent| {
-        event.prevent_default();
-        if busy.get_untracked() {
-            return;
-        }
-        busy.set(true);
-        error.set(None);
-        status.set(Some("Saving access assignments...".into()));
+    let submit = StoredValue::new(std::sync::Arc::new(
+        move |event: leptos::ev::SubmitEvent| {
+            event.prevent_default();
+            if busy.get_untracked() {
+                return;
+            }
+            busy.set(true);
+            error.set(None);
+            status.set(Some("Saving access assignments...".into()));
 
-        #[cfg(feature = "hydrate")]
-        {
-            let account_id = _account_id_for_submit.clone();
-            let scope_ids = selected_scope_ids.get_untracked();
-            let delegate_ids = selected_delegate_ids.get_untracked();
-            spawn_local(async move {
-                let payload = json!({
-                    "scope_node_ids": scope_ids,
-                    "delegate_account_ids": delegate_ids,
-                });
-                match put_json::<IdResponse>(&format!("/api/admin/users/{account_id}/access"), &payload).await {
-                    Ok(_) => redirect(&format!("/app/administration/users/{account_id}")),
-                    Err(message) => {
-                        error.set(Some(message));
-                        status.set(Some("Unable to save access assignments.".into()));
+            #[cfg(feature = "hydrate")]
+            {
+                let account_id = _account_id_for_submit.clone();
+                let scope_ids = selected_scope_ids.get_untracked();
+                let delegate_ids = selected_delegate_ids.get_untracked();
+                spawn_local(async move {
+                    let payload = json!({
+                        "scope_node_ids": scope_ids,
+                        "delegate_account_ids": delegate_ids,
+                    });
+                    match put_json::<IdResponse>(
+                        &format!("/api/admin/users/{account_id}/access"),
+                        &payload,
+                    )
+                    .await
+                    {
+                        Ok(_) => redirect(&format!("/app/administration/users/{account_id}")),
+                        Err(message) => {
+                            error.set(Some(message));
+                            status.set(Some("Unable to save access assignments.".into()));
+                        }
                     }
-                }
-                busy.set(false);
-            });
-        }
-    }));
+                    busy.set(false);
+                });
+            }
+        },
+    ));
 
     view! {
         <NativePage
@@ -848,7 +878,9 @@ pub fn NodeTypeDetailPage() -> impl IntoView {
         let node_type_id = _node_type_id_for_load.clone();
         spawn_local(async move {
             loading.set(true);
-            match get_json::<NodeTypeDefinition>(&format!("/api/admin/node-types/{node_type_id}")).await {
+            match get_json::<NodeTypeDefinition>(&format!("/api/admin/node-types/{node_type_id}"))
+                .await
+            {
                 Ok(payload) => {
                     detail.set(Some(payload));
                     error.set(None);
@@ -1149,7 +1181,9 @@ fn user_form_page(account_id: Option<String>) -> impl IntoView {
             loading.set(true);
             let roles_result = get_json::<Vec<RoleSummary>>("/api/admin/roles").await;
             let user_result = match account_id.clone() {
-                Some(account_id) => Some(get_json::<UserDetail>(&format!("/api/admin/users/{account_id}")).await),
+                Some(account_id) => {
+                    Some(get_json::<UserDetail>(&format!("/api/admin/users/{account_id}")).await)
+                }
                 None => None,
             };
 
@@ -1170,57 +1204,78 @@ fn user_form_page(account_id: Option<String>) -> impl IntoView {
                     Err(message) => error.set(Some(message)),
                 }
             } else {
-                status.set(Some("Provide account details and assign at least one role.".into()));
+                status.set(Some(
+                    "Provide account details and assign at least one role.".into(),
+                ));
             }
             loading.set(false);
         });
     });
 
-    let cancel_href = StoredValue::new(account_id
-        .as_ref()
-        .map(|account_id| format!("/app/administration/users/{account_id}"))
-        .unwrap_or_else(|| "/app/administration/users".into()));
+    let cancel_href = StoredValue::new(
+        account_id
+            .as_ref()
+            .map(|account_id| format!("/app/administration/users/{account_id}"))
+            .unwrap_or_else(|| "/app/administration/users".into()),
+    );
     let _account_id_for_submit = account_id.clone();
-    let submit = StoredValue::new(std::sync::Arc::new(move |event: leptos::ev::SubmitEvent| {
-        event.prevent_default();
-        if busy.get_untracked() {
-            return;
-        }
-        busy.set(true);
-        error.set(None);
-        status.set(Some(if is_edit { "Saving user changes..." } else { "Creating user..." }.into()));
-
-        #[cfg(feature = "hydrate")]
-        {
-            let account_id = _account_id_for_submit.clone();
-            let payload = json!({
-                "email": email.get_untracked(),
-                "display_name": display_name.get_untracked(),
-                "password": if is_edit {
-                    let password = password.get_untracked();
-                    if password.trim().is_empty() { serde_json::Value::Null } else { json!(password) }
+    let submit = StoredValue::new(std::sync::Arc::new(
+        move |event: leptos::ev::SubmitEvent| {
+            event.prevent_default();
+            if busy.get_untracked() {
+                return;
+            }
+            busy.set(true);
+            error.set(None);
+            status.set(Some(
+                if is_edit {
+                    "Saving user changes..."
                 } else {
-                    json!(password.get_untracked())
-                },
-                "is_active": is_active.get_untracked(),
-                "role_ids": selected_role_ids.get_untracked(),
-            });
-            spawn_local(async move {
-                let result = match account_id {
-                    Some(account_id) => put_json::<IdResponse>(&format!("/api/admin/users/{account_id}"), &payload).await,
-                    None => post_json::<IdResponse>("/api/admin/users", &payload).await,
-                };
-                match result {
-                    Ok(response) => redirect(&format!("/app/administration/users/{}", response.id)),
-                    Err(message) => {
-                        error.set(Some(message));
-                        status.set(Some("Unable to save the user.".into()));
-                    }
+                    "Creating user..."
                 }
-                busy.set(false);
-            });
-        }
-    }));
+                .into(),
+            ));
+
+            #[cfg(feature = "hydrate")]
+            {
+                let account_id = _account_id_for_submit.clone();
+                let payload = json!({
+                    "email": email.get_untracked(),
+                    "display_name": display_name.get_untracked(),
+                    "password": if is_edit {
+                        let password = password.get_untracked();
+                        if password.trim().is_empty() { serde_json::Value::Null } else { json!(password) }
+                    } else {
+                        json!(password.get_untracked())
+                    },
+                    "is_active": is_active.get_untracked(),
+                    "role_ids": selected_role_ids.get_untracked(),
+                });
+                spawn_local(async move {
+                    let result = match account_id {
+                        Some(account_id) => {
+                            put_json::<IdResponse>(
+                                &format!("/api/admin/users/{account_id}"),
+                                &payload,
+                            )
+                            .await
+                        }
+                        None => post_json::<IdResponse>("/api/admin/users", &payload).await,
+                    };
+                    match result {
+                        Ok(response) => {
+                            redirect(&format!("/app/administration/users/{}", response.id))
+                        }
+                        Err(message) => {
+                            error.set(Some(message));
+                            status.set(Some("Unable to save the user.".into()));
+                        }
+                    }
+                    busy.set(false);
+                });
+            }
+        },
+    ));
 
     view! {
         <NativePage
@@ -1347,9 +1402,12 @@ fn role_form_page(role_id: Option<String>) -> impl IntoView {
         let role_id = _role_id_for_load.clone();
         spawn_local(async move {
             loading.set(true);
-            let capabilities_result = get_json::<Vec<CapabilitySummary>>("/api/admin/capabilities").await;
+            let capabilities_result =
+                get_json::<Vec<CapabilitySummary>>("/api/admin/capabilities").await;
             let role_result = match role_id.clone() {
-                Some(role_id) => Some(get_json::<RoleDetail>(&format!("/api/admin/roles/{role_id}")).await),
+                Some(role_id) => {
+                    Some(get_json::<RoleDetail>(&format!("/api/admin/roles/{role_id}")).await)
+                }
                 None => None,
             };
 
@@ -1361,59 +1419,82 @@ fn role_form_page(role_id: Option<String>) -> impl IntoView {
                 match result {
                     Ok(role) => {
                         name.set(role.name);
-                        selected_capability_ids.set(role.capabilities.into_iter().map(|capability| capability.id).collect());
+                        selected_capability_ids.set(
+                            role.capabilities
+                                .into_iter()
+                                .map(|capability| capability.id)
+                                .collect(),
+                        );
                         status.set(Some("Role detail loaded.".into()));
                     }
                     Err(message) => error.set(Some(message)),
                 }
             } else {
-                status.set(Some("Provide a role name and choose one or more capabilities.".into()));
+                status.set(Some(
+                    "Provide a role name and choose one or more capabilities.".into(),
+                ));
             }
             loading.set(false);
         });
     });
 
-    let cancel_href = StoredValue::new(role_id
-        .as_ref()
-        .map(|role_id| format!("/app/administration/roles/{role_id}"))
-        .unwrap_or_else(|| "/app/administration/roles".into()));
+    let cancel_href = StoredValue::new(
+        role_id
+            .as_ref()
+            .map(|role_id| format!("/app/administration/roles/{role_id}"))
+            .unwrap_or_else(|| "/app/administration/roles".into()),
+    );
     let _role_id_for_submit = role_id.clone();
-    let submit = StoredValue::new(std::sync::Arc::new(move |event: leptos::ev::SubmitEvent| {
-        event.prevent_default();
-        if busy.get_untracked() {
-            return;
-        }
-        busy.set(true);
-        error.set(None);
-        status.set(Some(if is_edit { "Saving role changes..." } else { "Creating role..." }.into()));
-
-        #[cfg(feature = "hydrate")]
-        {
-            let role_id = _role_id_for_submit.clone();
-            let payload = if is_edit {
-                json!({ "capability_ids": selected_capability_ids.get_untracked() })
-            } else {
-                json!({
-                    "name": name.get_untracked(),
-                    "capability_ids": selected_capability_ids.get_untracked(),
-                })
-            };
-            spawn_local(async move {
-                let result = match role_id {
-                    Some(role_id) => put_json::<IdResponse>(&format!("/api/admin/roles/{role_id}"), &payload).await,
-                    None => post_json::<IdResponse>("/api/admin/roles", &payload).await,
-                };
-                match result {
-                    Ok(response) => redirect(&format!("/app/administration/roles/{}", response.id)),
-                    Err(message) => {
-                        error.set(Some(message));
-                        status.set(Some("Unable to save the role.".into()));
-                    }
+    let submit = StoredValue::new(std::sync::Arc::new(
+        move |event: leptos::ev::SubmitEvent| {
+            event.prevent_default();
+            if busy.get_untracked() {
+                return;
+            }
+            busy.set(true);
+            error.set(None);
+            status.set(Some(
+                if is_edit {
+                    "Saving role changes..."
+                } else {
+                    "Creating role..."
                 }
-                busy.set(false);
-            });
-        }
-    }));
+                .into(),
+            ));
+
+            #[cfg(feature = "hydrate")]
+            {
+                let role_id = _role_id_for_submit.clone();
+                let payload = if is_edit {
+                    json!({ "capability_ids": selected_capability_ids.get_untracked() })
+                } else {
+                    json!({
+                        "name": name.get_untracked(),
+                        "capability_ids": selected_capability_ids.get_untracked(),
+                    })
+                };
+                spawn_local(async move {
+                    let result = match role_id {
+                        Some(role_id) => {
+                            put_json::<IdResponse>(&format!("/api/admin/roles/{role_id}"), &payload)
+                                .await
+                        }
+                        None => post_json::<IdResponse>("/api/admin/roles", &payload).await,
+                    };
+                    match result {
+                        Ok(response) => {
+                            redirect(&format!("/app/administration/roles/{}", response.id))
+                        }
+                        Err(message) => {
+                            error.set(Some(message));
+                            status.set(Some("Unable to save the role.".into()));
+                        }
+                    }
+                    busy.set(false);
+                });
+            }
+        },
+    ));
 
     view! {
         <NativePage
@@ -1538,7 +1619,12 @@ fn node_type_form_page(node_type_id: Option<String>) -> impl IntoView {
             loading.set(true);
             let catalog_result = get_json::<Vec<NodeTypeSummary>>("/api/admin/node-types").await;
             let detail_result = match node_type_id.clone() {
-                Some(node_type_id) => Some(get_json::<NodeTypeDefinition>(&format!("/api/admin/node-types/{node_type_id}")).await),
+                Some(node_type_id) => Some(
+                    get_json::<NodeTypeDefinition>(&format!(
+                        "/api/admin/node-types/{node_type_id}"
+                    ))
+                    .await,
+                ),
                 None => None,
             };
 
@@ -1552,67 +1638,100 @@ fn node_type_form_page(node_type_id: Option<String>) -> impl IntoView {
                         name.set(detail.name);
                         slug.set(detail.slug);
                         plural_label.set(detail.plural_label);
-                        selected_parent_ids.set(detail.parent_relationships.into_iter().map(|item| item.node_type_id).collect());
-                        selected_child_ids.set(detail.child_relationships.into_iter().map(|item| item.node_type_id).collect());
+                        selected_parent_ids.set(
+                            detail
+                                .parent_relationships
+                                .into_iter()
+                                .map(|item| item.node_type_id)
+                                .collect(),
+                        );
+                        selected_child_ids.set(
+                            detail
+                                .child_relationships
+                                .into_iter()
+                                .map(|item| item.node_type_id)
+                                .collect(),
+                        );
                         status.set(Some("Node type detail loaded.".into()));
                     }
                     Err(message) => error.set(Some(message)),
                 }
             } else {
-                status.set(Some("Provide node type labels and configure allowed relationships.".into()));
+                status.set(Some(
+                    "Provide node type labels and configure allowed relationships.".into(),
+                ));
             }
             loading.set(false);
         });
     });
 
-    let cancel_href = StoredValue::new(node_type_id
-        .as_ref()
-        .map(|node_type_id| format!("/app/administration/node-types/{node_type_id}"))
-        .unwrap_or_else(|| "/app/administration/node-types".into()));
+    let cancel_href = StoredValue::new(
+        node_type_id
+            .as_ref()
+            .map(|node_type_id| format!("/app/administration/node-types/{node_type_id}"))
+            .unwrap_or_else(|| "/app/administration/node-types".into()),
+    );
     let parent_current_id = StoredValue::new(node_type_id.clone());
     let child_current_id = StoredValue::new(node_type_id.clone());
     let _node_type_id_for_submit = node_type_id.clone();
-    let submit = StoredValue::new(std::sync::Arc::new(move |event: leptos::ev::SubmitEvent| {
-        event.prevent_default();
-        if busy.get_untracked() {
-            return;
-        }
-        busy.set(true);
-        error.set(None);
-        status.set(Some(if is_edit { "Saving node type changes..." } else { "Creating node type..." }.into()));
-
-        #[cfg(feature = "hydrate")]
-        {
-            let node_type_id = _node_type_id_for_submit.clone();
-            let plural_label_value = plural_label.get_untracked();
-            let plural_label_payload = if plural_label_value.trim().is_empty() {
-                serde_json::Value::Null
-            } else {
-                json!(plural_label_value)
-            };
-            let payload = json!({
-                "name": name.get_untracked(),
-                "slug": slug.get_untracked(),
-                "plural_label": plural_label_payload,
-                "parent_node_type_ids": selected_parent_ids.get_untracked(),
-                "child_node_type_ids": selected_child_ids.get_untracked(),
-            });
-            spawn_local(async move {
-                let result = match node_type_id {
-                    Some(node_type_id) => put_json::<IdResponse>(&format!("/api/admin/node-types/{node_type_id}"), &payload).await,
-                    None => post_json::<IdResponse>("/api/admin/node-types", &payload).await,
-                };
-                match result {
-                    Ok(response) => redirect(&format!("/app/administration/node-types/{}", response.id)),
-                    Err(message) => {
-                        error.set(Some(message));
-                        status.set(Some("Unable to save the node type.".into()));
-                    }
+    let submit = StoredValue::new(std::sync::Arc::new(
+        move |event: leptos::ev::SubmitEvent| {
+            event.prevent_default();
+            if busy.get_untracked() {
+                return;
+            }
+            busy.set(true);
+            error.set(None);
+            status.set(Some(
+                if is_edit {
+                    "Saving node type changes..."
+                } else {
+                    "Creating node type..."
                 }
-                busy.set(false);
-            });
-        }
-    }));
+                .into(),
+            ));
+
+            #[cfg(feature = "hydrate")]
+            {
+                let node_type_id = _node_type_id_for_submit.clone();
+                let plural_label_value = plural_label.get_untracked();
+                let plural_label_payload = if plural_label_value.trim().is_empty() {
+                    serde_json::Value::Null
+                } else {
+                    json!(plural_label_value)
+                };
+                let payload = json!({
+                    "name": name.get_untracked(),
+                    "slug": slug.get_untracked(),
+                    "plural_label": plural_label_payload,
+                    "parent_node_type_ids": selected_parent_ids.get_untracked(),
+                    "child_node_type_ids": selected_child_ids.get_untracked(),
+                });
+                spawn_local(async move {
+                    let result = match node_type_id {
+                        Some(node_type_id) => {
+                            put_json::<IdResponse>(
+                                &format!("/api/admin/node-types/{node_type_id}"),
+                                &payload,
+                            )
+                            .await
+                        }
+                        None => post_json::<IdResponse>("/api/admin/node-types", &payload).await,
+                    };
+                    match result {
+                        Ok(response) => {
+                            redirect(&format!("/app/administration/node-types/{}", response.id))
+                        }
+                        Err(message) => {
+                            error.set(Some(message));
+                            status.set(Some("Unable to save the node type.".into()));
+                        }
+                    }
+                    busy.set(false);
+                });
+            }
+        },
+    ));
 
     view! {
         <NativePage

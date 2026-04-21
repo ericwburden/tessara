@@ -2070,7 +2070,7 @@ pub fn FormEditPage() -> impl IntoView {
 
     view! {
         <NativePage
-            title="Edit Form"
+            title="Draft Authoring"
             description="Edit a Tessara form."
             page_key="form-edit"
             active_route="forms"
@@ -2085,41 +2085,55 @@ pub fn FormEditPage() -> impl IntoView {
             ]
         >
             <section class="forms-route form-edit-screen">
-                <header class="detail-section box forms-screen-header">
-                    <div class="page-title-row">
-                        <div>
-                            <p class="eyebrow">"Forms"</p>
-                            <h1>"Draft Authoring"</h1>
-                            <p class="muted">
-                                "Create draft versions, author sections and fields, and publish valid drafts from the same route."
-                            </p>
-                        </div>
-                        <div class="actions">
-                            <a class="button-link button is-light" href=format!("/app/forms/{form_id}")>
-                                "Back To Detail"
-                            </a>
-                            <a class="button-link button is-light" href="/app/forms">
-                                "All Forms"
-                            </a>
-                        </div>
-                    </div>
-                </header>
                 <section class="form-edit-layout">
                     <section class="form-edit-primary">
+                        <div class="form-edit-toolbar">
+                            <div class="form-edit-toolbar__copy">
+                                <p class="eyebrow">"Forms"</p>
+                                <h1>"Draft Authoring"</h1>
+                                <p class="muted">
+                                    "Keep version choice nearby, but let the builder canvas stay visually primary."
+                                </p>
+                            </div>
+                            <div class="actions">
+                                <a class="button-link button is-light" href=format!("/app/forms/{form_id}")>
+                                    "Back To Detail"
+                                </a>
+                                <a class="button-link button is-light" href="/app/forms">
+                                    "All Forms"
+                                </a>
+                            </div>
+                        </div>
+                        <section class="detail-section box form-edit-workspace-shell">
+                            <div class="page-title-row compact-title-row">
+                                <div>
+                                    <p class="eyebrow">"Builder"</p>
+                                    <h3>"Draft Workspace"</h3>
+                                    <p class="muted">
+                                        "The authoring canvas stays primary. Lifecycle and metadata remain available, but secondary."
+                                    </p>
+                                </div>
+                            </div>
+                            <div id="form-version-workspace" class="record-detail form-edit-workspace">
+                                <p class="muted">"Loading draft workspace..."</p>
+                            </div>
+                        </section>
+                    </section>
+                    <aside class="form-edit-secondary">
                         <section class="detail-section box form-edit-lifecycle-shell">
                             <div class="page-title-row compact-title-row">
                                 <div>
                                     <p class="eyebrow">"Lifecycle"</p>
                                     <h3>"Draft Versions"</h3>
                                     <p class="muted">
-                                        "Choose the draft you want to author, or create a new one before entering the canvas."
+                                        "Keep version choice available without taking over the route before authoring begins."
                                     </p>
                                 </div>
                             </div>
                             <p id="form-version-status" class="muted">
                                 "Select or create a version to start authoring."
                             </p>
-                            <form id="form-version-create-form" class="entity-form">
+                            <form id="form-version-create-form" class="entity-form form-edit-version-create">
                                 <p class="muted">
                                     "Draft versions stay unlabeled until publish. Semantic version and major-line compatibility are assigned automatically when you publish."
                                 </p>
@@ -2131,22 +2145,6 @@ pub fn FormEditPage() -> impl IntoView {
                                 <p class="muted">"Loading form versions..."</p>
                             </div>
                         </section>
-                        <section class="detail-section box form-edit-workspace-shell">
-                            <div class="page-title-row compact-title-row">
-                                <div>
-                                    <p class="eyebrow">"Builder"</p>
-                                    <h3>"Draft Workspace"</h3>
-                                    <p class="muted">
-                                        "The authoring canvas stays primary. Metadata remains available, but secondary."
-                                    </p>
-                                </div>
-                            </div>
-                            <div id="form-version-workspace" class="record-detail form-edit-workspace">
-                                <p class="muted">"Loading draft workspace..."</p>
-                            </div>
-                        </section>
-                    </section>
-                    <aside class="form-edit-secondary">
                         <section class="detail-section box form-edit-metadata-shell">
                             <div class="page-title-row compact-title-row">
                                 <div>

@@ -28,7 +28,10 @@ pub fn password_scheme() -> &'static str {
 }
 
 pub fn derive_ui_access_profile(capabilities: &[String]) -> UiAccessProfile {
-    if capabilities.iter().any(|capability| capability == "admin:all") {
+    if capabilities
+        .iter()
+        .any(|capability| capability == "admin:all")
+    {
         UiAccessProfile::Admin
     } else if capabilities.iter().any(|capability| {
         matches!(
@@ -92,7 +95,10 @@ pub async fn authenticate_request(
     authenticate_request_with_cookie_name(pool, headers, &config.auth_cookie_name).await
 }
 
-pub async fn require_authenticated(pool: &PgPool, headers: &HeaderMap) -> ApiResult<AccountContext> {
+pub async fn require_authenticated(
+    pool: &PgPool,
+    headers: &HeaderMap,
+) -> ApiResult<AccountContext> {
     let (account, _) =
         authenticate_request_with_cookie_name(pool, headers, DEFAULT_AUTH_COOKIE_NAME).await?;
     Ok(account)

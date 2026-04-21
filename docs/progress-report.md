@@ -1,5 +1,23 @@
 # Progress Report
 
+## 2026-04-19 - UI Overhaul 2.0 Kickoff
+
+- Completed:
+  - confirmed `main` was clean before creating the dedicated UI migration branch and worktree
+  - created branch `codex/ui-overhaul-2-0` with sibling worktree `D:\Projects\tessara-ui-overhaul-2-0`
+  - wrote the kickoff plan in `docs/sprints/ui-overhaul-2-0-plan.md` and tied it to the approved out-of-roadmap UI migration scope
+  - promoted the `UIM-01` through `UIM-10` backlog in `docs/sprints/out-of-roadmap-ui-migration-github-ready.md` to live GitHub issues `#59` through `#68` under milestone `Out-Of-Roadmap UI Migration`
+- Validation Plan:
+  - `cargo fmt --all`
+  - `cargo test -p tessara-api`
+  - `cargo test -p tessara-web`
+  - `npx playwright test`
+  - `.\scripts\smoke.ps1`
+  - `.\scripts\local-launch.ps1`
+  - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`
+- Immediate Focus:
+  - execute the shell-first sequencing with the live backlog: `#59` -> `#61` -> `#62` -> `#60` -> `#63`
+
 ## 2026-04-19 - Sprint 2B Settled-Surface Session Contract (#52-#54)
 
 - Completed:
