@@ -2347,7 +2347,6 @@ body.tessara-app .app-shell--migration .app-sidebar {
     border-radius: 1rem;
     overflow: visible;
     isolation: isolate;
-    contain: paint;
     mix-blend-mode: normal;
     opacity: 1 !important;
     background: var(--shell-account-popover-bg) !important;
