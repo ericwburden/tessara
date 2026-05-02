@@ -577,7 +577,7 @@ mod hydrate {
     fn render_form_version_create_panel(form: &FormDefinition) -> String {
         if let Some(draft) = active_draft_version(form) {
             return format!(
-                r#"<p class="muted">One draft version is allowed at a time. Open the active draft workspace or publish it before creating another.</p><div class="actions"><button class="button is-primary" type="submit" disabled>Draft Already Open ({})</button></div>"#,
+                r#"<p class="muted">One draft version is allowed at a time. Open the active draft workspace or publish it before creating another.</p><p class="form-edit-version-lock">Active draft: {}</p>"#,
                 escape_html(&form_version_label(&draft))
             );
         }
@@ -615,47 +615,51 @@ mod hydrate {
         selected_section_id: Option<&str>,
     ) -> String {
         if rendered.sections.is_empty() {
-            return r#"<p class="muted form-builder-rail-empty">Add a first section to activate the canvas rail.</p>"#
+            return r#"<p class="muted form-builder-rail-empty">Add a first section to activate section tabs in the canvas.</p>"#
                 .into();
         }
 
-        rendered
-            .sections
-            .iter()
-            .enumerate()
-            .map(|(section_index, section)| {
-                format!(
-                    r##"<a class="form-builder-section-link{}" href="#builder-section-{}" data-select-form-section="{}"><span>Section {}</span><strong>{}</strong><small>{}</small></a>"##,
-                    if Some(section.id.as_str()) == selected_section_id {
-                        " is-selected"
-                    } else {
-                        ""
-                    },
-                    escape_html(&section.id),
-                    escape_html(&section.id),
-                    section_index + 1,
-                    escape_html(&section.title),
-                    escape_html(&form_section_layout_label(section.column_count)),
-                )
-            })
-            .collect::<Vec<_>>()
-            .join("")
+        format!(
+            r#"<nav class="form-builder-section-tabs" aria-label="Draft sections">{}</nav>"#,
+            rendered
+                .sections
+                .iter()
+                .map(|section| {
+                    format!(
+                        r##"<button class="form-builder-section-tab{}" type="button" data-select-form-section="{}" aria-pressed="{}" {}><span class="form-builder-section-tab__summary"><strong>{}</strong><small>/ {}</small></span></button>"##,
+                        if Some(section.id.as_str()) == selected_section_id {
+                            " is-selected"
+                        } else {
+                            ""
+                        },
+                        escape_html(&section.id),
+                        if Some(section.id.as_str()) == selected_section_id {
+                            "true"
+                        } else {
+                            "false"
+                        },
+                        if Some(section.id.as_str()) == selected_section_id {
+                            r#"aria-current="page""#
+                        } else {
+                            ""
+                        },
+                        escape_html(&section.title),
+                        escape_html(&form_section_layout_label(section.column_count)),
+                    )
+                })
+                .chain(std::iter::once(
+                    r#"<button class="form-builder-section-tab form-builder-section-tab--add" type="button" data-form-section-create="tabs" aria-label="Add Section"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>"#
+                        .to_string(),
+                ))
+                .collect::<Vec<_>>()
+                .join("")
+        )
     }
 
-    fn render_builder_insert_rail(selected_section: Option<&RenderedSection>) -> String {
-        let add_field_button = if let Some(section) = selected_section {
-            format!(
-                r#"<button class="button is-light" type="button" data-form-field-create="{}">Add Field To Selected Section</button><p class="muted">New fields open in the properties panel with generated defaults so authors can refine them in context.</p>"#,
-                escape_html(&section.id),
-            )
-        } else {
-            r#"<button class="button is-light" type="button" disabled>Select A Section First</button><p class="muted">Choose a section from the rail or canvas before inserting a new field.</p>"#
-                .into()
-        };
-
+    fn render_builder_add_field_card(section: &RenderedSection) -> String {
         format!(
-            r#"<aside class="detail-section box form-builder-insert-rail"><div class="page-title-row compact-title-row"><div><p class="form-builder-eyebrow">Insert Rail</p><h4>Add To Draft</h4><p class="muted">Keep the next authoring move near the canvas instead of in the global shell.</p></div></div><ul class="app-list form-builder-insert-catalog"><li><strong>Short answer</strong><span class="muted">Single-line response fields and short notes</span></li><li><strong>Number</strong><span class="muted">Quantities, counts, and numeric checks</span></li><li><strong>Date</strong><span class="muted">Schedule and reporting-period inputs</span></li><li><strong>Multiple choice</strong><span class="muted">Inline option lists until reusable sources land</span></li></ul><div class="actions form-builder-insert-actions"><button class="button" type="button" data-form-section-create="quick">Add Section</button>{}</div></aside>"#,
-            add_field_button
+            r#"<article class="record-card form-builder-field-card form-builder-field-card--add"><div class="form-builder-field-card__add"><button class="button" type="button" data-form-field-create="{}">Add New Field</button><p class="muted">This adds a new field to the currently viewed section and opens its properties here.</p></div></article>"#,
+            escape_html(&section.id),
         )
     }
 
@@ -698,7 +702,7 @@ mod hydrate {
     }
 
     fn render_editable_form_workspace(
-        form: &FormDefinition,
+        _form: &FormDefinition,
         version: &FormVersionSummary,
         rendered: &RenderedForm,
         selected_section_id: Option<&str>,
@@ -719,9 +723,6 @@ mod hydrate {
             selected_section_id,
             resolved_field_id.as_deref(),
         );
-        let selected_section = resolved_section_id
-            .as_deref()
-            .and_then(|section_id| current_rendered_section(rendered, section_id));
         let properties_panel =
             render_builder_properties_panel(rendered, resolved_field_id.as_deref());
         let sections = if rendered.sections.is_empty() {
@@ -732,67 +733,51 @@ mod hydrate {
                 .sections
                 .iter()
                 .enumerate()
+                .filter(|(_, section)| {
+                    Some(section.id.as_str()) == resolved_section_id.as_deref()
+                })
                 .map(|(section_index, section)| {
-                    let section_is_selected = Some(section.id.as_str())
-                        == resolved_section_id.as_deref()
-                        || section
-                            .fields
-                            .iter()
-                            .any(|field| Some(field.id.as_str()) == resolved_field_id.as_deref());
-                    let fields = if section.fields.is_empty() {
-                        format!(
-                            r#"<section class="form-builder-empty-fields"><p class="muted">No fields were added to this section yet. Select the section, then use the insert rail to add the first field.</p><div class="actions"><button class="button is-light" type="button" data-select-form-section="{}">Select Section</button></div></section>"#,
-                            escape_html(&section.id),
-                        )
-                    } else {
-                        section
-                            .fields
-                            .iter()
-                            .enumerate()
-                            .map(|(field_index, field)| {
-                                let field_is_selected =
-                                    Some(field.id.as_str()) == resolved_field_id.as_deref();
-                                format!(
-                                    r#"<article class="record-card form-builder-field-card{}"><div class="page-title-row compact-title-row"><div><p class="eyebrow">{}</p><button class="button button-link form-builder-field-title" type="button" data-select-form-field="{}">{}</button><p class="muted">Field {} · {}</p></div><div class="actions form-builder-field-actions"><button class="button is-light" type="button" data-form-field-move-up="{}">Up</button><button class="button is-light" type="button" data-form-field-move-down="{}">Down</button><button class="button is-light" type="button" data-form-field-delete="{}">Delete</button></div></div><p class="form-builder-field-key">Key: {}</p><p class="muted">{}</p></article>"#,
-                                    if field_is_selected {
-                                        " is-selected"
-                                    } else {
-                                        ""
-                                    },
-                                    escape_html(form_field_kind_label(&field.field_type)),
-                                    escape_html(&field.id),
-                                    escape_html(&field.label),
-                                    field_index + 1,
-                                    if field.required {
-                                        "Required"
-                                    } else {
-                                        "Optional"
-                                    },
-                                    escape_html(&field.id),
-                                    escape_html(&field.id),
-                                    escape_html(&field.id),
-                                    escape_html(&field.key),
-                                    escape_html(form_field_preview_copy(&field.field_type)),
-                                )
-                            })
-                            .collect::<Vec<_>>()
-                            .join("")
-                    };
+                    let fields = section
+                        .fields
+                        .iter()
+                        .enumerate()
+                        .map(|(field_index, field)| {
+                            let field_is_selected =
+                                Some(field.id.as_str()) == resolved_field_id.as_deref();
+                            format!(
+                                r#"<article class="record-card form-builder-field-card{}"><div class="page-title-row compact-title-row"><div><p class="eyebrow">{}</p><button class="button button-link form-builder-field-title" type="button" data-select-form-field="{}">{}</button><p class="muted">Field {} · {}</p></div><div class="actions form-builder-field-actions"><button class="button is-light" type="button" data-form-field-move-up="{}">Up</button><button class="button is-light" type="button" data-form-field-move-down="{}">Down</button><button class="button is-light" type="button" data-form-field-delete="{}">Delete</button></div></div><p class="form-builder-field-key">Key: {}</p><p class="muted">{}</p></article>"#,
+                                if field_is_selected {
+                                    " is-selected"
+                                } else {
+                                    ""
+                                },
+                                escape_html(form_field_kind_label(&field.field_type)),
+                                escape_html(&field.id),
+                                escape_html(&field.label),
+                                field_index + 1,
+                                if field.required {
+                                    "Required"
+                                } else {
+                                    "Optional"
+                                },
+                                escape_html(&field.id),
+                                escape_html(&field.id),
+                                escape_html(&field.id),
+                                escape_html(&field.key),
+                                escape_html(form_field_preview_copy(&field.field_type)),
+                            )
+                        })
+                        .chain(std::iter::once(render_builder_add_field_card(section)))
+                        .collect::<Vec<_>>()
+                        .join("");
                     format!(
-                        r##"<section class="detail-section box form-builder-section{}" id="builder-section-{}"><div class="page-title-row compact-title-row"><div><p class="form-builder-eyebrow">Section {}</p><h3>{}</h3><p class="muted">Display order {} · {} · {} field(s)</p></div><div class="actions"><a class="button is-light" href="#builder-section-{}" data-select-form-section="{}">Focus</a><button class="button is-light" type="button" data-form-section-move-up="{}">Up</button><button class="button is-light" type="button" data-form-section-move-down="{}">Down</button><button class="button is-light" type="button" data-form-section-delete="{}">Delete</button><button class="button" type="button" data-form-section-save="{}">Save Section</button></div></div><div class="form-grid"><div class="form-field wide-field"><label for="form-section-title-{}">Section Title</label><input class="input" id="form-section-title-{}" type="text" value="{}" /></div><div class="form-field wide-field"><label for="form-section-description-{}">Section Description</label><textarea class="textarea" id="form-section-description-{}" rows="3">{}</textarea></div><div class="form-field"><label for="form-section-column-count-{}">Columns</label><select class="input" id="form-section-column-count-{}">{}</select></div><div class="form-field"><label for="form-section-position-{}">Display Order</label><input class="input" id="form-section-position-{}" type="number" value="{}" /></div></div><div class="form-builder-field-grid form-builder-field-grid--cols-{}">{}</div></section>"##,
-                        if section_is_selected {
-                            " is-selected"
-                        } else {
-                            ""
-                        },
+                        r##"<section class="detail-section box form-builder-section" id="builder-section-{}"><div class="page-title-row compact-title-row"><div><p class="form-builder-eyebrow">Section {}</p><h3>{}</h3><p class="muted">Display order {} · {} · {} field(s)</p></div><div class="actions"><button class="button is-light" type="button" data-form-section-move-up="{}">Up</button><button class="button is-light" type="button" data-form-section-move-down="{}">Down</button><button class="button is-light" type="button" data-form-section-delete="{}">Delete</button><button class="button" type="button" data-form-section-save="{}">Save Section</button></div></div><div class="form-grid"><div class="form-field wide-field"><label for="form-section-title-{}">Section Title</label><input class="input" id="form-section-title-{}" type="text" value="{}" /></div><div class="form-field wide-field"><label for="form-section-description-{}">Section Description</label><textarea class="textarea" id="form-section-description-{}" rows="3">{}</textarea></div><div class="form-field"><label for="form-section-column-count-{}">Columns</label><select class="input" id="form-section-column-count-{}">{}</select></div><div class="form-field"><label for="form-section-position-{}">Display Order</label><input class="input" id="form-section-position-{}" type="number" value="{}" /></div></div><div class="form-builder-field-grid form-builder-field-grid--cols-{}">{}</div></section>"##,
                         escape_html(&section.id),
                         section_index + 1,
                         escape_html(&section.title),
                         section.position,
                         escape_html(&form_section_layout_label(section.column_count)),
                         section.fields.len(),
-                        escape_html(&section.id),
-                        escape_html(&section.id),
                         escape_html(&section.id),
                         escape_html(&section.id),
                         escape_html(&section.id),
@@ -827,18 +812,17 @@ mod hydrate {
             .iter()
             .map(|section| section.fields.len())
             .sum::<usize>();
+        let section_navigation =
+            render_builder_section_navigation(rendered, resolved_section_id.as_deref());
         format!(
-            r#"<section class="form-builder-shell"><section class="form-builder-lifecycle-strip"><div class="form-builder-lifecycle-strip__copy"><p class="form-builder-eyebrow">Lifecycle</p><h3>{}</h3><p class="muted">Draft workspace for {}. Publish and version status stay visible here while the canvas remains primary.</p></div><div class="form-builder-lifecycle-strip__meta"><span class="form-builder-lifecycle-chip">Draft</span><span class="form-builder-lifecycle-chip">Version line: {}</span><span class="form-builder-lifecycle-chip">Sections: {}</span><span class="form-builder-lifecycle-chip">Fields: {}</span></div><div class="form-builder-lifecycle-strip__actions"><div class="form-builder-lifecycle-strip__summary">{}</div><div class="actions"><button class="button" type="button" data-publish-form-version="{}">Publish Draft Version</button></div></div></section><div class="{}"><div class="form-builder-sidebar"><aside class="detail-section box form-builder-rail"><div class="page-title-row compact-title-row"><div><p class="form-builder-eyebrow">Sections</p><h4>Jump Between Sections</h4><p class="muted">Use the rail to switch context without losing the stacked canvas flow.</p></div></div><div class="form-builder-section-links">{}</div></aside>{}</div><div class="form-builder-main"><section class="detail-section box form-builder-canvas"><div class="page-title-row compact-title-row"><div><p class="form-builder-eyebrow">Section Stack</p><h4>Canvas</h4><p class="muted">Draft sections stay stacked in one authoring flow.</p></div></div>{}</section></div>{}</div></section>"#,
-            escape_html(&form_version_label(version)),
-            escape_html(&form.name),
+            r#"<section class="form-builder-shell"><section class="form-builder-lifecycle-strip"><div class="form-builder-lifecycle-strip__copy"><p class="form-builder-eyebrow">Lifecycle</p></div><div class="form-builder-lifecycle-strip__meta"><span class="form-builder-lifecycle-chip">Draft</span><span class="form-builder-lifecycle-chip">Version line: {}</span><span class="form-builder-lifecycle-chip">Sections: {}</span><span class="form-builder-lifecycle-chip">Fields: {}</span></div><div class="form-builder-lifecycle-strip__actions"><div class="form-builder-lifecycle-strip__summary">{}</div><div class="actions"><button class="button" type="button" data-publish-form-version="{}">Publish Draft Version</button></div></div></section><div class="{}"><div class="form-builder-main"><section class="detail-section box form-builder-canvas"><div class="page-title-row compact-title-row"><div><p class="form-builder-eyebrow">Section Stack</p><h4>Canvas</h4><p class="muted">Draft sections stay stacked in one authoring flow.</p></div></div>{}<div class="form-builder-canvas-scroll">{}</div></section></div>{}</div></section>"#,
             escape_html(&form_version_label(version)),
             rendered.sections.len(),
             field_count,
             render_form_version_lifecycle_summary(version),
             escape_html(&version.id),
             layout_class,
-            render_builder_section_navigation(rendered, resolved_section_id.as_deref()),
-            render_builder_insert_rail(selected_section.as_ref()),
+            section_navigation,
             sections,
             properties_panel,
         )
@@ -1673,6 +1657,7 @@ mod hydrate {
             "form-scope-node-type",
             form.scope_node_type_id.as_deref().unwrap_or(""),
         );
+        set_text("form-editor-status", "");
 
         let selected_version = preferred_version(&form, preferred_version_id.as_deref());
         set_html(
@@ -2108,25 +2093,8 @@ pub fn FormEditPage() -> impl IntoView {
             ]
         >
             <section class="forms-route form-edit-screen">
-                <section class="form-edit-layout">
+                    <section class="form-edit-layout">
                     <section class="form-edit-primary">
-                        <div class="form-edit-toolbar">
-                            <div class="form-edit-toolbar__copy">
-                                <p class="eyebrow">"Forms"</p>
-                                <h1>"Draft Authoring"</h1>
-                                <p class="muted">
-                                    "Keep version choice nearby, but let the builder canvas stay visually primary."
-                                </p>
-                            </div>
-                            <div class="actions">
-                                <a class="button-link button is-light" href=format!("/app/forms/{form_id}")>
-                                    "Back To Detail"
-                                </a>
-                                <a class="button-link button is-light" href="/app/forms">
-                                    "All Forms"
-                                </a>
-                            </div>
-                        </div>
                         <section class="detail-section box form-edit-workspace-shell">
                             <div class="page-title-row compact-title-row">
                                 <div>
@@ -2181,7 +2149,7 @@ pub fn FormEditPage() -> impl IntoView {
                             <p id="form-editor-status" class="muted">"Loading form metadata..."</p>
                             <form id="form-entity-form" class="entity-form">
                                 <div class="form-grid">
-                                    <div class="form-field wide-field">
+                                    <div class="form-field">
                                         <label for="form-name">"Name"</label>
                                         <input class="input" id="form-name" type="text" autocomplete="off" />
                                     </div>

@@ -762,69 +762,49 @@ test("forms authoring routes stay native and console-clean", async ({
   expect(editHref).toBeTruthy();
 
   await page.goto(editHref!);
-  await expect(
-    page.getByRole("heading", { name: "Draft Authoring" }).first(),
-  ).toBeVisible();
+  await expect(page.locator("body")).toContainText("Edit Form");
   await expect(page.locator("body")).toContainText("Draft Workspace");
   await expect(page.locator("#form-version-workspace")).toHaveCount(1);
-  if ((await page.getByRole("button", { name: "Create Draft Version" }).count()) > 0) {
-    await page.getByRole("button", { name: "Create Draft Version" }).click();
+  await page.waitForLoadState("networkidle");
+  const createDraftButton = page.locator(
+    "#form-version-create-form .button.is-primary",
+  );
+  if ((await createDraftButton.count()) > 0) {
+    await expect(createDraftButton).toBeVisible();
+    await createDraftButton.click();
     await expect(page.locator("#form-version-create-form")).toContainText(
       "One draft version is allowed at a time.",
     );
   }
   await expect(page.locator(".form-builder-shell")).toHaveCount(1);
-  await expect(page.locator(".form-builder-rail")).toContainText(
-    "Jump Between Sections",
+  await expect(page.locator(".form-builder-section-tabs")).toContainText(
+    "Section 1",
   );
-  await expect(page.locator(".form-builder-insert-rail")).toContainText(
-    "Insert Rail",
-  );
+  expect(await page.locator(".form-builder-section-tab").count()).toBeGreaterThan(0);
+  await expect(page.locator('[data-form-section-create="tabs"]')).toBeVisible();
+  await expect(page.locator(".form-builder-sidebar")).toHaveCount(0);
   await expect(page.locator(".form-builder-canvas")).toBeVisible();
+  await expect(page.locator(".form-builder-canvas-scroll")).toHaveCount(1);
 
-  await page
-    .locator('.form-builder-insert-rail [data-form-section-create="quick"]')
-    .click();
+  await page.locator('[data-form-section-create="tabs"]').click();
   await expect(page.locator(".form-builder-section").last()).toBeVisible();
   const sectionLinkCount = await page
-    .locator(".form-builder-section-link")
+    .locator(".form-builder-section-tab")
     .count();
   expect(sectionLinkCount).toBeGreaterThan(0);
 
-  const railBox = await page.locator(".form-builder-rail").boundingBox();
   const canvasBox = await page.locator(".form-builder-canvas").boundingBox();
-  expect(railBox).toBeTruthy();
   expect(canvasBox).toBeTruthy();
-  expect(railBox!.x).toBeLessThan(canvasBox!.x);
 
-  await page
-    .getByRole("button", { name: "Add Field To Selected Section" })
-    .click();
-  await expect(page.locator("#form-builder-properties")).toBeVisible();
-  await expect(page.locator("#form-builder-properties")).toContainText(
-    "Properties",
-  );
-  await expect(
-    page.locator(".form-builder-field-card.is-selected"),
-  ).toContainText("Untitled Field");
-
-  const insertBox = await page
-    .locator(".form-builder-insert-rail")
+  const scrollRegionBox = await page
+    .locator(".form-builder-canvas-scroll")
     .boundingBox();
-  const propertiesBox = await page
-    .locator("#form-builder-properties")
-    .boundingBox();
-  expect(insertBox).toBeTruthy();
-  expect(propertiesBox).toBeTruthy();
-  expect(insertBox!.x).toBeLessThanOrEqual(canvasBox!.x);
-  expect(propertiesBox!.x).toBeGreaterThan(railBox!.x);
-  expect(propertiesBox!.x).toBeGreaterThan(insertBox!.x);
+  expect(scrollRegionBox).toBeTruthy();
+  expect(scrollRegionBox!.y).toBeGreaterThan(canvasBox!.y);
   await expectNoLegacyBridge(page);
 
   await page.reload();
-  await expect(
-    page.getByRole("heading", { name: "Draft Authoring" }).first(),
-  ).toBeVisible();
+  await expect(page.locator("body")).toContainText("Edit Form");
   await expect(page.locator("#form-version-workspace")).toHaveCount(1);
   await expectNoLegacyBridge(page);
 

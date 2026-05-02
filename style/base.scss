@@ -1076,7 +1076,7 @@ body.tessara-app .button,
 body.tessara-app .button.is-light,
 body.tessara-app .button-link.button,
 body.tessara-app .button-link:not(.button),
-body.tessara-app button:not(.button):not(.theme-toggle-button):not(.app-sidebar-backdrop) {
+body.tessara-app button:not(.button):not(.theme-toggle-button):not(.app-sidebar-backdrop):not(.form-builder-section-tab) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1109,7 +1109,7 @@ body.tessara-app .button-link.button.is-light {
 body.tessara-app .button:hover,
 body.tessara-app .button-link.button:hover,
 body.tessara-app .button-link:not(.button):hover,
-body.tessara-app button:not(.button):not(.theme-toggle-button):not(.app-sidebar-backdrop):hover {
+body.tessara-app button:not(.button):not(.theme-toggle-button):not(.app-sidebar-backdrop):not(.form-builder-section-tab):hover {
   border-color: var(--tessara-button-hover-border);
   background: var(--tessara-button-hover-bg) !important;
   color: var(--tessara-button-hover-fg) !important;
@@ -2044,7 +2044,7 @@ body.tessara-app .button,
 body.tessara-app .button.is-light,
 body.tessara-app .button-link.button,
 body.tessara-app .button-link:not(.button),
-body.tessara-app button:not(.button):not(.theme-toggle-button) {
+body.tessara-app button:not(.button):not(.theme-toggle-button):not(.form-builder-section-tab) {
   min-height: 2.5rem;
   padding: 0.55rem 0.95rem;
 }
@@ -2750,6 +2750,28 @@ body.tessara-app .form-builder-shell {
   padding: 1.2rem;
 }
 
+body.tessara-app .form-edit-metadata-shell .form-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+body.tessara-app #form-editor-status:empty,
+body.tessara-app #form-version-status:empty {
+  display: none;
+}
+
+body.tessara-app .form-edit-version-lock {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35rem 0.85rem;
+  border: 1px solid color-mix(in srgb, var(--tessara-link) 30%, var(--tessara-border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tessara-link) 10%, var(--tessara-surface));
+  color: var(--tessara-link);
+  font-size: 0.82rem;
+  font-weight: 700;
+  margin: 0;
+}
+
 body.tessara-app .form-builder-lifecycle-strip,
 body.tessara-app .form-builder-lifecycle-strip__copy,
 body.tessara-app .form-builder-lifecycle-strip__meta,
@@ -2761,7 +2783,7 @@ body.tessara-app .form-builder-lifecycle-strip__summary {
 
 body.tessara-app .form-builder-lifecycle-strip {
   margin-bottom: 1rem;
-  padding: 0.9rem 1rem;
+  padding: 0.75rem 0.95rem;
   border: 1px solid var(--tessara-detail-rule);
   border-radius: 18px;
   background: var(--tessara-surface);
@@ -2773,20 +2795,21 @@ body.tessara-app .form-builder-lifecycle-strip p {
 }
 
 body.tessara-app .form-builder-lifecycle-strip__meta {
-  grid-template-columns: repeat(auto-fit, minmax(10rem, max-content));
+  grid-template-columns: repeat(auto-fit, minmax(7.5rem, max-content));
   align-items: center;
+  gap: 0.5rem;
 }
 
 body.tessara-app .form-builder-lifecycle-chip {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0.35rem 0.75rem;
+  padding: 0.2rem 0.6rem;
   border: 1px solid var(--tessara-detail-rule);
   border-radius: 999px;
   background: var(--tessara-inline-surface);
   color: var(--tessara-text-muted);
-  font-size: 0.76rem;
+  font-size: 0.69rem;
   font-weight: 700;
 }
 
@@ -2803,21 +2826,20 @@ body.tessara-app .form-builder-lifecycle-strip__summary p {
 
 body.tessara-app .form-builder-layout {
   display: grid;
-  grid-template-columns: minmax(14rem, 16rem) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 1rem;
   align-items: start;
 }
 
 body.tessara-app .form-builder-layout--with-properties {
-  grid-template-columns: minmax(14rem, 16rem) minmax(0, 1fr) minmax(19rem, 23rem);
+  grid-template-columns: minmax(0, 1fr) minmax(19rem, 23rem);
 }
 
-body.tessara-app .form-builder-sidebar {
-  align-content: start;
+body.tessara-app .form-builder-main {
+  min-width: 0;
+  min-height: 0;
 }
 
-body.tessara-app .form-builder-rail,
-body.tessara-app .form-builder-insert-rail,
 body.tessara-app .form-builder-properties {
   padding: 1rem;
   border: 1px solid var(--tessara-border);
@@ -2826,39 +2848,56 @@ body.tessara-app .form-builder-properties {
   box-shadow: none;
 }
 
-body.tessara-app .form-builder-rail,
 body.tessara-app .form-builder-properties {
   position: sticky;
   top: 1rem;
 }
 
-body.tessara-app .form-builder-section-links,
-body.tessara-app .form-builder-insert-actions {
+body.tessara-app .form-builder-section-tabs {
   display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 0.75rem;
 }
 
 body.tessara-app .form-builder-rail-empty,
-body.tessara-app .form-builder-section-link small,
+body.tessara-app .form-builder-section-tab small,
 body.tessara-app .form-builder-field-key,
 body.tessara-app .form-builder-empty-fields p,
 body.tessara-app .form-builder-empty-state p {
   margin: 0;
 }
 
-body.tessara-app .form-builder-section-link {
-  display: grid;
-  gap: 0.2rem;
+body.tessara-app .form-builder-section-tabs {
+  margin-bottom: 0.25rem;
+}
+
+body.tessara-app .form-builder-section-tab {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-width: 0;
+  width: 100%;
   padding: 0.9rem 1rem;
-  border: 1px solid var(--tessara-border);
+  border: 1px solid var(--tessara-border) !important;
   border-radius: 16px;
-  background: var(--tessara-surface);
-  color: var(--tessara-text);
+  background: var(--tessara-surface) !important;
+  color: var(--tessara-text) !important;
+  text-align: left;
   text-decoration: none;
+  cursor: pointer;
   transition: border-color 120ms ease-out, background 120ms ease-out, transform 120ms ease-out;
 }
 
-body.tessara-app .form-builder-section-link span,
+body.tessara-app .form-builder-section-tab__summary {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  justify-content: center;
+  min-width: 0;
+  width: 100%;
+}
+
+body.tessara-app .form-builder-section-tab span,
 body.tessara-app .form-builder-eyebrow {
   font-size: 0.72rem;
   font-weight: 800;
@@ -2866,26 +2905,52 @@ body.tessara-app .form-builder-eyebrow {
   text-transform: uppercase;
 }
 
-body.tessara-app .form-builder-section-link span {
+body.tessara-app .form-builder-section-tab strong {
+  color: var(--tessara-text-strong);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+body.tessara-app .form-builder-section-tab--add {
+  justify-content: center;
+  min-height: 3.5rem;
+  padding: 0;
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--tessara-link) 36%, var(--tessara-border));
+  background: color-mix(in srgb, var(--tessara-link) 11%, var(--tessara-surface));
   color: var(--tessara-link);
 }
 
-body.tessara-app .form-builder-section-link strong {
-  color: var(--tessara-text-strong);
+body.tessara-app .form-builder-section-tab--add i {
+  font-size: 1rem;
 }
 
-body.tessara-app .form-builder-section-link small,
+body.tessara-app .form-builder-section-tab small,
 body.tessara-app .form-builder-field-key {
   color: var(--tessara-text-muted);
+  white-space: nowrap;
 }
 
-body.tessara-app .form-builder-section-link:hover,
-body.tessara-app .form-builder-section-link.is-active {
-  border-color: color-mix(in srgb, var(--tessara-link) 34%, var(--tessara-border));
-  background: color-mix(in srgb, var(--tessara-link) 10%, var(--tessara-surface));
-  color: var(--tessara-text);
+body.tessara-app .form-builder-section-tab:hover,
+body.tessara-app .form-builder-section-tab.is-selected {
+  border-color: color-mix(in srgb, var(--tessara-link) 34%, var(--tessara-border)) !important;
+  background: color-mix(in srgb, var(--tessara-link) 10%, var(--tessara-surface)) !important;
+  color: var(--tessara-text) !important;
   text-decoration: none;
   transform: translateX(1px);
+}
+
+body.tessara-app .form-builder-section-tab.is-selected {
+  border-color: color-mix(in srgb, var(--tessara-brand-orange) 78%, var(--tessara-border)) !important;
+  background: color-mix(in srgb, var(--tessara-brand-orange) 24%, var(--tessara-surface-strong)) !important;
+  color: var(--tessara-text-strong) !important;
+  box-shadow: none;
+}
+
+body.tessara-app .form-builder-section-tab.is-selected strong,
+body.tessara-app .form-builder-section-tab.is-selected small {
+  color: var(--tessara-text-strong);
 }
 
 body.tessara-app .form-builder-section > .page-title-row,
@@ -2901,28 +2966,29 @@ body.tessara-app .form-builder-field-card > .page-title-row .actions {
   gap: 0.5rem;
 }
 
-body.tessara-app .form-builder-insert-rail {
-  align-content: start;
-}
-
-body.tessara-app .form-builder-insert-actions .button {
-  justify-content: center;
-}
-
 body.tessara-app .form-builder-canvas {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
   gap: 1.25rem;
+  min-height: 0;
+  max-height: calc(100vh - 12rem);
+  overflow: hidden;
+}
+
+body.tessara-app .form-builder-canvas-scroll {
+  min-height: 0;
+  overflow: auto;
+  padding-right: 0.35rem;
 }
 
 body.tessara-app .form-builder-section {
   padding: 1.15rem;
   border-radius: 22px;
   border: 1px solid var(--tessara-border);
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--tessara-link) 5%, var(--tessara-surface)) 0%, var(--tessara-surface) 100%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  background: var(--tessara-surface);
+  box-shadow: none;
 }
 
-body.tessara-app .form-builder-section.is-selected,
 body.tessara-app .form-builder-field-card.is-selected {
   border-color: color-mix(in srgb, var(--tessara-link) 36%, var(--tessara-border));
   box-shadow: 0 0 0 0.2rem color-mix(in srgb, var(--tessara-focus-ring) 65%, transparent);
@@ -2937,24 +3003,57 @@ body.tessara-app .form-builder-section .form-grid {
 
 body.tessara-app .form-builder-field-grid {
   display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.85rem;
 }
 
 body.tessara-app .form-builder-field-grid--cols-1 {
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 body.tessara-app .form-builder-field-grid--cols-2 {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 body.tessara-app .form-builder-field-card {
   display: grid;
   gap: 0.85rem;
+  width: 100%;
   padding: 0.95rem 1rem;
   border: 1px solid var(--tessara-border);
   border-radius: 18px;
   background: var(--tessara-surface-strong);
+}
+
+body.tessara-app .form-version-card {
+  padding: 1.1rem 1.15rem;
+}
+
+body.tessara-app .form-version-card .record-detail {
+  gap: 0.7rem;
+}
+
+body.tessara-app .form-builder-field-card--add {
+  min-height: 15rem;
+  align-items: stretch;
+  border-style: dashed;
+}
+
+body.tessara-app .form-builder-field-card__add {
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  gap: 0.75rem;
+  text-align: center;
+}
+
+body.tessara-app .form-builder-field-card__add .button {
+  min-width: min(100%, 13rem);
+}
+
+body.tessara-app .form-builder-field-card__add p {
+  max-width: 18rem;
+  margin: 0;
 }
 
 body.tessara-app .form-builder-field-title {
@@ -3111,7 +3210,6 @@ body.tessara-app .auth-shell__status {
   body.tessara-app .form-builder-section,
   body.tessara-app .form-builder-field-card,
   body.tessara-app .form-builder-rail,
-  body.tessara-app .form-builder-insert-rail,
   body.tessara-app .form-builder-properties {
     padding: 0.95rem;
   }
@@ -3123,13 +3221,8 @@ body.tessara-app .auth-shell__status {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  body.tessara-app .form-builder-rail,
   body.tessara-app .form-builder-properties {
     position: static;
-  }
-
-  body.tessara-app .form-builder-rail {
-    order: -2;
   }
 
   body.tessara-app .form-builder-main {
@@ -3139,16 +3232,32 @@ body.tessara-app .auth-shell__status {
   body.tessara-app .form-builder-properties {
     order: 1;
   }
+
+  body.tessara-app .form-builder-canvas {
+    max-height: none;
+    overflow: visible;
+  }
+
+  body.tessara-app .form-builder-canvas-scroll {
+    overflow: visible;
+    padding-right: 0;
+  }
+
+  body.tessara-app .form-builder-field-grid,
+  body.tessara-app .form-builder-field-grid--cols-1,
+  body.tessara-app .form-builder-field-grid--cols-2 {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 @media (max-width: 1320px) {
   body.tessara-app .form-builder-layout,
   body.tessara-app .form-builder-layout--with-properties {
-    grid-template-columns: minmax(14rem, 16rem) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
   }
 
   body.tessara-app .form-builder-layout--with-properties {
-    grid-template-columns: minmax(14rem, 16rem) minmax(0, 1fr) minmax(18rem, 21rem);
+    grid-template-columns: minmax(0, 1fr) minmax(18rem, 21rem);
   }
 }
 
@@ -3162,10 +3271,6 @@ body.tessara-app .auth-shell__status {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  body.tessara-app .form-builder-sidebar {
-    order: -2;
-  }
-
   body.tessara-app .form-builder-main {
     order: -1;
   }
@@ -3177,5 +3282,52 @@ body.tessara-app .auth-shell__status {
   body.tessara-app .form-builder-section > .page-title-row .actions,
   body.tessara-app .form-builder-field-card > .page-title-row .actions {
     width: 100%;
+  }
+
+  body.tessara-app .form-builder-section-tabs {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  body.tessara-app .form-builder-section-tab,
+  body.tessara-app .form-builder-section-tab--add,
+  body.tessara-app .form-builder-field-card {
+    width: 100%;
+  }
+}
+
+@media (max-width: 1800px) {
+  body.tessara-app .form-builder-section-tabs {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  body.tessara-app .form-builder-field-grid,
+  body.tessara-app .form-builder-field-grid--cols-1,
+  body.tessara-app .form-builder-field-grid--cols-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1500px) {
+  body.tessara-app .form-builder-field-grid,
+  body.tessara-app .form-builder-field-grid--cols-1,
+  body.tessara-app .form-builder-field-grid--cols-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1200px) {
+  body.tessara-app .form-edit-metadata-shell .form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  body.tessara-app .form-edit-metadata-shell .form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 1350px) {
+  body.tessara-app .form-builder-section-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
