@@ -517,17 +517,17 @@ body.tessara-app .organization-explorer-toggle {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 1.5rem !important;
-  padding: 0 !important;
-  border: 0 !important;
-  border-radius: 999px !important;
-  background: transparent !important;
-  color: var(--tessara-text-muted) !important;
-  box-shadow: none !important;
+  min-height: 1.5rem;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--tessara-text-muted);
+  box-shadow: none;
 }
 body.tessara-app .organization-explorer-toggle:hover {
-  background: color-mix(in srgb, var(--tessara-link) 10%, transparent) !important;
-  color: var(--tessara-text-strong) !important;
+  background: color-mix(in srgb, var(--tessara-link) 10%, transparent);
+  color: var(--tessara-text-strong);
 }
 body.tessara-app .organization-explorer-toggle__glyph {
   display: inline-flex;
@@ -564,18 +564,18 @@ body.tessara-app button.organization-explorer-row {
   gap: 0.75rem;
   align-items: center;
   justify-items: stretch;
-  min-height: 0 !important;
-  padding: 0.6rem 0.7rem !important;
-  border: 0 !important;
-  border-radius: 12px !important;
-  background: transparent !important;
+  min-height: 0;
+  padding: 0.6rem 0.7rem;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
   text-align: left;
   box-shadow: inset 0 -1px 0 var(--tessara-detail-rule);
   transition: background 120ms ease-out, color 120ms ease-out;
 }
 body.tessara-app button.organization-explorer-row:hover,
 body.tessara-app button.organization-explorer-row[data-selected='true'] {
-  background: color-mix(in srgb, var(--tessara-link) 8%, var(--tessara-inline-surface)) !important;
+  background: color-mix(in srgb, var(--tessara-link) 8%, var(--tessara-inline-surface));
 }
 body.tessara-app .organization-explorer-row__copy {
   min-width: 0;
@@ -1072,11 +1072,13 @@ body.tessara-app .button-link {
   font-weight: 700;
   text-decoration: none;
 }
+/* Shell-styled native buttons must opt in so component-owned controls do not
+   inherit app chrome through a blanket button selector. */
 body.tessara-app .button,
 body.tessara-app .button.is-light,
 body.tessara-app .button-link.button,
 body.tessara-app .button-link:not(.button),
-body.tessara-app button:not(.button):not(.theme-toggle-button):not(.app-sidebar-backdrop):not(.form-builder-section-tab) {
+body.tessara-app button.tessara-native-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1109,7 +1111,7 @@ body.tessara-app .button-link.button.is-light {
 body.tessara-app .button:hover,
 body.tessara-app .button-link.button:hover,
 body.tessara-app .button-link:not(.button):hover,
-body.tessara-app button:not(.button):not(.theme-toggle-button):not(.app-sidebar-backdrop):not(.form-builder-section-tab):hover {
+body.tessara-app button.tessara-native-button:hover {
   border-color: var(--tessara-button-hover-border);
   background: var(--tessara-button-hover-bg) !important;
   color: var(--tessara-button-hover-fg) !important;
@@ -1205,8 +1207,8 @@ body.tessara-app .app-sidebar-close {
   padding: 0;
   border: 1px solid var(--tessara-button-border);
   border-radius: 999px;
-  background: var(--tessara-button-bg) !important;
-  color: var(--tessara-button-fg) !important;
+  background: var(--tessara-button-bg);
+  color: var(--tessara-button-fg);
 }
 
 body.tessara-app .app-nav-toggle[hidden],
@@ -1592,13 +1594,13 @@ body.tessara-app button.app-sidebar__rail-profile {
   display: inline-flex;
   width: 2.5rem;
   min-width: 2.5rem;
-  height: 2.5rem !important;
-  min-height: 2.5rem !important;
-  padding: 0 !important;
-  border: 0 !important;
+  height: 2.5rem;
+  min-height: 2.5rem;
+  padding: 0;
+  border: 0;
   appearance: none;
-  background: none !important;
-  background-color: transparent !important;
+  background: none;
+  background-color: transparent;
   box-shadow: none;
   align-items: center;
   justify-content: center;
@@ -1612,7 +1614,7 @@ body.tessara-app .app-sidebar__account-summary-toggle:active,
 body.tessara-app .app-sidebar__account-summary-toggle:focus-visible {
   border: 0;
   outline: none;
-  background: transparent !important;
+  background: transparent;
   box-shadow: none;
 }
 
@@ -1669,8 +1671,8 @@ body.tessara-app .app-sidebar__icon-button {
   padding: 0;
   border: 1px solid var(--tessara-border);
   border-radius: 999px;
-  background: var(--tessara-inline-surface) !important;
-  color: var(--tessara-text) !important;
+  background: var(--tessara-inline-surface);
+  color: var(--tessara-text);
 }
 
 body.tessara-app .app-sidebar__icon-button:disabled {
@@ -2044,7 +2046,7 @@ body.tessara-app .button,
 body.tessara-app .button.is-light,
 body.tessara-app .button-link.button,
 body.tessara-app .button-link:not(.button),
-body.tessara-app button:not(.button):not(.theme-toggle-button):not(.form-builder-section-tab) {
+body.tessara-app button.tessara-native-button {
   min-height: 2.5rem;
   padding: 0.55rem 0.95rem;
 }
@@ -2878,10 +2880,10 @@ body.tessara-app .form-builder-section-tab {
   min-width: 0;
   width: 100%;
   padding: 0.9rem 1rem;
-  border: 1px solid var(--tessara-border) !important;
+  border: 1px solid var(--tessara-border);
   border-radius: 16px;
-  background: var(--tessara-surface) !important;
-  color: var(--tessara-text) !important;
+  background: var(--tessara-surface);
+  color: var(--tessara-text);
   text-align: left;
   text-decoration: none;
   cursor: pointer;
@@ -2934,17 +2936,17 @@ body.tessara-app .form-builder-field-key {
 
 body.tessara-app .form-builder-section-tab:hover,
 body.tessara-app .form-builder-section-tab.is-selected {
-  border-color: color-mix(in srgb, var(--tessara-link) 34%, var(--tessara-border)) !important;
-  background: color-mix(in srgb, var(--tessara-link) 10%, var(--tessara-surface)) !important;
-  color: var(--tessara-text) !important;
+  border-color: color-mix(in srgb, var(--tessara-link) 34%, var(--tessara-border));
+  background: color-mix(in srgb, var(--tessara-link) 10%, var(--tessara-surface));
+  color: var(--tessara-text);
   text-decoration: none;
   transform: translateX(1px);
 }
 
 body.tessara-app .form-builder-section-tab.is-selected {
-  border-color: color-mix(in srgb, var(--tessara-brand-orange) 78%, var(--tessara-border)) !important;
-  background: color-mix(in srgb, var(--tessara-brand-orange) 24%, var(--tessara-surface-strong)) !important;
-  color: var(--tessara-text-strong) !important;
+  border-color: color-mix(in srgb, var(--tessara-brand-orange) 78%, var(--tessara-border));
+  background: color-mix(in srgb, var(--tessara-brand-orange) 24%, var(--tessara-surface-strong));
+  color: var(--tessara-text-strong);
   box-shadow: none;
 }
 

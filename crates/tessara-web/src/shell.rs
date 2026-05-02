@@ -192,7 +192,7 @@ fn ActionBar(actions: &'static [Action]) -> impl IntoView {
                 .iter()
                 .map(|action| {
                     view! {
-                        <button type="button" onclick=action.handler>{action.label}</button>
+                        <button class="tessara-native-button" type="button" onclick=action.handler>{action.label}</button>
                     }
                 })
                 .collect_view()}

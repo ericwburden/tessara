@@ -749,10 +749,10 @@ fn migration_body() -> String {
             r#"
             <div class="entity-form-shell">
               <div class="actions">
-                <button type="button" onclick="loadLegacyFixtureExamples()">Load Fixture Examples</button>
-                <button type="button" onclick="validateLegacyFixture()">Validate Fixture</button>
-                <button type="button" onclick="dryRunLegacyFixture()">Dry-Run Fixture</button>
-                <button type="button" onclick="importLegacyFixture()">Import Fixture</button>
+                <button class="tessara-native-button" type="button" onclick="loadLegacyFixtureExamples()">Load Fixture Examples</button>
+                <button class="tessara-native-button" type="button" onclick="validateLegacyFixture()">Validate Fixture</button>
+                <button class="tessara-native-button" type="button" onclick="dryRunLegacyFixture()">Dry-Run Fixture</button>
+                <button class="tessara-native-button" type="button" onclick="importLegacyFixture()">Import Fixture</button>
               </div>
               <label class="wide-field" for="legacy-fixture-json">Fixture JSON</label>
               <textarea class="textarea" id="legacy-fixture-json" rows="18" placeholder="Paste legacy fixture JSON"></textarea>
@@ -3868,7 +3868,7 @@ pub fn report_detail_application_html(_script: &str, report_id: &str) -> String 
                     "Report Detail",
                     "This screen shows the selected report in read-only form and supports running it.",
                     format!(
-                        r#"<a class="button-link" href="/app/reports">Back to List</a><a class="button-link" href="/app/reports/{escaped}/edit">Edit</a><button type="button" onclick="runCurrentReport()">Run</button>"#
+                        r#"<a class="button-link" href="/app/reports">Back to List</a><a class="button-link" href="/app/reports/{escaped}/edit">Edit</a><button class="tessara-native-button" type="button" onclick="runCurrentReport()">Run</button>"#
                     ),
                 ),
                 empty_panel(
@@ -4004,7 +4004,7 @@ pub fn dashboard_detail_application_html(_script: &str, dashboard_id: &str) -> S
                     "Dashboard Detail",
                     "This screen shows the selected dashboard in read-only form and supports previewing it.",
                     format!(
-                        r#"<a class="button-link" href="/app/dashboards">Back to List</a><a class="button-link" href="/app/dashboards/{escaped}/edit">Edit</a><button type="button" onclick="viewCurrentDashboard()">View</button>"#
+                        r#"<a class="button-link" href="/app/dashboards">Back to List</a><a class="button-link" href="/app/dashboards/{escaped}/edit">Edit</a><button class="tessara-native-button" type="button" onclick="viewCurrentDashboard()">View</button>"#
                     ),
                 ),
                 empty_panel(
