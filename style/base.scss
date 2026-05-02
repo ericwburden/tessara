@@ -89,32 +89,34 @@ body.tessara-app main.shell {
   margin: 0 auto;
   padding: 2.5rem 1.25rem 4rem;
 }
-body.tessara-app .panel,
+/* Shell surfaces should opt into their skin explicitly. Keep a small set of
+   compatibility aliases for legacy feature markup while shared helpers migrate. */
+body.tessara-app .tessara-surface-panel,
 body.tessara-app .app-screen,
-body.tessara-app .selection-item,
-body.tessara-app .detail-section {
+body.tessara-app .detail-section,
+body.tessara-app .selection-item {
   border: 1px solid var(--tessara-border);
   box-shadow: var(--tessara-shadow);
 }
-body.tessara-app .panel,
-body.tessara-app .app-screen.box,
-body.tessara-app .detail-section.box,
-body.tessara-app .selection-item.box,
-body.tessara-app .selection-item,
-body.tessara-app .detail-section {
-  background: var(--tessara-surface) !important;
-  color: var(--tessara-text) !important;
+body.tessara-app .tessara-surface-panel,
+body.tessara-app .app-screen,
+body.tessara-app .detail-section,
+body.tessara-app .selection-item {
+  background: var(--tessara-surface);
+  color: var(--tessara-text);
 }
-body.tessara-app .card,
+body.tessara-app .tessara-surface-card,
+body.tessara-app .ui-card,
 body.tessara-app .record-card,
 body.tessara-app .home-card,
 body.tessara-app .directory-card,
 body.tessara-app .summary-card {
-  background: var(--tessara-surface-strong) !important;
-  color: var(--tessara-text) !important;
+  background: var(--tessara-surface-strong);
+  color: var(--tessara-text);
 }
 body.tessara-app .card-content,
-body.tessara-app .panel,
+body.tessara-app .tessara-surface-panel,
+body.tessara-app .tessara-surface-card,
 body.tessara-app .box {
   color: var(--tessara-text);
 }
@@ -1074,6 +1076,9 @@ body.tessara-app .button-link {
 }
 /* Shell-styled native buttons must opt in so component-owned controls do not
    inherit app chrome through a blanket button selector. */
+/* Shell buttons should prefer explicit primitives. The broader button aliases
+   remain as a compatibility bridge for hand-authored route markup. */
+body.tessara-app .tessara-shell-button,
 body.tessara-app .button,
 body.tessara-app .button.is-light,
 body.tessara-app .button-link.button,
@@ -1108,6 +1113,7 @@ body.tessara-app .button-link.button.is-light {
   background: var(--tessara-button-light-bg) !important;
   color: var(--tessara-button-light-fg) !important;
 }
+body.tessara-app .tessara-shell-button:hover,
 body.tessara-app .button:hover,
 body.tessara-app .button-link.button:hover,
 body.tessara-app .button-link:not(.button):hover,
@@ -2021,6 +2027,8 @@ body.tessara-app .home-snapshot-item strong {
   font-size: 0.98rem;
 }
 
+body.tessara-app .tessara-surface-card,
+body.tessara-app .ui-card,
 body.tessara-app .record-card,
 body.tessara-app .home-card,
 body.tessara-app .directory-card,
@@ -2042,6 +2050,7 @@ body.tessara-app .actions {
   align-items: center;
 }
 
+body.tessara-app .tessara-shell-button,
 body.tessara-app .button,
 body.tessara-app .button.is-light,
 body.tessara-app .button-link.button,
@@ -3173,6 +3182,89 @@ body.tessara-app .auth-shell__status {
   font-size: 0.92rem;
 }
 
+@media (max-width: 1800px) {
+  body.tessara-app .form-builder-section-tabs {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  body.tessara-app .form-builder-field-grid,
+  body.tessara-app .form-builder-field-grid--cols-1,
+  body.tessara-app .form-builder-field-grid--cols-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1350px) {
+  body.tessara-app .form-builder-section-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1320px) {
+  body.tessara-app .form-builder-layout--with-properties {
+    grid-template-columns: minmax(0, 1fr) minmax(18rem, 21rem);
+  }
+}
+
+@media (max-width: 1200px) {
+  body.tessara-app .form-edit-metadata-shell .form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1080px) {
+  body.tessara-app .form-builder-layout,
+  body.tessara-app .form-builder-layout--with-properties {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  body.tessara-app .form-builder-main {
+    order: -1;
+  }
+
+  body.tessara-app .form-builder-properties {
+    position: static;
+    order: 1;
+  }
+
+  body.tessara-app .form-builder-canvas {
+    max-height: none;
+    overflow: visible;
+  }
+
+  body.tessara-app .form-builder-canvas-scroll {
+    overflow: visible;
+    padding-right: 0;
+  }
+
+  body.tessara-app .form-builder-field-grid,
+  body.tessara-app .form-builder-field-grid--cols-1,
+  body.tessara-app .form-builder-field-grid--cols-2 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 900px) {
+  body.tessara-app .form-builder-lifecycle-strip__meta {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  body.tessara-app .form-builder-section > .page-title-row .actions,
+  body.tessara-app .form-builder-field-card > .page-title-row .actions {
+    width: 100%;
+  }
+
+  body.tessara-app .form-builder-section-tabs {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  body.tessara-app .form-builder-section-tab,
+  body.tessara-app .form-builder-section-tab--add,
+  body.tessara-app .form-builder-field-card {
+    width: 100%;
+  }
+}
+
 @media (max-width: 768px) {
   body.tessara-app .ui-toolbar {
     flex-direction: column;
@@ -3204,8 +3296,8 @@ body.tessara-app .auth-shell__status {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  body.tessara-app .form-builder-field-grid--cols-2,
-  body.tessara-app .form-builder-shell .form-grid {
+  body.tessara-app .form-builder-shell .form-grid,
+  body.tessara-app .form-edit-metadata-shell .form-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -3214,122 +3306,5 @@ body.tessara-app .auth-shell__status {
   body.tessara-app .form-builder-rail,
   body.tessara-app .form-builder-properties {
     padding: 0.95rem;
-  }
-}
-
-@media (max-width: 1080px) {
-  body.tessara-app .form-builder-layout,
-  body.tessara-app .form-builder-layout--with-properties {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  body.tessara-app .form-builder-properties {
-    position: static;
-  }
-
-  body.tessara-app .form-builder-main {
-    order: -1;
-  }
-
-  body.tessara-app .form-builder-properties {
-    order: 1;
-  }
-
-  body.tessara-app .form-builder-canvas {
-    max-height: none;
-    overflow: visible;
-  }
-
-  body.tessara-app .form-builder-canvas-scroll {
-    overflow: visible;
-    padding-right: 0;
-  }
-
-  body.tessara-app .form-builder-field-grid,
-  body.tessara-app .form-builder-field-grid--cols-1,
-  body.tessara-app .form-builder-field-grid--cols-2 {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-@media (max-width: 1320px) {
-  body.tessara-app .form-builder-layout,
-  body.tessara-app .form-builder-layout--with-properties {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  body.tessara-app .form-builder-layout--with-properties {
-    grid-template-columns: minmax(0, 1fr) minmax(18rem, 21rem);
-  }
-}
-
-@media (max-width: 900px) {
-  body.tessara-app .form-builder-lifecycle-strip__meta {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  body.tessara-app .form-builder-layout,
-  body.tessara-app .form-builder-layout--with-properties {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  body.tessara-app .form-builder-main {
-    order: -1;
-  }
-
-  body.tessara-app .form-builder-properties {
-    order: 1;
-  }
-
-  body.tessara-app .form-builder-section > .page-title-row .actions,
-  body.tessara-app .form-builder-field-card > .page-title-row .actions {
-    width: 100%;
-  }
-
-  body.tessara-app .form-builder-section-tabs {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  body.tessara-app .form-builder-section-tab,
-  body.tessara-app .form-builder-section-tab--add,
-  body.tessara-app .form-builder-field-card {
-    width: 100%;
-  }
-}
-
-@media (max-width: 1800px) {
-  body.tessara-app .form-builder-section-tabs {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  body.tessara-app .form-builder-field-grid,
-  body.tessara-app .form-builder-field-grid--cols-1,
-  body.tessara-app .form-builder-field-grid--cols-2 {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 1500px) {
-  body.tessara-app .form-builder-field-grid,
-  body.tessara-app .form-builder-field-grid--cols-1,
-  body.tessara-app .form-builder-field-grid--cols-2 {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 1200px) {
-  body.tessara-app .form-edit-metadata-shell .form-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 768px) {
-  body.tessara-app .form-edit-metadata-shell .form-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-@media (max-width: 1350px) {
-  body.tessara-app .form-builder-section-tabs {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

@@ -266,7 +266,7 @@ try {
     }
 
     $appShell = Invoke-Html -Uri "$baseUrl/app" -CookieJarPath $adminBrowserSession
-    Assert-ProtectedShell -Content $appShell -Needles @("Tessara Home", "app-shell--home", "Shared Home", "Primary navigation") -Context "application home shell"
+    Assert-ProtectedShell -Content $appShell -Needles @("Tessara Home", "app-shell--home", "Current Work", "Primary navigation") -Context "application home shell"
     $loginShell = Invoke-Html -Uri "$baseUrl/app/login"
     if (
         -not ($loginShell -like "*Tessara Sign In*") `
@@ -284,11 +284,11 @@ try {
     $formsShell = Invoke-Html -Uri "$baseUrl/app/forms" -CookieJarPath $adminBrowserSession
     Assert-ProtectedShell -Content $formsShell -Needles @("Forms") -Context "forms list shell"
     $workflowsShell = Invoke-Html -Uri "$baseUrl/app/workflows" -CookieJarPath $adminBrowserSession
-    Assert-ProtectedShell -Content $workflowsShell -Needles @("Tessara Workflows", "app-shell--workflows", "Product Area") -Context "workflows list shell"
+    Assert-ProtectedShell -Content $workflowsShell -Needles @("Tessara Workflows", "app-shell--workflows", "Workflows") -Context "workflows list shell"
     $workflowAssignmentsShell = Invoke-Html -Uri "$baseUrl/app/workflows/assignments" -CookieJarPath $adminBrowserSession
-    Assert-ProtectedShell -Content $workflowAssignmentsShell -Needles @("Workflow Assignments", "app-shell--workflows", "Assignment Console") -Context "workflow assignments shell"
+    Assert-ProtectedShell -Content $workflowAssignmentsShell -Needles @("Workflow Assignments", "app-shell--workflows", "Workflows") -Context "workflow assignments shell"
     $responsesShell = Invoke-Html -Uri "$baseUrl/app/responses" -CookieJarPath $adminBrowserSession
-    Assert-ProtectedShell -Content $responsesShell -Needles @("Tessara Responses", "app-shell--responses", "Product Area") -Context "responses list shell"
+    Assert-ProtectedShell -Content $responsesShell -Needles @("Tessara Responses", "app-shell--responses", "Responses") -Context "responses list shell"
     $submissionAppShell = Invoke-Html -Uri "$baseUrl/app/submissions" -CookieJarPath $adminBrowserSession
     Assert-ProtectedShell -Content $submissionAppShell -Needles @("Responses") -Context "submissions compatibility shell"
     $administrationShell = Invoke-Html -Uri "$baseUrl/app/administration" -CookieJarPath $adminBrowserSession

@@ -46,7 +46,7 @@ pub fn admin_shell_html(_script: &str) -> String {
 fn AdminShell() -> impl IntoView {
     view! {
         <main class="shell">
-            <section class="panel box hero">
+            <section class="panel box hero tessara-surface-panel">
                 <div class="hero-header">
                     <div class="brand-lockup">
                         <img class="brand-mark" src="/assets/tessara-icon-1024.svg" alt="" />
@@ -68,7 +68,7 @@ fn AdminShell() -> impl IntoView {
             </section>
             <UserTestingGuide/>
             <SelectionContext/>
-            <section class="panel box">
+            <section class="panel box tessara-surface-panel">
                 <h2>"Builder Workflows"</h2>
                 <p class="muted">
                     "These sections follow the migration roadmap slices: hierarchy, forms, "
@@ -81,11 +81,11 @@ fn AdminShell() -> impl IntoView {
                         .collect_view()}
                 </div>
             </section>
-            <section class="panel box">
+            <section class="panel box tessara-surface-panel">
                 <h2>"Screen"</h2>
                 <div id="screen" class="cards"></div>
             </section>
-            <section class="panel box">
+            <section class="panel box tessara-surface-panel">
                 <h2>"Raw Output"</h2>
                 <pre id="output">"No API calls yet."</pre>
             </section>
@@ -113,7 +113,7 @@ fn ThemeToggle() -> impl IntoView {
 #[component]
 fn SelectionContext() -> impl IntoView {
     view! {
-        <section class="panel box">
+        <section class="panel box tessara-surface-panel">
             <h2>"Selected Context"</h2>
             <p class="muted">
                 "Selections from cards populate workflow inputs and are summarized here."
@@ -128,7 +128,7 @@ fn SelectionContext() -> impl IntoView {
 #[component]
 fn UserTestingGuide() -> impl IntoView {
     view! {
-        <section class="panel box">
+        <section class="panel box tessara-surface-panel">
             <h2>"User Testing Guide"</h2>
             <p class="muted">
                 "Recommended path for the current Docker Compose test deployment."

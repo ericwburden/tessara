@@ -1626,7 +1626,7 @@ pub fn NativePage(
             </Show>
             <button class="app-sidebar-backdrop" type="button" aria-label="Close navigation" aria-hidden="true" data-sidebar-dismiss tabindex="-1" hidden></button>
             <section class="app-layout">
-                <aside id="app-sidebar" class="panel box app-sidebar" aria-label="Application navigation">
+                <aside id="app-sidebar" class="panel box app-sidebar tessara-surface-panel" aria-label="Application navigation">
                     <a class="app-sidebar__brand" href="/app" aria-label="Tessara home">
                         <span class="app-sidebar__brand-mark" aria-hidden="true">
                             <img class="app-sidebar__brand-mark-image" src="/assets/tessara-icon-256.svg" alt="" />
@@ -1674,7 +1674,7 @@ pub fn NativePage(
                         }
                     }}
                 </aside>
-                <section class="panel box app-main">
+                <section class="panel box app-main tessara-surface-panel">
                     <header class="top-app-bar">
                         <div class="top-app-bar__row">
                             <div class="top-app-bar__brand">

@@ -322,7 +322,7 @@ fn sidebar(active_route: &str, include_internal_create: bool) -> String {
 
     format!(
         r#"
-        <aside id="app-sidebar" class="panel box app-sidebar" aria-label="Application navigation">
+        <aside id="app-sidebar" class="panel box app-sidebar tessara-surface-panel" aria-label="Application navigation">
           <div class="app-sidebar__header">
             <button class="app-sidebar-close" type="button" aria-label="Close navigation" data-sidebar-dismiss>
               <span aria-hidden="true"><i class="fa-solid fa-xmark"></i></span>
@@ -401,7 +401,7 @@ fn app_shell(
           ></button>
           <section class="app-layout">
             {}
-            <section class="panel box app-main">
+            <section class="panel box app-main tessara-surface-panel">
               <nav class="breadcrumb-trail" aria-label="Breadcrumb">{}</nav>
               {}
             </section>

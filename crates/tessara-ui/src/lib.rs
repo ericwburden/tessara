@@ -58,11 +58,11 @@ impl ActionItem {
 
         match &self.target {
             ActionTarget::Link { href } => format!(
-                r#"<a class="button-link button ui-action{style}" href="{href}">{label}</a>"#,
+                r#"<a class="button-link button ui-action tessara-shell-button{style}" href="{href}">{label}</a>"#,
                 label = self.label,
             ),
             ActionTarget::Button { onclick } => format!(
-                r#"<button class="button ui-action{style}" type="button" onclick="{onclick}">{label}</button>"#,
+                r#"<button class="button ui-action tessara-shell-button{style}" type="button" onclick="{onclick}">{label}</button>"#,
                 label = self.label,
             ),
         }
@@ -134,7 +134,7 @@ pub fn page_header(
 
     format!(
         r#"
-        <section class="app-screen box entity-page ui-page-header">
+        <section class="app-screen box entity-page ui-page-header tessara-surface-panel">
           <p class="eyebrow ui-page-header__eyebrow">{eyebrow}</p>
           <div class="page-title-row ui-page-header__row">
             <div class="ui-page-header__copy">
@@ -158,7 +158,7 @@ pub fn panel(title: &str, description: &str, body: &str) -> String {
 
     format!(
         r#"
-        <section class="app-screen box page-panel ui-panel">
+        <section class="app-screen box page-panel ui-panel tessara-surface-panel">
           <h3 class="ui-panel__title">{title}</h3>
           {description_html}
           {body}
@@ -182,7 +182,7 @@ pub fn panel_with_header(
 
     format!(
         r#"
-        <section class="app-screen box page-panel ui-panel">
+        <section class="app-screen box page-panel ui-panel tessara-surface-panel">
           <div class="page-title-row compact-title-row ui-panel__header">
             <div class="ui-panel__copy">
               <h3 class="ui-panel__title">{title}</h3>
@@ -198,7 +198,7 @@ pub fn panel_with_header(
 
 pub fn card(class_name: &str, title: &str, body_html: &str) -> String {
     format!(
-        r#"<article class="{class_name} card ui-card"><div class="card-content ui-card__content"><h3>{title}</h3>{body_html}</div></article>"#
+        r#"<article class="{class_name} card ui-card tessara-surface-card"><div class="card-content ui-card__content"><h3>{title}</h3>{body_html}</div></article>"#
     )
 }
 

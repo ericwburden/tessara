@@ -2246,8 +2246,6 @@ async fn form_builder_guards_cross_version_sections_and_supersedes_previous_publ
     .await;
 
     let version_one_id = create_form_version(app.clone(), &token, form_id, "v1").await;
-    let version_two_id = create_form_version(app.clone(), &token, form_id, "v2").await;
-    assert_ne!(version_one_id, version_two_id);
     let section_one_id = create_form_section(app.clone(), &token, version_one_id, "Main").await;
     let field_one_id = create_number_field(
         app.clone(),
@@ -2469,6 +2467,7 @@ async fn form_builder_guards_cross_version_sections_and_supersedes_previous_publ
     );
 
     let version_two_id = create_form_version(app.clone(), &token, form_id, "v2").await;
+    assert_ne!(version_one_id, version_two_id);
     let cross_version_field = request_status_and_json(
         app.clone(),
         authorized_request(

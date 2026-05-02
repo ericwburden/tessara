@@ -623,13 +623,15 @@ mod tests {
         assert_protected_ssr_shell(&forms);
         assert_protected_ssr_shell(&responses);
 
-        assert!(datasets.contains("Datasets"));
-        assert!(datasets.contains("Dataset Directory"));
-        assert!(datasets.contains("dataset-list"));
+        assert_protected_ssr_shell(&datasets);
+        assert!(datasets.contains("<title>Tessara Datasets</title>"));
+        assert!(datasets.contains("app-shell--datasets"));
+        assert!(datasets.contains("top-app-bar__context-label\">Datasets"));
 
-        assert!(components.contains("Components"));
-        assert!(components.contains("Component Directory"));
-        assert!(components.contains("component-list"));
+        assert_protected_ssr_shell(&components);
+        assert!(components.contains("<title>Tessara Components</title>"));
+        assert!(components.contains("app-shell--components"));
+        assert!(components.contains("top-app-bar__context-label\">Components"));
 
         assert!(reports.contains("Reports"));
         assert!(reports.contains("Create Report"));
@@ -689,10 +691,12 @@ mod tests {
             assert_protected_ssr_shell(html);
         }
 
-        assert!(dataset_detail.contains("Dataset Detail"));
-        assert!(dataset_detail.contains("dataset-detail"));
-        assert!(component_detail.contains("Component Detail"));
-        assert!(component_detail.contains("component-detail"));
+        assert!(dataset_detail.contains("<title>Dataset Detail</title>"));
+        assert!(dataset_detail.contains("app-shell--datasets"));
+        assert!(dataset_detail.contains("<span>Dataset Detail</span>"));
+        assert!(component_detail.contains("<title>Component Detail</title>"));
+        assert!(component_detail.contains("app-shell--components"));
+        assert!(component_detail.contains("<span>Component Detail</span>"));
         assert!(report_detail.contains("Report Detail"));
         assert!(report_detail.contains("Run"));
     }

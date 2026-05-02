@@ -186,6 +186,30 @@ async function signIn(page: Page, email: string, password: string) {
   await expect(page).toHaveURL(/\/app$/);
 }
 
+async function seedDemoWorkspace(page: Page) {
+  const response = await page.request.post("/api/demo/seed");
+  expect(response.ok()).toBeTruthy();
+  return (await response.json()) as {
+    form_id: string;
+    seed_version: string;
+  };
+}
+
+async function ensureBuilderSectionTabs(page: Page) {
+  const addFirstSection = page.locator(
+    '[data-form-section-create="empty"]',
+  );
+  if ((await addFirstSection.count()) > 0) {
+    await addFirstSection.click();
+  }
+
+  const sectionTabs = page.locator(
+    ".form-builder-section-tab:not(.form-builder-section-tab--add)",
+  );
+  await expect(sectionTabs.first()).toContainText("Section 1");
+  await expect(page.locator(".form-builder-section-tabs")).toBeVisible();
+}
+
 async function provisionPendingAssignmentForAccount(
   page: Page,
   accountEmail: string,
@@ -728,6 +752,7 @@ test("forms authoring routes stay native and console-clean", async ({
   const assertNoConsoleErrors = attachConsoleGuard(page);
   await signInAsAdmin(page);
   await waitForAuthenticatedShell(page, "admin@tessara.local");
+  const seedSummary = await seedDemoWorkspace(page);
 
   await page.goto("/app/forms/new");
   await expect(
@@ -743,25 +768,18 @@ test("forms authoring routes stay native and console-clean", async ({
   await expect(page.locator("#form-editor-status")).toHaveCount(1);
   await expectNoLegacyBridge(page);
 
-  await page.goto("/app/forms");
-  const detailHref = await page
-    .locator('a[href^="/app/forms/"]:not([href$="/edit"])')
-    .filter({ hasText: "Open" })
-    .first()
-    .getAttribute("href");
-  expect(detailHref).toBeTruthy();
-
-  await page.goto(detailHref!);
+  const detailHref = `/app/forms/${seedSummary.form_id}`;
+  await page.goto(detailHref);
   await expect(
     page.getByRole("heading", { name: "Form Detail" }).first(),
   ).toBeVisible();
   await expect(page.locator("#form-detail")).toHaveCount(1);
   await expectNoLegacyBridge(page);
 
-  const editHref = `${detailHref!}/edit`;
+  const editHref = `${detailHref}/edit`;
   expect(editHref).toBeTruthy();
 
-  await page.goto(editHref!);
+  await page.goto(editHref);
   await expect(page.locator("body")).toContainText("Edit Form");
   await expect(page.locator("body")).toContainText("Draft Workspace");
   await expect(page.locator("#form-version-workspace")).toHaveCount(1);
@@ -777,9 +795,7 @@ test("forms authoring routes stay native and console-clean", async ({
     );
   }
   await expect(page.locator(".form-builder-shell")).toHaveCount(1);
-  await expect(page.locator(".form-builder-section-tabs")).toContainText(
-    "Section 1",
-  );
+  await ensureBuilderSectionTabs(page);
   expect(await page.locator(".form-builder-section-tab").count()).toBeGreaterThan(0);
   await expect(page.locator('[data-form-section-create="tabs"]')).toBeVisible();
   await expect(page.locator(".form-builder-sidebar")).toHaveCount(0);
@@ -796,9 +812,9 @@ test("forms authoring routes stay native and console-clean", async ({
   const canvasBox = await page.locator(".form-builder-canvas").boundingBox();
   expect(canvasBox).toBeTruthy();
 
-  const scrollRegionBox = await page
-    .locator(".form-builder-canvas-scroll")
-    .boundingBox();
+  const scrollRegion = page.locator(".form-builder-canvas-scroll");
+  await expect(scrollRegion).toBeVisible();
+  const scrollRegionBox = await scrollRegion.boundingBox();
   expect(scrollRegionBox).toBeTruthy();
   expect(scrollRegionBox!.y).toBeGreaterThan(canvasBox!.y);
   await expectNoLegacyBridge(page);
@@ -807,6 +823,145 @@ test("forms authoring routes stay native and console-clean", async ({
   await expect(page.locator("body")).toContainText("Edit Form");
   await expect(page.locator("#form-version-workspace")).toHaveCount(1);
   await expectNoLegacyBridge(page);
+
+  await assertNoConsoleErrors();
+});
+
+test("form editor layout holds its breakpoint contract across review widths", async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  const assertNoConsoleErrors = attachConsoleGuard(page);
+  const sameTrack = (a: number, b: number, delta = 6) =>
+    Math.abs(a - b) <= delta;
+
+  await signInAsAdmin(page);
+  await waitForAuthenticatedShell(page, "admin@tessara.local");
+  const seedSummary = await seedDemoWorkspace(page);
+
+  await page.goto(`/app/forms/${seedSummary.form_id}/edit`);
+  await expect(page.locator(".form-builder-shell")).toHaveCount(1);
+  await page.waitForLoadState("networkidle");
+  await ensureBuilderSectionTabs(page);
+
+  const addSectionButton = page.locator('[data-form-section-create="tabs"]');
+  while (
+    (await page
+      .locator(".form-builder-section-tab:not(.form-builder-section-tab--add)")
+      .count()) < 6
+  ) {
+    const currentCount = await page
+      .locator(".form-builder-section-tab:not(.form-builder-section-tab--add)")
+      .count();
+    await addSectionButton.click();
+    await expect(
+      page.locator(".form-builder-section-tab:not(.form-builder-section-tab--add)"),
+    ).toHaveCount(currentCount + 1);
+  }
+
+  const addFieldButton = page.locator(
+    '.form-builder-field-card--add button[data-form-field-create]',
+  );
+  while (
+    (await page
+      .locator(".form-builder-field-card:not(.form-builder-field-card--add)")
+      .count()) < 2
+  ) {
+    const currentCount = await page
+      .locator(".form-builder-field-card:not(.form-builder-field-card--add)")
+      .count();
+    await addFieldButton.click();
+    await expect(
+      page.locator(".form-builder-field-card:not(.form-builder-field-card--add)"),
+    ).toHaveCount(currentCount + 1);
+  }
+
+  await page
+    .locator(".form-builder-field-title")
+    .first()
+    .evaluate((node) => (node as HTMLButtonElement).click());
+  await expect(page.locator(".form-builder-properties")).toBeVisible();
+
+  await page.setViewportSize({ width: 1919, height: 869 });
+  await page.waitForTimeout(120);
+
+  const wideTabs = await page
+    .locator(".form-builder-section-tab:not(.form-builder-section-tab--add)")
+    .evaluateAll((nodes) =>
+      nodes.slice(0, 6).map((node) => {
+        const rect = (node as HTMLElement).getBoundingClientRect();
+        return { x: rect.x, y: rect.y };
+      }),
+    );
+  expect(wideTabs).toHaveLength(6);
+  expect(sameTrack(wideTabs[0].y, wideTabs[1].y)).toBe(true);
+  expect(sameTrack(wideTabs[0].y, wideTabs[2].y)).toBe(true);
+  expect(sameTrack(wideTabs[0].y, wideTabs[3].y)).toBe(true);
+  expect(sameTrack(wideTabs[0].y, wideTabs[4].y)).toBe(true);
+  expect(wideTabs[5].y).toBeGreaterThan(wideTabs[0].y + 6);
+
+  const wideFieldCards = await page
+    .locator(".form-builder-field-card:not(.form-builder-field-card--add)")
+    .evaluateAll((nodes) =>
+      nodes.slice(0, 2).map((node) => {
+        const rect = (node as HTMLElement).getBoundingClientRect();
+        return { x: rect.x, y: rect.y };
+      }),
+    );
+  expect(wideFieldCards).toHaveLength(2);
+  expect(sameTrack(wideFieldCards[0].y, wideFieldCards[1].y)).toBe(true);
+  expect(wideFieldCards[1].x).toBeGreaterThan(wideFieldCards[0].x + 6);
+
+  await page.setViewportSize({ width: 1492, height: 869 });
+  await page.waitForTimeout(120);
+
+  const midTabs = await page
+    .locator(".form-builder-section-tab:not(.form-builder-section-tab--add)")
+    .evaluateAll((nodes) =>
+      nodes.slice(0, 4).map((node) => {
+        const rect = (node as HTMLElement).getBoundingClientRect();
+        return { x: rect.x, y: rect.y };
+      }),
+    );
+  expect(midTabs).toHaveLength(4);
+  expect(sameTrack(midTabs[0].y, midTabs[1].y)).toBe(true);
+  expect(sameTrack(midTabs[0].y, midTabs[2].y)).toBe(true);
+  expect(midTabs[3].y).toBeGreaterThan(midTabs[0].y + 6);
+
+  await page.setViewportSize({ width: 840, height: 869 });
+  await page.waitForTimeout(120);
+
+  const mainBox = await page.locator(".form-builder-main").boundingBox();
+  const propertiesBox = await page
+    .locator(".form-builder-properties")
+    .boundingBox();
+  expect(mainBox).toBeTruthy();
+  expect(propertiesBox).toBeTruthy();
+  expect(propertiesBox!.y).toBeGreaterThan(mainBox!.y + 6);
+
+  const narrowTabs = await page
+    .locator(".form-builder-section-tab:not(.form-builder-section-tab--add)")
+    .evaluateAll((nodes) =>
+      nodes.slice(0, 2).map((node) => {
+        const rect = (node as HTMLElement).getBoundingClientRect();
+        return { x: rect.x, y: rect.y };
+      }),
+    );
+  expect(narrowTabs).toHaveLength(2);
+  expect(narrowTabs[1].y).toBeGreaterThan(narrowTabs[0].y + 6);
+  expect(sameTrack(narrowTabs[0].x, narrowTabs[1].x)).toBe(true);
+
+  const narrowFieldCards = await page
+    .locator(".form-builder-field-card:not(.form-builder-field-card--add)")
+    .evaluateAll((nodes) =>
+      nodes.slice(0, 2).map((node) => {
+        const rect = (node as HTMLElement).getBoundingClientRect();
+        return { x: rect.x, y: rect.y };
+      }),
+    );
+  expect(narrowFieldCards).toHaveLength(2);
+  expect(narrowFieldCards[1].y).toBeGreaterThan(narrowFieldCards[0].y + 6);
+  expect(sameTrack(narrowFieldCards[0].x, narrowFieldCards[1].x)).toBe(true);
 
   await assertNoConsoleErrors();
 });
