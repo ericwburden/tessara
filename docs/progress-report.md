@@ -1,5 +1,34 @@
 # Progress Report
 
+## 2026-05-03 - Audit Recommendation Roadmap Placement
+
+- Completed:
+  - added cross-cutting scope-regression and dependency-audit rules to `docs/roadmap.md`
+  - kept the workflow assignment scope fix in Sprint 2C, where workflow/runtime backend decomposition is already next
+  - placed cookie-helper cleanup and browser-token separation into Sprint 2D, where response flows continue the settled auth/session contract
+  - added `Sprint 2G: Scoped Analytics And Reporting Compatibility Hardening` before Phase 3 so report execution, chart/component metadata, aggregation, and dashboard scope behavior are corrected before dataset/component authoring expands
+  - carried scoped analytical visibility guarantees into Dataset, Component, Chart, and Dashboard roadmap slices
+  - placed `cargo audit` enforcement and advisory policy in Sprint 2F with other CI/runtime gates
+  - placed docs archive-reference cleanup in Sprint 6A and production CORS/browser-token hardening in Sprint 6B
+  - updated `docs/README.md` so it no longer links to absent `docs/archive` paths
+- Notes:
+  - Sprint 2G is intentionally a compatibility-hardening slice, not a new long-term endorsement of `Report`, `Aggregation`, or `Chart` as target assets
+
+## 2026-05-03 - Roadmap Reconciliation After UI Overhaul Detour
+
+- Completed:
+  - updated `docs/roadmap.md` to be authoritative as of May 3, 2026
+  - marked Sprint 2B as complete based on the implemented auth/session hardening and native settled-surface work
+  - added `UI Overhaul 2.0: Out-Of-Roadmap UX Detour` as a completed detour slice between Sprint 1G and Phase 2
+  - refreshed the current baseline to reflect the approved shell posture, sidebar footer context, access-denied toast flow, queue-first home direction, organization explorer posture, native Components/Datasets inspection surfaces, and form section description/column-count support
+  - reframed Sprint 2C as the next roadmap sprint around workflow/response backend decomposition and runtime hardening, since route ownership work was already pulled forward by Sprint 2A, Sprint 2B, and the UI detour
+- Validation:
+  - `.\scripts\local-launch.ps1`
+  - `.\scripts\smoke.ps1 -ComposeApi -KeepServices`
+  - roadmap consistency check confirmed a single `(Next)` marker on Sprint 2C
+- Notes:
+  - a follow-on audit placement pass now assigns those recommendations across Sprint 2C, Sprint 2D, Sprint 2F, Sprint 2G, Phase 3, Phase 4, Phase 5, Sprint 6A, and Sprint 6B
+
 ## 2026-04-19 - UI Overhaul 2.0 Kickoff
 
 - Completed:

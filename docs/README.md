@@ -25,7 +25,7 @@ This `/docs` folder is the authoritative source for Tessara's active roadmap, re
 
 The active direction for Tessara is:
 
-- preserve the implemented baseline as of April 12, 2026
+- preserve the implemented baseline as of May 3, 2026
 - transition from the current reporting stack into the `Dataset -> Component -> Dashboard` model
 - use a `cargo-leptos` SSR-first frontend pipeline with selective hydration and selective lazy loading
 - plan future delivery as explicit vertical-slice sprints
@@ -48,16 +48,6 @@ These remain useful but are not active direction documents:
 - [re-alignment/rust](./re-alignment/rust)
 - [../README.md](../README.md)
 
-## Archived Sources
+## Historical Sources
 
-Historical planning and design sources have been moved to `archive/docs/`.
-
-| Archived File | Replacement |
-| --- | --- |
-| [archive/docs/roadmap.md](./archive/docs/roadmap.md) | [roadmap.md](./roadmap.md) |
-| [archive/docs/blueprint.md](./archive/docs/blueprint.md) | [requirements.md](./requirements.md), [architecture.md](./architecture.md) |
-| [archive/docs/user-interface-design.md](./archive/docs/user-interface-design.md) | [ui-guidance.md](./ui-guidance.md) |
-| [archive/docs/tessara_design_guide.md](./archive/docs/tessara_design_guide.md) | [ui-guidance.md](./ui-guidance.md) |
-| [archive/docs/tessara_naming.md](./archive/docs/tessara_naming.md) | [ui-guidance.md](./ui-guidance.md) |
-| [archive/docs/tessara_dataset_addendum.md](./archive/docs/tessara_dataset_addendum.md) | [architecture.md](./architecture.md) |
-| [archive/docs/re-alignment](./archive/docs/re-alignment) | [roadmap.md](./roadmap.md), [architecture.md](./architecture.md) |
+Some older planning and design sources were consolidated into the canonical files above and are not present in this checkout. Treat `roadmap.md`, `requirements.md`, `architecture.md`, `ui-guidance.md`, and `ui-guidance-spec.md` as the active replacements for archived planning material.
