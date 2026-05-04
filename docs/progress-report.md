@@ -1,5 +1,145 @@
 # Progress Report
 
+## 2026-05-04 - Sprint 2D Closeout
+
+- Completed:
+  - marked Sprint 2D complete in the roadmap and moved the `(Next)` marker to Sprint 2E
+  - delivered assigned response starts, draft save/resume, strict submit, and submitted read-only review through native `/app/responses*` UI
+  - preserved the existing public response routes and endpoints while moving touched lifecycle SQL/orchestration into submissions repo/service helpers
+  - kept browser response flows config-aware for custom cookie names and reserved bearer handling for explicit API/script/test flows
+  - polished the response queue into separate `Assigned Work`, `Draft Queue`, and `Submitted Work` tables, with workflow descriptions in the `Details` column and 16px login action spacing
+- Validation:
+  - `.\scripts\local-launch.ps1` passed and rebuilt/reseeded the local stack
+  - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"` passed
+  - `.\scripts\smoke.ps1` passed: 23 passed, 0 failed, with the demo-flow JSON probe passing
+  - `.\scripts\local-launch.ps1 -SkipBuild` passed after smoke teardown and left the app running at `http://localhost:8080/app`
+  - `cargo fmt --all` passed
+  - `cargo test -p tessara-submissions` passed: 3 passed, 0 failed
+  - `cargo test -p tessara-api` passed across API, workflow runtime, auth, and response lifecycle coverage
+  - `cargo test -p tessara-web` passed: 18 passed, 0 failed
+  - `cd end2end; npx playwright test` passed: 33 passed, 0 failed
+- Next Sprint:
+  - Sprint 2E: Multi-Step Workflow Authoring And Execution
+
+## Sprint Handoff / Demo Instructions
+
+### Assigned Start And Draft Resume
+- Role: respondent
+- Paths: `/app/responses`, `/app/responses/{submission_id}/edit`, `/api/workflow-assignments/{assignment_id}/start`, `/api/submissions?status=draft`
+- Walkthrough:
+  - sign in as a response user, open `/app/responses`, and start assigned work when an assigned workflow is present
+  - enter values, save the draft, return to `/app/responses`, and reopen the same draft from `Draft Queue`
+  - confirm the values are still present and the queue points back to the same in-progress submission
+- Expected result:
+  - draft save preserves values and audit history, no duplicate draft is created, and resume returns to the same response item
+- Automated evidence:
+  - `response_lifecycle_saves_resumes_submits_and_locks_submitted_records`
+  - `assignee pending start opens the matching draft directly and removes it from pending after submit`
+  - `draft save preserves values for later resume`
+  - `draft resume actions resolve to the same in-progress response item`
+
+### Strict Submit And Read-Only Review
+- Role: respondent
+- Paths: `/app/responses/{submission_id}/edit`, `/app/responses/{submission_id}`, `/api/submissions/{submission_id}/submit`
+- Walkthrough:
+  - open a draft response, leave a required value blank, and attempt submit
+  - confirm the UI shows the server-backed validation feedback and the response remains in `Draft Queue`
+  - fill the required values, submit once, and land on the submitted read-only review page
+  - try edit/save/resubmit/delete paths against the submitted response
+- Expected result:
+  - invalid submit stays draft; valid submit sets `submitted_at`, completes the linked workflow step, audits submit, removes the item from active queues, and keeps review read-only
+- Automated evidence:
+  - `submit feedback keeps incomplete responses in draft`
+  - `response_lifecycle_saves_resumes_submits_and_locks_submitted_records`
+  - `submitted_responses_reject_edit_save_resubmit_and_delete`
+
+### Scoped Review And Delegation
+- Roles: admin, scoped operator, respondent, delegator
+- Paths: `/app/responses`, `/api/submissions`, `/api/submissions/{submission_id}`, delegated response context with `delegateAccountId`
+- Walkthrough:
+  - confirm an admin can review all submitted responses
+  - confirm a scoped operator can review only in-scope submissions and is denied for out-of-scope records
+  - confirm response users see their own work and delegators can query accessible delegated work
+- Expected result:
+  - review access follows the admin, scoped operator, response user, and delegation boundaries without leaking out-of-scope submissions
+- Automated evidence:
+  - `scoped_operator_cannot_review_out_of_scope_submission_by_uuid`
+  - `delegator_can_query_pending_work_for_an_accessible_delegate_account`
+  - response route Playwright coverage for role-gated manual start and accessible response queues
+
+### Native Response UI And Hydration
+- Roles: admin, respondent
+- Paths: `/app/responses`, `/app/responses/new`, `/app/responses/{submission_id}`, `/app/responses/{submission_id}/edit`, `/app/login`
+- Walkthrough:
+  - refresh the response routes and inspect the separate `Assigned Work`, `Draft Queue`, and `Submitted Work` tables
+  - confirm rows keep work text on the left, workflow descriptions in `Details`, and stacked actions on narrower widths
+  - confirm submitted rows expose `View` only and the sign-in form keeps a 16px gap above the submit button
+  - check browser console output during route load and hydration
+- Expected result:
+  - touched `/app/responses*` surfaces stay native SSR-owned, hydrate cleanly, remain console-clean, and do not introduce bridge-backed behavior
+- Automated evidence:
+  - `responses route stays readable and console-clean on the native shell`
+  - `response users are redirected away from the manual start screen while admins keep it`
+  - `cargo test -p tessara-web`
+
+## Acceptance Mapping
+
+- Draft save preserves values and audit history, and resume returns to the same in-progress submission:
+  - demonstrated through the respondent draft walkthrough and covered by response lifecycle API and Playwright draft resume tests
+- Submit fails visibly and leaves the submission as draft when required values are missing or invalid:
+  - demonstrated by the missing-required submit walkthrough and covered by strict submit API tests plus Playwright feedback coverage
+- Submit succeeds only once, sets `submitted_at`, completes the linked workflow step, records audit, removes the item from pending/draft queues, and shows read-only review:
+  - demonstrated through the valid submit walkthrough and covered by lifecycle API tests and pending-start Playwright coverage
+- Submitted responses cannot be edited, saved, resubmitted, or deleted:
+  - demonstrated by submitted-route checks and covered by immutability API tests
+- Admins can review all responses; scoped operators only see in-scope responses; response users and delegators only see their own or accessible delegated work:
+  - demonstrated through scoped review and delegation walkthroughs and covered by operator-scope and delegation API tests
+- Touched `/app/responses*` surfaces stay native SSR-owned, hydrate cleanly, and do not add new bridge-backed behavior:
+  - demonstrated by route refresh and console checks and covered by web unit tests plus Playwright console-clean response route coverage
+- Existing public routes and endpoints remain the response lifecycle surface:
+  - verified through preserved `/app/responses*`, `/api/responses/options`, `/api/submissions*`, and workflow-assignment start coverage in API, Playwright, smoke, and UAT runs
+
+## 2026-05-04 - Sprint 2D Response Lifecycle Implementation
+
+- Completed:
+  - moved response lifecycle orchestration into the submissions service and response persistence SQL into repository helpers
+  - switched touched response and workflow-start browser endpoints to the config-aware authenticated request extractor
+  - tightened submit validation so missing, empty, invalid, non-draft, and already-submitted transitions are rejected before final lifecycle changes
+  - polished draft save/resume, submit feedback, and submitted read-only review behavior in the native Responses UI
+  - added API and Playwright coverage for Sprint 2D lifecycle behavior
+- Validation:
+  - `cargo fmt --all` passed
+  - `cargo test -p tessara-submissions` passed
+  - `cargo test -p tessara-api` passed
+  - `cargo test -p tessara-web` passed
+  - `cd end2end; npm ci` passed
+  - `cd end2end; npx playwright test --list` passed and listed 33 tests
+  - `.\scripts\local-launch.ps1 -FreshData` passed after Docker Desktop became available
+  - `cd end2end; npx playwright test` passed: 33 passed, 0 failed
+  - `.\scripts\smoke.ps1` passed: 23 passed, 0 failed, with demo-flow probe passing
+  - `.\scripts\local-launch.ps1 -FreshData -SkipBuild` relaunched the rebuilt image and reseeded demo data after smoke teardown
+  - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"` passed
+- Next Focus:
+  - keep the deployment open for reviewer UAT and prepare the branch for review
+
+## 2026-05-04 - Sprint 2D Kickoff
+
+- Completed:
+  - confirmed clean `main` and selected `Sprint 2D: Draft, Submit, And Review Response Slice` from the single roadmap `(Next)` marker
+  - created branch `codex/sprint-2d` with worktree `C:\Users\ericw\Projects\tessara-sprint-2d`
+  - added the Sprint 2D plan at `C:\Users\ericw\Projects\tessara-sprint-2d\docs\sprints\sprint-2d-plan.md`
+- Validation Plan:
+  - `cargo fmt --all`
+  - `cargo test -p tessara-submissions`
+  - `cargo test -p tessara-api`
+  - `cargo test -p tessara-web`
+  - `cd end2end; npx playwright test`
+  - `.\scripts\smoke.ps1`
+  - `.\scripts\local-launch.ps1`
+  - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`
+- Immediate Focus:
+  - make the respondent response lifecycle coherent: save draft, resume with values intact, strict submit, and submitted read-only review through native `/app/responses*`
+
 ## 2026-05-04 - Sprint 2E Contextual Assignment UX Scope Added
 
 - Decision:

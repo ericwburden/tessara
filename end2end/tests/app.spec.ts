@@ -408,6 +408,15 @@ test("sign-in route stays bare and redirects authenticated browsers home", async
     page.getByRole("heading", { level: 1, name: "Sign In" }),
   ).toBeVisible();
   await expect(page.getByRole("button", { name: "Sign In" })).toBeVisible();
+  const loginButtonGap = await page.locator("#login-form").evaluate((form) => {
+    const password = form.querySelector("#login-password");
+    const button = form.querySelector("button[type='submit']");
+    if (!(password instanceof HTMLElement) || !(button instanceof HTMLElement)) {
+      throw new Error("Login form controls were not rendered");
+    }
+    return button.getBoundingClientRect().top - password.getBoundingClientRect().bottom;
+  });
+  expect(loginButtonGap).toBeCloseTo(16, 0);
   await expect(page.locator("[data-auth-surface]")).toHaveCount(1);
   await expect(page.locator(".top-app-bar")).toHaveCount(0);
   await expect(page.locator("#app-sidebar")).toHaveCount(0);
@@ -1174,10 +1183,84 @@ test("responses route stays readable and console-clean on the native shell", asy
     page.locator(".top-app-bar__context"),
   ).toHaveText("Form Responses");
   await expect(page.locator("#response-pending-list")).toHaveCount(1);
-  await expect(page.locator("body")).toContainText("Assigned Starts");
+  await expect(
+    page.locator(".response-queue-section--drafts .response-queue-table"),
+  ).toBeVisible();
+  await expect(page.locator(".response-secondary-panel")).toHaveCount(0);
+  await expect(page.locator(".response-panel-title")).toHaveText(
+    "Current Work",
+  );
   await expect(page.locator("body")).toContainText("Draft Queue");
-  await expect(page.locator("body")).toContainText("Submitted Responses");
+  await expect(page.locator("body")).toContainText("Submitted Work");
+  await expect(page.getByText("Queue by next action")).toHaveCount(0);
+  await expect(page.getByText("Resume saved work")).toHaveCount(0);
+  await expect(page.getByText("Read-only review")).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Manual Start" })).toHaveCount(0);
+  const draftRow = page.locator("#response-draft-list .response-queue-row").first();
+  await expect(draftRow.locator(".response-queue-row__copy")).toContainText(
+    /1\.0\.0 ·/,
+  );
+  await expect(draftRow.locator(".response-queue-row__meta")).toContainText(
+    "Generated from the linked form for Sprint 2A runtime compatibility.",
+  );
+  await expect(draftRow.locator(".response-queue-row__meta")).not.toContainText(
+    "Version:",
+  );
+  await expect(draftRow.locator(".response-queue-row__meta")).not.toContainText(
+    "Node:",
+  );
+
+  for (const viewport of [
+    { width: 1620, height: 791, compact: false },
+    { width: 1089, height: 909, compact: true },
+    { width: 1034, height: 909, compact: true },
+    { width: 933, height: 909, compact: true },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/app/responses");
+    const firstDraftRow = page
+      .locator("#response-draft-list .response-queue-row")
+      .first();
+    await expect(firstDraftRow).toBeVisible();
+    const rowLayout = await firstDraftRow.evaluate((row) => {
+      const copy = row.querySelector(".response-queue-row__copy");
+      const meta = row.querySelector(".response-queue-row__meta");
+      const actions = row.querySelector(".response-queue-row__actions");
+      if (
+        !(copy instanceof HTMLElement) ||
+        !(meta instanceof HTMLElement) ||
+        !(actions instanceof HTMLElement)
+      ) {
+        throw new Error("Response queue row layout regions were not rendered");
+      }
+
+      const rowRect = row.getBoundingClientRect();
+      const copyRect = copy.getBoundingClientRect();
+      const metaRect = meta.getBoundingClientRect();
+      const actionsRect = actions.getBoundingClientRect();
+      const metaItemTops = Array.from(meta.querySelectorAll("p")).map((item) =>
+        Math.round(item.getBoundingClientRect().top),
+      );
+
+      return {
+        actionsColumn: getComputedStyle(actions).flexDirection,
+        actionsInsideRight: actionsRect.right <= rowRect.right + 0.5,
+        actionsRightOfText:
+          actionsRect.left >= Math.max(copyRect.left, metaRect.left),
+        detailsStacked:
+          metaItemTops.length < 2 || metaItemTops[1] > metaItemTops[0],
+        topPadding: Number.parseFloat(getComputedStyle(row).paddingTop),
+      };
+    });
+    expect(rowLayout.actionsInsideRight).toBe(true);
+    expect(rowLayout.detailsStacked).toBe(true);
+    expect(rowLayout.topPadding).toBeGreaterThanOrEqual(18);
+    if (viewport.compact) {
+      expect(rowLayout.actionsColumn).toBe("column");
+      expect(rowLayout.actionsRightOfText).toBe(true);
+    }
+  }
+  await page.setViewportSize({ width: 1280, height: 720 });
   await expectNoLegacyBridge(page);
 
   await page.reload();
@@ -1424,8 +1507,17 @@ test("assignee pending start opens the matching draft directly and removes it fr
 
   await page.locator("#response-submit-button").click();
   await expect(page).toHaveURL(
-    new RegExp(`/app/responses/${submissionId}(?:/edit)?$`),
+    new RegExp(`/app/responses/${submissionId}$`),
   );
+  await expect(page.locator("#response-detail")).toContainText("Submitted", {
+    timeout: 15000,
+  });
+  await expect(page.locator("#response-detail")).toContainText(
+    "This submitted response is read-only.",
+  );
+  await expect(
+    page.locator(`a[href="/app/responses/${submissionId}/edit"]`),
+  ).toHaveCount(0);
 
   const pendingAfterSubmitResponse = await page.request.get(
     "/api/workflow-assignments/pending",
@@ -1450,6 +1542,133 @@ test("assignee pending start opens the matching draft directly and removes it fr
       `#response-pending-list button[data-workflow-assignment-id="${assignmentId}"]`,
     ),
   ).toHaveCount(0);
+
+  await assertNoConsoleErrors();
+});
+
+test("draft save preserves values for later resume", async ({ page }) => {
+  test.setTimeout(60000);
+  const assertNoConsoleErrors = attachConsoleGuard(page);
+  const provisionedAssignmentId = await provisionPendingAssignmentForAccount(
+    page,
+    "respondent@tessara.local",
+  );
+  await signInAsRespondent(page);
+  await waitForAuthenticatedShell(page, "respondent@tessara.local");
+
+  await page.goto("/app/responses");
+  const pendingCard = page
+    .locator("#response-pending-list .response-queue-row--pending")
+    .filter({
+      has: page.locator(
+        `button[data-workflow-assignment-id="${provisionedAssignmentId}"]`,
+      ),
+    });
+  await expect(pendingCard).toHaveCount(1);
+  await pendingCard.getByRole("button", { name: "Start" }).click();
+
+  await expect(page).toHaveURL(/\/app\/responses\/[^/]+\/edit$/);
+  await expect(page.locator("#response-edit-form")).toBeVisible({
+    timeout: 15000,
+  });
+  const submissionId = page
+    .url()
+    .match(/\/app\/responses\/([^/]+)\/edit$/)?.[1];
+  expect(submissionId).toBeTruthy();
+
+  const inputs = page.locator("#response-edit-form input");
+  const inputCount = await inputs.count();
+  let savedInputId: string | null = null;
+  let savedValue = "";
+  for (let index = 0; index < inputCount; index += 1) {
+    const input = inputs.nth(index);
+    const type = await input.getAttribute("type");
+    if (type === "checkbox") {
+      await input.check();
+    } else if (type === "date") {
+      await input.fill("2026-05-04");
+    } else if (type === "number") {
+      await input.fill("7");
+    } else {
+      const value = `Saved draft value ${index + 1}`;
+      await input.fill(value);
+      if (!savedInputId) {
+        savedInputId = await input.getAttribute("id");
+        savedValue = value;
+      }
+    }
+  }
+  expect(savedInputId).toBeTruthy();
+
+  await page.getByRole("button", { name: "Save Draft" }).click();
+  await expect(page.locator("#response-edit-status")).toContainText(
+    "Draft saved.",
+  );
+
+  await page.goto("/app/responses");
+  const draftCard = page
+    .locator("#response-draft-list .response-queue-row--draft")
+    .filter({
+      has: page.locator(`a[href="/app/responses/${submissionId}/edit"]`),
+    });
+  await expect(draftCard).toHaveCount(1);
+  await draftCard.getByRole("link", { name: "Edit" }).click();
+  await expect(page).toHaveURL(
+    new RegExp(`/app/responses/${submissionId}/edit$`),
+  );
+  await expect(page.locator("#response-edit-form")).toBeVisible({
+    timeout: 15000,
+  });
+  await expect(page.locator(`#${savedInputId}`)).toHaveValue(savedValue);
+
+  await assertNoConsoleErrors();
+});
+
+test("submit feedback keeps incomplete responses in draft", async ({ page }) => {
+  test.setTimeout(60000);
+  const assertNoConsoleErrors = attachConsoleGuard(page);
+  const provisionedAssignmentId = await provisionPendingAssignmentForAccount(
+    page,
+    "respondent@tessara.local",
+  );
+  await signInAsRespondent(page);
+  await waitForAuthenticatedShell(page, "respondent@tessara.local");
+
+  await page.goto("/app/responses");
+  const pendingCard = page
+    .locator("#response-pending-list .response-queue-row--pending")
+    .filter({
+      has: page.locator(
+        `button[data-workflow-assignment-id="${provisionedAssignmentId}"]`,
+      ),
+    });
+  await expect(pendingCard).toHaveCount(1);
+  await pendingCard.getByRole("button", { name: "Start" }).click();
+
+  await expect(page).toHaveURL(/\/app\/responses\/[^/]+\/edit$/);
+  await expect(page.locator("#response-edit-form")).toBeVisible({
+    timeout: 15000,
+  });
+  const submissionId = page
+    .url()
+    .match(/\/app\/responses\/([^/]+)\/edit$/)?.[1];
+  expect(submissionId).toBeTruthy();
+
+  await page.locator("#response-submit-button").click();
+  await expect(page.locator("#response-edit-status")).toContainText(
+    "Required fields missing:",
+  );
+  await expect(page).toHaveURL(
+    new RegExp(`/app/responses/${submissionId}/edit$`),
+  );
+
+  const submissionResponse = await page.request.get(
+    `/api/submissions/${submissionId}`,
+  );
+  expect(submissionResponse.ok()).toBeTruthy();
+  const submission = await submissionResponse.json();
+  expect(submission.status).toBe("draft");
+  expect(submission.submitted_at).toBeNull();
 
   await assertNoConsoleErrors();
 });
@@ -1503,10 +1722,11 @@ test("draft resume actions resolve to the same in-progress response item", async
     .locator("#response-draft-list .response-queue-row--draft")
     .filter({
       has: page.locator(`a[href="/app/responses/${submissionId}/edit"]`),
-    });
+  });
   await expect(draftCard).toHaveCount(1);
-  await expect(draftCard).toContainText("Draft Queue");
   await expect(draftCard).toContainText(submission.form_name);
+  await expect(draftCard.locator(".eyebrow")).toHaveCount(0);
+  await expect(draftCard).not.toContainText("Status: draft");
 
   await draftCard.getByRole("link", { name: "Edit" }).click();
   await expect(page).toHaveURL(

@@ -164,6 +164,12 @@ async fn assignee_pending_work_can_start_workflow_response() {
     let assignment_id = pending[0]["workflow_assignment_id"]
         .as_str()
         .expect("pending work should include assignment id");
+    assert!(
+        pending[0]["workflow_description"]
+            .as_str()
+            .expect("pending work should include workflow description")
+            .contains("Sprint 2A runtime compatibility")
+    );
 
     let started = request_json(
         app.clone(),
@@ -203,13 +209,340 @@ async fn assignee_pending_work_can_start_workflow_response() {
         ),
     )
     .await;
+    let draft = drafts
+        .as_array()
+        .expect("draft list should be an array")
+        .iter()
+        .find(|draft| draft["id"] == started["id"])
+        .expect("started draft should be included in the draft list");
     assert!(
-        drafts
-            .as_array()
-            .expect("draft list should be an array")
-            .iter()
-            .any(|draft| draft["id"] == started["id"])
+        draft["workflow_description"]
+            .as_str()
+            .expect("draft summary should include workflow description")
+            .contains("Sprint 2A runtime compatibility")
     );
+}
+
+#[tokio::test]
+async fn response_lifecycle_saves_resumes_submits_and_locks_submitted_records() {
+    let _guard = TEST_DATABASE_LOCK.lock().await;
+    let Some(app) = test_app().await else { return };
+    let admin_token = login_token(app.clone()).await;
+
+    let _seed = request_json(
+        app.clone(),
+        authorized_request("POST", "/api/demo/seed", &admin_token, None),
+    )
+    .await;
+    let respondent_token = login_token_for(
+        app.clone(),
+        "respondent@tessara.local",
+        "tessara-dev-respondent",
+    )
+    .await;
+
+    let pending = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            "/api/workflow-assignments/pending",
+            &respondent_token,
+            None,
+        ),
+    )
+    .await;
+    let assignment_id = pending[0]["workflow_assignment_id"]
+        .as_str()
+        .expect("pending work should include assignment id");
+    let started = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            &format!("/api/workflow-assignments/{assignment_id}/start"),
+            &respondent_token,
+            Some(json!({})),
+        ),
+    )
+    .await;
+    let submission_id = started["id"]
+        .as_str()
+        .expect("start response should include submission id");
+
+    let missing_required_submit = request_status_and_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            &format!("/api/submissions/{submission_id}/submit"),
+            &respondent_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(missing_required_submit.0, StatusCode::BAD_REQUEST);
+    assert_eq!(missing_required_submit.1["code"], "bad_request");
+    assert!(
+        missing_required_submit.1["error"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("required field")
+    );
+
+    let draft_after_rejection = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/submissions/{submission_id}"),
+            &respondent_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(draft_after_rejection["status"], "draft");
+    assert_eq!(draft_after_rejection["submitted_at"], Value::Null);
+
+    let mut values = serde_json::Map::new();
+    let required_fields = draft_after_rejection["values"]
+        .as_array()
+        .expect("submission detail should include fields")
+        .iter()
+        .filter(|field| field["required"] == true)
+        .collect::<Vec<_>>();
+    assert!(
+        !required_fields.is_empty(),
+        "demo pending response should include required fields"
+    );
+    for field in required_fields {
+        values.insert(
+            field["key"]
+                .as_str()
+                .expect("field should include stable key")
+                .to_string(),
+            value_for_field_type(
+                field["field_type"]
+                    .as_str()
+                    .expect("field should include field type"),
+            ),
+        );
+    }
+
+    request_json(
+        app.clone(),
+        authorized_request(
+            "PUT",
+            &format!("/api/submissions/{submission_id}/values"),
+            &respondent_token,
+            Some(json!({ "values": values })),
+        ),
+    )
+    .await;
+
+    let resumed = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/submissions/{submission_id}"),
+            &respondent_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(resumed["status"], "draft");
+    assert!(
+        resumed["audit_events"]
+            .as_array()
+            .expect("audit events should be present")
+            .iter()
+            .any(|event| event["event_type"] == "save_draft")
+    );
+    assert!(
+        resumed["values"]
+            .as_array()
+            .expect("values should be present")
+            .iter()
+            .any(|value| value["required"] == true && value["value"] != Value::Null)
+    );
+
+    request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            &format!("/api/submissions/{submission_id}/submit"),
+            &respondent_token,
+            None,
+        ),
+    )
+    .await;
+    let submitted = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/submissions/{submission_id}"),
+            &respondent_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(submitted["status"], "submitted");
+    assert_ne!(submitted["submitted_at"], Value::Null);
+    assert!(
+        submitted["audit_events"]
+            .as_array()
+            .expect("audit events should be present")
+            .iter()
+            .any(|event| event["event_type"] == "submit")
+    );
+
+    for request in [
+        authorized_request(
+            "PUT",
+            &format!("/api/submissions/{submission_id}/values"),
+            &respondent_token,
+            Some(json!({ "values": {} })),
+        ),
+        authorized_request(
+            "POST",
+            &format!("/api/submissions/{submission_id}/submit"),
+            &respondent_token,
+            None,
+        ),
+        authorized_request(
+            "DELETE",
+            &format!("/api/submissions/{submission_id}"),
+            &respondent_token,
+            None,
+        ),
+    ] {
+        let rejected = request_status_and_json(app.clone(), request).await;
+        assert_eq!(rejected.0, StatusCode::BAD_REQUEST);
+        assert_eq!(rejected.1["code"], "bad_request");
+    }
+}
+
+#[tokio::test]
+async fn scoped_operator_cannot_review_out_of_scope_submission_by_uuid() {
+    let _guard = TEST_DATABASE_LOCK.lock().await;
+    let Some(app) = test_app().await else { return };
+    let admin_token = login_token(app.clone()).await;
+
+    let _seed = request_json(
+        app.clone(),
+        authorized_request("POST", "/api/demo/seed", &admin_token, None),
+    )
+    .await;
+    let operator_token = login_token_for(
+        app.clone(),
+        "operator@tessara.local",
+        "tessara-dev-operator",
+    )
+    .await;
+
+    let operator_nodes = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/nodes?q=Demo", &operator_token, None),
+    )
+    .await;
+    let operator_node_ids = operator_nodes
+        .as_array()
+        .expect("operator nodes should be an array")
+        .iter()
+        .filter_map(|node| node["id"].as_str())
+        .collect::<Vec<_>>();
+    assert!(!operator_node_ids.is_empty());
+
+    let all_submissions = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/submissions", &admin_token, None),
+    )
+    .await;
+    let out_of_scope_submission = all_submissions
+        .as_array()
+        .expect("submission list should be an array")
+        .iter()
+        .find(|submission| {
+            submission["node_id"]
+                .as_str()
+                .is_some_and(|node_id| !operator_node_ids.contains(&node_id))
+        })
+        .expect("demo seed should expose out-of-scope response work");
+    let out_of_scope_submission_id = out_of_scope_submission["id"]
+        .as_str()
+        .expect("submission should expose id");
+
+    let rejected = request_status_and_json(
+        app,
+        authorized_request(
+            "GET",
+            &format!("/api/submissions/{out_of_scope_submission_id}"),
+            &operator_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(rejected.0, StatusCode::FORBIDDEN);
+    assert_eq!(rejected.1["code"], "forbidden");
+}
+
+#[tokio::test]
+async fn response_lifecycle_endpoints_accept_configured_cookie_name() {
+    let _guard = TEST_DATABASE_LOCK.lock().await;
+    let Some(state) = test_state_with_cookie_name("custom_tessara_session").await else {
+        return;
+    };
+    let app = router(state);
+    let admin_token = login_token(app.clone()).await;
+
+    let _seed = request_json(
+        app.clone(),
+        authorized_request("POST", "/api/demo/seed", &admin_token, None),
+    )
+    .await;
+    let respondent_cookie = login_cookie_for(
+        app.clone(),
+        "respondent@tessara.local",
+        "tessara-dev-respondent",
+    )
+    .await;
+    assert!(respondent_cookie.starts_with("custom_tessara_session="));
+
+    let pending = request_json(
+        app.clone(),
+        cookie_authenticated_request(
+            "GET",
+            "/api/workflow-assignments/pending",
+            &respondent_cookie,
+            None,
+        ),
+    )
+    .await;
+    let assignment_id = pending[0]["workflow_assignment_id"]
+        .as_str()
+        .expect("pending work should include assignment id");
+
+    let started = request_json(
+        app.clone(),
+        cookie_authenticated_request(
+            "POST",
+            &format!("/api/workflow-assignments/{assignment_id}/start"),
+            &respondent_cookie,
+            Some(json!({})),
+        ),
+    )
+    .await;
+    let submission_id = started["id"]
+        .as_str()
+        .expect("start should include submission id");
+
+    let submission = request_json(
+        app,
+        cookie_authenticated_request(
+            "GET",
+            &format!("/api/submissions/{submission_id}"),
+            &respondent_cookie,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(submission["status"], "draft");
 }
 
 #[tokio::test]
@@ -1066,6 +1399,10 @@ async fn test_app() -> Option<axum::Router> {
 }
 
 async fn test_state() -> Option<db::AppState> {
+    test_state_with_cookie_name("tessara_session").await
+}
+
+async fn test_state_with_cookie_name(auth_cookie_name: &str) -> Option<db::AppState> {
     LazyLock::force(&TEST_TRACING);
     let Some(database_url) = std::env::var("TEST_DATABASE_URL").ok() else {
         eprintln!("skipping database integration test; TEST_DATABASE_URL is not set");
@@ -1078,7 +1415,7 @@ async fn test_state() -> Option<db::AppState> {
         bind_addr: "127.0.0.1:0".to_string(),
         dev_admin_email: "admin@tessara.local".to_string(),
         dev_admin_password: "tessara-dev-admin".to_string(),
-        auth_cookie_name: "tessara_session".to_string(),
+        auth_cookie_name: auth_cookie_name.to_string(),
         auth_cookie_secure: false,
         auth_session_ttl_hours: 12,
     };
@@ -1087,6 +1424,17 @@ async fn test_state() -> Option<db::AppState> {
         .expect("database should migrate and seed");
 
     Some(db::AppState { pool, config })
+}
+
+fn value_for_field_type(field_type: &str) -> Value {
+    match field_type {
+        "number" => json!(7),
+        "boolean" => json!(false),
+        "date" => json!("2026-05-04"),
+        "multi_choice" => json!(["Sprint 2D"]),
+        "single_choice" => json!("Sprint 2D"),
+        _ => json!("Sprint 2D response value"),
+    }
 }
 
 async fn login_token(app: axum::Router) -> String {

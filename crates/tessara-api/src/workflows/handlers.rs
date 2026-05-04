@@ -8,7 +8,7 @@ use sqlx::{Postgres, Row, Transaction};
 use uuid::Uuid;
 
 use crate::{
-    auth,
+    auth::{self, AuthenticatedRequest},
     db::AppState,
     error::{ApiError, ApiResult},
     hierarchy::IdResponse,
@@ -358,13 +358,12 @@ pub async fn update_workflow_assignment(
 
 pub async fn list_pending_work(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    request: AuthenticatedRequest,
     Query(query): Query<WorkflowAssignmentQuery>,
 ) -> ApiResult<Json<Vec<PendingWorkflowWork>>> {
-    let account = auth::require_authenticated(&state.pool, &headers).await?;
     let delegate_account_id = auth::resolve_accessible_delegate_account_id(
         &state.pool,
-        &account,
+        &request.account,
         query.delegate_account_id,
     )
     .await?;
@@ -375,11 +374,11 @@ pub async fn list_pending_work(
 
 pub async fn start_assignment(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    request: AuthenticatedRequest,
     Path(workflow_assignment_id): Path<Uuid>,
 ) -> ApiResult<Json<IdResponse>> {
-    let account = auth::require_authenticated(&state.pool, &headers).await?;
-    let id = start_workflow_assignment(&state.pool, &account, workflow_assignment_id).await?;
+    let id =
+        start_workflow_assignment(&state.pool, &request.account, workflow_assignment_id).await?;
     Ok(Json(IdResponse { id }))
 }
 
@@ -892,6 +891,7 @@ pub async fn list_pending_assignments_for_account(
             workflow_assignments.id AS workflow_assignment_id,
             workflows.id AS workflow_id,
             workflows.name AS workflow_name,
+            workflows.description AS workflow_description,
             workflow_versions.id AS workflow_version_id,
             workflow_versions.version_label AS workflow_version_label,
             workflow_steps.title AS workflow_step_title,
@@ -939,6 +939,7 @@ pub async fn list_pending_assignments_for_account(
                 workflow_assignment_id: row.try_get("workflow_assignment_id")?,
                 workflow_id: row.try_get("workflow_id")?,
                 workflow_name: row.try_get("workflow_name")?,
+                workflow_description: row.try_get("workflow_description")?,
                 workflow_version_id: row.try_get("workflow_version_id")?,
                 workflow_version_label: row.try_get("workflow_version_label")?,
                 workflow_step_title: row.try_get("workflow_step_title")?,

@@ -57,6 +57,7 @@ pub struct SubmissionSummary {
     pub form_id: Uuid,
     pub form_version_id: Uuid,
     pub form_name: String,
+    pub workflow_description: Option<String>,
     pub version_label: String,
     pub node_id: Uuid,
     pub node_name: String,

@@ -424,7 +424,7 @@ Before deeper application-surface replacement continues, the frontend platform s
 
 **User-testable exit condition:** a tester can browse workflows, assign work, start or resume the correct response entry flow, and verify role/scope boundaries without falling back to the retained hybrid shell.
 
-### Sprint 2D: Draft, Submit, And Review Response Slice (Next)
+### Sprint 2D: Draft, Submit, And Review Response Slice (Complete)
 
 **Outcome:** the end-user response lifecycle is coherent and complete.
 
@@ -445,7 +445,7 @@ Before deeper application-surface replacement continues, the frontend platform s
 
 **User-testable exit condition:** a tester can save draft, resume, submit, and review responses through the application UI.
 
-### Sprint 2E: Multi-Step Workflow Authoring And Execution
+### Sprint 2E: Multi-Step Workflow Authoring And Execution (Next)
 
 **Outcome:** workflows are no longer limited to a single response step, and runtime execution can advance across explicit step definitions.
 

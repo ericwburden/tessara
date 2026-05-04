@@ -2723,6 +2723,161 @@ body.tessara-app .response-context-toolbar {
   margin-bottom: 1rem;
 }
 
+body.tessara-app .response-value-list {
+  display: grid;
+  gap: 0.55rem;
+  padding-left: 0;
+  list-style: none;
+}
+
+body.tessara-app .response-value-list li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  padding-bottom: 0.55rem;
+  border-bottom: 1px solid var(--tessara-detail-rule);
+}
+
+body.tessara-app .response-primary-panel--table {
+  display: grid;
+  gap: 1rem;
+}
+
+body.tessara-app .response-panel-title {
+  margin: 0;
+  color: var(--tessara-text);
+  font-size: 1.35rem;
+  font-weight: 800;
+}
+
+body.tessara-app .response-queue-groups {
+  display: grid;
+  gap: 1.35rem;
+}
+
+body.tessara-app .response-queue-table {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid var(--tessara-border);
+  border-radius: 18px;
+  background: var(--tessara-surface-subtle);
+}
+
+body.tessara-app .response-queue-table__head,
+body.tessara-app .response-queue-row {
+  display: grid;
+  grid-template-columns: minmax(13rem, 1.25fr) minmax(18rem, 1.75fr) minmax(9rem, auto);
+  align-items: center;
+  gap: 1rem;
+}
+
+body.tessara-app .response-queue-table__head {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--tessara-border);
+  background: var(--tessara-table-header-bg);
+  color: var(--tessara-text-muted);
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+body.tessara-app .response-queue-section[hidden] {
+  display: none;
+}
+
+body.tessara-app .response-queue-section__header {
+  margin-bottom: 0.5rem;
+}
+
+body.tessara-app .response-queue-section__title {
+  margin: 0;
+  color: var(--tessara-link);
+  font-size: 0.84rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+body.tessara-app .response-queue-list {
+  display: grid;
+}
+
+body.tessara-app .response-queue-row {
+  padding: 0.9rem 1rem;
+  border-top: 1px solid var(--tessara-detail-rule);
+  background: transparent !important;
+  box-shadow: none;
+}
+
+body.tessara-app .response-queue-row:first-child {
+  border-top: 0;
+  padding-top: 1.15rem;
+}
+
+body.tessara-app .response-queue-row__copy,
+body.tessara-app .response-queue-row__meta {
+  min-width: 0;
+}
+
+body.tessara-app .response-queue-row__copy strong,
+body.tessara-app .response-queue-row__meta p {
+  overflow-wrap: anywhere;
+}
+
+body.tessara-app .response-queue-row__meta {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.35rem;
+}
+
+body.tessara-app .response-queue-row--pending .response-queue-row__meta {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+body.tessara-app .response-queue-row__meta p,
+body.tessara-app .response-queue-row__copy p {
+  margin: 0;
+}
+
+body.tessara-app .response-queue-row__actions {
+  justify-content: flex-end;
+  margin-top: 0;
+}
+
+body.tessara-app .response-queue-row__actions .button-link {
+  min-width: 4.5rem;
+}
+
+body.tessara-app .response-empty-state {
+  padding: 0.9rem 1rem;
+  border-top: 1px solid var(--tessara-detail-rule);
+}
+
+body.tessara-app .status-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.65rem;
+  padding: 0.2rem 0.6rem;
+  border: 1px solid var(--tessara-border);
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+body.tessara-app .status-pill--draft {
+  border-color: color-mix(in srgb, var(--tessara-warning) 42%, var(--tessara-border));
+  background: color-mix(in srgb, var(--tessara-warning) 14%, var(--tessara-surface));
+  color: var(--tessara-text);
+}
+
+body.tessara-app .status-pill--submitted {
+  border-color: color-mix(in srgb, var(--tessara-link) 34%, var(--tessara-border));
+  background: color-mix(in srgb, var(--tessara-link) 10%, var(--tessara-surface));
+  color: var(--tessara-text);
+}
+
 body.tessara-app .form-builder-shell,
 body.tessara-app .form-builder-sidebar,
 body.tessara-app .form-builder-rail,
@@ -3136,6 +3291,7 @@ body.tessara-app .auth-shell__copy p {
 }
 
 body.tessara-app .auth-shell__form {
+  display: grid;
   gap: 1rem;
 }
 
@@ -3150,6 +3306,7 @@ body.tessara-app .auth-shell__form .field {
 
 body.tessara-app .auth-shell__form .actions {
   justify-content: stretch;
+  margin-top: 0;
 }
 
 body.tessara-app .auth-shell__form .actions .button {
@@ -3191,7 +3348,38 @@ body.tessara-app .auth-shell__status {
   }
 }
 
-@media (max-width: 1080px) {
+@media (max-width: 1200px) {
+  body.tessara-app .response-queue-table__head {
+    display: none;
+  }
+
+  body.tessara-app .response-queue-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "copy actions"
+      "meta actions";
+    align-items: start;
+    gap: 0.65rem 1rem;
+  }
+
+  body.tessara-app .response-queue-row__copy {
+    grid-area: copy;
+  }
+
+  body.tessara-app .response-queue-row__meta {
+    grid-area: meta;
+  }
+
+  body.tessara-app .response-queue-row__actions {
+    grid-area: actions;
+    align-self: center;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: center;
+    width: max-content;
+    max-width: 100%;
+  }
+
   body.tessara-app .form-builder-layout,
   body.tessara-app .form-builder-layout--with-properties {
     grid-template-columns: minmax(0, 1fr);
@@ -3261,6 +3449,16 @@ body.tessara-app .auth-shell__status {
   body.tessara-app .workflow-directory-card__status,
   body.tessara-app .response-queue-card__status {
     width: fit-content;
+  }
+
+  body.tessara-app .response-queue-section__header {
+    display: grid;
+    gap: 0.15rem;
+  }
+
+  body.tessara-app .response-queue-row__meta,
+  body.tessara-app .response-queue-row--pending .response-queue-row__meta {
+    grid-template-columns: 1fr;
   }
 
   body.tessara-app .form-builder-shell {

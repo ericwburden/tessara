@@ -27,6 +27,7 @@ mod hydrate {
     struct PendingWork {
         workflow_assignment_id: String,
         workflow_name: String,
+        workflow_description: String,
         workflow_version_label: Option<String>,
         workflow_step_title: String,
         form_name: String,
@@ -39,6 +40,7 @@ mod hydrate {
     struct SubmissionSummary {
         id: String,
         form_name: String,
+        workflow_description: Option<String>,
         version_label: String,
         node_name: String,
         status: String,
@@ -68,6 +70,7 @@ mod hydrate {
         form_version_id: String,
         node_name: String,
         status: String,
+        submitted_at: Option<String>,
         values: Vec<SubmissionValueDetail>,
         audit_events: Vec<SubmissionAuditEventSummary>,
     }
@@ -137,7 +140,11 @@ mod hydrate {
     }
 
     fn render_field_input(field: &RenderedField) -> String {
-        let required = if field.required { " required" } else { "" };
+        let required = if field.required {
+            r#" aria-required="true""#
+        } else {
+            ""
+        };
         if field.field_type == "boolean" {
             return format!(
                 r#"<input id="{}" type="checkbox"{}>"#,
@@ -199,13 +206,15 @@ mod hydrate {
         )
     }
 
+    fn workflow_detail_text(description: Option<&str>) -> String {
+        description
+            .map(str::trim)
+            .filter(|description| !description.is_empty())
+            .unwrap_or("No workflow description provided.")
+            .to_string()
+    }
+
     fn render_pending_cards(items: &[PendingWork]) -> String {
-        if items.is_empty() {
-            return render_queue_empty_state(
-                "No assigned responses are ready to start.",
-                "New assignment-backed work will appear here when a workflow step is waiting on this queue.",
-            );
-        }
         items.iter()
             .map(|item| {
                 let form_version = item.form_version_label.as_deref().unwrap_or("Published version");
@@ -213,10 +222,12 @@ mod hydrate {
                     .workflow_version_label
                     .as_deref()
                     .unwrap_or("Current runtime");
+                let workflow_description = workflow_detail_text(Some(&item.workflow_description));
                 format!(
-                    r#"<article class="home-queue-row response-queue-row response-queue-row--pending"><div class="home-queue-row__copy response-queue-row__copy"><p class="eyebrow">Assigned Start</p><strong>{}</strong><p class="muted">{}</p></div><div class="home-queue-row__meta response-queue-row__meta"><p><strong>Form:</strong> {} {}</p><p><strong>Step:</strong> {}</p><p><strong>Runtime:</strong> {}</p><p><strong>Assigned To:</strong> {}</p></div><div class="actions response-queue-row__actions"><button class="button-link" type="button" data-workflow-assignment-id="{}">Start</button></div></article>"#,
+                    r#"<article class="home-queue-row response-queue-row response-queue-row--pending"><div class="home-queue-row__copy response-queue-row__copy"><p class="eyebrow">Assigned Start</p><strong>{}</strong><p class="muted">{}</p></div><div class="home-queue-row__meta response-queue-row__meta"><p>{}</p><p><strong>Form:</strong> {} {}</p><p><strong>Step:</strong> {}</p><p><strong>Runtime:</strong> {}</p><p><strong>Assigned To:</strong> {}</p></div><div class="actions response-queue-row__actions"><button class="button-link" type="button" data-workflow-assignment-id="{}">Start</button></div></article>"#,
                     escape_html(&item.workflow_name),
                     escape_html(&item.node_name),
+                    escape_html(&workflow_description),
                     escape_html(&item.form_name),
                     escape_html(form_version),
                     escape_html(&item.workflow_step_title),
@@ -251,30 +262,58 @@ mod hydrate {
                 } else {
                     String::new()
                 };
-                let queue_label = if show_edit {
-                    "Draft Queue"
-                } else {
-                    "Submitted Response"
-                };
+                let workflow_description =
+                    workflow_detail_text(item.workflow_description.as_deref());
                 format!(
-                    r#"<article class="home-queue-row response-queue-row {}"><div class="home-queue-row__copy response-queue-row__copy"><p class="eyebrow">{}</p><strong>{}</strong><p class="muted">{}</p></div><div class="home-queue-row__meta response-queue-row__meta"><p><strong>Status:</strong> {}</p><p><strong>Version:</strong> {}</p><p><strong>Node:</strong> {}</p></div><div class="actions response-queue-row__actions"><a class="button-link" href="/app/responses/{}">View</a>{}</div></article>"#,
+                    r#"<article class="home-queue-row response-queue-row {}"><div class="home-queue-row__copy response-queue-row__copy"><strong>{}</strong><p class="muted">{}</p></div><div class="home-queue-row__meta response-queue-row__meta"><p>{}</p></div><div class="actions response-queue-row__actions"><a class="button-link" href="/app/responses/{}">View</a>{}</div></article>"#,
                     if show_edit {
                         "response-queue-row--draft"
                     } else {
                         "response-queue-row--submitted"
                     },
-                    queue_label,
                     escape_html(&item.form_name),
                     escape_html(&format!("{} · {}", item.version_label, item.node_name)),
-                    escape_html(&item.status),
-                    escape_html(&item.version_label),
-                    escape_html(&item.node_name),
+                    escape_html(&workflow_description),
                     escape_html(&item.id),
                     edit
                 )
             })
             .collect::<Vec<_>>()
             .join("")
+    }
+
+    fn render_response_value(value: Option<&Value>) -> String {
+        match value {
+            None | Some(Value::Null) => r#"<span class="muted">missing</span>"#.into(),
+            Some(Value::String(value)) if value.trim().is_empty() => {
+                r#"<span class="muted">missing</span>"#.into()
+            }
+            Some(Value::String(value)) => escape_html(value),
+            Some(Value::Array(values)) if values.is_empty() => {
+                r#"<span class="muted">missing</span>"#.into()
+            }
+            Some(Value::Array(values)) => {
+                let rendered = values
+                    .iter()
+                    .filter_map(|value| value.as_str())
+                    .filter(|value| !value.trim().is_empty())
+                    .map(escape_html)
+                    .collect::<Vec<_>>();
+                if rendered.is_empty() {
+                    r#"<span class="muted">missing</span>"#.into()
+                } else {
+                    rendered.join(", ")
+                }
+            }
+            Some(Value::Bool(value)) => {
+                if *value {
+                    "Yes".into()
+                } else {
+                    "No".into()
+                }
+            }
+            Some(value) => escape_html(&value.to_string()),
+        }
     }
 
     fn render_detail(detail: &SubmissionDetail) -> String {
@@ -285,12 +324,11 @@ mod hydrate {
                 .values
                 .iter()
                 .map(|item| {
-                    let value = item
-                        .value
-                        .as_ref()
-                        .map(|value| escape_html(&value.to_string()))
-                        .unwrap_or_else(|| "<span class=\"muted\">missing</span>".into());
-                    format!(r#"<li>{}: {}</li>"#, escape_html(&item.label), value)
+                    format!(
+                        r#"<li><strong>{}</strong><span>{}</span></li>"#,
+                        escape_html(&item.label),
+                        render_response_value(item.value.as_ref())
+                    )
                 })
                 .collect::<Vec<_>>()
                 .join("")
@@ -312,19 +350,35 @@ mod hydrate {
                 .collect::<Vec<_>>()
                 .join("")
         };
+        let review_state = if detail.status == "draft" {
+            r#"<span class="status-pill status-pill--draft">Draft</span>"#.to_string()
+        } else {
+            r#"<span class="status-pill status-pill--submitted">Submitted</span>"#.to_string()
+        };
+        let submitted_at = detail
+            .submitted_at
+            .as_deref()
+            .map(|value| {
+                format!(
+                    r#"<p><strong>Submitted:</strong> {}</p>"#,
+                    escape_html(value)
+                )
+            })
+            .unwrap_or_default();
         format!(
-            r#"<section class="page-panel nested-form-panel"><h3>Summary</h3><p>{} {}</p><p>{}</p><p class="muted">Status: {}</p>{}</section><section class="page-panel nested-form-panel"><h3>Values</h3><ul class="app-list">{}</ul></section><section class="page-panel nested-form-panel"><h3>Audit Trail</h3><ul class="app-list">{}</ul></section>"#,
+            r#"<section class="page-panel nested-form-panel"><h3>Summary</h3><p>{} {}</p><p>{}</p><p>{}</p>{}{}</section><section class="page-panel nested-form-panel response-review-values"><h3>Response Values</h3><ul class="app-list response-value-list">{}</ul></section><section class="page-panel nested-form-panel"><h3>Audit Trail</h3><ul class="app-list">{}</ul></section>"#,
             escape_html(&detail.form_name),
             escape_html(&detail.version_label),
             escape_html(&detail.node_name),
-            escape_html(&detail.status),
+            review_state,
+            submitted_at,
             if detail.status == "draft" {
                 format!(
                     r#"<p><a class="button-link" href="/app/responses/{}/edit">Edit Draft</a></p>"#,
                     escape_html(&detail.id)
                 )
             } else {
-                String::new()
+                r#"<p class="muted">This submitted response is read-only.</p>"#.into()
             },
             values,
             audit
@@ -333,7 +387,7 @@ mod hydrate {
 
     fn render_edit_surface(detail: &SubmissionDetail, rendered: &RenderedForm) -> String {
         format!(
-            r#"<p id="response-edit-status" class="muted">Save or submit the current draft here.</p><form id="response-edit-form" class="entity-form">{}{}</form>"#,
+            r#"<p id="response-edit-status" class="muted">Save this draft as often as needed. Submit only when required fields are complete.</p><form id="response-edit-form" class="entity-form" novalidate>{}{}</form>"#,
             rendered
                 .sections
                 .iter()
@@ -360,7 +414,7 @@ mod hydrate {
                 .collect::<Vec<_>>()
                 .join(""),
             format!(
-                r#"<div class="actions form-actions"><button type="submit" class="button is-light">Save</button><button type="button" class="button is-primary" id="response-submit-button">Submit</button><a class="button-link" href="/app/responses/{}">Cancel</a></div>"#,
+                r#"<div class="actions form-actions"><button type="submit" class="button is-light">Save Draft</button><button type="button" class="button is-primary" id="response-submit-button">Submit Response</button><a class="button-link" href="/app/responses/{}">Back to Queue</a></div>"#,
                 escape_html(&detail.id)
             )
         )
@@ -572,6 +626,13 @@ mod hydrate {
                     "response-metric-strip",
                     &render_queue_metrics(pending.len(), drafts.len(), submitted.len()),
                 );
+                if let Some(section) = by_id("response-pending-section") {
+                    if pending.is_empty() {
+                        section.set_attribute("hidden", "").ok();
+                    } else {
+                        section.remove_attribute("hidden").ok();
+                    }
+                }
                 set_html("response-pending-list", &render_pending_cards(&pending));
                 set_html(
                     "response-draft-list",
@@ -824,6 +885,47 @@ mod hydrate {
         });
     }
 
+    fn schedule_submission_load(
+        target_id: &'static str,
+        submission_id: String,
+        attempts_remaining: u8,
+        load: fn(String),
+    ) {
+        if by_id(target_id).is_some() || attempts_remaining == 0 {
+            load(submission_id);
+            return;
+        }
+
+        let fallback_submission_id = submission_id.clone();
+        let closure = Closure::wrap(Box::new(move || {
+            schedule_submission_load(
+                target_id,
+                submission_id.clone(),
+                attempts_remaining.saturating_sub(1),
+                load,
+            );
+        }) as Box<dyn FnMut()>);
+
+        if let Some(window) = window() {
+            let scheduled = window
+                .set_timeout_with_callback_and_timeout_and_arguments_0(
+                    closure.as_ref().unchecked_ref(),
+                    25,
+                )
+                .is_ok();
+            if scheduled {
+                closure.forget();
+                return;
+            }
+        }
+
+        load(fallback_submission_id);
+    }
+
+    pub fn schedule_load_detail_page(submission_id: String) {
+        schedule_submission_load("response-detail", submission_id, 80, load_detail_page);
+    }
+
     pub fn load_edit_page(submission_id: String) {
         spawn_local(async move {
             let detail =
@@ -866,7 +968,7 @@ mod hydrate {
                                         .await
                                         {
                                             Ok(_) => {
-                                                redirect(&format!("/app/responses/{submission_id}"))
+                                                set_text("response-edit-status", "Draft saved.")
                                             }
                                             Err(error) => set_text("response-edit-status", &error),
                                         },
@@ -925,26 +1027,7 @@ mod hydrate {
     }
 
     pub fn schedule_load_edit_page(submission_id: String) {
-        let load_now = {
-            let submission_id = submission_id.clone();
-            move || load_edit_page(submission_id.clone())
-        };
-        let closure = Closure::wrap(Box::new(load_now) as Box<dyn FnMut()>);
-
-        if let Some(window) = window() {
-            let scheduled = window
-                .set_timeout_with_callback_and_timeout_and_arguments_0(
-                    closure.as_ref().unchecked_ref(),
-                    0,
-                )
-                .is_ok();
-            if scheduled {
-                closure.forget();
-                return;
-            }
-        }
-
-        load_edit_page(submission_id);
+        schedule_submission_load("response-edit-surface", submission_id, 80, load_edit_page);
     }
 
     pub fn set_context(page_key: &'static str, record_id: Option<String>) {
@@ -989,61 +1072,63 @@ pub fn ResponsesListPage() -> impl IntoView {
                     <span>"items in flight"</span>
                 </article>
             </section>
-            <div class="home-workspace-grid response-workspace-grid">
-                <section class="home-primary-panel response-primary-panel">
-                    <div class="home-panel-header response-panel-header">
-                        <div class="home-panel-header__copy response-panel-header__copy">
-                            <p class="eyebrow">"Current Work"</p>
-                            <h2>"Queue by next action"</h2>
-                            <p class="muted">
-                                "Assigned starts and drafts stay primary so this route behaves like an operational inbox instead of a stack of management panels."
-                            </p>
-                        </div>
-                        <div id="response-start-actions" class="actions response-panel-actions"></div>
+            <section class="home-primary-panel response-primary-panel response-primary-panel--table">
+                <div class="home-panel-header response-panel-header">
+                    <div class="home-panel-header__copy response-panel-header__copy">
+                        <h2 class="response-panel-title">"Current Work"</h2>
                     </div>
-                    <div id="response-context-switcher"></div>
-                    <p id="response-pending-feedback" class="muted response-queue-feedback"></p>
-                    <section class="home-queue-panel response-queue-section">
+                    <div id="response-start-actions" class="actions response-panel-actions"></div>
+                </div>
+                <div id="response-context-switcher"></div>
+                <p id="response-pending-feedback" class="muted response-queue-feedback"></p>
+                <div class="response-queue-groups">
+                    <section id="response-pending-section" class="response-queue-section response-queue-section--pending" hidden>
                         <div class="response-queue-section__header">
-                            <p class="eyebrow">"Assigned Starts"</p>
-                            <h3>"Ready to begin"</h3>
+                            <h3 class="response-queue-section__title">"Assigned Work"</h3>
                         </div>
-                        <div id="response-pending-list" class="home-queue-list response-queue-list">
-                            <p class="muted">"Loading assigned response work..."</p>
+                        <div class="response-queue-table" role="table" aria-label="Assigned response work">
+                            <div class="response-queue-table__head" role="row">
+                                <span role="columnheader">"Work"</span>
+                                <span role="columnheader">"Details"</span>
+                                <span role="columnheader">"Actions"</span>
+                            </div>
+                            <div id="response-pending-list" class="home-queue-list response-queue-list">
+                                <p class="muted">"Loading assigned response work..."</p>
+                            </div>
                         </div>
                     </section>
-                    <section class="home-queue-panel response-queue-section">
+                    <section class="response-queue-section response-queue-section--drafts">
                         <div class="response-queue-section__header">
-                            <p class="eyebrow">"Draft Queue"</p>
-                            <h3>"Resume saved work"</h3>
+                            <h3 class="response-queue-section__title">"Draft Queue"</h3>
                         </div>
-                        <div id="response-draft-list" class="home-queue-list response-queue-list">
-                            <p class="muted">"Loading draft responses..."</p>
+                        <div class="response-queue-table" role="table" aria-label="Draft response work">
+                            <div class="response-queue-table__head" role="row">
+                                <span role="columnheader">"Work"</span>
+                                <span role="columnheader">"Details"</span>
+                                <span role="columnheader">"Actions"</span>
+                            </div>
+                            <div id="response-draft-list" class="home-queue-list response-queue-list">
+                                <p class="muted">"Loading draft responses..."</p>
+                            </div>
                         </div>
                     </section>
-                </section>
-                <aside class="home-secondary-panel response-secondary-panel">
-                    <section class="home-secondary-section response-secondary-section">
+                    <section class="response-queue-section response-queue-section--submitted">
                         <div class="response-queue-section__header">
-                            <p class="eyebrow">"Submitted Responses"</p>
-                            <h3>"Read-only review"</h3>
-                            <p class="muted">
-                                "Completed responses stay available here for audit lookup without competing with active work."
-                            </p>
+                            <h3 class="response-queue-section__title">"Submitted Work"</h3>
                         </div>
-                        <div id="response-submitted-list" class="home-queue-list response-queue-list">
-                            <p class="muted">"Loading submitted responses..."</p>
+                        <div class="response-queue-table" role="table" aria-label="Submitted response work">
+                            <div class="response-queue-table__head" role="row">
+                                <span role="columnheader">"Work"</span>
+                                <span role="columnheader">"Details"</span>
+                                <span role="columnheader">"Actions"</span>
+                            </div>
+                            <div id="response-submitted-list" class="home-queue-list response-queue-list">
+                                <p class="muted">"Loading submitted responses..."</p>
+                            </div>
                         </div>
                     </section>
-                    <section class="home-secondary-section response-secondary-section">
-                        <p class="eyebrow">"Queue Discipline"</p>
-                        <h3>"Delegation stays in the route, not on every row"</h3>
-                        <p class="muted">
-                            "The account context switcher stays above the active queue so delegated work remains visible without repeating the same ownership metadata on every response."
-                        </p>
-                    </section>
-                </aside>
-            </div>
+                </div>
+            </section>
         </NativePage>
     }
 }
@@ -1116,7 +1201,10 @@ pub fn ResponseDetailPage() -> impl IntoView {
     #[cfg(feature = "hydrate")]
     hydrate::set_context("native-response-detail", Some(submission_id.clone()));
     #[cfg(feature = "hydrate")]
-    hydrate::load_detail_page(submission_id.clone());
+    {
+        let submission_id = submission_id.clone();
+        Effect::new(move |_| hydrate::schedule_load_detail_page(submission_id.clone()));
+    }
     view! {
         <NativePage
             title="Response Detail"

@@ -118,6 +118,7 @@ pub struct PendingWorkflowWork {
     pub workflow_assignment_id: Uuid,
     pub workflow_id: Uuid,
     pub workflow_name: String,
+    pub workflow_description: String,
     pub workflow_version_id: Uuid,
     pub workflow_version_label: Option<String>,
     pub workflow_step_title: String,

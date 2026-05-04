@@ -300,6 +300,13 @@ body.tessara-app .actions {
   gap: 0.75rem;
   margin-top: 0.25rem;
 }
+body.tessara-app #login-form {
+  display: grid;
+  gap: 16px;
+}
+body.tessara-app #login-form > .actions {
+  margin-top: 0;
+}
 body.tessara-app .button-link {
   text-decoration: none;
 }

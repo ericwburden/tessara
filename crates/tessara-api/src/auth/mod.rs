@@ -15,6 +15,6 @@ pub use repo::{
 };
 pub use service::{
     backfill_legacy_password_hashes, derive_ui_access_profile, hash_password_for_storage,
-    password_scheme, require_authenticated, require_capability,
-    resolve_accessible_delegate_account_id, scope_assignments_are_meaningful, store_password_hash,
+    password_scheme, require_capability, resolve_accessible_delegate_account_id,
+    scope_assignments_are_meaningful, store_password_hash,
 };
