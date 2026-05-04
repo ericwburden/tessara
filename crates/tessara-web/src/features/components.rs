@@ -69,17 +69,6 @@ pub fn ComponentsPage() -> impl IntoView {
                 BreadcrumbItem::current("Components"),
             ]
         >
-            <PageHeader
-                eyebrow="Product Area"
-                title="Internal Component Directory"
-                description="Browse dashboard component definitions and inspect how each component maps to a dashboard, chart, and report surface."
-                actions=Arc::new(|| {
-                    view! {
-                        <a class="button-link button is-light" href="/app/dashboards">"Open Dashboards"</a>
-                    }
-                    .into_any()
-                })
-            />
             <MetadataStrip items=vec![
                 ("Mode", "Directory".into()),
                 ("Surface", "Internal composition".into()),
@@ -89,6 +78,9 @@ pub fn ComponentsPage() -> impl IntoView {
                 title="Component Directory"
                 description="Components remain internal-facing, but they should be inspectable from the shared shell without relying on the legacy workbench."
             >
+                <div class="actions">
+                    <a class="button-link button is-light" href="/app/dashboards">"Open Dashboards"</a>
+                </div>
                 <div id="component-list" class="record-list">
                     <Show
                         when=move || !loading.get()

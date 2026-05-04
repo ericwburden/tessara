@@ -401,7 +401,7 @@ Before deeper application-surface replacement continues, the frontend platform s
 
 **User-testable exit condition:** a tester can sign in, refresh, browse Organization and Forms, create or edit a form, publish a version, and sign out through native SSR-owned routes without touching the retained hybrid shell.
 
-### Sprint 2C: Workflow/Response Backend Decomposition And Runtime Hardening Slice (Next)
+### Sprint 2C: Workflow/Response Backend Decomposition And Runtime Hardening Slice (Complete)
 
 **Outcome:** workflow and response-entry behavior is reorganized enough that later workflow and response work no longer compounds the god-file pattern, while the native route ownership pulled forward by UI Overhaul 2.0 remains stable.
 
@@ -424,7 +424,7 @@ Before deeper application-surface replacement continues, the frontend platform s
 
 **User-testable exit condition:** a tester can browse workflows, assign work, start or resume the correct response entry flow, and verify role/scope boundaries without falling back to the retained hybrid shell.
 
-### Sprint 2D: Draft, Submit, And Review Response Slice
+### Sprint 2D: Draft, Submit, And Review Response Slice (Next)
 
 **Outcome:** the end-user response lifecycle is coherent and complete.
 
@@ -454,6 +454,7 @@ Before deeper application-surface replacement continues, the frontend platform s
 - multi-step workflow version authoring with ordered step definitions
 - explicit step transitions and runtime progression across workflow instances
 - assignment support for step-specific work rather than only workflow-level single-step work
+- contextual assignment creation from organization nodes and the global assignment console, backed by shared candidate/eligibility APIs
 - response handoff behavior between steps, including completion of one step and activation of the next
 - publish-time validation that multi-step workflow versions are structurally complete
 - multi-step runtime work extending the decomposed workflow and runtime service layer rather than adding new orchestration to giant route modules
@@ -463,9 +464,10 @@ Before deeper application-surface replacement continues, the frontend platform s
 **Application UI delivered this sprint:**
 
 - workflow authoring screens that let operators define and inspect multi-step workflow versions
+- assignment creation surfaces that let operators select valid `Node path - Workflow` candidates, use `Assign Workflow` from a selected organization node, and choose only valid assignees
 - runtime surfaces that show current step, upcoming step, and completed-step history for in-flight work
 
-**User-testable exit condition:** a tester can create a workflow with more than one step, assign and start it, complete the first step, and observe the next step become the active work item through the application UI.
+**User-testable exit condition:** a tester can create a workflow with more than one step, assign it from both an organization node and the global assignment console using only valid node/workflow/assignee combinations, start it, complete the first step, and observe the next step become the active work item through the application UI.
 
 ### Sprint 2F: Runtime Status And Materialization Slice
 

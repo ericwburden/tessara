@@ -77,11 +77,6 @@ pub fn DashboardsPage() -> impl IntoView {
             required_capability="reports:read"
             breadcrumbs=vec![BreadcrumbItem::current("Home"), BreadcrumbItem::current("Dashboards")]
         >
-            <PageHeader
-                eyebrow="Product Area"
-                title="Dashboard Directory"
-                description="Browse dashboards and inspect the current component footprint without leaving the native application shell."
-            />
             <MetadataStrip items=vec![
                 ("Mode", "Directory".into()),
                 ("Surface", "Dashboard runtime overview".into()),

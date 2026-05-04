@@ -924,6 +924,29 @@ mod hydrate {
         });
     }
 
+    pub fn schedule_load_edit_page(submission_id: String) {
+        let load_now = {
+            let submission_id = submission_id.clone();
+            move || load_edit_page(submission_id.clone())
+        };
+        let closure = Closure::wrap(Box::new(load_now) as Box<dyn FnMut()>);
+
+        if let Some(window) = window() {
+            let scheduled = window
+                .set_timeout_with_callback_and_timeout_and_arguments_0(
+                    closure.as_ref().unchecked_ref(),
+                    0,
+                )
+                .is_ok();
+            if scheduled {
+                closure.forget();
+                return;
+            }
+        }
+
+        load_edit_page(submission_id);
+    }
+
     pub fn set_context(page_key: &'static str, record_id: Option<String>) {
         set_page_context(page_key, "responses", record_id);
     }
@@ -937,7 +960,7 @@ pub fn ResponsesListPage() -> impl IntoView {
     hydrate::load_list_page();
     view! {
         <NativePage
-            title="Responses"
+            title="Form Responses"
             description="Tessara responses list screen."
             page_key="native-response-list"
             active_route="responses"
@@ -945,18 +968,9 @@ pub fn ResponsesListPage() -> impl IntoView {
             required_capability="submissions:write"
             breadcrumbs=vec![
                 BreadcrumbItem::link("Home", "/app"),
-                BreadcrumbItem::current("Responses"),
+                BreadcrumbItem::current("Form Responses"),
             ]
         >
-            <section id="response-summary" class="home-summary response-summary">
-                <div class="home-summary__copy response-summary__copy">
-                    <p class="eyebrow">"Responses"</p>
-                    <h1>"Operational Queue"</h1>
-                    <p class="muted home-summary__description">
-                        "Start assigned work, resume drafts, and review submitted responses from one queue-first route."
-                    </p>
-                </div>
-            </section>
             <section id="response-metric-strip" class="home-metric-strip response-metric-strip">
                 <article class="home-metric response-metric">
                     <strong>"--"</strong>
@@ -1149,7 +1163,10 @@ pub fn ResponseEditPage() -> impl IntoView {
     #[cfg(feature = "hydrate")]
     hydrate::set_context("native-response-edit", Some(submission_id.clone()));
     #[cfg(feature = "hydrate")]
-    hydrate::load_edit_page(submission_id.clone());
+    {
+        let submission_id = submission_id.clone();
+        Effect::new(move |_| hydrate::schedule_load_edit_page(submission_id.clone()));
+    }
     view! {
         <NativePage
             title="Edit Response"

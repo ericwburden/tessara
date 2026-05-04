@@ -1839,25 +1839,6 @@ pub fn FormsListPage() -> impl IntoView {
             ]
         >
             <section class="forms-route forms-catalog-screen">
-                <header class="detail-section box forms-screen-header">
-                    <div class="page-title-row">
-                        <div>
-                            <p class="eyebrow">"Forms"</p>
-                            <h1>"Form Directory"</h1>
-                            <p class="muted">
-                                "Browse forms by lifecycle state, then move directly into detail or draft authoring without a metadata-first detour."
-                            </p>
-                        </div>
-                        <div class="actions">
-                            <a class="button-link button is-primary" href="/app/forms/new">"Create Form"</a>
-                        </div>
-                    </div>
-                    <div class="record-detail">
-                        <p class="muted">
-                            "Use this screen as the directory. Each record should make scope, published line, and available draft work visible before you drill in."
-                        </p>
-                    </div>
-                </header>
                 <section class="detail-section box forms-directory-shell">
                     <div class="page-title-row compact-title-row">
                         <div>
@@ -1866,6 +1847,9 @@ pub fn FormsListPage() -> impl IntoView {
                             <p class="muted">
                                 "Current form records and their version posture appear here."
                             </p>
+                        </div>
+                        <div class="actions">
+                            <a class="button-link button is-primary" href="/app/forms/new">"Create Form"</a>
                         </div>
                     </div>
                     <div id="form-list" class="record-list forms-directory-list">

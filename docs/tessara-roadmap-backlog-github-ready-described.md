@@ -1063,136 +1063,120 @@ This issue implements **2B-09: Auth hardening UAT and regression matrix** in **S
 
 ---
 
-## Sprint 2C: Workflow/Response Route Ownership And Backend Decomposition Slice
+## Sprint 2C: Workflow/Response Backend Decomposition And Runtime Hardening Slice
 
-### 2C-01: Native SSR workflow browse/detail/assignment surfaces
-**Scope:** Frontend / workflows  
-**Labels:** `phase:2-runtime-responses`, `sprint:2C`, `type:feature`, `status:backlog`, `area:frontend`, `area:workflows`, `area:responses`
+### 2C-01: Workflow backend service/repository split
+**Scope:** Backend / workflows  
+**Labels:** `phase:2-runtime-responses`, `sprint:2C`, `type:refactor`, `status:backlog`, `area:backend`, `area:workflows`
 **Depends on:** `2B-09`
-**Milestone:** `Sprint 2C - Workflow/Response Route Ownership And Backend Decomposition Slice`
-
+**Milestone:** `Sprint 2C - Workflow/Response Backend Decomposition And Runtime Hardening Slice`
 
 **Description:**
-This issue implements **Native SSR workflow browse/detail/assignment surfaces** in **Sprint 2C - Workflow/Response Route Ownership And Backend Decomposition Slice**. The primary goal is to migrate `/app/workflows*` assignment and browse/detail flows onto native SSR ownership. It also includes work to remove route-local bridge dependencies from these settled workflow surfaces. This ticket spans **Frontend / workflows** concerns and should leave the touched surface in a shippable state that satisfies the acceptance criteria below.
-
-**Work:**
-- Migrate `/app/workflows*` assignment and browse/detail flows onto native SSR ownership.
-- Remove route-local bridge dependencies from these settled workflow surfaces.
+Split the workflow backend into bounded `dto`, `handlers`, `service`, and `repo` modules while preserving every public HTTP endpoint and response shape. Route handlers should decode transport input, call services, and return shaped responses; workflow orchestration belongs in services and SQL belongs in repositories.
 
 **Acceptance criteria:**
-- Workflow browse/detail/assignment routes operate without the retained hybrid shell.
-- Reload and in-app navigation preserve the selected workflow context correctly.
-- Browser-console and hydration checks are clean for touched workflow routes.
+- `/api/workflows*` and `/api/workflow-assignments*` keep their existing public behavior.
+- Touched workflow handlers are thin transport boundaries.
+- Workflow SQL and transaction-heavy persistence logic moves behind repository functions.
 
-### 2C-02: Native SSR response-start and resume entry surfaces
-**Scope:** Frontend / responses / runtime  
-**Labels:** `phase:2-runtime-responses`, `sprint:2C`, `type:feature`, `status:backlog`, `area:frontend`, `area:runtime`, `area:responses`
-**Depends on:** `2B-09`
-**Milestone:** `Sprint 2C - Workflow/Response Route Ownership And Backend Decomposition Slice`
-
+### 2C-02: Submissions response-start service/repository split
+**Scope:** Backend / responses / runtime  
+**Labels:** `phase:2-runtime-responses`, `sprint:2C`, `type:refactor`, `status:backlog`, `area:backend`, `area:responses`, `area:runtime`
+**Depends on:** `2C-01`
+**Milestone:** `Sprint 2C - Workflow/Response Backend Decomposition And Runtime Hardening Slice`
 
 **Description:**
-This issue implements **Native SSR response-start and resume entry surfaces** in **Sprint 2C - Workflow/Response Route Ownership And Backend Decomposition Slice**. The primary goal is to migrate response-start, pending-work, and resume entry routes onto native SSR ownership. It also includes work to keep deep response editing/review for the next sprint, but own the entry surfaces natively now. This ticket spans **Frontend / responses / runtime** concerns and should leave the touched surface in a shippable state that satisfies the acceptance criteria below.
-
-**Work:**
-- Migrate response-start, pending-work, and resume entry routes onto native SSR ownership.
-- Keep deep response editing/review for the next sprint, but own the entry surfaces natively now.
+Split response-start and submissions backend behavior into bounded `dto`, `handlers`, `service`, and `repo` modules for options, draft creation, list/detail, value save, submit, and delete flows. Keep the endpoint contract stable for the native response entry surfaces.
 
 **Acceptance criteria:**
-- A tester can start or resume the correct response flow without falling back to the bridge.
-- Pending-work and entry pages hydrate cleanly and reload correctly.
-- Entry surfaces use the settled browser auth/session contract from Sprint 2B.
+- `/api/responses/options` and `/api/submissions*` keep their existing public behavior.
+- Touched submission handlers call services instead of embedding orchestration and SQL.
+- Service/repo boundaries remain clear enough for Sprint 2D draft/submit continuation.
 
-### 2C-03: Decompose touched backend auth/hierarchy/forms modules
+### 2C-03: Scoped workflow assignment start authorization
+**Scope:** Backend / authorization / workflows  
+**Labels:** `phase:2-runtime-responses`, `sprint:2C`, `type:feature`, `status:backlog`, `area:backend`, `area:authorization`, `area:workflows`, `area:responses`
+**Depends on:** `2C-01`, `2C-02`
+**Milestone:** `Sprint 2C - Workflow/Response Backend Decomposition And Runtime Hardening Slice`
+
+**Description:**
+Close the workflow-assignment start gap so operators cannot start another account's out-of-scope workflow assignment by UUID. Preserve admin starts and response-user self/delegation starts.
+
+**Acceptance criteria:**
+- Admins can start any valid workflow assignment.
+- Operators can start workflow assignments only when the assignment node is inside effective scope.
+- Response users can start only their own or delegated assignments.
+- A negative regression proves a scoped operator receives `403` for an out-of-scope assignment UUID.
+
+### 2C-04: Forms, hierarchy, and auth touched-slice decomposition continuation
 **Scope:** Backend / architecture  
-**Labels:** `phase:2-runtime-responses`, `sprint:2C`, `type:refactor`, `status:backlog`, `area:backend`, `area:auth`, `area:organization`
-**Depends on:** `2B-05`
-**Milestone:** `Sprint 2C - Workflow/Response Route Ownership And Backend Decomposition Slice`
-
+**Labels:** `phase:2-runtime-responses`, `sprint:2C`, `type:refactor`, `status:backlog`, `area:backend`, `area:auth`, `area:forms`, `area:organization`
+**Depends on:** `2C-01`, `2C-02`
+**Milestone:** `Sprint 2C - Workflow/Response Backend Decomposition And Runtime Hardening Slice`
 
 **Description:**
-This issue implements **Decompose touched backend auth/hierarchy/forms modules** in **Sprint 2C - Workflow/Response Route Ownership And Backend Decomposition Slice**. The primary goal is to split touched auth, hierarchy, and forms code toward `router`, `handlers`, `service`, `repo`, and `dto`. It also includes work to keep business rules out of `lib.rs`. This ticket spans **Backend / architecture** concerns and should leave the touched surface in a shippable state that satisfies the acceptance criteria below.
-
-**Work:**
-- Split touched auth, hierarchy, and forms code toward `router`, `handlers`, `service`, `repo`, and `dto`.
-- Keep business rules out of `lib.rs`.
+Continue the existing auth decomposition pattern into touched forms and hierarchy call sites only where this sprint's workflow/runtime seams require it. Avoid broad unrelated rewrites.
 
 **Acceptance criteria:**
-- Newly touched auth/hierarchy/forms behavior lands outside giant vertical files when feasible.
-- `tessara-api::lib` remains a composition root rather than a business-logic host.
-- New tests can target service or repo layers without booting unrelated route code.
+- New touched auth, forms, and hierarchy behavior follows the existing handler/service/repo direction.
+- Form publish safeguards remain covered while workflow backfill behavior remains stable.
+- No unrelated Phase 1 surface is reworked beyond the needs of Sprint 2C.
 
-### 2C-04: Decompose touched workflow/submission modules
+### 2C-05: Router composition and lib.rs boundary guard
 **Scope:** Backend / architecture  
 **Labels:** `phase:2-runtime-responses`, `sprint:2C`, `type:refactor`, `status:backlog`, `area:backend`, `area:workflows`, `area:responses`
-**Depends on:** `2C-03`
-**Milestone:** `Sprint 2C - Workflow/Response Route Ownership And Backend Decomposition Slice`
-
-
-**Description:**
-This issue implements **Decompose touched workflow/submission modules** in **Sprint 2C - Workflow/Response Route Ownership And Backend Decomposition Slice**. The primary goal is to apply the same module split to touched workflow and submissions code. It also includes work to move orchestration into services and SQL into repositories. This ticket spans **Backend / architecture** concerns and should leave the touched surface in a shippable state that satisfies the acceptance criteria below.
-
-**Work:**
-- Apply the same module split to touched workflow and submissions code.
-- Move orchestration into services and SQL into repositories.
-
-**Acceptance criteria:**
-- Touched workflow/submission handlers are thin enough to primarily decode input, call services, and shape responses.
-- SQL or DB orchestration no longer expands inside route handlers for touched flows.
-- The changed structure is documented enough for follow-on tickets to use consistently.
-
-### 2C-05: Shrink `tessara-api::lib` to routing/middleware/state composition
-**Scope:** Backend / architecture  
-**Labels:** `phase:2-runtime-responses`, `sprint:2C`, `type:refactor`, `status:backlog`, `area:backend`, `area:workflows`, `area:responses`
-**Depends on:** `2C-03`, `2C-04`
-**Milestone:** `Sprint 2C - Workflow/Response Route Ownership And Backend Decomposition Slice`
-
+**Depends on:** `2C-01`, `2C-02`, `2C-04`
+**Milestone:** `Sprint 2C - Workflow/Response Backend Decomposition And Runtime Hardening Slice`
 
 **Description:**
-This issue implements **Shrink `tessara-api::lib` to routing/middleware/state composition** in **Sprint 2C - Workflow/Response Route Ownership And Backend Decomposition Slice**. The primary goal is to ensure no new business workflows are added to `lib.rs`. It also includes work to move route registration and state setup into clearer composition helpers where useful. This ticket spans **Backend / architecture** concerns and should leave the touched surface in a shippable state that satisfies the acceptance criteria below.
-
-**Work:**
-- Ensure no new business workflows are added to `lib.rs`.
-- Move route registration and state setup into clearer composition helpers where useful.
+Keep `tessara-api::lib` as the router, middleware, asset, and state composition root. Add module/router composition helpers only where they make route ownership easier to audit without changing public routes.
 
 **Acceptance criteria:**
-- `lib.rs` primarily wires routers, middleware, state, and shared configuration.
-- New business logic does not land directly in `lib.rs`.
-- Route composition remains easy to audit after the change.
+- No new business orchestration lands directly in `lib.rs`.
+- Public API route registration remains complete and easy to audit.
+- Workflow/submission modules expose router-compatible handler names or routers.
 
-### 2C-06: Tighten shared UI primitives for SSR-owned settled routes
+### 2C-06: Tighten native workflow/response UI action primitives
 **Scope:** Frontend / component system  
-**Labels:** `phase:2-runtime-responses`, `sprint:2C`, `type:feature`, `status:backlog`, `area:frontend`, `area:components`, `area:workflows`
-**Depends on:** `2B-08`, `1G-R1`
-**Milestone:** `Sprint 2C - Workflow/Response Route Ownership And Backend Decomposition Slice`
-
+**Labels:** `phase:2-runtime-responses`, `sprint:2C`, `type:feature`, `status:backlog`, `area:frontend`, `area:components`, `area:workflows`, `area:responses`
+**Depends on:** `2C-01`, `2C-02`
+**Milestone:** `Sprint 2C - Workflow/Response Backend Decomposition And Runtime Hardening Slice`
 
 **Description:**
-This issue implements **Tighten shared UI primitives for SSR-owned settled routes** in **Sprint 2C - Workflow/Response Route Ownership And Backend Decomposition Slice**. The primary goal is to replace raw inline `onclick` patterns on newly migrated routes with safer component/event patterns. It also includes work to update touched `tessara-ui` primitives if needed. This ticket spans **Frontend / component system** concerns and should leave the touched surface in a shippable state that satisfies the acceptance criteria below.
-
-**Work:**
-- Replace raw inline `onclick` patterns on newly migrated routes with safer component/event patterns.
-- Update touched `tessara-ui` primitives if needed.
+Preserve native SSR ownership for `/app/workflows*` and `/app/responses*` while tightening touched workflow/response action markup so new SSR surfaces do not depend on raw inline `onclick` strings. Keep `/app/admin` legacy-only.
 
 **Acceptance criteria:**
-- Newly migrated SSR routes do not rely on raw inline action-handler strings.
-- Shared action primitives remain usable across settled routes after the change.
-- Any remaining inline-handler exceptions are isolated and explicitly tracked.
+- Touched workflow/response native SSR surfaces continue to hydrate and reload correctly.
+- New or touched action controls prefer safer component/event patterns over raw inline handler strings.
+- `/app/admin` receives no new product-facing behavior.
 
-### 2C-07: Targeted integration suites for settled workflow/runtime flows
+### 2C-07: Targeted workflow/runtime integration suites
 **Scope:** QA / backend + frontend  
-**Labels:** `phase:2-runtime-responses`, `sprint:2C`, `type:feature`, `status:backlog`, `area:frontend`, `area:backend`, `area:workflows`
+**Labels:** `phase:2-runtime-responses`, `sprint:2C`, `type:test`, `status:backlog`, `area:backend`, `area:frontend`, `area:workflows`, `area:responses`, `area:qa`
 **Depends on:** `2C-01`, `2C-02`, `2C-03`, `2C-04`, `2C-05`, `2C-06`
-**Milestone:** `Sprint 2C - Workflow/Response Route Ownership And Backend Decomposition Slice`
-
+**Milestone:** `Sprint 2C - Workflow/Response Backend Decomposition And Runtime Hardening Slice`
 
 **Description:**
-This issue implements **2C-07: Targeted integration suites for settled workflow/runtime flows** in **Sprint 2C - Workflow/Response Route Ownership And Backend Decomposition Slice** and should leave the touched surface in a shippable state that satisfies the acceptance criteria below.
+Add targeted regression suites for the settled workflow/runtime stack so auth/session, role/capability, form publish, workflow assignment, and response-start failures identify the broken bounded context.
 
 **Acceptance criteria:**
-- There are focused integration suites for auth/session, role/capability boundaries, form publish safeguards, workflow assignment, and response-start behavior.
-- Failing tests isolate the broken bounded context instead of only failing a giant demo script.
+- Focused tests cover auth/session, role/capability boundaries, form publish safeguards, workflow assignment, and response-start behavior.
+- The scoped operator out-of-scope assignment-start regression is explicit.
 - Sprint-close verification includes native-route ownership for Workflows and Responses entry surfaces.
+
+### 2C-08: Sprint 2C UAT and closeout verification
+**Scope:** QA / sprint closeout  
+**Labels:** `phase:2-runtime-responses`, `sprint:2C`, `type:test`, `status:backlog`, `area:qa`, `area:workflows`, `area:responses`
+**Depends on:** `2C-07`
+**Milestone:** `Sprint 2C - Workflow/Response Backend Decomposition And Runtime Hardening Slice`
+
+**Description:**
+Run the Sprint 2C automated and manual verification matrix, update progress, and prepare the sprint for closeout.
+
+**Acceptance criteria:**
+- `cargo fmt --all`, API/web tests, Playwright, smoke, local launch, and UAT commands are run or explicitly documented with blockers.
+- Manual UAT covers admin, operator, respondent, and delegator workflow/response paths.
+- Progress notes capture verification results and any residual follow-up.
 
 ---
 
@@ -1419,18 +1403,41 @@ This issue implements **Typed workflow step and runtime states** in **Sprint 2E 
 - Request/response boundaries map to those typed values predictably.
 - Tests cover at least one invalid-state transition attempt.
 
-### 2E-07: Multi-step workflow execution UAT
-**Scope:** QA / workflows / runtime  
-**Labels:** `phase:2-runtime-responses`, `sprint:2E`, `type:test`, `status:backlog`, `area:workflows`, `area:runtime`
-**Depends on:** `2E-01`, `2E-02`, `2E-03`, `2E-04`, `2E-05`, `2E-06`
+### 2E-07: Contextual workflow assignment UX and eligibility APIs
+**Scope:** Backend + frontend / workflows / organization  
+**Labels:** `phase:2-runtime-responses`, `sprint:2E`, `type:feature`, `status:backlog`, `area:frontend`, `area:backend`, `area:workflows`, `area:organization`, `area:authorization`
+**Depends on:** `2E-01`, `2E-04`
 **Milestone:** `Sprint 2E - Multi-Step Workflow Authoring And Execution`
 
 
 **Description:**
-This issue implements **2E-07: Multi-step workflow execution UAT** in **Sprint 2E - Multi-Step Workflow Authoring And Execution** and should leave the touched surface in a shippable state that satisfies the acceptance criteria below.
+This issue implements **2E-07: Contextual workflow assignment UX and eligibility APIs** in **Sprint 2E - Multi-Step Workflow Authoring And Execution**. The primary goal is to make assignment creation follow the operator's natural path: navigate to an organization node, choose an eligible workflow, and assign it to one or more valid assignees. The global assignment console should use the same validation rules through a searchable `Node path - Workflow` picker.
+
+**Work:**
+- Add assignment-candidate APIs that return valid published workflow/node combinations, filtered by form scope node type, assigner permissions, and effective node scope.
+- Add assignee-option APIs for a selected candidate that return only users who can receive and start that assignment under role, scope, and delegation rules.
+- Add bulk assignment creation for one workflow/node candidate and multiple assignees, creating missing assignments, reactivating inactive duplicates, skipping active duplicates, and returning a per-assignee summary.
+- Add an `Assign Workflow` action from the selected organization node and replace the global assignment console's independent workflow/node/assignee selects with a searchable `Node path - Workflow` picker plus assignee multiselect.
 
 **Acceptance criteria:**
-- A tester can create a multi-step workflow, assign it, start it, complete the first step, and observe the next step become active.
+- Organization-node assignment creation offers only strictly eligible workflows for the selected node and only valid assignees after a workflow is selected.
+- The global assignment console offers the same valid combinations as `Node path - Workflow` candidates and does not expose raw node selection as an unexplained independent field.
+- Invalid workflow/node/user combinations are not offered in normal UI choices, and direct API attempts fail with stable authorization or validation errors.
+- Bulk assignment creation is idempotent and reports created, reactivated, and skipped assignments without failing the whole batch for active duplicates.
+- Native SSR ownership, route refresh behavior, and browser-console cleanliness are verified for touched organization and workflow assignment surfaces.
+
+### 2E-08: Multi-step workflow execution UAT
+**Scope:** QA / workflows / runtime  
+**Labels:** `phase:2-runtime-responses`, `sprint:2E`, `type:test`, `status:backlog`, `area:workflows`, `area:runtime`
+**Depends on:** `2E-01`, `2E-02`, `2E-03`, `2E-04`, `2E-05`, `2E-06`, `2E-07`
+**Milestone:** `Sprint 2E - Multi-Step Workflow Authoring And Execution`
+
+
+**Description:**
+This issue implements **2E-08: Multi-step workflow execution UAT** in **Sprint 2E - Multi-Step Workflow Authoring And Execution** and should leave the touched surface in a shippable state that satisfies the acceptance criteria below.
+
+**Acceptance criteria:**
+- A tester can create a multi-step workflow, assign it from both an organization node and the global assignment console, start it, complete the first step, and observe the next step become active.
 - The runtime surfaces remain under native SSR ownership.
 - Validation, assignment, and progression failures identify their bounded context clearly.
 
@@ -1441,7 +1448,7 @@ This issue implements **2E-07: Multi-step workflow execution UAT** in **Sprint 2
 ### 2F-01: Runtime status model and APIs
 **Scope:** Backend / runtime / operators  
 **Labels:** `phase:2-runtime-responses`, `sprint:2F`, `type:feature`, `status:backlog`, `area:backend`, `area:runtime`, `area:operators`
-**Depends on:** `2E-07`
+**Depends on:** `2E-08`
 **Milestone:** `Sprint 2F - Runtime Status And Materialization Slice`
 
 
@@ -1459,7 +1466,7 @@ This issue implements **Runtime status model and APIs** in **Sprint 2F - Runtime
 ### 2F-02: Materialization readiness and refresh status
 **Scope:** Backend / data pipeline  
 **Labels:** `phase:2-runtime-responses`, `sprint:2F`, `type:feature`, `status:backlog`, `area:backend`, `area:data-pipeline`, `area:runtime`
-**Depends on:** `2E-07`
+**Depends on:** `2E-08`
 **Milestone:** `Sprint 2F - Runtime Status And Materialization Slice`
 
 

@@ -1419,25 +1419,14 @@ pub fn OrganizationListPage() -> impl IntoView {
                 BreadcrumbItem::current("Organization"),
             ]
         >
-            <section class="app-screen box entity-page ui-page-header">
-                <p class="eyebrow ui-page-header__eyebrow">"Organization"</p>
-                <div class="page-title-row ui-page-header__row">
-                    <div class="ui-page-header__copy">
-                        <h1 id="organization-page-title">"Organization Explorer"</h1>
-                        <p id="organization-page-description" class="muted ui-page-header__description">
-                            "Loading scope-aware explorer context."
-                        </p>
-                    </div>
-                    <div id="organization-page-actions" class="actions ui-action-group">
-                        <p class="muted">"Loading organization actions..."</p>
-                    </div>
-                </div>
-            </section>
             <div class="organization-explorer-layout">
                 <Panel
                     title="Explorer"
                     description="Traverse the visible hierarchy with a quiet indented explorer instead of card-per-node navigation."
                 >
+                    <div id="organization-page-actions" class="actions ui-action-group">
+                        <p class="muted">"Loading organization actions..."</p>
+                    </div>
                     <div class="organization-explorer-panel">
                         <div class="organization-section-heading organization-explorer-panel__header">
                             <h2 id="organization-list-title">"Visible Hierarchy"</h2>

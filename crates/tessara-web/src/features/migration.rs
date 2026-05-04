@@ -1,6 +1,6 @@
 use leptos::prelude::*;
 
-use crate::features::native_shell::{BreadcrumbItem, MetadataStrip, NativePage, PageHeader, Panel};
+use crate::features::native_shell::{BreadcrumbItem, MetadataStrip, NativePage, Panel};
 
 #[cfg(feature = "hydrate")]
 use crate::features::native_runtime::{get_json, post_json};
@@ -126,11 +126,6 @@ pub fn MigrationPage() -> impl IntoView {
                 BreadcrumbItem::current("Migration"),
             ]
         >
-            <PageHeader
-                eyebrow="Internal Area"
-                title="Migration Workbench"
-                description="Validate, dry-run, and import representative legacy fixtures from this native operator surface."
-            />
             <MetadataStrip items=vec![
                 ("Mode", "Workspace".into()),
                 ("Surface", "Operator import flow".into()),

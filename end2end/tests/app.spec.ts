@@ -264,13 +264,17 @@ async function provisionPendingAssignmentForAccount(
   const workflowVersionIds = [
     ...new Set(assignments.map((assignment) => assignment.workflow_version_id)),
   ];
-  const template = workflowVersionIds
-    .flatMap((workflowVersionId) =>
-      nodes.map((node) => ({
-        workflow_version_id: workflowVersionId,
-        node_id: node.id,
-      })),
-    )
+  const knownAssignmentTemplates = assignments.map((assignment) => ({
+    workflow_version_id: assignment.workflow_version_id,
+    node_id: assignment.node_id,
+  }));
+  const fallbackTemplates = workflowVersionIds.flatMap((workflowVersionId) =>
+    nodes.map((node) => ({
+      workflow_version_id: workflowVersionId,
+      node_id: node.id,
+    })),
+  );
+  const template = [...knownAssignmentTemplates, ...fallbackTemplates]
     .find(
       (candidate) =>
         !usedPairs.has(`${candidate.workflow_version_id}:${candidate.node_id}`),
@@ -288,6 +292,9 @@ async function provisionPendingAssignmentForAccount(
     },
   });
   expect(createResponse.ok()).toBeTruthy();
+  const createdAssignment = (await createResponse.json()) as { id: string };
+  expect(createdAssignment.id).toBeTruthy();
+  return createdAssignment.id;
 }
 
 test("home route stays on the native SSR shell", async ({ page }) => {
@@ -348,7 +355,11 @@ test("theme preference persists on the native shell", async ({ page }) => {
 
   await page
     .locator("#shell-theme-context")
-    .getByRole("button", { name: "Dark" })
+    .getByRole("button", { name: "Theme options" })
+    .click();
+  await page
+    .locator("#shell-theme-context")
+    .getByRole("menuitemradio", { name: "Dark" })
     .click();
   await expect(page.locator("html")).toHaveAttribute(
     "data-theme-preference",
@@ -364,16 +375,24 @@ test("theme preference persists on the native shell", async ({ page }) => {
     "dark",
   );
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await page
+    .locator("#shell-theme-context")
+    .getByRole("button", { name: "Theme options" })
+    .click();
   await expect(
     page
       .locator("#shell-theme-context")
-      .getByRole("button", { name: "System" }),
+      .getByRole("menuitemradio", { name: "System" }),
   ).toBeVisible();
   await expect(
-    page.locator("#shell-theme-context").getByRole("button", { name: "Light" }),
+    page
+      .locator("#shell-theme-context")
+      .getByRole("menuitemradio", { name: "Light" }),
   ).toBeVisible();
   await expect(
-    page.locator("#shell-theme-context").getByRole("button", { name: "Dark" }),
+    page
+      .locator("#shell-theme-context")
+      .getByRole("menuitemradio", { name: "Dark" }),
   ).toBeVisible();
 
   await assertNoConsoleErrors();
@@ -473,8 +492,8 @@ test("migration route stays readable and console-clean on the native shell", asy
 
   await page.goto("/app/migration");
   await expect(
-    page.getByRole("heading", { name: "Migration Workbench" }).first(),
-  ).toBeVisible();
+    page.locator(".top-app-bar__context"),
+  ).toHaveText("Migration");
   await expect(page.locator("#migration-list")).toHaveCount(1);
   await expect(page.locator("#migration-fixture-json")).toHaveCount(1);
   await expect(page.locator("#migration-results")).toHaveCount(1);
@@ -483,8 +502,8 @@ test("migration route stays readable and console-clean on the native shell", asy
 
   await page.reload();
   await expect(
-    page.getByRole("heading", { name: "Migration Workbench" }).first(),
-  ).toBeVisible();
+    page.locator(".top-app-bar__context"),
+  ).toHaveText("Migration");
   await expectNoLegacyBridge(page);
 
   const scripts = await pkgScripts(page);
@@ -505,8 +524,8 @@ test("forms list route stays readable and console-clean on the native shell", as
   await page.goto("/app/forms");
 
   await expect(
-    page.getByRole("heading", { name: "Form Directory" }).first(),
-  ).toBeVisible();
+    page.locator(".top-app-bar__context"),
+  ).toHaveText("Forms");
   await expect(page.locator("#form-list")).toHaveCount(1);
   await expect(page.locator("body")).toContainText("Published line");
   await expect(page.locator(".breadcrumb-item")).toHaveCount(0);
@@ -514,8 +533,8 @@ test("forms list route stays readable and console-clean on the native shell", as
 
   await page.reload();
   await expect(
-    page.getByRole("heading", { name: "Form Directory" }).first(),
-  ).toBeVisible();
+    page.locator(".top-app-bar__context"),
+  ).toHaveText("Forms");
   await expectNoLegacyBridge(page);
 
   await assertNoConsoleErrors();
@@ -530,7 +549,7 @@ test("components and datasets routes stay on the native shell", async ({
 
   await page.goto("/app/components");
   await expect(
-    page.getByRole("heading", { name: "Internal Component Directory" }),
+    page.getByRole("heading", { name: "Component Directory" }),
   ).toBeVisible();
   await expect(page.locator("#component-list")).toHaveCount(1);
   await expect(page.locator("header.top-app-bar")).not.toContainText(
@@ -541,7 +560,7 @@ test("components and datasets routes stay on the native shell", async ({
 
   await page.goto("/app/datasets");
   await expect(
-    page.getByRole("heading", { name: "Readable Dataset Directory" }),
+    page.getByRole("heading", { name: "Dataset Directory" }),
   ).toBeVisible();
   await expect(page.locator("#dataset-list")).toHaveCount(1);
   await expect(page.locator("header.top-app-bar")).not.toContainText(
@@ -570,9 +589,9 @@ test("organization routes stay readable and console-clean on the native shell", 
   const nodeId = nodes[0]!.id;
 
   await page.goto("/app/organization");
-  await expect(page.locator("#organization-page-title")).toHaveText(
-    /Explorer$/,
-  );
+  await expect(
+    page.locator(".top-app-bar__context"),
+  ).toHaveText("Organization Explorer");
   await expect(page.locator("#organization-directory-tree")).toHaveCount(1);
   await expect
     .poll(async () =>
@@ -609,9 +628,9 @@ test("organization routes stay readable and console-clean on the native shell", 
   await expectNoLegacyBridge(page);
 
   await page.reload();
-  await expect(page.locator("#organization-page-title")).toHaveText(
-    /Explorer$/,
-  );
+  await expect(
+    page.locator(".top-app-bar__context"),
+  ).toHaveText("Organization Explorer");
   await expectNoLegacyBridge(page);
 
   await page.goto("/app/organization/new");
@@ -665,9 +684,9 @@ test("organization navigator uses scope-aware labels and selection sync for scop
   await waitForAuthenticatedShell(page, "operator@tessara.local");
 
   await page.goto("/app/organization");
-  await expect(page.locator("#organization-page-title")).toHaveText(
-    "Activity Explorer",
-  );
+  await expect(
+    page.locator(".top-app-bar__context"),
+  ).toHaveText("Organization Explorer");
   await expect(page.locator("#organization-list-title")).toHaveText(
     "Visible Hierarchy",
   );
@@ -721,9 +740,9 @@ test("organization explorer stacks the selected detail below the tree on mobile"
   await page.setViewportSize({ width: 390, height: 844 });
 
   await page.goto("/app/organization");
-  await expect(page.locator("#organization-page-title")).toHaveText(
-    "Activity Explorer",
-  );
+  await expect(
+    page.locator(".top-app-bar__context"),
+  ).toHaveText("Organization Explorer");
 
   const firstRow = page
     .locator("#organization-directory-tree button[data-select-node-id]")
@@ -995,7 +1014,7 @@ test("dashboards routes stay readable and console-clean on the native shell", as
 
   await page.goto("/app/dashboards");
   await expect(
-    page.getByRole("heading", { name: "Dashboards" }).first(),
+    page.getByRole("heading", { name: "Dashboard Directory" }).first(),
   ).toBeVisible();
   await expect(page.locator("#dashboard-list")).toHaveCount(1);
   await expect(page.locator("body")).toContainText("Dashboard Directory");
@@ -1003,7 +1022,7 @@ test("dashboards routes stay readable and console-clean on the native shell", as
 
   await page.reload();
   await expect(
-    page.getByRole("heading", { name: "Dashboards" }).first(),
+    page.getByRole("heading", { name: "Dashboard Directory" }).first(),
   ).toBeVisible();
   await expectNoLegacyBridge(page);
 
@@ -1050,9 +1069,9 @@ test("administration routes stay readable and console-clean on the native shell"
 
   await page.goto("/app/administration");
   await expect(
-    page.getByRole("heading", { name: "Administration" }).first(),
-  ).toBeVisible();
-  await expect(page.locator("body")).toContainText("Administration Workspace");
+    page.locator(".top-app-bar__context"),
+  ).toHaveText("Administration Workspace");
+  await expect(page.locator(".admin-workspace-grid")).toBeVisible();
   await expectNoLegacyBridge(page);
 
   await page.goto("/app/administration/users");
@@ -1152,8 +1171,8 @@ test("responses route stays readable and console-clean on the native shell", asy
   await page.goto("/app/responses");
 
   await expect(
-    page.getByRole("heading", { name: "Operational Queue" }).first(),
-  ).toBeVisible();
+    page.locator(".top-app-bar__context"),
+  ).toHaveText("Form Responses");
   await expect(page.locator("#response-pending-list")).toHaveCount(1);
   await expect(page.locator("body")).toContainText("Assigned Starts");
   await expect(page.locator("body")).toContainText("Draft Queue");
@@ -1164,8 +1183,8 @@ test("responses route stays readable and console-clean on the native shell", asy
   await page.reload();
   await waitForAuthenticatedShell(page, "respondent@tessara.local");
   await expect(
-    page.getByRole("heading", { name: "Operational Queue" }).first(),
-  ).toBeVisible();
+    page.locator(".top-app-bar__context"),
+  ).toHaveText("Form Responses");
   await expectNoLegacyBridge(page);
 
   await assertNoConsoleErrors();
@@ -1323,17 +1342,31 @@ test("unauthorized deep links redirect home with transient shell feedback", asyn
 test("assignee pending start opens the matching draft directly and removes it from pending after submit", async ({
   page,
 }) => {
+  test.setTimeout(60000);
   const assertNoConsoleErrors = attachConsoleGuard(page);
-  await provisionPendingAssignmentForAccount(page, "respondent@tessara.local");
+  const provisionedAssignmentId = await provisionPendingAssignmentForAccount(
+    page,
+    "respondent@tessara.local",
+  );
   await signInAsRespondent(page);
   await waitForAuthenticatedShell(page, "respondent@tessara.local");
 
   await page.goto("/app/responses");
 
-  const pendingCards = page.locator("#response-pending-list .record-card");
+  const pendingCards = page.locator(
+    "#response-pending-list .response-queue-row--pending",
+  );
   await expect.poll(async () => pendingCards.count()).toBeGreaterThan(0);
 
-  const pendingCard = pendingCards.last();
+  const pendingCard = pendingCards.filter({
+    has: page.locator(
+      `button[data-workflow-assignment-id="${provisionedAssignmentId}"]`,
+    ),
+  });
+  await expect(pendingCard).toHaveCount(1);
+  await expect(pendingCard).toContainText("Assigned Start");
+  await expect(pendingCard).toContainText("Form:");
+  await expect(pendingCard).toContainText("Step:");
   const assignmentId = await pendingCard
     .locator("button[data-workflow-assignment-id]")
     .getAttribute("data-workflow-assignment-id");
@@ -1356,6 +1389,9 @@ test("assignee pending start opens the matching draft directly and removes it fr
   await pendingCard.getByRole("button", { name: "Start" }).click();
 
   await expect(page).toHaveURL(/\/app\/responses\/[^/]+\/edit$/);
+  await expect(page.locator("#response-edit-form")).toBeVisible({
+    timeout: 15000,
+  });
 
   const submissionId = page
     .url()
@@ -1386,7 +1422,7 @@ test("assignee pending start opens the matching draft directly and removes it fr
     }
   }
 
-  await page.getByRole("button", { name: "Submit" }).click();
+  await page.locator("#response-submit-button").click();
   await expect(page).toHaveURL(
     new RegExp(`/app/responses/${submissionId}(?:/edit)?$`),
   );
@@ -1421,37 +1457,56 @@ test("assignee pending start opens the matching draft directly and removes it fr
 test("draft resume actions resolve to the same in-progress response item", async ({
   page,
 }) => {
+  test.setTimeout(60000);
   const assertNoConsoleErrors = attachConsoleGuard(page);
-  await provisionPendingAssignmentForAccount(page, "respondent@tessara.local");
+  const provisionedAssignmentId = await provisionPendingAssignmentForAccount(
+    page,
+    "respondent@tessara.local",
+  );
   await signInAsRespondent(page);
   await waitForAuthenticatedShell(page, "respondent@tessara.local");
 
   await page.goto("/app/responses");
 
-  const pendingCards = page.locator("#response-pending-list .record-card");
+  const pendingCards = page.locator(
+    "#response-pending-list .response-queue-row--pending",
+  );
   await expect.poll(async () => pendingCards.count()).toBeGreaterThan(0);
 
-  const pendingCard = pendingCards.last();
-  const expectedFormLabel = (
-    await pendingCard.locator("p.muted").first().textContent()
-  )
-    ?.replace(/^Form:\s*/, "")
-    .trim();
-  expect(expectedFormLabel).toBeTruthy();
+  const pendingCard = pendingCards.filter({
+    has: page.locator(
+      `button[data-workflow-assignment-id="${provisionedAssignmentId}"]`,
+    ),
+  });
+  await expect(pendingCard).toHaveCount(1);
+  await expect(pendingCard).toContainText("Assigned Start");
+  await expect(pendingCard).toContainText("Form:");
 
   await pendingCard.getByRole("button", { name: "Start" }).click();
   await expect(page).toHaveURL(/\/app\/responses\/[^/]+\/edit$/);
+  await expect(page.locator("#response-edit-form")).toBeVisible({
+    timeout: 15000,
+  });
 
   const submissionId = page
     .url()
     .match(/\/app\/responses\/([^/]+)\/edit$/)?.[1];
   expect(submissionId).toBeTruthy();
+  const submissionResponse = await page.request.get(
+    `/api/submissions/${submissionId}`,
+  );
+  expect(submissionResponse.ok()).toBeTruthy();
+  const submission = await submissionResponse.json();
 
   await page.goto("/app/responses");
-  const draftCard = page.locator("#response-draft-list .record-card").filter({
-    has: page.locator(`a[href="/app/responses/${submissionId}/edit"]`),
-  });
+  const draftCard = page
+    .locator("#response-draft-list .response-queue-row--draft")
+    .filter({
+      has: page.locator(`a[href="/app/responses/${submissionId}/edit"]`),
+    });
   await expect(draftCard).toHaveCount(1);
+  await expect(draftCard).toContainText("Draft Queue");
+  await expect(draftCard).toContainText(submission.form_name);
 
   await draftCard.getByRole("link", { name: "Edit" }).click();
   await expect(page).toHaveURL(
@@ -1474,8 +1529,8 @@ test("response users are redirected away from the manual start screen while admi
   await page.goto("/app/responses/new");
   await expect(page).toHaveURL(/\/app\/responses$/);
   await expect(
-    page.getByRole("heading", { name: "Responses" }).first(),
-  ).toBeVisible();
+    page.locator(".top-app-bar__context"),
+  ).toHaveText("Form Responses");
 
   await signOut(page);
   await signInAsAdmin(page);
@@ -1568,14 +1623,14 @@ test("left nav updates visible content across touched Sprint 2A routes", async (
   await productNav.getByRole("link", { name: "Responses" }).click();
   await expect(page).toHaveURL(/\/app\/responses$/);
   await expect(
-    page.getByRole("heading", { name: "Responses" }).first(),
-  ).toBeVisible();
+    page.locator(".top-app-bar__context"),
+  ).toHaveText("Form Responses");
 
   await productNav.getByRole("link", { name: "Forms" }).click();
   await expect(page).toHaveURL(/\/app\/forms$/);
   await expect(
-    page.getByRole("heading", { name: "Forms" }).first(),
-  ).toBeVisible();
+    page.locator(".top-app-bar__context"),
+  ).toHaveText("Forms");
 
   await assertNoConsoleErrors();
 });
@@ -1597,9 +1652,9 @@ test("deeper routes show breadcrumbs and internal cues stay subtle", async ({
 
   await page.goto("/app/administration");
   await expect(
-    page.getByRole("heading", { name: "Administration" }).first(),
-  ).toBeVisible();
-  await expect(page.getByText("Administration Workspace")).toBeVisible();
+    page.locator(".top-app-bar__context"),
+  ).toHaveText("Administration Workspace");
+  await expect(page.locator(".admin-workspace-grid")).toBeVisible();
   await expect(
     page
       .getByRole("navigation", { name: "Admin navigation" })
@@ -1608,8 +1663,8 @@ test("deeper routes show breadcrumbs and internal cues stay subtle", async ({
 
   await page.goto("/app/migration");
   await expect(
-    page.getByRole("heading", { name: "Migration Workbench" }).first(),
-  ).toBeVisible();
+    page.locator(".top-app-bar__context"),
+  ).toHaveText("Migration");
   await expect(page.getByText("Operator import flow")).toBeVisible();
 });
 
@@ -1747,7 +1802,10 @@ test("narrow-width routes avoid shell-level horizontal overflow", async ({
   });
 
   expect(overflow).toBeLessThanOrEqual(1);
-  await expect(page.locator("#global-search")).toBeVisible();
+  await expect(page.locator("#global-search")).toBeHidden();
+  await expect(
+    page.getByRole("button", { name: "Open search" }),
+  ).toBeVisible();
 
   await page.goto("/app/organization/00000000-0000-0000-0000-000000000001");
   await expect(page.locator(".breadcrumb-item")).toHaveCount(3);
@@ -1799,13 +1857,13 @@ test("core SSR surfaces remain readable without JavaScript", async ({
 
   await page.goto(`${baseURL}/app/datasets`);
   await expect(
-    page.getByRole("heading", { level: 1, name: "Datasets" }),
-  ).toBeVisible();
+    page.locator(".top-app-bar__context"),
+  ).toHaveText("Datasets");
 
   await page.goto(`${baseURL}/app/components`);
   await expect(
-    page.getByRole("heading", { level: 1, name: "Components" }),
-  ).toBeVisible();
+    page.locator(".top-app-bar__context"),
+  ).toHaveText("Components");
 
   await page.goto(`${baseURL}/app/migration`);
   await expect(page.locator("body")).toContainText("Loading Session");

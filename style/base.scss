@@ -2071,11 +2071,6 @@ body.tessara-app table td {
   padding: 0.65rem 0.875rem;
 }
 
-body.tessara-app .app-shell--administration .top-app-bar,
-body.tessara-app .app-shell--administration .app-sidebar {
-  border-color: rgba(245, 158, 11, 0.35);
-}
-
 body.tessara-app .app-shell--migration .top-app-bar,
 body.tessara-app .app-shell--migration .app-sidebar {
   border-color: rgba(100, 116, 139, 0.4);
@@ -2128,14 +2123,6 @@ body.tessara-app .app-shell--migration .app-sidebar {
     padding: 1.5rem;
     height: 100%;
     overflow: auto;
-  }
-
-  body.tessara-app .app-shell--administration .app-layout {
-    border-color: rgba(245, 158, 11, 0.35);
-  }
-
-  body.tessara-app .app-shell--administration aside.panel.box.app-sidebar {
-    border-inline-end-color: rgba(245, 158, 11, 0.35);
   }
 
   body.tessara-app .app-shell--migration .app-layout {
@@ -2417,14 +2404,6 @@ body.tessara-app .app-shell--migration .app-sidebar {
   html[data-shell-ready='true'] body.tessara-app[data-shell-viewport='tablet'][data-sidebar-state='collapsed'] .app-nav__icon {
     width: auto;
     flex-basis: auto;
-  }
-
-  html[data-shell-ready='true'] body.tessara-app[data-shell-viewport='tablet'] .app-shell--administration .app-layout {
-    border-color: rgba(245, 158, 11, 0.35);
-  }
-
-  html[data-shell-ready='true'] body.tessara-app[data-shell-viewport='tablet'] .app-shell--administration aside.panel.box.app-sidebar {
-    border-inline-end-color: rgba(245, 158, 11, 0.35);
   }
 
   html[data-shell-ready='true'] body.tessara-app[data-shell-viewport='tablet'] .app-shell--migration .app-layout {

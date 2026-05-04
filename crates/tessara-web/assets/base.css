@@ -727,11 +727,6 @@ body.tessara-app .selection-panel {
   border-top: 1px solid var(--tessara-border);
 }
 
-body.tessara-app .app-shell--administration .top-app-bar,
-body.tessara-app .app-shell--administration .app-sidebar {
-  border-color: rgba(245, 158, 11, 0.35);
-}
-
 body.tessara-app .app-shell--migration .top-app-bar,
 body.tessara-app .app-shell--migration .app-sidebar {
   border-color: rgba(100, 116, 139, 0.4);

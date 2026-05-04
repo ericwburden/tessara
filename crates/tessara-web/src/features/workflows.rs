@@ -937,11 +937,6 @@ pub fn WorkflowsPage() -> impl IntoView {
                 BreadcrumbItem::current("Workflows"),
             ]
         >
-            <PageHeader
-                eyebrow="Workflows"
-                title="Workflow Directory"
-                description="Browse workflow records, inspect linked form runtime status, and branch into assignment management from one directory-first route."
-            />
             <MetadataStrip items=vec![
                 ("Mode", "Directory".into()),
                 ("Surface", "Workflow directory".into()),

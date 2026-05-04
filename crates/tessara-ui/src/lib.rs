@@ -21,6 +21,7 @@ impl ActionStyle {
 pub enum ActionTarget {
     Link { href: String },
     Button { onclick: String },
+    EventButton { action: String },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -53,6 +54,20 @@ impl ActionItem {
         }
     }
 
+    pub fn event_button(
+        label: impl Into<String>,
+        action: impl Into<String>,
+        style: ActionStyle,
+    ) -> Self {
+        Self {
+            label: label.into(),
+            target: ActionTarget::EventButton {
+                action: action.into(),
+            },
+            style,
+        }
+    }
+
     pub fn render(&self) -> String {
         let style = self.style.class_name();
 
@@ -63,6 +78,10 @@ impl ActionItem {
             ),
             ActionTarget::Button { onclick } => format!(
                 r#"<button class="button ui-action tessara-shell-button{style}" type="button" onclick="{onclick}">{label}</button>"#,
+                label = self.label,
+            ),
+            ActionTarget::EventButton { action } => format!(
+                r#"<button class="button ui-action tessara-shell-button{style}" type="button" data-ui-action="{action}">{label}</button>"#,
                 label = self.label,
             ),
         }
@@ -298,12 +317,23 @@ mod tests {
         let html = action_group(&[
             ActionItem::link("Open", "/app/forms", ActionStyle::Light),
             ActionItem::button("Refresh", "refresh()", ActionStyle::Primary),
+            ActionItem::event_button("Start", "response:start", ActionStyle::Default),
         ]);
 
         assert!(html.contains("ui-action-group"));
         assert!(html.contains(r#"href="/app/forms""#));
         assert!(html.contains(r#"onclick="refresh()""#));
+        assert!(html.contains(r#"data-ui-action="response:start""#));
         assert!(html.contains("is-primary"));
+    }
+
+    #[test]
+    fn event_button_does_not_render_inline_onclick() {
+        let html =
+            ActionItem::event_button("Start", "workflow:start", ActionStyle::Primary).render();
+
+        assert!(html.contains(r#"data-ui-action="workflow:start""#));
+        assert!(!html.contains("onclick="));
     }
 
     #[test]

@@ -186,17 +186,8 @@ pub fn AdministrationPage() -> impl IntoView {
             ]
         >
             <section class="app-screen box entity-page admin-workspace-shell">
-                <div class="admin-workspace-intro">
-                    <div class="admin-workspace-intro__copy">
-                        <p class="eyebrow">"Internal Area"</p>
-                        <h1>"Administration Workspace"</h1>
-                        <p class="muted">
-                            "Keep account access, role bundles, hierarchy definitions, and migration entry points together in one deliberate internal workspace."
-                        </p>
-                    </div>
-                    <div class="actions">
-                        <a class="button-link button is-light" href="/app/migration">"Open Migration"</a>
-                    </div>
+                <div class="actions">
+                    <a class="button-link button is-light" href="/app/migration">"Open Migration"</a>
                 </div>
                 <div class="admin-workspace-grid">
                     <article class="admin-workspace-card">

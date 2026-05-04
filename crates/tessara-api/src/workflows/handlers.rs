@@ -4,7 +4,6 @@ use axum::{
     http::HeaderMap,
 };
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
 use sqlx::{Postgres, Row, Transaction};
 use uuid::Uuid;
 
@@ -15,134 +14,12 @@ use crate::{
     hierarchy::IdResponse,
 };
 
-#[derive(Deserialize)]
-pub struct CreateWorkflowRequest {
-    pub form_id: Uuid,
-    pub name: String,
-    pub slug: String,
-    pub description: Option<String>,
-}
-
-#[derive(Deserialize)]
-pub struct UpdateWorkflowRequest {
-    pub form_id: Uuid,
-    pub name: String,
-    pub slug: String,
-    pub description: Option<String>,
-}
-
-#[derive(Deserialize)]
-pub struct CreateWorkflowVersionRequest {
-    pub form_version_id: Uuid,
-    pub title: Option<String>,
-}
-
-#[derive(Deserialize)]
-pub struct CreateWorkflowAssignmentRequest {
-    pub workflow_version_id: Uuid,
-    pub node_id: Uuid,
-    pub account_id: Uuid,
-}
-
-#[derive(Deserialize)]
-pub struct UpdateWorkflowAssignmentRequest {
-    pub node_id: Uuid,
-    pub account_id: Uuid,
-    pub is_active: bool,
-}
-
-#[derive(Deserialize, Default)]
-pub struct WorkflowAssignmentQuery {
-    pub workflow_id: Option<Uuid>,
-    pub workflow_version_id: Option<Uuid>,
-    pub form_id: Option<Uuid>,
-    pub account_id: Option<Uuid>,
-    pub node_id: Option<Uuid>,
-    pub active: Option<bool>,
-    pub delegate_account_id: Option<Uuid>,
-}
-
-#[derive(Serialize)]
-pub struct WorkflowSummary {
-    pub id: Uuid,
-    pub form_id: Uuid,
-    pub form_name: String,
-    pub form_slug: String,
-    pub name: String,
-    pub slug: String,
-    pub description: String,
-    pub current_version_id: Option<Uuid>,
-    pub current_version_label: Option<String>,
-    pub current_form_version_id: Option<Uuid>,
-    pub current_status: Option<String>,
-    pub assignment_count: i64,
-}
-
-#[derive(Serialize)]
-pub struct WorkflowVersionSummary {
-    pub id: Uuid,
-    pub form_version_id: Uuid,
-    pub form_version_label: Option<String>,
-    pub title: String,
-    pub status: String,
-    pub published_at: Option<DateTime<Utc>>,
-    pub created_at: DateTime<Utc>,
-}
-
-#[derive(Serialize)]
-pub struct WorkflowAssignmentSummary {
-    pub id: Uuid,
-    pub workflow_id: Uuid,
-    pub workflow_name: String,
-    pub workflow_version_id: Uuid,
-    pub workflow_version_label: Option<String>,
-    pub form_id: Uuid,
-    pub form_name: String,
-    pub form_version_id: Uuid,
-    pub form_version_label: Option<String>,
-    pub workflow_step_id: Uuid,
-    pub workflow_step_title: String,
-    pub node_id: Uuid,
-    pub node_name: String,
-    pub account_id: Uuid,
-    pub account_display_name: String,
-    pub account_email: String,
-    pub is_active: bool,
-    pub has_draft: bool,
-    pub has_submitted: bool,
-    pub created_at: DateTime<Utc>,
-}
-
-#[derive(Serialize)]
-pub struct WorkflowDefinition {
-    pub id: Uuid,
-    pub form_id: Uuid,
-    pub form_name: String,
-    pub form_slug: String,
-    pub name: String,
-    pub slug: String,
-    pub description: String,
-    pub versions: Vec<WorkflowVersionSummary>,
-    pub assignments: Vec<WorkflowAssignmentSummary>,
-}
-
-#[derive(Serialize)]
-pub struct PendingWorkflowWork {
-    pub workflow_assignment_id: Uuid,
-    pub workflow_id: Uuid,
-    pub workflow_name: String,
-    pub workflow_version_id: Uuid,
-    pub workflow_version_label: Option<String>,
-    pub workflow_step_title: String,
-    pub form_id: Uuid,
-    pub form_name: String,
-    pub form_version_id: Uuid,
-    pub form_version_label: Option<String>,
-    pub node_id: Uuid,
-    pub node_name: String,
-    pub account_id: Uuid,
-    pub account_display_name: String,
-}
+use super::dto::{
+    CreateWorkflowAssignmentRequest, CreateWorkflowRequest, CreateWorkflowVersionRequest,
+    PendingWorkflowWork, UpdateWorkflowAssignmentRequest, UpdateWorkflowRequest,
+    WorkflowAssignmentQuery, WorkflowAssignmentSummary, WorkflowDefinition, WorkflowSummary,
+    WorkflowVersionSummary,
+};
 
 pub async fn list_workflows(
     State(state): State<AppState>,
@@ -843,9 +720,7 @@ pub async fn start_workflow_assignment(
     .ok_or_else(|| ApiError::NotFound(format!("workflow assignment {workflow_assignment_id}")))?;
 
     let assignee_account_id: Uuid = row.try_get("account_id")?;
-    if !can_access_workflow_assignment(pool, account, assignee_account_id).await? {
-        return Err(ApiError::Forbidden("workflow_assignment:start".into()));
-    }
+    super::service::ensure_can_start_assignment(pool, account, workflow_assignment_id).await?;
 
     let is_active: bool = row.try_get("is_active")?;
     if !is_active {
@@ -1469,19 +1344,4 @@ async fn ensure_workflow_assignment_tx(
     .fetch_one(&mut **tx)
     .await
     .map_err(Into::into)
-}
-
-async fn can_access_workflow_assignment(
-    _pool: &sqlx::PgPool,
-    account: &auth::AccountContext,
-    assignee_account_id: Uuid,
-) -> ApiResult<bool> {
-    if account.is_admin() || account.is_operator() || account.account_id == assignee_account_id {
-        return Ok(true);
-    }
-
-    Ok(account
-        .delegations
-        .iter()
-        .any(|delegate| delegate.account_id == assignee_account_id))
 }

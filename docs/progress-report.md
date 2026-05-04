@@ -1,5 +1,192 @@
 # Progress Report
 
+## 2026-05-04 - Sprint 2E Contextual Assignment UX Scope Added
+
+- Decision:
+  - added contextual workflow assignment UX to Sprint 2E planning because multi-step workflow assignment semantics are already scheduled there
+  - selected two equal-priority entry points: organization-node `Assign Workflow` and the global assignment console
+  - selected strict eligibility: normal UI choices should only show valid node/workflow candidates and valid assignees
+- Documentation:
+  - updated `docs/roadmap.md` so Sprint 2E includes shared assignment-candidate APIs, node-context assignment, global `Node path - Workflow` selection, and assignee multiselect behavior
+  - updated `docs/tessara-roadmap-backlog-github-ready-described.md` with new issue `2E-07: Contextual workflow assignment UX and eligibility APIs`
+  - renumbered the Sprint 2E UAT issue to `2E-08` and updated immediate Sprint 2F dependencies accordingly
+
+## 2026-05-04 - Sprint 2C Closeout
+
+- Completed:
+  - completed full teardown and redeploy from the Sprint 2C verification mirror, including Compose shutdown, Postgres volume refresh, API/app image rebuild, container recreation, and UAT demo reseed
+  - marked Sprint 2C complete in `docs/roadmap.md` and moved the `(Next)` marker to Sprint 2D
+  - preserved public workflow/submission HTTP contracts while splitting workflow and submission backend code into `dto`, `handlers`, `service`, and `repo` modules
+  - hardened workflow-assignment start authorization so admins can start any assignment, scoped operators can start only assignments inside effective scope, and response users stay limited to their own or delegated work
+  - stabilized native workflow/response SSR routes and updated Playwright expectations to the current UI shape
+  - removed redundant main-page title/explanation blocks on touched shell routes, renamed the Responses surface to `Form Responses`, fixed response edit hydration after assignment start, documented the faster dev loop, and removed the accidental amber administration shell border
+- Validation:
+  - `.\scripts\local-launch.ps1 -FreshData` passed from `C:\Users\rdpuser\AppData\Local\Temp\tessara-sprint-2c-verify`
+  - `cargo fmt --all` passed; the command still reports the known `could not canonicalize path C:\Users\ericw` warning
+  - `cargo test -p tessara-api` passed with `CARGO_TARGET_DIR=C:\Users\rdpuser\AppData\Local\Temp\tessara-sprint-2c-target`; a first repo-local target attempt failed on the known `lzma-sys` MSVC archive path issue
+  - `cargo test -p tessara-web` passed with the same temp target
+  - `.\scripts\smoke.ps1` passed with the same temp target
+  - `.\scripts\local-launch.ps1 -FreshData -SkipBuild` relaunched the rebuilt image and reseeded demo data after smoke teardown
+  - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"` passed
+  - `cd end2end; npx playwright test` passed: 31 passed, 0 failed
+- Next Sprint:
+  - Sprint 2D: Draft, Submit, And Review Response Slice
+
+## Sprint Handoff / Demo Instructions
+
+### Native Workflow And Response Entry
+- Role: admin
+- Paths:
+  - `http://localhost:8080/app/workflows`
+  - `http://localhost:8080/app/workflows/assignments`
+  - `http://localhost:8080/app/responses`
+- Steps:
+  1. Sign in as `admin@tessara.local`.
+  2. Open Workflows, then Workflow Assignments.
+  3. Review assignment context and start or inspect response work from the native shell.
+  4. Open Responses and confirm the page is titled `Form Responses`.
+- Expected:
+  - workflow and response pages render in the native Tessara shell, stay readable after refresh, and do not fall back to `/app/admin`.
+- Acceptance check:
+  - pass if workflow/response route ownership remains native and response work opens the correct draft/detail route.
+- Evidence location:
+  - `cd end2end; npx playwright test` tests 17, 18, 23, 24, 25, and 26.
+
+### Scoped Assignment Start Authorization
+- Role: operator
+- Paths:
+  - `POST /api/workflow-assignments/{assignment_id}/start`
+  - `http://localhost:8080/app/responses`
+- Steps:
+  1. Sign in as a scoped operator.
+  2. Start an assignment attached to an in-scope node.
+  3. Attempt to start an assignment UUID outside the operator's effective node scope.
+- Expected:
+  - the in-scope start succeeds; the out-of-scope start returns `403` with code `forbidden`.
+- Acceptance check:
+  - pass if scoped operators cannot bypass UI scoping by posting another assignment UUID directly.
+- Evidence location:
+  - `cargo test -p tessara-api` includes `scoped_operator_cannot_start_out_of_scope_workflow_assignment_by_uuid`.
+
+### Response Resume And Hydration Stability
+- Role: respondent
+- Paths:
+  - `http://localhost:8080/app/responses`
+  - `http://localhost:8080/app/responses/{submission_id}/edit`
+- Steps:
+  1. Sign in as `respondent@tessara.local`.
+  2. Open Responses.
+  3. Start a pending assignment-backed response.
+  4. Submit or resume the resulting draft.
+- Expected:
+  - starting work opens the matching edit route, the form hydrates reliably, and submitted work leaves the pending queue.
+- Acceptance check:
+  - pass if the app reaches the response editor instead of getting stuck on `Loading response form...`.
+- Evidence location:
+  - `cd end2end; npx playwright test` tests 23 and 24.
+
+### Main Navigation UI Cleanup
+- Role: admin
+- Paths:
+  - `http://localhost:8080/app/organization`
+  - `http://localhost:8080/app/forms`
+  - `http://localhost:8080/app/administration`
+- Steps:
+  1. Sign in as `admin@tessara.local`.
+  2. Open the main navigation pages.
+  3. Confirm each page keeps the top shell title and no longer repeats a large redundant page heading/explanation block.
+  4. Open Administration and confirm the shell border is neutral, not amber.
+- Expected:
+  - touched main navigation pages have less duplicated titling and Administration visually matches the neutral shell treatment.
+- Acceptance check:
+  - pass if main navigation pages are readable without duplicate hero titles and Administration has no yellow border highlight.
+- Evidence location:
+  - `cd end2end; npx playwright test` tests 5 through 18 and the final computed-style verification from the admin border fix.
+
+## Acceptance Mapping
+
+- Exit condition:
+  - public workflow/submission API contracts remain compatible while backend code is decomposed.
+- Manual demonstration:
+  - Native Workflow And Response Entry.
+- Automated check:
+  - `cargo test -p tessara-api`; `cd end2end; npx playwright test`.
+
+- Exit condition:
+  - admins, scoped operators, respondents, and delegators observe correct assignment-start boundaries.
+- Manual demonstration:
+  - Scoped Assignment Start Authorization and Response Resume And Hydration Stability.
+- Automated check:
+  - `scoped_operator_cannot_start_out_of_scope_workflow_assignment_by_uuid`; Playwright response-start and draft-resume tests.
+
+- Exit condition:
+  - `/app/workflows*` and `/app/responses*` remain native SSR-owned and stable under refresh.
+- Manual demonstration:
+  - Native Workflow And Response Entry.
+- Automated check:
+  - Playwright workflow, response, deep-link, no-JavaScript, and protected-route tests.
+
+- Exit condition:
+  - Sprint 2C is deployable from a clean local Compose stack.
+- Manual demonstration:
+  - open `http://localhost:8080/app` after closeout redeploy.
+- Automated check:
+  - `.\scripts\local-launch.ps1 -FreshData`, `.\scripts\smoke.ps1`, and `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`.
+
+## 2026-05-04 - Sprint 2C Local Dev Loop Adjustment
+
+- Decision:
+  - use the faster local development loop for Sprint 2C UI and Playwright iteration instead of defaulting to full Docker teardown/rebuild/redeploy
+  - prefer host-run Tessara with Docker Postgres where possible, or `.\scripts\local-refresh-api.ps1` / `.\scripts\local-launch.ps1 -SkipBuild` when a container refresh is sufficient
+  - reserve full teardown, rebuild, and redeploy for Docker/dependency/migration changes, release-build verification, smoke, manual UAT, and sprint closeout
+- Validation context:
+  - `.\scripts\local-launch.ps1 -FreshData -SkipBuild` refreshed the Compose data volume and relaunched the existing image in about 20 seconds during the Playwright retest loop
+  - targeted Playwright response-start coverage passed after switching away from repeated full rebuilds
+  - `.\scripts\local-refresh-api.ps1 -SkipSeed` rebuilt only the API/app image after the response edit-loader hardening, then `.\scripts\local-launch.ps1 -FreshData -SkipBuild` reset seeded data without rebuilding the image
+  - `cd end2end; npx playwright test` passed: 31 passed, 0 failed
+
+## 2026-05-04 - Sprint 2C Backend Decomposition And Runtime Hardening
+
+- Completed:
+  - refreshed Sprint 2C tracking around the current roadmap: renamed GitHub milestone `#14`, rescopied issue `#90` as `2C-06`, and created issues `#93` through `#99` for `2C-01` through `2C-05`, `2C-07`, and `2C-08`
+  - split workflow and submission API modules into bounded `dto`, `handlers`, `service`, and `repo` modules while preserving public route registrations and endpoint names
+  - moved submission access checks, field-contract loading, and submission audit writes behind service/repo helpers
+  - closed the workflow-assignment start gap so scoped operators can only start assignments inside effective node scope while admins and valid self/delegation starts remain supported
+  - added the negative workflow-runtime regression for an out-of-scope operator assignment-start UUID
+  - added a non-inline `event_button` action primitive in `tessara-ui` for touched native SSR surfaces to use instead of raw inline handlers
+- Validation:
+  - `cargo fmt --all`
+  - `cargo check -p tessara-api`
+  - `cargo test -p tessara-api --test workflow_runtime scoped_operator_cannot_start_out_of_scope_workflow_assignment_by_uuid -- --nocapture --test-threads=1`
+  - `cargo test -p tessara-api`
+  - `cargo test -p tessara-web`
+  - `cargo test -p tessara-ui`
+- Docker Follow-Up:
+  - confirmed Docker Desktop is now reachable (`docker info` reported server version `29.4.0`)
+  - `.\scripts\smoke.ps1` passed after setting `CARGO_TARGET_DIR` to `C:\Users\rdpuser\AppData\Local\Temp\tessara-sprint-2c-target`; the default target under `C:\Users\ericw\Projects\tessara-sprint-2c\target` is not writable enough from this `rdpuser` session for the `lzma-sys` MSVC archive step
+  - direct `.\scripts\local-launch.ps1` from the sprint worktree reached Docker but Docker could not evaluate the `C:\Users\ericw\Projects\tessara-sprint-2c` build context because the current session is running as `rdpuser`
+  - mirrored the source, excluding `.git`, `target`, `tmp`, and prior Playwright output, to `C:\Users\rdpuser\AppData\Local\Temp\tessara-sprint-2c-verify`; `.\scripts\local-launch.ps1` passed there and served `http://localhost:8080/app`
+  - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"` passed against the local Compose deployment
+  - `cd end2end; npm ci; npx playwright install; npx playwright test` ran against the deployment: 22 passed, 9 failed on existing browser-suite expectations around theme popover interaction, current dashboard/response/dataset headings, response card CSS selectors, duplicate administration text, and hidden mobile search visibility
+  - spot-checked the Sprint 2C response-start path in the live browser: respondent pending starts rendered and clicking `button[data-workflow-assignment-id]` opened `/app/responses/{submission_id}/edit`
+
+## 2026-05-04 - Sprint 2C Kickoff
+
+- Completed:
+  - confirmed clean `main` and selected `Sprint 2C: Workflow/Response Backend Decomposition And Runtime Hardening Slice` from the single roadmap `(Next)` marker
+  - created branch `codex/sprint-2c` with worktree `C:\Users\ericw\Projects\tessara-sprint-2c`
+  - added the Sprint 2C plan at `C:\Users\ericw\Projects\tessara-sprint-2c\docs\sprints\sprint-2c-plan.md`
+- Validation Plan:
+  - `cargo fmt --all`
+  - `cargo test -p tessara-api`
+  - `cargo test -p tessara-web`
+  - `cd end2end; npx playwright test`
+  - `.\scripts\smoke.ps1`
+  - `.\scripts\local-launch.ps1`
+  - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`
+- Immediate Focus:
+  - refresh the stale Sprint 2C backlog and GitHub issue set, then begin workflow/submission backend decomposition and scoped assignment-start hardening
+
 ## 2026-05-03 - Audit Recommendation Roadmap Placement
 
 - Completed:

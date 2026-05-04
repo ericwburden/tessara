@@ -107,17 +107,6 @@ pub fn DatasetsPage() -> impl IntoView {
                 BreadcrumbItem::current("Datasets"),
             ]
         >
-            <PageHeader
-                eyebrow="Internal Area"
-                title="Readable Dataset Directory"
-                description="Browse readable dataset definitions and inspect source and field structure from the shared shell."
-                actions=Arc::new(|| {
-                    view! {
-                        <a class="button-link button is-light" href="/app/administration">"Open Administration"</a>
-                    }
-                    .into_any()
-                })
-            />
             <MetadataStrip items=vec![
                 ("Mode", "Directory".into()),
                 ("Surface", "Internal analytics".into()),
@@ -127,6 +116,9 @@ pub fn DatasetsPage() -> impl IntoView {
                 title="Dataset Directory"
                 description="Dataset definitions remain internal-facing, but they should be readable without dropping into the legacy builder for every inspection task."
             >
+                <div class="actions">
+                    <a class="button-link button is-light" href="/app/administration">"Open Administration"</a>
+                </div>
                 <div id="dataset-list" class="record-list">
                     <Show
                         when=move || !loading.get()
