@@ -5,6 +5,7 @@ const BENIGN_NAVIGATION_ABORT_ERRORS = [
 ];
 
 type WorkflowAssignmentSummary = {
+  id: string;
   workflow_version_id: string;
   node_id: string;
   account_id: string;
@@ -12,6 +13,18 @@ type WorkflowAssignmentSummary = {
   is_active: boolean;
   has_draft: boolean;
   has_submitted: boolean;
+};
+
+type WorkflowAssignmentCandidate = {
+  workflow_version_id: string;
+  node_id: string;
+  label: string;
+};
+
+type WorkflowAssigneeOption = {
+  account_id: string;
+  email: string;
+  display_name: string;
 };
 
 type SessionScopeNode = {
@@ -238,20 +251,80 @@ async function provisionPendingAssignmentForAccount(
 
   const assignments =
     (await assignmentsResponse.json()) as WorkflowAssignmentSummary[];
-  const targetAssignment = assignments.find(
+  const targetAssignments = assignments.filter(
     (assignment) => assignment.account_email === accountEmail,
   );
-  expect(targetAssignment).toBeTruthy();
-
-  const targetAccountId = targetAssignment!.account_id;
-  const usedPairs = new Set(
-    assignments
-      .filter((assignment) => assignment.account_id === targetAccountId)
-      .map(
-        (assignment) =>
-          `${assignment.workflow_version_id}:${assignment.node_id}`,
-      ),
+  const targetAccountId = targetAssignments[0]?.account_id ?? null;
+  const pendingExisting = targetAssignments.find(
+    (assignment) =>
+      assignment.is_active && !assignment.has_draft && !assignment.has_submitted,
   );
+  if (pendingExisting) {
+    return pendingExisting.id;
+  }
+
+  const candidatesResponse = await page.request.get(
+    "/api/workflow-assignment-candidates",
+    {
+      headers: {
+        Authorization: `Bearer ${adminToken}`,
+      },
+    },
+  );
+  expect(candidatesResponse.ok()).toBeTruthy();
+  const candidates =
+    (await candidatesResponse.json()) as WorkflowAssignmentCandidate[];
+
+  const usedPairs = new Set(
+    targetAssignments.map(
+      (assignment) =>
+        `${assignment.workflow_version_id}:${assignment.node_id}`,
+    ),
+  );
+
+  for (const candidate of candidates) {
+    const assigneesResponse = await page.request.get(
+      `/api/workflow-assignment-candidates/assignees?workflow_version_id=${candidate.workflow_version_id}&node_id=${candidate.node_id}`,
+      {
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+        },
+      },
+    );
+    if (!assigneesResponse.ok()) {
+      continue;
+    }
+    const assignees =
+      (await assigneesResponse.json()) as WorkflowAssigneeOption[];
+    const targetAssignee = assignees.find(
+      (assignee) => assignee.email === accountEmail,
+    );
+    if (!targetAssignee) {
+      continue;
+    }
+
+    const pairKey = `${candidate.workflow_version_id}:${candidate.node_id}`;
+    if (usedPairs.has(pairKey)) {
+      continue;
+    }
+
+    const createResponse = await page.request.post("/api/workflow-assignments", {
+      headers: {
+        Authorization: `Bearer ${adminToken}`,
+      },
+      data: {
+        workflow_version_id: candidate.workflow_version_id,
+        node_id: candidate.node_id,
+        account_id: targetAssignee.account_id,
+      },
+    });
+    if (!createResponse.ok()) {
+      continue;
+    }
+    const createdAssignment = (await createResponse.json()) as { id: string };
+    expect(createdAssignment.id).toBeTruthy();
+    return createdAssignment.id;
+  }
 
   const nodesResponse = await page.request.get("/api/nodes", {
     headers: {
@@ -281,20 +354,25 @@ async function provisionPendingAssignmentForAccount(
     );
   expect(template).toBeTruthy();
 
-  const createResponse = await page.request.post("/api/workflow-assignments", {
-    headers: {
-      Authorization: `Bearer ${adminToken}`,
-    },
-    data: {
-      workflow_version_id: template!.workflow_version_id,
-      node_id: template!.node_id,
-      account_id: targetAccountId,
-    },
-  });
-  expect(createResponse.ok()).toBeTruthy();
-  const createdAssignment = (await createResponse.json()) as { id: string };
-  expect(createdAssignment.id).toBeTruthy();
-  return createdAssignment.id;
+  if (targetAccountId) {
+    const createResponse = await page.request.post("/api/workflow-assignments", {
+      headers: {
+        Authorization: `Bearer ${adminToken}`,
+      },
+      data: {
+        workflow_version_id: template!.workflow_version_id,
+        node_id: template!.node_id,
+        account_id: targetAccountId,
+      },
+    });
+    if (createResponse.ok()) {
+      const createdAssignment = (await createResponse.json()) as { id: string };
+      expect(createdAssignment.id).toBeTruthy();
+      return createdAssignment.id;
+    }
+  }
+
+  throw new Error(`Could not provision pending assignment for ${accountEmail}`);
 }
 
 test("home route stays on the native SSR shell", async ({ page }) => {
@@ -1152,10 +1230,16 @@ test("workflows route stays readable and console-clean on the native shell", asy
   await page.goto("/app/workflows");
 
   await expect(
-    page.getByRole("heading", { name: "Workflow Directory" }).first(),
-  ).toBeVisible();
+    page.locator(".top-app-bar__context"),
+  ).toHaveText("Workflows");
   await expect(page.locator("#workflow-list")).toHaveCount(1);
-  await expect(page.locator("body")).toContainText("Workflow Directory");
+  await expect(page.locator("#workflow-directory-data-table")).toBeVisible();
+  await expect(page.locator("#workflow-directory-search")).toBeVisible();
+  await expect
+    .poll(async () =>
+      page.locator("#workflow-directory-table-body .workflow-directory-row").count(),
+    )
+    .toBeGreaterThan(0);
   await expect(
     page.getByRole("link", { name: "Open Assignment Management" }),
   ).toBeVisible();
@@ -1163,8 +1247,9 @@ test("workflows route stays readable and console-clean on the native shell", asy
 
   await page.reload();
   await expect(
-    page.getByRole("heading", { name: "Workflow Directory" }).first(),
-  ).toBeVisible();
+    page.locator(".top-app-bar__context"),
+  ).toHaveText("Workflows");
+  await expect(page.locator("#workflow-directory-data-table")).toBeVisible();
   await expectNoLegacyBridge(page);
 
   await assertNoConsoleErrors();
@@ -1190,7 +1275,7 @@ test("responses route stays readable and console-clean on the native shell", asy
   await expect(page.locator(".response-panel-title")).toHaveText(
     "Current Work",
   );
-  await expect(page.locator("body")).toContainText("Draft Queue");
+  await expect(page.locator("body")).toContainText("In Progress");
   await expect(page.locator("body")).toContainText("Submitted Work");
   await expect(page.getByText("Queue by next action")).toHaveCount(0);
   await expect(page.getByText("Resume saved work")).toHaveCount(0);
@@ -1201,7 +1286,19 @@ test("responses route stays readable and console-clean on the native shell", asy
     /1\.0\.0 ·/,
   );
   await expect(draftRow.locator(".response-queue-row__meta")).toContainText(
-    "Generated from the linked form for Sprint 2A runtime compatibility.",
+    "Steps Completed:",
+  );
+  await expect(draftRow.locator(".response-queue-row__meta")).toContainText(
+    "Current Step:",
+  );
+  await expect(draftRow.locator(".response-queue-row__meta")).toContainText(
+    "Next Step:",
+  );
+  await expect(draftRow.locator(".response-queue-row__meta")).toContainText(
+    "Assigned To:",
+  );
+  await expect(draftRow.locator(".response-queue-row__meta")).toContainText(
+    "Last Modified Date:",
   );
   await expect(draftRow.locator(".response-queue-row__meta")).not.toContainText(
     "Version:",
@@ -1447,9 +1544,10 @@ test("assignee pending start opens the matching draft directly and removes it fr
     ),
   });
   await expect(pendingCard).toHaveCount(1);
-  await expect(pendingCard).toContainText("Assigned Start");
-  await expect(pendingCard).toContainText("Form:");
-  await expect(pendingCard).toContainText("Step:");
+  await expect(pendingCard).toContainText("Total Steps:");
+  await expect(pendingCard).toContainText("Next Step:");
+  await expect(pendingCard).toContainText("Assigned To:");
+  await expect(pendingCard).toContainText("Assigned Date:");
   const assignmentId = await pendingCard
     .locator("button[data-workflow-assignment-id]")
     .getAttribute("data-workflow-assignment-id");
@@ -1601,7 +1699,7 @@ test("draft save preserves values for later resume", async ({ page }) => {
   expect(savedInputId).toBeTruthy();
 
   await page.getByRole("button", { name: "Save Draft" }).click();
-  await expect(page.locator("#response-edit-status")).toContainText(
+  await expect(page.locator("#response-edit-toast")).toContainText(
     "Draft saved.",
   );
 
@@ -1698,8 +1796,9 @@ test("draft resume actions resolve to the same in-progress response item", async
     ),
   });
   await expect(pendingCard).toHaveCount(1);
-  await expect(pendingCard).toContainText("Assigned Start");
-  await expect(pendingCard).toContainText("Form:");
+  await expect(pendingCard).toContainText("Total Steps:");
+  await expect(pendingCard).toContainText("Next Step:");
+  await expect(pendingCard).toContainText("Assigned To:");
 
   await pendingCard.getByRole("button", { name: "Start" }).click();
   await expect(page).toHaveURL(/\/app\/responses\/[^/]+\/edit$/);
@@ -1777,8 +1876,8 @@ test("workflow assignment deep links preserve workflow context in the assignment
 
   await page.goto("/app/workflows", { waitUntil: "domcontentloaded" });
   await expect(
-    page.getByRole("heading", { name: "Workflow Directory" }).first(),
-  ).toBeVisible();
+    page.locator(".top-app-bar__context"),
+  ).toHaveText("Workflows");
   await expect(page.locator("#workflow-list")).not.toContainText(
     "Loading workflow records...",
     {
@@ -1787,12 +1886,12 @@ test("workflow assignment deep links preserve workflow context in the assignment
   );
   await expect(
     page.locator(
-      '.workflow-selected-detail a[href^="/app/workflows/assignments?workflowId="]',
+      '.workflow-directory-actions a[href^="/app/workflows/assignments?workflowId="]',
     ),
   ).not.toHaveCount(0);
 
   const assignmentLink = page
-    .locator('.workflow-selected-detail a[href^="/app/workflows/assignments?workflowId="]')
+    .locator('.workflow-directory-actions a[href^="/app/workflows/assignments?workflowId="]')
     .first();
   const href = await assignmentLink.getAttribute("href");
   expect(href).toBeTruthy();
@@ -1810,10 +1909,10 @@ test("workflow assignment deep links preserve workflow context in the assignment
   await expect(
     page.getByRole("heading", { name: "Assignment Management" }).first(),
   ).toBeVisible();
-  await expect(page.locator("#workflow-assignment-workflow")).toHaveValue(
-    workflowId!,
-  );
-  await expect(page.locator("#workflow-assignment-node")).not.toHaveValue("");
+  await expect(page.locator("#workflow-assignment-candidate-search")).toBeVisible();
+  await expect(page.locator("#workflow-assignment-candidate")).toBeVisible();
+  await expect(page.locator("#workflow-assignment-candidate")).not.toHaveValue("");
+  await expect(page.locator("#workflow-assignment-candidate")).toBeDisabled();
 
   await assertNoConsoleErrors();
 });
@@ -1837,8 +1936,9 @@ test("left nav updates visible content across touched Sprint 2A routes", async (
   await productNav.getByRole("link", { name: "Workflows" }).click();
   await expect(page).toHaveURL(/\/app\/workflows$/);
   await expect(
-    page.getByRole("heading", { name: "Workflow Directory" }).first(),
-  ).toBeVisible();
+    page.locator(".top-app-bar__context"),
+  ).toHaveText("Workflows");
+  await expect(page.locator("#workflow-directory-data-table")).toBeVisible();
 
   await productNav.getByRole("link", { name: "Responses" }).click();
   await expect(page).toHaveURL(/\/app\/responses$/);

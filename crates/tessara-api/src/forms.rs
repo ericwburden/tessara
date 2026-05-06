@@ -154,6 +154,16 @@ pub struct FormVersionSummary {
     semantic_bump: Option<String>,
     started_new_major_line: Option<bool>,
     publish_preview: Option<FormPublishPreview>,
+    assignment_nodes: Vec<FormVersionAssignmentNodeSummary>,
+}
+
+#[derive(Clone, Serialize)]
+pub struct FormVersionAssignmentNodeSummary {
+    node_id: Uuid,
+    node_name: String,
+    node_type_name: String,
+    parent_node_id: Option<Uuid>,
+    node_path: String,
 }
 
 #[derive(Serialize)]
@@ -217,6 +227,52 @@ pub struct PublishedFormVersionSummary {
     pub version_label: String,
     pub published_at: Option<chrono::DateTime<chrono::Utc>>,
     pub field_count: i64,
+}
+
+async fn load_form_version_assignment_nodes(
+    pool: &sqlx::PgPool,
+    form_version_ids: &[Uuid],
+) -> ApiResult<BTreeMap<Uuid, Vec<FormVersionAssignmentNodeSummary>>> {
+    if form_version_ids.is_empty() {
+        return Ok(BTreeMap::new());
+    }
+
+    let rows = sqlx::query(
+        r#"
+        SELECT DISTINCT
+            form_assignments.form_version_id,
+            nodes.id AS node_id,
+            nodes.name AS node_name,
+            nodes.parent_node_id,
+            node_types.name AS node_type_name,
+            COALESCE(parent_nodes.name || ' / ' || nodes.name, nodes.name) AS node_path
+        FROM form_assignments
+        JOIN nodes ON nodes.id = form_assignments.node_id
+        JOIN node_types ON node_types.id = nodes.node_type_id
+        LEFT JOIN nodes AS parent_nodes ON parent_nodes.id = nodes.parent_node_id
+        WHERE form_assignments.form_version_id = ANY($1)
+        ORDER BY node_path, nodes.name, nodes.id
+        "#,
+    )
+    .bind(form_version_ids)
+    .fetch_all(pool)
+    .await?;
+
+    let mut assignment_nodes = BTreeMap::<Uuid, Vec<FormVersionAssignmentNodeSummary>>::new();
+    for row in rows {
+        let form_version_id: Uuid = row.try_get("form_version_id")?;
+        assignment_nodes.entry(form_version_id).or_default().push(
+            FormVersionAssignmentNodeSummary {
+                node_id: row.try_get("node_id")?,
+                node_name: row.try_get("node_name")?,
+                node_type_name: row.try_get("node_type_name")?,
+                parent_node_id: row.try_get("parent_node_id")?,
+                node_path: row.try_get("node_path")?,
+            },
+        );
+    }
+
+    Ok(assignment_nodes)
 }
 
 pub async fn create_form(
@@ -335,6 +391,11 @@ pub async fn list_forms(
     )
     .fetch_all(&state.pool)
     .await?;
+    let version_ids = version_rows
+        .iter()
+        .map(|version| version.try_get::<Uuid, _>("id"))
+        .collect::<Result<Vec<_>, sqlx::Error>>()?;
+    let assignment_nodes = load_form_version_assignment_nodes(&state.pool, &version_ids).await?;
 
     let mut forms = Vec::new();
     for form in form_rows {
@@ -343,8 +404,9 @@ pub async fn list_forms(
         for version in &version_rows {
             let version_form_id: Uuid = version.try_get("form_id")?;
             if version_form_id == form_id {
+                let version_id: Uuid = version.try_get("id")?;
                 versions.push(FormVersionSummary {
-                    id: version.try_get("id")?,
+                    id: version_id,
                     version_label: version.try_get("version_label")?,
                     status: version.try_get("status")?,
                     version_major: version.try_get("version_major")?,
@@ -357,6 +419,10 @@ pub async fn list_forms(
                     semantic_bump: version.try_get("semantic_bump")?,
                     started_new_major_line: version.try_get("started_new_major_line")?,
                     publish_preview: None,
+                    assignment_nodes: assignment_nodes
+                        .get(&version_id)
+                        .cloned()
+                        .unwrap_or_default(),
                 });
             }
         }
@@ -548,6 +614,11 @@ pub async fn list_readable_forms(
         .fetch_all(&state.pool)
         .await?
     };
+    let version_ids = version_rows
+        .iter()
+        .map(|version| version.try_get::<Uuid, _>("id"))
+        .collect::<Result<Vec<_>, sqlx::Error>>()?;
+    let assignment_nodes = load_form_version_assignment_nodes(&state.pool, &version_ids).await?;
 
     let mut forms = Vec::new();
     for form in form_rows {
@@ -556,8 +627,9 @@ pub async fn list_readable_forms(
         for version in &version_rows {
             let version_form_id: Uuid = version.try_get("form_id")?;
             if version_form_id == form_id {
+                let version_id: Uuid = version.try_get("id")?;
                 versions.push(FormVersionSummary {
-                    id: version.try_get("id")?,
+                    id: version_id,
                     version_label: version.try_get("version_label")?,
                     status: version.try_get("status")?,
                     version_major: version.try_get("version_major")?,
@@ -570,6 +642,10 @@ pub async fn list_readable_forms(
                     semantic_bump: version.try_get("semantic_bump")?,
                     started_new_major_line: version.try_get("started_new_major_line")?,
                     publish_preview: None,
+                    assignment_nodes: assignment_nodes
+                        .get(&version_id)
+                        .cloned()
+                        .unwrap_or_default(),
                 });
             }
         }
@@ -692,9 +768,21 @@ async fn get_form_definition(pool: &sqlx::PgPool, form_id: Uuid) -> ApiResult<Fo
             semantic_bump: row.try_get("semantic_bump")?,
             started_new_major_line: row.try_get("started_new_major_line")?,
             publish_preview: None,
+            assignment_nodes: Vec::new(),
         })
     })
     .collect::<Result<Vec<_>, sqlx::Error>>()?;
+    let version_ids = versions
+        .iter()
+        .map(|version| version.id)
+        .collect::<Vec<_>>();
+    let assignment_nodes = load_form_version_assignment_nodes(pool, &version_ids).await?;
+    for version in &mut versions {
+        version.assignment_nodes = assignment_nodes
+            .get(&version.id)
+            .cloned()
+            .unwrap_or_default();
+    }
 
     for version in &mut versions {
         if version.status == "draft" {
@@ -744,6 +832,16 @@ async fn get_form_definition(pool: &sqlx::PgPool, form_id: Uuid) -> ApiResult<Fo
         LEFT JOIN workflow_assignments
             ON workflow_assignments.workflow_version_id = workflow_versions.id
         WHERE workflows.form_id = $1
+           OR EXISTS (
+                SELECT 1
+                FROM workflow_versions AS step_workflow_versions
+                JOIN workflow_steps
+                    ON workflow_steps.workflow_version_id = step_workflow_versions.id
+                JOIN form_versions AS step_form_versions
+                    ON step_form_versions.id = workflow_steps.form_version_id
+                WHERE step_workflow_versions.workflow_id = workflows.id
+                  AND step_form_versions.form_id = $1
+           )
         GROUP BY
             workflows.id,
             workflows.name,

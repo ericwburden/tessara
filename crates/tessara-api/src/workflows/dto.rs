@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 #[derive(Deserialize)]
 pub struct CreateWorkflowRequest {
-    pub form_id: Uuid,
+    pub form_id: Option<Uuid>,
     pub name: String,
     pub slug: String,
     pub description: Option<String>,
@@ -12,7 +12,7 @@ pub struct CreateWorkflowRequest {
 
 #[derive(Deserialize)]
 pub struct UpdateWorkflowRequest {
-    pub form_id: Uuid,
+    pub form_id: Option<Uuid>,
     pub name: String,
     pub slug: String,
     pub description: Option<String>,
@@ -20,8 +20,22 @@ pub struct UpdateWorkflowRequest {
 
 #[derive(Deserialize)]
 pub struct CreateWorkflowVersionRequest {
-    pub form_version_id: Uuid,
+    pub form_version_id: Option<Uuid>,
     pub title: Option<String>,
+    #[serde(default)]
+    pub steps: Vec<CreateWorkflowStepRequest>,
+}
+
+#[derive(Clone, Deserialize)]
+pub struct CreateWorkflowStepRequest {
+    pub title: String,
+    pub form_version_id: Uuid,
+}
+
+#[derive(Deserialize)]
+pub struct UpdateWorkflowVersionStepsRequest {
+    #[serde(default)]
+    pub steps: Vec<CreateWorkflowStepRequest>,
 }
 
 #[derive(Deserialize)]
@@ -29,6 +43,25 @@ pub struct CreateWorkflowAssignmentRequest {
     pub workflow_version_id: Uuid,
     pub node_id: Uuid,
     pub account_id: Uuid,
+}
+
+#[derive(Deserialize)]
+pub struct AssignmentCandidateQuery {
+    pub node_id: Option<Uuid>,
+    pub q: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct AssignmentCandidateAssigneeQuery {
+    pub workflow_version_id: Uuid,
+    pub node_id: Uuid,
+}
+
+#[derive(Deserialize)]
+pub struct BulkWorkflowAssignmentRequest {
+    pub workflow_version_id: Uuid,
+    pub node_id: Uuid,
+    pub account_ids: Vec<Uuid>,
 }
 
 #[derive(Deserialize)]
@@ -63,6 +96,8 @@ pub struct WorkflowSummary {
     pub current_form_version_id: Option<Uuid>,
     pub current_status: Option<String>,
     pub assignment_count: i64,
+    pub version_count: i64,
+    pub assignment_node_names: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -74,6 +109,19 @@ pub struct WorkflowVersionSummary {
     pub status: String,
     pub published_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
+    pub step_count: i64,
+    pub steps: Vec<WorkflowStepSummary>,
+}
+
+#[derive(Serialize)]
+pub struct WorkflowStepSummary {
+    pub id: Uuid,
+    pub form_id: Uuid,
+    pub form_name: String,
+    pub form_version_id: Uuid,
+    pub form_version_label: Option<String>,
+    pub title: String,
+    pub position: i32,
 }
 
 #[derive(Serialize)]
@@ -122,6 +170,10 @@ pub struct PendingWorkflowWork {
     pub workflow_version_id: Uuid,
     pub workflow_version_label: Option<String>,
     pub workflow_step_title: String,
+    pub workflow_step_position: i32,
+    pub workflow_step_count: i64,
+    pub next_workflow_step_title: Option<String>,
+    pub next_workflow_step_form_name: Option<String>,
     pub form_id: Uuid,
     pub form_name: String,
     pub form_version_id: Uuid,
@@ -130,4 +182,39 @@ pub struct PendingWorkflowWork {
     pub node_name: String,
     pub account_id: Uuid,
     pub account_display_name: String,
+    pub assigned_at: DateTime<Utc>,
+}
+
+#[derive(Serialize)]
+pub struct WorkflowAssignmentCandidate {
+    pub workflow_version_id: Uuid,
+    pub workflow_id: Uuid,
+    pub workflow_name: String,
+    pub workflow_version_label: Option<String>,
+    pub node_id: Uuid,
+    pub node_name: String,
+    pub node_path: String,
+    pub label: String,
+    pub step_count: i64,
+}
+
+#[derive(Serialize)]
+pub struct WorkflowAssigneeOption {
+    pub account_id: Uuid,
+    pub email: String,
+    pub display_name: String,
+}
+
+#[derive(Serialize)]
+pub struct BulkWorkflowAssignmentResponse {
+    pub results: Vec<BulkWorkflowAssignmentResult>,
+}
+
+#[derive(Serialize)]
+pub struct BulkWorkflowAssignmentResult {
+    pub account_id: Uuid,
+    pub email: String,
+    pub display_name: String,
+    pub status: String,
+    pub workflow_assignment_id: Uuid,
 }

@@ -9,9 +9,9 @@ use crate::{
 use super::repo;
 
 pub use super::handlers::{
-    ensure_submission_runtime_linkage, ensure_workflow_assignment_for_form_assignment,
-    ensure_workflow_for_published_form_version_tx, list_pending_assignments_for_account,
-    start_workflow_assignment,
+    complete_workflow_step_and_advance, ensure_submission_runtime_linkage,
+    ensure_workflow_assignment_for_form_assignment, ensure_workflow_for_published_form_version_tx,
+    list_pending_assignments_for_account, start_workflow_assignment,
 };
 
 pub(crate) async fn ensure_can_start_assignment(

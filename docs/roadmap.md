@@ -445,7 +445,7 @@ Before deeper application-surface replacement continues, the frontend platform s
 
 **User-testable exit condition:** a tester can save draft, resume, submit, and review responses through the application UI.
 
-### Sprint 2E: Multi-Step Workflow Authoring And Execution (Next)
+### Sprint 2E: Multi-Step Workflow Authoring And Execution (Complete)
 
 **Outcome:** workflows are no longer limited to a single response step, and runtime execution can advance across explicit step definitions.
 
@@ -468,6 +468,28 @@ Before deeper application-surface replacement continues, the frontend platform s
 - runtime surfaces that show current step, upcoming step, and completed-step history for in-flight work
 
 **User-testable exit condition:** a tester can create a workflow with more than one step, assign it from both an organization node and the global assignment console using only valid node/workflow/assignee combinations, start it, complete the first step, and observe the next step become the active work item through the application UI.
+
+### Post-Sprint 2E Design Detour: Rust/UI Styling And Component Alignment (Next)
+
+**Outcome:** the workflow and response UX feedback gathered during Sprint 2E is consolidated into a coherent component and stylesheet direction before additional feature work compounds the current styling debt.
+
+**Build:**
+
+- pivot touched workflow, assignment, response, and home surfaces toward Rust/UI component patterns for tables, inputs, badges, icon buttons, tags, confirmation dialogs, and form actions
+- replace ad hoc table controls with a Rust/UI-style data-table component pattern that supports search, sort, filtering, pagination, and accessible action controls
+- standardize icon usage through the Rust/UI icon set or an equivalent local wrapper so contextual actions read consistently across the app
+- define reusable form action/footer classes with the expected spacing, including the 16px top margin required for bottom-of-form button containers
+- consolidate stylesheet organization around a documented SCSS entrypoint, named global/component/feature partials, and a clear decision for the parallel `crates/tessara-web/assets/base.css` path
+- add lightweight deployed-CSS verification so future UI edits prove that the stylesheet selectors being changed are the selectors being served
+- carry forward deferred Sprint 2E UX comments without changing the accepted Sprint 2E functional behavior
+
+**Application UI delivered this detour:**
+
+- workflow directory and assignment directory tables aligned to the selected Rust/UI data-table language
+- workflow step editing controls, assignment assignee chips, status badges, and icon buttons using a consistent component vocabulary
+- response and home work queues visually prepared for later delegated-work redesign without changing assignment/runtime rules
+
+**User-testable exit condition:** a tester can browse the touched workflow, assignment, response, and home routes and see consistent Rust/UI-style tables, tags, icon actions, and form button spacing while all Sprint 2E workflow behavior remains intact.
 
 ### Sprint 2F: Runtime Status And Materialization Slice
 

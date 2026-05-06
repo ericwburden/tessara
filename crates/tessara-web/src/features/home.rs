@@ -36,6 +36,20 @@ struct HomePendingAssignmentSummary {
     account_display_name: String,
 }
 
+fn home_pending_path(delegate_account_id: Option<&str>) -> String {
+    delegate_account_id
+        .filter(|value| !value.is_empty())
+        .map(|value| format!("/api/workflow-assignments/pending?delegate_account_id={value}"))
+        .unwrap_or_else(|| "/api/workflow-assignments/pending".into())
+}
+
+fn responses_path(delegate_account_id: Option<&str>) -> String {
+    delegate_account_id
+        .filter(|value| !value.is_empty())
+        .map(|value| format!("/app/responses?delegateAccountId={value}"))
+        .unwrap_or_else(|| "/app/responses".into())
+}
+
 fn quantify(count: i64, singular: &'static str, plural: &'static str) -> String {
     if count == 1 {
         singular.to_string()
@@ -80,6 +94,7 @@ pub fn HomePage() -> impl IntoView {
     let pending_assignments = RwSignal::new(None::<Vec<HomePendingAssignmentSummary>>);
     let home_summary_error = RwSignal::new(None::<String>);
     let home_queue_error = RwSignal::new(None::<String>);
+    let home_delegate_account_id = RwSignal::new(String::new());
 
     #[cfg(feature = "hydrate")]
     Effect::new(move |_| {
@@ -99,8 +114,13 @@ pub fn HomePage() -> impl IntoView {
                 }
             }
 
-            match get_json::<Vec<HomePendingAssignmentSummary>>("/api/workflow-assignments/pending")
-                .await
+            let delegate_account_id = home_delegate_account_id.get();
+            let delegate_account_id =
+                (!delegate_account_id.is_empty()).then_some(delegate_account_id);
+            match get_json::<Vec<HomePendingAssignmentSummary>>(&home_pending_path(
+                delegate_account_id.as_deref(),
+            ))
+            .await
             {
                 Ok(items) => {
                     pending_assignments.set(Some(items));
@@ -196,9 +216,52 @@ pub fn HomePage() -> impl IntoView {
                             </p>
                         </div>
                         <div class="actions">
-                            <a class="button-link button is-light" href="/app/responses">"Open full queue"</a>
+                            <a
+                                class="button-link button is-light"
+                                href=move || responses_path((!home_delegate_account_id.get().is_empty()).then_some(home_delegate_account_id.get()).as_deref())
+                            >
+                                "Open full queue"
+                            </a>
                         </div>
                     </div>
+                    {move || {
+                        let account = session.account.get();
+                        let Some(account) = account else {
+                            return view! { <></> }.into_any();
+                        };
+                        if account.delegations.is_empty() {
+                            return view! { <></> }.into_any();
+                        }
+                        view! {
+                            <section class="ui-toolbar response-context-toolbar home-context-toolbar">
+                                <div class="ui-toolbar__primary">
+                                    <div class="ui-field">
+                                        <label class="ui-field__label" for="home-delegate-context-select">"Viewing Work For"</label>
+                                        <div class="ui-field__control">
+                                            <select
+                                                class="input"
+                                                id="home-delegate-context-select"
+                                                on:change=move |event| home_delegate_account_id.set(event_target_value(&event))
+                                            >
+                                                <option value="">"My work"</option>
+                                                {account.delegations.into_iter().map(|delegate| {
+                                                    let label = if delegate.display_name.is_empty() {
+                                                        delegate.email.clone()
+                                                    } else {
+                                                        delegate.display_name.clone()
+                                                    };
+                                                    view! {
+                                                        <option value=delegate.account_id>{label}</option>
+                                                    }
+                                                }).collect_view()}
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                            </section>
+                        }
+                        .into_any()
+                    }}
                     <div id="home-current-work" class="home-queue-panel">
                         {move || {
                             if let Some(error) = home_queue_error.get() {
@@ -267,7 +330,7 @@ pub fn HomePage() -> impl IntoView {
                                                             <a
                                                                 class="button-link button is-light"
                                                                 href=format!(
-                                                                    "/app/responses?workflowAssignmentId={}",
+                                                                    "/app/responses/new?workflow_assignment_id={}",
                                                                     item.workflow_assignment_id
                                                                 )
                                                             >
@@ -289,7 +352,12 @@ pub fn HomePage() -> impl IntoView {
                             .into_any()
                         }}
                         <div class="home-next-step">
-                            <a class="button-link button is-primary" href="/app/responses">"Open Responses"</a>
+                            <a
+                                class="button-link button is-primary"
+                                href=move || responses_path((!home_delegate_account_id.get().is_empty()).then_some(home_delegate_account_id.get()).as_deref())
+                            >
+                                "Open Responses"
+                            </a>
                             {move || {
                                 let account = session.account.get();
                                 if account.as_ref().is_some_and(|account| !account.delegations.is_empty()) {

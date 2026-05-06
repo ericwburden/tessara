@@ -1,5 +1,318 @@
 # Progress Report
 
+## 2026-05-06 - Sprint 2E Closeout
+
+- Completed:
+  - marked Sprint 2E complete in the roadmap and moved the `(Next)` marker to the post-Sprint 2E Rust/UI styling detour
+  - delivered multi-step workflow authoring where each ordered step can reference a published version from a different form
+  - allowed form versions to be reused across workflows rather than owned by a single workflow
+  - added lineage-aware publish and assignment validation so composed workflow forms stay on one node line without sibling branching
+  - added contextual workflow assignment candidates, assignee filtering, and idempotent bulk assignment creation
+  - delivered same-assignee automatic runtime handoff from one workflow step to the next, with completion state persisted for workflow instances
+  - refreshed workflow, organization, home, and response surfaces to expose Sprint 2E workflow context while deferring further UX polish to the Rust/UI detour
+- Validation:
+  - `.\scripts\local-launch.ps1` - passed; rebuilt and reseeded the local stack
+  - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"` - passed
+  - `.\scripts\smoke.ps1` - passed after updating demo seed assertions for the six published Sprint 2E forms
+  - `cargo test -p tessara-api` - passed
+  - `cargo test -p tessara-web` - passed
+  - `cd end2end; npx playwright test` - passed, 33/33
+  - `cargo fmt --all` - passed
+  - `.\scripts\local-launch.ps1 -SkipBuild` - passed; local review stack left running at `http://localhost:8080`
+- Next Focus:
+  - Post-Sprint 2E Design Detour: Rust/UI Styling And Component Alignment
+
+## Sprint Handoff / Demo Instructions
+
+### Multi-Step Workflow Authoring
+- Role: admin
+- Paths:
+  - `http://localhost:8080/app/workflows/new`
+  - `http://localhost:8080/app/workflows/{workflow_id}/edit`
+  - `POST /api/workflows/{workflow_id}/versions`
+  - `POST /api/workflow-versions/{workflow_version_id}/publish`
+- Steps:
+  1. Sign in as `admin@tessara.local`.
+  2. Open `/app/workflows/new`, create workflow metadata, and use the version editor to add two or more ordered steps.
+  3. Select published form versions from different forms, including Program/Activity combinations or the sibling Activity demo forms.
+  4. Save as draft or publish the workflow version.
+- Expected:
+  - each step has its own linked published form version, form versions can be reused across workflows, and invalid sibling-branch combinations are rejected before publish.
+- Acceptance check:
+  - Pass when the workflow publishes only for a straight-line node lineage and rejects missing, unpublished, or incompatible step collections with stable validation feedback.
+- Evidence location:
+  - `cargo test -p tessara-api`
+  - `cargo test -p tessara-web`
+  - `npx playwright test`
+
+### Contextual Workflow Assignment
+- Role: admin
+- Paths:
+  - `http://localhost:8080/app/workflows/assignments`
+  - `http://localhost:8080/app/organization/{node_id}`
+  - `GET /api/workflow-assignment-candidates`
+  - `GET /api/workflow-assignment-candidates/assignees?workflow_version_id=...&node_id=...`
+  - `POST /api/workflow-assignments/bulk`
+- Steps:
+  1. Open an organization node detail route and use `Assign Workflow`, or open `/app/workflows/assignments`.
+  2. Choose a valid `Node path - Workflow` candidate.
+  3. Select one or more valid assignees and create assignments.
+  4. Repeat the same assignment request for the same assignee.
+- Expected:
+  - candidates respect assigner scope and workflow step-form lineage, assignees are filtered to valid users, and bulk creation reports created/reactivated/skipped outcomes without duplicates.
+- Acceptance check:
+  - Pass when invalid workflow/node/assignee combinations are unavailable or rejected, and repeat bulk assignment is idempotent.
+- Evidence location:
+  - `cargo test -p tessara-api`
+  - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`
+  - `.\scripts\smoke.ps1`
+
+### Step Runtime Handoff
+- Role: respondent
+- Paths:
+  - `http://localhost:8080/app`
+  - `http://localhost:8080/app/responses`
+  - `POST /api/workflow-assignments/{workflow_assignment_id}/start`
+  - `POST /api/submissions/{submission_id}/submit`
+- Steps:
+  1. Sign in as the assigned response user.
+  2. Start the pending workflow work from Home or Responses.
+  3. Complete and submit step 1.
+  4. Confirm the next step becomes the active work item and opens with its own form.
+  5. Complete the final step.
+- Expected:
+  - the workflow advances in order for the same assignee, each step uses its selected form version, and the workflow instance is marked complete after the final submit.
+- Acceptance check:
+  - Pass when step 2 cannot be started before step 1, step 1 submit activates step 2, and final submit leaves completed history visible.
+- Evidence location:
+  - `cargo test -p tessara-api`
+  - `npx playwright test`
+  - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`
+
+### Backward Compatibility And Native Routes
+- Role: admin, respondent
+- Paths:
+  - `http://localhost:8080/app/workflows`
+  - `http://localhost:8080/app/organization`
+  - `http://localhost:8080/app/responses`
+  - existing single-step workflow assignment/start/draft/submit/review APIs
+- Steps:
+  1. Open the workflow directory and inspect existing single-step demo workflows.
+  2. Start, save, submit, and review a single-step response item.
+  3. Refresh touched workflow, organization, home, and response routes.
+- Expected:
+  - existing single-step workflows continue to work through the compatibility anchors, touched routes remain native SSR/hydrated, and runtime UI displays workflow context without breaking older records.
+- Acceptance check:
+  - Pass when single-step response lifecycle behavior remains available and touched app routes load cleanly after refresh.
+- Evidence location:
+  - `cargo test -p tessara-web`
+  - `npx playwright test`
+  - `.\scripts\smoke.ps1`
+
+### Deferred Rust/UI Styling Detour
+- Role: admin
+- Paths:
+  - `docs/roadmap.md`
+  - `docs/sprints/sprint-2e-plan.md`
+- Steps:
+  1. Review the roadmap section after Sprint 2E.
+  2. Confirm the UX feedback collected during Sprint 2E is assigned to the Rust/UI styling detour instead of remaining as unfinished Sprint 2E scope.
+- Expected:
+  - Sprint 2E closes as functionally complete while table controls, icon polish, form spacing, assignee chips, stylesheet organization, and broader Rust/UI component adoption are tracked as next work.
+- Acceptance check:
+  - Pass when the roadmap names the detour and keeps Sprint 2F available after the styling/design alignment work.
+- Evidence location:
+  - `docs/roadmap.md`
+  - `docs/sprints/sprint-2e-plan.md`
+
+## Acceptance Mapping
+
+- Exit condition:
+  - A tester can create a workflow with more than one step.
+- Manual demonstration:
+  - `Multi-Step Workflow Authoring`
+- Automated check:
+  - `cargo test -p tessara-api`
+  - `cargo test -p tessara-web`
+  - `npx playwright test`
+
+- Exit condition:
+  - Steps can reference different forms and reusable form versions.
+- Manual demonstration:
+  - `Multi-Step Workflow Authoring`
+- Automated check:
+  - `cargo test -p tessara-api`
+
+- Exit condition:
+  - Assignment works from both an organization node and the global assignment console using only valid node/workflow/assignee combinations.
+- Manual demonstration:
+  - `Contextual Workflow Assignment`
+- Automated check:
+  - `cargo test -p tessara-api`
+  - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`
+
+- Exit condition:
+  - Starting and submitting step 1 activates the next step as the active work item through the UI.
+- Manual demonstration:
+  - `Step Runtime Handoff`
+- Automated check:
+  - `cargo test -p tessara-api`
+  - `npx playwright test`
+
+- Exit condition:
+  - Touched workflow, organization, home, and response routes remain native, refresh-safe, and compatible with existing single-step behavior.
+- Manual demonstration:
+  - `Backward Compatibility And Native Routes`
+- Automated check:
+  - `cargo test -p tessara-web`
+  - `.\scripts\smoke.ps1`
+
+- Exit condition:
+  - Deferred UX work is captured without making the later one-draft/one-active/retired lifecycle or delegated Home redesign harder.
+- Manual demonstration:
+  - `Deferred Rust/UI Styling Detour`
+- Automated check:
+  - roadmap/progress documentation review in this closeout entry
+
+## 2026-05-06 - Sprint 2E Rust/UI Table Pivot
+
+- Completed:
+  - pivoted the Sprint 2E workflow directory and assignment directory tables toward Rust/UI-style component structure instead of introducing DataTables.net
+  - added native table controls for search, status filtering, sorting, page size, row count summaries, and previous/next pagination
+  - kept workflow directory action buttons spaced at 6px, in a single row on wide screens and a single column on narrower screens
+  - added a future-work note to schedule a dedicated post-Sprint 2E design detour for adopting Rust/UI-style components across the broader application
+  - expanded the Rust/UI design-detour note to include stylesheet consolidation, including a single documented app stylesheet entrypoint, named SCSS partials, clarified handling for the parallel `crates/tessara-web/assets/base.css` path, and deployed-CSS selector verification
+- Validation:
+  - `cargo fmt --all`
+  - `cargo check -p tessara-web --target wasm32-unknown-unknown --no-default-features --features hydrate`
+  - `cargo test -p tessara-web`
+  - `cargo test -p tessara-api`
+  - `.\scripts\local-launch.ps1`
+- Remaining:
+  - run Playwright, smoke, and UAT coverage before final Sprint 2E closeout
+
+## 2026-05-05 - Sprint 2E Concrete Lineage Demo Forms
+
+- Completed:
+  - added two published Activity-scoped demo forms linked to sibling Activities: `Demo Intake Activity Checkpoint` on `Demo Activity Intake and Orientation` and `Demo Workshop Activity Checkpoint` on `Demo Activity Family Workshops`
+  - expanded form version summaries with linked assignment-node context so workflow authoring can reason about concrete nodes, not only node types
+  - updated workflow step option filtering so a first Activity-linked form excludes sibling Activity-linked forms while still allowing ancestors and descendants on the same line
+  - tightened publish validation so sibling concrete form assignment nodes are rejected even when their forms share the same node type
+  - updated runtime step-node resolution and assignment candidates to prefer a form version's linked nodes before falling back to node-type compatibility
+  - updated demo seed expectations from four to six forms and added regression coverage for sibling Activity workflow rejection
+- Validation:
+  - `cargo fmt --all`
+  - `cargo check -p tessara-api`
+  - `cargo check -p tessara-web --target wasm32-unknown-unknown --no-default-features --features hydrate`
+  - `TEST_DATABASE_URL=postgres://tessara:tessara@localhost:5432/tessara_test cargo test -p tessara-api workflow_publish_rejects_sibling_step_form_assignment_nodes -- --nocapture`
+  - `TEST_DATABASE_URL=postgres://tessara:tessara@localhost:5432/tessara_test cargo test -p tessara-api demo_seed_creates_full_uat_dataset_and_is_repeatable -- --nocapture`
+  - `.\scripts\local-launch.ps1`
+- Remaining:
+  - run full API, Playwright, smoke, and UAT coverage before Sprint 2E closeout
+
+## 2026-05-04 - Sprint 2E Workflow UX Feedback Pass
+
+- Completed:
+  - removed the visible legacy Linked Form selector from workflow create/edit because forms are now selected per workflow step
+  - changed new workflow-version authoring to create and publish in one action from the operator's point of view
+  - made workflow metadata create/update payloads tolerate an omitted legacy form anchor while preserving backward compatibility
+  - preselect assignment candidates when arriving with a node/workflow context, moved assignees below the candidate picker, and made the multiselect taller
+  - refreshed assignment results in place after bulk creation and converted the assignment directory to a table
+  - redirected response users directly into the next workflow step after submit when one is available
+  - added a server-side start guard so later workflow steps cannot be started before the previous step is completed
+- Validation:
+  - `cargo fmt --all`
+  - `cargo check -p tessara-web --target wasm32-unknown-unknown --no-default-features --features hydrate`
+  - `TEST_DATABASE_URL=postgres://tessara:tessara@localhost:5432/tessara_test cargo test -p tessara-api multi_step_workflow_ -- --nocapture`
+  - `cargo test -p tessara-api --no-run`
+  - `cargo test -p tessara-web --no-run`
+- Remaining:
+  - run full API, Playwright, smoke, and UAT coverage before Sprint 2E closeout
+
+## 2026-05-04 - Sprint 2E Lineage-Pinned Workflow Form Collections
+
+- Completed:
+  - refined composed workflow validation so every step form scope must stay on one straight node-type lineage with no branching
+  - pinned assignment candidates to the highest/broadest component form scope, so Program plus Activity workflows assign at Program, not Partner
+  - kept descendant step execution intact: a Program-assigned workflow can start an Activity-scoped step against the matching descended Activity node
+  - filtered workflow authoring form-version choices client-side after step selection so later steps stay within the selected lineage
+  - applied assignment-candidate validation to direct create/update paths, not only candidate and bulk assignment flows
+  - added regression coverage for Program-to-Activity workflow execution, highest-scope candidate pinning, and branching publish rejection
+- Validation:
+  - `cargo fmt --all`
+  - `TEST_DATABASE_URL=postgres://tessara:tessara@localhost:5432/tessara_test cargo test -p tessara-api multi_step_workflow_ -- --nocapture`
+  - `TEST_DATABASE_URL=postgres://tessara:tessara@localhost:5432/tessara_test cargo test -p tessara-api workflow_publish_rejects_branching_step_form_scopes -- --nocapture`
+  - `cargo test -p tessara-api --no-run`
+  - `cargo test -p tessara-web --no-run`
+  - `cargo check -p tessara-web --target wasm32-unknown-unknown --no-default-features --features hydrate`
+- Remaining:
+  - run full API, Playwright, smoke, and UAT coverage before Sprint 2E closeout
+
+## 2026-05-04 - Sprint 2E Descendant Step Scope Compatibility
+
+- Completed:
+  - replaced the incorrect single-node-type publish rule with composed step validation that allows different form scopes in one workflow version
+  - changed workflow assignment candidates to accept a node when every step form can resolve to that node or one of its descendants
+  - changed step start runtime so each submission uses the resolved node for that step's form while the workflow assignment/instance remains attached to the workflow node
+  - fixed pending-card and submission runtime step counts to count the full workflow version instead of only the currently selected row
+  - moved multi-step test respondent login after demo seeding and added a Program-to-Activity descendant-scope regression test
+  - redeployed the local app and confirmed the previously failing draft workflow version publishes successfully
+- Validation:
+  - `cargo fmt --all`
+  - `TEST_DATABASE_URL=postgres://tessara:tessara@localhost:5432/tessara_test cargo test -p tessara-api multi_step_workflow_ -- --nocapture`
+  - `cargo test -p tessara-api --no-run`
+  - `cargo test -p tessara-web --no-run`
+  - `cargo check -p tessara-web --target wasm32-unknown-unknown --no-default-features --features hydrate`
+  - `.\scripts\local-launch.ps1 -SkipSeed`
+- Remaining:
+  - run full API, Playwright, smoke, and UAT coverage before Sprint 2E closeout
+
+## 2026-05-04 - Sprint 2E Workflow Step Authoring Controls
+
+- Completed:
+  - replaced the fixed three-row workflow version editor with dynamic step rows
+  - added authoring controls to add, remove, move up, and move down workflow steps before creating a workflow version
+  - changed step collection to read the current DOM order so submitted step position matches the operator-authored order
+- Validation:
+  - `cargo fmt --all`
+  - `cargo test -p tessara-web --no-run`
+  - `cargo test -p tessara-api --no-run`
+- Remaining:
+  - add Playwright coverage for add/remove/reorder and run browser verification against a local app instance
+
+## 2026-05-04 - Sprint 2E Reusable Form Workflow Ingredients
+
+- Completed:
+  - expanded Sprint 2E scope so a form and any published form version can be included in any number of workflows
+  - dropped the remaining `workflows.form_id` exclusivity in the Sprint 2E migration, alongside the existing `workflow_versions.form_version_id` uniqueness removal
+  - removed API validation that enforced one workflow per form while preserving unique workflow slugs
+  - tightened the legacy published-form compatibility helper so it updates only the generated default workflow/version instead of grabbing any workflow version that uses the same form version
+  - updated form detail reads so workflows are shown when a form appears through any workflow step, not only through the legacy workflow anchor
+  - added API regression coverage for reusing the same form version across multiple workflows and for showing step-form workflow usage from form detail
+- Validation:
+  - `cargo fmt --all`
+  - `cargo test -p tessara-api --no-run`
+  - `cargo test -p tessara-api form_versions_can_be_reused_across_workflows -- --nocapture`
+- Remaining:
+  - run the full DB-backed API suite, Playwright flow, smoke, local launch, and UAT once the broader Sprint 2E polish pass is complete
+
+## 2026-05-04 - Sprint 2E Kickoff
+
+- Completed:
+  - confirmed clean `main` and selected `Sprint 2E: Multi-Step Workflow Authoring And Execution` from the single roadmap `(Next)` marker
+  - created branch `codex/sprint-2e` with worktree `C:\Users\ericw\Projects\tessara-sprint-2e`
+  - added the Sprint 2E plan at `C:\Users\ericw\Projects\tessara-sprint-2e\docs\sprints\sprint-2e-plan.md`
+- Validation Plan:
+  - `cargo fmt --all`
+  - `cargo test -p tessara-api`
+  - `cargo test -p tessara-web`
+  - `cd end2end; npx playwright test`
+  - `.\scripts\smoke.ps1`
+  - `.\scripts\local-launch.ps1`
+  - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`
+- Immediate Focus:
+  - implement workflow versions as ordered form collections with same-assignee automatic step handoff and shared assignment eligibility APIs
+
 ## 2026-05-04 - Sprint 2D Closeout
 
 - Completed:

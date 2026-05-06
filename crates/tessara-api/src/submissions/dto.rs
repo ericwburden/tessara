@@ -57,13 +57,22 @@ pub struct SubmissionSummary {
     pub form_id: Uuid,
     pub form_version_id: Uuid,
     pub form_name: String,
+    pub workflow_name: Option<String>,
     pub workflow_description: Option<String>,
+    pub workflow_step_position: Option<i32>,
+    pub workflow_step_count: Option<i64>,
+    pub workflow_steps_completed: Option<i64>,
+    pub current_workflow_step_title: Option<String>,
+    pub next_workflow_step_title: Option<String>,
+    pub next_workflow_step_form_name: Option<String>,
+    pub assigned_to_display_name: Option<String>,
     pub version_label: String,
     pub node_id: Uuid,
     pub node_name: String,
     pub status: String,
     pub value_count: i64,
     pub created_at: chrono::DateTime<chrono::Utc>,
+    pub last_modified_at: chrono::DateTime<chrono::Utc>,
     pub submitted_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
@@ -81,6 +90,26 @@ pub struct SubmissionDetail {
     pub submitted_at: Option<chrono::DateTime<chrono::Utc>>,
     pub values: Vec<SubmissionValueDetail>,
     pub audit_events: Vec<SubmissionAuditEventSummary>,
+    pub runtime: Option<SubmissionRuntimeDetail>,
+}
+
+#[derive(Serialize)]
+pub struct SubmissionRuntimeDetail {
+    pub workflow_name: String,
+    pub current_step_title: String,
+    pub current_step_position: i32,
+    pub step_count: i64,
+    pub next_step_title: Option<String>,
+    pub history: Vec<SubmissionRuntimeStepHistory>,
+}
+
+#[derive(Serialize)]
+pub struct SubmissionRuntimeStepHistory {
+    pub title: String,
+    pub form_name: String,
+    pub status: String,
+    pub position: i32,
+    pub completed_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 #[derive(Serialize)]

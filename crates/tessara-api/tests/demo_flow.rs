@@ -51,7 +51,7 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
     assert_eq!(seed["node_counts"]["programs"], 4);
     assert_eq!(seed["node_counts"]["activities"], 6);
     assert_eq!(seed["node_counts"]["sessions"], 8);
-    assert_eq!(seed["form_count"], 4);
+    assert_eq!(seed["form_count"], 6);
     assert_eq!(seed["draft_submission_count"], 4);
     assert_eq!(seed["submitted_submission_count"], 8);
     assert_eq!(seed["report_count"], 4);
@@ -67,7 +67,7 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
         authorized_request("GET", "/api/app/summary", &token, None),
     )
     .await;
-    assert_eq!(app_summary["published_form_versions"], 4);
+    assert_eq!(app_summary["published_form_versions"], 6);
     assert_eq!(app_summary["draft_submissions"], 4);
     assert_eq!(app_summary["submitted_submissions"], 8);
     assert_eq!(app_summary["datasets"], 0);
@@ -1301,7 +1301,7 @@ async fn demo_seed_creates_full_uat_dataset_and_is_repeatable() {
     assert_eq!(first_seed["node_counts"]["programs"], 4);
     assert_eq!(first_seed["node_counts"]["activities"], 6);
     assert_eq!(first_seed["node_counts"]["sessions"], 8);
-    assert_eq!(first_seed["form_count"], 4);
+    assert_eq!(first_seed["form_count"], 6);
     assert_eq!(first_seed["draft_submission_count"], 4);
     assert_eq!(first_seed["submitted_submission_count"], 8);
     assert_eq!(first_seed["report_count"], 4);
@@ -1362,6 +1362,8 @@ async fn demo_seed_creates_full_uat_dataset_and_is_repeatable() {
         "Demo Partner Profile",
         "Demo Program Snapshot",
         "Demo Activity Plan",
+        "Demo Intake Activity Checkpoint",
+        "Demo Workshop Activity Checkpoint",
         "Demo Session Log",
     ] {
         assert!(

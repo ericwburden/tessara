@@ -235,7 +235,7 @@ pub async fn submit_submission(
         ));
     }
 
-    repo::complete_workflow_step_for_submission(pool, submission_id).await?;
+    workflows::complete_workflow_step_and_advance(pool, submission_id).await?;
     repo::audit_submission(pool, submission_id, "submit", Some(account.account_id)).await?;
     Ok(submission_id)
 }

@@ -1590,6 +1590,12 @@ pub fn OrganizationDetailPage() -> impl IntoView {
                 <div class="actions">
                     <a class="button-link button is-light" href="/app/organization">"Back to Explorer"</a>
                     <a
+                        class="button-link button is-primary"
+                        href=move || format!("/app/workflows/assignments?nodeId={}", node_id_value.get_value())
+                    >
+                        "Assign Workflow"
+                    </a>
+                    <a
                         class="button-link button is-light"
                         href=move || format!("/app/organization/{}/edit", node_id_value.get_value())
                     >

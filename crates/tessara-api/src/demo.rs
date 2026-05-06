@@ -50,10 +50,14 @@ pub struct DemoSeedSummary {
     pub partner_form_id: Uuid,
     pub program_form_id: Uuid,
     pub activity_form_id: Uuid,
+    pub intake_activity_form_id: Uuid,
+    pub workshop_activity_form_id: Uuid,
     pub session_form_id: Uuid,
     pub partner_form_version_id: Uuid,
     pub program_form_version_id: Uuid,
     pub activity_form_version_id: Uuid,
+    pub intake_activity_form_version_id: Uuid,
+    pub workshop_activity_form_version_id: Uuid,
     pub session_form_version_id: Uuid,
     pub analytics_values: i64,
 }
@@ -801,6 +805,76 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         },
     )
     .await?;
+    let intake_activity_form = ensure_demo_form(
+        pool,
+        DemoFormSpec {
+            name: "Demo Intake Activity Checkpoint",
+            slug: "demo-intake-activity-checkpoint",
+            scope_node_type_id: activity_type_id,
+            compatibility_group_name: "Demo Intake Activity Checkpoint Compatible",
+            version_label: "1.0.0",
+            section_title: "Intake Activity Checkpoint",
+            fields: vec![
+                FormFieldDef {
+                    key: "checkpoint_notes",
+                    label: "Checkpoint Notes",
+                    field_type: "text",
+                    required: true,
+                    position: 1,
+                },
+                FormFieldDef {
+                    key: "orientation_complete",
+                    label: "Orientation Complete",
+                    field_type: "boolean",
+                    required: true,
+                    position: 2,
+                },
+                FormFieldDef {
+                    key: "families_ready",
+                    label: "Families Ready",
+                    field_type: "number",
+                    required: true,
+                    position: 3,
+                },
+            ],
+        },
+    )
+    .await?;
+    let workshop_activity_form = ensure_demo_form(
+        pool,
+        DemoFormSpec {
+            name: "Demo Workshop Activity Checkpoint",
+            slug: "demo-workshop-activity-checkpoint",
+            scope_node_type_id: activity_type_id,
+            compatibility_group_name: "Demo Workshop Activity Checkpoint Compatible",
+            version_label: "1.0.0",
+            section_title: "Workshop Activity Checkpoint",
+            fields: vec![
+                FormFieldDef {
+                    key: "workshop_notes",
+                    label: "Workshop Notes",
+                    field_type: "text",
+                    required: true,
+                    position: 1,
+                },
+                FormFieldDef {
+                    key: "materials_ready",
+                    label: "Materials Ready",
+                    field_type: "boolean",
+                    required: true,
+                    position: 2,
+                },
+                FormFieldDef {
+                    key: "expected_families",
+                    label: "Expected Families",
+                    field_type: "number",
+                    required: true,
+                    position: 3,
+                },
+            ],
+        },
+    )
+    .await?;
     let session_form = ensure_demo_form(
         pool,
         DemoFormSpec {
@@ -1089,6 +1163,20 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         delegate_account_id,
     )
     .await?;
+    ensure_form_assignment(
+        pool,
+        intake_activity_form.form_version_id,
+        activity_a,
+        respondent_account_id,
+    )
+    .await?;
+    ensure_form_assignment(
+        pool,
+        workshop_activity_form.form_version_id,
+        activity_b,
+        respondent_account_id,
+    )
+    .await?;
 
     let analytics_status = analytics::refresh_projection(pool).await?;
 
@@ -1182,7 +1270,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
             activities: 6,
             sessions: 8,
         },
-        form_count: 4,
+        form_count: 6,
         draft_submission_count: 4,
         submitted_submission_count: 8,
         report_count: 4,
@@ -1201,10 +1289,14 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         partner_form_id: partner_form.form_id,
         program_form_id: program_form.form_id,
         activity_form_id: activity_form.form_id,
+        intake_activity_form_id: intake_activity_form.form_id,
+        workshop_activity_form_id: workshop_activity_form.form_id,
         session_form_id: session_form.form_id,
         partner_form_version_id: partner_form.form_version_id,
         program_form_version_id: program_form.form_version_id,
         activity_form_version_id: activity_form.form_version_id,
+        intake_activity_form_version_id: intake_activity_form.form_version_id,
+        workshop_activity_form_version_id: workshop_activity_form.form_version_id,
         session_form_version_id: session_form.form_version_id,
         analytics_values: analytics_status.value_count,
     })

@@ -403,8 +403,28 @@ pub fn router(state: AppState) -> Router {
             post(workflows::publish_workflow_version),
         )
         .route(
+            "/api/workflow-versions/{workflow_version_id}/steps",
+            put(workflows::replace_workflow_version_steps),
+        )
+        .route(
+            "/api/workflow-versions/{workflow_version_id}",
+            delete(workflows::delete_workflow_version),
+        )
+        .route(
+            "/api/workflow-assignment-candidates",
+            get(workflows::list_assignment_candidates),
+        )
+        .route(
+            "/api/workflow-assignment-candidates/assignees",
+            get(workflows::list_assignment_candidate_assignees),
+        )
+        .route(
             "/api/workflow-assignments",
             get(workflows::list_workflow_assignments).post(workflows::create_workflow_assignment),
+        )
+        .route(
+            "/api/workflow-assignments/bulk",
+            post(workflows::bulk_create_workflow_assignments),
         )
         .route(
             "/api/workflow-assignments/pending",

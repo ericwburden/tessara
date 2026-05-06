@@ -8,8 +8,8 @@ use uuid::Uuid;
 use crate::{error::ApiResult, hierarchy::parse_field_type};
 
 use super::dto::{
-    ResponseNodeSummary, SubmissionAuditEventSummary, SubmissionDetail, SubmissionSummary,
-    SubmissionValueDetail,
+    ResponseNodeSummary, SubmissionAuditEventSummary, SubmissionDetail, SubmissionRuntimeDetail,
+    SubmissionRuntimeStepHistory, SubmissionSummary, SubmissionValueDetail,
 };
 
 pub struct SubmissionAccessRow {
@@ -352,6 +352,7 @@ pub async fn load_submission_detail(
     let form_version_id = row.try_get::<Uuid, _>("form_version_id")?;
     let values = load_submission_value_details(pool, submission_id, form_version_id).await?;
     let audit_events = load_submission_audit_events(pool, submission_id).await?;
+    let runtime = load_submission_runtime_detail(pool, submission_id).await?;
 
     Ok(Some(SubmissionDetail {
         id: row.try_get("id")?,
@@ -366,6 +367,87 @@ pub async fn load_submission_detail(
         submitted_at: row.try_get("submitted_at")?,
         values,
         audit_events,
+        runtime,
+    }))
+}
+
+async fn load_submission_runtime_detail(
+    pool: &PgPool,
+    submission_id: Uuid,
+) -> ApiResult<Option<SubmissionRuntimeDetail>> {
+    let Some(current) = sqlx::query(
+        r#"
+        SELECT
+            workflows.name AS workflow_name,
+            workflow_instances.id AS workflow_instance_id,
+            workflow_steps.workflow_version_id,
+            workflow_steps.title AS current_step_title,
+            workflow_steps.position AS current_step_position,
+            (
+                SELECT COUNT(*)
+                FROM workflow_steps AS all_steps
+                WHERE all_steps.workflow_version_id = workflow_steps.workflow_version_id
+            ) AS step_count,
+            next_steps.title AS next_step_title
+        FROM submissions
+        JOIN workflow_instances ON workflow_instances.id = submissions.workflow_instance_id
+        JOIN workflow_step_instances ON workflow_step_instances.id = submissions.workflow_step_instance_id
+        JOIN workflow_steps ON workflow_steps.id = workflow_step_instances.workflow_step_id
+        JOIN workflow_versions ON workflow_versions.id = workflow_steps.workflow_version_id
+        JOIN workflows ON workflows.id = workflow_versions.workflow_id
+        LEFT JOIN workflow_steps AS next_steps
+            ON next_steps.workflow_version_id = workflow_steps.workflow_version_id
+           AND next_steps.position = workflow_steps.position + 1
+        WHERE submissions.id = $1
+        "#,
+    )
+    .bind(submission_id)
+    .fetch_optional(pool)
+    .await?
+    else {
+        return Ok(None);
+    };
+
+    let workflow_instance_id: Uuid = current.try_get("workflow_instance_id")?;
+    let history_rows = sqlx::query(
+        r#"
+        SELECT
+            workflow_steps.title,
+            forms.name AS form_name,
+            workflow_step_instances.status,
+            workflow_steps.position,
+            workflow_step_instances.completed_at
+        FROM workflow_step_instances
+        JOIN workflow_steps ON workflow_steps.id = workflow_step_instances.workflow_step_id
+        JOIN form_versions ON form_versions.id = workflow_steps.form_version_id
+        JOIN forms ON forms.id = form_versions.form_id
+        WHERE workflow_step_instances.workflow_instance_id = $1
+        ORDER BY workflow_steps.position
+        "#,
+    )
+    .bind(workflow_instance_id)
+    .fetch_all(pool)
+    .await?;
+    let history = history_rows
+        .into_iter()
+        .map(|row| {
+            Ok(SubmissionRuntimeStepHistory {
+                title: row.try_get("title")?,
+                form_name: row.try_get("form_name")?,
+                status: row.try_get("status")?,
+                position: row.try_get("position")?,
+                completed_at: row.try_get("completed_at")?,
+            })
+        })
+        .collect::<Result<Vec<_>, sqlx::Error>>()?;
+
+    Ok(Some(SubmissionRuntimeDetail {
+        workflow_name: current.try_get("workflow_name")?,
+        current_step_title: current.try_get("current_step_title")?,
+        current_step_position: current.try_get("current_step_position")?,
+        step_count: current.try_get("step_count")?,
+        next_step_title: current.try_get("next_step_title")?,
+        history,
     }))
 }
 
@@ -485,6 +567,12 @@ pub async fn delete_workflow_instance_for_submission(
             FROM submissions
             WHERE id = $1
         )
+          AND NOT EXISTS (
+              SELECT 1
+              FROM workflow_step_instances
+              WHERE workflow_step_instances.workflow_instance_id = workflow_instances.id
+                AND workflow_step_instances.status = 'completed'
+          )
         "#,
     )
     .bind(submission_id)
@@ -618,13 +706,22 @@ fn submission_summary_from_row(row: PgRow) -> Result<SubmissionSummary, sqlx::Er
         form_id: row.try_get("form_id")?,
         form_version_id: row.try_get("form_version_id")?,
         form_name: row.try_get("form_name")?,
+        workflow_name: row.try_get("workflow_name")?,
         workflow_description: row.try_get("workflow_description")?,
+        workflow_step_position: row.try_get("workflow_step_position")?,
+        workflow_step_count: row.try_get("workflow_step_count")?,
+        workflow_steps_completed: row.try_get("workflow_steps_completed")?,
+        current_workflow_step_title: row.try_get("current_workflow_step_title")?,
+        next_workflow_step_title: row.try_get("next_workflow_step_title")?,
+        next_workflow_step_form_name: row.try_get("next_workflow_step_form_name")?,
+        assigned_to_display_name: row.try_get("assigned_to_display_name")?,
         version_label: row.try_get("version_label")?,
         node_id: row.try_get("node_id")?,
         node_name: row.try_get("node_name")?,
         status: row.try_get("status")?,
         value_count: row.try_get("value_count")?,
         created_at: row.try_get("created_at")?,
+        last_modified_at: row.try_get("last_modified_at")?,
         submitted_at: row.try_get("submitted_at")?,
     })
 }
@@ -635,12 +732,34 @@ SELECT
     forms.id AS form_id,
     submissions.form_version_id,
     forms.name AS form_name,
+    workflows.name AS workflow_name,
     workflows.description AS workflow_description,
+    workflow_steps.position AS workflow_step_position,
+    (
+        SELECT COUNT(*)
+        FROM workflow_steps AS all_steps
+        WHERE all_steps.workflow_version_id = workflow_versions.id
+    ) AS workflow_step_count,
+    (
+        SELECT COUNT(*)
+        FROM workflow_step_instances AS completed_steps
+        WHERE completed_steps.workflow_instance_id = submissions.workflow_instance_id
+          AND completed_steps.status = 'completed'
+    ) AS workflow_steps_completed,
+    workflow_steps.title AS current_workflow_step_title,
+    next_steps.title AS next_workflow_step_title,
+    next_forms.name AS next_workflow_step_form_name,
+    workflow_accounts.display_name AS assigned_to_display_name,
     form_versions.version_label,
     submissions.node_id,
     nodes.name AS node_name,
     submissions.status::text AS status,
     submissions.created_at,
+    COALESCE((
+        SELECT MAX(submission_audit_events.created_at)
+        FROM submission_audit_events
+        WHERE submission_audit_events.submission_id = submissions.id
+    ), submissions.created_at) AS last_modified_at,
     submissions.submitted_at,
     COUNT(submission_values.field_id) AS value_count
 FROM submissions
@@ -650,6 +769,14 @@ JOIN nodes ON nodes.id = submissions.node_id
 LEFT JOIN workflow_assignments ON workflow_assignments.id = submissions.workflow_assignment_id
 LEFT JOIN workflow_versions ON workflow_versions.id = workflow_assignments.workflow_version_id
 LEFT JOIN workflows ON workflows.id = workflow_versions.workflow_id
+LEFT JOIN accounts AS workflow_accounts ON workflow_accounts.id = workflow_assignments.account_id
+LEFT JOIN workflow_step_instances ON workflow_step_instances.id = submissions.workflow_step_instance_id
+LEFT JOIN workflow_steps ON workflow_steps.id = workflow_step_instances.workflow_step_id
+LEFT JOIN workflow_steps AS next_steps
+    ON next_steps.workflow_version_id = workflow_steps.workflow_version_id
+   AND next_steps.position = workflow_steps.position + 1
+LEFT JOIN form_versions AS next_form_versions ON next_form_versions.id = next_steps.form_version_id
+LEFT JOIN forms AS next_forms ON next_forms.id = next_form_versions.form_id
 LEFT JOIN submission_values ON submission_values.submission_id = submissions.id
 WHERE ($1::submission_status IS NULL OR submissions.status = $1::submission_status)
   AND ($2::uuid IS NULL OR forms.id = $2)
@@ -666,7 +793,15 @@ GROUP BY
     forms.id,
     submissions.form_version_id,
     forms.name,
+    workflows.name,
     workflows.description,
+    workflow_versions.id,
+    submissions.workflow_instance_id,
+    workflow_steps.position,
+    workflow_steps.title,
+    next_steps.title,
+    next_forms.name,
+    workflow_accounts.display_name,
     form_versions.version_label,
     submissions.node_id,
     nodes.name,
@@ -683,12 +818,34 @@ SELECT
     forms.id AS form_id,
     submissions.form_version_id,
     forms.name AS form_name,
+    workflows.name AS workflow_name,
     workflows.description AS workflow_description,
+    workflow_steps.position AS workflow_step_position,
+    (
+        SELECT COUNT(*)
+        FROM workflow_steps AS all_steps
+        WHERE all_steps.workflow_version_id = workflow_versions.id
+    ) AS workflow_step_count,
+    (
+        SELECT COUNT(*)
+        FROM workflow_step_instances AS completed_steps
+        WHERE completed_steps.workflow_instance_id = submissions.workflow_instance_id
+          AND completed_steps.status = 'completed'
+    ) AS workflow_steps_completed,
+    workflow_steps.title AS current_workflow_step_title,
+    next_steps.title AS next_workflow_step_title,
+    next_forms.name AS next_workflow_step_form_name,
+    workflow_accounts.display_name AS assigned_to_display_name,
     form_versions.version_label,
     submissions.node_id,
     nodes.name AS node_name,
     submissions.status::text AS status,
     submissions.created_at,
+    COALESCE((
+        SELECT MAX(submission_audit_events.created_at)
+        FROM submission_audit_events
+        WHERE submission_audit_events.submission_id = submissions.id
+    ), submissions.created_at) AS last_modified_at,
     submissions.submitted_at,
     COUNT(submission_values.field_id) AS value_count
 FROM submissions
@@ -698,6 +855,14 @@ JOIN nodes ON nodes.id = submissions.node_id
 LEFT JOIN workflow_assignments ON workflow_assignments.id = submissions.workflow_assignment_id
 LEFT JOIN workflow_versions ON workflow_versions.id = workflow_assignments.workflow_version_id
 LEFT JOIN workflows ON workflows.id = workflow_versions.workflow_id
+LEFT JOIN accounts AS workflow_accounts ON workflow_accounts.id = workflow_assignments.account_id
+LEFT JOIN workflow_step_instances ON workflow_step_instances.id = submissions.workflow_step_instance_id
+LEFT JOIN workflow_steps ON workflow_steps.id = workflow_step_instances.workflow_step_id
+LEFT JOIN workflow_steps AS next_steps
+    ON next_steps.workflow_version_id = workflow_steps.workflow_version_id
+   AND next_steps.position = workflow_steps.position + 1
+LEFT JOIN form_versions AS next_form_versions ON next_form_versions.id = next_steps.form_version_id
+LEFT JOIN forms AS next_forms ON next_forms.id = next_form_versions.form_id
 LEFT JOIN submission_values ON submission_values.submission_id = submissions.id
 WHERE submissions.node_id = ANY($1)
   AND ($2::submission_status IS NULL OR submissions.status = $2::submission_status)
@@ -715,7 +880,15 @@ GROUP BY
     forms.id,
     submissions.form_version_id,
     forms.name,
+    workflows.name,
     workflows.description,
+    workflow_versions.id,
+    submissions.workflow_instance_id,
+    workflow_steps.position,
+    workflow_steps.title,
+    next_steps.title,
+    next_forms.name,
+    workflow_accounts.display_name,
     form_versions.version_label,
     submissions.node_id,
     nodes.name,
@@ -732,18 +905,49 @@ SELECT
     forms.id AS form_id,
     submissions.form_version_id,
     forms.name AS form_name,
+    workflows.name AS workflow_name,
     workflows.description AS workflow_description,
+    workflow_steps.position AS workflow_step_position,
+    (
+        SELECT COUNT(*)
+        FROM workflow_steps AS all_steps
+        WHERE all_steps.workflow_version_id = workflow_versions.id
+    ) AS workflow_step_count,
+    (
+        SELECT COUNT(*)
+        FROM workflow_step_instances AS completed_steps
+        WHERE completed_steps.workflow_instance_id = submissions.workflow_instance_id
+          AND completed_steps.status = 'completed'
+    ) AS workflow_steps_completed,
+    workflow_steps.title AS current_workflow_step_title,
+    next_steps.title AS next_workflow_step_title,
+    next_forms.name AS next_workflow_step_form_name,
+    workflow_assignments.account_id,
+    accounts.display_name AS assigned_to_display_name,
     form_versions.version_label,
     submissions.node_id,
     nodes.name AS node_name,
     submissions.status::text AS status,
     submissions.created_at,
+    COALESCE((
+        SELECT MAX(submission_audit_events.created_at)
+        FROM submission_audit_events
+        WHERE submission_audit_events.submission_id = submissions.id
+    ), submissions.created_at) AS last_modified_at,
     submissions.submitted_at,
     COUNT(submission_values.field_id) AS value_count
 FROM submissions
 JOIN workflow_assignments ON workflow_assignments.id = submissions.workflow_assignment_id
 JOIN workflow_versions ON workflow_versions.id = workflow_assignments.workflow_version_id
 JOIN workflows ON workflows.id = workflow_versions.workflow_id
+JOIN accounts ON accounts.id = workflow_assignments.account_id
+LEFT JOIN workflow_step_instances ON workflow_step_instances.id = submissions.workflow_step_instance_id
+LEFT JOIN workflow_steps ON workflow_steps.id = workflow_step_instances.workflow_step_id
+LEFT JOIN workflow_steps AS next_steps
+    ON next_steps.workflow_version_id = workflow_steps.workflow_version_id
+   AND next_steps.position = workflow_steps.position + 1
+LEFT JOIN form_versions AS next_form_versions ON next_form_versions.id = next_steps.form_version_id
+LEFT JOIN forms AS next_forms ON next_forms.id = next_form_versions.form_id
 JOIN form_versions ON form_versions.id = submissions.form_version_id
 JOIN forms ON forms.id = form_versions.form_id
 JOIN nodes ON nodes.id = submissions.node_id
@@ -764,7 +968,16 @@ GROUP BY
     forms.id,
     submissions.form_version_id,
     forms.name,
+    workflows.name,
     workflows.description,
+    workflow_versions.id,
+    submissions.workflow_instance_id,
+    workflow_steps.position,
+    workflow_steps.title,
+    next_steps.title,
+    next_forms.name,
+    workflow_assignments.account_id,
+    accounts.display_name,
     form_versions.version_label,
     submissions.node_id,
     nodes.name,
