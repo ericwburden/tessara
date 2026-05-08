@@ -110,30 +110,67 @@ This should reinforce the product themes of:
 | Surface | `#FFFFFF` | cards, panels, inputs |
 | Teal | `#14B8A6` | primary action, primary accent |
 | Orange | `#F59E0B` | focus outline and highlight accent |
-| Lime | `#84CC16` | secondary workflow accent |
+| Lime | `#84CC16` | success and completed states |
+| Cyan | `#06B6D4` | secondary accent |
+| Indigo | `#6366F1` | informational states and neutral system feedback |
+| Red | `#DC2626` | danger, destructive action, and error states |
+
+### Semantic color schemes
+
+Components MUST consume semantic color tokens rather than reaching directly for raw palette names unless they are brand assets or static illustrations.
+
+| Semantic role | Base color | Foreground | Soft background | Border | Use |
+| --- | --- | --- | --- | --- | --- |
+| Primary accent | Teal `#14B8A6` | Ink `#0F172A` | `rgba(20, 184, 166, 0.16)` | `rgba(20, 184, 166, 0.30)` | primary actions, active navigation, key links, selected productive state |
+| Secondary accent | Cyan `#06B6D4` | Ink `#0F172A` | `rgba(6, 182, 212, 0.16)` | `rgba(6, 182, 212, 0.30)` | secondary workflow cues, supporting accents, non-primary feature affordances |
+| Info | Indigo `#6366F1` | Light `#F8FAFC` | `rgba(99, 102, 241, 0.16)` | `rgba(99, 102, 241, 0.30)` | neutral notices, pending or queued system state, explanatory feedback |
+| Success | Lime `#84CC16` | Ink `#0F172A` | `rgba(132, 204, 22, 0.16)` | `rgba(132, 204, 22, 0.30)` | completed work, saved changes, confirmed success |
+| Warning | Orange `#F59E0B` | Ink `#0F172A` | `rgba(245, 158, 11, 0.16)` | `rgba(245, 158, 11, 0.30)` | pending work, unsaved or intermediate states, focus and caution |
+| Danger | Red `#DC2626` | Light `#F8FAFC` | `rgba(220, 38, 38, 0.16)` | `rgba(220, 38, 38, 0.32)` | destructive actions, validation errors, blocked state |
+
+Rules:
+
+- Primary accent is the default for affirmative product actions and selected productive UI.
+- Secondary accent is not a second primary button color. Use it for supporting state or workflow cues.
+- Info is for neutral system feedback and should not imply success.
+- Success should remain quieter than warning and danger.
+- Warning doubles as the default focus color unless a component has a specific accessibility reason to use another semantic color.
+- Danger must always be paired with clear text, not color alone.
+- Semantic soft backgrounds should be used for badges, notices, active nav states, and selected rows. Solid semantic fills should be reserved for buttons and strong action affordances.
 
 ### Color and theme rules
 
 - Prefer light application surfaces with `Light` backgrounds and `Surface` cards.
 - Use `Ink` for primary text and `Slate Mid` for muted text.
-- Use `Teal` for primary buttons and major action emphasis.
-- Use `Orange` for keyboard focus outlines.
-- Use `Teal`, `Lime`, and `Orange` deliberately. Do not introduce unrelated accent colors without updating this document.
+- Use semantic roles for component state and interaction color.
+- Use Primary accent for primary buttons and major action emphasis.
+- Use Warning for keyboard focus outlines.
+- Use Primary accent, Secondary accent, Info, Success, Warning, and Danger deliberately. Do not introduce unrelated semantic roles or hues without updating this document.
 - Tessara supports both light and dark themes through the same shared shell and component system.
 - The dark theme MUST use only the approved palette plus opacity variants. Do not introduce new hues without updating this document.
-- In dark theme, use `Ink` for shell background, `Slate Dark` for surfaces, `Light` for primary foreground text, `Slate Mid` for muted text, `Neutral` for borders, `Teal` for links and primary actions, `Orange` for focus, and `Lime` for secondary accent states.
+- In dark theme, use `Ink` for shell background, `Slate Dark` for surfaces, `Light` for primary foreground text, `Slate Mid` for muted text, `Neutral` for borders, Primary accent for links and primary actions, Warning for focus, and Secondary accent for secondary workflow cues.
 
 ### Theme selector behavior
 
 The shell-level theme selector MUST:
 
 - appear in the shared shell chrome rather than inside individual page actions
-- live in the sidebar account/footer context area rather than as a full theme control group in the top app bar
+- live in the top app bar utility row between global search and notification/help controls
+- use the Rust/UI Theme Toggle structure and Tessara shell styling
 - offer `System`, `Light`, and `Dark`
 - follow system theme by default
 - persist explicit user choice between sessions
 
 ### Icon and wordmark guidance
+
+The canonical Tessara app icon is the A4.5 flat mosaic mark:
+
+- a freestanding mosaic of triangular corner pieces and diamond tiles
+- no padded color-field background around the mark
+- Slate Dark `#334155` outlines for standard and large brand assets
+- a center diamond cutout rather than a filled center tile
+- simplified no-outline geometry for 40px and smaller uses
+- relatively thicker outlines for the 64px icon
 
 Brand assets already tracked in the repo:
 
@@ -148,11 +185,13 @@ Brand assets already tracked in the repo:
 
 Usage rules:
 
-- keep one accent tile per face in the brand mark
+- use the A4.5 mosaic mark as the default product iconography
 - use simplified favicons at small sizes
 - avoid distorting icon proportions
 - keep sufficient contrast on light backgrounds
 - treat application CSS tokens as the implementation expression of this palette
+- use Rust/UI native Leptos icon components for application chrome and route icons when an appropriate icon exists
+- reserve custom SVG assets for the Tessara brand mark, favicons, and bespoke product illustrations
 
 ### Metadata and asset integration
 
@@ -275,6 +314,7 @@ Mobile (below `md`):
 Responsive requirements:
 
 - No page may require horizontal scrolling at the app-shell level.
+- The primary navigation surface MUST span the full viewport height. The main workspace/content region scrolls independently beside it.
 - Page headers MUST stack cleanly on narrower screens.
 - Multi-column forms MUST collapse to one column.
 - Dashboard tiles MUST reflow to a single-column stack on narrow widths.
@@ -294,6 +334,10 @@ Behavior:
 - Tablet MUST default to collapsed.
 - Mobile MUST use overlay behavior, not reserved width.
 - Collapsed state MUST show icons, active state, and tooltips or reveal behavior.
+- Collapsed navigation groups MUST use horizontal separator rules instead of text group labels.
+- Mobile navigation SHOULD be revealed from a hamburger menu and reuse the same navigation content as the permanent sidebar.
+- Mobile navigation MUST close when users click outside the drawer.
+- Mobile navigation launch controls MUST NOT remain layered over the open drawer.
 - Sidebar nav groups SHOULD be separated by spacing rather than heavy dividers.
 - Avoid deep always-expanded trees in main navigation.
 - The Organization nav item MAY expose a quiet node-type ladder beneath it when hierarchy context is important.
@@ -484,21 +528,23 @@ Use islands selectively for widget-level enhancements on otherwise read-heavy pa
 Font families:
 
 - primary UI font: `Inter`
+- heading font: `DM Sans`
 - monospace font: `JetBrains Mono`
 
 Recommended weights:
 
 - Inter: `400, 500, 600, 700`
+- DM Sans: `500, 650, 750`
 - JetBrains Mono: `400, 500, 600`
 
 Type scale:
 
 | Token | Size / Line height | Weight | Use |
 | --- | --- | --- | --- |
-| `text-display` | `32 / 40` | `700` | rare landing or hero-like headings only |
-| `text-page-title` | `24 / 32` | `600` | page titles |
-| `text-section-title` | `18 / 24` | `600` | section headings |
-| `text-panel-title` | `16 / 24` | `600` | panel or tile headings |
+| `text-display` | `36 / 44` | `750` | rare landing or hero-like headings only |
+| `text-page-title` | `32 / 40` | `750` | page titles and route-level `h1` headings |
+| `text-section-title` | `18 / 24` | `750` | section headings |
+| `text-panel-title` | `16 / 24` | `650` | panel or tile headings |
 | `text-body` | `14 / 20` | `400` | standard body text |
 | `text-body-strong` | `14 / 20` | `500` | slight emphasis in body text |
 | `text-label` | `13 / 18` | `500` | field labels |
@@ -519,6 +565,12 @@ Typographic behavior:
 - Tables MUST default to `13px` body text.
 - Supporting text SHOULD generally use `12px`.
 - Hierarchy SHOULD come from weight, spacing, and placement before large jumps in size.
+- Headings SHOULD use `DM Sans` by default while body text remains `Inter`.
+- Route-level `h1` headings SHOULD use the primary accent color and the `text-page-title` size.
+- Heading styles SHOULD follow the adopted Option E direction: polished admin headings with a short accent rule for section-level headings.
+- Page titles SHOULD rely on font, weight, and spacing for distinctiveness rather than eyebrow labels.
+- Section headings SHOULD use a short accent rule below the text when they need to act as landmarks in dense screens.
+- Eyebrow text is no longer a default heading primitive. Use it only when it carries necessary information that the title cannot naturally carry, such as route scope, record state, or a compact classification label.
 
 Numerals:
 
@@ -1284,7 +1336,7 @@ Rules:
 
 Number formatting beyond the tabular-numeral rules above is not yet globally ratified. Keep formatting consistent within a local surface, but do not treat any unapproved global number-format pattern as binding.
 
-## Transitional constraints and roadmap alignment
+## Reset constraints and roadmap alignment
 
 ### Target asset language
 
@@ -1302,20 +1354,15 @@ Preferred future authoring and viewing split:
 - Components: authoring, publish or version detail, and viewer
 - Dashboards: composition and viewer
 
-### Transitional UI constraints
+### Native reset constraints
 
-The current app still exposes transitional reporting concepts in code and screens:
+The reset application starts from a native Leptos SSR baseline.
 
-- report list, detail, and edit flows
-- aggregation configuration and execution paths
-- chart-specific builder and viewer paths
-
-Until the transition is complete:
-
-- existing report, aggregation, and chart routes may remain in service if needed for user testing
-- new planning should describe them as transitional, not final
-- new screen work should avoid deepening the old model unless needed to preserve a usable application between sprints
-- the retained JavaScript controller is a temporary bridge and should be tracked route-by-route until each bridged surface has a native Leptos replacement
+- Active routes MUST be implemented as native Leptos components returning views.
+- Active routes MUST NOT render UI through HTML strings, `inner_html`, retained JavaScript controllers, bridge routes, or compatibility shells.
+- Broad legacy UI files MUST NOT be copied into the reset application.
+- Functional/domain code MAY be migrated from the reference worktree when it supports a native route.
+- Reports, aggregations, and chart-specific builder concepts remain out of the default UI unless product scope is explicitly reaffirmed.
 
 ### Immediate roadmap implications
 
@@ -1378,9 +1425,13 @@ Out of scope for this UI guidance:
 
 ### Foundations
 
-- [ ] Inter is the default UI font.
+- [ ] Inter is the default body UI font.
+- [ ] DM Sans is the default heading font.
 - [ ] JetBrains Mono is used only for code-like or system text.
 - [ ] Type sizes match the approved scale.
+- [ ] Page and section headings do not rely on eyebrow text for hierarchy.
+- [ ] Components use semantic color roles instead of raw palette colors.
+- [ ] Primary, secondary, info, success, warning, and danger states are visually distinct and text-labeled.
 - [ ] Structured data uses tabular numerals.
 - [ ] Spacing uses approved tokens only.
 - [ ] Controls and surfaces use the approved radius scale.
@@ -1452,11 +1503,9 @@ Out of scope for this UI guidance:
 
 ## Practical implementation note
 
-When there is a conflict between a legacy screen and this document, default to this document unless:
+When there is a conflict between a legacy screen and this document, default to this document unless the governing product requirement or architecture document requires a narrower constraint.
 
-1. the legacy behavior is required by product functionality
-2. a transitional route must remain in service to preserve a usable application between sprints
-3. the governing product requirement or architecture document requires a narrower constraint
+Before adding or designing a UI element, engineers MUST check whether Rust/UI already provides a suitable native Leptos component or pattern. If a suitable Rust/UI option exists, suggest it and prefer it as the implementation baseline. Custom UI is acceptable when Rust/UI lacks the needed component, when the product interaction needs a deliberately different pattern, or when the element is a Tessara brand asset or bespoke illustration.
 
 When in doubt, favor:
 
@@ -1466,245 +1515,117 @@ When in doubt, favor:
 - explicit state communication over visual ambiguity
 - fewer, stronger patterns over many custom ones
 
-## Appendix A: Shared Primitive Contracts
+## Appendix A: Native Primitive Contracts
 
-These appendices describe the shared primitive contracts that exist in the repo today. They do not override the design rules above. When a primitive contract conflicts with the main body of this document, the main body wins.
+These appendices describe the shared primitive contracts for the reset application. They do not override the design rules above. When a primitive contract conflicts with the main body of this document, the main body wins.
 
-### Current primitive layers
+### Current primitive layer
 
-There are two real primitive layers in the repo today:
+The reset application has one active UI primitive layer:
 
-1. `crates/tessara-web/src/features/native_shell.rs`
-   - Leptos-native wrappers for shared SSR route structure.
-   - Current stable surface primitives:
-     - `NativePage`
-     - `PageHeader`
-     - `MetadataStrip`
-     - `Panel`
-   - These are the default choice for native `/app` routes.
-2. `crates/tessara-ui/src/lib.rs`
-   - HTML helper primitives used by compatibility surfaces and older string-rendered route builders.
-   - Current stable helpers:
-     - `action_group`
-     - `page_header`
-     - `panel`
-     - `panel_with_header`
-     - `card`
-     - `field_wrapper`
-     - `checkbox_field`
-     - `toolbar`
+- `crates/tessara-web/src/ui/components.rs`
+  - Leptos-native SSR components for shared shell, navigation, page framing, buttons, overlays, tables, and state surfaces.
+  - Active primitives include:
+    - `AppShell`
+    - `Sidebar`
+    - `TopAppBar`
+    - `PageHeader`
+    - `Button`
+    - `IconButton`
+    - `DropdownMenu`
+    - `Drawer`
+    - `Sheet`
+    - `DataTable`
+    - `InfoListTable`
+    - `StatusBadge`
+    - `EmptyState`
 
-These layers are not fully converged yet. New native SSR route work SHOULD prefer the `native_shell` components. Use raw `tessara-ui` HTML helpers only when extending a compatibility surface or when extracting a shared contract that does not yet have a Leptos-native wrapper.
+Rules:
 
-### Native page shell
+- New route UI MUST use native Leptos components and `view!` markup.
+- Shared primitives SHOULD be extended in `crates/tessara-web/src/ui/components.rs` before route-local variants are introduced.
+- Application chrome and route icons SHOULD use Rust/UI native Leptos icon components where an appropriate icon exists.
+- Tessara brand marks, favicons, and exploratory icon mockups MAY use custom SVG assets.
+- HTML-string helpers, compatibility shells, and broad legacy UI files are not part of the reset primitive layer.
 
-Use `NativePage` as the outer frame for product-facing SSR routes.
+### App shell
 
-```rust
-view! {
-    <NativePage
-        title="Tessara Home"
-        description="Tessara application home for local replacement workflow testing."
-        page_key="home"
-        active_route="home"
-        workspace_label="Shared Home"
-        breadcrumbs=vec![BreadcrumbItem::current("Home")]
-    >
-        // page content
-    </NativePage>
-}
-```
+Use `AppShell` as the outer frame for authenticated product routes.
 
 Contract:
 
-- route title, active route, and page key are explicit
-- shared shell chrome comes from the native application shell, not page-local markup
+- route title and active route are explicit
+- shared shell chrome comes from the shell component, not page-local markup
 - product routes should not rebuild sidebar or top-bar structure locally
+- overlays should mount through the shared overlay root when they need to escape route layout constraints
+
+### Login and session entry
+
+Use a Rust/UI-style centered auth card for `/login`.
+
+Contract:
+
+- login is outside `AppShell`
+- the card includes the Tessara mark, a direct heading, and only the fields needed to sign in
+- field icons should come from Rust/UI native Leptos icon components when available
+- errors render inline inside the card using the semantic danger tokens
+- successful logout routes the user to `/login`
 
 ### Page header
 
 Use `PageHeader` once per route as the top route summary.
 
-```rust
-view! {
-    <PageHeader
-        eyebrow="Workflows"
-        title="Workflow Directory"
-        description="Current workflow records, linked forms, and assignment counts appear here."
-    />
-}
-```
-
 Contract:
 
-- one eyebrow
 - one page title
 - one concise route summary
+- optional compact page-level actions
 - page-level actions belong in the header area, not repeated in later panels
+- route-local eyebrow labels are not default heading structure
 
-### Metadata strip
+### Button and icon button
 
-Use `MetadataStrip` for compact route state.
-
-```rust
-view! {
-    <MetadataStrip items=vec![
-        ("Mode", "Directory".into()),
-        ("Surface", "Workflow runtime shell".into()),
-        ("State", "Loading workflow records".into()),
-    ]/>
-}
-```
+Use `Button` for text commands and `IconButton` for compact chrome or icon-only actions.
 
 Contract:
 
-- use short label/value pairs only
-- route mode, surface, and state are the common first choices
-- do not turn this into a general-purpose detail grid
+- button labels use title case
+- icon-only buttons MUST have accessible labels and tooltips
+- icons should come from Rust/UI icon components when available
+- use custom SVG only for product brand marks or approved bespoke illustrations
 
-### Panel
+### Tables
 
-Use `Panel` for substantive route sections.
-
-```rust
-view! {
-    <Panel
-        title="Product Areas"
-        description="These are the primary destinations for top-level entity browsing and workflow entry."
-    >
-        // section content
-    </Panel>
-}
-```
+Use `DataTable` for tabular lists and `InfoListTable` for label/value details.
 
 Contract:
 
-- title is required
-- description is short and explanatory
-- body holds the route-local content
-- use multiple panels instead of one oversized page body
+- lists default to shared tables unless a route has a specific reason not to
+- label/value details keep the bold label on the left
+- table styling consumes semantic tokens rather than route-local color literals
 
-### Action group
+### Overlays
 
-Use `tessara_ui::action_group` when a string-rendered or compatibility-owned surface needs shared action markup.
-
-```rust
-let actions = tessara_ui::action_group(&[
-    ActionItem::link("Create Workflow", "/app/workflows/new", ActionStyle::Primary),
-    ActionItem::link(
-        "Open Assignment Console",
-        "/app/workflows/assignments",
-        ActionStyle::Light,
-    ),
-]);
-```
+Use `DropdownMenu`, `Drawer`, and `Sheet` for contextual overlays.
 
 Contract:
 
-- group route-level or section-level actions only
-- prefer links for navigation and buttons for in-place operations
-- do not create page-local action wrappers when this shared shape is sufficient
+- overlays are native Leptos components
+- transparent overlay surfaces use the shared blurred-surface treatment
+- route overlays should be mounted through `#app-overlays` when layout containment would otherwise clip or misposition them
 
-### Card
-
-`tessara_ui::card` exists, but native route adoption is incomplete. Today it is best treated as the compatibility-layer card contract, not as a fully adopted native route primitive.
-
-```rust
-let card_html = tessara_ui::card(
-    "directory-card",
-    "Forms",
-    r#"<p>Browse forms, inspect lifecycle state, and review workflow attachments.</p>"#,
-);
-```
-
-Contract:
-
-- use for concise summary or navigation blocks
-- keep content short
-- do not invent a new card class family when `record-card`, `directory-card`, or `home-card` already covers the need
-
-### Field wrapper and checkbox field
-
-Use `field_wrapper` or `checkbox_field` when a shared form control block is sufficient.
-
-```rust
-let name_field = tessara_ui::field_wrapper(
-    "form-name",
-    "Name",
-    &tessara_ui::text_input("form-name", "text", "off", "Form name", ""),
-    Some("Use the top-level label shown in navigation."),
-    "wide-field",
-);
-
-let active_field =
-    tessara_ui::checkbox_field("assignment-active", "Assignment is active", true, None);
-```
-
-Contract:
-
-- label above control
-- helper text only when it adds meaning
-- `wide-field` is the current shared full-width modifier
-
-### Toolbar
-
-Use `toolbar` for compact filter/search/action rows.
-
-```rust
-let toolbar_html = tessara_ui::toolbar(
-    &tessara_ui::field_wrapper(
-        "delegate-context-select",
-        "Acting For",
-        r#"<select id="delegate-context-select"></select>"#,
-        None,
-        "",
-    ),
-    "",
-);
-```
-
-Contract:
-
-- primary zone holds the main filter/search control
-- secondary zone is optional
-- do not create new ad hoc filter-row wrappers when this layout works
-
-## Appendix B: Current Primitive Adoption Notes
-
-Current strong adoption:
-
-- native shared page shell on `Home`, `Forms`, `Workflows`, and `Responses`
-- permission-gated navigation driven from shared link specifications in `native_shell.rs`
-- shared route framing through `NativePage`, `PageHeader`, `MetadataStrip`, and `Panel`
-
-Current partial adoption:
-
-- cards, field grids, and action rows inside `Forms`, `Workflows`, and `Responses` still rely heavily on page-local `record-card`, `form-field`, `button-link`, and `page-title-row` markup
-- `Home` still uses route-local `home-card` and `directory-card` markup for destination tiles
-
-Current non-adoption:
-
-- `Organization` routes still render through `inner_html` and retained application-shell builders
-- `Administration`, `Reporting`, `Dashboards`, and `Migration` remain compatibility surfaces
-
-Review rule:
-
-- use an approved primitive if one already exists
-- if no approved primitive exists, reuse the existing shared class family instead of inventing a new one
-- if a bespoke structure is unavoidable, document the reason and the intended replacement target in the PR or issue
-
-## Appendix C: Implementation Notes And Known Gaps
+## Appendix B: Implementation Notes And Known Gaps
 
 These notes are implementation-facing and remain subordinate to the main policy sections above.
 
-Known gaps that are not redefined here and must be mapped from existing assets or handled elsewhere:
+Known gaps:
 
-- color token values beyond the approved palette names
-- the iconography set itself, beyond the behavior rules in this document
-- a globally ratified number-formatting standard beyond the rules already stated above
+- route-by-route migration is still in progress
+- semantic color usage should continue to be tightened as new routes are rebuilt
+- number formatting beyond tabular-numeral rules is not yet globally ratified
 
 When auditing or implementing against this document:
 
 - use the main body for policy and design decisions
-- use Appendices A and B for current shared primitive and adoption contracts
-- treat transitional implementation details as temporary unless they are explicitly promoted into the main body
+- use Appendix A for current shared primitive contracts
+- treat any discovered HTML-string rendering as a defect to remove, not a compatibility pattern to preserve

@@ -1,0 +1,47 @@
+# Tessara UI Screen Inventory
+
+This inventory is the migration map for the native Leptos SSR reset worktree. The reference worktree is `C:\Users\eric-dev\Projects\tessara`; this reset worktree is treated as a new application that only migrates functional/domain code forward intentionally.
+
+| Old path | New path | Nav section | Data/API dependencies | Actions | Overlays | Tables/forms | Functional code worth preserving |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `/app` | `/` | Main | `/api/auth/session`, `/api/me`, `/api/app/summary` | Open work queues, navigate to product areas | None initially | Summary cards, assignment queue | Auth/session DTOs, home summary DTOs, queue filtering |
+| `/app/login` | `/login` | Session | `/api/auth/login`, `/api/auth/session`, `/api/auth/logout` | Sign in, sign out, session verification | Auth feedback | Login form | Auth request/response contracts and session bootstrap behavior |
+| `/app/organization` | `/organization` | Main | `/api/hierarchy`, `/api/node-types`, `/api/forms`, `/api/submissions`, `/api/dashboards` | Create node, details, edit, create child | Sheet for node details, dropdown row menus | Nested collapsibles, info-list tables, related-work accordions | Hierarchy DTOs, node relationship helpers, metadata label handling, RFC2822 timestamp formatting |
+| `/app/organization/new` | `/organization/new` | Main | `/api/admin/nodes`, `/api/node-types` | Create node, cancel | Validation feedback | Node create form | Node payload assembly and metadata field handling |
+| `/app/organization/:node_id` | `/organization/:node_id` | Main | `/api/hierarchy/{node_id}` plus related work APIs | Details, edit, create child | Sheet | Info-list tables, related accordions | Related work aggregation and metadata labels |
+| `/app/organization/:node_id/edit` | `/organization/:node_id/edit` | Main | `/api/admin/nodes/{node_id}` | Save, cancel | Validation feedback | Node edit form | Existing validation and patch payload behavior |
+| `/app/forms` | `/forms` | Main | `/api/forms`, `/api/node-types` | Create form, view, edit | None initially | Data table | Form DTOs, version summary formatting |
+| `/app/forms/new` | `/forms/new` | Main | `/api/admin/forms`, `/api/node-types` | Create form, add fields, cancel | Field editing drawer if needed | Form builder | Field schema helpers and validation rules |
+| `/app/forms/:form_id` | `/forms/:form_id` | Main | `/api/forms/{form_id}` | Edit, open published versions | Sheet/drawer only when needed | Info-list and field table | Form detail DTOs and published version mapping |
+| `/app/forms/:form_id/edit` | `/forms/:form_id/edit` | Main | `/api/admin/forms/{form_id}` | Save draft, publish, cancel | Field editor | Form builder | Draft version editing behavior |
+| `/app/workflows` | `/workflows` | Main | `/api/workflows`, `/api/workflow-assignments` | Create workflow, assign, view, edit | None initially | Data table | Workflow DTOs, assignment summary helpers |
+| `/app/workflows/new` | `/workflows/new` | Main | `/api/admin/workflows` | Create, cancel | Validation feedback | Workflow form | Workflow payload helpers |
+| `/app/workflows/assignments` | `/workflows/assignments` | Main | `/api/workflow-assignments`, `/api/hierarchy` | Assign, unassign, filter | Assignment sheet | Assignment table/form | Assignment filtering and node targeting |
+| `/app/workflows/:workflow_id` | `/workflows/:workflow_id` | Main | `/api/workflows/{workflow_id}` | Edit, manage assignments | None initially | Info-list, versions table | Workflow version lifecycle behavior |
+| `/app/workflows/:workflow_id/edit` | `/workflows/:workflow_id/edit` | Main | `/api/admin/workflows/{workflow_id}` | Save, cancel | Validation feedback | Workflow edit form | Existing workflow update logic |
+| `/app/responses` and `/app/submissions` | `/responses` | Main | `/api/submissions`, `/api/workflow-assignments` | Start response, view, edit draft | None initially | Data table | Submission list DTOs, delegate filtering, RFC2822 timestamps |
+| `/app/responses/new` | `/responses/new` | Main | `/api/submissions`, `/api/forms` | Start, save draft, submit | Validation feedback | Response form | Response payload and field rendering behavior |
+| `/app/responses/:submission_id` | `/responses/:submission_id` | Main | `/api/submissions/{submission_id}` | Edit draft, back to list | None initially | Info-list, answer table | Response detail rendering and submitted/draft guardrails |
+| `/app/responses/:submission_id/edit` | `/responses/:submission_id/edit` | Main | `/api/submissions/{submission_id}` | Save draft, submit | Validation feedback | Response edit form | Existing answer serialization |
+| `/app/components` | `/components` | Main | `/api/dashboards`, `/api/charts` | View component | None initially | Data table | Component reference parsing |
+| `/app/components/:component_ref` | `/components/:component_ref` | Main | `/api/charts`, `/api/dashboards` | Back to list | None initially | Detail panel | Component lookup helpers |
+| `/app/dashboards` | `/dashboards` | Main | `/api/dashboards`, `/api/charts` | Create dashboard, view, edit | None initially | Data table/cards | Dashboard DTOs and component count helpers |
+| `/app/dashboards/new` | `/dashboards/new` | Main | `/api/admin/dashboards`, `/api/charts` | Create, cancel | Component selector drawer | Dashboard form | Dashboard payload helpers |
+| `/app/dashboards/:dashboard_id` | `/dashboards/:dashboard_id` | Main | `/api/dashboards/{dashboard_id}` | Edit, inspect components | Sheet/drawer if needed | Dashboard component list | Dashboard composition logic |
+| `/app/dashboards/:dashboard_id/edit` | `/dashboards/:dashboard_id/edit` | Main | `/api/admin/dashboards/{dashboard_id}` | Save, add/remove component | Component selector drawer | Dashboard edit form | Component ordering and update behavior |
+| `/app/datasets` | `/datasets` | Admin | Dataset registry APIs | View dataset | None initially | Data table | Dataset descriptor contracts |
+| `/app/datasets/:dataset_id` | `/datasets/:dataset_id` | Admin | Dataset registry APIs | Back to list | None initially | Info-list/table | Dataset detail formatting |
+| `/app/administration` | `/administration` | Admin | `/api/admin/capabilities` | Open users, node types, roles | None initially | Link grid | Capability DTOs |
+| `/app/administration/users` | `/administration/users` | Admin | `/api/admin/users`, `/api/admin/roles` | Create, edit, manage access | Access sheet | User table/forms | User and role assignment DTOs |
+| `/app/administration/node-types` | `/administration/node-types` | Admin | `/api/admin/node-types`, relationship and metadata APIs | Create, edit, manage relationships | Relationship and metadata sheets | Node type table/forms | Node type relationship and metadata contracts |
+| `/app/administration/roles` | `/administration/roles` | Admin | `/api/admin/roles`, capabilities API | Create, edit | Capability selector | Role table/forms | Capability grouping helpers |
+| `/app/migration` | `/migration` | Admin | `/api/admin/legacy-import/*` | Inspect fixtures, run import | Import confirmation | Fixture tables/forms | Legacy import DTOs and validation behavior |
+| `/app/reports` | Pending scope | Pending | Reporting APIs | Create, run, edit | Report builder | Report tables | Keep reporting domain code parked until product scope is confirmed |
+
+## Migration guardrails
+
+- Active routes start as native Leptos components returning `impl IntoView`.
+- No route migrates string-rendered UI, transitional shell code, or broad feature files.
+- `#app-overlays` is a direct child of `body` before `#app-root`.
+- Tailwind 4 is the styling target; Bulma assets and shell CSS have been removed from the active reset baseline.
+- Lists default to shared table primitives unless a route has a specific UX reason to diverge.

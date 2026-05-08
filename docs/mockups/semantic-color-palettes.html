@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tessara Semantic Color Palette Exploration</title>
+  <style>
+    :root {
+      --ink: #0f172a;
+      --slate: #334155;
+      --slate-2: #475569;
+      --neutral: #e2e8f0;
+      --light: #f8fafc;
+      --surface: #ffffff;
+      --primary: #14b8a6;
+      --success: #84cc16;
+      --warning: #f59e0b;
+      --radius: 8px;
+      --font: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: #111827;
+      color: var(--light);
+      font-family: var(--font);
+      line-height: 1.5;
+    }
+
+    main {
+      display: grid;
+      gap: 1.25rem;
+      width: min(1240px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 32px 0 48px;
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin: 0;
+    }
+
+    .intro {
+      display: grid;
+      gap: 0.6rem;
+      border: 1px solid rgb(226 232 240 / 18%);
+      border-radius: var(--radius);
+      background: rgb(51 65 85 / 74%);
+      padding: 1rem;
+    }
+
+    .intro p {
+      color: rgb(226 232 240 / 74%);
+      max-width: 84ch;
+    }
+
+    .palette {
+      display: grid;
+      gap: 1rem;
+      border: 1px solid rgb(226 232 240 / 18%);
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: rgb(15 23 42 / 36%);
+    }
+
+    .palette-header {
+      display: flex;
+      align-items: start;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 1rem;
+    }
+
+    .palette-header div {
+      display: grid;
+      gap: 0.35rem;
+    }
+
+    .palette-header p {
+      color: rgb(226 232 240 / 74%);
+    }
+
+    .mode-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .mode {
+      display: grid;
+      gap: 1rem;
+      min-width: 0;
+      padding: 1rem;
+    }
+
+    .mode.light {
+      --bg: #f8fafc;
+      --panel: #ffffff;
+      --text: #0f172a;
+      --muted: #64748b;
+      --line: #e2e8f0;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    .mode.dark {
+      --bg: #0f172a;
+      --panel: #334155;
+      --text: #f8fafc;
+      --muted: rgb(226 232 240 / 72%);
+      --line: rgb(226 232 240 / 18%);
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    .mode h3 {
+      font-size: 1rem;
+    }
+
+    .surface {
+      display: grid;
+      gap: 0.85rem;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--panel);
+      padding: 1rem;
+    }
+
+    .surface p {
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .swatches {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 0.5rem;
+    }
+
+    .swatch {
+      display: grid;
+      gap: 0.4rem;
+      min-width: 0;
+    }
+
+    .chip {
+      min-height: 3.2rem;
+      border-radius: var(--radius);
+      border: 1px solid rgb(15 23 42 / 12%);
+    }
+
+    .mode.dark .chip {
+      border-color: rgb(248 250 252 / 16%);
+    }
+
+    .swatch strong {
+      color: var(--text);
+      font-size: 0.78rem;
+    }
+
+    .swatch span {
+      color: var(--muted);
+      font-size: 0.72rem;
+      overflow-wrap: anywhere;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    .button,
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 2.25rem;
+      border-radius: var(--radius);
+      font-size: 0.84rem;
+      font-weight: 750;
+      padding: 0 0.7rem;
+    }
+
+    .button.primary {
+      background: var(--primary);
+      color: var(--ink);
+    }
+
+    .button.secondary {
+      background: var(--secondary);
+      color: var(--secondary-fg);
+    }
+
+    .badge {
+      border: 1px solid color-mix(in srgb, var(--badge-color), transparent 68%);
+      background: color-mix(in srgb, var(--badge-color), transparent 84%);
+      color: var(--text);
+    }
+
+    .badge.info {
+      --badge-color: var(--info);
+    }
+
+    .badge.success {
+      --badge-color: var(--success);
+    }
+
+    .badge.warning {
+      --badge-color: var(--warning);
+    }
+
+    .badge.danger {
+      --badge-color: var(--danger);
+    }
+
+    .notice {
+      border: 1px solid color-mix(in srgb, var(--info), transparent 68%);
+      border-radius: var(--radius);
+      background: color-mix(in srgb, var(--info), transparent 88%);
+      padding: 0.75rem;
+    }
+
+    .notice strong {
+      display: block;
+      color: var(--text);
+      font-size: 0.9rem;
+    }
+
+    .notice span {
+      color: var(--muted);
+      font-size: 0.84rem;
+    }
+
+    .a {
+      --secondary: #64748b;
+      --secondary-fg: #f8fafc;
+      --info: #3b82f6;
+      --danger: #ef4444;
+    }
+
+    .b {
+      --secondary: #8b5cf6;
+      --secondary-fg: #f8fafc;
+      --info: #0ea5e9;
+      --danger: #f43f5e;
+    }
+
+    .c {
+      --secondary: #06b6d4;
+      --secondary-fg: #0f172a;
+      --info: #6366f1;
+      --danger: #dc2626;
+    }
+
+    .d {
+      --secondary: #a855f7;
+      --secondary-fg: #f8fafc;
+      --info: #2563eb;
+      --danger: #e11d48;
+    }
+
+    @media (max-width: 900px) {
+      .mode-grid,
+      .swatches {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="intro">
+      <h1>Semantic Color Palette Exploration</h1>
+      <p>Fixed decisions: Primary is Teal, Success is Lime, and Warning is Orange. These options explore Secondary, Info, and Danger in both light and dark surfaces.</p>
+    </section>
+
+    <section class="palette a">
+      <div class="palette-header">
+        <div>
+          <h2>Option A: Conservative System</h2>
+          <p>Secondary stays neutral slate, info is familiar blue, danger is clear red.</p>
+        </div>
+      </div>
+      <div class="mode-grid">
+        <div class="mode light"><div class="surface">
+          <h3>Light Mode</h3>
+          <p>Quiet and very admin-native. Secondary does not compete with primary actions.</p>
+          <div class="swatches">
+            <div class="swatch"><div class="chip" style="background: var(--primary)"></div><strong>Primary</strong><span>#14B8A6</span></div>
+            <div class="swatch"><div class="chip" style="background: var(--secondary)"></div><strong>Secondary</strong><span>#64748B</span></div>
+            <div class="swatch"><div class="chip" style="background: var(--info)"></div><strong>Info</strong><span>#3B82F6</span></div>
+            <div class="swatch"><div class="chip" style="background: var(--success)"></div><strong>Success</strong><span>#84CC16</span></div>
+            <div class="swatch"><div class="chip" style="background: var(--warning)"></div><strong>Warning</strong><span>#F59E0B</span></div>
+            <div class="swatch"><div class="chip" style="background: var(--danger)"></div><strong>Danger</strong><span>#EF4444</span></div>
+          </div>
+          <div class="controls"><span class="button primary">Save</span><span class="button secondary">Secondary</span><span class="badge info">Info</span><span class="badge success">Done</span><span class="badge warning">Pending</span><span class="badge danger">Error</span></div>
+          <div class="notice"><strong>System notice</strong><span>Information uses blue without feeling like an action.</span></div>
+        </div></div>
+        <div class="mode dark"><div class="surface">
+          <h3>Dark Mode</h3>
+          <p>Strongest fit with the current shell. The danger color stays obvious but not neon.</p>
+          <div class="swatches">
+            <div class="swatch"><div class="chip" style="background: var(--primary)"></div><strong>Primary</strong><span>#14B8A6</span></div>
+            <div class="swatch"><div class="chip" style="background: var(--secondary)"></div><strong>Secondary</strong><span>#64748B</span></div>
+            <div class="swatch"><div class="chip" style="background: var(--info)"></div><strong>Info</strong><span>#3B82F6</span></div>
+            <div class="swatch"><div class="chip" style="background: var(--success)"></div><strong>Success</strong><span>#84CC16</span></div>
+            <div class="swatch"><div class="chip" style="background: var(--warning)"></div><strong>Warning</strong><span>#F59E0B</span></div>
+            <div class="swatch"><div class="chip" style="background: var(--danger)"></div><strong>Danger</strong><span>#EF4444</span></div>
+          </div>
+          <div class="controls"><span class="button primary">Save</span><span class="button secondary">Secondary</span><span class="badge info">Info</span><span class="badge success">Done</span><span class="badge warning">Pending</span><span class="badge danger">Error</span></div>
+          <div class="notice"><strong>System notice</strong><span>Information remains distinct from success and warning.</span></div>
+        </div></div>
+      </div>
+    </section>
+
+    <section class="palette b">
+      <div class="palette-header">
+        <div>
+          <h2>Option B: Product Accent</h2>
+          <p>Secondary is violet, info is sky blue, danger leans rose.</p>
+        </div>
+      </div>
+      <div class="mode-grid">
+        <div class="mode light"><div class="surface">
+          <h3>Light Mode</h3>
+          <p>More expressive. Useful if secondary actions need to feel product-specific.</p>
+          <div class="swatches">
+            <div class="swatch"><div class="chip" style="background: var(--primary)"></div><strong>Primary</strong><span>#14B8A6</span></div>
+            <div class="swatch"><div class="chip" style="background: var(--secondary)"></div><strong>Secondary</strong><span>#8B5CF6</span></div>
+            <div class="swatch"><div class="chip" style="background: var(--info)"></div><strong>Info</strong><span>#0EA5E9</span></div>
+            <div class="swatch"><div class="chip" style="background: var(--success)"></div><strong>Success</strong><span>#84CC16</span></div>
+            <div class="swatch"><div class="chip" style="background: var(--warning)"></div><strong>Warning</strong><span>#F59E0B</span></div>
+            <div class="swatch"><div class="chip" style="background: var(--danger)"></div><strong>Danger</strong><span>#F43F5E</span></div>
+          </div>
+          <div class="controls"><span class="button primary">Save</span><span class="button secondary">Secondary</span><span class="badge info">Info</span><span class="badge success">Done</span><span class="badge warning">Pending</span><span class="badge danger">Error</span></div>
+          <div class="notice"><strong>System notice</strong><span>Sky blue gives info a brighter product feel.</span></div>
+        </div></div>
+        <div class="mode dark"><div class="surface">
+          <h3>Dark Mode</h3>
+          <p>Attractive, but violet introduces a fourth accent family that may draw attention.</p>
+          <div class="swatches">
+            <div class="swatch"><div class="chip" style="background: var(--primary)"></div><strong>Primary</strong><span>#14B8A6</span></div>
+            <div class="swatch"><div class="chip" style="background: var(--secondary)"></div><strong>Secondary</strong><span>#8B5CF6</span></div>
+            <div class="swatch"><div class="chip" style="background: var(--info)"></div><strong>Info</strong><span>#0EA5E9</span></div>
+            <div class="swatch"><div class="chip" style="background: var(--success)"></div><strong>Success</strong><span>#84CC16</span></div>
+            <div class="swatch"><div class="chip" style="background: var(--warning)"></div><strong>Warning</strong><span>#F59E0B</span></div>
+            <div class="swatch"><div class="chip" style="background: var(--danger)"></div><strong>Danger</strong><span>#F43F5E</span></div>
+          </div>
+          <div class="controls"><span class="button primary">Save</span><span class="button secondary">Secondary</span><span class="badge info">Info</span><span class="badge success">Done</span><span class="badge warning">Pending</span><span class="badge danger">Error</span></div>
+          <div class="notice"><strong>System notice</strong><span>Distinct and energetic, but less restrained.</span></div>
+        </div></div>
+      </div>
+    </section>
+
+    <section class="palette c">
+      <div class="palette-header">
+        <div>
+          <h2>Option C: Cool Technical</h2>
+          <p>Secondary is cyan, info is indigo, danger is deeper red.</p>
+        </div>
+      </div>
+      <div class="mode-grid">
+        <div class="mode light"><div class="surface">
+          <h3>Light Mode</h3>
+          <p>Feels technical and crisp, but secondary and primary are closer together.</p>
+          <div class="swatches">
+            <div class="swatch"><div class="chip" style="background: var(--primary)"></div><strong>Primary</strong><span>#14B8A6</span></div>
+            <div class="swatch"><div class="chip" style="background: var(--secondary)"></div><strong>Secondary</strong><span>#06B6D4</span></div>
+            <div class="swatch"><div class="chip" style="background: var(--info)"></div><strong>Info</strong><span>#6366F1</span></div>
+            <div class="swatch"><div class="chip" style="background: var(--success)"></div><strong>Success</strong><span>#84CC16</span></div>
+            <div class="swatch"><div class="chip" style="background: var(--warning)"></div><strong>Warning</strong><span>#F59E0B</span></div>
+            <div class="swatch"><div class="chip" style="background: var(--danger)"></div><strong>Danger</strong><span>#DC2626</span></div>
+          </div>
+          <div class="controls"><span class="button primary">Save</span><span class="button secondary">Secondary</span><span class="badge info">Info</span><span class="badge success">Done</span><span class="badge warning">Pending</span><span class="badge danger">Error</span></div>
+          <div class="notice"><strong>System notice</strong><span>Indigo info is distinct from teal and cyan.</span></div>
+        </div></div>
+        <div class="mode dark"><div class="surface">
+          <h3>Dark Mode</h3>
+          <p>Good data-product energy. Secondary may compete with primary in dense screens.</p>
+          <div class="swatches">
+            <div class="swatch"><div class="chip" style="background: var(--primary)"></div><strong>Primary</strong><span>#14B8A6</span></div>
+            <div class="swatch"><div class="chip" style="background: var(--secondary)"></div><strong>Secondary</strong><span>#06B6D4</span></div>
+            <div class="swatch"><div class="chip" style="background: var(--info)"></div><strong>Info</strong><span>#6366F1</span></div>
+            <div class="swatch"><div class="chip" style="background: var(--success)"></div><strong>Success</strong><span>#84CC16</span></div>
+            <div class="swatch"><div class="chip" style="background: var(--warning)"></div><strong>Warning</strong><span>#F59E0B</span></div>
+            <div class="swatch"><div class="chip" style="background: var(--danger)"></div><strong>Danger</strong><span>#DC2626</span></div>
+          </div>
+          <div class="controls"><span class="button primary">Save</span><span class="button secondary">Secondary</span><span class="badge info">Info</span><span class="badge success">Done</span><span class="badge warning">Pending</span><span class="badge danger">Error</span></div>
+          <div class="notice"><strong>System notice</strong><span>Crisp, but more chromatic overall.</span></div>
+        </div></div>
+      </div>
+    </section>
+
+    <section class="palette d">
+      <div class="palette-header">
+        <div>
+          <h2>Option D: Saturated Operator</h2>
+          <p>Secondary is purple, info is stronger blue, danger is crimson.</p>
+        </div>
+      </div>
+      <div class="mode-grid">
+        <div class="mode light"><div class="surface">
+          <h3>Light Mode</h3>
+          <p>High distinction across all roles, but the loudest option.</p>
+          <div class="swatches">
+            <div class="swatch"><div class="chip" style="background: var(--primary)"></div><strong>Primary</strong><span>#14B8A6</span></div>
+            <div class="swatch"><div class="chip" style="background: var(--secondary)"></div><strong>Secondary</strong><span>#A855F7</span></div>
+            <div class="swatch"><div class="chip" style="background: var(--info)"></div><strong>Info</strong><span>#2563EB</span></div>
+            <div class="swatch"><div class="chip" style="background: var(--success)"></div><strong>Success</strong><span>#84CC16</span></div>
+            <div class="swatch"><div class="chip" style="background: var(--warning)"></div><strong>Warning</strong><span>#F59E0B</span></div>
+            <div class="swatch"><div class="chip" style="background: var(--danger)"></div><strong>Danger</strong><span>#E11D48</span></div>
+          </div>
+          <div class="controls"><span class="button primary">Save</span><span class="button secondary">Secondary</span><span class="badge info">Info</span><span class="badge success">Done</span><span class="badge warning">Pending</span><span class="badge danger">Error</span></div>
+          <div class="notice"><strong>System notice</strong><span>Very clear roles, with a stronger product personality.</span></div>
+        </div></div>
+        <div class="mode dark"><div class="surface">
+          <h3>Dark Mode</h3>
+          <p>Readable and distinct. May be too expressive for Tessara's quieter admin posture.</p>
+          <div class="swatches">
+            <div class="swatch"><div class="chip" style="background: var(--primary)"></div><strong>Primary</strong><span>#14B8A6</span></div>
+            <div class="swatch"><div class="chip" style="background: var(--secondary)"></div><strong>Secondary</strong><span>#A855F7</span></div>
+            <div class="swatch"><div class="chip" style="background: var(--info)"></div><strong>Info</strong><span>#2563EB</span></div>
+            <div class="swatch"><div class="chip" style="background: var(--success)"></div><strong>Success</strong><span>#84CC16</span></div>
+            <div class="swatch"><div class="chip" style="background: var(--warning)"></div><strong>Warning</strong><span>#F59E0B</span></div>
+            <div class="swatch"><div class="chip" style="background: var(--danger)"></div><strong>Danger</strong><span>#E11D48</span></div>
+          </div>
+          <div class="controls"><span class="button primary">Save</span><span class="button secondary">Secondary</span><span class="badge info">Info</span><span class="badge success">Done</span><span class="badge warning">Pending</span><span class="badge danger">Error</span></div>
+          <div class="notice"><strong>System notice</strong><span>High signal, high personality.</span></div>
+        </div></div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

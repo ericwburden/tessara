@@ -19,21 +19,22 @@ pub fn render_native_app_document(title: &str, description: &str, _path: &str) -
     let hydration = pipeline::hydration_module_tag();
 
     format!(
-        r#"<!doctype html>
-<html lang="en" data-theme="light" data-theme-preference="system">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{title}</title>
-    {brand}
-    <script>{theme_bootstrap}</script>
-    {stylesheets}
-  </head>
-  <body class="tessara-app">
-    <div id="{app_root_id}">{shell}</div>
-    {hydration}
-  </body>
-</html>"#,
+        "<!doctype html>\n\
+<html lang=\"en\" data-theme=\"light\" data-theme-preference=\"system\">\n\
+  <head>\n\
+    <meta charset=\"utf-8\">\n\
+    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n\
+    <title>{title}</title>\n\
+    {brand}\n\
+    <script>{theme_bootstrap}</script>\n\
+    {stylesheets}\n\
+  </head>\n\
+  <body class=\"tessara-app\">\n\
+    <div id=\"app-overlays\"></div>\n\
+    <div id=\"{app_root_id}\">{shell}</div>\n\
+    {hydration}\n\
+  </body>\n\
+</html>",
         app_root_id = pipeline::APP_ROOT_ID,
     )
 }

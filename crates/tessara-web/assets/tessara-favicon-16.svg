@@ -1,11 +1,12 @@
-<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
-<rect width="16" height="16" rx="3" fill="#F8FAFC"/>
-<polygon points="8.0,4.8 10.88,6.24 8.0,7.68 5.12,6.24" fill="#14B8A6"/>
-<polygon points="5.12,6.24 8.0,7.68 8.0,10.56 5.12,9.12" fill="#84CC16"/>
-<polygon points="10.88,6.24 8.0,7.68 8.0,10.56 10.88,9.12" fill="#F59E0B"/>
-<g stroke="#0F172A" stroke-width="1.2" stroke-linejoin="round">
-<polygon points="8.0,4.8 10.88,6.24 8.0,7.68 5.12,6.24" fill="none"/>
-<polygon points="5.12,6.24 8.0,7.68 8.0,10.56 5.12,9.12" fill="none"/>
-<polygon points="10.88,6.24 8.0,7.68 8.0,10.56 10.88,9.12" fill="none"/>
-</g>
+<svg width="16" height="16" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Tessara">
+  <g>
+    <path d="M11 11h40L11 51Z" fill="#14B8A6"/>
+    <path d="M117 11v40L77 11Z" fill="#F59E0B"/>
+    <path d="M11 117V77l40 40Z" fill="#6366F1"/>
+    <path d="M117 117H77l40-40Z" fill="#84CC16"/>
+    <path d="M64 16 86 38 64 60 42 38Z" fill="#14B8A6"/>
+    <path d="M36 44 58 66 36 88 14 66Z" fill="#E2E8F0"/>
+    <path d="M92 44 114 66 92 88 70 66Z" fill="#F59E0B"/>
+    <path d="M64 72 86 94 64 116 42 94Z" fill="#84CC16"/>
+  </g>
 </svg>

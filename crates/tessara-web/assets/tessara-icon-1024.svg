@@ -1,18 +1,13 @@
-<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-<rect width="1024" height="1024" rx="184" fill="#F8FAFC"/>
-<polygon points="512.0,327.68 593.92,368.64 512.0,409.6 430.08,368.64" fill="#E2E8F0"/>
-<polygon points="430.08,368.64 512.0,409.6 430.08,450.56 348.16,409.6" fill="#14B8A6"/>
-<polygon points="593.92,368.64 675.84,409.6 593.92,450.56 512.0,409.6" fill="#E2E8F0"/>
-<polygon points="512.0,409.6 593.92,450.56 512.0,491.52 430.08,450.56" fill="#E2E8F0"/>
-<polygon points="348.16,409.6 430.08,450.56 430.08,532.48 348.16,491.52" fill="#64748B"/>
-<polygon points="348.16,491.52 430.08,532.48 430.08,614.4 348.16,573.44" fill="#64748B"/>
-<polygon points="430.08,450.56 512.0,491.52 512.0,573.44 430.08,532.48" fill="#64748B"/>
-<polygon points="430.08,532.48 512.0,573.44 512.0,655.36 430.08,614.4" fill="#84CC16"/>
-<polygon points="675.84,409.6 593.92,450.56 593.92,532.48 675.84,491.52" fill="#F59E0B"/>
-<polygon points="675.84,491.52 593.92,532.48 593.92,614.4 675.84,573.44" fill="#334155"/>
-<polygon points="593.92,450.56 512.0,491.52 512.0,573.44 593.92,532.48" fill="#334155"/>
-<polygon points="593.92,532.48 512.0,573.44 512.0,655.36 593.92,614.4" fill="#334155"/>
-<polygon points="512.0,327.68 675.84,409.6 512.0,491.52 348.16,409.6" fill="none" stroke="#0F172A" stroke-width="12" stroke-linejoin="round"/>
-<polygon points="348.16,409.6 512.0,491.52 512.0,655.36 348.16,573.44" fill="none" stroke="#0F172A" stroke-width="12" stroke-linejoin="round"/>
-<polygon points="675.84,409.6 512.0,491.52 512.0,655.36 675.84,573.44" fill="none" stroke="#0F172A" stroke-width="12" stroke-linejoin="round"/>
+<svg width="1024" height="1024" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Tessara">
+  <g stroke="#334155" stroke-width="4" stroke-linejoin="round" style="paint-order:stroke fill">
+    <path d="M13 13h36L13 49Z" fill="#14B8A6"/>
+    <path d="M115 13v36L79 13Z" fill="#F59E0B"/>
+    <path d="M13 115V79l36 36Z" fill="#6366F1"/>
+    <path d="M115 115H79l36-36Z" fill="#84CC16"/>
+    <path d="M64 18 83 37 64 56 45 37Z" fill="#14B8A6"/>
+    <path d="M38 44 57 63 38 82 19 63Z" fill="#E2E8F0"/>
+    <path d="M90 44 109 63 90 82 71 63Z" fill="#F59E0B"/>
+    <path d="M64 70 83 89 64 108 45 89Z" fill="#84CC16"/>
+    <path d="M64 44 83 63 64 82 45 63Z" fill="none"/>
+  </g>
 </svg>

@@ -1,13 +1,1 @@
-pub mod administration;
-pub mod components;
-pub mod dashboards;
-pub mod datasets;
-pub mod forms;
-pub mod home;
-pub mod migration;
-pub(crate) mod native_runtime;
-pub mod native_shell;
-pub mod organization;
-pub mod reporting;
-pub mod responses;
-pub mod workflows;
+pub mod reset;

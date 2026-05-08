@@ -12,7 +12,6 @@ members = [
     "crates/tessara-jobs",
     "crates/tessara-reporting",
     "crates/tessara-submissions",
-    "crates/tessara-ui",
     "crates/tessara-web",
 ]
 resolver = "3"
@@ -30,6 +29,7 @@ axum = "0.8"
 chrono = { version = "0.4", features = ["serde"] }
 datafusion = "50"
 gloo-net = "0.6"
+icons = { version = "0.18.2", features = ["leptos"] }
 leptos = { version = "0.8.17", default-features = false }
 leptos_meta = { version = "0.8.5", default-features = false }
 leptos_router = { version = "0.8.13", default-features = false }
@@ -44,7 +44,6 @@ tower-http = { version = "0.6", features = ["cors", "trace", "fs"] }
 tower = { version = "0.5", features = ["util"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
-tessara-ui = { path = "crates/tessara-ui" }
 uuid = { version = "1", features = ["serde", "v4"] }
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
@@ -59,7 +58,7 @@ site-root = "target/site"
 site-pkg-dir = "pkg"
 site-addr = "127.0.0.1:8080"
 assets-dir = "crates/tessara-web/public"
-style-file = "style/main.scss"
+style-file = "style/main.css"
 browserquery = "defaults"
 bin-features = ["ssr"]
 lib-features = ["hydrate"]

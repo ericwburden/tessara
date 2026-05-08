@@ -1,0 +1,12 @@
+{
+  "name": "tessara-ui-reset",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "tailwind:build": "tailwindcss -i ./style/main.css -o ./target/site/pkg/tessara-web.css"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.1.0",
+    "tailwindcss": "^4.1.0"
+  }
+}

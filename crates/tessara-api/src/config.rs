@@ -14,7 +14,7 @@ pub struct Config {
     pub dev_admin_email: String,
     /// Development administrator password accepted by the temporary login flow.
     pub dev_admin_password: String,
-    /// Cookie name used for browser `/app` sessions.
+    /// Cookie name used for browser sessions.
     pub auth_cookie_name: String,
     /// Whether auth cookies should be marked `Secure`.
     pub auth_cookie_secure: bool,

@@ -32,6 +32,14 @@ use axum::{
 use db::AppState;
 use tower_http::{cors::CorsLayer, services::ServeDir, trace::TraceLayer};
 
+fn native_app(path: impl AsRef<str>, title: &str, description: &str) -> Html<String> {
+    Html(tessara_web::application_html(
+        path.as_ref(),
+        title,
+        description,
+    ))
+}
+
 /// Builds the complete Tessara HTTP router for the supplied application state.
 ///
 /// The router includes the API endpoints for the current vertical slice plus a
@@ -40,254 +48,302 @@ use tower_http::{cors::CorsLayer, services::ServeDir, trace::TraceLayer};
 /// surface without duplicating route registration.
 pub fn router(state: AppState) -> Router {
     Router::new()
-        .route("/", get(|| async { Html(tessara_web::admin_shell_html()) }))
+        .route(
+            "/",
+            get(|| async { native_app("/", "Tessara Home", "Tessara native Leptos home.") }),
+        )
+        .route(
+            "/login",
+            get(|| async { native_app("/login", "Tessara Sign In", "Sign in to Tessara.") }),
+        )
         .route("/assets/{asset_name}", get(svg_asset))
-        .route("/bridge/{asset_name}", get(bridge_asset))
         .nest_service("/pkg", ServeDir::new(tessara_web::pkg_dir()))
         .route(
-            "/app",
-            get(|| async { Html(tessara_web::application_shell_html()) }),
+            "/organization",
+            get(|| async {
+                native_app(
+                    "/organization",
+                    "Tessara Organization",
+                    "Browse the Tessara organization hierarchy.",
+                )
+            }),
         )
         .route(
-            "/app/login",
-            get(|| async { Html(tessara_web::login_application_html()) }),
+            "/organization/new",
+            get(|| async {
+                native_app(
+                    "/organization/new",
+                    "Create Organization Node",
+                    "Create an organization node.",
+                )
+            }),
         )
         .route(
-            "/app/organization",
-            get(|| async { Html(tessara_web::organization_application_shell_html()) }),
-        )
-        .route(
-            "/app/organization/new",
-            get(|| async { Html(tessara_web::organization_create_application_html()) }),
-        )
-        .route(
-            "/app/organization/{node_id}/edit",
+            "/organization/{node_id}/edit",
             get(|Path(node_id): Path<String>| async move {
-                Html(tessara_web::organization_edit_application_html(&node_id))
+                native_app(
+                    format!("/organization/{node_id}/edit"),
+                    "Edit Organization Node",
+                    "Edit an organization node.",
+                )
             }),
         )
         .route(
-            "/app/organization/{node_id}",
+            "/organization/{node_id}",
             get(|Path(node_id): Path<String>| async move {
-                Html(tessara_web::organization_detail_application_html(&node_id))
+                native_app(
+                    format!("/organization/{node_id}"),
+                    "Organization Detail",
+                    "Inspect an organization node.",
+                )
             }),
         )
         .route(
-            "/app/forms",
-            get(|| async { Html(tessara_web::forms_application_shell_html()) }),
+            "/forms",
+            get(|| async { native_app("/forms", "Tessara Forms", "Browse Tessara forms.") }),
         )
         .route(
-            "/app/forms/new",
-            get(|| async { Html(tessara_web::form_create_application_html()) }),
+            "/forms/new",
+            get(|| async { native_app("/forms/new", "Create Form", "Create a Tessara form.") }),
         )
         .route(
-            "/app/forms/{form_id}/edit",
+            "/forms/{form_id}/edit",
             get(|Path(form_id): Path<String>| async move {
-                Html(tessara_web::form_edit_application_html(&form_id))
+                native_app(
+                    format!("/forms/{form_id}/edit"),
+                    "Edit Form",
+                    "Edit a Tessara form.",
+                )
             }),
         )
         .route(
-            "/app/forms/{form_id}",
+            "/forms/{form_id}",
             get(|Path(form_id): Path<String>| async move {
-                Html(tessara_web::form_detail_application_html(&form_id))
+                native_app(
+                    format!("/forms/{form_id}"),
+                    "Form Detail",
+                    "Inspect a Tessara form.",
+                )
             }),
         )
         .route(
-            "/app/workflows",
-            get(|| async { Html(tessara_web::workflows_application_shell_html()) }),
+            "/workflows",
+            get(|| async {
+                native_app(
+                    "/workflows",
+                    "Tessara Workflows",
+                    "Browse Tessara workflows.",
+                )
+            }),
         )
         .route(
-            "/app/workflows/new",
-            get(|| async { Html(tessara_web::workflow_create_application_html()) }),
+            "/workflows/new",
+            get(|| async {
+                native_app(
+                    "/workflows/new",
+                    "Create Workflow",
+                    "Create a Tessara workflow.",
+                )
+            }),
         )
         .route(
-            "/app/workflows/assignments",
-            get(|| async { Html(tessara_web::workflow_assignments_application_html()) }),
+            "/workflows/assignments",
+            get(|| async {
+                native_app(
+                    "/workflows/assignments",
+                    "Workflow Assignments",
+                    "Manage workflow assignments.",
+                )
+            }),
         )
         .route(
-            "/app/workflows/{workflow_id}/edit",
+            "/workflows/{workflow_id}/edit",
             get(|Path(workflow_id): Path<String>| async move {
-                Html(tessara_web::workflow_edit_application_html(&workflow_id))
+                native_app(
+                    format!("/workflows/{workflow_id}/edit"),
+                    "Edit Workflow",
+                    "Edit a Tessara workflow.",
+                )
             }),
         )
         .route(
-            "/app/workflows/{workflow_id}",
+            "/workflows/{workflow_id}",
             get(|Path(workflow_id): Path<String>| async move {
-                Html(tessara_web::workflow_detail_application_html(&workflow_id))
+                native_app(
+                    format!("/workflows/{workflow_id}"),
+                    "Workflow Detail",
+                    "Inspect a Tessara workflow.",
+                )
             }),
         )
         .route(
-            "/app/responses",
-            get(|| async { Html(tessara_web::responses_application_shell_html()) }),
+            "/responses",
+            get(|| async {
+                native_app(
+                    "/responses",
+                    "Tessara Responses",
+                    "Browse Tessara responses.",
+                )
+            }),
         )
         .route(
-            "/app/responses/new",
-            get(|| async { Html(tessara_web::response_create_application_html()) }),
+            "/responses/new",
+            get(|| async {
+                native_app(
+                    "/responses/new",
+                    "Start Response",
+                    "Start a Tessara response.",
+                )
+            }),
         )
         .route(
-            "/app/responses/{submission_id}/edit",
+            "/responses/{submission_id}/edit",
             get(|Path(submission_id): Path<String>| async move {
-                Html(tessara_web::response_edit_application_html(&submission_id))
+                native_app(
+                    format!("/responses/{submission_id}/edit"),
+                    "Edit Response",
+                    "Edit a Tessara response.",
+                )
             }),
         )
         .route(
-            "/app/responses/{submission_id}",
+            "/responses/{submission_id}",
             get(|Path(submission_id): Path<String>| async move {
-                Html(tessara_web::response_detail_application_html(
-                    &submission_id,
-                ))
+                native_app(
+                    format!("/responses/{submission_id}"),
+                    "Response Detail",
+                    "Inspect a Tessara response.",
+                )
             }),
         )
         .route(
-            "/app/submissions",
-            get(|| async { Html(tessara_web::submission_application_shell_html()) }),
-        )
-        .route(
-            "/app/administration",
-            get(|| async { Html(tessara_web::administration_application_shell_html()) }),
-        )
-        .route(
-            "/app/administration/users",
-            get(|| async { Html(tessara_web::users_application_shell_html()) }),
-        )
-        .route(
-            "/app/administration/users/new",
-            get(|| async { Html(tessara_web::user_create_application_html()) }),
-        )
-        .route(
-            "/app/administration/users/{account_id}/edit",
-            get(|Path(account_id): Path<String>| async move {
-                Html(tessara_web::user_edit_application_html(&account_id))
+            "/components",
+            get(|| async {
+                native_app(
+                    "/components",
+                    "Tessara Components",
+                    "Browse Tessara components.",
+                )
             }),
         )
         .route(
-            "/app/administration/users/{account_id}",
-            get(|Path(account_id): Path<String>| async move {
-                Html(tessara_web::user_detail_application_html(&account_id))
-            }),
-        )
-        .route(
-            "/app/administration/users/{account_id}/access",
-            get(|Path(account_id): Path<String>| async move {
-                Html(tessara_web::user_access_application_html(&account_id))
-            }),
-        )
-        .route(
-            "/app/administration/node-types",
-            get(|| async { Html(tessara_web::node_types_application_shell_html()) }),
-        )
-        .route(
-            "/app/administration/node-types/new",
-            get(|| async { Html(tessara_web::node_type_create_application_html()) }),
-        )
-        .route(
-            "/app/administration/node-types/{node_type_id}/edit",
-            get(|Path(node_type_id): Path<String>| async move {
-                Html(tessara_web::node_type_edit_application_html(&node_type_id))
-            }),
-        )
-        .route(
-            "/app/administration/node-types/{node_type_id}",
-            get(|Path(node_type_id): Path<String>| async move {
-                Html(tessara_web::node_type_detail_application_html(
-                    &node_type_id,
-                ))
-            }),
-        )
-        .route(
-            "/app/administration/roles",
-            get(|| async { Html(tessara_web::roles_application_shell_html()) }),
-        )
-        .route(
-            "/app/administration/roles/new",
-            get(|| async { Html(tessara_web::role_create_application_html()) }),
-        )
-        .route(
-            "/app/administration/roles/{role_id}/edit",
-            get(|Path(role_id): Path<String>| async move {
-                Html(tessara_web::role_edit_application_html(&role_id))
-            }),
-        )
-        .route(
-            "/app/administration/roles/{role_id}",
-            get(|Path(role_id): Path<String>| async move {
-                Html(tessara_web::role_detail_application_html(&role_id))
-            }),
-        )
-        .route(
-            "/app/admin",
-            get(|| async { Html(tessara_web::admin_application_shell_html()) }),
-        )
-        .route(
-            "/app/reports",
-            get(|| async { Html(tessara_web::reporting_application_shell_html()) }),
-        )
-        .route(
-            "/app/reports/new",
-            get(|| async { Html(tessara_web::report_create_application_html()) }),
-        )
-        .route(
-            "/app/reports/{report_id}/edit",
-            get(|Path(report_id): Path<String>| async move {
-                Html(tessara_web::report_edit_application_html(&report_id))
-            }),
-        )
-        .route(
-            "/app/reports/{report_id}",
-            get(|Path(report_id): Path<String>| async move {
-                Html(tessara_web::report_detail_application_html(&report_id))
-            }),
-        )
-        .route(
-            "/app/datasets",
-            get(|| async { Html(tessara_web::datasets_application_shell_html()) }),
-        )
-        .route(
-            "/app/datasets/{dataset_id}",
-            get(|Path(dataset_id): Path<String>| async move {
-                Html(tessara_web::dataset_detail_application_html(&dataset_id))
-            }),
-        )
-        .route(
-            "/app/components",
-            get(|| async { Html(tessara_web::components_application_shell_html()) }),
-        )
-        .route(
-            "/app/components/{component_ref}",
+            "/components/{component_ref}",
             get(|Path(component_ref): Path<String>| async move {
-                Html(tessara_web::component_detail_application_html(
-                    &component_ref,
-                ))
+                native_app(
+                    format!("/components/{component_ref}"),
+                    "Component Detail",
+                    "Inspect a Tessara component.",
+                )
             }),
         )
         .route(
-            "/app/dashboards",
-            get(|| async { Html(tessara_web::dashboards_application_shell_html()) }),
+            "/dashboards",
+            get(|| async {
+                native_app(
+                    "/dashboards",
+                    "Tessara Dashboards",
+                    "Browse Tessara dashboards.",
+                )
+            }),
         )
         .route(
-            "/app/dashboards/new",
-            get(|| async { Html(tessara_web::dashboard_create_application_html()) }),
+            "/dashboards/new",
+            get(|| async {
+                native_app(
+                    "/dashboards/new",
+                    "Create Dashboard",
+                    "Create a Tessara dashboard.",
+                )
+            }),
         )
         .route(
-            "/app/dashboards/{dashboard_id}/edit",
+            "/dashboards/{dashboard_id}/edit",
             get(|Path(dashboard_id): Path<String>| async move {
-                Html(tessara_web::dashboard_edit_application_html(&dashboard_id))
+                native_app(
+                    format!("/dashboards/{dashboard_id}/edit"),
+                    "Edit Dashboard",
+                    "Edit a Tessara dashboard.",
+                )
             }),
         )
         .route(
-            "/app/dashboards/{dashboard_id}",
+            "/dashboards/{dashboard_id}",
             get(|Path(dashboard_id): Path<String>| async move {
-                Html(tessara_web::dashboard_detail_application_html(
-                    &dashboard_id,
-                ))
+                native_app(
+                    format!("/dashboards/{dashboard_id}"),
+                    "Dashboard Detail",
+                    "Inspect a Tessara dashboard.",
+                )
             }),
         )
         .route(
-            "/app/migration",
-            get(|| async { Html(tessara_web::migration_application_shell_html()) }),
+            "/datasets",
+            get(|| async {
+                native_app("/datasets", "Tessara Datasets", "Browse Tessara datasets.")
+            }),
+        )
+        .route(
+            "/datasets/{dataset_id}",
+            get(|Path(dataset_id): Path<String>| async move {
+                native_app(
+                    format!("/datasets/{dataset_id}"),
+                    "Dataset Detail",
+                    "Inspect a Tessara dataset.",
+                )
+            }),
+        )
+        .route(
+            "/administration",
+            get(|| async {
+                native_app(
+                    "/administration",
+                    "Tessara Administration",
+                    "Manage Tessara administration.",
+                )
+            }),
+        )
+        .route(
+            "/administration/users",
+            get(|| async {
+                native_app(
+                    "/administration/users",
+                    "Tessara Users",
+                    "Manage Tessara users.",
+                )
+            }),
+        )
+        .route(
+            "/administration/node-types",
+            get(|| async {
+                native_app(
+                    "/administration/node-types",
+                    "Tessara Node Types",
+                    "Manage organization node types.",
+                )
+            }),
+        )
+        .route(
+            "/administration/roles",
+            get(|| async {
+                native_app(
+                    "/administration/roles",
+                    "Tessara Roles",
+                    "Manage Tessara roles.",
+                )
+            }),
+        )
+        .route(
+            "/migration",
+            get(|| async {
+                native_app(
+                    "/migration",
+                    "Tessara Migration",
+                    "Run Tessara migration workflows.",
+                )
+            }),
         )
         .route("/health", get(|| async { "ok" }))
-        .route("/api/app/summary", get(app_summary::get_summary))
+        .route("/api/summary", get(app_summary::get_summary))
         .route("/api/auth/login", post(auth::login))
         .route("/api/auth/session", get(auth::session))
         .route("/api/auth/logout", delete(auth::logout))
@@ -553,17 +609,6 @@ async fn svg_asset(Path(asset_name): Path<String>) -> impl IntoResponse {
         Some(svg) => (
             [(header::CONTENT_TYPE, "image/svg+xml; charset=utf-8")],
             svg,
-        )
-            .into_response(),
-        None => (StatusCode::NOT_FOUND, "asset not found").into_response(),
-    }
-}
-
-async fn bridge_asset(Path(asset_name): Path<String>) -> impl IntoResponse {
-    match tessara_web::bridge_asset(&asset_name) {
-        Some(asset) => (
-            [(header::CONTENT_TYPE, "text/javascript; charset=utf-8")],
-            asset,
         )
             .into_response(),
         None => (StatusCode::NOT_FOUND, "asset not found").into_response(),

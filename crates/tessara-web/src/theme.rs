@@ -5,9 +5,16 @@ use crate::pipeline;
 pub const STORAGE_KEY: &str = "tessara.themePreference";
 pub const LIGHT_THEME_COLOR: &str = "#F8FAFC";
 pub const DARK_THEME_COLOR: &str = "#0F172A";
+const DM_SANS_URL: &str = "https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,500;9..40,650;9..40,750&display=swap";
 
 pub fn stylesheet_links() -> String {
-    format!(r#"<link rel="stylesheet" href="{}">"#, pipeline::css_path())
+    format!(
+        "<link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">\
+<link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin>\
+<link rel=\"stylesheet\" href=\"{DM_SANS_URL}\">\
+<link rel=\"stylesheet\" href=\"{}\">",
+        pipeline::css_path()
+    )
 }
 
 pub fn bootstrap_script() -> String {
@@ -42,12 +49,4 @@ pub fn bootstrap_script() -> String {
   }}
 }})();"#,
     )
-}
-
-pub fn control_html() -> &'static str {
-    r#"<div class="theme-toggle" role="group" aria-label="Theme preference">
-      <button class="theme-toggle-button" type="button" data-theme-choice="system" aria-pressed="true">System</button>
-      <button class="theme-toggle-button" type="button" data-theme-choice="light" aria-pressed="false">Light</button>
-      <button class="theme-toggle-button" type="button" data-theme-choice="dark" aria-pressed="false">Dark</button>
-    </div>"#
 }
