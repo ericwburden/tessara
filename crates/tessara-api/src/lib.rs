@@ -24,12 +24,14 @@ mod workflows;
 
 use axum::{
     Router,
-    extract::Path,
-    http::{StatusCode, header},
-    response::{Html, IntoResponse},
+    extract::{Path, Request, State},
+    http::{Method, StatusCode, header},
+    middleware::{self, Next},
+    response::{Html, IntoResponse, Redirect, Response},
     routing::{delete, get, post, put},
 };
 use db::AppState;
+use error::ApiError;
 use tower_http::{cors::CorsLayer, services::ServeDir, trace::TraceLayer};
 
 fn native_app(path: impl AsRef<str>, title: &str, description: &str) -> Html<String> {
@@ -47,6 +49,8 @@ fn native_app(path: impl AsRef<str>, title: &str, description: &str) -> Html<Str
 /// binaries, and future deployment adapters can construct the same service
 /// surface without duplicating route registration.
 pub fn router(state: AppState) -> Router {
+    let auth_state = state.clone();
+
     Router::new()
         .route(
             "/",
@@ -601,7 +605,46 @@ pub fn router(state: AppState) -> Router {
         .route("/api/demo/seed", post(demo::seed_demo_endpoint))
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
+        .layer(middleware::from_fn_with_state(
+            auth_state,
+            require_authenticated_ui_route,
+        ))
         .with_state(state)
+}
+
+async fn require_authenticated_ui_route(
+    State(state): State<AppState>,
+    request: Request,
+    next: Next,
+) -> Response {
+    if !is_protected_ui_request(&request) {
+        return next.run(request).await;
+    }
+
+    match auth::authenticate_request(&state.pool, &state.config, request.headers()).await {
+        Ok(_) => next.run(request).await,
+        Err(ApiError::Unauthorized | ApiError::SessionExpired | ApiError::SessionRevoked) => {
+            Redirect::to("/login").into_response()
+        }
+        Err(error) => error.into_response(),
+    }
+}
+
+fn is_protected_ui_request(request: &Request) -> bool {
+    if !matches!(request.method(), &Method::GET | &Method::HEAD) {
+        return false;
+    }
+
+    let path = request.uri().path();
+    !(path == "/"
+        || path == "/login"
+        || path == "/health"
+        || path == "/api"
+        || path.starts_with("/api/")
+        || path == "/assets"
+        || path.starts_with("/assets/")
+        || path == "/pkg"
+        || path.starts_with("/pkg/"))
 }
 
 async fn svg_asset(Path(asset_name): Path<String>) -> impl IntoResponse {

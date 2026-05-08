@@ -3,6 +3,10 @@ use icons::{
     LayoutDashboard, LogOut, Menu, Monitor, Moon, SlidersHorizontal, Sun, Truck, Workflow,
 };
 use leptos::prelude::*;
+#[cfg(feature = "hydrate")]
+use serde::Deserialize;
+#[cfg(feature = "hydrate")]
+use wasm_bindgen::JsValue;
 
 #[cfg(feature = "hydrate")]
 use crate::theme::{DARK_THEME_COLOR, LIGHT_THEME_COLOR, STORAGE_KEY};
@@ -84,6 +88,8 @@ pub fn AppShell(
     title: &'static str,
     children: Children,
 ) -> impl IntoView {
+    require_authenticated_route(active_route);
+
     view! {
         <main class="app-shell">
             <Sidebar active_route/>
@@ -95,6 +101,47 @@ pub fn AppShell(
             </section>
         </main>
     }
+}
+
+fn require_authenticated_route(active_route: &'static str) {
+    #[cfg(feature = "hydrate")]
+    {
+        if active_route == "home" {
+            return;
+        }
+
+        leptos::task::spawn_local(async move {
+            let response = gloo_net::http::Request::get("/api/auth/session")
+                .send()
+                .await;
+
+            let authenticated = match response {
+                Ok(response) if response.ok() => response
+                    .json::<SessionStateResponse>()
+                    .await
+                    .map(|session| session.authenticated)
+                    .unwrap_or(false),
+                _ => false,
+            };
+
+            if !authenticated {
+                if let Some(window) = web_sys::window() {
+                    let _ = window.location().set_href("/login");
+                }
+            }
+        });
+    }
+
+    #[cfg(not(feature = "hydrate"))]
+    {
+        let _ = active_route;
+    }
+}
+
+#[cfg(feature = "hydrate")]
+#[derive(Deserialize)]
+struct SessionStateResponse {
+    authenticated: bool,
 }
 
 #[component]
@@ -430,14 +477,15 @@ fn MobileNav(active_route: &'static str) -> impl IntoView {
 #[component]
 pub fn PageHeader(
     title: &'static str,
-    description: &'static str,
+    #[prop(optional)] description: Option<&'static str>,
     #[prop(optional)] children: Option<Children>,
 ) -> impl IntoView {
     view! {
         <header class="page-header">
             <div>
                 <h2>{title}</h2>
-                <p>{description}</p>
+                {description
+                    .map(|description| view! { <p>{description}</p> })}
             </div>
             <div class="page-header__actions">
                 {children.map(|children| children())}
@@ -464,16 +512,83 @@ pub fn IconButton(label: &'static str, children: Children) -> impl IntoView {
 }
 
 #[component]
-pub fn DropdownMenu(label: &'static str, children: Children) -> impl IntoView {
+pub fn Timestamp(value: String) -> impl IntoView {
+    let datetime = value.clone();
+    let display_value = RwSignal::new(value.clone());
+
+    #[cfg(feature = "hydrate")]
+    Effect::new(move |_| {
+        display_value.set(format_local_timestamp(&value));
+    });
+
     view! {
-        <details class="dropdown-menu blurred-surface">
-            <summary class="icon-button" aria-label=label title=label>
-                <Ellipsis class="icon-button__icon"/>
-            </summary>
-            <div class="dropdown-menu__content">
+        <time datetime=datetime>{move || display_value.get()}</time>
+    }
+}
+
+#[cfg(feature = "hydrate")]
+fn format_local_timestamp(value: &str) -> String {
+    let date = js_sys::Date::new(&JsValue::from_str(value));
+    if date.get_time().is_nan() {
+        return value.to_string();
+    }
+
+    let month = date.get_month() + 1;
+    let day = date.get_date();
+    let year = date.get_full_year() % 100;
+    let mut hour = date.get_hours();
+    let minute = date.get_minutes();
+    let second = date.get_seconds();
+    let meridiem = if hour >= 12 { "PM" } else { "AM" };
+
+    hour %= 12;
+    if hour == 0 {
+        hour = 12;
+    }
+
+    format!("{month:02}/{day:02}/{year:02} {hour:02}:{minute:02}:{second:02} {meridiem}")
+}
+
+#[component]
+pub fn DropdownMenu(#[prop(into)] label: String, children: Children) -> impl IntoView {
+    let is_open = RwSignal::new(false);
+    let menu_class = move || {
+        if is_open.get() {
+            "dropdown-menu is-open"
+        } else {
+            "dropdown-menu"
+        }
+    };
+
+    view! {
+        <div class=menu_class>
+            <button
+                class="icon-button"
+                type="button"
+                aria-label=label.clone()
+                title=label
+                aria-haspopup="menu"
+                aria-expanded=move || is_open.get().to_string()
+                on:click=move |_| is_open.update(|open| *open = !*open)
+            >
+                <span aria-hidden="true">
+                    <Ellipsis class="icon-button__icon"/>
+                </span>
+            </button>
+            <button
+                class="dropdown-menu__scrim"
+                type="button"
+                aria-label="Close menu"
+                on:click=move |_| is_open.set(false)
+            ></button>
+            <div
+                class="dropdown-menu__content blurred-surface"
+                role="menu"
+                on:click=move |_| is_open.set(false)
+            >
                 {children()}
             </div>
-        </details>
+        </div>
     }
 }
 

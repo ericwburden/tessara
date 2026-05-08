@@ -111,7 +111,8 @@ This should reinforce the product themes of:
 | Teal | `#14B8A6` | primary action, primary accent |
 | Orange | `#F59E0B` | focus outline and highlight accent |
 | Lime | `#84CC16` | success and completed states |
-| Cyan | `#06B6D4` | secondary accent |
+| Slate Mid | `#64748B` | secondary accent |
+| Cyan | `#06B6D4` | reserved only for future documented use |
 | Indigo | `#6366F1` | informational states and neutral system feedback |
 | Red | `#DC2626` | danger, destructive action, and error states |
 
@@ -122,7 +123,7 @@ Components MUST consume semantic color tokens rather than reaching directly for 
 | Semantic role | Base color | Foreground | Soft background | Border | Use |
 | --- | --- | --- | --- | --- | --- |
 | Primary accent | Teal `#14B8A6` | Ink `#0F172A` | `rgba(20, 184, 166, 0.16)` | `rgba(20, 184, 166, 0.30)` | primary actions, active navigation, key links, selected productive state |
-| Secondary accent | Cyan `#06B6D4` | Ink `#0F172A` | `rgba(6, 182, 212, 0.16)` | `rgba(6, 182, 212, 0.30)` | secondary workflow cues, supporting accents, non-primary feature affordances |
+| Secondary accent | Slate Mid `#64748B` | Light `#F8FAFC` | `rgba(100, 116, 139, 0.18)` | `rgba(100, 116, 139, 0.34)` | secondary workflow cues, supporting accents, non-primary feature affordances |
 | Info | Indigo `#6366F1` | Light `#F8FAFC` | `rgba(99, 102, 241, 0.16)` | `rgba(99, 102, 241, 0.30)` | neutral notices, pending or queued system state, explanatory feedback |
 | Success | Lime `#84CC16` | Ink `#0F172A` | `rgba(132, 204, 22, 0.16)` | `rgba(132, 204, 22, 0.30)` | completed work, saved changes, confirmed success |
 | Warning | Orange `#F59E0B` | Ink `#0F172A` | `rgba(245, 158, 11, 0.16)` | `rgba(245, 158, 11, 0.30)` | pending work, unsaved or intermediate states, focus and caution |

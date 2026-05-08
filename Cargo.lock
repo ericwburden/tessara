@@ -4424,6 +4424,7 @@ dependencies = [
  "console_error_panic_hook",
  "gloo-net",
  "icons",
+ "js-sys",
  "leptos",
  "leptos_meta",
  "leptos_router",

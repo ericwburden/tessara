@@ -14,7 +14,7 @@ pub use repo::{
     effective_scope_node_ids, load_delegations, load_effective_capabilities, load_scope_nodes,
 };
 pub use service::{
-    backfill_legacy_password_hashes, derive_ui_access_profile, hash_password_for_storage,
-    password_scheme, require_capability, resolve_accessible_delegate_account_id,
-    scope_assignments_are_meaningful, store_password_hash,
+    authenticate_request, backfill_legacy_password_hashes, derive_ui_access_profile,
+    hash_password_for_storage, password_scheme, require_capability,
+    resolve_accessible_delegate_account_id, scope_assignments_are_meaningful, store_password_hash,
 };

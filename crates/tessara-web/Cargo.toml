@@ -22,6 +22,7 @@ any_spawner = { version = "0.3", features = ["wasm-bindgen"] }
 console_error_panic_hook = "0.1"
 gloo-net = { workspace = true }
 icons = { workspace = true }
+js-sys = { workspace = true }
 leptos = { workspace = true }
 leptos_meta = { workspace = true }
 leptos_router = { workspace = true }
