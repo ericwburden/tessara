@@ -2944,7 +2944,6 @@ pub fn OrganizationDetailPage() -> impl IntoView {
                         view! {
                             <PageHeader title="Organization Detail">
                                 <a class="button" href=edit_href>"Edit Node"</a>
-                                <Button label="Back to Organization" href="/organization"/>
                             </PageHeader>
                             <OrganizationDetailFullContent detail=node_detail/>
                         }
@@ -3007,20 +3006,23 @@ pub fn OrganizationEditPage() -> impl IntoView {
                     <BreadcrumbLink href="/organization">"Organization"</BreadcrumbLink>
                 </BreadcrumbItem>
                 <BreadcrumbSeparator/>
+                {move || {
+                    detail.get().map(|node| {
+                        let href = format!("/organization/{}", node.id);
+                        view! {
+                            <BreadcrumbItem>
+                                <BreadcrumbLink href=href>{node.name}</BreadcrumbLink>
+                            </BreadcrumbItem>
+                            <BreadcrumbSeparator/>
+                        }
+                    })
+                }}
                 <BreadcrumbItem>
                     <BreadcrumbPage>"Edit Node"</BreadcrumbPage>
                 </BreadcrumbItem>
             </Breadcrumb>
-            <section class="route-panel organization-page">
-                <PageHeader title="Edit Organization Node">
-                    {move || detail.get().map(|node| {
-                        let href = format!("/organization/{}", node.id);
-                        view! {
-                            <a class="button" href=href>"Back to Detail"</a>
-                        }
-                    })}
-                    <Button label="Back to Organization" href="/organization"/>
-                </PageHeader>
+            <section class="route-panel organization-page organization-edit-page">
+                <PageHeader title="Edit Organization Node"/>
 
                 {move || {
                     if is_loading.get() {

@@ -524,7 +524,7 @@ pub fn BreadcrumbItem(children: Children) -> impl IntoView {
 }
 
 #[component]
-pub fn BreadcrumbLink(href: &'static str, children: Children) -> impl IntoView {
+pub fn BreadcrumbLink(#[prop(into)] href: String, children: Children) -> impl IntoView {
     view! {
         <a class="breadcrumb__link" href=href>
             {children()}

@@ -558,6 +558,10 @@ input {
   border-radius: var(--radius);
 }
 
+.table-wrap:has(.data-table-filter.is-open) {
+  overflow: visible;
+}
+
 .data-table {
   width: 100%;
   min-width: 42rem;
@@ -907,6 +911,10 @@ input {
   align-content: start;
 }
 
+.organization-edit-page {
+  max-width: 56.5rem;
+}
+
 .organization-tree {
   display: grid;
   gap: 0.35rem;
@@ -1074,7 +1082,7 @@ input {
 .native-form {
   display: grid;
   gap: 1rem;
-  max-width: 54rem;
+  max-width: 100%;
 }
 
 .form-grid {
