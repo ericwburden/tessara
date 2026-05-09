@@ -9,6 +9,7 @@ use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::infra::routing::{NodeRouteParams, require_route_params};
 use crate::ui::components::{
     AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator,
     Button, DataTable, DropdownMenu, EmptyState, InfoListTable, InfoRow, PageHeader, StatusBadge,
@@ -51,8 +52,8 @@ const ROUTE_MIGRATIONS: [RouteMigration; 32] = [
     RouteMigration {
         name: "Organization Detail",
         route: "/organization/:node_id",
-        href: "/organization/demo-partner-north-star-services",
-        status: "Pending",
+        href: "/organization/fb3fb3c8-2670-4c85-bcda-be59dd3aa119",
+        status: "Done",
     },
     RouteMigration {
         name: "Edit Organization Node",
@@ -849,6 +850,43 @@ fn OrganizationDetailContent(detail: OrganizationNodeDetail) -> impl IntoView {
             <h3>"Related Work"</h3>
             <RelatedWorkSummary detail/>
         </section>
+    }
+}
+
+#[component]
+fn OrganizationDetailFullContent(detail: OrganizationNodeDetail) -> impl IntoView {
+    let metadata_rows = metadata_rows(&detail.metadata);
+    let node_type = detail.node_type_singular_label.clone();
+
+    view! {
+        <div class="organization-detail-content">
+            <header class="organization-detail-content__header">
+                <p>{format!("{} Detail", node_type)}</p>
+                <h3>{detail.name.clone()}</h3>
+            </header>
+            <div class="organization-detail-content__grid">
+                <section class="organization-detail-card">
+                    <h3>"Details"</h3>
+                    <DynamicInfoTable rows=vec![
+                        ("Parent".to_string(), detail.parent_node_name.clone().unwrap_or_else(|| "Top-level".to_string())),
+                        ("Type".to_string(), detail.node_type_name.clone()),
+                        ("Plural".to_string(), detail.node_type_plural_label.clone()),
+                    ]/>
+                </section>
+                <section class="organization-detail-card">
+                    <h3>"Metadata"</h3>
+                    {if metadata_rows.is_empty() {
+                        view! { <p class="muted">"No metadata recorded."</p> }.into_any()
+                    } else {
+                        view! { <DynamicInfoTable rows=metadata_rows/> }.into_any()
+                    }}
+                </section>
+                <section class="organization-detail-card organization-detail-card--wide">
+                    <h3>"Related Work"</h3>
+                    <RelatedWorkSummary detail/>
+                </section>
+            </div>
+        </div>
     }
 }
 
@@ -1922,7 +1960,69 @@ fn current_search_param(name: &str) -> Option<String> {
 
 #[component]
 pub fn OrganizationDetailPage() -> impl IntoView {
-    view! { <ResetRoute active_route="organization" title="Organization Detail" route="/organization/:node_id" status="Registered" next_step="Restore details sheet and related work after organization list lands."/> }
+    let params = require_route_params::<NodeRouteParams>();
+    let node_id = params.node_id;
+    let detail = RwSignal::new(None::<OrganizationNodeDetail>);
+    let is_loading = RwSignal::new(true);
+    let error = RwSignal::new(None::<String>);
+
+    Effect::new(move |_| {
+        load_organization_detail(node_id.clone(), detail, is_loading, error);
+    });
+
+    view! {
+        <AppShell active_route="organization" title="Organization">
+            <Breadcrumb>
+                <BreadcrumbItem>
+                    <BreadcrumbLink href="/organization">"Organization"</BreadcrumbLink>
+                </BreadcrumbItem>
+                <BreadcrumbSeparator/>
+                <BreadcrumbItem>
+                    <BreadcrumbPage>"Detail"</BreadcrumbPage>
+                </BreadcrumbItem>
+            </Breadcrumb>
+
+            <section class="route-panel organization-page organization-detail-page">
+                {move || {
+                    if is_loading.get() {
+                        view! {
+                            <section class="organization-state" aria-live="polite">
+                                <h3>"Loading detail"</h3>
+                                <p>"Fetching organization node details."</p>
+                            </section>
+                        }
+                        .into_any()
+                    } else if let Some(message) = error.get() {
+                        view! {
+                            <section class="organization-state is-error" role="alert">
+                                <h3>"Organization detail unavailable"</h3>
+                                <p>{message}</p>
+                            </section>
+                        }
+                        .into_any()
+                    } else if let Some(node_detail) = detail.get() {
+                        let edit_href = format!("/organization/{}/edit", node_detail.id);
+                        view! {
+                            <PageHeader title="Organization Detail">
+                                <a class="button" href=edit_href>"Edit Node"</a>
+                                <Button label="Back to Organization" href="/organization"/>
+                            </PageHeader>
+                            <OrganizationDetailFullContent detail=node_detail/>
+                        }
+                        .into_any()
+                    } else {
+                        view! {
+                            <EmptyState
+                                title="Organization detail unavailable"
+                                message="The selected node could not be loaded."
+                            />
+                        }
+                        .into_any()
+                    }
+                }}
+            </section>
+        </AppShell>
+    }
 }
 
 #[component]

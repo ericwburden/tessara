@@ -1061,6 +1061,52 @@ input {
   color: var(--color-muted);
 }
 
+.organization-detail-content {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.organization-detail-content__header {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.organization-detail-content__header p {
+  margin: 0;
+  color: var(--semantic-primary);
+  font-size: 0.82rem;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.organization-detail-content__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.organization-detail-card {
+  display: grid;
+  align-content: start;
+  gap: 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-panel-soft);
+  padding: 1rem;
+}
+
+.organization-detail-card--wide {
+  grid-column: 1 / -1;
+}
+
+.organization-detail-card h3 {
+  color: var(--semantic-primary);
+  font-size: 0.95rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .status-badge {
   display: inline-flex;
   align-items: center;
