@@ -2,7 +2,8 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 
 use icons::{
-    ChevronDown, ChevronRight, ExternalLink, LockKeyhole, Mail, PanelRight, Pencil, Plus, X,
+    ChevronDown, ChevronRight, ExternalLink, LockKeyhole, Mail, PanelRight, Pencil, Plus, Search,
+    SlidersHorizontal, X,
 };
 use leptos::portal::Portal;
 use leptos::prelude::*;
@@ -12,8 +13,8 @@ use serde_json::Value;
 use crate::infra::routing::{NodeRouteParams, require_route_params};
 use crate::ui::components::{
     AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator,
-    Button, DataTable, DropdownMenu, EmptyState, InfoListTable, InfoRow, PageHeader, StatusBadge,
-    Timestamp,
+    Button, DataTable, DropdownMenu, EmptyState, InfoListTable, InfoRow, PageHeader,
+    SearchableDataTable, StatusBadge, Tabs, TabsContent, TabsList, TabsTrigger, Timestamp,
 };
 
 #[derive(Clone, Copy)]
@@ -514,6 +515,7 @@ struct NodeFormLink {
     form_name: String,
     form_slug: String,
     published_version_count: i64,
+    active_version_label: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -523,6 +525,8 @@ struct NodeSubmissionLink {
     version_label: String,
     status: String,
     created_at: String,
+    submitted_at: Option<String>,
+    submitted_by: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -530,6 +534,7 @@ struct NodeDashboardLink {
     dashboard_id: String,
     dashboard_name: String,
     component_count: i64,
+    description: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -911,97 +916,382 @@ fn DynamicInfoTable(rows: Vec<(String, String)>) -> impl IntoView {
 
 #[component]
 fn RelatedWorkSummary(detail: OrganizationNodeDetail) -> impl IntoView {
+    let active_tab = RwSignal::new("forms".to_string());
+    let forms_count = detail.related_forms.len();
+    let responses_count = detail.related_responses.len();
+    let dashboards_count = detail.related_dashboards.len();
+
     view! {
         <div class="related-work-summary">
-            <RelatedForms forms=detail.related_forms/>
-            <RelatedResponses responses=detail.related_responses/>
-            <RelatedDashboards dashboards=detail.related_dashboards/>
+            <Tabs active=active_tab>
+                <TabsList>
+                    <TabsTrigger active=active_tab value="forms">
+                        {format!("Forms ({forms_count})")}
+                    </TabsTrigger>
+                    <TabsTrigger active=active_tab value="responses">
+                        {format!("Responses ({responses_count})")}
+                    </TabsTrigger>
+                    <TabsTrigger active=active_tab value="dashboards">
+                        {format!("Dashboards ({dashboards_count})")}
+                    </TabsTrigger>
+                </TabsList>
+                <TabsContent active=active_tab value="forms">
+                    <RelatedFormsTable forms=detail.related_forms/>
+                </TabsContent>
+                <TabsContent active=active_tab value="responses">
+                    <RelatedResponsesTable responses=detail.related_responses/>
+                </TabsContent>
+                <TabsContent active=active_tab value="dashboards">
+                    <RelatedDashboardsTable dashboards=detail.related_dashboards/>
+                </TabsContent>
+            </Tabs>
         </div>
     }
 }
 
 #[component]
-fn RelatedForms(forms: Vec<NodeFormLink>) -> impl IntoView {
-    let count = forms.len();
+fn RelatedFormsTable(forms: Vec<NodeFormLink>) -> impl IntoView {
+    let search = RwSignal::new(String::new());
+    let filtered_forms = move || {
+        let query = search.get();
+        forms
+            .iter()
+            .filter(|form| {
+                text_matches(
+                    &query,
+                    &[
+                        &form.form_name,
+                        &form.form_slug,
+                        form.active_version_label.as_deref().unwrap_or(""),
+                    ],
+                )
+            })
+            .cloned()
+            .collect::<Vec<_>>()
+    };
+
     view! {
-        <section class="related-work-summary__group">
-            <h4>{format!("Forms ({count})")}</h4>
-            {if forms.is_empty() {
-                view! { <p class="muted">"No related forms."</p> }.into_any()
-            } else {
-                forms
-                    .into_iter()
-                    .map(|form| view! {
-                        <a class="related-work-card" href=format!("/forms/{}", form.form_id)>
-                            <span>
-                                <strong>{form.form_name}</strong>
-                                <small>{form.form_slug}</small>
-                            </span>
-                            <span class="related-work-card__meta">{format!("{} versions", form.published_version_count)}</span>
-                            <ExternalLink class="related-work-card__icon"/>
-                        </a>
-                    })
-                    .collect_view()
-                    .into_any()
-            }}
-        </section>
+        <SearchableDataTable search_label="Search forms" placeholder="Search related forms" search>
+            <thead>
+                <tr>
+                    <th scope="col">"Form name"</th>
+                    <th scope="col">"Slug"</th>
+                    <th scope="col">"Active version"</th>
+                    <th scope="col">"View"</th>
+                </tr>
+            </thead>
+            <tbody>
+                {move || {
+                    let rows = filtered_forms();
+                    if rows.is_empty() {
+                        view! {
+                            <tr>
+                                <td class="data-table__empty" colspan="4">"No Related Forms to Display"</td>
+                            </tr>
+                        }
+                        .into_any()
+                    } else {
+                        rows
+                            .into_iter()
+                            .map(|form| {
+                                let href = format!("/forms/{}", form.form_id);
+                                view! {
+                                    <tr>
+                                        <th scope="row">{form.form_name}</th>
+                                        <td>{form.form_slug}</td>
+                                        <td>{form.active_version_label.unwrap_or_else(|| "-".to_string())}</td>
+                                        <td>
+                                            <a class="data-table__action" href=href aria-label="View form" title="View form">
+                                                <ExternalLink/>
+                                            </a>
+                                        </td>
+                                    </tr>
+                                }
+                            })
+                            .collect_view()
+                            .into_any()
+                    }
+                }}
+            </tbody>
+        </SearchableDataTable>
     }
 }
 
 #[component]
-fn RelatedResponses(responses: Vec<NodeSubmissionLink>) -> impl IntoView {
-    let count = responses.len();
+fn RelatedResponsesTable(responses: Vec<NodeSubmissionLink>) -> impl IntoView {
+    let search = RwSignal::new(String::new());
+    let status_filter = RwSignal::new("all".to_string());
+    let filtered_responses = move || {
+        let query = search.get();
+        let status = status_filter.get();
+        responses
+            .iter()
+            .filter(|response| status == "all" || response.status == status)
+            .filter(|response| {
+                text_matches(
+                    &query,
+                    &[
+                        &response.form_name,
+                        &response.version_label,
+                        &response.status,
+                        response.submitted_by.as_deref().unwrap_or("Unknown"),
+                    ],
+                )
+            })
+            .cloned()
+            .collect::<Vec<_>>()
+    };
+
     view! {
-        <section class="related-work-summary__group">
-            <h4>{format!("Responses ({count})")}</h4>
-            {if responses.is_empty() {
-                view! { <p class="muted">"No recent responses."</p> }.into_any()
-            } else {
-                responses
-                    .into_iter()
-                    .map(|response| view! {
-                        <a class="related-work-card" href=format!("/responses/{}", response.submission_id)>
-                            <span>
-                                <strong>{response.form_name}</strong>
-                                <small>{format!("{} | {}", response.version_label, response.status)}</small>
-                            </span>
-                            <span class="related-work-card__meta">
-                                <Timestamp value=response.created_at/>
-                            </span>
-                            <ExternalLink class="related-work-card__icon"/>
-                        </a>
-                    })
-                    .collect_view()
-                    .into_any()
-            }}
-        </section>
+        <div class="searchable-data-table">
+            <label class="searchable-data-table__search searchable-data-table__control">
+                <Search class="searchable-data-table__control-icon"/>
+                <span class="sr-only">"Search responses"</span>
+                <input
+                    type="search"
+                    placeholder="Search related responses"
+                    prop:value=move || search.get()
+                    on:input=move |event| search.set(event_target_value(&event))
+                />
+            </label>
+            <DataTable>
+            <thead>
+                <tr>
+                    <th scope="col">"Form name"</th>
+                    <th scope="col">"Version"</th>
+                    <th scope="col">
+                        <StatusFilterHeader status_filter/>
+                    </th>
+                    <th scope="col">"Submitted Date"</th>
+                    <th scope="col">"Submitted By"</th>
+                    <th scope="col">"View"</th>
+                </tr>
+            </thead>
+            <tbody>
+                {move || {
+                    let rows = filtered_responses();
+                    if rows.is_empty() {
+                        view! {
+                            <tr>
+                                <td class="data-table__empty" colspan="6">"No Related Responses to Display"</td>
+                            </tr>
+                        }
+                        .into_any()
+                    } else {
+                        rows
+                            .into_iter()
+                            .map(|response| {
+                                let href = format!("/responses/{}", response.submission_id);
+                                let submitted_date = response
+                                    .submitted_at
+                                    .clone()
+                                    .unwrap_or_else(|| response.created_at.clone());
+                                view! {
+                                    <tr>
+                                        <th scope="row">{response.form_name}</th>
+                                        <td>{response.version_label}</td>
+                                        <td>{sentence_label(&response.status)}</td>
+                                        <td><Timestamp value=submitted_date/></td>
+                                        <td>{response.submitted_by.unwrap_or_else(|| "Unknown".to_string())}</td>
+                                        <td>
+                                            <a class="data-table__action" href=href aria-label="View response" title="View response">
+                                                <ExternalLink/>
+                                            </a>
+                                        </td>
+                                    </tr>
+                                }
+                            })
+                            .collect_view()
+                            .into_any()
+                    }
+                }}
+            </tbody>
+            </DataTable>
+        </div>
     }
 }
 
 #[component]
-fn RelatedDashboards(dashboards: Vec<NodeDashboardLink>) -> impl IntoView {
-    let count = dashboards.len();
+fn StatusFilterHeader(status_filter: RwSignal<String>) -> impl IntoView {
+    let is_open = RwSignal::new(false);
+    let menu_class = move || {
+        if is_open.get() {
+            "data-table-filter is-open"
+        } else {
+            "data-table-filter"
+        }
+    };
+    let button_label = move || {
+        let current = status_filter.get();
+        if current == "all" {
+            "Filter Status".to_string()
+        } else {
+            format!("Filter Status: {}", sentence_label(&current))
+        }
+    };
+
     view! {
-        <section class="related-work-summary__group">
-            <h4>{format!("Dashboards ({count})")}</h4>
-            {if dashboards.is_empty() {
-                view! { <p class="muted">"No related dashboards."</p> }.into_any()
-            } else {
-                dashboards
-                    .into_iter()
-                    .map(|dashboard| view! {
-                        <a class="related-work-card" href=format!("/dashboards/{}", dashboard.dashboard_id)>
-                            <span>
-                                <strong>{dashboard.dashboard_name}</strong>
-                                <small>{format!("{} components", dashboard.component_count)}</small>
-                            </span>
-                            <ExternalLink class="related-work-card__icon"/>
-                        </a>
-                    })
-                    .collect_view()
-                    .into_any()
-            }}
-        </section>
+        <div class=menu_class>
+            <span>"Status"</span>
+            <button
+                class="data-table-filter__trigger"
+                type="button"
+                aria-label=button_label
+                title=button_label
+                aria-haspopup="menu"
+                aria-expanded=move || is_open.get().to_string()
+                on:click=move |_| is_open.update(|open| *open = !*open)
+            >
+                <SlidersHorizontal/>
+            </button>
+            <button
+                class="data-table-filter__scrim"
+                type="button"
+                aria-label="Close status filter"
+                on:click=move |_| is_open.set(false)
+            ></button>
+            <div class="data-table-filter__menu blurred-surface" role="menu">
+                <button
+                    class=move || filter_option_class(&status_filter.get(), "all")
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked=move || (status_filter.get() == "all").to_string()
+                    on:click=move |_| {
+                        status_filter.set("all".to_string());
+                        is_open.set(false);
+                    }
+                >
+                    "All statuses"
+                </button>
+                <button
+                    class=move || filter_option_class(&status_filter.get(), "draft")
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked=move || (status_filter.get() == "draft").to_string()
+                    on:click=move |_| {
+                        status_filter.set("draft".to_string());
+                        is_open.set(false);
+                    }
+                >
+                    "Draft"
+                </button>
+                <button
+                    class=move || filter_option_class(&status_filter.get(), "submitted")
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked=move || (status_filter.get() == "submitted").to_string()
+                    on:click=move |_| {
+                        status_filter.set("submitted".to_string());
+                        is_open.set(false);
+                    }
+                >
+                    "Submitted"
+                </button>
+            </div>
+        </div>
+    }
+}
+
+fn filter_option_class(current: &str, value: &str) -> &'static str {
+    if current == value {
+        "data-table-filter__option is-active"
+    } else {
+        "data-table-filter__option"
+    }
+}
+
+#[component]
+fn RelatedDashboardsTable(dashboards: Vec<NodeDashboardLink>) -> impl IntoView {
+    let search = RwSignal::new(String::new());
+    let filtered_dashboards = move || {
+        let query = search.get();
+        dashboards
+            .iter()
+            .filter(|dashboard| {
+                text_matches(
+                    &query,
+                    &[
+                        &dashboard.dashboard_name,
+                        &dashboard.component_count.to_string(),
+                        dashboard.description.as_deref().unwrap_or("No description"),
+                    ],
+                )
+            })
+            .cloned()
+            .collect::<Vec<_>>()
+    };
+
+    view! {
+        <SearchableDataTable search_label="Search dashboards" placeholder="Search related dashboards" search>
+            <thead>
+                <tr>
+                    <th scope="col">"Dashboard name"</th>
+                    <th scope="col">"Component Count"</th>
+                    <th scope="col">"Description"</th>
+                    <th scope="col">"View"</th>
+                </tr>
+            </thead>
+            <tbody>
+                {move || {
+                    let rows = filtered_dashboards();
+                    if rows.is_empty() {
+                        view! {
+                            <tr>
+                                <td class="data-table__empty" colspan="4">"No Related Dashboards to Display"</td>
+                            </tr>
+                        }
+                        .into_any()
+                    } else {
+                        rows
+                            .into_iter()
+                            .map(|dashboard| {
+                                let href = format!("/dashboards/{}", dashboard.dashboard_id);
+                                view! {
+                                    <tr>
+                                        <th scope="row">{dashboard.dashboard_name}</th>
+                                        <td>{dashboard.component_count}</td>
+                                        <td>{nonempty_text(dashboard.description.as_deref(), "No description")}</td>
+                                        <td>
+                                            <a class="data-table__action" href=href aria-label="View dashboard" title="View dashboard">
+                                                <ExternalLink/>
+                                            </a>
+                                        </td>
+                                    </tr>
+                                }
+                            })
+                            .collect_view()
+                            .into_any()
+                    }
+                }}
+            </tbody>
+        </SearchableDataTable>
+    }
+}
+
+fn text_matches(query: &str, values: &[&str]) -> bool {
+    let query = query.trim().to_lowercase();
+    if query.is_empty() {
+        return true;
+    }
+
+    values
+        .iter()
+        .any(|value| value.to_lowercase().contains(&query))
+}
+
+fn nonempty_text(value: Option<&str>, fallback: &'static str) -> String {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| fallback.to_string())
+}
+
+fn sentence_label(value: &str) -> String {
+    let mut chars = value.chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+        None => String::new(),
     }
 }
 

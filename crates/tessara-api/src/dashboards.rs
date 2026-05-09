@@ -29,6 +29,7 @@ pub struct CreateChartRequest {
 #[derive(Deserialize)]
 pub struct CreateDashboardRequest {
     name: String,
+    description: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -43,6 +44,7 @@ pub struct AddDashboardComponentRequest {
 pub struct DashboardResponse {
     id: Uuid,
     name: String,
+    description: Option<String>,
     components: Vec<DashboardComponentResponse>,
 }
 
@@ -79,6 +81,7 @@ pub struct ChartDefinition {
 pub struct DashboardSummary {
     id: Uuid,
     name: String,
+    description: Option<String>,
     component_count: i64,
 }
 
@@ -269,11 +272,12 @@ pub async fn get_chart(
         SELECT
             dashboards.id,
             dashboards.name,
+            dashboards.description,
             COUNT(dashboard_components.id) AS component_count
         FROM dashboards
         JOIN dashboard_components ON dashboard_components.dashboard_id = dashboards.id
         WHERE dashboard_components.chart_id = $1
-        GROUP BY dashboards.id, dashboards.name
+        GROUP BY dashboards.id, dashboards.name, dashboards.description
         ORDER BY dashboards.name, dashboards.id
         "#,
     )
@@ -285,6 +289,7 @@ pub async fn get_chart(
         Ok(DashboardSummary {
             id: row.try_get("id")?,
             name: row.try_get("name")?,
+            description: row.try_get("description")?,
             component_count: row.try_get("component_count")?,
         })
     })
@@ -316,10 +321,13 @@ pub async fn create_dashboard(
     auth::require_capability(&state.pool, &headers, "reports:write").await?;
     require_text("dashboard name", &payload.name)?;
 
-    let id = sqlx::query_scalar("INSERT INTO dashboards (name) VALUES ($1) RETURNING id")
-        .bind(payload.name)
-        .fetch_one(&state.pool)
-        .await?;
+    let id = sqlx::query_scalar(
+        "INSERT INTO dashboards (name, description) VALUES ($1, $2) RETURNING id",
+    )
+    .bind(payload.name)
+    .bind(payload.description)
+    .fetch_one(&state.pool)
+    .await?;
 
     Ok(Json(IdResponse { id }))
 }
@@ -335,8 +343,9 @@ pub async fn update_dashboard(
     require_dashboard_exists(&state.pool, dashboard_id).await?;
     require_text("dashboard name", &payload.name)?;
 
-    sqlx::query("UPDATE dashboards SET name = $1 WHERE id = $2")
+    sqlx::query("UPDATE dashboards SET name = $1, description = $2 WHERE id = $3")
         .bind(payload.name)
+        .bind(payload.description)
         .bind(dashboard_id)
         .execute(&state.pool)
         .await?;
@@ -443,7 +452,7 @@ pub async fn list_dashboards(
         let scope_ids = auth::effective_scope_node_ids(&state.pool, account.account_id).await?;
         sqlx::query(
             r#"
-            SELECT DISTINCT dashboards.id, dashboards.name, COUNT(all_components.id) AS component_count
+            SELECT DISTINCT dashboards.id, dashboards.name, dashboards.description, COUNT(all_components.id) AS component_count
             FROM dashboards
             LEFT JOIN dashboard_components AS all_components ON all_components.dashboard_id = dashboards.id
             WHERE EXISTS (
@@ -470,7 +479,7 @@ pub async fn list_dashboards(
                       OR aggregation_assignments.node_id = ANY($1)
                   )
             )
-            GROUP BY dashboards.id, dashboards.name
+            GROUP BY dashboards.id, dashboards.name, dashboards.description
             ORDER BY dashboards.name, dashboards.id
             "#,
         )
@@ -480,10 +489,10 @@ pub async fn list_dashboards(
     } else {
         sqlx::query(
             r#"
-            SELECT dashboards.id, dashboards.name, COUNT(dashboard_components.id) AS component_count
+            SELECT dashboards.id, dashboards.name, dashboards.description, COUNT(dashboard_components.id) AS component_count
             FROM dashboards
             LEFT JOIN dashboard_components ON dashboard_components.dashboard_id = dashboards.id
-            GROUP BY dashboards.id, dashboards.name
+            GROUP BY dashboards.id, dashboards.name, dashboards.description
             ORDER BY dashboards.name, dashboards.id
             "#,
         )
@@ -497,6 +506,7 @@ pub async fn list_dashboards(
             Ok(DashboardSummary {
                 id: row.try_get("id")?,
                 name: row.try_get("name")?,
+                description: row.try_get("description")?,
                 component_count: row.try_get("component_count")?,
             })
         })
@@ -550,7 +560,7 @@ pub async fn get_dashboard(
         }
     }
 
-    let dashboard = sqlx::query("SELECT id, name FROM dashboards WHERE id = $1")
+    let dashboard = sqlx::query("SELECT id, name, description FROM dashboards WHERE id = $1")
         .bind(dashboard_id)
         .fetch_optional(&state.pool)
         .await?
@@ -613,6 +623,7 @@ pub async fn get_dashboard(
     Ok(Json(DashboardResponse {
         id: dashboard.try_get("id")?,
         name: dashboard.try_get("name")?,
+        description: dashboard.try_get("description")?,
         components,
     }))
 }

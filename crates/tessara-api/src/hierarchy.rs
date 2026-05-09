@@ -126,6 +126,7 @@ pub struct NodeFormLink {
     form_name: String,
     form_slug: String,
     published_version_count: i64,
+    active_version_label: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -138,6 +139,7 @@ pub struct NodeSubmissionLink {
     status: String,
     created_at: chrono::DateTime<chrono::Utc>,
     submitted_at: Option<chrono::DateTime<chrono::Utc>>,
+    submitted_by: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -145,6 +147,7 @@ pub struct NodeDashboardLink {
     dashboard_id: Uuid,
     dashboard_name: String,
     component_count: i64,
+    description: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -957,12 +960,27 @@ pub async fn get_node(
             forms.name AS form_name,
             forms.slug AS form_slug,
             COUNT(DISTINCT form_versions.id)
-                FILTER (WHERE form_versions.status = 'published') AS published_version_count
+                FILTER (WHERE form_versions.status = 'published') AS published_version_count,
+            active_form_versions.version_label AS active_version_label
         FROM forms
         JOIN form_versions ON form_versions.form_id = forms.id
         JOIN form_assignments ON form_assignments.form_version_id = form_versions.id
+        LEFT JOIN LATERAL (
+            SELECT form_versions.version_label
+            FROM form_versions
+            WHERE form_versions.form_id = forms.id
+              AND form_versions.status = 'published'::form_version_status
+            ORDER BY
+                form_versions.version_major DESC NULLS LAST,
+                form_versions.version_minor DESC NULLS LAST,
+                form_versions.version_patch DESC NULLS LAST,
+                form_versions.published_at DESC NULLS LAST,
+                form_versions.created_at DESC,
+                form_versions.id DESC
+            LIMIT 1
+        ) AS active_form_versions ON TRUE
         WHERE form_assignments.node_id = $1
-        GROUP BY forms.id, forms.name, forms.slug
+        GROUP BY forms.id, forms.name, forms.slug, active_form_versions.version_label
         ORDER BY forms.name, forms.id
         "#,
     )
@@ -976,6 +994,7 @@ pub async fn get_node(
             form_name: row.try_get("form_name")?,
             form_slug: row.try_get("form_slug")?,
             published_version_count: row.try_get("published_version_count")?,
+            active_version_label: row.try_get("active_version_label")?,
         })
     })
     .collect::<Result<Vec<_>, sqlx::Error>>()?;
@@ -990,10 +1009,23 @@ pub async fn get_node(
             form_versions.version_label,
             submissions.status::text AS status,
             submissions.created_at,
-            submissions.submitted_at
+            submissions.submitted_at,
+            submitters.submitted_by
         FROM submissions
         JOIN form_versions ON form_versions.id = submissions.form_version_id
         JOIN forms ON forms.id = form_versions.form_id
+        LEFT JOIN LATERAL (
+            SELECT accounts.display_name AS submitted_by
+            FROM submission_audit_events
+            LEFT JOIN accounts ON accounts.id = submission_audit_events.account_id
+            WHERE submission_audit_events.submission_id = submissions.id
+              AND submission_audit_events.account_id IS NOT NULL
+            ORDER BY
+                CASE WHEN submission_audit_events.event_type = 'submit' THEN 0 ELSE 1 END,
+                submission_audit_events.created_at DESC,
+                submission_audit_events.id DESC
+            LIMIT 1
+        ) AS submitters ON TRUE
         WHERE submissions.node_id = $1
         ORDER BY submissions.created_at DESC, submissions.id DESC
         LIMIT 10
@@ -1013,6 +1045,7 @@ pub async fn get_node(
             status: row.try_get("status")?,
             created_at: row.try_get("created_at")?,
             submitted_at: row.try_get("submitted_at")?,
+            submitted_by: row.try_get("submitted_by")?,
         })
     })
     .collect::<Result<Vec<_>, sqlx::Error>>()?;
@@ -1022,6 +1055,7 @@ pub async fn get_node(
         SELECT
             dashboards.id AS dashboard_id,
             dashboards.name AS dashboard_name,
+            dashboards.description,
             COUNT(all_components.id) AS component_count
         FROM dashboards
         LEFT JOIN dashboard_components AS all_components
@@ -1053,7 +1087,7 @@ pub async fn get_node(
                   OR aggregation_assignments.node_id = $1
               )
         )
-        GROUP BY dashboards.id, dashboards.name
+        GROUP BY dashboards.id, dashboards.name, dashboards.description
         ORDER BY dashboards.name, dashboards.id
         "#,
     )
@@ -1066,6 +1100,7 @@ pub async fn get_node(
             dashboard_id: row.try_get("dashboard_id")?,
             dashboard_name: row.try_get("dashboard_name")?,
             component_count: row.try_get("component_count")?,
+            description: row.try_get("description")?,
         })
     })
     .collect::<Result<Vec<_>, sqlx::Error>>()?;

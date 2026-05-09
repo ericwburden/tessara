@@ -1,7 +1,7 @@
 use icons::{
     Bell, Blocks, ChevronRight, CircleHelp, ClipboardCheck, Database, Ellipsis, File, FileText,
-    GitBranch, House, LayoutDashboard, LogOut, Menu, Monitor, Moon, SlidersHorizontal, Sun, Truck,
-    Workflow,
+    GitBranch, House, LayoutDashboard, LogOut, Menu, Monitor, Moon, Search, SlidersHorizontal, Sun,
+    Truck, Workflow,
 };
 use leptos::prelude::*;
 #[cfg(feature = "hydrate")]
@@ -668,6 +668,90 @@ pub fn DataTable(children: Children) -> impl IntoView {
                 {children()}
             </table>
         </div>
+    }
+}
+
+#[component]
+pub fn SearchableDataTable(
+    search_label: &'static str,
+    placeholder: &'static str,
+    search: RwSignal<String>,
+    children: Children,
+) -> impl IntoView {
+    view! {
+        <div class="searchable-data-table">
+            <label class="searchable-data-table__search searchable-data-table__control">
+                <Search class="searchable-data-table__control-icon"/>
+                <span class="sr-only">{search_label}</span>
+                <input
+                    type="search"
+                    placeholder=placeholder
+                    prop:value=move || search.get()
+                    on:input=move |event| search.set(event_target_value(&event))
+                />
+            </label>
+            <DataTable>{children()}</DataTable>
+        </div>
+    }
+}
+
+#[component]
+pub fn Tabs(active: RwSignal<String>, children: Children) -> impl IntoView {
+    view! {
+        <div class="tabs" data-active=move || active.get()>
+            {children()}
+        </div>
+    }
+}
+
+#[component]
+pub fn TabsList(children: Children) -> impl IntoView {
+    view! {
+        <div class="tabs-list" role="tablist">
+            {children()}
+        </div>
+    }
+}
+
+#[component]
+pub fn TabsTrigger(
+    active: RwSignal<String>,
+    value: &'static str,
+    children: Children,
+) -> impl IntoView {
+    view! {
+        <button
+            class=move || {
+                if active.get() == value {
+                    "tabs-trigger is-active"
+                } else {
+                    "tabs-trigger"
+                }
+            }
+            type="button"
+            role="tab"
+            aria-selected=move || (active.get() == value).to_string()
+            on:click=move |_| active.set(value.to_string())
+        >
+            {children()}
+        </button>
+    }
+}
+
+#[component]
+pub fn TabsContent(
+    active: RwSignal<String>,
+    value: &'static str,
+    children: Children,
+) -> impl IntoView {
+    view! {
+        <section
+            class="tabs-content"
+            role="tabpanel"
+            hidden=move || active.get() != value
+        >
+            {children()}
+        </section>
     }
 }
 

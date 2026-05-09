@@ -1245,7 +1245,12 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
     let session_chart_id =
         ensure_chart(pool, "Participants Table", Some(session_report_id), "table").await?;
 
-    let dashboard_id = ensure_dashboard(pool, "Demo Operations Dashboard").await?;
+    let dashboard_id = ensure_dashboard(
+        pool,
+        "Demo Operations Dashboard",
+        Some("Operational view of partner, program, activity, and session data."),
+    )
+    .await?;
     replace_dashboard_components(
         pool,
         dashboard_id,
@@ -2152,17 +2157,23 @@ async fn ensure_chart(
     .map_err(Into::into)
 }
 
-async fn ensure_dashboard(pool: &PgPool, name: &str) -> ApiResult<Uuid> {
+async fn ensure_dashboard(pool: &PgPool, name: &str, description: Option<&str>) -> ApiResult<Uuid> {
     if let Some(id) = sqlx::query_scalar("SELECT id FROM dashboards WHERE name = $1")
         .bind(name)
         .fetch_optional(pool)
         .await?
     {
+        sqlx::query("UPDATE dashboards SET description = $1 WHERE id = $2")
+            .bind(description)
+            .bind(id)
+            .execute(pool)
+            .await?;
         return Ok(id);
     }
 
-    sqlx::query_scalar("INSERT INTO dashboards (name) VALUES ($1) RETURNING id")
+    sqlx::query_scalar("INSERT INTO dashboards (name, description) VALUES ($1, $2) RETURNING id")
         .bind(name)
+        .bind(description)
         .fetch_one(pool)
         .await
         .map_err(Into::into)
