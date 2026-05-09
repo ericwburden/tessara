@@ -1514,7 +1514,7 @@ When there is a conflict between a legacy screen and this document, default to t
 
 Before adding or designing a UI element, engineers MUST check whether Rust/UI already provides a suitable native Leptos component or pattern. If a suitable Rust/UI option exists, suggest it and prefer it as the implementation baseline. Custom UI is acceptable when Rust/UI lacks the needed component, when the product interaction needs a deliberately different pattern, or when the element is a Tessara brand asset or bespoke illustration.
 
-New page components SHOULD default to reusable shared primitives instead of one-off route markup, especially for page structure, navigation aids, overlays, controls, data display, forms, and status feedback. If it is unclear whether a new component should be reusable, ask before committing to route-local markup.
+New page components SHOULD default to reusable shared primitives instead of one-off route markup, especially for page structure, navigation aids, overlays, controls, data display, forms, and status feedback. Before introducing a route-local component, review existing shared primitives for a small extension that would cover the need cleanly. If it is unclear whether a new component should be reusable, ask before committing to route-local markup.
 
 When in doubt, favor:
 

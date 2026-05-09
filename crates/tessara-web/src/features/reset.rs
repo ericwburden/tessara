@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 
 use icons::{
-    ChevronDown, ChevronRight, ExternalLink, LockKeyhole, Mail, PanelRight, Pencil, Plus, Search,
-    SlidersHorizontal, X,
+    ChevronDown, ChevronRight, ExternalLink, ListFilter, LockKeyhole, Mail, PanelRight, Pencil,
+    Plus, Search, X,
 };
 use leptos::portal::Portal;
 use leptos::prelude::*;
@@ -23,6 +23,7 @@ struct RouteMigration {
     route: &'static str,
     href: &'static str,
     status: &'static str,
+    rbac_status: &'static str,
 }
 
 const ROUTE_MIGRATIONS: [RouteMigration; 32] = [
@@ -31,192 +32,224 @@ const ROUTE_MIGRATIONS: [RouteMigration; 32] = [
         route: "/",
         href: "/",
         status: "In Progress",
+        rbac_status: "Pending",
     },
     RouteMigration {
         name: "Login",
         route: "/login",
         href: "/login",
         status: "Done",
+        rbac_status: "Pending",
     },
     RouteMigration {
         name: "Organization",
         route: "/organization",
         href: "/organization",
         status: "Done",
+        rbac_status: "Pending",
     },
     RouteMigration {
         name: "Create Organization Node",
         route: "/organization/new",
         href: "/organization/new",
         status: "Done",
+        rbac_status: "Pending",
     },
     RouteMigration {
         name: "Organization Detail",
         route: "/organization/:node_id",
         href: "/organization/fb3fb3c8-2670-4c85-bcda-be59dd3aa119",
         status: "Done",
+        rbac_status: "Pending",
     },
     RouteMigration {
         name: "Edit Organization Node",
         route: "/organization/:node_id/edit",
-        href: "/organization/demo-partner-north-star-services/edit",
-        status: "Pending",
+        href: "/organization/fb3fb3c8-2670-4c85-bcda-be59dd3aa119/edit",
+        status: "Done",
+        rbac_status: "Pending",
     },
     RouteMigration {
         name: "Forms",
         route: "/forms",
         href: "/forms",
         status: "Pending",
+        rbac_status: "Pending",
     },
     RouteMigration {
         name: "Create Form",
         route: "/forms/new",
         href: "/forms/new",
         status: "Pending",
+        rbac_status: "Pending",
     },
     RouteMigration {
         name: "Form Detail",
         route: "/forms/:form_id",
         href: "/forms/demo-partner-profile",
         status: "Pending",
+        rbac_status: "Pending",
     },
     RouteMigration {
         name: "Edit Form",
         route: "/forms/:form_id/edit",
         href: "/forms/demo-partner-profile/edit",
         status: "Pending",
+        rbac_status: "Pending",
     },
     RouteMigration {
         name: "Workflows",
         route: "/workflows",
         href: "/workflows",
         status: "Pending",
+        rbac_status: "Pending",
     },
     RouteMigration {
         name: "Create Workflow",
         route: "/workflows/new",
         href: "/workflows/new",
         status: "Pending",
+        rbac_status: "Pending",
     },
     RouteMigration {
         name: "Workflow Assignments",
         route: "/workflows/assignments",
         href: "/workflows/assignments",
         status: "Pending",
+        rbac_status: "Pending",
     },
     RouteMigration {
         name: "Workflow Detail",
         route: "/workflows/:workflow_id",
         href: "/workflows/demo-intake-workflow",
         status: "Pending",
+        rbac_status: "Pending",
     },
     RouteMigration {
         name: "Edit Workflow",
         route: "/workflows/:workflow_id/edit",
         href: "/workflows/demo-intake-workflow/edit",
         status: "Pending",
+        rbac_status: "Pending",
     },
     RouteMigration {
         name: "Responses",
         route: "/responses",
         href: "/responses",
         status: "Pending",
+        rbac_status: "Pending",
     },
     RouteMigration {
         name: "Start Response",
         route: "/responses/new",
         href: "/responses/new",
         status: "Pending",
+        rbac_status: "Pending",
     },
     RouteMigration {
         name: "Response Detail",
         route: "/responses/:submission_id",
         href: "/responses/demo-submission",
         status: "Pending",
+        rbac_status: "Pending",
     },
     RouteMigration {
         name: "Edit Response",
         route: "/responses/:submission_id/edit",
         href: "/responses/demo-submission/edit",
         status: "Pending",
+        rbac_status: "Pending",
     },
     RouteMigration {
         name: "Components",
         route: "/components",
         href: "/components",
         status: "Pending",
+        rbac_status: "Pending",
     },
     RouteMigration {
         name: "Component Detail",
         route: "/components/:component_ref",
         href: "/components/demo-component",
         status: "Pending",
+        rbac_status: "Pending",
     },
     RouteMigration {
         name: "Dashboards",
         route: "/dashboards",
         href: "/dashboards",
         status: "Pending",
+        rbac_status: "Pending",
     },
     RouteMigration {
         name: "Create Dashboard",
         route: "/dashboards/new",
         href: "/dashboards/new",
         status: "Pending",
+        rbac_status: "Pending",
     },
     RouteMigration {
         name: "Dashboard Detail",
         route: "/dashboards/:dashboard_id",
         href: "/dashboards/demo-operations-dashboard",
         status: "Pending",
+        rbac_status: "Pending",
     },
     RouteMigration {
         name: "Edit Dashboard",
         route: "/dashboards/:dashboard_id/edit",
         href: "/dashboards/demo-operations-dashboard/edit",
         status: "Pending",
+        rbac_status: "Pending",
     },
     RouteMigration {
         name: "Datasets",
         route: "/datasets",
         href: "/datasets",
         status: "Pending",
+        rbac_status: "Pending",
     },
     RouteMigration {
         name: "Dataset Detail",
         route: "/datasets/:dataset_id",
         href: "/datasets/demo-dataset",
         status: "Pending",
+        rbac_status: "Pending",
     },
     RouteMigration {
         name: "Administration",
         route: "/administration",
         href: "/administration",
         status: "Pending",
+        rbac_status: "Pending",
     },
     RouteMigration {
         name: "Users",
         route: "/administration/users",
         href: "/administration/users",
         status: "Pending",
+        rbac_status: "Pending",
     },
     RouteMigration {
         name: "Node Types",
         route: "/administration/node-types",
         href: "/administration/node-types",
         status: "Pending",
+        rbac_status: "Pending",
     },
     RouteMigration {
         name: "Roles",
         route: "/administration/roles",
         href: "/administration/roles",
         status: "Pending",
+        rbac_status: "Pending",
     },
     RouteMigration {
         name: "Migration",
         route: "/migration",
         href: "/migration",
         status: "Pending",
+        rbac_status: "Pending",
     },
 ];
 
@@ -250,6 +283,18 @@ fn ResetRoute(
 
 #[component]
 pub fn HomePage() -> impl IntoView {
+    view! {
+        <AppShell active_route="home" title="Home">
+            <section class="route-panel">
+                <PageHeader title="Native UI Migration" description="Routes are registered in the clean native Leptos SSR shell and will be rebuilt in navigation order."/>
+                <RouteMigrationOverview/>
+            </section>
+        </AppShell>
+    }
+}
+
+#[component]
+fn RouteMigrationOverview() -> impl IntoView {
     let route_rows = ROUTE_MIGRATIONS
         .iter()
         .map(|route| {
@@ -258,27 +303,55 @@ pub fn HomePage() -> impl IntoView {
                     <th scope="row">{route.name}</th>
                     <td><a href=route.href>{route.route}</a></td>
                     <td><StatusBadge label=route.status/></td>
+                    <td><StatusBadge label=route.rbac_status/></td>
                 </tr>
             }
         })
         .collect_view();
 
+    let route_cards = ROUTE_MIGRATIONS
+        .iter()
+        .map(|route| {
+            view! {
+                <article class="route-migration-card">
+                    <div class="route-migration-card__header">
+                        <h3>{route.name}</h3>
+                        <a href=route.href>{route.route}</a>
+                    </div>
+                    <dl class="route-migration-card__meta">
+                        <div>
+                            <dt>"Status"</dt>
+                            <dd><StatusBadge label=route.status/></dd>
+                        </div>
+                        <div>
+                            <dt>"RBAC"</dt>
+                            <dd><StatusBadge label=route.rbac_status/></dd>
+                        </div>
+                    </dl>
+                </article>
+            }
+        })
+        .collect_view();
+
     view! {
-        <AppShell active_route="home" title="Home">
-            <section class="route-panel">
-                <PageHeader title="Native UI Migration" description="Routes are registered in the clean native Leptos SSR shell and will be rebuilt in navigation order."/>
+        <div class="route-migration-overview">
+            <div class="route-migration-overview__table">
                 <DataTable>
                     <thead>
                         <tr>
                             <th scope="col">"Name"</th>
                             <th scope="col">"Route"</th>
                             <th scope="col">"Status"</th>
+                            <th scope="col">"RBAC"</th>
                         </tr>
                     </thead>
                     <tbody>{route_rows}</tbody>
                 </DataTable>
-            </section>
-        </AppShell>
+            </div>
+            <div class="route-migration-overview__cards" aria-label="Route migration status">
+                {route_cards}
+            </div>
+        </div>
     }
 }
 
@@ -494,9 +567,11 @@ struct OrganizationNode {
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 struct OrganizationNodeDetail {
     id: String,
+    node_type_id: String,
     node_type_name: String,
     node_type_singular_label: String,
     node_type_plural_label: String,
+    parent_node_id: Option<String>,
     parent_node_name: Option<String>,
     name: String,
     #[serde(default)]
@@ -591,6 +666,14 @@ struct IdResponse {
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
 struct CreateNodePayload {
     node_type_id: String,
+    parent_node_id: Option<String>,
+    name: String,
+    metadata: serde_json::Map<String, Value>,
+}
+
+#[derive(Serialize)]
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+struct UpdateNodePayload {
     parent_node_id: Option<String>,
     name: String,
     metadata: serde_json::Map<String, Value>,
@@ -952,9 +1035,28 @@ fn RelatedWorkSummary(detail: OrganizationNodeDetail) -> impl IntoView {
 #[component]
 fn RelatedFormsTable(forms: Vec<NodeFormLink>) -> impl IntoView {
     let search = RwSignal::new(String::new());
+    let forms_for_table = forms.clone();
+    let forms_for_cards = forms;
     let filtered_forms = move || {
         let query = search.get();
-        forms
+        forms_for_table
+            .iter()
+            .filter(|form| {
+                text_matches(
+                    &query,
+                    &[
+                        &form.form_name,
+                        &form.form_slug,
+                        form.active_version_label.as_deref().unwrap_or(""),
+                    ],
+                )
+            })
+            .cloned()
+            .collect::<Vec<_>>()
+    };
+    let filtered_form_cards = move || {
+        let query = search.get();
+        forms_for_cards
             .iter()
             .filter(|form| {
                 text_matches(
@@ -971,49 +1073,85 @@ fn RelatedFormsTable(forms: Vec<NodeFormLink>) -> impl IntoView {
     };
 
     view! {
-        <SearchableDataTable search_label="Search forms" placeholder="Search related forms" search>
-            <thead>
-                <tr>
-                    <th scope="col">"Form name"</th>
-                    <th scope="col">"Slug"</th>
-                    <th scope="col">"Active version"</th>
-                    <th scope="col">"View"</th>
-                </tr>
-            </thead>
-            <tbody>
-                {move || {
-                    let rows = filtered_forms();
-                    if rows.is_empty() {
-                        view! {
-                            <tr>
-                                <td class="data-table__empty" colspan="4">"No Related Forms to Display"</td>
-                            </tr>
+        <div class="related-work-responsive-table">
+            <SearchableDataTable search_label="Search forms" placeholder="Search related forms" search>
+                <thead>
+                    <tr>
+                        <th scope="col">"Form name"</th>
+                        <th scope="col">"Slug"</th>
+                        <th scope="col">"Active version"</th>
+                        <th scope="col">"View"</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {move || {
+                        let rows = filtered_forms();
+                        if rows.is_empty() {
+                            view! {
+                                <tr>
+                                    <td class="data-table__empty" colspan="4">"No Related Forms to Display"</td>
+                                </tr>
+                            }
+                            .into_any()
+                        } else {
+                            rows
+                                .into_iter()
+                                .map(|form| {
+                                    let href = format!("/forms/{}", form.form_id);
+                                    view! {
+                                        <tr>
+                                            <th scope="row">{form.form_name}</th>
+                                            <td>{form.form_slug}</td>
+                                            <td>{form.active_version_label.unwrap_or_else(|| "-".to_string())}</td>
+                                            <td>
+                                                <a class="data-table__action" href=href aria-label="View form" title="View form">
+                                                    <ExternalLink/>
+                                                </a>
+                                            </td>
+                                        </tr>
+                                    }
+                                })
+                                .collect_view()
+                                .into_any()
                         }
-                        .into_any()
+                    }}
+                </tbody>
+            </SearchableDataTable>
+            <div class="related-work-mobile-cards">
+                {move || {
+                    let rows = filtered_form_cards();
+                    if rows.is_empty() {
+                        view! { <p class="related-work-mobile-empty">"No Related Forms to Display"</p> }.into_any()
                     } else {
                         rows
                             .into_iter()
                             .map(|form| {
                                 let href = format!("/forms/{}", form.form_id);
                                 view! {
-                                    <tr>
-                                        <th scope="row">{form.form_name}</th>
-                                        <td>{form.form_slug}</td>
-                                        <td>{form.active_version_label.unwrap_or_else(|| "-".to_string())}</td>
-                                        <td>
-                                            <a class="data-table__action" href=href aria-label="View form" title="View form">
-                                                <ExternalLink/>
-                                            </a>
-                                        </td>
-                                    </tr>
+                                    <article class="related-work-mobile-card">
+                                        <div class="related-work-mobile-card__header">
+                                            <h4>{form.form_name}</h4>
+                                            <a href=href aria-label="View form" title="View form"><ExternalLink/></a>
+                                        </div>
+                                        <dl>
+                                            <div>
+                                                <dt>"Slug"</dt>
+                                                <dd>{form.form_slug}</dd>
+                                            </div>
+                                            <div>
+                                                <dt>"Active version"</dt>
+                                                <dd>{form.active_version_label.unwrap_or_else(|| "-".to_string())}</dd>
+                                            </div>
+                                        </dl>
+                                    </article>
                                 }
                             })
                             .collect_view()
                             .into_any()
                     }
                 }}
-            </tbody>
-        </SearchableDataTable>
+            </div>
+        </div>
     }
 }
 
@@ -1021,10 +1159,32 @@ fn RelatedFormsTable(forms: Vec<NodeFormLink>) -> impl IntoView {
 fn RelatedResponsesTable(responses: Vec<NodeSubmissionLink>) -> impl IntoView {
     let search = RwSignal::new(String::new());
     let status_filter = RwSignal::new("all".to_string());
+    let responses_for_table = responses.clone();
+    let responses_for_cards = responses;
     let filtered_responses = move || {
         let query = search.get();
         let status = status_filter.get();
-        responses
+        responses_for_table
+            .iter()
+            .filter(|response| status == "all" || response.status == status)
+            .filter(|response| {
+                text_matches(
+                    &query,
+                    &[
+                        &response.form_name,
+                        &response.version_label,
+                        &response.status,
+                        response.submitted_by.as_deref().unwrap_or("Unknown"),
+                    ],
+                )
+            })
+            .cloned()
+            .collect::<Vec<_>>()
+    };
+    let filtered_response_cards = move || {
+        let query = search.get();
+        let status = status_filter.get();
+        responses_for_cards
             .iter()
             .filter(|response| status == "all" || response.status == status)
             .filter(|response| {
@@ -1043,40 +1203,80 @@ fn RelatedResponsesTable(responses: Vec<NodeSubmissionLink>) -> impl IntoView {
     };
 
     view! {
-        <div class="searchable-data-table">
-            <label class="searchable-data-table__search searchable-data-table__control">
-                <Search class="searchable-data-table__control-icon"/>
-                <span class="sr-only">"Search responses"</span>
-                <input
-                    type="search"
-                    placeholder="Search related responses"
-                    prop:value=move || search.get()
-                    on:input=move |event| search.set(event_target_value(&event))
-                />
-            </label>
+        <div class="searchable-data-table related-work-responsive-table">
+            <div class="searchable-data-table__toolbar related-work-mobile-toolbar">
+                <label class="searchable-data-table__search searchable-data-table__control">
+                    <Search class="searchable-data-table__control-icon"/>
+                    <span class="sr-only">"Search responses"</span>
+                    <input
+                        type="search"
+                        placeholder="Search related responses"
+                        prop:value=move || search.get()
+                        on:input=move |event| search.set(event_target_value(&event))
+                    />
+                </label>
+                <div class="related-work-mobile-filter">
+                    <StatusFilterHeader status_filter compact_control=true/>
+                </div>
+            </div>
             <DataTable>
-            <thead>
-                <tr>
-                    <th scope="col">"Form name"</th>
-                    <th scope="col">"Version"</th>
-                    <th scope="col">
-                        <StatusFilterHeader status_filter/>
-                    </th>
-                    <th scope="col">"Submitted Date"</th>
-                    <th scope="col">"Submitted By"</th>
-                    <th scope="col">"View"</th>
-                </tr>
-            </thead>
-            <tbody>
-                {move || {
-                    let rows = filtered_responses();
-                    if rows.is_empty() {
-                        view! {
-                            <tr>
-                                <td class="data-table__empty" colspan="6">"No Related Responses to Display"</td>
-                            </tr>
+                <thead>
+                    <tr>
+                        <th scope="col">"Form name"</th>
+                        <th scope="col">"Version"</th>
+                        <th scope="col">
+                            <StatusFilterHeader status_filter/>
+                        </th>
+                        <th scope="col">"Submitted Date"</th>
+                        <th scope="col">"Submitted By"</th>
+                        <th scope="col">"View"</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {move || {
+                        let rows = filtered_responses();
+                        if rows.is_empty() {
+                            view! {
+                                <tr>
+                                    <td class="data-table__empty" colspan="6">"No Related Responses to Display"</td>
+                                </tr>
+                            }
+                            .into_any()
+                        } else {
+                            rows
+                                .into_iter()
+                                .map(|response| {
+                                    let href = format!("/responses/{}", response.submission_id);
+                                    let submitted_date = response
+                                        .submitted_at
+                                        .clone()
+                                        .unwrap_or_else(|| response.created_at.clone());
+                                    view! {
+                                        <tr>
+                                            <th scope="row">{response.form_name}</th>
+                                            <td>{response.version_label}</td>
+                                            <td>{sentence_label(&response.status)}</td>
+                                            <td><Timestamp value=submitted_date/></td>
+                                            <td>{response.submitted_by.unwrap_or_else(|| "Unknown".to_string())}</td>
+                                            <td>
+                                                <a class="data-table__action" href=href aria-label="View response" title="View response">
+                                                    <ExternalLink/>
+                                                </a>
+                                            </td>
+                                        </tr>
+                                    }
+                                })
+                                .collect_view()
+                                .into_any()
                         }
-                        .into_any()
+                    }}
+                </tbody>
+            </DataTable>
+            <div class="related-work-mobile-cards">
+                {move || {
+                    let rows = filtered_response_cards();
+                    if rows.is_empty() {
+                        view! { <p class="related-work-mobile-empty">"No Related Responses to Display"</p> }.into_any()
                     } else {
                         rows
                             .into_iter()
@@ -1087,32 +1287,46 @@ fn RelatedResponsesTable(responses: Vec<NodeSubmissionLink>) -> impl IntoView {
                                     .clone()
                                     .unwrap_or_else(|| response.created_at.clone());
                                 view! {
-                                    <tr>
-                                        <th scope="row">{response.form_name}</th>
-                                        <td>{response.version_label}</td>
-                                        <td>{sentence_label(&response.status)}</td>
-                                        <td><Timestamp value=submitted_date/></td>
-                                        <td>{response.submitted_by.unwrap_or_else(|| "Unknown".to_string())}</td>
-                                        <td>
-                                            <a class="data-table__action" href=href aria-label="View response" title="View response">
-                                                <ExternalLink/>
-                                            </a>
-                                        </td>
-                                    </tr>
+                                    <article class="related-work-mobile-card">
+                                        <div class="related-work-mobile-card__header">
+                                            <h4>{response.form_name}</h4>
+                                            <a href=href aria-label="View response" title="View response"><ExternalLink/></a>
+                                        </div>
+                                        <dl>
+                                            <div>
+                                                <dt>"Version"</dt>
+                                                <dd>{response.version_label}</dd>
+                                            </div>
+                                            <div>
+                                                <dt>"Status"</dt>
+                                                <dd>{sentence_label(&response.status)}</dd>
+                                            </div>
+                                            <div>
+                                                <dt>"Submitted Date"</dt>
+                                                <dd><Timestamp value=submitted_date/></dd>
+                                            </div>
+                                            <div>
+                                                <dt>"Submitted By"</dt>
+                                                <dd>{response.submitted_by.unwrap_or_else(|| "Unknown".to_string())}</dd>
+                                            </div>
+                                        </dl>
+                                    </article>
                                 }
                             })
                             .collect_view()
                             .into_any()
                     }
                 }}
-            </tbody>
-            </DataTable>
+            </div>
         </div>
     }
 }
 
 #[component]
-fn StatusFilterHeader(status_filter: RwSignal<String>) -> impl IntoView {
+fn StatusFilterHeader(
+    status_filter: RwSignal<String>,
+    #[prop(optional)] compact_control: bool,
+) -> impl IntoView {
     let is_open = RwSignal::new(false);
     let menu_class = move || {
         if is_open.get() {
@@ -1129,12 +1343,25 @@ fn StatusFilterHeader(status_filter: RwSignal<String>) -> impl IntoView {
             format!("Filter Status: {}", sentence_label(&current))
         }
     };
+    let trigger_class = move || {
+        let size_class = if compact_control {
+            " icon-button--compact-control"
+        } else {
+            ""
+        };
+        let filtered_class = if status_filter.get() == "all" {
+            ""
+        } else {
+            " is-filtered"
+        };
+        format!("icon-button{size_class} data-table-filter__trigger{filtered_class}")
+    };
 
     view! {
         <div class=menu_class>
             <span>"Status"</span>
             <button
-                class="data-table-filter__trigger"
+                class=trigger_class
                 type="button"
                 aria-label=button_label
                 title=button_label
@@ -1142,7 +1369,7 @@ fn StatusFilterHeader(status_filter: RwSignal<String>) -> impl IntoView {
                 aria-expanded=move || is_open.get().to_string()
                 on:click=move |_| is_open.update(|open| *open = !*open)
             >
-                <SlidersHorizontal/>
+                <ListFilter/>
             </button>
             <button
                 class="data-table-filter__scrim"
@@ -1203,9 +1430,28 @@ fn filter_option_class(current: &str, value: &str) -> &'static str {
 #[component]
 fn RelatedDashboardsTable(dashboards: Vec<NodeDashboardLink>) -> impl IntoView {
     let search = RwSignal::new(String::new());
+    let dashboards_for_table = dashboards.clone();
+    let dashboards_for_cards = dashboards;
     let filtered_dashboards = move || {
         let query = search.get();
-        dashboards
+        dashboards_for_table
+            .iter()
+            .filter(|dashboard| {
+                text_matches(
+                    &query,
+                    &[
+                        &dashboard.dashboard_name,
+                        &dashboard.component_count.to_string(),
+                        dashboard.description.as_deref().unwrap_or("No description"),
+                    ],
+                )
+            })
+            .cloned()
+            .collect::<Vec<_>>()
+    };
+    let filtered_dashboard_cards = move || {
+        let query = search.get();
+        dashboards_for_cards
             .iter()
             .filter(|dashboard| {
                 text_matches(
@@ -1222,49 +1468,85 @@ fn RelatedDashboardsTable(dashboards: Vec<NodeDashboardLink>) -> impl IntoView {
     };
 
     view! {
-        <SearchableDataTable search_label="Search dashboards" placeholder="Search related dashboards" search>
-            <thead>
-                <tr>
-                    <th scope="col">"Dashboard name"</th>
-                    <th scope="col">"Component Count"</th>
-                    <th scope="col">"Description"</th>
-                    <th scope="col">"View"</th>
-                </tr>
-            </thead>
-            <tbody>
-                {move || {
-                    let rows = filtered_dashboards();
-                    if rows.is_empty() {
-                        view! {
-                            <tr>
-                                <td class="data-table__empty" colspan="4">"No Related Dashboards to Display"</td>
-                            </tr>
+        <div class="related-work-responsive-table">
+            <SearchableDataTable search_label="Search dashboards" placeholder="Search related dashboards" search>
+                <thead>
+                    <tr>
+                        <th scope="col">"Dashboard name"</th>
+                        <th scope="col">"Component Count"</th>
+                        <th scope="col">"Description"</th>
+                        <th scope="col">"View"</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {move || {
+                        let rows = filtered_dashboards();
+                        if rows.is_empty() {
+                            view! {
+                                <tr>
+                                    <td class="data-table__empty" colspan="4">"No Related Dashboards to Display"</td>
+                                </tr>
+                            }
+                            .into_any()
+                        } else {
+                            rows
+                                .into_iter()
+                                .map(|dashboard| {
+                                    let href = format!("/dashboards/{}", dashboard.dashboard_id);
+                                    view! {
+                                        <tr>
+                                            <th scope="row">{dashboard.dashboard_name}</th>
+                                            <td>{dashboard.component_count}</td>
+                                            <td>{nonempty_text(dashboard.description.as_deref(), "No description")}</td>
+                                            <td>
+                                                <a class="data-table__action" href=href aria-label="View dashboard" title="View dashboard">
+                                                    <ExternalLink/>
+                                                </a>
+                                            </td>
+                                        </tr>
+                                    }
+                                })
+                                .collect_view()
+                                .into_any()
                         }
-                        .into_any()
+                    }}
+                </tbody>
+            </SearchableDataTable>
+            <div class="related-work-mobile-cards">
+                {move || {
+                    let rows = filtered_dashboard_cards();
+                    if rows.is_empty() {
+                        view! { <p class="related-work-mobile-empty">"No Related Dashboards to Display"</p> }.into_any()
                     } else {
                         rows
                             .into_iter()
                             .map(|dashboard| {
                                 let href = format!("/dashboards/{}", dashboard.dashboard_id);
                                 view! {
-                                    <tr>
-                                        <th scope="row">{dashboard.dashboard_name}</th>
-                                        <td>{dashboard.component_count}</td>
-                                        <td>{nonempty_text(dashboard.description.as_deref(), "No description")}</td>
-                                        <td>
-                                            <a class="data-table__action" href=href aria-label="View dashboard" title="View dashboard">
-                                                <ExternalLink/>
-                                            </a>
-                                        </td>
-                                    </tr>
+                                    <article class="related-work-mobile-card">
+                                        <div class="related-work-mobile-card__header">
+                                            <h4>{dashboard.dashboard_name}</h4>
+                                            <a href=href aria-label="View dashboard" title="View dashboard"><ExternalLink/></a>
+                                        </div>
+                                        <dl>
+                                            <div>
+                                                <dt>"Component Count"</dt>
+                                                <dd>{dashboard.component_count}</dd>
+                                            </div>
+                                            <div>
+                                                <dt>"Description"</dt>
+                                                <dd>{nonempty_text(dashboard.description.as_deref(), "No description")}</dd>
+                                            </div>
+                                        </dl>
+                                    </article>
                                 }
                             })
                             .collect_view()
                             .into_any()
                     }
                 }}
-            </tbody>
-        </SearchableDataTable>
+            </div>
+        </div>
     }
 }
 
@@ -1847,6 +2129,62 @@ fn parent_node_options(nodes: &[OrganizationNode]) -> Vec<ParentNodeOption> {
     options
 }
 
+fn parent_node_options_for_edit(
+    nodes: &[OrganizationNode],
+    node_types: &[NodeTypeCatalogEntry],
+    edited_node_id: &str,
+    edited_node_type_id: &str,
+) -> Vec<ParentNodeOption> {
+    let excluded_ids = descendant_node_ids(nodes, edited_node_id);
+    parent_node_options(nodes)
+        .into_iter()
+        .filter(|option| !excluded_ids.contains(&option.id))
+        .filter(|option| {
+            nodes
+                .iter()
+                .find(|node| node.id == option.id)
+                .and_then(|node| {
+                    node_types
+                        .iter()
+                        .find(|node_type| node_type.id == node.node_type_id)
+                })
+                .map(|node_type| {
+                    node_type
+                        .child_relationships
+                        .iter()
+                        .any(|relationship| relationship.node_type_id == edited_node_type_id)
+                })
+                .unwrap_or(false)
+        })
+        .collect()
+}
+
+fn descendant_node_ids(nodes: &[OrganizationNode], root_id: &str) -> HashSet<String> {
+    let mut descendants = HashSet::from([root_id.to_string()]);
+    let mut changed = true;
+
+    while changed {
+        changed = false;
+        for node in nodes {
+            if descendants.contains(&node.id) {
+                continue;
+            }
+
+            if node
+                .parent_node_id
+                .as_ref()
+                .map(|parent_id| descendants.contains(parent_id))
+                .unwrap_or(false)
+            {
+                descendants.insert(node.id.clone());
+                changed = true;
+            }
+        }
+    }
+
+    descendants
+}
+
 fn append_parent_node_options(
     branches: &[OrganizationTreeNode],
     depth: usize,
@@ -2179,6 +2517,258 @@ fn submit_create_node(
     }
 }
 
+fn load_organization_edit_options(
+    node_id: String,
+    node_types: RwSignal<Vec<NodeTypeCatalogEntry>>,
+    nodes: RwSignal<Vec<OrganizationNode>>,
+    detail: RwSignal<Option<OrganizationNodeDetail>>,
+    selected_parent_node_id: RwSignal<String>,
+    name: RwSignal<String>,
+    metadata_fields: RwSignal<Vec<NodeMetadataFieldSummary>>,
+    metadata_values: RwSignal<HashMap<String, String>>,
+    metadata_booleans: RwSignal<HashMap<String, bool>>,
+    is_loading: RwSignal<bool>,
+    message: RwSignal<Option<String>>,
+) {
+    #[cfg(feature = "hydrate")]
+    {
+        leptos::task::spawn_local(async move {
+            is_loading.set(true);
+            message.set(None);
+
+            let node_type_response = gloo_net::http::Request::get("/api/node-types").send().await;
+            let node_response = gloo_net::http::Request::get("/api/nodes").send().await;
+            let detail_response = gloo_net::http::Request::get(&format!("/api/nodes/{node_id}"))
+                .send()
+                .await;
+
+            match (node_type_response, node_response, detail_response) {
+                (Ok(response), _, _) if response.status() == 401 => {
+                    is_loading.set(false);
+                    redirect_to_login();
+                }
+                (_, Ok(response), _) if response.status() == 401 => {
+                    is_loading.set(false);
+                    redirect_to_login();
+                }
+                (_, _, Ok(response)) if response.status() == 401 => {
+                    is_loading.set(false);
+                    redirect_to_login();
+                }
+                (Ok(node_type_response), Ok(node_response), Ok(detail_response))
+                    if node_type_response.ok() && node_response.ok() && detail_response.ok() =>
+                {
+                    let loaded_node_types =
+                        node_type_response.json::<Vec<NodeTypeCatalogEntry>>().await;
+                    let loaded_nodes = node_response.json::<Vec<OrganizationNode>>().await;
+                    let loaded_detail = detail_response.json::<OrganizationNodeDetail>().await;
+
+                    match (loaded_node_types, loaded_nodes, loaded_detail) {
+                        (Ok(loaded_node_types), Ok(loaded_nodes), Ok(loaded_detail)) => {
+                            let metadata_response = gloo_net::http::Request::get(&format!(
+                                "/api/admin/node-types/{}",
+                                loaded_detail.node_type_id
+                            ))
+                            .send()
+                            .await;
+
+                            match metadata_response {
+                                Ok(response) if response.status() == 401 => {
+                                    is_loading.set(false);
+                                    redirect_to_login();
+                                }
+                                Ok(response) if response.ok() => {
+                                    match response.json::<NodeTypeDefinition>().await {
+                                        Ok(definition) => {
+                                            let (text_values, boolean_values) =
+                                                metadata_input_state(
+                                                    &definition.metadata_fields,
+                                                    &loaded_detail.metadata,
+                                                );
+
+                                            selected_parent_node_id.set(
+                                                loaded_detail
+                                                    .parent_node_id
+                                                    .clone()
+                                                    .unwrap_or_default(),
+                                            );
+                                            name.set(loaded_detail.name.clone());
+                                            metadata_fields.set(definition.metadata_fields);
+                                            metadata_values.set(text_values);
+                                            metadata_booleans.set(boolean_values);
+                                            detail.set(Some(loaded_detail));
+                                            nodes.set(loaded_nodes);
+                                            node_types.set(loaded_node_types);
+                                            is_loading.set(false);
+                                        }
+                                        Err(_) => {
+                                            is_loading.set(false);
+                                            message.set(Some(
+                                                "Metadata fields could not be read.".into(),
+                                            ));
+                                        }
+                                    }
+                                }
+                                Ok(_) => {
+                                    is_loading.set(false);
+                                    message.set(Some(
+                                        "Metadata fields returned an unexpected response.".into(),
+                                    ));
+                                }
+                                Err(_) => {
+                                    is_loading.set(false);
+                                    message.set(Some("Could not reach the node type API.".into()));
+                                }
+                            }
+                        }
+                        _ => {
+                            is_loading.set(false);
+                            message.set(Some("Edit options could not be read.".into()));
+                        }
+                    }
+                }
+                (Ok(_), Ok(_), Ok(_)) => {
+                    is_loading.set(false);
+                    message.set(Some("Edit options returned an unexpected response.".into()));
+                }
+                _ => {
+                    is_loading.set(false);
+                    message.set(Some("Could not reach the organization APIs.".into()));
+                }
+            }
+        });
+    }
+
+    #[cfg(not(feature = "hydrate"))]
+    {
+        let _ = (
+            node_id,
+            node_types,
+            nodes,
+            detail,
+            selected_parent_node_id,
+            name,
+            metadata_fields,
+            metadata_values,
+            metadata_booleans,
+            is_loading,
+            message,
+        );
+    }
+}
+
+fn submit_update_node(
+    node_id: String,
+    selected_parent_node_id: RwSignal<String>,
+    name: RwSignal<String>,
+    metadata_fields: RwSignal<Vec<NodeMetadataFieldSummary>>,
+    metadata_values: RwSignal<HashMap<String, String>>,
+    metadata_booleans: RwSignal<HashMap<String, bool>>,
+    is_saving: RwSignal<bool>,
+    message: RwSignal<Option<String>>,
+) {
+    #[cfg(feature = "hydrate")]
+    {
+        if is_saving.get() {
+            return;
+        }
+
+        let node_name = name.get().trim().to_string();
+        if node_name.is_empty() {
+            message.set(Some("Name is required.".into()));
+            return;
+        }
+
+        let metadata = match collect_node_metadata(
+            &metadata_fields.get(),
+            &metadata_values.get(),
+            &metadata_booleans.get(),
+        ) {
+            Ok(metadata) => metadata,
+            Err(error) => {
+                message.set(Some(error));
+                return;
+            }
+        };
+
+        let payload = UpdateNodePayload {
+            parent_node_id: selected_parent_node_id
+                .get()
+                .trim()
+                .to_string()
+                .into_nonempty(),
+            name: node_name,
+            metadata,
+        };
+
+        leptos::task::spawn_local(async move {
+            is_saving.set(true);
+            message.set(None);
+
+            let body = match serde_json::to_string(&payload) {
+                Ok(body) => body,
+                Err(_) => {
+                    message.set(Some("Update request could not be prepared.".into()));
+                    is_saving.set(false);
+                    return;
+                }
+            };
+
+            let response = gloo_net::http::Request::put(&format!("/api/admin/nodes/{node_id}"))
+                .header("Content-Type", "application/json")
+                .body(body)
+                .expect("json request body should be valid")
+                .send()
+                .await;
+
+            match response {
+                Ok(response) if response.status() == 401 => {
+                    is_saving.set(false);
+                    redirect_to_login();
+                }
+                Ok(response) if response.ok() => match response.json::<IdResponse>().await {
+                    Ok(updated) => {
+                        if let Some(window) = web_sys::window() {
+                            let _ = window
+                                .location()
+                                .set_href(&format!("/organization/{}", updated.id));
+                        }
+                    }
+                    Err(_) => {
+                        message.set(Some("Update response could not be read.".into()));
+                        is_saving.set(false);
+                    }
+                },
+                Ok(response) => {
+                    message.set(Some(format!(
+                        "Update failed with status {}.",
+                        response.status()
+                    )));
+                    is_saving.set(false);
+                }
+                Err(_) => {
+                    message.set(Some("Could not reach the update node API.".into()));
+                    is_saving.set(false);
+                }
+            }
+        });
+    }
+
+    #[cfg(not(feature = "hydrate"))]
+    {
+        let _ = (
+            node_id,
+            selected_parent_node_id,
+            name,
+            metadata_fields,
+            metadata_values,
+            metadata_booleans,
+            is_saving,
+            message,
+        );
+    }
+}
+
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
 fn collect_node_metadata(
     fields: &[NodeMetadataFieldSummary],
@@ -2211,6 +2801,25 @@ fn collect_node_metadata(
                     metadata.insert(field.key.clone(), serde_json::json!(parsed));
                 }
             }
+            "multi_choice" => {
+                let raw = values
+                    .get(&field.key)
+                    .map(|value| value.trim())
+                    .unwrap_or_default();
+                let selected = raw
+                    .split(',')
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .map(|value| Value::String(value.to_string()))
+                    .collect::<Vec<_>>();
+                if selected.is_empty() {
+                    if field.required {
+                        return Err(format!("{} is required.", field.label));
+                    }
+                } else {
+                    metadata.insert(field.key.clone(), Value::Array(selected));
+                }
+            }
             _ => {
                 let raw = values
                     .get(&field.key)
@@ -2228,6 +2837,46 @@ fn collect_node_metadata(
     }
 
     Ok(metadata)
+}
+
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+fn metadata_input_state(
+    fields: &[NodeMetadataFieldSummary],
+    metadata: &Value,
+) -> (HashMap<String, String>, HashMap<String, bool>) {
+    let values = metadata.as_object();
+    let mut text_values = HashMap::new();
+    let mut boolean_values = HashMap::new();
+
+    for field in fields {
+        let value = values.and_then(|values| values.get(&field.key));
+        if field.field_type == "boolean" {
+            boolean_values.insert(
+                field.key.clone(),
+                value.and_then(Value::as_bool).unwrap_or(false),
+            );
+        } else if let Some(value) = value {
+            text_values.insert(field.key.clone(), metadata_input_value(value));
+        }
+    }
+
+    (text_values, boolean_values)
+}
+
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+fn metadata_input_value(value: &Value) -> String {
+    match value {
+        Value::Null => String::new(),
+        Value::Bool(value) => value.to_string(),
+        Value::Number(value) => value.to_string(),
+        Value::String(value) => value.clone(),
+        Value::Array(values) => values
+            .iter()
+            .filter_map(Value::as_str)
+            .collect::<Vec<_>>()
+            .join(", "),
+        Value::Object(_) => value.to_string(),
+    }
 }
 
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
@@ -2317,7 +2966,211 @@ pub fn OrganizationDetailPage() -> impl IntoView {
 
 #[component]
 pub fn OrganizationEditPage() -> impl IntoView {
-    view! { <ResetRoute active_route="organization" title="Edit Organization Node" route="/organization/:node_id/edit" status="Registered" next_step="Restore native edit form after detail behavior is stable."/> }
+    let params = require_route_params::<NodeRouteParams>();
+    let node_id = params.node_id;
+    let node_types = RwSignal::new(Vec::<NodeTypeCatalogEntry>::new());
+    let nodes = RwSignal::new(Vec::<OrganizationNode>::new());
+    let detail = RwSignal::new(None::<OrganizationNodeDetail>);
+    let selected_parent_node_id = RwSignal::new(String::new());
+    let name = RwSignal::new(String::new());
+    let metadata_fields = RwSignal::new(Vec::<NodeMetadataFieldSummary>::new());
+    let metadata_values = RwSignal::new(HashMap::<String, String>::new());
+    let metadata_booleans = RwSignal::new(HashMap::<String, bool>::new());
+    let is_loading = RwSignal::new(true);
+    let is_saving = RwSignal::new(false);
+    let message = RwSignal::new(None::<String>);
+
+    let load_node_id = node_id.clone();
+    Effect::new(move |_| {
+        load_organization_edit_options(
+            load_node_id.clone(),
+            node_types,
+            nodes,
+            detail,
+            selected_parent_node_id,
+            name,
+            metadata_fields,
+            metadata_values,
+            metadata_booleans,
+            is_loading,
+            message,
+        );
+    });
+
+    let option_node_id = node_id.clone();
+    let can_submit = move || !is_loading.get() && !is_saving.get() && !name.get().trim().is_empty();
+
+    view! {
+        <AppShell active_route="organization" title="Organization">
+            <Breadcrumb>
+                <BreadcrumbItem>
+                    <BreadcrumbLink href="/organization">"Organization"</BreadcrumbLink>
+                </BreadcrumbItem>
+                <BreadcrumbSeparator/>
+                <BreadcrumbItem>
+                    <BreadcrumbPage>"Edit Node"</BreadcrumbPage>
+                </BreadcrumbItem>
+            </Breadcrumb>
+            <section class="route-panel organization-page">
+                <PageHeader title="Edit Organization Node">
+                    {move || detail.get().map(|node| {
+                        let href = format!("/organization/{}", node.id);
+                        view! {
+                            <a class="button" href=href>"Back to Detail"</a>
+                        }
+                    })}
+                    <Button label="Back to Organization" href="/organization"/>
+                </PageHeader>
+
+                {move || {
+                    if is_loading.get() {
+                        view! {
+                            <section class="organization-state" aria-live="polite">
+                                <h3>"Loading edit options"</h3>
+                                <p>"Fetching organization node details."</p>
+                            </section>
+                        }
+                        .into_any()
+                    } else if detail.get().is_none() {
+                        view! {
+                            <EmptyState
+                                title="Organization node unavailable"
+                                message="The selected node could not be loaded for editing."
+                            />
+                        }
+                        .into_any()
+                    } else {
+                        let node = detail.get().expect("detail is checked above");
+                        let option_node_id_for_options = option_node_id.clone();
+                        let submit_node_id = node_id.clone();
+                        view! {
+                            <form
+                                class="native-form organization-node-form"
+                                on:submit=move |event| {
+                                    event.prevent_default();
+                                    submit_update_node(
+                                        submit_node_id.clone(),
+                                        selected_parent_node_id,
+                                        name,
+                                        metadata_fields,
+                                        metadata_values,
+                                        metadata_booleans,
+                                        is_saving,
+                                        message,
+                                    );
+                                }
+                            >
+                                <div class="form-grid">
+                                    <label class="form-field" for="organization-node-type">
+                                        <span>"Node Type"</span>
+                                        <input
+                                            id="organization-node-type"
+                                            type="text"
+                                            value=node.node_type_singular_label
+                                            readonly
+                                        />
+                                    </label>
+
+                                    <label class="form-field" for="organization-parent-node">
+                                        <span>"Parent Node"</span>
+                                        <select
+                                            id="organization-parent-node"
+                                            prop:value=move || selected_parent_node_id.get()
+                                            on:change=move |event| selected_parent_node_id.set(event_target_value(&event))
+                                        >
+                                            <Show when=move || {
+                                                detail
+                                                    .get()
+                                                    .and_then(|detail| {
+                                                        node_types
+                                                            .get()
+                                                            .into_iter()
+                                                            .find(|node_type| node_type.id == detail.node_type_id)
+                                                    })
+                                                    .map(|node_type| node_type.is_root_type)
+                                                    .unwrap_or(false)
+                                            }>
+                                                <option value="">"Top-level record"</option>
+                                            </Show>
+                                            {move || {
+                                                detail
+                                                    .get()
+                                                    .map(|detail| {
+                                                        parent_node_options_for_edit(
+                                                            &nodes.get(),
+                                                            &node_types.get(),
+                                                            &option_node_id_for_options,
+                                                            &detail.node_type_id,
+                                                        )
+                                                    })
+                                                    .unwrap_or_default()
+                                                    .into_iter()
+                                                    .map(|option| {
+                                                        view! {
+                                                            <option value=option.id>{option.label}</option>
+                                                        }
+                                                    })
+                                                    .collect_view()
+                                            }}
+                                        </select>
+                                    </label>
+
+                                    <label class="form-field form-field--wide" for="organization-name">
+                                        <span>"Name"</span>
+                                        <input
+                                            id="organization-name"
+                                            type="text"
+                                            autocomplete="off"
+                                            prop:value=move || name.get()
+                                            on:input=move |event| name.set(event_target_value(&event))
+                                            required
+                                        />
+                                    </label>
+                                </div>
+
+                                <section class="form-section">
+                                    <h3>"Metadata"</h3>
+                                    {move || {
+                                        let fields = metadata_fields.get();
+                                        if fields.is_empty() {
+                                            view! { <p class="muted">"No metadata fields are configured for this node type."</p> }.into_any()
+                                        } else {
+                                            view! {
+                                                <div class="form-grid">
+                                                    {fields.into_iter().map(|field| {
+                                                        view! {
+                                                            <MetadataFieldInput
+                                                                field
+                                                                metadata_values
+                                                                metadata_booleans
+                                                            />
+                                                        }
+                                                    }).collect_view()}
+                                                </div>
+                                            }
+                                            .into_any()
+                                        }
+                                    }}
+                                </section>
+
+                                {move || message.get().map(|message| view! {
+                                    <p class="form-message" role="status">{message}</p>
+                                })}
+
+                                <div class="form-actions">
+                                    <Button label="Cancel" href="/organization"/>
+                                    <button class="button" type="submit" disabled=move || !can_submit()>
+                                        {move || if is_saving.get() { "Saving..." } else { "Save Changes" }}
+                                    </button>
+                                </div>
+                            </form>
+                        }
+                        .into_any()
+                    }
+                }}
+            </section>
+        </AppShell>
+    }
 }
 
 #[component]
