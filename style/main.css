@@ -706,6 +706,136 @@ input {
   background: var(--semantic-danger-soft);
 }
 
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.breadcrumb__list {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  color: var(--color-muted);
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.breadcrumb__item,
+.breadcrumb__separator {
+  display: inline-flex;
+  align-items: center;
+}
+
+.breadcrumb__link {
+  color: var(--semantic-primary);
+  text-decoration: none;
+}
+
+.breadcrumb__link:hover {
+  color: var(--color-text);
+}
+
+.breadcrumb__page {
+  color: var(--color-muted);
+}
+
+.breadcrumb__separator-icon {
+  width: 0.9rem;
+  height: 0.9rem;
+  color: var(--color-muted);
+}
+
+.native-form {
+  display: grid;
+  gap: 1rem;
+  max-width: 54rem;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.form-field,
+.form-section {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.form-field--wide {
+  grid-column: 1 / -1;
+}
+
+.form-section {
+  margin-top: 0.6rem;
+}
+
+.form-field > span,
+.form-section h3 {
+  color: var(--color-muted);
+  font-size: 0.82rem;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.form-field input,
+.form-field select {
+  width: 100%;
+  min-height: 2.65rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-control);
+  color: var(--color-text);
+  padding: 0 0.8rem;
+}
+
+.form-field input:focus,
+.form-field select:focus {
+  border-color: var(--semantic-primary-border);
+  outline: 2px solid var(--color-focus);
+  outline-offset: 1px;
+}
+
+.form-field--checkbox {
+  display: inline-flex;
+  min-height: 2.65rem;
+  align-items: center;
+  gap: 0.65rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-control);
+  padding: 0 0.8rem;
+}
+
+.form-field--checkbox input {
+  width: 1rem;
+  min-height: 1rem;
+  padding: 0;
+}
+
+.form-message {
+  margin: 0;
+  border: 1px solid var(--semantic-info-border);
+  border-radius: var(--radius);
+  background: var(--semantic-info-soft);
+  color: var(--color-text);
+  padding: 0.8rem 0.9rem;
+}
+
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
 .dropdown-menu {
   position: relative;
   display: inline-flex;
@@ -1234,6 +1364,10 @@ input {
   .search-field,
   .search-field input {
     width: 100%;
+  }
+
+  .form-grid {
+    grid-template-columns: 1fr;
   }
 
 }

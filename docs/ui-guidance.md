@@ -380,7 +380,9 @@ Top app bar:
 Page header:
 
 - lives inside main content
-- carries page title, subtitle or metadata, primary action, secondary actions, and page-local controls
+- carries page title, primary action, secondary actions, and page-local controls
+- SHOULD avoid explanatory body copy that merely describes what the page is for
+- MAY include a concise subtitle or metadata only when it changes the user's next decision
 
 Global search:
 
@@ -425,6 +427,7 @@ Vertical page rhythm:
 - between major page sections: `32px`
 - between related stacked panels or cards: `16px`
 - tight internal grouping: `12px`
+- section headings inside forms SHOULD have enough top spacing to read as a new group rather than another field label
 
 ### Right contextual panel, drawers, and modals
 
@@ -481,7 +484,10 @@ Organization browsing SHOULD become more scope-aware and less generic.
 - The canonical desktop and tablet pattern is `Explorer + Selected Node Detail`.
 - The explorer SHOULD use indented rows, minimal separators, and restrained selection styling rather than connector-line trees or card-per-node treatments.
 - The selected-node panel SHOULD remain a compact summary surface that leads with related forms, responses, dashboards, open issues, and recent changes.
-- Management actions SHOULD appear in the selected-node panel but remain secondary to related-work context.
+- Management actions SHOULD remain secondary to related-work context.
+- Node creation actions SHOULD be relationship-specific: offer `Create {child type}` links for each child node type allowed under the selected parent, and preselect both parent and child type when navigating to the create form.
+- Organization create/edit forms SHOULD ask for `Parent Node` before `Node Type`; selecting a parent constrains the available node types, while `Top-level record` constrains choices to root node types.
+- Parent node selectors SHOULD present visible nodes in lineage order, with indentation that communicates nesting depth.
 - Capability bundles and scope assignments in Administration should use accessible data-grid layouts once those surfaces need to support larger data sets.
 
 Responsive Organization behavior:
@@ -1508,6 +1514,8 @@ When there is a conflict between a legacy screen and this document, default to t
 
 Before adding or designing a UI element, engineers MUST check whether Rust/UI already provides a suitable native Leptos component or pattern. If a suitable Rust/UI option exists, suggest it and prefer it as the implementation baseline. Custom UI is acceptable when Rust/UI lacks the needed component, when the product interaction needs a deliberately different pattern, or when the element is a Tessara brand asset or bespoke illustration.
 
+New page components SHOULD default to reusable shared primitives instead of one-off route markup, especially for page structure, navigation aids, overlays, controls, data display, forms, and status feedback. If it is unclear whether a new component should be reusable, ask before committing to route-local markup.
+
 When in doubt, favor:
 
 - calmer surfaces over decorative styling
@@ -1534,6 +1542,7 @@ The reset application has one active UI primitive layer:
     - `Button`
     - `IconButton`
     - `DropdownMenu`
+    - `Breadcrumb`
     - `Drawer`
     - `Sheet`
     - `DataTable`

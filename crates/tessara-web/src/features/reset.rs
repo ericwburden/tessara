@@ -1,4 +1,3 @@
-#[cfg(feature = "hydrate")]
 use std::collections::HashMap;
 use std::collections::HashSet;
 
@@ -7,12 +6,13 @@ use icons::{
 };
 use leptos::portal::Portal;
 use leptos::prelude::*;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::ui::components::{
-    AppShell, Button, DataTable, DropdownMenu, EmptyState, InfoListTable, InfoRow, PageHeader,
-    StatusBadge, Timestamp,
+    AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator,
+    Button, DataTable, DropdownMenu, EmptyState, InfoListTable, InfoRow, PageHeader, StatusBadge,
+    Timestamp,
 };
 
 #[derive(Clone, Copy)]
@@ -46,7 +46,7 @@ const ROUTE_MIGRATIONS: [RouteMigration; 32] = [
         name: "Create Organization Node",
         route: "/organization/new",
         href: "/organization/new",
-        status: "Pending",
+        status: "Done",
     },
     RouteMigration {
         name: "Organization Detail",
@@ -403,6 +403,7 @@ fn submit_login(
 #[component]
 pub fn OrganizationPage() -> impl IntoView {
     let tree = RwSignal::new(Vec::<OrganizationTreeNode>::new());
+    let node_types = RwSignal::new(Vec::<NodeTypeCatalogEntry>::new());
     let expanded_nodes = RwSignal::new(HashSet::<String>::new());
     let is_loading = RwSignal::new(true);
     let load_error = RwSignal::new(None::<String>);
@@ -411,7 +412,7 @@ pub fn OrganizationPage() -> impl IntoView {
     let detail_error = RwSignal::new(None::<String>);
 
     Effect::new(move |_| {
-        load_organization_tree(tree, expanded_nodes, is_loading, load_error);
+        load_organization_tree(tree, node_types, expanded_nodes, is_loading, load_error);
     });
 
     view! {
@@ -450,15 +451,16 @@ pub fn OrganizationPage() -> impl IntoView {
                         .into_any()
                     } else {
                         view! {
-                            <OrganizationTree
-                                nodes=tree.get()
-                                expanded_nodes
-                                detail
-                                detail_is_loading
-                                detail_error
-                                depth=0
-                                lineage=Vec::new()
-                            />
+                            {organization_tree_view(
+                                tree.get(),
+                                node_types.get(),
+                                expanded_nodes,
+                                detail,
+                                detail_is_loading,
+                                detail_error,
+                                0,
+                                Vec::new(),
+                            )}
                         }
                         .into_any()
                     }
@@ -481,6 +483,7 @@ struct OrganizationNode {
     node_type_plural_label: String,
     parent_node_id: Option<String>,
     parent_node_name: Option<String>,
+    node_type_id: String,
     name: String,
     #[serde(default)]
     metadata: Value,
@@ -528,59 +531,131 @@ struct NodeDashboardLink {
     component_count: i64,
 }
 
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+struct NodeTypeCatalogEntry {
+    id: String,
+    name: String,
+    slug: String,
+    singular_label: String,
+    plural_label: String,
+    is_root_type: bool,
+    node_count: i64,
+    #[serde(default)]
+    parent_relationships: Vec<NodeTypePeerLink>,
+    #[serde(default)]
+    child_relationships: Vec<NodeTypePeerLink>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+struct NodeTypePeerLink {
+    node_type_id: String,
+    node_type_name: String,
+    node_type_slug: String,
+    singular_label: String,
+    plural_label: String,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+struct NodeTypeDefinition {
+    id: String,
+    name: String,
+    slug: String,
+    singular_label: String,
+    plural_label: String,
+    #[serde(default)]
+    metadata_fields: Vec<NodeMetadataFieldSummary>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+struct NodeMetadataFieldSummary {
+    key: String,
+    label: String,
+    field_type: String,
+    required: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+struct IdResponse {
+    id: String,
+}
+
+#[derive(Serialize)]
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+struct CreateNodePayload {
+    node_type_id: String,
+    parent_node_id: Option<String>,
+    name: String,
+    metadata: serde_json::Map<String, Value>,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 struct OrganizationTreeNode {
     node: OrganizationNode,
     children: Vec<OrganizationTreeNode>,
 }
 
-#[component]
-fn OrganizationTree(
+#[derive(Clone, Debug, PartialEq)]
+struct CreateChildLink {
+    href: String,
+    label: String,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct ParentNodeOption {
+    id: String,
+    label: String,
+}
+
+fn organization_tree_view(
     nodes: Vec<OrganizationTreeNode>,
+    node_types: Vec<NodeTypeCatalogEntry>,
     expanded_nodes: RwSignal<HashSet<String>>,
     detail: RwSignal<Option<OrganizationNodeDetail>>,
     detail_is_loading: RwSignal<bool>,
     detail_error: RwSignal<Option<String>>,
     depth: usize,
     lineage: Vec<String>,
-) -> impl IntoView {
+) -> AnyView {
     view! {
         <div class="organization-tree" role=if depth == 0 { "tree" } else { "group" }>
             {nodes
                 .into_iter()
                 .map(|branch| {
-                    view! {
-                        <OrganizationBranch
-                            branch
-                            expanded_nodes
-                            detail
-                            detail_is_loading
-                            detail_error
-                            depth
-                            lineage=lineage.clone()
-                        />
-                    }
+                    organization_branch_view(
+                        branch,
+                        node_types.clone(),
+                        expanded_nodes,
+                        detail,
+                        detail_is_loading,
+                        detail_error,
+                        depth,
+                        lineage.clone(),
+                    )
                 })
                 .collect_view()}
         </div>
     }
+    .into_any()
 }
 
-#[component]
-fn OrganizationBranch(
+fn organization_branch_view(
     branch: OrganizationTreeNode,
+    node_types: Vec<NodeTypeCatalogEntry>,
     expanded_nodes: RwSignal<HashSet<String>>,
     detail: RwSignal<Option<OrganizationNodeDetail>>,
     detail_is_loading: RwSignal<bool>,
     detail_error: RwSignal<Option<String>>,
     depth: usize,
     lineage: Vec<String>,
-) -> impl IntoView {
+) -> AnyView {
     let node = branch.node;
     let children = branch.children;
     let node_id = node.id.clone();
     let row_id = node.id.clone();
     let row_class_id = node.id.clone();
+    let child_link_node_type_id = node.node_type_id.clone();
     let expanded_id = node.id.clone();
     let toggle_icon_id = node.id.clone();
     let child_visibility_id = node.id.clone();
@@ -601,7 +676,7 @@ fn OrganizationBranch(
         }
     };
     let edit_href = format!("/organization/{node_id}/edit");
-    let create_href = format!("/organization/new?parent_node_id={node_id}");
+    let create_links = child_create_links(&child_link_node_type_id, &node_types, &node_id);
     let child_label = visible_child_label(child_count);
 
     view! {
@@ -662,26 +737,35 @@ fn OrganizationBranch(
                         <Pencil class="dropdown-menu__item-icon"/>
                         <span>"Edit"</span>
                     </a>
-                    <a class="dropdown-menu__item" role="menuitem" href=create_href>
-                        <Plus class="dropdown-menu__item-icon"/>
-                        <span>"Create child"</span>
-                    </a>
+                    {create_links
+                        .into_iter()
+                        .map(|link| {
+                            view! {
+                                <a class="dropdown-menu__item" role="menuitem" href=link.href>
+                                    <Plus class="dropdown-menu__item-icon"/>
+                                    <span>{link.label}</span>
+                                </a>
+                            }
+                        })
+                        .collect_view()}
                 </DropdownMenu>
             </div>
 
             <Show when=move || has_children && expanded_nodes.with(|nodes| nodes.contains(&child_visibility_id))>
-                <OrganizationTree
-                    nodes=children.clone()
-                    expanded_nodes
-                    detail
-                    detail_is_loading
-                    detail_error
-                    depth=depth + 1
-                    lineage=child_lineage.clone()
-                />
+                {organization_tree_view(
+                    children.clone(),
+                    node_types.clone(),
+                    expanded_nodes,
+                    detail,
+                    detail_is_loading,
+                    detail_error,
+                    depth + 1,
+                    child_lineage.clone(),
+                )}
             </Show>
         </section>
     }
+    .into_any()
 }
 
 #[component]
@@ -955,6 +1039,7 @@ fn toggle_organization_branch(
 
 fn load_organization_tree(
     tree: RwSignal<Vec<OrganizationTreeNode>>,
+    node_types: RwSignal<Vec<NodeTypeCatalogEntry>>,
     expanded_nodes: RwSignal<HashSet<String>>,
     is_loading: RwSignal<bool>,
     load_error: RwSignal<Option<String>>,
@@ -965,17 +1050,31 @@ fn load_organization_tree(
             is_loading.set(true);
             load_error.set(None);
 
-            let response = gloo_net::http::Request::get("/api/nodes").send().await;
+            let node_response = gloo_net::http::Request::get("/api/nodes").send().await;
+            let node_type_response = gloo_net::http::Request::get("/api/node-types").send().await;
 
-            match response {
-                Ok(response) if response.status() == 401 => {
+            match (node_response, node_type_response) {
+                (Ok(response), _) if response.status() == 401 => {
                     tree.set(Vec::new());
+                    node_types.set(Vec::new());
                     is_loading.set(false);
                     redirect_to_login();
                 }
-                Ok(response) if response.ok() => {
-                    match response.json::<Vec<OrganizationNode>>().await {
-                        Ok(nodes) => {
+                (_, Ok(response)) if response.status() == 401 => {
+                    tree.set(Vec::new());
+                    node_types.set(Vec::new());
+                    is_loading.set(false);
+                    redirect_to_login();
+                }
+                (Ok(node_response), Ok(node_type_response))
+                    if node_response.ok() && node_type_response.ok() =>
+                {
+                    let loaded_nodes = node_response.json::<Vec<OrganizationNode>>().await;
+                    let loaded_node_types =
+                        node_type_response.json::<Vec<NodeTypeCatalogEntry>>().await;
+
+                    match (loaded_nodes, loaded_node_types) {
+                        (Ok(nodes), Ok(loaded_node_types)) => {
                             let branches = build_organization_tree(nodes);
                             let first_open = branches
                                 .iter()
@@ -984,25 +1083,29 @@ fn load_organization_tree(
 
                             expanded_nodes.set(first_open.into_iter().collect());
                             tree.set(branches);
+                            node_types.set(loaded_node_types);
                             is_loading.set(false);
                         }
-                        Err(_) => {
+                        _ => {
                             tree.set(Vec::new());
+                            node_types.set(Vec::new());
                             load_error
                                 .set(Some("The hierarchy response could not be read.".into()));
                             is_loading.set(false);
                         }
                     }
                 }
-                Ok(_) => {
+                (Ok(_), Ok(_)) => {
                     tree.set(Vec::new());
+                    node_types.set(Vec::new());
                     load_error.set(Some(
                         "The hierarchy API returned an unexpected response.".into(),
                     ));
                     is_loading.set(false);
                 }
-                Err(_) => {
+                _ => {
                     tree.set(Vec::new());
+                    node_types.set(Vec::new());
                     load_error.set(Some("Could not reach the hierarchy API.".into()));
                     is_loading.set(false);
                 }
@@ -1012,7 +1115,7 @@ fn load_organization_tree(
 
     #[cfg(not(feature = "hydrate"))]
     {
-        let _ = (tree, expanded_nodes, is_loading, load_error);
+        let _ = (tree, node_types, expanded_nodes, is_loading, load_error);
     }
 }
 
@@ -1076,7 +1179,6 @@ fn redirect_to_login() {
     }
 }
 
-#[cfg(feature = "hydrate")]
 fn build_organization_tree(nodes: Vec<OrganizationNode>) -> Vec<OrganizationTreeNode> {
     let visible_ids = nodes
         .iter()
@@ -1103,7 +1205,6 @@ fn build_organization_tree(nodes: Vec<OrganizationNode>) -> Vec<OrganizationTree
     build_organization_branches(None, &mut children_by_parent)
 }
 
-#[cfg(feature = "hydrate")]
 fn build_organization_branches(
     parent_id: Option<String>,
     children_by_parent: &mut HashMap<Option<String>, Vec<OrganizationNode>>,
@@ -1119,9 +1220,704 @@ fn build_organization_branches(
         .collect()
 }
 
+fn child_create_links(
+    parent_node_type_id: &str,
+    node_types: &[NodeTypeCatalogEntry],
+    parent_node_id: &str,
+) -> Vec<CreateChildLink> {
+    let Some(parent_type) = node_types
+        .iter()
+        .find(|node_type| node_type.id == parent_node_type_id)
+    else {
+        return Vec::new();
+    };
+
+    parent_type
+        .child_relationships
+        .iter()
+        .map(|relationship| CreateChildLink {
+            href: format!(
+                "/organization/new?parent_node_id={parent_node_id}&node_type_id={}",
+                relationship.node_type_id
+            ),
+            label: format!("Create {}", relationship.singular_label),
+        })
+        .collect()
+}
+
 #[component]
 pub fn OrganizationNewPage() -> impl IntoView {
-    view! { <ResetRoute active_route="organization" title="Create Organization Node" route="/organization/new" status="Registered" next_step="Restore native create form after organization list lands."/> }
+    let node_types = RwSignal::new(Vec::<NodeTypeCatalogEntry>::new());
+    let nodes = RwSignal::new(Vec::<OrganizationNode>::new());
+    let selected_node_type_id = RwSignal::new(String::new());
+    let selected_parent_node_id = RwSignal::new(String::new());
+    let name = RwSignal::new(String::new());
+    let metadata_fields = RwSignal::new(Vec::<NodeMetadataFieldSummary>::new());
+    let metadata_values = RwSignal::new(HashMap::<String, String>::new());
+    let metadata_booleans = RwSignal::new(HashMap::<String, bool>::new());
+    let is_loading = RwSignal::new(true);
+    let is_saving = RwSignal::new(false);
+    let message = RwSignal::new(None::<String>);
+
+    Effect::new(move |_| {
+        load_organization_create_options(
+            node_types,
+            nodes,
+            selected_node_type_id,
+            selected_parent_node_id,
+            is_loading,
+            message,
+        );
+    });
+
+    Effect::new(move |_| {
+        let node_type_id = selected_node_type_id.get();
+        if node_type_id.is_empty() {
+            metadata_fields.set(Vec::new());
+            metadata_values.set(HashMap::new());
+            metadata_booleans.set(HashMap::new());
+            return;
+        }
+
+        load_node_type_metadata(
+            node_type_id,
+            metadata_fields,
+            metadata_values,
+            metadata_booleans,
+            message,
+        );
+    });
+
+    let parent_options = move || parent_node_options(&nodes.get());
+    let node_type_options = move || {
+        available_node_types_for_parent(
+            &selected_parent_node_id.get(),
+            &node_types.get(),
+            &nodes.get(),
+        )
+    };
+
+    let can_submit = move || {
+        !is_loading.get()
+            && !is_saving.get()
+            && !selected_node_type_id.get().is_empty()
+            && !name.get().trim().is_empty()
+    };
+
+    view! {
+        <AppShell active_route="organization" title="Organization">
+            <Breadcrumb>
+                <BreadcrumbItem>
+                    <BreadcrumbLink href="/organization">"Organization"</BreadcrumbLink>
+                </BreadcrumbItem>
+                <BreadcrumbSeparator/>
+                <BreadcrumbItem>
+                    <BreadcrumbPage>"Create Node"</BreadcrumbPage>
+                </BreadcrumbItem>
+            </Breadcrumb>
+            <section class="route-panel organization-page">
+                <PageHeader title="Create Organization Node">
+                    <Button label="Back to Organization" href="/organization"/>
+                </PageHeader>
+
+                {move || {
+                    if is_loading.get() {
+                        view! {
+                            <section class="organization-state" aria-live="polite">
+                                <h3>"Loading create options"</h3>
+                                <p>"Fetching organization node types and visible parent records."</p>
+                            </section>
+                        }
+                        .into_any()
+                    } else {
+                        view! {
+                            <form
+                                class="native-form organization-node-form"
+                                on:submit=move |event| {
+                                    event.prevent_default();
+                                    submit_create_node(
+                                        selected_node_type_id,
+                                        selected_parent_node_id,
+                                        name,
+                                        metadata_fields,
+                                        metadata_values,
+                                        metadata_booleans,
+                                        is_saving,
+                                        message,
+                                    );
+                                }
+                            >
+                                <div class="form-grid">
+                                    <label class="form-field" for="organization-parent-node">
+                                        <span>"Parent Node"</span>
+                                        <select
+                                            id="organization-parent-node"
+                                            prop:value=move || selected_parent_node_id.get()
+                                            on:change=move |event| {
+                                                let parent_id = event_target_value(&event);
+                                                let available_types = available_node_types_for_parent(
+                                                    &parent_id,
+                                                    &node_types.get(),
+                                                    &nodes.get(),
+                                                );
+                                                let current_type_id = selected_node_type_id.get();
+
+                                                selected_parent_node_id.set(parent_id);
+
+                                                if !available_types.iter().any(|node_type| node_type.id == current_type_id) {
+                                                    selected_node_type_id.set(
+                                                        available_types
+                                                            .first()
+                                                            .map(|node_type| node_type.id.clone())
+                                                            .unwrap_or_default(),
+                                                    );
+                                                }
+                                            }
+                                        >
+                                            <option value="">"Top-level record"</option>
+                                            {move || parent_options().into_iter().map(|option| {
+                                                view! {
+                                                    <option value=option.id>{option.label}</option>
+                                                }
+                                            }).collect_view()}
+                                        </select>
+                                    </label>
+
+                                    <label class="form-field" for="organization-node-type">
+                                        <span>"Node Type"</span>
+                                        <select
+                                            id="organization-node-type"
+                                            prop:value=move || selected_node_type_id.get()
+                                            on:change=move |event| selected_node_type_id.set(event_target_value(&event))
+                                        >
+                                            <option value="">"Select node type"</option>
+                                            {move || node_type_options().into_iter().map(|node_type| {
+                                                view! {
+                                                    <option value=node_type.id>{node_type.singular_label}</option>
+                                                }
+                                            }).collect_view()}
+                                        </select>
+                                    </label>
+
+                                    <label class="form-field form-field--wide" for="organization-name">
+                                        <span>"Name"</span>
+                                        <input
+                                            id="organization-name"
+                                            type="text"
+                                            autocomplete="off"
+                                            prop:value=move || name.get()
+                                            on:input=move |event| name.set(event_target_value(&event))
+                                            required
+                                        />
+                                    </label>
+                                </div>
+
+                                <section class="form-section">
+                                    <h3>"Metadata"</h3>
+                                    {move || {
+                                        let fields = metadata_fields.get();
+                                        if fields.is_empty() {
+                                            view! { <p class="muted">"No metadata fields are configured for this node type."</p> }.into_any()
+                                        } else {
+                                            view! {
+                                                <div class="form-grid">
+                                                    {fields.into_iter().map(|field| {
+                                                        view! {
+                                                            <MetadataFieldInput
+                                                                field
+                                                                metadata_values
+                                                                metadata_booleans
+                                                            />
+                                                        }
+                                                    }).collect_view()}
+                                                </div>
+                                            }
+                                            .into_any()
+                                        }
+                                    }}
+                                </section>
+
+                                {move || message.get().map(|message| view! {
+                                    <p class="form-message" role="status">{message}</p>
+                                })}
+
+                                <div class="form-actions">
+                                    <Button label="Cancel" href="/organization"/>
+                                    <button class="button" type="submit" disabled=move || !can_submit()>
+                                        {move || if is_saving.get() { "Saving..." } else { "Create Node" }}
+                                    </button>
+                                </div>
+                            </form>
+                        }
+                        .into_any()
+                    }
+                }}
+            </section>
+        </AppShell>
+    }
+}
+
+#[component]
+fn MetadataFieldInput(
+    field: NodeMetadataFieldSummary,
+    metadata_values: RwSignal<HashMap<String, String>>,
+    metadata_booleans: RwSignal<HashMap<String, bool>>,
+) -> impl IntoView {
+    let key = field.key.clone();
+    let input_id = format!("organization-metadata-{}", field.key);
+    let required_label = if field.required { " *" } else { "" };
+
+    match field.field_type.as_str() {
+        "boolean" => view! {
+            <label class="form-field form-field--checkbox" for=input_id.clone()>
+                <input
+                    id=input_id.clone()
+                    type="checkbox"
+                    prop:checked=move || metadata_booleans.with(|values| values.get(&key).copied().unwrap_or(false))
+                    on:change=move |event| {
+                        metadata_booleans.update(|values| {
+                            values.insert(field.key.clone(), event_target_checked(&event));
+                        });
+                    }
+                />
+                <span>{format!("{}{}", field.label, required_label)}</span>
+            </label>
+        }
+        .into_any(),
+        field_type => {
+            let input_type = match field_type {
+                "number" => "number",
+                "date" => "date",
+                _ => "text",
+            };
+
+            view! {
+                <label class="form-field" for=input_id.clone()>
+                    <span>{format!("{}{}", field.label, required_label)}</span>
+                    <input
+                        id=input_id.clone()
+                        type=input_type
+                        prop:value=move || metadata_values.with(|values| values.get(&key).cloned().unwrap_or_default())
+                        on:input=move |event| {
+                            metadata_values.update(|values| {
+                                values.insert(field.key.clone(), event_target_value(&event));
+                            });
+                        }
+                        required=field.required
+                    />
+                </label>
+            }
+            .into_any()
+        }
+    }
+}
+
+fn parent_node_options(nodes: &[OrganizationNode]) -> Vec<ParentNodeOption> {
+    let branches = build_organization_tree(nodes.to_vec());
+    let mut options = Vec::new();
+    append_parent_node_options(&branches, 0, &mut options);
+    options
+}
+
+fn append_parent_node_options(
+    branches: &[OrganizationTreeNode],
+    depth: usize,
+    options: &mut Vec<ParentNodeOption>,
+) {
+    for branch in branches {
+        let prefix = if depth == 0 {
+            String::new()
+        } else {
+            format!("{} ", "--".repeat(depth))
+        };
+
+        options.push(ParentNodeOption {
+            id: branch.node.id.clone(),
+            label: format!(
+                "{}{} ({})",
+                prefix, branch.node.name, branch.node.node_type_singular_label
+            ),
+        });
+        append_parent_node_options(&branch.children, depth + 1, options);
+    }
+}
+
+fn available_node_types_for_parent(
+    parent_node_id: &str,
+    node_types: &[NodeTypeCatalogEntry],
+    nodes: &[OrganizationNode],
+) -> Vec<NodeTypeCatalogEntry> {
+    if parent_node_id.is_empty() {
+        return node_types
+            .iter()
+            .filter(|node_type| node_type.is_root_type)
+            .cloned()
+            .collect();
+    }
+
+    let Some(parent_node) = nodes.iter().find(|node| node.id == parent_node_id) else {
+        return Vec::new();
+    };
+    let Some(parent_type) = node_types
+        .iter()
+        .find(|node_type| node_type.id == parent_node.node_type_id)
+    else {
+        return Vec::new();
+    };
+
+    parent_type
+        .child_relationships
+        .iter()
+        .filter_map(|relationship| {
+            node_types
+                .iter()
+                .find(|node_type| node_type.id == relationship.node_type_id)
+                .cloned()
+        })
+        .collect()
+}
+
+fn load_organization_create_options(
+    node_types: RwSignal<Vec<NodeTypeCatalogEntry>>,
+    nodes: RwSignal<Vec<OrganizationNode>>,
+    selected_node_type_id: RwSignal<String>,
+    selected_parent_node_id: RwSignal<String>,
+    is_loading: RwSignal<bool>,
+    message: RwSignal<Option<String>>,
+) {
+    #[cfg(feature = "hydrate")]
+    {
+        leptos::task::spawn_local(async move {
+            is_loading.set(true);
+            message.set(None);
+
+            let node_type_response = gloo_net::http::Request::get("/api/node-types").send().await;
+            let node_response = gloo_net::http::Request::get("/api/nodes").send().await;
+
+            match (node_type_response, node_response) {
+                (Ok(response), _) if response.status() == 401 => {
+                    is_loading.set(false);
+                    redirect_to_login();
+                }
+                (_, Ok(response)) if response.status() == 401 => {
+                    is_loading.set(false);
+                    redirect_to_login();
+                }
+                (Ok(node_type_response), Ok(node_response))
+                    if node_type_response.ok() && node_response.ok() =>
+                {
+                    let loaded_node_types =
+                        node_type_response.json::<Vec<NodeTypeCatalogEntry>>().await;
+                    let loaded_nodes = node_response.json::<Vec<OrganizationNode>>().await;
+
+                    match (loaded_node_types, loaded_nodes) {
+                        (Ok(loaded_node_types), Ok(loaded_nodes)) => {
+                            let requested_node_type_id = current_search_param("node_type_id");
+                            let requested_parent_id = current_search_param("parent_node_id")
+                                .or_else(|| current_search_param("parent_id"));
+                            let selected_parent = requested_parent_id
+                                .filter(|requested| {
+                                    loaded_nodes.iter().any(|node| node.id == *requested)
+                                })
+                                .unwrap_or_default();
+                            let available_types = available_node_types_for_parent(
+                                &selected_parent,
+                                &loaded_node_types,
+                                &loaded_nodes,
+                            );
+                            let selected_type = requested_node_type_id
+                                .filter(|requested| {
+                                    available_types
+                                        .iter()
+                                        .any(|node_type| node_type.id == *requested)
+                                })
+                                .or_else(|| {
+                                    available_types
+                                        .first()
+                                        .map(|node_type| node_type.id.clone())
+                                });
+
+                            nodes.set(loaded_nodes);
+                            node_types.set(loaded_node_types);
+                            selected_node_type_id.set(selected_type.unwrap_or_default());
+                            selected_parent_node_id.set(selected_parent);
+                            is_loading.set(false);
+                        }
+                        _ => {
+                            is_loading.set(false);
+                            message.set(Some("Create options could not be read.".into()));
+                        }
+                    }
+                }
+                (Ok(_), Ok(_)) => {
+                    is_loading.set(false);
+                    message.set(Some(
+                        "Create options returned an unexpected response.".into(),
+                    ));
+                }
+                _ => {
+                    is_loading.set(false);
+                    message.set(Some("Could not reach the organization APIs.".into()));
+                }
+            }
+        });
+    }
+
+    #[cfg(not(feature = "hydrate"))]
+    {
+        let _ = (
+            node_types,
+            nodes,
+            selected_node_type_id,
+            selected_parent_node_id,
+            is_loading,
+            message,
+        );
+    }
+}
+
+fn load_node_type_metadata(
+    node_type_id: String,
+    metadata_fields: RwSignal<Vec<NodeMetadataFieldSummary>>,
+    metadata_values: RwSignal<HashMap<String, String>>,
+    metadata_booleans: RwSignal<HashMap<String, bool>>,
+    message: RwSignal<Option<String>>,
+) {
+    #[cfg(feature = "hydrate")]
+    {
+        leptos::task::spawn_local(async move {
+            let response =
+                gloo_net::http::Request::get(&format!("/api/admin/node-types/{node_type_id}"))
+                    .send()
+                    .await;
+
+            match response {
+                Ok(response) if response.status() == 401 => redirect_to_login(),
+                Ok(response) if response.ok() => {
+                    match response.json::<NodeTypeDefinition>().await {
+                        Ok(definition) => {
+                            metadata_fields.set(definition.metadata_fields);
+                            metadata_values.set(HashMap::new());
+                            metadata_booleans.set(HashMap::new());
+                        }
+                        Err(_) => {
+                            metadata_fields.set(Vec::new());
+                            message.set(Some("Metadata fields could not be read.".into()));
+                        }
+                    }
+                }
+                Ok(_) => {
+                    metadata_fields.set(Vec::new());
+                    message.set(Some(
+                        "Metadata fields returned an unexpected response.".into(),
+                    ));
+                }
+                Err(_) => {
+                    metadata_fields.set(Vec::new());
+                    message.set(Some("Could not reach the node type API.".into()));
+                }
+            }
+        });
+    }
+
+    #[cfg(not(feature = "hydrate"))]
+    {
+        let _ = (
+            node_type_id,
+            metadata_fields,
+            metadata_values,
+            metadata_booleans,
+            message,
+        );
+    }
+}
+
+fn submit_create_node(
+    selected_node_type_id: RwSignal<String>,
+    selected_parent_node_id: RwSignal<String>,
+    name: RwSignal<String>,
+    metadata_fields: RwSignal<Vec<NodeMetadataFieldSummary>>,
+    metadata_values: RwSignal<HashMap<String, String>>,
+    metadata_booleans: RwSignal<HashMap<String, bool>>,
+    is_saving: RwSignal<bool>,
+    message: RwSignal<Option<String>>,
+) {
+    #[cfg(feature = "hydrate")]
+    {
+        if is_saving.get() {
+            return;
+        }
+
+        let node_type_id = selected_node_type_id.get();
+        let node_name = name.get().trim().to_string();
+        if node_type_id.is_empty() {
+            message.set(Some("Select a node type before saving.".into()));
+            return;
+        }
+        if node_name.is_empty() {
+            message.set(Some("Name is required.".into()));
+            return;
+        }
+
+        let metadata = match collect_node_metadata(
+            &metadata_fields.get(),
+            &metadata_values.get(),
+            &metadata_booleans.get(),
+        ) {
+            Ok(metadata) => metadata,
+            Err(error) => {
+                message.set(Some(error));
+                return;
+            }
+        };
+
+        let parent_node_id = selected_parent_node_id
+            .get()
+            .trim()
+            .to_string()
+            .into_nonempty();
+        let payload = CreateNodePayload {
+            node_type_id,
+            parent_node_id,
+            name: node_name,
+            metadata,
+        };
+
+        leptos::task::spawn_local(async move {
+            is_saving.set(true);
+            message.set(None);
+
+            let body = match serde_json::to_string(&payload) {
+                Ok(body) => body,
+                Err(_) => {
+                    message.set(Some("Create request could not be prepared.".into()));
+                    is_saving.set(false);
+                    return;
+                }
+            };
+
+            let response = gloo_net::http::Request::post("/api/admin/nodes")
+                .header("Content-Type", "application/json")
+                .body(body)
+                .expect("json request body should be valid")
+                .send()
+                .await;
+
+            match response {
+                Ok(response) if response.status() == 401 => {
+                    is_saving.set(false);
+                    redirect_to_login();
+                }
+                Ok(response) if response.ok() => match response.json::<IdResponse>().await {
+                    Ok(created) => {
+                        if let Some(window) = web_sys::window() {
+                            let _ = window
+                                .location()
+                                .set_href(&format!("/organization/{}", created.id));
+                        }
+                    }
+                    Err(_) => {
+                        message.set(Some("Create response could not be read.".into()));
+                        is_saving.set(false);
+                    }
+                },
+                Ok(response) => {
+                    message.set(Some(format!(
+                        "Create failed with status {}.",
+                        response.status()
+                    )));
+                    is_saving.set(false);
+                }
+                Err(_) => {
+                    message.set(Some("Could not reach the create node API.".into()));
+                    is_saving.set(false);
+                }
+            }
+        });
+    }
+
+    #[cfg(not(feature = "hydrate"))]
+    {
+        let _ = (
+            selected_node_type_id,
+            selected_parent_node_id,
+            name,
+            metadata_fields,
+            metadata_values,
+            metadata_booleans,
+            is_saving,
+            message,
+        );
+    }
+}
+
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+fn collect_node_metadata(
+    fields: &[NodeMetadataFieldSummary],
+    values: &HashMap<String, String>,
+    booleans: &HashMap<String, bool>,
+) -> Result<serde_json::Map<String, Value>, String> {
+    let mut metadata = serde_json::Map::new();
+
+    for field in fields {
+        match field.field_type.as_str() {
+            "boolean" => {
+                metadata.insert(
+                    field.key.clone(),
+                    Value::Bool(booleans.get(&field.key).copied().unwrap_or(false)),
+                );
+            }
+            "number" => {
+                let raw = values
+                    .get(&field.key)
+                    .map(|value| value.trim())
+                    .unwrap_or_default();
+                if raw.is_empty() {
+                    if field.required {
+                        return Err(format!("{} is required.", field.label));
+                    }
+                } else {
+                    let parsed = raw
+                        .parse::<f64>()
+                        .map_err(|_| format!("{} must be a number.", field.label))?;
+                    metadata.insert(field.key.clone(), serde_json::json!(parsed));
+                }
+            }
+            _ => {
+                let raw = values
+                    .get(&field.key)
+                    .map(|value| value.trim())
+                    .unwrap_or_default();
+                if raw.is_empty() {
+                    if field.required {
+                        return Err(format!("{} is required.", field.label));
+                    }
+                } else {
+                    metadata.insert(field.key.clone(), Value::String(raw.to_string()));
+                }
+            }
+        }
+    }
+
+    Ok(metadata)
+}
+
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+trait IntoNonemptyString {
+    fn into_nonempty(self) -> Option<String>;
+}
+
+impl IntoNonemptyString for String {
+    fn into_nonempty(self) -> Option<String> {
+        if self.is_empty() { None } else { Some(self) }
+    }
+}
+
+#[cfg(feature = "hydrate")]
+fn current_search_param(name: &str) -> Option<String> {
+    let search = web_sys::window().and_then(|window| window.location().search().ok())?;
+    let params = web_sys::UrlSearchParams::new_with_str(&search).ok()?;
+    params.get(name).filter(|value| !value.is_empty())
 }
 
 #[component]
