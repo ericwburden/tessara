@@ -1165,6 +1165,20 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
     .await?;
     ensure_form_assignment(
         pool,
+        activity_form.form_version_id,
+        activity_b,
+        respondent_account_id,
+    )
+    .await?;
+    ensure_form_assignment(
+        pool,
+        activity_form.form_version_id,
+        activity_f,
+        respondent_account_id,
+    )
+    .await?;
+    ensure_form_assignment(
+        pool,
         intake_activity_form.form_version_id,
         activity_a,
         respondent_account_id,

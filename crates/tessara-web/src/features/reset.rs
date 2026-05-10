@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::collections::HashSet;
 
@@ -73,7 +74,7 @@ const ROUTE_MIGRATIONS: [RouteMigration; 32] = [
         name: "Forms",
         route: "/forms",
         href: "/forms",
-        status: "Pending",
+        status: "Done",
         rbac_status: "Pending",
     },
     RouteMigration {
@@ -679,6 +680,57 @@ struct UpdateNodePayload {
     metadata: serde_json::Map<String, Value>,
 }
 
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+struct FormSummary {
+    id: String,
+    name: String,
+    slug: String,
+    scope_node_type_name: Option<String>,
+    #[serde(default)]
+    versions: Vec<FormVersionSummary>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+struct FormVersionSummary {
+    version_label: Option<String>,
+    status: String,
+    published_at: Option<String>,
+    field_count: i64,
+    #[serde(default)]
+    assignment_nodes: Vec<FormVersionAssignmentNodeSummary>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+struct FormVersionAssignmentNodeSummary {
+    node_id: String,
+    node_name: String,
+    parent_node_id: Option<String>,
+    node_path: String,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct FormAttachmentLink {
+    href: String,
+    label: String,
+    title: String,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct FormsAttachedNodesSheetData {
+    form_name: String,
+    form_href: String,
+    nodes: Vec<FormAttachmentLink>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct FormNodeFilterOption {
+    id: String,
+    name: String,
+    parent_node_id: Option<String>,
+    path: String,
+    depth: usize,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 struct OrganizationTreeNode {
     node: OrganizationNode,
@@ -875,9 +927,25 @@ fn OrganizationDetailSheet(
                 <section class="sheet-overlay organization-detail-overlay" aria-label="Organization detail overlay">
                     <button class="sheet-overlay__scrim" type="button" aria-label="Close details" on:click=close></button>
                     <aside class="sheet-panel blurred-surface organization-detail-sheet" role="dialog" aria-modal="true" aria-label="Organization details">
-                        <button class="icon-button sheet-panel__close" type="button" aria-label="Close details" title="Close details" on:click=close>
-                            <X class="icon-button__icon"/>
-                        </button>
+                        <div class="sheet-panel__actions">
+                            {move || {
+                                detail
+                                    .get()
+                                    .map(|node_detail| {
+                                        let href = format!("/organization/{}", node_detail.id);
+                                        view! {
+                                            <a class="icon-button sheet-panel__open" href=href aria-label="Open detail page" title="Open detail page">
+                                                <ExternalLink class="icon-button__icon"/>
+                                            </a>
+                                        }
+                                        .into_any()
+                                    })
+                                    .unwrap_or_else(|| view! {}.into_any())
+                            }}
+                            <button class="icon-button sheet-panel__close" type="button" aria-label="Close details" title="Close details" on:click=close>
+                                <X class="icon-button__icon"/>
+                            </button>
+                        </div>
                         {move || {
                             if is_loading.get() {
                                 view! {
@@ -936,7 +1004,7 @@ fn OrganizationDetailContent(detail: OrganizationNodeDetail) -> impl IntoView {
         </section>
         <section class="sheet-panel__section">
             <h3>"Related Work"</h3>
-            <RelatedWorkSummary detail/>
+            <RelatedWorkSummary detail cards_only=true/>
         </section>
     }
 }
@@ -998,14 +1066,22 @@ fn DynamicInfoTable(rows: Vec<(String, String)>) -> impl IntoView {
 }
 
 #[component]
-fn RelatedWorkSummary(detail: OrganizationNodeDetail) -> impl IntoView {
+fn RelatedWorkSummary(
+    detail: OrganizationNodeDetail,
+    #[prop(optional)] cards_only: bool,
+) -> impl IntoView {
     let active_tab = RwSignal::new("forms".to_string());
+    let summary_class = if cards_only {
+        "related-work-summary related-work-summary--cards-only"
+    } else {
+        "related-work-summary"
+    };
     let forms_count = detail.related_forms.len();
     let responses_count = detail.related_responses.len();
     let dashboards_count = detail.related_dashboards.len();
 
     view! {
-        <div class="related-work-summary">
+        <div class=summary_class>
             <Tabs active=active_tab>
                 <TabsList>
                     <TabsTrigger active=active_tab value="forms">
@@ -1080,7 +1156,6 @@ fn RelatedFormsTable(forms: Vec<NodeFormLink>) -> impl IntoView {
                         <th scope="col">"Form name"</th>
                         <th scope="col">"Slug"</th>
                         <th scope="col">"Active version"</th>
-                        <th scope="col">"View"</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -1089,7 +1164,7 @@ fn RelatedFormsTable(forms: Vec<NodeFormLink>) -> impl IntoView {
                         if rows.is_empty() {
                             view! {
                                 <tr>
-                                    <td class="data-table__empty" colspan="4">"No Related Forms to Display"</td>
+                                    <td class="data-table__empty" colspan="3">"No Related Forms to Display"</td>
                                 </tr>
                             }
                             .into_any()
@@ -1100,14 +1175,11 @@ fn RelatedFormsTable(forms: Vec<NodeFormLink>) -> impl IntoView {
                                     let href = format!("/forms/{}", form.form_id);
                                     view! {
                                         <tr>
-                                            <th scope="row">{form.form_name}</th>
+                                            <th scope="row">
+                                                <a class="data-table__primary-link" href=href>{form.form_name}</a>
+                                            </th>
                                             <td>{form.form_slug}</td>
                                             <td>{form.active_version_label.unwrap_or_else(|| "-".to_string())}</td>
-                                            <td>
-                                                <a class="data-table__action" href=href aria-label="View form" title="View form">
-                                                    <ExternalLink/>
-                                                </a>
-                                            </td>
                                         </tr>
                                     }
                                 })
@@ -1130,8 +1202,7 @@ fn RelatedFormsTable(forms: Vec<NodeFormLink>) -> impl IntoView {
                                 view! {
                                     <article class="related-work-mobile-card">
                                         <div class="related-work-mobile-card__header">
-                                            <h4>{form.form_name}</h4>
-                                            <a href=href aria-label="View form" title="View form"><ExternalLink/></a>
+                                            <h4><a href=href>{form.form_name}</a></h4>
                                         </div>
                                         <dl>
                                             <div>
@@ -1229,7 +1300,6 @@ fn RelatedResponsesTable(responses: Vec<NodeSubmissionLink>) -> impl IntoView {
                         </th>
                         <th scope="col">"Submitted Date"</th>
                         <th scope="col">"Submitted By"</th>
-                        <th scope="col">"View"</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -1238,7 +1308,7 @@ fn RelatedResponsesTable(responses: Vec<NodeSubmissionLink>) -> impl IntoView {
                         if rows.is_empty() {
                             view! {
                                 <tr>
-                                    <td class="data-table__empty" colspan="6">"No Related Responses to Display"</td>
+                                    <td class="data-table__empty" colspan="5">"No Related Responses to Display"</td>
                                 </tr>
                             }
                             .into_any()
@@ -1253,16 +1323,13 @@ fn RelatedResponsesTable(responses: Vec<NodeSubmissionLink>) -> impl IntoView {
                                         .unwrap_or_else(|| response.created_at.clone());
                                     view! {
                                         <tr>
-                                            <th scope="row">{response.form_name}</th>
+                                            <th scope="row">
+                                                <a class="data-table__primary-link" href=href>{response.form_name}</a>
+                                            </th>
                                             <td>{response.version_label}</td>
                                             <td>{sentence_label(&response.status)}</td>
                                             <td><Timestamp value=submitted_date/></td>
                                             <td>{response.submitted_by.unwrap_or_else(|| "Unknown".to_string())}</td>
-                                            <td>
-                                                <a class="data-table__action" href=href aria-label="View response" title="View response">
-                                                    <ExternalLink/>
-                                                </a>
-                                            </td>
                                         </tr>
                                     }
                                 })
@@ -1289,8 +1356,7 @@ fn RelatedResponsesTable(responses: Vec<NodeSubmissionLink>) -> impl IntoView {
                                 view! {
                                     <article class="related-work-mobile-card">
                                         <div class="related-work-mobile-card__header">
-                                            <h4>{response.form_name}</h4>
-                                            <a href=href aria-label="View response" title="View response"><ExternalLink/></a>
+                                            <h4><a href=href>{response.form_name}</a></h4>
                                         </div>
                                         <dl>
                                             <div>
@@ -1428,6 +1494,98 @@ fn filter_option_class(current: &str, value: &str) -> &'static str {
 }
 
 #[component]
+fn FilterHeader(
+    label: &'static str,
+    all_label: &'static str,
+    filter: RwSignal<String>,
+    options: Vec<String>,
+) -> impl IntoView {
+    let is_open = RwSignal::new(false);
+    let menu_class = move || {
+        if is_open.get() {
+            "data-table-filter is-open"
+        } else {
+            "data-table-filter"
+        }
+    };
+    let button_label = move || {
+        let current = filter.get();
+        if current == "all" {
+            format!("Filter {label}")
+        } else {
+            format!("Filter {label}: {current}")
+        }
+    };
+    let trigger_class = move || {
+        if filter.get() == "all" {
+            "icon-button data-table-filter__trigger"
+        } else {
+            "icon-button data-table-filter__trigger is-filtered"
+        }
+    };
+    let option_buttons = options
+        .into_iter()
+        .map(|option| {
+            let option_for_class = option.clone();
+            let option_for_checked = option.clone();
+            let option_for_click = option.clone();
+            view! {
+                <button
+                    class=move || filter_option_class(&filter.get(), &option_for_class)
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked=move || (filter.get() == option_for_checked).to_string()
+                    on:click=move |_| {
+                        filter.set(option_for_click.clone());
+                        is_open.set(false);
+                    }
+                >
+                    {option}
+                </button>
+            }
+        })
+        .collect_view();
+
+    view! {
+        <div class=menu_class>
+            <span>{label}</span>
+            <button
+                class=trigger_class
+                type="button"
+                aria-label=button_label
+                title=button_label
+                aria-haspopup="menu"
+                aria-expanded=move || is_open.get().to_string()
+                on:click=move |_| is_open.update(|open| *open = !*open)
+            >
+                <ListFilter/>
+            </button>
+            <button
+                class="data-table-filter__scrim"
+                type="button"
+                aria-label=format!("Close {label} filter")
+                on:click=move |_| is_open.set(false)
+            ></button>
+            <div class="data-table-filter__menu blurred-surface" role="menu">
+                <button
+                    class=move || filter_option_class(&filter.get(), "all")
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked=move || (filter.get() == "all").to_string()
+                    on:click=move |_| {
+                        filter.set("all".to_string());
+                        is_open.set(false);
+                    }
+                >
+                    {all_label}
+                </button>
+                {option_buttons}
+            </div>
+        </div>
+    }
+}
+
+#[component]
 fn RelatedDashboardsTable(dashboards: Vec<NodeDashboardLink>) -> impl IntoView {
     let search = RwSignal::new(String::new());
     let dashboards_for_table = dashboards.clone();
@@ -1475,7 +1633,6 @@ fn RelatedDashboardsTable(dashboards: Vec<NodeDashboardLink>) -> impl IntoView {
                         <th scope="col">"Dashboard name"</th>
                         <th scope="col">"Component Count"</th>
                         <th scope="col">"Description"</th>
-                        <th scope="col">"View"</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -1484,7 +1641,7 @@ fn RelatedDashboardsTable(dashboards: Vec<NodeDashboardLink>) -> impl IntoView {
                         if rows.is_empty() {
                             view! {
                                 <tr>
-                                    <td class="data-table__empty" colspan="4">"No Related Dashboards to Display"</td>
+                                    <td class="data-table__empty" colspan="3">"No Related Dashboards to Display"</td>
                                 </tr>
                             }
                             .into_any()
@@ -1495,14 +1652,11 @@ fn RelatedDashboardsTable(dashboards: Vec<NodeDashboardLink>) -> impl IntoView {
                                     let href = format!("/dashboards/{}", dashboard.dashboard_id);
                                     view! {
                                         <tr>
-                                            <th scope="row">{dashboard.dashboard_name}</th>
+                                            <th scope="row">
+                                                <a class="data-table__primary-link" href=href>{dashboard.dashboard_name}</a>
+                                            </th>
                                             <td>{dashboard.component_count}</td>
                                             <td>{nonempty_text(dashboard.description.as_deref(), "No description")}</td>
-                                            <td>
-                                                <a class="data-table__action" href=href aria-label="View dashboard" title="View dashboard">
-                                                    <ExternalLink/>
-                                                </a>
-                                            </td>
                                         </tr>
                                     }
                                 })
@@ -1525,8 +1679,7 @@ fn RelatedDashboardsTable(dashboards: Vec<NodeDashboardLink>) -> impl IntoView {
                                 view! {
                                     <article class="related-work-mobile-card">
                                         <div class="related-work-mobile-card__header">
-                                            <h4>{dashboard.dashboard_name}</h4>
-                                            <a href=href aria-label="View dashboard" title="View dashboard"><ExternalLink/></a>
+                                            <h4><a href=href>{dashboard.dashboard_name}</a></h4>
                                         </div>
                                         <dl>
                                             <div>
@@ -1630,6 +1783,264 @@ fn visible_child_label(count: usize) -> String {
     }
 }
 
+fn active_form_version(form: &FormSummary) -> Option<&FormVersionSummary> {
+    form.versions
+        .iter()
+        .rev()
+        .find(|version| version.status == "published")
+        .or_else(|| form.versions.last())
+}
+
+fn form_version_label(version: Option<&FormVersionSummary>) -> String {
+    version
+        .and_then(|version| version.version_label.as_deref())
+        .map(str::to_string)
+        .unwrap_or_else(|| "-".to_string())
+}
+
+fn form_status_label(version: Option<&FormVersionSummary>) -> String {
+    version
+        .map(|version| sentence_label(&version.status))
+        .unwrap_or_else(|| "No versions".to_string())
+}
+
+fn form_field_count_label(version: Option<&FormVersionSummary>) -> String {
+    version
+        .map(|version| version.field_count.to_string())
+        .unwrap_or_else(|| "-".to_string())
+}
+
+fn form_scope_label(form: &FormSummary) -> String {
+    nonempty_text(form.scope_node_type_name.as_deref(), "All node types")
+}
+
+fn form_attached_to_label(version: Option<&FormVersionSummary>) -> String {
+    version
+        .map(|version| {
+            version
+                .assignment_nodes
+                .iter()
+                .map(|node| node.node_name.as_str())
+                .filter(|name| !name.trim().is_empty())
+                .collect::<Vec<_>>()
+                .join(", ")
+        })
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "Not attached".to_string())
+}
+
+fn form_attached_nodes(version: Option<&FormVersionSummary>) -> Vec<FormAttachmentLink> {
+    version
+        .map(|version| {
+            version
+                .assignment_nodes
+                .iter()
+                .filter(|node| !node.node_name.trim().is_empty())
+                .map(|node| FormAttachmentLink {
+                    href: format!("/organization/{}", node.node_id),
+                    label: node.node_name.clone(),
+                    title: if node.node_path.trim().is_empty() {
+                        node.node_name.clone()
+                    } else {
+                        node.node_path.replace(" / ", " > ")
+                    },
+                })
+                .collect::<Vec<_>>()
+        })
+        .filter(|nodes| !nodes.is_empty())
+        .unwrap_or_default()
+}
+
+fn form_node_filter_options(forms: &[FormSummary]) -> Vec<FormNodeFilterOption> {
+    let mut options_by_id = BTreeMap::<String, FormNodeFilterOption>::new();
+
+    for form in forms {
+        for version in &form.versions {
+            for node in &version.assignment_nodes {
+                if node.node_id.trim().is_empty() || node.node_name.trim().is_empty() {
+                    continue;
+                }
+
+                let path = if node.node_path.trim().is_empty() {
+                    node.node_name.clone()
+                } else {
+                    node.node_path.clone()
+                };
+
+                options_by_id
+                    .entry(node.node_id.clone())
+                    .or_insert_with(|| FormNodeFilterOption {
+                        id: node.node_id.clone(),
+                        name: node.node_name.clone(),
+                        parent_node_id: node.parent_node_id.clone(),
+                        path,
+                        depth: 0,
+                    });
+            }
+        }
+    }
+
+    let options_map = options_by_id.clone();
+    let mut options = options_by_id
+        .into_values()
+        .map(|mut option| {
+            option.depth = form_node_filter_depth(&option.id, &options_map, &mut HashSet::new());
+            option.path = form_node_filter_path(&option.id, &options_map, &mut HashSet::new());
+            option
+        })
+        .collect::<Vec<_>>();
+    options.sort_by(|left, right| left.path.cmp(&right.path).then(left.name.cmp(&right.name)));
+    options
+}
+
+fn form_node_filter_depth(
+    node_id: &str,
+    options_by_id: &BTreeMap<String, FormNodeFilterOption>,
+    visited: &mut HashSet<String>,
+) -> usize {
+    if !visited.insert(node_id.to_string()) {
+        return 0;
+    }
+
+    options_by_id
+        .get(node_id)
+        .and_then(|option| option.parent_node_id.as_deref())
+        .and_then(|parent_id| {
+            options_by_id
+                .contains_key(parent_id)
+                .then(|| 1 + form_node_filter_depth(parent_id, options_by_id, visited))
+        })
+        .unwrap_or(0)
+}
+
+fn form_node_filter_path(
+    node_id: &str,
+    options_by_id: &BTreeMap<String, FormNodeFilterOption>,
+    visited: &mut HashSet<String>,
+) -> String {
+    if !visited.insert(node_id.to_string()) {
+        return options_by_id
+            .get(node_id)
+            .map(|option| option.name.clone())
+            .unwrap_or_else(|| node_id.to_string());
+    }
+
+    let Some(option) = options_by_id.get(node_id) else {
+        return node_id.to_string();
+    };
+
+    option
+        .parent_node_id
+        .as_deref()
+        .filter(|parent_id| options_by_id.contains_key(*parent_id))
+        .map(|parent_id| {
+            format!(
+                "{} / {}",
+                form_node_filter_path(parent_id, options_by_id, visited),
+                option.name
+            )
+        })
+        .unwrap_or_else(|| option.name.clone())
+}
+
+fn form_matches_node_filter(
+    form: &FormSummary,
+    selected_node_id: Option<&str>,
+    options: &[FormNodeFilterOption],
+) -> bool {
+    let Some(selected_node_id) = selected_node_id else {
+        return true;
+    };
+
+    form.versions.iter().any(|version| {
+        version.assignment_nodes.iter().any(|node| {
+            node.node_id == selected_node_id
+                || form_node_is_descendant_of_selected(&node.node_id, selected_node_id, options)
+        })
+    })
+}
+
+fn form_node_is_descendant_of_selected(
+    node_id: &str,
+    selected_node_id: &str,
+    options: &[FormNodeFilterOption],
+) -> bool {
+    let by_id = options
+        .iter()
+        .map(|option| (option.id.as_str(), option))
+        .collect::<HashMap<_, _>>();
+    let mut current_parent = by_id
+        .get(node_id)
+        .and_then(|option| option.parent_node_id.as_deref());
+    let mut visited = HashSet::<String>::new();
+
+    while let Some(parent_id) = current_parent {
+        if parent_id == selected_node_id {
+            return true;
+        }
+        if !visited.insert(parent_id.to_string()) {
+            return false;
+        }
+        current_parent = by_id
+            .get(parent_id)
+            .and_then(|option| option.parent_node_id.as_deref());
+    }
+
+    false
+}
+
+fn visible_form_node_filter_options(
+    options: &[FormNodeFilterOption],
+    selected_node_id: Option<&str>,
+    query: &str,
+) -> Vec<FormNodeFilterOption> {
+    let query = query.trim().to_lowercase();
+
+    options
+        .iter()
+        .filter(|option| {
+            if selected_node_id == Some(option.id.as_str()) {
+                return false;
+            }
+
+            let Some(selected_node_id) = selected_node_id else {
+                return true;
+            };
+
+            form_node_is_descendant_of_selected(&option.id, selected_node_id, options)
+        })
+        .filter(|option| {
+            query.is_empty()
+                || option.name.to_lowercase().contains(&query)
+                || option.path.to_lowercase().contains(&query)
+        })
+        .cloned()
+        .collect()
+}
+
+fn indented_node_label(option: &FormNodeFilterOption) -> String {
+    format!("{}{}", " ".repeat(option.depth), option.name)
+}
+
+fn unique_filter_options(values: impl IntoIterator<Item = String>) -> Vec<String> {
+    let mut options = values
+        .into_iter()
+        .filter(|value| !value.trim().is_empty())
+        .collect::<Vec<_>>();
+    options.sort();
+    options.dedup();
+    options
+}
+
+fn status_badge_class(status: &str) -> &'static str {
+    match status {
+        "published" | "done" | "active" => "status-badge is-success",
+        "draft" | "in_progress" => "status-badge is-warning",
+        "error" | "archived" => "status-badge is-danger",
+        _ => "status-badge is-info",
+    }
+}
+
 fn toggle_organization_branch(
     expanded_nodes: RwSignal<HashSet<String>>,
     node_id: String,
@@ -1726,6 +2137,57 @@ fn load_organization_tree(
     #[cfg(not(feature = "hydrate"))]
     {
         let _ = (tree, node_types, expanded_nodes, is_loading, load_error);
+    }
+}
+
+fn load_forms(
+    forms: RwSignal<Vec<FormSummary>>,
+    is_loading: RwSignal<bool>,
+    load_error: RwSignal<Option<String>>,
+) {
+    #[cfg(feature = "hydrate")]
+    {
+        leptos::task::spawn_local(async move {
+            is_loading.set(true);
+            load_error.set(None);
+
+            match gloo_net::http::Request::get("/api/forms").send().await {
+                Ok(response) if response.status() == 401 => {
+                    forms.set(Vec::new());
+                    is_loading.set(false);
+                    redirect_to_login();
+                }
+                Ok(response) if response.ok() => match response.json::<Vec<FormSummary>>().await {
+                    Ok(loaded_forms) => {
+                        forms.set(loaded_forms);
+                        is_loading.set(false);
+                    }
+                    Err(error) => {
+                        forms.set(Vec::new());
+                        load_error.set(Some(format!("Unable to parse forms: {error}")));
+                        is_loading.set(false);
+                    }
+                },
+                Ok(response) => {
+                    forms.set(Vec::new());
+                    load_error.set(Some(format!(
+                        "Unable to load forms. Server returned {}.",
+                        response.status()
+                    )));
+                    is_loading.set(false);
+                }
+                Err(error) => {
+                    forms.set(Vec::new());
+                    load_error.set(Some(format!("Unable to load forms: {error}")));
+                    is_loading.set(false);
+                }
+            }
+        });
+    }
+
+    #[cfg(not(feature = "hydrate"))]
+    {
+        let _ = (forms, is_loading, load_error);
     }
 }
 
@@ -3177,7 +3639,629 @@ pub fn OrganizationEditPage() -> impl IntoView {
 
 #[component]
 pub fn FormsPage() -> impl IntoView {
-    view! { <ResetRoute active_route="forms" title="Forms" route="/forms" status="Queued" next_step="Restore form list APIs and native table."/> }
+    let forms = RwSignal::new(Vec::<FormSummary>::new());
+    let search = RwSignal::new(String::new());
+    let scope_filter = RwSignal::new("all".to_string());
+    let status_filter = RwSignal::new("all".to_string());
+    let node_filter_query = RwSignal::new(String::new());
+    let selected_node_id = RwSignal::new(None::<String>);
+    let is_loading = RwSignal::new(true);
+    let load_error = RwSignal::new(None::<String>);
+
+    Effect::new(move |_| {
+        load_forms(forms, is_loading, load_error);
+    });
+
+    let filtered_forms = move || {
+        let query = search.get();
+        let selected_scope = scope_filter.get();
+        let selected_status = status_filter.get();
+        let selected_node = selected_node_id.get();
+        let loaded_forms = forms.get();
+        let node_options = form_node_filter_options(&loaded_forms);
+
+        loaded_forms
+            .into_iter()
+            .filter(|form| {
+                let active_version = active_form_version(form);
+                let scope = form_scope_label(form);
+                let attached_to = form_attached_to_label(active_version);
+                let status = form_status_label(active_version);
+                let matches_scope = selected_scope == "all" || scope == selected_scope;
+                let matches_status = selected_status == "all" || status == selected_status;
+                let matches_node_filter =
+                    form_matches_node_filter(form, selected_node.as_deref(), &node_options);
+                if !matches_scope || !matches_status || !matches_node_filter {
+                    return false;
+                }
+                text_matches(
+                    &query,
+                    &[
+                        &form.name,
+                        &form.slug,
+                        &scope,
+                        &attached_to,
+                        &form_version_label(active_version),
+                        &status,
+                    ],
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+
+    let scope_options =
+        move || unique_filter_options(forms.get().iter().map(form_scope_label).collect::<Vec<_>>());
+    let status_options = move || {
+        unique_filter_options(
+            forms
+                .get()
+                .iter()
+                .map(|form| form_status_label(active_form_version(form)))
+                .collect::<Vec<_>>(),
+        )
+    };
+    let node_filter_options = move || form_node_filter_options(&forms.get());
+
+    view! {
+        <AppShell active_route="forms" title="Forms">
+            <section class="route-panel forms-page">
+                <PageHeader title="Forms">
+                    <Button label="Create Form" href="/forms/new"/>
+                </PageHeader>
+
+                {move || {
+                    if is_loading.get() {
+                        view! {
+                            <section class="organization-state" aria-live="polite">
+                                <h3>"Loading forms"</h3>
+                                <p>"Fetching available form definitions."</p>
+                            </section>
+                        }
+                        .into_any()
+                    } else if let Some(message) = load_error.get() {
+                        view! {
+                            <section class="organization-state is-error" role="alert">
+                                <h3>"Forms unavailable"</h3>
+                                <p>{message}</p>
+                            </section>
+                        }
+                        .into_any()
+                    } else {
+                        view! {
+                            <FormsList
+                                forms=filtered_forms()
+                                search
+                                scope_filter
+                                status_filter
+                                node_filter_query
+                                selected_node_id
+                                scope_options=scope_options()
+                                status_options=status_options()
+                                node_filter_options=node_filter_options()
+                            />
+                        }
+                        .into_any()
+                    }
+                }}
+            </section>
+        </AppShell>
+    }
+}
+
+#[component]
+fn FormsNodeLineageFilter(
+    options: Vec<FormNodeFilterOption>,
+    selected_node_id: RwSignal<Option<String>>,
+    query: RwSignal<String>,
+) -> impl IntoView {
+    let is_open = RwSignal::new(false);
+    let options_for_visible = options.clone();
+    let options_for_label = options.clone();
+    let options_for_selected = options.clone();
+    let trigger_label = move || {
+        let selected = selected_node_id.get();
+        selected
+            .as_deref()
+            .and_then(|id| {
+                options_for_label
+                    .iter()
+                    .find(|option| option.id == id)
+                    .map(|option| option.name.clone())
+            })
+            .unwrap_or_else(|| "Filter by node".to_string())
+    };
+    let trigger_class = move || {
+        if selected_node_id.get().is_none() {
+            "forms-node-filter__trigger"
+        } else {
+            "forms-node-filter__trigger is-filtered"
+        }
+    };
+    let visible_options = move || {
+        visible_form_node_filter_options(
+            &options_for_visible,
+            selected_node_id.get().as_deref(),
+            &query.get(),
+        )
+    };
+    let selected_options = move || {
+        selected_node_id
+            .get()
+            .as_deref()
+            .and_then(|selected| {
+                options_for_selected
+                    .iter()
+                    .find(|option| option.id == selected)
+                    .cloned()
+            })
+            .into_iter()
+            .collect::<Vec<_>>()
+    };
+
+    view! {
+        <div class=move || if is_open.get() { "forms-node-filter is-open" } else { "forms-node-filter" }>
+            <button
+                class=trigger_class
+                type="button"
+                role="combobox"
+                aria-haspopup="listbox"
+                aria-expanded=move || is_open.get().to_string()
+                aria-label="Filter forms by organization node"
+                title="Filter forms by organization node"
+                on:click=move |_| is_open.update(|open| *open = !*open)
+            >
+                <ListFilter/>
+                <span>{trigger_label}</span>
+                <ChevronDown/>
+            </button>
+            <button
+                class="forms-node-filter__scrim"
+                type="button"
+                aria-label="Close node filter"
+                on:click=move |_| is_open.set(false)
+            ></button>
+            <div
+                class="forms-node-filter__menu blurred-surface floating-layer"
+                data-mobile-behavior="dialog"
+                role="dialog"
+                aria-label="Filter by organization node"
+            >
+                <label class="forms-node-filter__search">
+                    <Search/>
+                    <span class="sr-only">"Search organization nodes"</span>
+                    <input
+                        type="search"
+                        placeholder="Search organization nodes"
+                        prop:value=move || query.get()
+                        on:input=move |event| query.set(event_target_value(&event))
+                    />
+                </label>
+                <div class="forms-node-filter__selected">
+                    {move || {
+                        let selected = selected_options();
+                        if selected.is_empty() {
+                            view! { <p>"No node selected"</p> }.into_any()
+                        } else {
+                            view! {
+                                <div class="forms-node-filter__chips">
+                                    {selected
+                                        .into_iter()
+                                        .map(|option| {
+                                            let option_id = option.id.clone();
+                                            view! {
+                                                <button
+                                                    class="forms-node-filter__chip"
+                                                    type="button"
+                                                    title=option.path
+                                                    on:click=move |_| {
+                                                        if selected_node_id.get().as_deref() == Some(option_id.as_str()) {
+                                                            selected_node_id.set(None);
+                                                        }
+                                                    }
+                                                >
+                                                    <span>{option.name}</span>
+                                                    <X/>
+                                                </button>
+                                            }
+                                        })
+                                        .collect_view()}
+                                </div>
+                            }
+                            .into_any()
+                        }
+                    }}
+                    <button
+                        class="forms-node-filter__clear"
+                        type="button"
+                        disabled=move || selected_node_id.get().is_none() && query.get().is_empty()
+                        on:click=move |_| {
+                            selected_node_id.set(None);
+                            query.set(String::new());
+                        }
+                    >
+                        "Clear"
+                    </button>
+                </div>
+                <div class="forms-node-filter__options" role="listbox">
+                    {move || {
+                        let visible = visible_options();
+                        if visible.is_empty() {
+                            view! {
+                                <p class="forms-node-filter__empty">"No matching nodes to display"</p>
+                            }
+                            .into_any()
+                        } else {
+                            visible
+                                .into_iter()
+                                .map(|option| {
+                                    let option_id = option.id.clone();
+                                    let label = indented_node_label(&option);
+                                    let path = option.path.clone();
+                                    view! {
+                                        <button
+                                            class="forms-node-filter__option"
+                                            type="button"
+                                            role="option"
+                                            aria-selected="false"
+                                            title=path
+                                            on:click=move |_| {
+                                                selected_node_id.set(Some(option_id.clone()));
+                                                query.set(String::new());
+                                            }
+                                        >
+                                            <span>{label}</span>
+                                        </button>
+                                    }
+                                })
+                                .collect_view()
+                                .into_any()
+                        }
+                    }}
+                </div>
+            </div>
+        </div>
+    }
+}
+
+#[component]
+fn FormsList(
+    forms: Vec<FormSummary>,
+    search: RwSignal<String>,
+    scope_filter: RwSignal<String>,
+    status_filter: RwSignal<String>,
+    node_filter_query: RwSignal<String>,
+    selected_node_id: RwSignal<Option<String>>,
+    scope_options: Vec<String>,
+    status_options: Vec<String>,
+    node_filter_options: Vec<FormNodeFilterOption>,
+) -> impl IntoView {
+    let table_forms = forms.clone();
+    let card_forms = forms;
+    let attached_nodes_sheet = RwSignal::new(None::<FormsAttachedNodesSheetData>);
+
+    view! {
+        <div class="forms-list forms-list-responsive-table">
+            <div class="searchable-data-table">
+                <div class="searchable-data-table__toolbar forms-list__toolbar">
+                    <label class="searchable-data-table__search searchable-data-table__control">
+                        <Search class="searchable-data-table__control-icon"/>
+                        <span class="sr-only">"Search forms"</span>
+                        <input
+                            type="search"
+                            placeholder="Search forms"
+                            prop:value=move || search.get()
+                            on:input=move |event| search.set(event_target_value(&event))
+                        />
+                    </label>
+                    <FormsNodeLineageFilter
+                        options=node_filter_options
+                        selected_node_id
+                        query=node_filter_query
+                    />
+                </div>
+                <DataTable>
+                <thead>
+                    <tr>
+                        <th scope="col">"Form name"</th>
+                        <th scope="col">
+                            <FilterHeader
+                                label="Scope"
+                                all_label="All scopes"
+                                filter=scope_filter
+                                options=scope_options
+                            />
+                        </th>
+                        <th scope="col">"Attached To"</th>
+                        <th class="data-table__cell--center" scope="col">"Active version"</th>
+                        <th class="data-table__cell--center" scope="col">
+                            <FilterHeader
+                                label="Status"
+                                all_label="All statuses"
+                                filter=status_filter
+                                options=status_options
+                            />
+                        </th>
+                        <th class="data-table__cell--center" scope="col">"Fields"</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {if table_forms.is_empty() {
+                        view! {
+                            <tr>
+                                <td class="data-table__empty" colspan="6">"No Forms to Display"</td>
+                            </tr>
+                        }
+                        .into_any()
+                    } else {
+                        table_forms
+                            .into_iter()
+                            .map(|form| {
+                                let href = format!("/forms/{}", form.id);
+                                let active_version = active_form_version(&form);
+                                let status = active_version
+                                    .map(|version| version.status.as_str())
+                                    .unwrap_or("none");
+                                let name = form.name.clone();
+                                let scope = form_scope_label(&form);
+                                let attached_nodes = form_attached_nodes(active_version);
+                                let attached_nodes_form_name = name.clone();
+                                let version_label = form_version_label(active_version);
+                                let status_label = form_status_label(active_version);
+                                let field_count = form_field_count_label(active_version);
+                                view! {
+                                    <tr>
+                                        <th scope="row">
+                                            <a class="data-table__primary-link" href=href.clone()>{name}</a>
+                                        </th>
+                                        <td>{scope}</td>
+                                        <td>
+                                            <FormsAttachedNodesList
+                                                nodes=attached_nodes
+                                                form_name=attached_nodes_form_name
+                                                form_href=href
+                                                sheet=attached_nodes_sheet
+                                            />
+                                        </td>
+                                        <td class="data-table__cell--center">{version_label}</td>
+                                        <td class="data-table__cell--center"><span class=status_badge_class(status)>{status_label}</span></td>
+                                        <td class="data-table__cell--center">{field_count}</td>
+                                    </tr>
+                                }
+                            })
+                            .collect_view()
+                            .into_any()
+                    }}
+                </tbody>
+                </DataTable>
+            </div>
+            <div class="forms-list-mobile-cards">
+                {if card_forms.is_empty() {
+                    view! { <p class="forms-list-mobile-empty">"No Forms to Display"</p> }.into_any()
+                } else {
+                    card_forms
+                        .into_iter()
+                        .map(|form| {
+                            let href = format!("/forms/{}", form.id);
+                            let active_version = active_form_version(&form);
+                            let status = active_version
+                                .map(|version| version.status.as_str())
+                                .unwrap_or("none");
+                            let name = form.name.clone();
+                            let scope = form_scope_label(&form);
+                            let attached_nodes = form_attached_nodes(active_version);
+                            let attached_nodes_form_name = name.clone();
+                            let version_label = form_version_label(active_version);
+                            let status_label = form_status_label(active_version);
+                            let field_count = form_field_count_label(active_version);
+                            view! {
+                                <article class="forms-list-mobile-card">
+                                    <div class="forms-list-mobile-card__header">
+                                        <div>
+                                            <h3><a href=href.clone()>{name}</a></h3>
+                                        </div>
+                                    </div>
+                                    <dl>
+                                        <div>
+                                            <dt>"Scope"</dt>
+                                            <dd>{scope}</dd>
+                                        </div>
+                                        <div>
+                                            <dt>"Attached To"</dt>
+                                            <dd>
+                                                <FormsAttachedNodesList
+                                                    nodes=attached_nodes
+                                                    form_name=attached_nodes_form_name
+                                                    form_href=href
+                                                    sheet=attached_nodes_sheet
+                                                />
+                                            </dd>
+                                        </div>
+                                        <div>
+                                            <dt>"Active version"</dt>
+                                            <dd>{version_label}</dd>
+                                        </div>
+                                        <div>
+                                            <dt>"Status"</dt>
+                                            <dd><span class=status_badge_class(status)>{status_label}</span></dd>
+                                        </div>
+                                        <div>
+                                            <dt>"Fields"</dt>
+                                            <dd>{field_count}</dd>
+                                        </div>
+                                    </dl>
+                                </article>
+                            }
+                        })
+                        .collect_view()
+                        .into_any()
+                }}
+            </div>
+            <FormsAttachedNodesSheet detail=attached_nodes_sheet/>
+        </div>
+    }
+}
+
+#[component]
+fn FormsAttachedNodesList(
+    nodes: Vec<FormAttachmentLink>,
+    form_name: String,
+    form_href: String,
+    sheet: RwSignal<Option<FormsAttachedNodesSheetData>>,
+) -> impl IntoView {
+    let total_nodes = nodes.len();
+    let visible_nodes = if total_nodes > 5 {
+        nodes[total_nodes - 4..].to_vec()
+    } else {
+        nodes.clone()
+    };
+    let nodes_for_sheet = nodes.clone();
+    let form_name_for_sheet = form_name.clone();
+    let form_href_for_sheet = form_href.clone();
+
+    view! {
+        <div class="forms-attached-list">
+            {if visible_nodes.is_empty() {
+                view! { <p>"Not attached"</p> }.into_any()
+            } else {
+                visible_nodes
+                    .into_iter()
+                    .map(|node| {
+                        view! {
+                            <p>
+                                <a href=node.href title=node.title>{node.label}</a>
+                            </p>
+                        }
+                    })
+                    .collect_view()
+                    .into_any()
+            }}
+            {if total_nodes > 5 {
+                view! {
+                    <button
+                        class="forms-attached-list__more"
+                        type="button"
+                        on:click=move |_| {
+                            sheet.set(Some(FormsAttachedNodesSheetData {
+                                form_name: form_name_for_sheet.clone(),
+                                form_href: form_href_for_sheet.clone(),
+                                nodes: nodes_for_sheet.clone(),
+                            }));
+                        }
+                    >
+                        "More Nodes..."
+                    </button>
+                }
+                .into_any()
+            } else {
+                view! {}.into_any()
+            }}
+        </div>
+    }
+}
+
+#[component]
+fn FormsAttachedNodesSheet(detail: RwSignal<Option<FormsAttachedNodesSheetData>>) -> impl IntoView {
+    let search = RwSignal::new(String::new());
+    let close = move |_| {
+        detail.set(None);
+        search.set(String::new());
+    };
+    let filtered_nodes = move || {
+        let query = search.get().trim().to_lowercase();
+        detail
+            .get()
+            .map(|data| {
+                data.nodes
+                    .into_iter()
+                    .filter(|node| {
+                        query.is_empty()
+                            || node.label.to_lowercase().contains(&query)
+                            || node.title.to_lowercase().contains(&query)
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default()
+    };
+
+    view! {
+        <Portal>
+            <Show when=move || detail.get().is_some()>
+                <section class="sheet-overlay forms-attached-overlay" aria-label="Attached organization nodes">
+                    <button class="sheet-overlay__scrim" type="button" aria-label="Close attached nodes" on:click=close></button>
+                    <aside class="sheet-panel blurred-surface forms-attached-sheet" role="dialog" aria-modal="true" aria-label="Attached organization nodes">
+                        <div class="sheet-panel__actions">
+                            {move || {
+                                detail
+                                    .get()
+                                    .map(|data| {
+                                        view! {
+                                            <a class="icon-button sheet-panel__open" href=data.form_href aria-label="Open form detail" title="Open form detail">
+                                                <ExternalLink class="icon-button__icon"/>
+                                            </a>
+                                        }
+                                        .into_any()
+                                    })
+                                    .unwrap_or_else(|| view! {}.into_any())
+                            }}
+                            <button class="icon-button sheet-panel__close" type="button" aria-label="Close attached nodes" title="Close attached nodes" on:click=close>
+                                <X class="icon-button__icon"/>
+                            </button>
+                        </div>
+                        {move || {
+                            detail
+                                .get()
+                                .map(|data| {
+                                    let total = data.nodes.len();
+                                    view! {
+                                        <header class="sheet-panel__header">
+                                            <p>"Attached Nodes"</p>
+                                            <h2>{data.form_name}</h2>
+                                            <span class="forms-attached-sheet__count">{format!("{total} nodes")}</span>
+                                        </header>
+                                        <section class="sheet-panel__section">
+                                            <label class="searchable-data-table__search searchable-data-table__control forms-attached-sheet__search">
+                                                <Search class="searchable-data-table__control-icon"/>
+                                                <span class="sr-only">"Search attached nodes"</span>
+                                                <input
+                                                    type="search"
+                                                    placeholder="Search attached nodes"
+                                                    prop:value=move || search.get()
+                                                    on:input=move |event| search.set(event_target_value(&event))
+                                                />
+                                            </label>
+                                            <div class="forms-attached-sheet__list">
+                                                {move || {
+                                                    let nodes = filtered_nodes();
+                                                    if nodes.is_empty() {
+                                                        view! { <p class="forms-attached-sheet__empty">"No Attached Nodes to Display"</p> }.into_any()
+                                                    } else {
+                                                        nodes
+                                                            .into_iter()
+                                                            .map(|node| {
+                                                                let node_title = node.title.clone();
+                                                                view! {
+                                                                    <a class="forms-attached-sheet__item" href=node.href title=node_title>
+                                                                        <span>{node.label}</span>
+                                                                        <small>{node.title}</small>
+                                                                    </a>
+                                                                }
+                                                            })
+                                                            .collect_view()
+                                                            .into_any()
+                                                    }
+                                                }}
+                                            </div>
+                                        </section>
+                                    }
+                                    .into_any()
+                                })
+                                .unwrap_or_else(|| view! {}.into_any())
+                        }}
+                    </aside>
+                </section>
+            </Show>
+        </Portal>
+    }
 }
 
 #[component]
