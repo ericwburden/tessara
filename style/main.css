@@ -1522,6 +1522,17 @@ input {
   padding: 0 0.8rem;
 }
 
+.form-derived-value {
+  display: flex;
+  min-height: 2.65rem;
+  align-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-control);
+  color: var(--color-muted);
+  padding: 0 0.8rem;
+}
+
 .form-field input:focus,
 .form-field select:focus {
   border-color: var(--semantic-primary-border);
@@ -1560,6 +1571,53 @@ input {
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 0.75rem;
+}
+
+.form-builder {
+  gap: 0.9rem;
+}
+
+.form-builder__header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.form-builder__header p {
+  margin: 0.2rem 0 0;
+  color: var(--color-muted);
+}
+
+.form-builder__fields {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.form-builder-field {
+  display: grid;
+  gap: 0.85rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-table-row);
+  padding: 0.9rem;
+}
+
+.form-builder-field__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.form-builder-field__header h4 {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 1rem;
+}
+
+.form-builder-field__required {
+  align-self: end;
 }
 
 .dropdown-menu {
@@ -2252,6 +2310,11 @@ input {
 
   .form-grid {
     grid-template-columns: 1fr;
+  }
+
+  .form-builder__header {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .route-migration-overview__table {

@@ -81,7 +81,7 @@ const ROUTE_MIGRATIONS: [RouteMigration; 32] = [
         name: "Create Form",
         route: "/forms/new",
         href: "/forms/new",
-        status: "Pending",
+        status: "Done",
         rbac_status: "Pending",
     },
     RouteMigration {
@@ -678,6 +678,44 @@ struct UpdateNodePayload {
     parent_node_id: Option<String>,
     name: String,
     metadata: serde_json::Map<String, Value>,
+}
+
+#[derive(Serialize)]
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+struct CreateFormPayload {
+    name: String,
+    slug: String,
+    scope_node_type_id: Option<String>,
+}
+
+#[derive(Serialize)]
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+struct CreateFormSectionPayload {
+    title: String,
+    position: i32,
+    description: String,
+    column_count: i32,
+}
+
+#[derive(Serialize)]
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+struct CreateFormFieldPayload {
+    section_id: String,
+    key: String,
+    label: String,
+    field_type: String,
+    required: bool,
+    position: i32,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct FormBuilderFieldDraft {
+    id: usize,
+    label: String,
+    key: String,
+    field_type: String,
+    required: bool,
+    key_was_edited: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -2032,6 +2070,99 @@ fn unique_filter_options(values: impl IntoIterator<Item = String>) -> Vec<String
     options
 }
 
+fn slug_from_label(label: &str) -> String {
+    let mut slug = String::new();
+    let mut last_was_dash = false;
+
+    for character in label.trim().chars().flat_map(|character| character.to_lowercase()) {
+        if character.is_ascii_alphanumeric() {
+            slug.push(character);
+            last_was_dash = false;
+        } else if !last_was_dash && !slug.is_empty() {
+            slug.push('-');
+            last_was_dash = true;
+        }
+    }
+
+    while slug.ends_with('-') {
+        slug.pop();
+    }
+
+    slug
+}
+
+fn unique_slug_from_label(label: &str, existing_slugs: &[String]) -> String {
+    let base = slug_from_label(label);
+    if base.is_empty() {
+        return String::new();
+    }
+
+    let existing = existing_slugs.iter().cloned().collect::<HashSet<_>>();
+    if !existing.contains(&base) {
+        return base;
+    }
+
+    let mut suffix = 2;
+    loop {
+        let candidate = format!("{base}-{suffix}");
+        if !existing.contains(&candidate) {
+            return candidate;
+        }
+        suffix += 1;
+    }
+}
+
+fn existing_form_slugs(forms: &[FormSummary]) -> Vec<String> {
+    forms.iter().map(|form| form.slug.clone()).collect()
+}
+
+fn blank_form_builder_field(id: usize) -> FormBuilderFieldDraft {
+    FormBuilderFieldDraft {
+        id,
+        label: String::new(),
+        key: String::new(),
+        field_type: "text".into(),
+        required: false,
+        key_was_edited: false,
+    }
+}
+
+fn prepared_form_builder_fields(
+    fields: &[FormBuilderFieldDraft],
+) -> Result<Vec<FormBuilderFieldDraft>, String> {
+    let mut prepared = Vec::new();
+    let mut keys = HashSet::new();
+
+    for field in fields {
+        let label = field.label.trim();
+        let key = field.key.trim();
+        if label.is_empty() && key.is_empty() {
+            continue;
+        }
+        if label.is_empty() {
+            return Err("Every builder field needs a label.".into());
+        }
+        if key.is_empty() {
+            return Err(format!("{label} needs a field key."));
+        }
+
+        let normalized_key = slug_from_label(key);
+        if normalized_key.is_empty() {
+            return Err(format!("{label} needs a valid field key."));
+        }
+        if !keys.insert(normalized_key.clone()) {
+            return Err(format!("Field key {normalized_key} is already used."));
+        }
+
+        let mut field = field.clone();
+        field.label = label.to_string();
+        field.key = normalized_key;
+        prepared.push(field);
+    }
+
+    Ok(prepared)
+}
+
 fn status_badge_class(status: &str) -> &'static str {
     match status {
         "published" | "done" | "active" => "status-badge is-success",
@@ -2188,6 +2319,81 @@ fn load_forms(
     #[cfg(not(feature = "hydrate"))]
     {
         let _ = (forms, is_loading, load_error);
+    }
+}
+
+fn load_form_create_options(
+    node_types: RwSignal<Vec<NodeTypeCatalogEntry>>,
+    existing_forms: RwSignal<Vec<FormSummary>>,
+    is_loading: RwSignal<bool>,
+    message: RwSignal<Option<String>>,
+) {
+    #[cfg(feature = "hydrate")]
+    {
+        leptos::task::spawn_local(async move {
+            is_loading.set(true);
+            message.set(None);
+
+            let node_types_response = gloo_net::http::Request::get("/api/node-types").send().await;
+            let forms_response = gloo_net::http::Request::get("/api/forms").send().await;
+
+            match (node_types_response, forms_response) {
+                (Ok(response), _) if response.status() == 401 => {
+                    node_types.set(Vec::new());
+                    existing_forms.set(Vec::new());
+                    is_loading.set(false);
+                    redirect_to_login();
+                }
+                (_, Ok(response)) if response.status() == 401 => {
+                    node_types.set(Vec::new());
+                    existing_forms.set(Vec::new());
+                    is_loading.set(false);
+                    redirect_to_login();
+                }
+                (Ok(node_types_response), Ok(forms_response))
+                    if node_types_response.ok() && forms_response.ok() =>
+                {
+                    let loaded_node_types =
+                        node_types_response.json::<Vec<NodeTypeCatalogEntry>>().await;
+                    let loaded_forms = forms_response.json::<Vec<FormSummary>>().await;
+
+                    match (loaded_node_types, loaded_forms) {
+                        (Ok(loaded_node_types), Ok(loaded_forms)) => {
+                            node_types.set(loaded_node_types);
+                            existing_forms.set(loaded_forms);
+                            is_loading.set(false);
+                        }
+                        _ => {
+                            node_types.set(Vec::new());
+                            existing_forms.set(Vec::new());
+                            message.set(Some("Form options could not be read.".into()));
+                            is_loading.set(false);
+                        }
+                    }
+                }
+                (Ok(node_types_response), Ok(forms_response)) => {
+                    node_types.set(Vec::new());
+                    existing_forms.set(Vec::new());
+                    message.set(Some(format!(
+                        "Form options failed with status {} / {}.",
+                        node_types_response.status(),
+                        forms_response.status()
+                    )));
+                    is_loading.set(false);
+                }
+                _ => {
+                    node_types.set(Vec::new());
+                    existing_forms.set(Vec::new());
+                    message.set(Some("Could not reach the form option APIs.".into()));
+                    is_loading.set(false);
+                }
+            }
+        });
+    }
+
+    #[cfg(not(feature = "hydrate"))]
+    {
+        let _ = (node_types, existing_forms, is_loading, message);
     }
 }
 
@@ -2973,6 +3179,282 @@ fn submit_create_node(
             metadata_fields,
             metadata_values,
             metadata_booleans,
+            is_saving,
+            message,
+        );
+    }
+}
+
+fn submit_create_form(
+    name: RwSignal<String>,
+    scope_node_type_id: RwSignal<String>,
+    fields: RwSignal<Vec<FormBuilderFieldDraft>>,
+    existing_forms: RwSignal<Vec<FormSummary>>,
+    is_saving: RwSignal<bool>,
+    message: RwSignal<Option<String>>,
+) {
+    #[cfg(feature = "hydrate")]
+    {
+        if is_saving.get() {
+            return;
+        }
+
+        let form_name = name.get().trim().to_string();
+        if form_name.is_empty() {
+            message.set(Some("Form name is required.".into()));
+            return;
+        }
+
+        let form_slug = unique_slug_from_label(
+            &form_name,
+            &existing_form_slugs(existing_forms.get_untracked().as_slice()),
+        );
+        if form_slug.is_empty() {
+            message.set(Some("Form name must contain letters or numbers.".into()));
+            return;
+        }
+
+        let prepared_fields = match prepared_form_builder_fields(&fields.get_untracked()) {
+            Ok(fields) => fields,
+            Err(error) => {
+                message.set(Some(error));
+                return;
+            }
+        };
+        if prepared_fields.is_empty() {
+            message.set(Some("Add at least one field to the form builder.".into()));
+            return;
+        }
+
+        let payload = CreateFormPayload {
+            name: form_name,
+            slug: form_slug,
+            scope_node_type_id: scope_node_type_id.get().trim().to_string().into_nonempty(),
+        };
+
+        leptos::task::spawn_local(async move {
+            is_saving.set(true);
+            message.set(None);
+
+            let body = match serde_json::to_string(&payload) {
+                Ok(body) => body,
+                Err(_) => {
+                    message.set(Some("Create request could not be prepared.".into()));
+                    is_saving.set(false);
+                    return;
+                }
+            };
+
+            let response = gloo_net::http::Request::post("/api/admin/forms")
+                .header("Content-Type", "application/json")
+                .body(body)
+                .expect("json request body should be valid")
+                .send()
+                .await;
+
+            match response {
+                Ok(response) if response.status() == 401 => {
+                    is_saving.set(false);
+                    redirect_to_login();
+                }
+                Ok(response) if response.ok() => match response.json::<IdResponse>().await {
+                    Ok(created) => {
+                        let version_response = gloo_net::http::Request::post(&format!(
+                            "/api/admin/forms/{}/versions",
+                            created.id
+                        ))
+                        .header("Content-Type", "application/json")
+                        .body("{}")
+                        .expect("json request body should be valid")
+                        .send()
+                        .await;
+
+                        match version_response {
+                            Ok(response) if response.status() == 401 => {
+                                is_saving.set(false);
+                                redirect_to_login();
+                            }
+                            Ok(response) if response.ok() => {
+                                let created_version = match response.json::<IdResponse>().await {
+                                    Ok(created_version) => created_version,
+                                    Err(_) => {
+                                        message.set(Some(
+                                            "Form was created, but draft version response could not be read."
+                                                .into(),
+                                        ));
+                                        is_saving.set(false);
+                                        return;
+                                    }
+                                };
+
+                                let section_payload = CreateFormSectionPayload {
+                                    title: "Main".into(),
+                                    position: 1,
+                                    description: String::new(),
+                                    column_count: 1,
+                                };
+                                let section_body = match serde_json::to_string(&section_payload) {
+                                    Ok(body) => body,
+                                    Err(_) => {
+                                        message.set(Some(
+                                            "Form section request could not be prepared.".into(),
+                                        ));
+                                        is_saving.set(false);
+                                        return;
+                                    }
+                                };
+                                let section_response = gloo_net::http::Request::post(&format!(
+                                    "/api/admin/form-versions/{}/sections",
+                                    created_version.id
+                                ))
+                                .header("Content-Type", "application/json")
+                                .body(section_body)
+                                .expect("json request body should be valid")
+                                .send()
+                                .await;
+
+                                let created_section = match section_response {
+                                    Ok(response) if response.status() == 401 => {
+                                        is_saving.set(false);
+                                        redirect_to_login();
+                                        return;
+                                    }
+                                    Ok(response) if response.ok() => {
+                                        match response.json::<IdResponse>().await {
+                                            Ok(created_section) => created_section,
+                                            Err(_) => {
+                                                message.set(Some(
+                                                    "Form section response could not be read.".into(),
+                                                ));
+                                                is_saving.set(false);
+                                                return;
+                                            }
+                                        }
+                                    }
+                                    Ok(response) => {
+                                        message.set(Some(format!(
+                                            "Form was created, but section setup failed with status {}.",
+                                            response.status()
+                                        )));
+                                        is_saving.set(false);
+                                        return;
+                                    }
+                                    Err(_) => {
+                                        message.set(Some(
+                                            "Form was created, but the section API could not be reached."
+                                                .into(),
+                                        ));
+                                        is_saving.set(false);
+                                        return;
+                                    }
+                                };
+
+                                for (index, field) in prepared_fields.iter().enumerate() {
+                                    let field_payload = CreateFormFieldPayload {
+                                        section_id: created_section.id.clone(),
+                                        key: field.key.clone(),
+                                        label: field.label.clone(),
+                                        field_type: field.field_type.clone(),
+                                        required: field.required,
+                                        position: (index + 1) as i32,
+                                    };
+                                    let field_body = match serde_json::to_string(&field_payload) {
+                                        Ok(body) => body,
+                                        Err(_) => {
+                                            message.set(Some(format!(
+                                                "{} field request could not be prepared.",
+                                                field.label
+                                            )));
+                                            is_saving.set(false);
+                                            return;
+                                        }
+                                    };
+                                    let field_response = gloo_net::http::Request::post(&format!(
+                                        "/api/admin/form-versions/{}/fields",
+                                        created_version.id
+                                    ))
+                                    .header("Content-Type", "application/json")
+                                    .body(field_body)
+                                    .expect("json request body should be valid")
+                                    .send()
+                                    .await;
+
+                                    match field_response {
+                                        Ok(response) if response.status() == 401 => {
+                                            is_saving.set(false);
+                                            redirect_to_login();
+                                            return;
+                                        }
+                                        Ok(response) if response.ok() => {}
+                                        Ok(response) => {
+                                            message.set(Some(format!(
+                                                "{} field setup failed with status {}.",
+                                                field.label,
+                                                response.status()
+                                            )));
+                                            is_saving.set(false);
+                                            return;
+                                        }
+                                        Err(_) => {
+                                            message.set(Some(format!(
+                                                "{} field API could not be reached.",
+                                                field.label
+                                            )));
+                                            is_saving.set(false);
+                                            return;
+                                        }
+                                    }
+                                }
+
+                                if let Some(window) = web_sys::window() {
+                                    let _ = window
+                                        .location()
+                                        .set_href(&format!("/forms/{}", created.id));
+                                }
+                            }
+                            Ok(response) => {
+                                message.set(Some(format!(
+                                    "Form was created, but draft version setup failed with status {}.",
+                                    response.status()
+                                )));
+                                is_saving.set(false);
+                            }
+                            Err(_) => {
+                                message.set(Some(
+                                    "Form was created, but the draft version API could not be reached."
+                                        .into(),
+                                ));
+                                is_saving.set(false);
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        message.set(Some("Create response could not be read.".into()));
+                        is_saving.set(false);
+                    }
+                },
+                Ok(response) => {
+                    message.set(Some(format!(
+                        "Create failed with status {}.",
+                        response.status()
+                    )));
+                    is_saving.set(false);
+                }
+                Err(_) => {
+                    message.set(Some("Could not reach the create form API.".into()));
+                    is_saving.set(false);
+                }
+            }
+        });
+    }
+
+    #[cfg(not(feature = "hydrate"))]
+    {
+        let _ = (
+            name,
+            scope_node_type_id,
+            fields,
+            existing_forms,
             is_saving,
             message,
         );
@@ -4266,7 +4748,286 @@ fn FormsAttachedNodesSheet(detail: RwSignal<Option<FormsAttachedNodesSheetData>>
 
 #[component]
 pub fn FormsNewPage() -> impl IntoView {
-    view! { <ResetRoute active_route="forms" title="Create Form" route="/forms/new" status="Registered" next_step="Restore form builder primitives."/> }
+    let node_types = RwSignal::new(Vec::<NodeTypeCatalogEntry>::new());
+    let existing_forms = RwSignal::new(Vec::<FormSummary>::new());
+    let name = RwSignal::new(String::new());
+    let scope_node_type_id = RwSignal::new(String::new());
+    let builder_fields = RwSignal::new(vec![blank_form_builder_field(1)]);
+    let next_builder_field_id = RwSignal::new(2usize);
+    let is_loading = RwSignal::new(true);
+    let is_saving = RwSignal::new(false);
+    let message = RwSignal::new(None::<String>);
+
+    Effect::new(move |_| {
+        load_form_create_options(node_types, existing_forms, is_loading, message);
+    });
+
+    let generated_slug = move || {
+        unique_slug_from_label(
+            &name.get(),
+            &existing_form_slugs(existing_forms.get().as_slice()),
+        )
+    };
+    let can_submit = move || {
+        !is_loading.get() && !is_saving.get() && !name.get().trim().is_empty()
+    };
+
+    view! {
+        <AppShell active_route="forms" title="Forms">
+            <Breadcrumb>
+                <BreadcrumbItem>
+                    <BreadcrumbLink href="/forms">"Forms"</BreadcrumbLink>
+                </BreadcrumbItem>
+                <BreadcrumbSeparator/>
+                <BreadcrumbItem>
+                    <BreadcrumbPage>"Create Form"</BreadcrumbPage>
+                </BreadcrumbItem>
+            </Breadcrumb>
+            <section class="route-panel forms-page form-editor-panel">
+                <PageHeader title="Create Form"/>
+
+                {move || {
+                    if is_loading.get() {
+                        view! {
+                            <section class="organization-state" aria-live="polite">
+                                <h3>"Loading form options"</h3>
+                                <p>"Fetching available organization scopes."</p>
+                            </section>
+                        }
+                        .into_any()
+                    } else {
+                        view! {
+                            <form
+                                class="native-form form-create-form"
+                                on:submit=move |event| {
+                                    event.prevent_default();
+                                    submit_create_form(
+                                        name,
+                                        scope_node_type_id,
+                                        builder_fields,
+                                        existing_forms,
+                                        is_saving,
+                                        message,
+                                    );
+                                }
+                            >
+                                <div class="form-grid">
+                                    <label class="form-field form-field--wide" for="form-name">
+                                        <span>"Form Name"</span>
+                                        <input
+                                            id="form-name"
+                                            type="text"
+                                            autocomplete="off"
+                                            prop:value=move || name.get()
+                                            on:input=move |event| name.set(event_target_value(&event))
+                                            required
+                                        />
+                                    </label>
+
+                                    <label class="form-field" for="form-scope-node-type">
+                                        <span>"Scope"</span>
+                                        <select
+                                            id="form-scope-node-type"
+                                            prop:value=move || scope_node_type_id.get()
+                                            on:change=move |event| scope_node_type_id.set(event_target_value(&event))
+                                        >
+                                            <option value="">"No scope"</option>
+                                            {move || {
+                                                let mut options = node_types.get();
+                                                options.sort_by(|left, right| {
+                                                    left.singular_label
+                                                        .cmp(&right.singular_label)
+                                                        .then(left.name.cmp(&right.name))
+                                                });
+                                                options
+                                                    .into_iter()
+                                                    .map(|node_type| {
+                                                        view! {
+                                                            <option value=node_type.id>{node_type.singular_label}</option>
+                                                        }
+                                                    })
+                                                    .collect_view()
+                                            }}
+                                        </select>
+                                    </label>
+
+                                    <div class="form-field">
+                                        <span>"Generated Slug"</span>
+                                        <div class="form-derived-value">
+                                            {move || {
+                                                let slug = generated_slug();
+                                                if slug.is_empty() { "Waiting for form name".into() } else { slug }
+                                            }}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <section class="form-section">
+                                    <h3>"Initial Version"</h3>
+                                    <InfoListTable>
+                                        <InfoRow label="Status" value="Draft"/>
+                                        <tr>
+                                            <th scope="row">"Fields"</th>
+                                            <td>
+                                                {move || {
+                                                    prepared_form_builder_fields(&builder_fields.get())
+                                                        .map(|fields| fields.len().to_string())
+                                                        .unwrap_or_else(|_| "0".into())
+                                                }}
+                                            </td>
+                                        </tr>
+                                    </InfoListTable>
+                                </section>
+
+                                <section class="form-builder form-section">
+                                    <div class="form-builder__header">
+                                        <div>
+                                            <h3>"Form Builder"</h3>
+                                        </div>
+                                        <button
+                                            class="button button--secondary"
+                                            type="button"
+                                            on:click=move |_| {
+                                                let field_id = next_builder_field_id.get_untracked();
+                                                next_builder_field_id.set(field_id + 1);
+                                                builder_fields.update(|fields| fields.push(blank_form_builder_field(field_id)));
+                                            }
+                                        >
+                                            <Plus/>
+                                            "Add Field"
+                                        </button>
+                                    </div>
+
+                                    <div class="form-builder__fields">
+                                        {move || {
+                                            builder_fields
+                                                .get()
+                                                .into_iter()
+                                                .enumerate()
+                                                .map(|(index, field)| {
+                                                    let field_id = field.id;
+                                                    view! {
+                                                        <article class="form-builder-field">
+                                                            <div class="form-builder-field__header">
+                                                                <h4>{format!("Field {}", index + 1)}</h4>
+                                                                <button
+                                                                    class="icon-button icon-button--control"
+                                                                    type="button"
+                                                                    aria-label="Remove field"
+                                                                    on:click=move |_| {
+                                                                        builder_fields.update(|fields| {
+                                                                            fields.retain(|field| field.id != field_id);
+                                                                        });
+                                                                    }
+                                                                >
+                                                                    <X/>
+                                                                </button>
+                                                            </div>
+
+                                                            <div class="form-grid">
+                                                                <label class="form-field" for=format!("form-field-label-{field_id}")>
+                                                                    <span>"Field Label"</span>
+                                                                    <input
+                                                                        id=format!("form-field-label-{field_id}")
+                                                                        type="text"
+                                                                        autocomplete="off"
+                                                                        prop:value=field.label.clone()
+                                                                        on:input=move |event| {
+                                                                            let next_label = event_target_value(&event);
+                                                                            builder_fields.update(|fields| {
+                                                                                if let Some(field) = fields.iter_mut().find(|field| field.id == field_id) {
+                                                                                    field.label = next_label.clone();
+                                                                                    if !field.key_was_edited {
+                                                                                        field.key = slug_from_label(&next_label);
+                                                                                    }
+                                                                                }
+                                                                            });
+                                                                        }
+                                                                    />
+                                                                </label>
+
+                                                                <label class="form-field" for=format!("form-field-key-{field_id}")>
+                                                                    <span>"Field Key"</span>
+                                                                    <input
+                                                                        id=format!("form-field-key-{field_id}")
+                                                                        type="text"
+                                                                        autocomplete="off"
+                                                                        prop:value=field.key.clone()
+                                                                        on:input=move |event| {
+                                                                            let next_key = slug_from_label(&event_target_value(&event));
+                                                                            builder_fields.update(|fields| {
+                                                                                if let Some(field) = fields.iter_mut().find(|field| field.id == field_id) {
+                                                                                    field.key = next_key.clone();
+                                                                                    field.key_was_edited = true;
+                                                                                }
+                                                                            });
+                                                                        }
+                                                                    />
+                                                                </label>
+
+                                                                <label class="form-field" for=format!("form-field-type-{field_id}")>
+                                                                    <span>"Field Type"</span>
+                                                                    <select
+                                                                        id=format!("form-field-type-{field_id}")
+                                                                        prop:value=field.field_type.clone()
+                                                                        on:change=move |event| {
+                                                                            let next_type = event_target_value(&event);
+                                                                            builder_fields.update(|fields| {
+                                                                                if let Some(field) = fields.iter_mut().find(|field| field.id == field_id) {
+                                                                                    field.field_type = next_type.clone();
+                                                                                }
+                                                                            });
+                                                                        }
+                                                                    >
+                                                                        <option value="text">"Text"</option>
+                                                                        <option value="number">"Number"</option>
+                                                                        <option value="date">"Date"</option>
+                                                                        <option value="boolean">"Checkbox"</option>
+                                                                    </select>
+                                                                </label>
+
+                                                                <label class="form-field form-field--checkbox form-builder-field__required">
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        prop:checked=field.required
+                                                                        on:change=move |event| {
+                                                                            let checked = event_target_checked(&event);
+                                                                            builder_fields.update(|fields| {
+                                                                                if let Some(field) = fields.iter_mut().find(|field| field.id == field_id) {
+                                                                                    field.required = checked;
+                                                                                }
+                                                                            });
+                                                                        }
+                                                                    />
+                                                                    <span>"Required"</span>
+                                                                </label>
+                                                            </div>
+                                                        </article>
+                                                    }
+                                                })
+                                                .collect_view()
+                                        }}
+                                    </div>
+                                </section>
+
+                                {move || message.get().map(|message| view! {
+                                    <p class="form-message" role="status">{message}</p>
+                                })}
+
+                                <div class="form-actions">
+                                    <Button label="Cancel" href="/forms"/>
+                                    <button class="button" type="submit" disabled=move || !can_submit()>
+                                        {move || if is_saving.get() { "Creating..." } else { "Create Form" }}
+                                    </button>
+                                </div>
+                            </form>
+                        }
+                        .into_any()
+                    }
+                }}
+            </section>
+        </AppShell>
+    }
 }
 
 #[component]
