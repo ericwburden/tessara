@@ -3,8 +3,9 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 
 use icons::{
-    ChevronDown, ChevronRight, ExternalLink, ListFilter, LockKeyhole, Mail, PanelRight, Pencil,
-    Plus, Search, X,
+    CalendarDays, ChevronDown, ChevronRight, CircleDot, ExternalLink, Hash, ListChecks, ListFilter,
+    LockKeyhole, Mail, PanelRight, Pencil, Plus, Search, SquareCheckBig, TextCursorInput, Trash2,
+    X,
 };
 use leptos::portal::Portal;
 use leptos::prelude::*;
@@ -706,15 +707,33 @@ struct CreateFormFieldPayload {
     field_type: String,
     required: bool,
     position: i32,
+    grid_row: i32,
+    grid_column: i32,
+    grid_width: i32,
+    grid_height: i32,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct FormBuilderSectionDraft {
+    id: usize,
+    title: String,
+    description: String,
+    column_count: i32,
+    position: i32,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 struct FormBuilderFieldDraft {
     id: usize,
+    section_id: usize,
     label: String,
     key: String,
     field_type: String,
     required: bool,
+    grid_row: i32,
+    grid_column: i32,
+    grid_width: i32,
+    grid_height: i32,
     key_was_edited: bool,
 }
 
@@ -2074,7 +2093,11 @@ fn slug_from_label(label: &str) -> String {
     let mut slug = String::new();
     let mut last_was_dash = false;
 
-    for character in label.trim().chars().flat_map(|character| character.to_lowercase()) {
+    for character in label
+        .trim()
+        .chars()
+        .flat_map(|character| character.to_lowercase())
+    {
         if character.is_ascii_alphanumeric() {
             slug.push(character);
             last_was_dash = false;
@@ -2091,6 +2114,7 @@ fn slug_from_label(label: &str) -> String {
     slug
 }
 
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
 fn unique_slug_from_label(label: &str, existing_slugs: &[String]) -> String {
     let base = slug_from_label(label);
     if base.is_empty() {
@@ -2112,19 +2136,248 @@ fn unique_slug_from_label(label: &str, existing_slugs: &[String]) -> String {
     }
 }
 
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
 fn existing_form_slugs(forms: &[FormSummary]) -> Vec<String> {
     forms.iter().map(|form| form.slug.clone()).collect()
 }
 
-fn blank_form_builder_field(id: usize) -> FormBuilderFieldDraft {
+fn blank_form_builder_section(id: usize) -> FormBuilderSectionDraft {
+    FormBuilderSectionDraft {
+        id,
+        title: if id == 1 {
+            "Main".into()
+        } else {
+            format!("Section {id}")
+        },
+        description: String::new(),
+        column_count: 2,
+        position: id as i32,
+    }
+}
+
+fn blank_form_builder_field(
+    id: usize,
+    section_id: usize,
+    fields: &[FormBuilderFieldDraft],
+    column_count: i32,
+) -> FormBuilderFieldDraft {
+    let (grid_row, grid_column) =
+        first_available_form_builder_cell(section_id, fields, column_count);
+
     FormBuilderFieldDraft {
         id,
+        section_id,
         label: String::new(),
         key: String::new(),
         field_type: "text".into(),
         required: false,
+        grid_row,
+        grid_column,
+        grid_width: 1,
+        grid_height: 1,
         key_was_edited: false,
     }
+}
+
+fn form_builder_field_occupies(field: &FormBuilderFieldDraft, row: i32, column: i32) -> bool {
+    let row_start = field.grid_row.max(1);
+    let row_end = row_start + field.grid_height.max(1) - 1;
+    let column_start = field.grid_column.max(1);
+    let column_end = column_start + field.grid_width.max(1) - 1;
+
+    row >= row_start && row <= row_end && column >= column_start && column <= column_end
+}
+
+fn form_builder_fields_overlap(
+    left: &FormBuilderFieldDraft,
+    right: &FormBuilderFieldDraft,
+) -> bool {
+    if left.section_id != right.section_id || left.id == right.id {
+        return false;
+    }
+
+    let left_row_start = left.grid_row.max(1);
+    let left_row_end = left_row_start + left.grid_height.max(1) - 1;
+    let left_column_start = left.grid_column.max(1);
+    let left_column_end = left_column_start + left.grid_width.max(1) - 1;
+
+    let right_row_start = right.grid_row.max(1);
+    let right_row_end = right_row_start + right.grid_height.max(1) - 1;
+    let right_column_start = right.grid_column.max(1);
+    let right_column_end = right_column_start + right.grid_width.max(1) - 1;
+
+    left_row_start <= right_row_end
+        && left_row_end >= right_row_start
+        && left_column_start <= right_column_end
+        && left_column_end >= right_column_start
+}
+
+fn form_builder_field_has_collision(
+    field: &FormBuilderFieldDraft,
+    fields: &[FormBuilderFieldDraft],
+) -> bool {
+    fields
+        .iter()
+        .any(|candidate| form_builder_fields_overlap(field, candidate))
+}
+
+fn first_available_form_builder_cell(
+    section_id: usize,
+    fields: &[FormBuilderFieldDraft],
+    column_count: i32,
+) -> (i32, i32) {
+    let column_count = column_count.clamp(1, 12);
+
+    for row in 1..=200 {
+        for column in 1..=column_count {
+            if fields
+                .iter()
+                .filter(|field| field.section_id == section_id)
+                .all(|field| !form_builder_field_occupies(field, row, column))
+            {
+                return (row, column);
+            }
+        }
+    }
+
+    (1, 1)
+}
+
+fn max_form_builder_field_width(
+    field: &FormBuilderFieldDraft,
+    fields: &[FormBuilderFieldDraft],
+    column_count: i32,
+) -> i32 {
+    let row = field.grid_row.max(1);
+    let column = field.grid_column.max(1);
+    let column_count = column_count.clamp(1, 12);
+    let mut width = 0;
+
+    for candidate_column in column..=column_count {
+        let mut candidate = field.clone();
+        candidate.grid_row = row;
+        candidate.grid_column = column;
+        candidate.grid_width = candidate_column - column + 1;
+
+        let blocked = form_builder_field_has_collision(&candidate, fields);
+
+        if blocked {
+            break;
+        }
+
+        width += 1;
+    }
+
+    width.max(1)
+}
+
+fn max_form_builder_field_height(
+    field: &FormBuilderFieldDraft,
+    fields: &[FormBuilderFieldDraft],
+) -> i32 {
+    let mut height = 0;
+
+    for candidate_height in 1..=6 {
+        let mut candidate = field.clone();
+        candidate.grid_height = candidate_height;
+
+        if form_builder_field_has_collision(&candidate, fields) {
+            break;
+        }
+
+        height += 1;
+    }
+
+    height.max(1)
+}
+
+fn form_builder_layout_candidate(
+    field: &FormBuilderFieldDraft,
+    control_index: usize,
+    value: i32,
+    column_count: i32,
+) -> FormBuilderFieldDraft {
+    let mut candidate = field.clone();
+
+    match control_index {
+        0 => candidate.grid_row = value,
+        1 => {
+            let max_column =
+                (column_count - candidate.grid_width.max(1) + 1).clamp(1, column_count.max(1));
+            candidate.grid_column = value.clamp(1, max_column);
+        }
+        2 => candidate.grid_width = value,
+        _ => candidate.grid_height = value.clamp(1, 6),
+    }
+
+    candidate
+}
+
+fn valid_form_builder_layout_values(
+    field: &FormBuilderFieldDraft,
+    fields: &[FormBuilderFieldDraft],
+    control_index: usize,
+    max_value: i32,
+    column_count: i32,
+) -> Vec<i32> {
+    let current_value = match control_index {
+        0 => field.grid_row,
+        1 => field.grid_column,
+        2 => field.grid_width,
+        _ => field.grid_height,
+    }
+    .max(1);
+
+    let mut values = (1..=max_value.max(1))
+        .filter(|value| {
+            let candidate =
+                form_builder_layout_candidate(field, control_index, *value, column_count);
+            let candidate_column_end =
+                candidate.grid_column.max(1) + candidate.grid_width.max(1) - 1;
+
+            candidate_column_end <= column_count
+                && !form_builder_field_has_collision(&candidate, fields)
+        })
+        .collect::<Vec<_>>();
+
+    let current_candidate =
+        form_builder_layout_candidate(field, control_index, current_value, column_count);
+    let current_column_end =
+        current_candidate.grid_column.max(1) + current_candidate.grid_width.max(1) - 1;
+    let current_is_valid = current_column_end <= column_count
+        && !form_builder_field_has_collision(&current_candidate, fields);
+
+    if current_is_valid && !values.contains(&current_value) {
+        values.push(current_value);
+        values.sort_unstable();
+    }
+
+    values
+}
+
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+fn prepared_form_builder_sections(
+    sections: &[FormBuilderSectionDraft],
+) -> Result<Vec<FormBuilderSectionDraft>, String> {
+    let mut prepared = Vec::new();
+
+    for (index, section) in sections.iter().enumerate() {
+        let title = section.title.trim();
+        if title.is_empty() {
+            return Err("Every section needs a title.".into());
+        }
+        if !(1..=12).contains(&section.column_count) {
+            return Err(format!("{title} must use between 1 and 12 grid columns."));
+        }
+
+        let mut section = section.clone();
+        section.title = title.to_string();
+        section.description = section.description.trim().to_string();
+        section.position = (index + 1) as i32;
+        prepared.push(section);
+    }
+
+    Ok(prepared)
 }
 
 fn prepared_form_builder_fields(
@@ -2153,6 +2406,18 @@ fn prepared_form_builder_fields(
         if !keys.insert(normalized_key.clone()) {
             return Err(format!("Field key {normalized_key} is already used."));
         }
+        if field.grid_row < 1 {
+            return Err(format!("{label} must start on row 1 or later."));
+        }
+        if field.grid_column < 1 {
+            return Err(format!("{label} must start on column 1 or later."));
+        }
+        if field.grid_width < 1 {
+            return Err(format!("{label} must span at least 1 column."));
+        }
+        if field.grid_height < 1 {
+            return Err(format!("{label} must span at least 1 row."));
+        }
 
         let mut field = field.clone();
         field.label = label.to_string();
@@ -2161,6 +2426,17 @@ fn prepared_form_builder_fields(
     }
 
     Ok(prepared)
+}
+
+fn form_builder_field_type_icon(field_type: &str) -> AnyView {
+    match field_type {
+        "number" => view! { <Hash /> }.into_any(),
+        "date" => view! { <CalendarDays /> }.into_any(),
+        "boolean" => view! { <SquareCheckBig /> }.into_any(),
+        "single_choice" => view! { <CircleDot /> }.into_any(),
+        "multi_choice" => view! { <ListChecks /> }.into_any(),
+        _ => view! { <TextCursorInput /> }.into_any(),
+    }
 }
 
 fn status_badge_class(status: &str) -> &'static str {
@@ -2353,8 +2629,9 @@ fn load_form_create_options(
                 (Ok(node_types_response), Ok(forms_response))
                     if node_types_response.ok() && forms_response.ok() =>
                 {
-                    let loaded_node_types =
-                        node_types_response.json::<Vec<NodeTypeCatalogEntry>>().await;
+                    let loaded_node_types = node_types_response
+                        .json::<Vec<NodeTypeCatalogEntry>>()
+                        .await;
                     let loaded_forms = forms_response.json::<Vec<FormSummary>>().await;
 
                     match (loaded_node_types, loaded_forms) {
@@ -3185,9 +3462,11 @@ fn submit_create_node(
     }
 }
 
+#[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
 fn submit_create_form(
     name: RwSignal<String>,
     scope_node_type_id: RwSignal<String>,
+    sections: RwSignal<Vec<FormBuilderSectionDraft>>,
     fields: RwSignal<Vec<FormBuilderFieldDraft>>,
     existing_forms: RwSignal<Vec<FormSummary>>,
     is_saving: RwSignal<bool>,
@@ -3214,6 +3493,13 @@ fn submit_create_form(
             return;
         }
 
+        let prepared_sections = match prepared_form_builder_sections(&sections.get_untracked()) {
+            Ok(sections) => sections,
+            Err(error) => {
+                message.set(Some(error));
+                return;
+            }
+        };
         let prepared_fields = match prepared_form_builder_fields(&fields.get_untracked()) {
             Ok(fields) => fields,
             Err(error) => {
@@ -3287,76 +3573,97 @@ fn submit_create_form(
                                     }
                                 };
 
-                                let section_payload = CreateFormSectionPayload {
-                                    title: "Main".into(),
-                                    position: 1,
-                                    description: String::new(),
-                                    column_count: 1,
-                                };
-                                let section_body = match serde_json::to_string(&section_payload) {
-                                    Ok(body) => body,
-                                    Err(_) => {
-                                        message.set(Some(
-                                            "Form section request could not be prepared.".into(),
-                                        ));
-                                        is_saving.set(false);
-                                        return;
-                                    }
-                                };
-                                let section_response = gloo_net::http::Request::post(&format!(
-                                    "/api/admin/form-versions/{}/sections",
-                                    created_version.id
-                                ))
-                                .header("Content-Type", "application/json")
-                                .body(section_body)
-                                .expect("json request body should be valid")
-                                .send()
-                                .await;
+                                let mut section_ids = HashMap::new();
+                                for section in &prepared_sections {
+                                    let section_payload = CreateFormSectionPayload {
+                                        title: section.title.clone(),
+                                        position: section.position,
+                                        description: section.description.clone(),
+                                        column_count: section.column_count,
+                                    };
+                                    let section_body = match serde_json::to_string(&section_payload)
+                                    {
+                                        Ok(body) => body,
+                                        Err(_) => {
+                                            message.set(Some(format!(
+                                                "{} section request could not be prepared.",
+                                                section.title
+                                            )));
+                                            is_saving.set(false);
+                                            return;
+                                        }
+                                    };
+                                    let section_response = gloo_net::http::Request::post(&format!(
+                                        "/api/admin/form-versions/{}/sections",
+                                        created_version.id
+                                    ))
+                                    .header("Content-Type", "application/json")
+                                    .body(section_body)
+                                    .expect("json request body should be valid")
+                                    .send()
+                                    .await;
 
-                                let created_section = match section_response {
-                                    Ok(response) if response.status() == 401 => {
-                                        is_saving.set(false);
-                                        redirect_to_login();
-                                        return;
-                                    }
-                                    Ok(response) if response.ok() => {
-                                        match response.json::<IdResponse>().await {
-                                            Ok(created_section) => created_section,
-                                            Err(_) => {
-                                                message.set(Some(
-                                                    "Form section response could not be read.".into(),
-                                                ));
-                                                is_saving.set(false);
-                                                return;
+                                    let created_section = match section_response {
+                                        Ok(response) if response.status() == 401 => {
+                                            is_saving.set(false);
+                                            redirect_to_login();
+                                            return;
+                                        }
+                                        Ok(response) if response.ok() => {
+                                            match response.json::<IdResponse>().await {
+                                                Ok(created_section) => created_section,
+                                                Err(_) => {
+                                                    message.set(Some(format!(
+                                                        "{} section response could not be read.",
+                                                        section.title
+                                                    )));
+                                                    is_saving.set(false);
+                                                    return;
+                                                }
                                             }
                                         }
-                                    }
-                                    Ok(response) => {
+                                        Ok(response) => {
+                                            message.set(Some(format!(
+                                                "Form was created, but {} section setup failed with status {}.",
+                                                section.title,
+                                                response.status()
+                                            )));
+                                            is_saving.set(false);
+                                            return;
+                                        }
+                                        Err(_) => {
+                                            message.set(Some(format!(
+                                                "Form was created, but the {} section API could not be reached.",
+                                                section.title
+                                            )));
+                                            is_saving.set(false);
+                                            return;
+                                        }
+                                    };
+                                    section_ids.insert(section.id, created_section.id);
+                                }
+
+                                for (index, field) in prepared_fields.iter().enumerate() {
+                                    let Some(section_id) = section_ids.get(&field.section_id)
+                                    else {
                                         message.set(Some(format!(
-                                            "Form was created, but section setup failed with status {}.",
-                                            response.status()
+                                            "{} field could not be matched to a section.",
+                                            field.label
                                         )));
                                         is_saving.set(false);
                                         return;
-                                    }
-                                    Err(_) => {
-                                        message.set(Some(
-                                            "Form was created, but the section API could not be reached."
-                                                .into(),
-                                        ));
-                                        is_saving.set(false);
-                                        return;
-                                    }
-                                };
-
-                                for (index, field) in prepared_fields.iter().enumerate() {
+                                    };
                                     let field_payload = CreateFormFieldPayload {
-                                        section_id: created_section.id.clone(),
+                                        section_id: section_id.clone(),
                                         key: field.key.clone(),
                                         label: field.label.clone(),
                                         field_type: field.field_type.clone(),
                                         required: field.required,
                                         position: (index + 1) as i32,
+                                        grid_row: field.grid_row,
+                                        grid_column: field.grid_column,
+                                        grid_width: field.grid_width,
+                                        grid_height: field.grid_height,
                                     };
                                     let field_body = match serde_json::to_string(&field_payload) {
                                         Ok(body) => body,
@@ -4752,7 +5059,12 @@ pub fn FormsNewPage() -> impl IntoView {
     let existing_forms = RwSignal::new(Vec::<FormSummary>::new());
     let name = RwSignal::new(String::new());
     let scope_node_type_id = RwSignal::new(String::new());
-    let builder_fields = RwSignal::new(vec![blank_form_builder_field(1)]);
+    let builder_sections = RwSignal::new(vec![blank_form_builder_section(1)]);
+    let active_builder_section = RwSignal::new("1".to_string());
+    let next_builder_section_id = RwSignal::new(2usize);
+    let builder_fields = RwSignal::new(vec![blank_form_builder_field(1, 1, &[], 2)]);
+    let active_builder_field = RwSignal::new(None::<usize>);
+    let dragged_builder_field = RwSignal::new(None::<usize>);
     let next_builder_field_id = RwSignal::new(2usize);
     let is_loading = RwSignal::new(true);
     let is_saving = RwSignal::new(false);
@@ -4762,15 +5074,7 @@ pub fn FormsNewPage() -> impl IntoView {
         load_form_create_options(node_types, existing_forms, is_loading, message);
     });
 
-    let generated_slug = move || {
-        unique_slug_from_label(
-            &name.get(),
-            &existing_form_slugs(existing_forms.get().as_slice()),
-        )
-    };
-    let can_submit = move || {
-        !is_loading.get() && !is_saving.get() && !name.get().trim().is_empty()
-    };
+    let can_submit = move || !is_loading.get() && !is_saving.get() && !name.get().trim().is_empty();
 
     view! {
         <AppShell active_route="forms" title="Forms">
@@ -4797,6 +5101,7 @@ pub fn FormsNewPage() -> impl IntoView {
                         .into_any()
                     } else {
                         view! {
+                            <div class="form-create-workspace">
                             <form
                                 class="native-form form-create-form"
                                 on:submit=move |event| {
@@ -4804,6 +5109,7 @@ pub fn FormsNewPage() -> impl IntoView {
                                     submit_create_form(
                                         name,
                                         scope_node_type_id,
+                                        builder_sections,
                                         builder_fields,
                                         existing_forms,
                                         is_saving,
@@ -4851,15 +5157,6 @@ pub fn FormsNewPage() -> impl IntoView {
                                         </select>
                                     </label>
 
-                                    <div class="form-field">
-                                        <span>"Generated Slug"</span>
-                                        <div class="form-derived-value">
-                                            {move || {
-                                                let slug = generated_slug();
-                                                if slug.is_empty() { "Waiting for form name".into() } else { slug }
-                                            }}
-                                        </div>
-                                    </div>
                                 </div>
 
                                 <section class="form-section">
@@ -4881,126 +5178,298 @@ pub fn FormsNewPage() -> impl IntoView {
 
                                 <section class="form-builder form-section">
                                     <div class="form-builder__header">
-                                        <div>
-                                            <h3>"Form Builder"</h3>
-                                        </div>
-                                        <button
-                                            class="button button--secondary"
-                                            type="button"
-                                            on:click=move |_| {
-                                                let field_id = next_builder_field_id.get_untracked();
-                                                next_builder_field_id.set(field_id + 1);
-                                                builder_fields.update(|fields| fields.push(blank_form_builder_field(field_id)));
-                                            }
-                                        >
-                                            <Plus/>
-                                            "Add Field"
-                                        </button>
+                                        <h3>"Form Builder"</h3>
                                     </div>
 
-                                    <div class="form-builder__fields">
+                                    <Tabs active=active_builder_section>
+                                        <TabsList>
+                                            {move || {
+                                                builder_sections
+                                                    .get()
+                                                    .into_iter()
+                                                    .map(|section| {
+                                                        let section_value = section.id.to_string();
+                                                        let section_tab_value = section_value.clone();
+                                                        view! {
+                                                            <button
+                                                                class=move || {
+                                                                    if active_builder_section.get() == section_tab_value {
+                                                                        "tabs-trigger is-active"
+                                                                    } else {
+                                                                        "tabs-trigger"
+                                                                    }
+                                                                }
+                                                                type="button"
+                                                                role="tab"
+                                                                aria-selected=move || (active_builder_section.get() == section_value).to_string()
+                                                                on:click=move |_| active_builder_section.set(section.id.to_string())
+                                                            >
+                                                                {section.title}
+                                                            </button>
+                                                        }
+                                                    })
+                                                    .collect_view()
+                                            }}
+                                            <button
+                                                class="tabs-trigger form-builder__add-section-tab"
+                                                type="button"
+                                                on:click=move |_| {
+                                                    let section_id = next_builder_section_id.get_untracked();
+                                                    next_builder_section_id.set(section_id + 1);
+                                                    builder_sections.update(|sections| {
+                                                        let mut section = blank_form_builder_section(section_id);
+                                                        section.position = (sections.len() + 1) as i32;
+                                                        sections.push(section);
+                                                    });
+                                                    active_builder_section.set(section_id.to_string());
+                                                }
+                                            >
+                                                <Plus/>
+                                                "Section"
+                                            </button>
+                                        </TabsList>
+                                    </Tabs>
+
+                                    <div class="form-builder__sections">
                                         {move || {
-                                            builder_fields
+                                            builder_sections
                                                 .get()
                                                 .into_iter()
-                                                .enumerate()
-                                                .map(|(index, field)| {
-                                                    let field_id = field.id;
+                                                .filter(|section| active_builder_section.get() == section.id.to_string())
+                                                .map(|section| {
+                                                    let section_id = section.id;
+                                                    let section_fields = builder_fields
+                                                        .get()
+                                                        .into_iter()
+                                                        .filter(|field| field.section_id == section_id)
+                                                        .collect::<Vec<_>>();
+                                                    let column_count = section.column_count.max(1);
+                                                    let field_row_count = section_fields
+                                                        .iter()
+                                                        .map(|field| field.grid_row.max(1) + field.grid_height.max(1) - 1)
+                                                        .max()
+                                                        .unwrap_or(1)
+                                                        .max(3);
+                                                    let (add_field_row, add_field_column) =
+                                                        first_available_form_builder_cell(
+                                                            section_id,
+                                                            &section_fields,
+                                                            column_count,
+                                                        );
+                                                    let row_count = field_row_count.max(add_field_row);
                                                     view! {
-                                                        <article class="form-builder-field">
-                                                            <div class="form-builder-field__header">
-                                                                <h4>{format!("Field {}", index + 1)}</h4>
-                                                                <button
-                                                                    class="icon-button icon-button--control"
-                                                                    type="button"
-                                                                    aria-label="Remove field"
-                                                                    on:click=move |_| {
-                                                                        builder_fields.update(|fields| {
-                                                                            fields.retain(|field| field.id != field_id);
-                                                                        });
-                                                                    }
-                                                                >
-                                                                    <X/>
-                                                                </button>
+                                                        <article class="form-builder-section-card">
+                                                            <div class="form-builder-section-card__header">
+                                                                <h4>{section.title.clone()}</h4>
                                                             </div>
 
-                                                            <div class="form-grid">
-                                                                <label class="form-field" for=format!("form-field-label-{field_id}")>
-                                                                    <span>"Field Label"</span>
+                                                            <div class="form-grid form-builder-section-card__settings">
+                                                                <label class="form-field" for=format!("form-section-title-{section_id}")>
+                                                                    <span>"Section Title"</span>
                                                                     <input
-                                                                        id=format!("form-field-label-{field_id}")
+                                                                        id=format!("form-section-title-{section_id}")
                                                                         type="text"
                                                                         autocomplete="off"
-                                                                        prop:value=field.label.clone()
+                                                                        prop:value=section.title.clone()
                                                                         on:input=move |event| {
-                                                                            let next_label = event_target_value(&event);
-                                                                            builder_fields.update(|fields| {
-                                                                                if let Some(field) = fields.iter_mut().find(|field| field.id == field_id) {
-                                                                                    field.label = next_label.clone();
-                                                                                    if !field.key_was_edited {
-                                                                                        field.key = slug_from_label(&next_label);
-                                                                                    }
+                                                                            let next_title = event_target_value(&event);
+                                                                            builder_sections.update(|sections| {
+                                                                                if let Some(section) = sections.iter_mut().find(|section| section.id == section_id) {
+                                                                                    section.title = next_title.clone();
                                                                                 }
                                                                             });
                                                                         }
                                                                     />
                                                                 </label>
 
-                                                                <label class="form-field" for=format!("form-field-key-{field_id}")>
-                                                                    <span>"Field Key"</span>
-                                                                    <input
-                                                                        id=format!("form-field-key-{field_id}")
-                                                                        type="text"
-                                                                        autocomplete="off"
-                                                                        prop:value=field.key.clone()
-                                                                        on:input=move |event| {
-                                                                            let next_key = slug_from_label(&event_target_value(&event));
-                                                                            builder_fields.update(|fields| {
-                                                                                if let Some(field) = fields.iter_mut().find(|field| field.id == field_id) {
-                                                                                    field.key = next_key.clone();
-                                                                                    field.key_was_edited = true;
-                                                                                }
-                                                                            });
-                                                                        }
-                                                                    />
-                                                                </label>
-
-                                                                <label class="form-field" for=format!("form-field-type-{field_id}")>
-                                                                    <span>"Field Type"</span>
+                                                                <label class="form-field" for=format!("form-section-columns-{section_id}")>
+                                                                    <span>"Grid Columns"</span>
                                                                     <select
-                                                                        id=format!("form-field-type-{field_id}")
-                                                                        prop:value=field.field_type.clone()
+                                                                        id=format!("form-section-columns-{section_id}")
+                                                                        prop:value=section.column_count
                                                                         on:change=move |event| {
-                                                                            let next_type = event_target_value(&event);
-                                                                            builder_fields.update(|fields| {
-                                                                                if let Some(field) = fields.iter_mut().find(|field| field.id == field_id) {
-                                                                                    field.field_type = next_type.clone();
+                                                                            let next_columns = event_target_value(&event)
+                                                                                .parse::<i32>()
+                                                                                .unwrap_or(1)
+                                                                                .clamp(1, 12);
+                                                                            builder_sections.update(|sections| {
+                                                                                if let Some(section) = sections.iter_mut().find(|section| section.id == section_id) {
+                                                                                    section.column_count = next_columns;
                                                                                 }
                                                                             });
                                                                         }
                                                                     >
-                                                                        <option value="text">"Text"</option>
-                                                                        <option value="number">"Number"</option>
-                                                                        <option value="date">"Date"</option>
-                                                                        <option value="boolean">"Checkbox"</option>
+                                                                        {(1..=12)
+                                                                            .map(|count| {
+                                                                                view! {
+                                                                                    <option value=count>{count}</option>
+                                                                                }
+                                                                            })
+                                                                            .collect_view()}
                                                                     </select>
                                                                 </label>
 
-                                                                <label class="form-field form-field--checkbox form-builder-field__required">
-                                                                    <input
-                                                                        type="checkbox"
-                                                                        prop:checked=field.required
-                                                                        on:change=move |event| {
-                                                                            let checked = event_target_checked(&event);
-                                                                            builder_fields.update(|fields| {
-                                                                                if let Some(field) = fields.iter_mut().find(|field| field.id == field_id) {
-                                                                                    field.required = checked;
+                                                                <label class="form-field form-field--wide" for=format!("form-section-description-{section_id}")>
+                                                                    <span>"Description"</span>
+                                                                    <textarea
+                                                                        id=format!("form-section-description-{section_id}")
+                                                                        prop:value=section.description.clone()
+                                                                        on:input=move |event| {
+                                                                            let next_description = event_target_value(&event);
+                                                                            builder_sections.update(|sections| {
+                                                                                if let Some(section) = sections.iter_mut().find(|section| section.id == section_id) {
+                                                                                    section.description = next_description.clone();
                                                                                 }
                                                                             });
                                                                         }
-                                                                    />
-                                                                    <span>"Required"</span>
+                                                                    ></textarea>
                                                                 </label>
+                                                            </div>
+
+                                                            <div
+                                                                class="form-builder-layout-grid"
+                                                                style=format!(
+                                                                    "--form-builder-columns: {column_count}; --form-builder-rows: {row_count}; --form-builder-max-height: {}px;",
+                                                                    row_count * 80,
+                                                                )
+                                                                >
+                                                                <div class="form-builder-grid-cells" aria-hidden="true">
+                                                                    {(1..=row_count)
+                                                                        .flat_map(|row| {
+                                                                            (1..=column_count).map(move |column| (row, column))
+                                                                        })
+                                                                        .map(|(row, column)| {
+                                                                            view! {
+                                                                                <div
+                                                                                    id=format!("form-builder-section-{section_id}-cell-r{row}-c{column}")
+                                                                                    class="form-builder-grid-cell"
+                                                                                    data-row=row
+                                                                                    data-column=column
+                                                                                    style=format!("grid-column: {column}; grid-row: {row};")
+                                                                                    on:mouseup=move |_| {
+                                                                                        let Some(field_id) = dragged_builder_field.get_untracked() else {
+                                                                                            return;
+                                                                                        };
+                                                                                        builder_fields.update(|fields| {
+                                                                                            let Some(position) = fields.iter().position(|field| field.id == field_id) else {
+                                                                                                return;
+                                                                                            };
+                                                                                            let mut candidate = fields[position].clone();
+                                                                                            candidate.section_id = section_id;
+                                                                                            candidate.grid_row = row;
+                                                                                            candidate.grid_column = column;
+                                                                                            let max_width = (column_count - column + 1).max(1);
+                                                                                            candidate.grid_width = candidate.grid_width.min(max_width);
+
+                                                                                            if !form_builder_field_has_collision(&candidate, fields) {
+                                                                                                fields[position] = candidate;
+                                                                                            }
+                                                                                        });
+                                                                                        dragged_builder_field.set(None);
+                                                                                    }
+                                                                                    on:dragover=move |event| {
+                                                                                        if dragged_builder_field.get_untracked().is_some() {
+                                                                                            event.prevent_default();
+                                                                                        }
+                                                                                    }
+                                                                                    on:drop=move |event| {
+                                                                                        event.prevent_default();
+                                                                                        let Some(field_id) = dragged_builder_field.get_untracked() else {
+                                                                                            return;
+                                                                                        };
+                                                                                        builder_fields.update(|fields| {
+                                                                                            let Some(position) = fields.iter().position(|field| field.id == field_id) else {
+                                                                                                return;
+                                                                                            };
+                                                                                            let mut candidate = fields[position].clone();
+                                                                                            candidate.section_id = section_id;
+                                                                                            candidate.grid_row = row;
+                                                                                            candidate.grid_column = column;
+                                                                                            let max_width = (column_count - column + 1).max(1);
+                                                                                            candidate.grid_width = candidate.grid_width.min(max_width);
+
+                                                                                            if !form_builder_field_has_collision(&candidate, fields) {
+                                                                                                fields[position] = candidate;
+                                                                                            }
+                                                                                        });
+                                                                                        dragged_builder_field.set(None);
+                                                                                    }
+                                                                                ></div>
+                                                                            }
+                                                                        })
+                                                                        .collect_view()}
+                                                                </div>
+                                                                {section_fields
+                                                                    .into_iter()
+                                                                    .map(|field| {
+                                                                                let field_id = field.id;
+                                                                                let display_label = if field.label.trim().is_empty() {
+                                                                                    format!("Field {field_id}")
+                                                                                } else {
+                                                                                    field.label.clone()
+                                                                                };
+                                                                                let tooltip_label = display_label.clone();
+                                                                                let aria_label = format!("Configure {display_label}");
+                                                                                let heading_label = display_label.clone();
+                                                                                let type_icon = form_builder_field_type_icon(&field.field_type);
+                                                                                view! {
+                                                                                    <button
+                                                                                        class="form-builder-grid-tile form-builder-grid-tile--field form-builder-grid-field form-builder-grid-field--summary"
+                                                                                        type="button"
+                                                                                        title=tooltip_label
+                                                                                        aria-label=aria_label
+                                                                                        style=format!(
+                                                                                            "grid-column: {} / span {}; grid-row: {} / span {};",
+                                                                                            field.grid_column.max(1),
+                                                                                            field.grid_width.max(1),
+                                                                                            field.grid_row.max(1),
+                                                                                            field.grid_height.max(1),
+                                                                                        )
+                                                                                        on:mousedown=move |event: leptos::ev::MouseEvent| {
+                                                                                            if event.button() == 0 {
+                                                                                                dragged_builder_field.set(Some(field_id));
+                                                                                            }
+                                                                                        }
+                                                                                        on:click=move |_| {
+                                                                                            dragged_builder_field.set(None);
+                                                                                            active_builder_field.set(Some(field_id));
+                                                                                        }
+                                                                                    >
+                                                                                        <div class="form-builder-grid-field__summary">
+                                                                                            <span class="form-builder-field-type-icon">{type_icon}</span>
+                                                                                            <div>
+                                                                                                <h5>{heading_label}</h5>
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    </button>
+                                                                                }
+                                                                            })
+                                                                            .collect_view()}
+                                                                <button
+                                                                    class="form-builder-grid-tile form-builder-grid-tile--add form-builder-add-field-card"
+                                                                    type="button"
+                                                                    aria-label="Add field"
+                                                                    title="Add field"
+                                                                    style=format!(
+                                                                        "grid-column: {add_field_column} / span 1; grid-row: {add_field_row} / span 1;",
+                                                                    )
+                                                                    on:click=move |_| {
+                                                                        let field_id = next_builder_field_id.get_untracked();
+                                                                        next_builder_field_id.set(field_id + 1);
+                                                                        let existing_fields = builder_fields.get_untracked();
+                                                                        let new_field = blank_form_builder_field(field_id, section_id, &existing_fields, column_count);
+                                                                        builder_fields.update(|fields| fields.push(new_field));
+                                                                    }
+                                                                >
+                                                                    <div class="form-builder-grid-field__summary">
+                                                                        <span class="form-builder-field-type-icon">
+                                                                            <Plus/>
+                                                                        </span>
+                                                                        <div>
+                                                                            <h5>"Add Field"</h5>
+                                                                        </div>
+                                                                    </div>
+                                                                </button>
                                                             </div>
                                                         </article>
                                                     }
@@ -5016,11 +5485,253 @@ pub fn FormsNewPage() -> impl IntoView {
 
                                 <div class="form-actions">
                                     <Button label="Cancel" href="/forms"/>
+                                    <button class="button button--secondary" type="submit" disabled=move || !can_submit()>
+                                        {move || if is_saving.get() { "Saving..." } else { "Save as Draft" }}
+                                    </button>
                                     <button class="button" type="submit" disabled=move || !can_submit()>
                                         {move || if is_saving.get() { "Creating..." } else { "Create Form" }}
                                     </button>
                                 </div>
                             </form>
+                            <Portal>
+                                <Show when=move || active_builder_field.get().is_some()>
+                                    {move || {
+                                        let close = move |_| active_builder_field.set(None);
+                                        let field_id = active_builder_field.get().unwrap_or_default();
+                                        let field = builder_fields
+                                            .get()
+                                            .into_iter()
+                                            .find(|field| field.id == field_id);
+                                        field
+                                            .map(|field| {
+                                                let display_label = if field.label.trim().is_empty() {
+                                                    format!("Field {}", field.id)
+                                                } else {
+                                                    field.label.clone()
+                                                };
+                                                let section_column_count = builder_sections
+                                                    .get()
+                                                    .into_iter()
+                                                    .find(|section| section.id == field.section_id)
+                                                    .map(|section| section.column_count.clamp(1, 12))
+                                                    .unwrap_or(12);
+                                                let section_fields_for_bounds = builder_fields
+                                                    .get()
+                                                    .into_iter()
+                                                    .filter(|candidate| candidate.section_id == field.section_id)
+                                                    .collect::<Vec<_>>();
+                                                let displayed_rows = section_fields_for_bounds
+                                                    .iter()
+                                                    .map(|candidate| {
+                                                        candidate.grid_row.max(1) + candidate.grid_height.max(1) - 1
+                                                    })
+                                                    .max()
+                                                    .unwrap_or(1)
+                                                    .max(3);
+                                                let row_max = displayed_rows + 1;
+                                                let width_max = max_form_builder_field_width(
+                                                    &field,
+                                                    &section_fields_for_bounds,
+                                                    section_column_count,
+                                                );
+                                                let height_max = max_form_builder_field_height(
+                                                    &field,
+                                                    &section_fields_for_bounds,
+                                                );
+                                                view! {
+                                                    <section class="sheet-overlay form-field-config-overlay" aria-label="Field configuration">
+                                                        <button class="sheet-overlay__scrim" type="button" aria-label="Close field configuration" on:click=close></button>
+                                                        <aside class="sheet-panel blurred-surface form-field-config-sheet" role="dialog" aria-modal="true" aria-label="Field configuration">
+                                                            <div class="sheet-panel__actions">
+                                                                <button
+                                                                    class="icon-button icon-button--danger"
+                                                                    type="button"
+                                                                    aria-label="Delete field"
+                                                                    title="Delete field"
+                                                                    on:click=move |_| {
+                                                                        builder_fields.update(|fields| {
+                                                                            fields.retain(|field| field.id != field_id);
+                                                                        });
+                                                                        active_builder_field.set(None);
+                                                                    }
+                                                                >
+                                                                    <Trash2/>
+                                                                </button>
+                                                                <button class="icon-button sheet-panel__close" type="button" aria-label="Close field configuration" title="Close field configuration" on:click=close>
+                                                                    <X/>
+                                                                </button>
+                                                            </div>
+
+                                                            <header class="sheet-panel__header">
+                                                                <p>"Field Configuration"</p>
+                                                                <h2>{display_label}</h2>
+                                                            </header>
+
+                                                            <section class="sheet-panel__section">
+                                                                <div class="form-grid form-builder-field-sheet-controls">
+                                                                    <label class="form-field" for=format!("sheet-form-field-label-{field_id}")>
+                                                                        <span>"Field Label"</span>
+                                                                        <input
+                                                                            id=format!("sheet-form-field-label-{field_id}")
+                                                                            type="text"
+                                                                            autocomplete="off"
+                                                                            prop:value=field.label.clone()
+                                                                            on:input=move |event| {
+                                                                                let next_label = event_target_value(&event);
+                                                                                builder_fields.update(|fields| {
+                                                                                    if let Some(field) = fields.iter_mut().find(|field| field.id == field_id) {
+                                                                                        field.label = next_label.clone();
+                                                                                        if !field.key_was_edited {
+                                                                                            field.key = slug_from_label(&next_label);
+                                                                                        }
+                                                                                    }
+                                                                                });
+                                                                            }
+                                                                        />
+                                                                    </label>
+
+                                                                    <label class="form-field" for=format!("sheet-form-field-key-{field_id}")>
+                                                                        <span>"Field Key"</span>
+                                                                        <input
+                                                                            id=format!("sheet-form-field-key-{field_id}")
+                                                                            type="text"
+                                                                            autocomplete="off"
+                                                                            prop:value=field.key.clone()
+                                                                            on:input=move |event| {
+                                                                                let next_key = slug_from_label(&event_target_value(&event));
+                                                                                builder_fields.update(|fields| {
+                                                                                    if let Some(field) = fields.iter_mut().find(|field| field.id == field_id) {
+                                                                                        field.key = next_key.clone();
+                                                                                        field.key_was_edited = true;
+                                                                                    }
+                                                                                });
+                                                                            }
+                                                                        />
+                                                                    </label>
+
+                                                                    <label class="form-field" for=format!("sheet-form-field-type-{field_id}")>
+                                                                        <span>"Field Type"</span>
+                                                                        <select
+                                                                            id=format!("sheet-form-field-type-{field_id}")
+                                                                            prop:value=field.field_type.clone()
+                                                                            on:change=move |event| {
+                                                                                let next_type = event_target_value(&event);
+                                                                                builder_fields.update(|fields| {
+                                                                                    if let Some(field) = fields.iter_mut().find(|field| field.id == field_id) {
+                                                                                        field.field_type = next_type.clone();
+                                                                                    }
+                                                                                });
+                                                                            }
+                                                                        >
+                                                                            <option value="text">"Text"</option>
+                                                                            <option value="number">"Number"</option>
+                                                                            <option value="date">"Date"</option>
+                                                                            <option value="boolean">"Checkbox"</option>
+                                                                            <option value="single_choice">"Single choice"</option>
+                                                                            <option value="multi_choice">"Multi choice"</option>
+                                                                        </select>
+                                                                    </label>
+
+                                                                    <label class="form-field form-field--checkbox form-builder-field__required">
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            prop:checked=field.required
+                                                                            on:change=move |event| {
+                                                                                let checked = event_target_checked(&event);
+                                                                                builder_fields.update(|fields| {
+                                                                                    if let Some(field) = fields.iter_mut().find(|field| field.id == field_id) {
+                                                                                        field.required = checked;
+                                                                                    }
+                                                                                });
+                                                                            }
+                                                                        />
+                                                                        <span>"Required"</span>
+                                                                    </label>
+
+                                                                    {["Row", "Column", "Width", "Height"]
+                                                                        .into_iter()
+                                                                        .enumerate()
+                                                                        .map(|(index, label)| {
+                                                                            let value = match index {
+                                                                                0 => field.grid_row,
+                                                                                1 => field.grid_column,
+                                                                                2 => field.grid_width,
+                                                                                _ => field.grid_height,
+                                                                            };
+                                                                            let max_value = match index {
+                                                                                0 => row_max,
+                                                                                1 => (section_column_count - field.grid_width.max(1) + 1)
+                                                                                    .clamp(1, section_column_count.max(1)),
+                                                                                2 => width_max,
+                                                                                _ => height_max,
+                                                                            }
+                                                                            .max(1);
+                                                                            let value = value.clamp(1, max_value);
+                                                                            let valid_values = valid_form_builder_layout_values(
+                                                                                &field,
+                                                                                &section_fields_for_bounds,
+                                                                                index,
+                                                                                max_value,
+                                                                                section_column_count,
+                                                                            );
+                                                                            let control_id = format!("sheet-form-field-layout-{index}-{field_id}");
+                                                                            let input_id = control_id.clone();
+                                                                            view! {
+                                                                                <label class="form-field" for=control_id>
+                                                                                    <span>{label}</span>
+                                                                                    <select
+                                                                                        id=input_id
+                                                                                        on:change=move |event| {
+                                                                                            let value = event_target_value(&event)
+                                                                                                .parse::<i32>()
+                                                                                                .unwrap_or(1)
+                                                                                                .clamp(1, max_value);
+                                                                                            builder_fields.update(|fields| {
+                                                                                                if let Some(position) = fields.iter().position(|field| field.id == field_id) {
+                                                                                                    let candidate = form_builder_layout_candidate(
+                                                                                                        &fields[position],
+                                                                                                        index,
+                                                                                                        value,
+                                                                                                        section_column_count,
+                                                                                                    );
+
+                                                                                                    if !form_builder_field_has_collision(&candidate, fields) {
+                                                                                                        fields[position] = candidate;
+                                                                                                    }
+                                                                                                }
+                                                                                            });
+                                                                                        }
+                                                                                    >
+                                                                                        {valid_values
+                                                                                            .into_iter()
+                                                                                            .map(|option_value| {
+                                                                                                view! {
+                                                                                                    <option
+                                                                                                        value=option_value.to_string()
+                                                                                                        selected=option_value == value
+                                                                                                    >
+                                                                                                        {option_value}
+                                                                                                    </option>
+                                                                                                }
+                                                                                            })
+                                                                                            .collect_view()}
+                                                                                    </select>
+                                                                                </label>
+                                                                            }
+                                                                        })
+                                                                        .collect_view()}
+                                                                </div>
+                                                            </section>
+                                                        </aside>
+                                                    </section>
+                                                }
+                                                .into_any()
+                                            })
+                                            .unwrap_or_else(|| view! {}.into_any())
+                                    }}
+                                </Show>
+                            </Portal>
+                            </div>
                         }
                         .into_any()
                     }

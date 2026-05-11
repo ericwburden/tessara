@@ -56,6 +56,14 @@ pub struct CreateFormFieldRequest {
     field_type: String,
     required: bool,
     position: i32,
+    #[serde(default = "default_form_field_grid_row")]
+    grid_row: i32,
+    #[serde(default = "default_form_field_grid_column")]
+    grid_column: i32,
+    #[serde(default = "default_form_field_grid_width")]
+    grid_width: i32,
+    #[serde(default = "default_form_field_grid_height")]
+    grid_height: i32,
 }
 
 #[derive(Deserialize)]
@@ -76,6 +84,14 @@ pub struct UpdateFormFieldRequest {
     field_type: String,
     required: bool,
     position: i32,
+    #[serde(default = "default_form_field_grid_row")]
+    grid_row: i32,
+    #[serde(default = "default_form_field_grid_column")]
+    grid_column: i32,
+    #[serde(default = "default_form_field_grid_width")]
+    grid_width: i32,
+    #[serde(default = "default_form_field_grid_height")]
+    grid_height: i32,
 }
 
 #[derive(Serialize)]
@@ -106,6 +122,22 @@ fn default_form_section_column_count() -> i32 {
     1
 }
 
+fn default_form_field_grid_row() -> i32 {
+    1
+}
+
+fn default_form_field_grid_column() -> i32 {
+    1
+}
+
+fn default_form_field_grid_width() -> i32 {
+    1
+}
+
+fn default_form_field_grid_height() -> i32 {
+    1
+}
+
 #[derive(Serialize)]
 pub struct RenderedField {
     id: Uuid,
@@ -114,6 +146,10 @@ pub struct RenderedField {
     field_type: String,
     required: bool,
     position: i32,
+    grid_row: i32,
+    grid_column: i32,
+    grid_width: i32,
+    grid_height: i32,
 }
 
 #[derive(Serialize)]
@@ -1056,14 +1092,20 @@ pub async fn create_form_field(
     require_text("field label", &payload.label)?;
     require_form_field_key_available(&state.pool, form_version_id, &payload.key).await?;
     let field_type = parse_field_type(&payload.field_type)?;
+    require_form_field_layout(
+        payload.grid_row,
+        payload.grid_column,
+        payload.grid_width,
+        payload.grid_height,
+    )?;
     assert_section_belongs_to_form_version(&state.pool, form_version_id, payload.section_id)
         .await?;
 
     let id = sqlx::query_scalar(
         r#"
         INSERT INTO form_fields
-            (form_version_id, section_id, key, label, field_type, required, position)
-        VALUES ($1, $2, $3, $4, $5::field_type, $6, $7)
+            (form_version_id, section_id, key, label, field_type, required, position, grid_row, grid_column, grid_width, grid_height)
+        VALUES ($1, $2, $3, $4, $5::field_type, $6, $7, $8, $9, $10, $11)
         RETURNING id
         "#,
     )
@@ -1074,6 +1116,10 @@ pub async fn create_form_field(
     .bind(field_type.as_str())
     .bind(payload.required)
     .bind(payload.position)
+    .bind(payload.grid_row)
+    .bind(payload.grid_column)
+    .bind(payload.grid_width)
+    .bind(payload.grid_height)
     .fetch_one(&state.pool)
     .await?;
 
@@ -1149,6 +1195,12 @@ pub async fn update_form_field(
         payload.section_id,
     )
     .await?;
+    require_form_field_layout(
+        payload.grid_row,
+        payload.grid_column,
+        payload.grid_width,
+        payload.grid_height,
+    )?;
 
     sqlx::query(
         r#"
@@ -1158,8 +1210,12 @@ pub async fn update_form_field(
             label = $3,
             field_type = $4::field_type,
             required = $5,
-            position = $6
-        WHERE id = $7
+            position = $6,
+            grid_row = $7,
+            grid_column = $8,
+            grid_width = $9,
+            grid_height = $10
+        WHERE id = $11
         "#,
     )
     .bind(payload.section_id)
@@ -1168,6 +1224,10 @@ pub async fn update_form_field(
     .bind(field_type.as_str())
     .bind(payload.required)
     .bind(payload.position)
+    .bind(payload.grid_row)
+    .bind(payload.grid_column)
+    .bind(payload.grid_width)
+    .bind(payload.grid_height)
     .bind(field_id)
     .execute(&state.pool)
     .await?;
@@ -1310,10 +1370,21 @@ pub async fn render_form_version(
 
     let field_rows = sqlx::query(
         r#"
-        SELECT id, section_id, key, label, field_type::text AS field_type, required, position
+        SELECT
+            id,
+            section_id,
+            key,
+            label,
+            field_type::text AS field_type,
+            required,
+            position,
+            grid_row,
+            grid_column,
+            grid_width,
+            grid_height
         FROM form_fields
         WHERE form_version_id = $1
-        ORDER BY position, label
+        ORDER BY position, grid_row, grid_column, label
         "#,
     )
     .bind(form_version_id)
@@ -1334,6 +1405,10 @@ pub async fn render_form_version(
                     field_type: field.try_get("field_type")?,
                     required: field.try_get("required")?,
                     position: field.try_get("position")?,
+                    grid_row: field.try_get("grid_row")?,
+                    grid_column: field.try_get("grid_column")?,
+                    grid_width: field.try_get("grid_width")?,
+                    grid_height: field.try_get("grid_height")?,
                 });
             }
         }
@@ -1389,13 +1464,43 @@ fn normalize_form_section_description(description: &str) -> String {
 }
 
 fn require_form_section_column_count(column_count: i32) -> ApiResult<i32> {
-    if matches!(column_count, 1 | 2) {
+    if (1..=12).contains(&column_count) {
         Ok(column_count)
     } else {
         Err(ApiError::BadRequest(
-            "section column count must be 1 or 2".into(),
+            "section column count must be between 1 and 12".into(),
         ))
     }
+}
+
+fn require_form_field_layout(
+    grid_row: i32,
+    grid_column: i32,
+    grid_width: i32,
+    grid_height: i32,
+) -> ApiResult<()> {
+    if grid_row < 1 {
+        return Err(ApiError::BadRequest(
+            "field grid row must be at least 1".into(),
+        ));
+    }
+    if grid_column < 1 {
+        return Err(ApiError::BadRequest(
+            "field grid column must be at least 1".into(),
+        ));
+    }
+    if grid_width < 1 {
+        return Err(ApiError::BadRequest(
+            "field grid width must be at least 1".into(),
+        ));
+    }
+    if grid_height < 1 {
+        return Err(ApiError::BadRequest(
+            "field grid height must be at least 1".into(),
+        ));
+    }
+
+    Ok(())
 }
 
 async fn assert_form_version_draft(pool: &sqlx::PgPool, form_version_id: Uuid) -> ApiResult<()> {
@@ -1577,6 +1682,10 @@ struct ComparableFormField {
     section_title: String,
     section_position: i32,
     field_position: i32,
+    grid_row: i32,
+    grid_column: i32,
+    grid_width: i32,
+    grid_height: i32,
 }
 
 struct FormVersionContract {
@@ -1726,6 +1835,10 @@ fn classify_contract_change(
             || published_field.section_title != draft_field.section_title
             || published_field.section_position != draft_field.section_position
             || published_field.field_position != draft_field.field_position
+            || published_field.grid_row != draft_field.grid_row
+            || published_field.grid_column != draft_field.grid_column
+            || published_field.grid_width != draft_field.grid_width
+            || published_field.grid_height != draft_field.grid_height
         {
             bump = bump.max(SemanticBump::Patch);
         }
@@ -1774,6 +1887,10 @@ async fn load_form_version_contract(
             form_fields.field_type::text AS field_type,
             form_fields.required,
             form_fields.position,
+            form_fields.grid_row,
+            form_fields.grid_column,
+            form_fields.grid_width,
+            form_fields.grid_height,
             form_sections.title AS section_title,
             form_sections.position AS section_position
         FROM form_fields
@@ -1808,6 +1925,10 @@ async fn load_form_version_contract(
             section_title: row.try_get("section_title")?,
             section_position: row.try_get("section_position")?,
             field_position: row.try_get("position")?,
+            grid_row: row.try_get("grid_row")?,
+            grid_column: row.try_get("grid_column")?,
+            grid_width: row.try_get("grid_width")?,
+            grid_height: row.try_get("grid_height")?,
         };
         fields_by_key.insert(field.key.clone(), field);
     }
