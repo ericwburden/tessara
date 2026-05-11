@@ -11,6 +11,10 @@ use leptos::portal::Portal;
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+#[cfg(feature = "hydrate")]
+use wasm_bindgen::closure::Closure;
+#[cfg(feature = "hydrate")]
+use wasm_bindgen::JsCast;
 
 use crate::infra::routing::{NodeRouteParams, require_route_params};
 use crate::ui::components::{
@@ -743,6 +747,113 @@ struct FormBuilderDragPreview {
     section_id: usize,
     row: i32,
     column: i32,
+}
+
+fn set_form_builder_drag_preview(
+    builder_drag_preview: RwSignal<Option<FormBuilderDragPreview>>,
+    next_preview: FormBuilderDragPreview,
+) {
+    if builder_drag_preview.get_untracked() != Some(next_preview) {
+        builder_drag_preview.set(Some(next_preview));
+    }
+}
+
+fn clear_form_builder_drag_intent(
+    builder_drag_preview: RwSignal<Option<FormBuilderDragPreview>>,
+    pending_builder_drag_preview: RwSignal<Option<FormBuilderDragPreview>>,
+    builder_drag_preview_timeout: RwSignal<Option<i32>>,
+) {
+    pending_builder_drag_preview.set(None);
+    builder_drag_preview.set(None);
+
+    #[cfg(feature = "hydrate")]
+    {
+        if let (Some(window), Some(timeout_handle)) = (
+            web_sys::window(),
+            builder_drag_preview_timeout.get_untracked(),
+        ) {
+            window.clear_timeout_with_handle(timeout_handle);
+        }
+    }
+
+    builder_drag_preview_timeout.set(None);
+}
+
+fn schedule_form_builder_drag_preview(
+    builder_drag_preview: RwSignal<Option<FormBuilderDragPreview>>,
+    pending_builder_drag_preview: RwSignal<Option<FormBuilderDragPreview>>,
+    _builder_drag_preview_timeout: RwSignal<Option<i32>>,
+    next_preview: FormBuilderDragPreview,
+) {
+    if builder_drag_preview.get_untracked() == Some(next_preview) {
+        return;
+    }
+
+    pending_builder_drag_preview.set(Some(next_preview));
+
+    #[cfg(feature = "hydrate")]
+    {
+        if let (Some(window), Some(timeout_handle)) = (
+            web_sys::window(),
+            _builder_drag_preview_timeout.get_untracked(),
+        ) {
+            window.clear_timeout_with_handle(timeout_handle);
+        }
+
+        let pending_preview = pending_builder_drag_preview;
+        let preview_signal = builder_drag_preview;
+        let timeout_signal = _builder_drag_preview_timeout;
+        let callback = Closure::wrap(Box::new(move || {
+            if pending_preview.get_untracked() == Some(next_preview) {
+                set_form_builder_drag_preview(preview_signal, next_preview);
+            }
+            timeout_signal.set(None);
+        }) as Box<dyn FnMut()>);
+
+        if let Some(window) = web_sys::window() {
+            if let Ok(timeout_handle) = window
+                .set_timeout_with_callback_and_timeout_and_arguments_0(
+                    callback.as_ref().unchecked_ref(),
+                    1_000,
+                )
+            {
+                _builder_drag_preview_timeout.set(Some(timeout_handle));
+                callback.forget();
+                return;
+            }
+        }
+    }
+
+    #[cfg(not(feature = "hydrate"))]
+    set_form_builder_drag_preview(builder_drag_preview, next_preview);
+}
+
+fn commit_form_builder_drag_preview(
+    builder_fields: RwSignal<Vec<FormBuilderFieldDraft>>,
+    builder_drag_preview: RwSignal<Option<FormBuilderDragPreview>>,
+    pending_builder_drag_preview: RwSignal<Option<FormBuilderDragPreview>>,
+    builder_drag_preview_timeout: RwSignal<Option<i32>>,
+    dragged_builder_field: RwSignal<Option<usize>>,
+    suppress_builder_field_click: RwSignal<Option<usize>>,
+    column_count: i32,
+) {
+    let preview = builder_drag_preview
+        .get_untracked()
+        .or_else(|| pending_builder_drag_preview.get_untracked());
+
+    if let Some(preview) = preview {
+        builder_fields.update(|fields| {
+            *fields = form_builder_reflow_section_fields(fields, preview, column_count);
+        });
+        suppress_builder_field_click.set(Some(preview.field_id));
+    }
+
+    clear_form_builder_drag_intent(
+        builder_drag_preview,
+        pending_builder_drag_preview,
+        builder_drag_preview_timeout,
+    );
+    dragged_builder_field.set(None);
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -5151,6 +5262,8 @@ pub fn FormsNewPage() -> impl IntoView {
     let active_builder_field = RwSignal::new(None::<usize>);
     let dragged_builder_field = RwSignal::new(None::<usize>);
     let builder_drag_preview = RwSignal::new(None::<FormBuilderDragPreview>);
+    let pending_builder_drag_preview = RwSignal::new(None::<FormBuilderDragPreview>);
+    let builder_drag_preview_timeout = RwSignal::new(None::<i32>);
     let suppress_builder_field_click = RwSignal::new(None::<usize>);
     let next_builder_field_id = RwSignal::new(2usize);
     let is_loading = RwSignal::new(true);
@@ -5437,20 +5550,30 @@ pub fn FormsNewPage() -> impl IntoView {
                                                                     "--form-builder-columns: {column_count}; --form-builder-rows: {row_count}; --form-builder-max-height: {}px;",
                                                                     row_count * 80,
                                                                 )
-                                                                on:mouseup=move |_| {
-                                                                    if let Some(preview) = builder_drag_preview.get_untracked() {
-                                                                        builder_fields.update(|fields| {
-                                                                            *fields = form_builder_reflow_section_fields(fields, preview, column_count);
-                                                                        });
-                                                                        suppress_builder_field_click.set(Some(preview.field_id));
+                                                                on:dragover=move |event| {
+                                                                    if dragged_builder_field.get_untracked().is_some() {
+                                                                        event.prevent_default();
                                                                     }
-                                                                    builder_drag_preview.set(None);
-                                                                    dragged_builder_field.set(None);
+                                                                }
+                                                                on:drop=move |event| {
+                                                                    event.prevent_default();
+                                                                    commit_form_builder_drag_preview(
+                                                                        builder_fields,
+                                                                        builder_drag_preview,
+                                                                        pending_builder_drag_preview,
+                                                                        builder_drag_preview_timeout,
+                                                                        dragged_builder_field,
+                                                                        suppress_builder_field_click,
+                                                                        column_count,
+                                                                    );
                                                                 }
                                                                 on:mouseleave=move |_| {
                                                                     if dragged_builder_field.get_untracked().is_some() {
-                                                                        builder_drag_preview.set(None);
-                                                                        dragged_builder_field.set(None);
+                                                                        clear_form_builder_drag_intent(
+                                                                            builder_drag_preview,
+                                                                            pending_builder_drag_preview,
+                                                                            builder_drag_preview_timeout,
+                                                                        );
                                                                     }
                                                                 }
                                                                 >
@@ -5467,54 +5590,26 @@ pub fn FormsNewPage() -> impl IntoView {
                                                                                     data-row=row
                                                                                     data-column=column
                                                                                     style=format!("grid-column: {column}; grid-row: {row};")
-                                                                                    on:mouseenter=move |_| {
-                                                                                        if let Some(field_id) = dragged_builder_field.get_untracked() {
-                                                                                            builder_drag_preview.set(Some(FormBuilderDragPreview {
-                                                                                                field_id,
-                                                                                                section_id,
-                                                                                                row,
-                                                                                                column,
-                                                                                            }));
-                                                                                        }
-                                                                                    }
                                                                                     on:dragenter=move |event| {
                                                                                         if let Some(field_id) = dragged_builder_field.get_untracked() {
                                                                                             event.prevent_default();
-                                                                                            builder_drag_preview.set(Some(FormBuilderDragPreview {
+                                                                                            schedule_form_builder_drag_preview(
+                                                                                                builder_drag_preview,
+                                                                                                pending_builder_drag_preview,
+                                                                                                builder_drag_preview_timeout,
+                                                                                                FormBuilderDragPreview {
                                                                                                 field_id,
                                                                                                 section_id,
                                                                                                 row,
                                                                                                 column,
-                                                                                            }));
+                                                                                                },
+                                                                                            );
                                                                                         }
-                                                                                    }
-                                                                                    on:mouseup=move |_| {
-                                                                                        let Some(preview) = builder_drag_preview.get_untracked() else {
-                                                                                            return;
-                                                                                        };
-                                                                                        builder_fields.update(|fields| {
-                                                                                            *fields = form_builder_reflow_section_fields(fields, preview, column_count);
-                                                                                        });
-                                                                                        suppress_builder_field_click.set(Some(preview.field_id));
-                                                                                        builder_drag_preview.set(None);
-                                                                                        dragged_builder_field.set(None);
                                                                                     }
                                                                                     on:dragover=move |event| {
                                                                                         if dragged_builder_field.get_untracked().is_some() {
                                                                                             event.prevent_default();
                                                                                         }
-                                                                                    }
-                                                                                    on:drop=move |event| {
-                                                                                        event.prevent_default();
-                                                                                        let Some(preview) = builder_drag_preview.get_untracked() else {
-                                                                                            return;
-                                                                                        };
-                                                                                        builder_fields.update(|fields| {
-                                                                                            *fields = form_builder_reflow_section_fields(fields, preview, column_count);
-                                                                                        });
-                                                                                        suppress_builder_field_click.set(Some(preview.field_id));
-                                                                                        builder_drag_preview.set(None);
-                                                                                        dragged_builder_field.set(None);
                                                                                     }
                                                                                 ></div>
                                                                             }
@@ -5554,12 +5649,6 @@ pub fn FormsNewPage() -> impl IntoView {
                                                                                             field.grid_row.max(1),
                                                                                             field.grid_height.max(1),
                                                                                         )
-                                                                                        on:mousedown=move |event: leptos::ev::MouseEvent| {
-                                                                                            if event.button() == 0 {
-                                                                                                dragged_builder_field.set(Some(field_id));
-                                                                                                builder_drag_preview.set(None);
-                                                                                            }
-                                                                                        }
                                                                                         on:dragstart=move |_event: leptos::ev::DragEvent| {
                                                                                             dragged_builder_field.set(Some(field_id));
                                                                                             builder_drag_preview.set(Some(FormBuilderDragPreview {
@@ -5569,37 +5658,21 @@ pub fn FormsNewPage() -> impl IntoView {
                                                                                                 column: field.grid_column.max(1),
                                                                                             }));
                                                                                         }
-                                                                                        on:mouseenter=move |_| {
-                                                                                            if let Some(dragged_field_id) = dragged_builder_field.get_untracked() {
-                                                                                                builder_drag_preview.set(Some(FormBuilderDragPreview {
-                                                                                                    field_id: dragged_field_id,
-                                                                                                    section_id,
-                                                                                                    row: field.grid_row.max(1),
-                                                                                                    column: field.grid_column.max(1),
-                                                                                                }));
-                                                                                            }
-                                                                                        }
                                                                                         on:dragenter=move |event| {
                                                                                             if let Some(dragged_field_id) = dragged_builder_field.get_untracked() {
                                                                                                 event.prevent_default();
-                                                                                                builder_drag_preview.set(Some(FormBuilderDragPreview {
+                                                                                                schedule_form_builder_drag_preview(
+                                                                                                    builder_drag_preview,
+                                                                                                    pending_builder_drag_preview,
+                                                                                                    builder_drag_preview_timeout,
+                                                                                                    FormBuilderDragPreview {
                                                                                                     field_id: dragged_field_id,
                                                                                                     section_id,
                                                                                                     row: field.grid_row.max(1),
                                                                                                     column: field.grid_column.max(1),
-                                                                                                }));
+                                                                                                    },
+                                                                                                );
                                                                                             }
-                                                                                        }
-                                                                                        on:mouseup=move |_| {
-                                                                                            let Some(preview) = builder_drag_preview.get_untracked() else {
-                                                                                                return;
-                                                                                            };
-                                                                                            builder_fields.update(|fields| {
-                                                                                                *fields = form_builder_reflow_section_fields(fields, preview, column_count);
-                                                                                            });
-                                                                                            suppress_builder_field_click.set(Some(preview.field_id));
-                                                                                            builder_drag_preview.set(None);
-                                                                                            dragged_builder_field.set(None);
                                                                                         }
                                                                                         on:click=move |_| {
                                                                                             if suppress_builder_field_click.get_untracked() == Some(field_id) {
@@ -5610,7 +5683,11 @@ pub fn FormsNewPage() -> impl IntoView {
                                                                                             }
                                                                                         }
                                                                                         on:dragend=move |_| {
-                                                                                            builder_drag_preview.set(None);
+                                                                                            clear_form_builder_drag_intent(
+                                                                                                builder_drag_preview,
+                                                                                                pending_builder_drag_preview,
+                                                                                                builder_drag_preview_timeout,
+                                                                                            );
                                                                                             dragged_builder_field.set(None);
                                                                                         }
                                                                                     >
@@ -5632,37 +5709,21 @@ pub fn FormsNewPage() -> impl IntoView {
                                                                     style=format!(
                                                                         "grid-column: {add_field_column} / span 1; grid-row: {add_field_row} / span 1;",
                                                                     )
-                                                                    on:mouseenter=move |_| {
-                                                                        if let Some(field_id) = dragged_builder_field.get_untracked() {
-                                                                            builder_drag_preview.set(Some(FormBuilderDragPreview {
-                                                                                field_id,
-                                                                                section_id,
-                                                                                row: add_field_row,
-                                                                                column: add_field_column,
-                                                                            }));
-                                                                        }
-                                                                    }
                                                                     on:dragenter=move |event| {
                                                                         if let Some(field_id) = dragged_builder_field.get_untracked() {
                                                                             event.prevent_default();
-                                                                            builder_drag_preview.set(Some(FormBuilderDragPreview {
+                                                                            schedule_form_builder_drag_preview(
+                                                                                builder_drag_preview,
+                                                                                pending_builder_drag_preview,
+                                                                                builder_drag_preview_timeout,
+                                                                                FormBuilderDragPreview {
                                                                                 field_id,
                                                                                 section_id,
                                                                                 row: add_field_row,
                                                                                 column: add_field_column,
-                                                                            }));
+                                                                                },
+                                                                            );
                                                                         }
-                                                                    }
-                                                                    on:mouseup=move |_| {
-                                                                        let Some(preview) = builder_drag_preview.get_untracked() else {
-                                                                            return;
-                                                                        };
-                                                                        builder_fields.update(|fields| {
-                                                                            *fields = form_builder_reflow_section_fields(fields, preview, column_count);
-                                                                        });
-                                                                        suppress_builder_field_click.set(Some(preview.field_id));
-                                                                        builder_drag_preview.set(None);
-                                                                        dragged_builder_field.set(None);
                                                                     }
                                                                     on:click=move |_| {
                                                                         if suppress_builder_field_click.get_untracked().is_some() {
