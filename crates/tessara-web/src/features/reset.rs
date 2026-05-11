@@ -12,9 +12,9 @@ use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 #[cfg(feature = "hydrate")]
-use wasm_bindgen::closure::Closure;
-#[cfg(feature = "hydrate")]
 use wasm_bindgen::JsCast;
+#[cfg(feature = "hydrate")]
+use wasm_bindgen::closure::Closure;
 
 use crate::infra::routing::{NodeRouteParams, require_route_params};
 use crate::ui::components::{
@@ -758,6 +758,36 @@ fn set_form_builder_drag_preview(
     }
 }
 
+#[cfg(feature = "hydrate")]
+fn clear_form_builder_drag_target_dom() {
+    let Some(document) = web_sys::window().and_then(|window| window.document()) else {
+        return;
+    };
+    let Ok(targets) = document.query_selector_all(".form-builder-grid-cell.is-drop-target") else {
+        return;
+    };
+
+    for index in 0..targets.length() {
+        if let Some(target) = targets.item(index) {
+            if let Ok(element) = target.dyn_into::<web_sys::Element>() {
+                let _ = element.class_list().remove_1("is-drop-target");
+            }
+        }
+    }
+}
+
+#[cfg(feature = "hydrate")]
+fn set_form_builder_drag_target_dom(target_id: &str) {
+    clear_form_builder_drag_target_dom();
+
+    if let Some(element) = web_sys::window()
+        .and_then(|window| window.document())
+        .and_then(|document| document.get_element_by_id(target_id))
+    {
+        let _ = element.class_list().add_1("is-drop-target");
+    }
+}
+
 fn clear_form_builder_drag_intent(
     builder_drag_preview: RwSignal<Option<FormBuilderDragPreview>>,
     pending_builder_drag_preview: RwSignal<Option<FormBuilderDragPreview>>,
@@ -774,6 +804,7 @@ fn clear_form_builder_drag_intent(
         ) {
             window.clear_timeout_with_handle(timeout_handle);
         }
+        clear_form_builder_drag_target_dom();
     }
 
     builder_drag_preview_timeout.set(None);
@@ -784,6 +815,7 @@ fn schedule_form_builder_drag_preview(
     pending_builder_drag_preview: RwSignal<Option<FormBuilderDragPreview>>,
     _builder_drag_preview_timeout: RwSignal<Option<i32>>,
     next_preview: FormBuilderDragPreview,
+    target_id: String,
 ) {
     if builder_drag_preview.get_untracked() == Some(next_preview) {
         return;
@@ -806,6 +838,7 @@ fn schedule_form_builder_drag_preview(
         let callback = Closure::wrap(Box::new(move || {
             if pending_preview.get_untracked() == Some(next_preview) {
                 set_form_builder_drag_preview(preview_signal, next_preview);
+                set_form_builder_drag_target_dom(&target_id);
             }
             timeout_signal.set(None);
         }) as Box<dyn FnMut()>);
@@ -825,7 +858,10 @@ fn schedule_form_builder_drag_preview(
     }
 
     #[cfg(not(feature = "hydrate"))]
-    set_form_builder_drag_preview(builder_drag_preview, next_preview);
+    {
+        set_form_builder_drag_preview(builder_drag_preview, next_preview);
+        let _ = target_id;
+    }
 }
 
 fn commit_form_builder_drag_preview(
@@ -837,9 +873,7 @@ fn commit_form_builder_drag_preview(
     suppress_builder_field_click: RwSignal<Option<usize>>,
     column_count: i32,
 ) {
-    let preview = builder_drag_preview
-        .get_untracked()
-        .or_else(|| pending_builder_drag_preview.get_untracked());
+    let preview = builder_drag_preview.get_untracked();
 
     if let Some(preview) = preview {
         builder_fields.update(|fields| {
@@ -5439,19 +5473,7 @@ pub fn FormsNewPage() -> impl IntoView {
                                                 .map(|section| {
                                                     let section_id = section.id;
                                                     let all_builder_fields = builder_fields.get();
-                                                    let section_drag_preview = builder_drag_preview
-                                                        .get()
-                                                        .filter(|preview| preview.section_id == section_id);
-                                                    let displayed_builder_fields = section_drag_preview
-                                                        .map(|preview| {
-                                                            form_builder_reflow_section_fields(
-                                                                &all_builder_fields,
-                                                                preview,
-                                                                section.column_count.max(1),
-                                                            )
-                                                        })
-                                                        .unwrap_or_else(|| all_builder_fields.clone());
-                                                    let section_fields = displayed_builder_fields
+                                                    let section_fields = all_builder_fields
                                                         .into_iter()
                                                         .filter(|field| field.section_id == section_id)
                                                         .collect::<Vec<_>>();
@@ -5603,6 +5625,7 @@ pub fn FormsNewPage() -> impl IntoView {
                                                                                                 row,
                                                                                                 column,
                                                                                                 },
+                                                                                                format!("form-builder-section-{section_id}-cell-r{row}-c{column}"),
                                                                                             );
                                                                                         }
                                                                                     }
@@ -5650,13 +5673,12 @@ pub fn FormsNewPage() -> impl IntoView {
                                                                                             field.grid_height.max(1),
                                                                                         )
                                                                                         on:dragstart=move |_event: leptos::ev::DragEvent| {
+                                                                                            clear_form_builder_drag_intent(
+                                                                                                builder_drag_preview,
+                                                                                                pending_builder_drag_preview,
+                                                                                                builder_drag_preview_timeout,
+                                                                                            );
                                                                                             dragged_builder_field.set(Some(field_id));
-                                                                                            builder_drag_preview.set(Some(FormBuilderDragPreview {
-                                                                                                field_id,
-                                                                                                section_id,
-                                                                                                row: field.grid_row.max(1),
-                                                                                                column: field.grid_column.max(1),
-                                                                                            }));
                                                                                         }
                                                                                         on:dragenter=move |event| {
                                                                                             if let Some(dragged_field_id) = dragged_builder_field.get_untracked() {
@@ -5671,6 +5693,11 @@ pub fn FormsNewPage() -> impl IntoView {
                                                                                                     row: field.grid_row.max(1),
                                                                                                     column: field.grid_column.max(1),
                                                                                                     },
+                                                                                                    format!(
+                                                                                                        "form-builder-section-{section_id}-cell-r{}-c{}",
+                                                                                                        field.grid_row.max(1),
+                                                                                                        field.grid_column.max(1),
+                                                                                                    ),
                                                                                                 );
                                                                                             }
                                                                                         }
@@ -5722,6 +5749,7 @@ pub fn FormsNewPage() -> impl IntoView {
                                                                                 row: add_field_row,
                                                                                 column: add_field_column,
                                                                                 },
+                                                                                format!("form-builder-section-{section_id}-cell-r{add_field_row}-c{add_field_column}"),
                                                                             );
                                                                         }
                                                                     }
