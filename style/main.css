@@ -1653,14 +1653,15 @@ input {
 
 .form-builder-layout-grid {
   --form-builder-grid-line: color-mix(in srgb, var(--color-border) 54%, transparent);
+  --form-builder-columns: 12;
   position: relative;
   display: grid;
   width: 100%;
   max-width: 100%;
   justify-self: stretch;
-  grid-template-columns: repeat(var(--form-builder-columns, 1), minmax(0, 1fr));
+  grid-template-columns: repeat(12, minmax(0, 1fr));
   grid-template-rows: repeat(var(--form-builder-rows, 3), minmax(0, 1fr));
-  aspect-ratio: var(--form-builder-columns, 1) / var(--form-builder-rows, 3);
+  aspect-ratio: 12 / var(--form-builder-rows, 3);
   max-height: var(--form-builder-max-height, 240px);
   gap: 0;
   border: 1px dashed var(--color-border);
@@ -1675,7 +1676,7 @@ input {
   display: grid;
   grid-column: 1 / -1;
   grid-row: 1 / -1;
-  grid-template-columns: repeat(var(--form-builder-columns, 1), minmax(0, 1fr));
+  grid-template-columns: repeat(12, minmax(0, 1fr));
   grid-template-rows: repeat(var(--form-builder-rows, 3), minmax(0, 1fr));
   min-width: 0;
   min-height: 0;
@@ -1683,9 +1684,40 @@ input {
 }
 
 .form-builder-grid-cell {
+  position: relative;
+  display: grid;
   min-width: 0;
   min-height: 0;
   box-shadow: inset 0 0 0 1px var(--form-builder-grid-line);
+}
+
+.form-builder-grid-cell--empty {
+  cursor: pointer;
+}
+
+.form-builder-grid-cell--empty::before {
+  position: absolute;
+  inset: 2px;
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--semantic-primary-border);
+  border-radius: max(2px, calc(var(--radius) - 4px));
+  color: var(--semantic-primary);
+  content: "+";
+  font-size: clamp(1rem, 3vw, 3rem);
+  font-weight: 700;
+  line-height: 1;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.form-builder-grid-cell--empty::before {
+  background: color-mix(in srgb, var(--semantic-primary-soft) 42%, transparent);
+}
+
+.form-builder-grid-cell--empty:hover::before,
+.form-builder-grid-cell--empty:focus-visible::before {
+  opacity: 1;
 }
 
 .form-builder-layout-grid.is-dragging .form-builder-grid-cell {
@@ -1706,7 +1738,6 @@ input {
 
 .form-builder-grid-tile {
   z-index: 1;
-  container-type: size;
   min-width: 0;
   min-height: 0;
   width: calc(100% - 4px);
@@ -1742,24 +1773,27 @@ input {
 }
 
 .form-builder-grid-field__summary {
-  display: flex;
+  display: grid;
   width: 100%;
   height: 100%;
   max-width: 100%;
   max-height: 100%;
   min-width: 0;
   min-height: 0;
-  align-items: start;
-  gap: 0.75rem;
+  place-items: center;
   box-sizing: border-box;
   overflow: hidden;
-  padding: 0.85rem;
+  padding: 0.18rem;
+}
+
+.form-builder-grid-field__summary > div {
+  display: none;
 }
 
 .form-builder-grid-field__summary h5 {
   margin: 0;
   color: var(--color-text);
-  font-size: clamp(0.78rem, 14cqw, 1rem);
+  font-size: 0.9rem;
 }
 
 .form-builder-grid-field__summary span:not(.form-builder-field-type-icon) {
@@ -1772,74 +1806,22 @@ input {
 
 .form-builder-field-type-icon {
   display: inline-flex;
-  width: 2rem;
-  height: 2rem;
+  aspect-ratio: 1;
+  width: min(70%, 4rem);
+  height: min(70%, 4rem);
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--semantic-primary-border);
+  border: 0;
   border-radius: var(--radius-sm);
-  background: var(--semantic-primary-soft);
+  background: transparent;
   color: var(--semantic-primary);
   font-weight: 900;
 }
 
 .form-builder-field-type-icon svg {
-  width: 1rem;
-  height: 1rem;
-}
-
-.form-builder-add-field-card {
-  display: grid;
-  border: 1px dashed var(--semantic-primary-border);
-  border-radius: var(--radius);
-  background: color-mix(in srgb, var(--semantic-primary-soft) 58%, transparent);
-  color: var(--semantic-primary);
-  cursor: pointer;
-}
-
-.form-builder-add-field-card:hover {
-  background: var(--semantic-primary-soft);
-  border-color: var(--semantic-primary);
-}
-
-.form-builder-grid-tile--add .form-builder-grid-field__summary h5 {
-  color: var(--semantic-primary);
-}
-
-@container (max-width: 8.5rem) {
-  .form-builder-grid-field--summary .form-builder-grid-field__summary,
-  .form-builder-grid-tile--add .form-builder-grid-field__summary {
-    display: grid;
-    place-items: center;
-    min-width: 0;
-    min-height: 0;
-    padding: 0.18rem;
-  }
-
-  .form-builder-grid-field--summary .form-builder-grid-field__summary > div,
-  .form-builder-grid-tile--add .form-builder-grid-field__summary > div {
-    display: none;
-  }
-
-  .form-builder-grid-field--summary .form-builder-field-type-icon,
-  .form-builder-grid-tile--add .form-builder-field-type-icon {
-    aspect-ratio: 1;
-    width: min(70cqw, 70cqh);
-    height: min(70cqw, 70cqh);
-    max-width: 100%;
-    max-height: 100%;
-    min-width: 0;
-    min-height: 0;
-    border: 0;
-    background: transparent;
-  }
-
-  .form-builder-grid-field--summary .form-builder-field-type-icon svg,
-  .form-builder-grid-tile--add .form-builder-field-type-icon svg {
-    width: 100%;
-    height: 100%;
-  }
+  width: 100%;
+  height: 100%;
 }
 
 .form-builder-field-controls {

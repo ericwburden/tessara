@@ -741,6 +741,8 @@ struct FormBuilderFieldDraft {
     key_was_edited: bool,
 }
 
+const FORM_BUILDER_COLUMN_COUNT: i32 = 12;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct FormBuilderDragPreview {
     field_id: usize,
@@ -756,6 +758,41 @@ fn set_form_builder_drag_preview(
     if builder_drag_preview.get_untracked() != Some(next_preview) {
         builder_drag_preview.set(Some(next_preview));
     }
+}
+
+#[cfg(feature = "hydrate")]
+fn form_builder_grid_cell_from_drag_event(
+    event: &leptos::ev::DragEvent,
+) -> Option<(i32, i32, String)> {
+    let target = event.target()?.dyn_into::<web_sys::Element>().ok()?;
+    let cell = target.closest(".form-builder-grid-cell").ok().flatten()?;
+    let row = cell.get_attribute("data-row")?.parse::<i32>().ok()?;
+    let column = cell.get_attribute("data-column")?.parse::<i32>().ok()?;
+    Some((row, column, cell.id()))
+}
+
+#[cfg(not(feature = "hydrate"))]
+fn form_builder_grid_cell_from_drag_event(
+    _event: &leptos::ev::DragEvent,
+) -> Option<(i32, i32, String)> {
+    None
+}
+
+#[cfg(feature = "hydrate")]
+fn form_builder_add_tile_from_click_event(event: &leptos::ev::MouseEvent) -> Option<(i32, i32)> {
+    let target = event.target()?.dyn_into::<web_sys::Element>().ok()?;
+    let add_cell = target
+        .closest(".form-builder-grid-cell[data-empty]")
+        .ok()
+        .flatten()?;
+    let row = add_cell.get_attribute("data-row")?.parse::<i32>().ok()?;
+    let column = add_cell.get_attribute("data-column")?.parse::<i32>().ok()?;
+    Some((row, column))
+}
+
+#[cfg(not(feature = "hydrate"))]
+fn form_builder_add_tile_from_click_event(_event: &leptos::ev::MouseEvent) -> Option<(i32, i32)> {
+    None
 }
 
 #[cfg(feature = "hydrate")]
@@ -871,13 +908,12 @@ fn commit_form_builder_drag_preview(
     builder_drag_preview_timeout: RwSignal<Option<i32>>,
     dragged_builder_field: RwSignal<Option<usize>>,
     suppress_builder_field_click: RwSignal<Option<usize>>,
-    column_count: i32,
 ) {
     let preview = builder_drag_preview.get_untracked();
 
     if let Some(preview) = preview {
         builder_fields.update(|fields| {
-            *fields = form_builder_reflow_section_fields(fields, preview, column_count);
+            *fields = form_builder_reflow_section_fields(fields, preview);
         });
         suppress_builder_field_click.set(Some(preview.field_id));
     }
@@ -2303,7 +2339,7 @@ fn blank_form_builder_section(id: usize) -> FormBuilderSectionDraft {
             format!("Section {id}")
         },
         description: String::new(),
-        column_count: 2,
+        column_count: FORM_BUILDER_COLUMN_COUNT,
         position: id as i32,
     }
 }
@@ -2312,11 +2348,18 @@ fn blank_form_builder_field(
     id: usize,
     section_id: usize,
     fields: &[FormBuilderFieldDraft],
-    column_count: i32,
 ) -> FormBuilderFieldDraft {
-    let (grid_row, grid_column) =
-        first_available_form_builder_cell(section_id, fields, column_count);
+    let (grid_row, grid_column) = first_available_form_builder_cell(section_id, fields);
 
+    blank_form_builder_field_at(id, section_id, grid_row, grid_column)
+}
+
+fn blank_form_builder_field_at(
+    id: usize,
+    section_id: usize,
+    grid_row: i32,
+    grid_column: i32,
+) -> FormBuilderFieldDraft {
     FormBuilderFieldDraft {
         id,
         section_id,
@@ -2332,13 +2375,84 @@ fn blank_form_builder_field(
     }
 }
 
-fn form_builder_field_occupies(field: &FormBuilderFieldDraft, row: i32, column: i32) -> bool {
-    let row_start = field.grid_row.max(1);
-    let row_end = row_start + field.grid_height.max(1) - 1;
-    let column_start = field.grid_column.max(1);
-    let column_end = column_start + field.grid_width.max(1) - 1;
+#[derive(Clone, Debug, PartialEq)]
+struct FormBuilderGridCell {
+    row: i32,
+    column: i32,
+}
 
-    row >= row_start && row <= row_end && column >= column_start && column <= column_end
+#[derive(Clone, Debug, PartialEq)]
+struct FormBuilderSectionLayout {
+    fields: Vec<FormBuilderFieldDraft>,
+    occupied_cells: HashSet<(i32, i32)>,
+    column_count: i32,
+    row_count: i32,
+}
+
+fn form_builder_section_fields(
+    section_id: usize,
+    fields: &[FormBuilderFieldDraft],
+) -> Vec<FormBuilderFieldDraft> {
+    fields
+        .iter()
+        .filter(|field| field.section_id == section_id)
+        .cloned()
+        .collect()
+}
+
+fn form_builder_occupancy_map(fields: &[FormBuilderFieldDraft]) -> HashSet<(i32, i32)> {
+    let mut occupied = HashSet::new();
+
+    for field in fields {
+        let row_start = field.grid_row.max(1);
+        let row_end = row_start + field.grid_height.max(1) - 1;
+        let column_start = field.grid_column.max(1);
+        let column_end = column_start + field.grid_width.max(1) - 1;
+
+        for row in row_start..=row_end {
+            for column in column_start..=column_end {
+                occupied.insert((row, column));
+            }
+        }
+    }
+
+    occupied
+}
+
+fn first_available_form_builder_cell_in_map(occupied_cells: &HashSet<(i32, i32)>) -> (i32, i32) {
+    for row in 1..=200 {
+        for column in 1..=FORM_BUILDER_COLUMN_COUNT {
+            if !occupied_cells.contains(&(row, column)) {
+                return (row, column);
+            }
+        }
+    }
+
+    (1, 1)
+}
+
+fn form_builder_section_layout(
+    section: &FormBuilderSectionDraft,
+    fields: &[FormBuilderFieldDraft],
+) -> FormBuilderSectionLayout {
+    let section_fields = form_builder_section_fields(section.id, fields);
+    let occupied_cells = form_builder_occupancy_map(&section_fields);
+    let column_count = FORM_BUILDER_COLUMN_COUNT;
+    let field_row_count = section_fields
+        .iter()
+        .map(|field| field.grid_row.max(1) + field.grid_height.max(1) - 1)
+        .max()
+        .unwrap_or(1)
+        .max(3);
+    let (add_field_row, _) = first_available_form_builder_cell_in_map(&occupied_cells);
+    let row_count = field_row_count.max(add_field_row).max(3);
+
+    FormBuilderSectionLayout {
+        fields: section_fields,
+        occupied_cells,
+        column_count,
+        row_count,
+    }
 }
 
 fn form_builder_fields_overlap(
@@ -2382,9 +2496,8 @@ fn form_builder_linear_grid_index(field: &FormBuilderFieldDraft, column_count: i
 fn form_builder_reflow_section_fields(
     fields: &[FormBuilderFieldDraft],
     preview: FormBuilderDragPreview,
-    column_count: i32,
 ) -> Vec<FormBuilderFieldDraft> {
-    let column_count = column_count.clamp(1, 12);
+    let column_count = FORM_BUILDER_COLUMN_COUNT;
     let mut section_fields = fields
         .iter()
         .filter(|field| field.section_id == preview.section_id)
@@ -2454,33 +2567,20 @@ fn form_builder_reflow_section_fields(
 fn first_available_form_builder_cell(
     section_id: usize,
     fields: &[FormBuilderFieldDraft],
-    column_count: i32,
 ) -> (i32, i32) {
-    let column_count = column_count.clamp(1, 12);
+    let section_fields = form_builder_section_fields(section_id, fields);
+    let occupied_cells = form_builder_occupancy_map(&section_fields);
 
-    for row in 1..=200 {
-        for column in 1..=column_count {
-            if fields
-                .iter()
-                .filter(|field| field.section_id == section_id)
-                .all(|field| !form_builder_field_occupies(field, row, column))
-            {
-                return (row, column);
-            }
-        }
-    }
-
-    (1, 1)
+    first_available_form_builder_cell_in_map(&occupied_cells)
 }
 
 fn max_form_builder_field_width(
     field: &FormBuilderFieldDraft,
     fields: &[FormBuilderFieldDraft],
-    column_count: i32,
 ) -> i32 {
     let row = field.grid_row.max(1);
     let column = field.grid_column.max(1);
-    let column_count = column_count.clamp(1, 12);
+    let column_count = FORM_BUILDER_COLUMN_COUNT;
     let mut width = 0;
 
     for candidate_column in column..=column_count {
@@ -2525,15 +2625,14 @@ fn form_builder_layout_candidate(
     field: &FormBuilderFieldDraft,
     control_index: usize,
     value: i32,
-    column_count: i32,
 ) -> FormBuilderFieldDraft {
     let mut candidate = field.clone();
 
     match control_index {
         0 => candidate.grid_row = value,
         1 => {
-            let max_column =
-                (column_count - candidate.grid_width.max(1) + 1).clamp(1, column_count.max(1));
+            let max_column = (FORM_BUILDER_COLUMN_COUNT - candidate.grid_width.max(1) + 1)
+                .clamp(1, FORM_BUILDER_COLUMN_COUNT);
             candidate.grid_column = value.clamp(1, max_column);
         }
         2 => candidate.grid_width = value,
@@ -2548,7 +2647,6 @@ fn valid_form_builder_layout_values(
     fields: &[FormBuilderFieldDraft],
     control_index: usize,
     max_value: i32,
-    column_count: i32,
 ) -> Vec<i32> {
     let current_value = match control_index {
         0 => field.grid_row,
@@ -2560,21 +2658,19 @@ fn valid_form_builder_layout_values(
 
     let mut values = (1..=max_value.max(1))
         .filter(|value| {
-            let candidate =
-                form_builder_layout_candidate(field, control_index, *value, column_count);
+            let candidate = form_builder_layout_candidate(field, control_index, *value);
             let candidate_column_end =
                 candidate.grid_column.max(1) + candidate.grid_width.max(1) - 1;
 
-            candidate_column_end <= column_count
+            candidate_column_end <= FORM_BUILDER_COLUMN_COUNT
                 && !form_builder_field_has_collision(&candidate, fields)
         })
         .collect::<Vec<_>>();
 
-    let current_candidate =
-        form_builder_layout_candidate(field, control_index, current_value, column_count);
+    let current_candidate = form_builder_layout_candidate(field, control_index, current_value);
     let current_column_end =
         current_candidate.grid_column.max(1) + current_candidate.grid_width.max(1) - 1;
-    let current_is_valid = current_column_end <= column_count
+    let current_is_valid = current_column_end <= FORM_BUILDER_COLUMN_COUNT
         && !form_builder_field_has_collision(&current_candidate, fields);
 
     if current_is_valid && !values.contains(&current_value) {
@@ -2596,11 +2692,8 @@ fn prepared_form_builder_sections(
         if title.is_empty() {
             return Err("Every section needs a title.".into());
         }
-        if !(1..=12).contains(&section.column_count) {
-            return Err(format!("{title} must use between 1 and 12 grid columns."));
-        }
-
         let mut section = section.clone();
+        section.column_count = FORM_BUILDER_COLUMN_COUNT;
         section.title = title.to_string();
         section.description = section.description.trim().to_string();
         section.position = (index + 1) as i32;
@@ -2610,6 +2703,7 @@ fn prepared_form_builder_sections(
     Ok(prepared)
 }
 
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
 fn prepared_form_builder_fields(
     fields: &[FormBuilderFieldDraft],
 ) -> Result<Vec<FormBuilderFieldDraft>, String> {
@@ -3723,6 +3817,7 @@ fn submit_create_form(
             return;
         }
 
+        let current_fields = fields.get_untracked();
         let prepared_sections = match prepared_form_builder_sections(&sections.get_untracked()) {
             Ok(sections) => sections,
             Err(error) => {
@@ -3730,7 +3825,7 @@ fn submit_create_form(
                 return;
             }
         };
-        let prepared_fields = match prepared_form_builder_fields(&fields.get_untracked()) {
+        let prepared_fields = match prepared_form_builder_fields(&current_fields) {
             Ok(fields) => fields,
             Err(error) => {
                 message.set(Some(error));
@@ -5284,6 +5379,573 @@ fn FormsAttachedNodesSheet(detail: RwSignal<Option<FormsAttachedNodesSheetData>>
 }
 
 #[component]
+fn FormBuilderSection(
+    section_id: usize,
+    builder_sections: RwSignal<Vec<FormBuilderSectionDraft>>,
+    builder_fields: RwSignal<Vec<FormBuilderFieldDraft>>,
+    active_builder_field: RwSignal<Option<usize>>,
+    dragged_builder_field: RwSignal<Option<usize>>,
+    builder_drag_preview: RwSignal<Option<FormBuilderDragPreview>>,
+    pending_builder_drag_preview: RwSignal<Option<FormBuilderDragPreview>>,
+    builder_drag_preview_timeout: RwSignal<Option<i32>>,
+    suppress_builder_field_click: RwSignal<Option<usize>>,
+    next_builder_field_id: RwSignal<usize>,
+) -> impl IntoView {
+    let section = Memo::new(move |_| {
+        builder_sections
+            .get()
+            .into_iter()
+            .find(|section| section.id == section_id)
+            .unwrap_or_else(|| blank_form_builder_section(section_id))
+    });
+    let layout = Memo::new(move |_| {
+        let section = section.get();
+        let fields = builder_fields.get();
+        form_builder_section_layout(&section, &fields)
+    });
+
+    view! {
+        <article class="form-builder-section-card">
+            <div class="form-builder-section-card__header">
+                <h4>{move || section.get().title}</h4>
+            </div>
+
+            <div class="form-grid form-builder-section-card__settings">
+                <label class="form-field" for=format!("form-section-title-{section_id}")>
+                    <span>"Section Title"</span>
+                    <input
+                        id=format!("form-section-title-{section_id}")
+                        type="text"
+                        autocomplete="off"
+                        prop:value=move || section.get().title
+                        on:input=move |event| {
+                            let next_title = event_target_value(&event);
+                            builder_sections.update(|sections| {
+                                if let Some(section) = sections.iter_mut().find(|section| section.id == section_id) {
+                                    section.title = next_title.clone();
+                                }
+                            });
+                        }
+                    />
+                </label>
+
+                <label class="form-field form-field--wide" for=format!("form-section-description-{section_id}")>
+                    <span>"Description"</span>
+                    <textarea
+                        id=format!("form-section-description-{section_id}")
+                        prop:value=move || section.get().description
+                        on:input=move |event| {
+                            let next_description = event_target_value(&event);
+                            builder_sections.update(|sections| {
+                                if let Some(section) = sections.iter_mut().find(|section| section.id == section_id) {
+                                    section.description = next_description.clone();
+                                }
+                            });
+                        }
+                    ></textarea>
+                </label>
+            </div>
+
+            <FormBuilderGrid
+                section_id=section_id
+                layout=layout
+                builder_fields=builder_fields
+                active_builder_field=active_builder_field
+                dragged_builder_field=dragged_builder_field
+                builder_drag_preview=builder_drag_preview
+                pending_builder_drag_preview=pending_builder_drag_preview
+                builder_drag_preview_timeout=builder_drag_preview_timeout
+                suppress_builder_field_click=suppress_builder_field_click
+                next_builder_field_id=next_builder_field_id
+            />
+        </article>
+    }
+}
+
+#[component]
+fn FormBuilderGrid(
+    section_id: usize,
+    layout: Memo<FormBuilderSectionLayout>,
+    builder_fields: RwSignal<Vec<FormBuilderFieldDraft>>,
+    active_builder_field: RwSignal<Option<usize>>,
+    dragged_builder_field: RwSignal<Option<usize>>,
+    builder_drag_preview: RwSignal<Option<FormBuilderDragPreview>>,
+    pending_builder_drag_preview: RwSignal<Option<FormBuilderDragPreview>>,
+    builder_drag_preview_timeout: RwSignal<Option<i32>>,
+    suppress_builder_field_click: RwSignal<Option<usize>>,
+    next_builder_field_id: RwSignal<usize>,
+) -> impl IntoView {
+    let grid_rows = Memo::new(move |_| layout.get().row_count);
+    let grid_cells = Memo::new(move |_| {
+        let row_count = grid_rows.get();
+        (1..=row_count)
+            .flat_map(|row| {
+                (1..=FORM_BUILDER_COLUMN_COUNT)
+                    .map(move |column| FormBuilderGridCell { row, column })
+            })
+            .collect::<Vec<_>>()
+    });
+
+    view! {
+        <div
+            class=move || {
+                if dragged_builder_field.get().is_some() {
+                    "form-builder-layout-grid is-dragging"
+                } else {
+                    "form-builder-layout-grid"
+                }
+            }
+            style=move || {
+                let row_count = grid_rows.get();
+                format!(
+                    "--form-builder-rows: {}; --form-builder-max-height: {}px;",
+                    row_count,
+                    row_count * 80,
+                )
+            }
+            on:dragenter=move |event| {
+                let Some(field_id) = dragged_builder_field.get_untracked() else {
+                    return;
+                };
+                let Some((row, column, target_id)) = form_builder_grid_cell_from_drag_event(&event) else {
+                    return;
+                };
+                event.prevent_default();
+                schedule_form_builder_drag_preview(
+                    builder_drag_preview,
+                    pending_builder_drag_preview,
+                    builder_drag_preview_timeout,
+                    FormBuilderDragPreview {
+                        field_id,
+                        section_id,
+                        row,
+                        column,
+                    },
+                    target_id,
+                );
+            }
+            on:dragover=move |event| {
+                if dragged_builder_field.get_untracked().is_some() {
+                    event.prevent_default();
+                }
+            }
+            on:drop=move |event| {
+                event.prevent_default();
+                commit_form_builder_drag_preview(
+                    builder_fields,
+                    builder_drag_preview,
+                    pending_builder_drag_preview,
+                    builder_drag_preview_timeout,
+                    dragged_builder_field,
+                    suppress_builder_field_click,
+                );
+            }
+            on:mouseleave=move |_| {
+                if dragged_builder_field.get_untracked().is_some() {
+                    clear_form_builder_drag_intent(
+                        builder_drag_preview,
+                        pending_builder_drag_preview,
+                        builder_drag_preview_timeout,
+                    );
+                }
+            }
+            on:click=move |event| {
+                let Some((row, column)) = form_builder_add_tile_from_click_event(&event) else {
+                    return;
+                };
+                event.prevent_default();
+                if suppress_builder_field_click.get_untracked().is_some() {
+                    suppress_builder_field_click.set(None);
+                    return;
+                }
+                let occupied_cells = {
+                    let fields = builder_fields.get_untracked();
+                    let section_fields = form_builder_section_fields(section_id, &fields);
+                    form_builder_occupancy_map(&section_fields)
+                };
+                if occupied_cells.contains(&(row, column)) {
+                    return;
+                }
+                let field_id = next_builder_field_id.get_untracked();
+                next_builder_field_id.set(field_id + 1);
+                let new_field = blank_form_builder_field_at(field_id, section_id, row, column);
+                builder_fields.update(|fields| fields.push(new_field));
+            }
+        >
+            <div class="form-builder-grid-cells">
+                <For
+                    each=move || grid_cells.get()
+                    key=|cell| (cell.row, cell.column)
+                    children=move |cell| {
+                        let cell_label =
+                            format!("Add field at row {}, column {}", cell.row, cell.column);
+                        view! {
+                            <div
+                                id=format!("form-builder-section-{section_id}-cell-r{}-c{}", cell.row, cell.column)
+                                class="form-builder-grid-cell form-builder-grid-cell--empty"
+                                data-row=cell.row
+                                data-column=cell.column
+                                data-empty=true
+                                aria-label=cell_label
+                                style=format!("grid-column: {}; grid-row: {};", cell.column, cell.row)
+                            ></div>
+                        }
+                    }
+                />
+            </div>
+            <For
+                each=move || layout.get().fields
+                key=|field| field.id
+                children=move |field| {
+                    view! {
+                        <FormBuilderGridTile
+                            field=field
+                            section_id=section_id
+                            active_builder_field=active_builder_field
+                            dragged_builder_field=dragged_builder_field
+                            builder_drag_preview=builder_drag_preview
+                            pending_builder_drag_preview=pending_builder_drag_preview
+                            builder_drag_preview_timeout=builder_drag_preview_timeout
+                            suppress_builder_field_click=suppress_builder_field_click
+                        />
+                    }
+                }
+            />
+        </div>
+    }
+}
+
+#[component]
+fn FormBuilderGridTile(
+    field: FormBuilderFieldDraft,
+    section_id: usize,
+    active_builder_field: RwSignal<Option<usize>>,
+    dragged_builder_field: RwSignal<Option<usize>>,
+    builder_drag_preview: RwSignal<Option<FormBuilderDragPreview>>,
+    pending_builder_drag_preview: RwSignal<Option<FormBuilderDragPreview>>,
+    builder_drag_preview_timeout: RwSignal<Option<i32>>,
+    suppress_builder_field_click: RwSignal<Option<usize>>,
+) -> impl IntoView {
+    let field_id = field.id;
+    let display_label = if field.label.trim().is_empty() {
+        format!("Field {field_id}")
+    } else {
+        field.label.clone()
+    };
+    let tooltip_label = display_label.clone();
+    let aria_label = format!("Configure {display_label}");
+    let heading_label = display_label.clone();
+    let type_icon = form_builder_field_type_icon(&field.field_type);
+    let field_row = field.grid_row.max(1);
+    let field_column = field.grid_column.max(1);
+    view! {
+        <button
+            class=move || {
+                if dragged_builder_field.get() == Some(field_id) {
+                    "form-builder-grid-tile form-builder-grid-tile--field form-builder-grid-field form-builder-grid-field--summary is-dragging"
+                } else {
+                    "form-builder-grid-tile form-builder-grid-tile--field form-builder-grid-field form-builder-grid-field--summary"
+                }
+            }
+            type="button"
+            title=tooltip_label
+            aria-label=aria_label
+            draggable="true"
+            style=format!(
+                "grid-column: {} / span {}; grid-row: {} / span {};",
+                field_column,
+                field.grid_width.max(1),
+                field_row,
+                field.grid_height.max(1),
+            )
+            on:dragstart=move |_event: leptos::ev::DragEvent| {
+                clear_form_builder_drag_intent(
+                    builder_drag_preview,
+                    pending_builder_drag_preview,
+                    builder_drag_preview_timeout,
+                );
+                dragged_builder_field.set(Some(field_id));
+            }
+            on:dragenter=move |event| {
+                if let Some(dragged_field_id) = dragged_builder_field.get_untracked() {
+                    event.prevent_default();
+                    schedule_form_builder_drag_preview(
+                        builder_drag_preview,
+                        pending_builder_drag_preview,
+                        builder_drag_preview_timeout,
+                        FormBuilderDragPreview {
+                            field_id: dragged_field_id,
+                            section_id,
+                            row: field_row,
+                            column: field_column,
+                        },
+                        format!("form-builder-section-{section_id}-cell-r{field_row}-c{field_column}"),
+                    );
+                }
+            }
+            on:click=move |_| {
+                if suppress_builder_field_click.get_untracked() == Some(field_id) {
+                    suppress_builder_field_click.set(None);
+                } else {
+                    dragged_builder_field.set(None);
+                    active_builder_field.set(Some(field_id));
+                }
+            }
+            on:dragend=move |_| {
+                clear_form_builder_drag_intent(
+                    builder_drag_preview,
+                    pending_builder_drag_preview,
+                    builder_drag_preview_timeout,
+                );
+                dragged_builder_field.set(None);
+            }
+        >
+            <div class="form-builder-grid-field__summary">
+                <span class="form-builder-field-type-icon">{type_icon}</span>
+                <div>
+                    <h5>{heading_label}</h5>
+                </div>
+            </div>
+        </button>
+    }
+}
+
+#[component]
+fn FieldConfigSheet(
+    active_builder_field: RwSignal<Option<usize>>,
+    builder_sections: RwSignal<Vec<FormBuilderSectionDraft>>,
+    builder_fields: RwSignal<Vec<FormBuilderFieldDraft>>,
+) -> impl IntoView {
+    view! {
+        <Portal>
+            <Show when=move || active_builder_field.get().is_some()>
+                {move || {
+                    let close = move |_| active_builder_field.set(None);
+                    let field_id = active_builder_field.get().unwrap_or_default();
+                    let field = builder_fields
+                        .get()
+                        .into_iter()
+                        .find(|field| field.id == field_id);
+                    field
+                        .map(|field| {
+                            let display_label = if field.label.trim().is_empty() {
+                                format!("Field {}", field.id)
+                            } else {
+                                field.label.clone()
+                            };
+                            let section = builder_sections
+                                .get()
+                                .into_iter()
+                                .find(|section| section.id == field.section_id)
+                                .unwrap_or_else(|| blank_form_builder_section(field.section_id));
+                            let all_fields = builder_fields.get();
+                            let layout = form_builder_section_layout(&section, &all_fields);
+                            let section_column_count = layout.column_count;
+                            let section_fields_for_bounds = layout.fields;
+                            let row_max = layout.row_count + 1;
+                            let width_max = max_form_builder_field_width(
+                                &field,
+                                &section_fields_for_bounds,
+                            );
+                            let height_max = max_form_builder_field_height(
+                                &field,
+                                &section_fields_for_bounds,
+                            );
+                            view! {
+                                <section class="sheet-overlay form-field-config-overlay" aria-label="Field configuration">
+                                    <button class="sheet-overlay__scrim" type="button" aria-label="Close field configuration" on:click=close></button>
+                                    <aside class="sheet-panel blurred-surface form-field-config-sheet" role="dialog" aria-modal="true" aria-label="Field configuration">
+                                        <div class="sheet-panel__actions">
+                                            <button
+                                                class="icon-button icon-button--danger"
+                                                type="button"
+                                                aria-label="Delete field"
+                                                title="Delete field"
+                                                on:click=move |_| {
+                                                    builder_fields.update(|fields| {
+                                                        fields.retain(|field| field.id != field_id);
+                                                    });
+                                                    active_builder_field.set(None);
+                                                }
+                                            >
+                                                <Trash2/>
+                                            </button>
+                                            <button class="icon-button sheet-panel__close" type="button" aria-label="Close field configuration" title="Close field configuration" on:click=close>
+                                                <X/>
+                                            </button>
+                                        </div>
+
+                                        <header class="sheet-panel__header">
+                                            <p>"Field Configuration"</p>
+                                            <h2>{display_label}</h2>
+                                        </header>
+
+                                        <section class="sheet-panel__section">
+                                            <div class="form-grid form-builder-field-sheet-controls">
+                                                <label class="form-field" for=format!("sheet-form-field-label-{field_id}")>
+                                                    <span>"Field Label"</span>
+                                                    <input
+                                                        id=format!("sheet-form-field-label-{field_id}")
+                                                        type="text"
+                                                        autocomplete="off"
+                                                        prop:value=field.label.clone()
+                                                        on:input=move |event| {
+                                                            let next_label = event_target_value(&event);
+                                                            builder_fields.update(|fields| {
+                                                                if let Some(field) = fields.iter_mut().find(|field| field.id == field_id) {
+                                                                    field.label = next_label.clone();
+                                                                    if !field.key_was_edited {
+                                                                        field.key = slug_from_label(&next_label);
+                                                                    }
+                                                                }
+                                                            });
+                                                        }
+                                                    />
+                                                </label>
+
+                                                <label class="form-field" for=format!("sheet-form-field-key-{field_id}")>
+                                                    <span>"Field Key"</span>
+                                                    <input
+                                                        id=format!("sheet-form-field-key-{field_id}")
+                                                        type="text"
+                                                        autocomplete="off"
+                                                        prop:value=field.key.clone()
+                                                        on:input=move |event| {
+                                                            let next_key = slug_from_label(&event_target_value(&event));
+                                                            builder_fields.update(|fields| {
+                                                                if let Some(field) = fields.iter_mut().find(|field| field.id == field_id) {
+                                                                    field.key = next_key.clone();
+                                                                    field.key_was_edited = true;
+                                                                }
+                                                            });
+                                                        }
+                                                    />
+                                                </label>
+
+                                                <label class="form-field" for=format!("sheet-form-field-type-{field_id}")>
+                                                    <span>"Field Type"</span>
+                                                    <select
+                                                        id=format!("sheet-form-field-type-{field_id}")
+                                                        prop:value=field.field_type.clone()
+                                                        on:change=move |event| {
+                                                            let next_type = event_target_value(&event);
+                                                            builder_fields.update(|fields| {
+                                                                if let Some(field) = fields.iter_mut().find(|field| field.id == field_id) {
+                                                                    field.field_type = next_type.clone();
+                                                                }
+                                                            });
+                                                        }
+                                                    >
+                                                        <option value="text">"Text"</option>
+                                                        <option value="number">"Number"</option>
+                                                        <option value="date">"Date"</option>
+                                                        <option value="boolean">"Checkbox"</option>
+                                                        <option value="single_choice">"Single choice"</option>
+                                                        <option value="multi_choice">"Multi choice"</option>
+                                                    </select>
+                                                </label>
+
+                                                <label class="form-field form-field--checkbox form-builder-field__required">
+                                                    <input
+                                                        type="checkbox"
+                                                        prop:checked=field.required
+                                                        on:change=move |event| {
+                                                            let checked = event_target_checked(&event);
+                                                            builder_fields.update(|fields| {
+                                                                if let Some(field) = fields.iter_mut().find(|field| field.id == field_id) {
+                                                                    field.required = checked;
+                                                                }
+                                                            });
+                                                        }
+                                                    />
+                                                    <span>"Required"</span>
+                                                </label>
+
+                                                {["Row", "Column", "Width", "Height"]
+                                                    .into_iter()
+                                                    .enumerate()
+                                                    .map(|(index, label)| {
+                                                        let value = match index {
+                                                            0 => field.grid_row,
+                                                            1 => field.grid_column,
+                                                            2 => field.grid_width,
+                                                            _ => field.grid_height,
+                                                        };
+                                                        let max_value = match index {
+                                                            0 => row_max,
+                                                            1 => (section_column_count - field.grid_width.max(1) + 1)
+                                                                .clamp(1, section_column_count.max(1)),
+                                                            2 => width_max,
+                                                            _ => height_max,
+                                                        }
+                                                        .max(1);
+                                                        let value = value.clamp(1, max_value);
+                                                        let valid_values = valid_form_builder_layout_values(
+                                                            &field,
+                                                            &section_fields_for_bounds,
+                                                            index,
+                                                            max_value,
+                                                        );
+                                                        let control_id = format!("sheet-form-field-layout-{index}-{field_id}");
+                                                        let input_id = control_id.clone();
+                                                        view! {
+                                                            <label class="form-field" for=control_id>
+                                                                <span>{label}</span>
+                                                                <select
+                                                                    id=input_id
+                                                                    on:change=move |event| {
+                                                                        let value = event_target_value(&event)
+                                                                            .parse::<i32>()
+                                                                            .unwrap_or(1)
+                                                                            .clamp(1, max_value);
+                                                                        builder_fields.update(|fields| {
+                                                                            if let Some(position) = fields.iter().position(|field| field.id == field_id) {
+                                                                                let candidate = form_builder_layout_candidate(
+                                                                                    &fields[position],
+                                                                                    index,
+                                                                                    value,
+                                                                                );
+
+                                                                                if !form_builder_field_has_collision(&candidate, fields) {
+                                                                                    fields[position] = candidate;
+                                                                                }
+                                                                            }
+                                                                        });
+                                                                    }
+                                                                >
+                                                                    {valid_values
+                                                                        .into_iter()
+                                                                        .map(|option_value| {
+                                                                            view! {
+                                                                                <option
+                                                                                    value=option_value.to_string()
+                                                                                    selected=option_value == value
+                                                                                >
+                                                                                    {option_value}
+                                                                                </option>
+                                                                            }
+                                                                        })
+                                                                        .collect_view()}
+                                                                </select>
+                                                            </label>
+                                                        }
+                                                    })
+                                                    .collect_view()}
+                                            </div>
+                                        </section>
+                                    </aside>
+                                </section>
+                            }
+                            .into_any()
+                        })
+                        .unwrap_or_else(|| view! {}.into_any())
+                }}
+            </Show>
+        </Portal>
+    }
+}
+
+#[component]
 pub fn FormsNewPage() -> impl IntoView {
     let node_types = RwSignal::new(Vec::<NodeTypeCatalogEntry>::new());
     let existing_forms = RwSignal::new(Vec::<FormSummary>::new());
@@ -5292,7 +5954,7 @@ pub fn FormsNewPage() -> impl IntoView {
     let builder_sections = RwSignal::new(vec![blank_form_builder_section(1)]);
     let active_builder_section = RwSignal::new("1".to_string());
     let next_builder_section_id = RwSignal::new(2usize);
-    let builder_fields = RwSignal::new(vec![blank_form_builder_field(1, 1, &[], 2)]);
+    let builder_fields = RwSignal::new(vec![blank_form_builder_field(1, 1, &[])]);
     let active_builder_field = RwSignal::new(None::<usize>);
     let dragged_builder_field = RwSignal::new(None::<usize>);
     let builder_drag_preview = RwSignal::new(None::<FormBuilderDragPreview>);
@@ -5303,6 +5965,18 @@ pub fn FormsNewPage() -> impl IntoView {
     let is_loading = RwSignal::new(true);
     let is_saving = RwSignal::new(false);
     let message = RwSignal::new(None::<String>);
+    let builder_field_count = Memo::new(move |_| {
+        builder_fields
+            .get()
+            .into_iter()
+            .filter(|field| {
+                !field.label.trim().is_empty()
+                    || !field.key.trim().is_empty()
+                    || field.field_type != "text"
+                    || field.required
+            })
+            .count()
+    });
 
     Effect::new(move |_| {
         load_form_create_options(node_types, existing_forms, is_loading, message);
@@ -5400,11 +6074,7 @@ pub fn FormsNewPage() -> impl IntoView {
                                         <tr>
                                             <th scope="row">"Fields"</th>
                                             <td>
-                                                {move || {
-                                                    prepared_form_builder_fields(&builder_fields.get())
-                                                        .map(|fields| fields.len().to_string())
-                                                        .unwrap_or_else(|_| "0".into())
-                                                }}
+                                                {move || builder_field_count.get().to_string()}
                                             </td>
                                         </tr>
                                     </InfoListTable>
@@ -5465,324 +6135,37 @@ pub fn FormsNewPage() -> impl IntoView {
                                     </Tabs>
 
                                     <div class="form-builder__sections">
-                                        {move || {
-                                            builder_sections
-                                                .get()
-                                                .into_iter()
-                                                .filter(|section| active_builder_section.get() == section.id.to_string())
-                                                .map(|section| {
-                                                    let section_id = section.id;
-                                                    let all_builder_fields = builder_fields.get();
-                                                    let section_fields = all_builder_fields
-                                                        .into_iter()
-                                                        .filter(|field| field.section_id == section_id)
-                                                        .collect::<Vec<_>>();
-                                                    let column_count = section.column_count.max(1);
-                                                    let field_row_count = section_fields
-                                                        .iter()
-                                                        .map(|field| field.grid_row.max(1) + field.grid_height.max(1) - 1)
-                                                        .max()
-                                                        .unwrap_or(1)
-                                                        .max(3);
-                                                    let (add_field_row, add_field_column) =
-                                                        first_available_form_builder_cell(
-                                                            section_id,
-                                                            &section_fields,
-                                                            column_count,
-                                                        );
-                                                    let row_count = field_row_count.max(add_field_row);
-                                                    view! {
-                                                        <article class="form-builder-section-card">
-                                                            <div class="form-builder-section-card__header">
-                                                                <h4>{section.title.clone()}</h4>
-                                                            </div>
-
-                                                            <div class="form-grid form-builder-section-card__settings">
-                                                                <label class="form-field" for=format!("form-section-title-{section_id}")>
-                                                                    <span>"Section Title"</span>
-                                                                    <input
-                                                                        id=format!("form-section-title-{section_id}")
-                                                                        type="text"
-                                                                        autocomplete="off"
-                                                                        prop:value=section.title.clone()
-                                                                        on:input=move |event| {
-                                                                            let next_title = event_target_value(&event);
-                                                                            builder_sections.update(|sections| {
-                                                                                if let Some(section) = sections.iter_mut().find(|section| section.id == section_id) {
-                                                                                    section.title = next_title.clone();
-                                                                                }
-                                                                            });
-                                                                        }
-                                                                    />
-                                                                </label>
-
-                                                                <label class="form-field" for=format!("form-section-columns-{section_id}")>
-                                                                    <span>"Grid Columns"</span>
-                                                                    <select
-                                                                        id=format!("form-section-columns-{section_id}")
-                                                                        prop:value=section.column_count
-                                                                        on:change=move |event| {
-                                                                            let next_columns = event_target_value(&event)
-                                                                                .parse::<i32>()
-                                                                                .unwrap_or(1)
-                                                                                .clamp(1, 12);
-                                                                            builder_sections.update(|sections| {
-                                                                                if let Some(section) = sections.iter_mut().find(|section| section.id == section_id) {
-                                                                                    section.column_count = next_columns;
-                                                                                }
-                                                                            });
-                                                                        }
-                                                                    >
-                                                                        {(1..=12)
-                                                                            .map(|count| {
-                                                                                view! {
-                                                                                    <option value=count>{count}</option>
-                                                                                }
-                                                                            })
-                                                                            .collect_view()}
-                                                                    </select>
-                                                                </label>
-
-                                                                <label class="form-field form-field--wide" for=format!("form-section-description-{section_id}")>
-                                                                    <span>"Description"</span>
-                                                                    <textarea
-                                                                        id=format!("form-section-description-{section_id}")
-                                                                        prop:value=section.description.clone()
-                                                                        on:input=move |event| {
-                                                                            let next_description = event_target_value(&event);
-                                                                            builder_sections.update(|sections| {
-                                                                                if let Some(section) = sections.iter_mut().find(|section| section.id == section_id) {
-                                                                                    section.description = next_description.clone();
-                                                                                }
-                                                                            });
-                                                                        }
-                                                                    ></textarea>
-                                                                </label>
-                                                            </div>
-
-                                                            <div
-                                                                class=move || {
-                                                                    if dragged_builder_field.get().is_some() {
-                                                                        "form-builder-layout-grid is-dragging"
-                                                                    } else {
-                                                                                        "form-builder-layout-grid"
-                                                                    }
-                                                                }
-                                                                style=format!(
-                                                                    "--form-builder-columns: {column_count}; --form-builder-rows: {row_count}; --form-builder-max-height: {}px;",
-                                                                    row_count * 80,
-                                                                )
-                                                                on:dragover=move |event| {
-                                                                    if dragged_builder_field.get_untracked().is_some() {
-                                                                        event.prevent_default();
-                                                                    }
-                                                                }
-                                                                on:drop=move |event| {
-                                                                    event.prevent_default();
-                                                                    commit_form_builder_drag_preview(
-                                                                        builder_fields,
-                                                                        builder_drag_preview,
-                                                                        pending_builder_drag_preview,
-                                                                        builder_drag_preview_timeout,
-                                                                        dragged_builder_field,
-                                                                        suppress_builder_field_click,
-                                                                        column_count,
-                                                                    );
-                                                                }
-                                                                on:mouseleave=move |_| {
-                                                                    if dragged_builder_field.get_untracked().is_some() {
-                                                                        clear_form_builder_drag_intent(
-                                                                            builder_drag_preview,
-                                                                            pending_builder_drag_preview,
-                                                                            builder_drag_preview_timeout,
-                                                                        );
-                                                                    }
-                                                                }
-                                                                >
-                                                                <div class="form-builder-grid-cells" aria-hidden="true">
-                                                                    {(1..=row_count)
-                                                                        .flat_map(|row| {
-                                                                            (1..=column_count).map(move |column| (row, column))
-                                                                        })
-                                                                        .map(|(row, column)| {
-                                                                            view! {
-                                                                                <div
-                                                                                    id=format!("form-builder-section-{section_id}-cell-r{row}-c{column}")
-                                                                                    class="form-builder-grid-cell"
-                                                                                    data-row=row
-                                                                                    data-column=column
-                                                                                    style=format!("grid-column: {column}; grid-row: {row};")
-                                                                                    on:dragenter=move |event| {
-                                                                                        if let Some(field_id) = dragged_builder_field.get_untracked() {
-                                                                                            event.prevent_default();
-                                                                                            schedule_form_builder_drag_preview(
-                                                                                                builder_drag_preview,
-                                                                                                pending_builder_drag_preview,
-                                                                                                builder_drag_preview_timeout,
-                                                                                                FormBuilderDragPreview {
-                                                                                                field_id,
-                                                                                                section_id,
-                                                                                                row,
-                                                                                                column,
-                                                                                                },
-                                                                                                format!("form-builder-section-{section_id}-cell-r{row}-c{column}"),
-                                                                                            );
-                                                                                        }
-                                                                                    }
-                                                                                    on:dragover=move |event| {
-                                                                                        if dragged_builder_field.get_untracked().is_some() {
-                                                                                            event.prevent_default();
-                                                                                        }
-                                                                                    }
-                                                                                ></div>
-                                                                            }
-                                                                        })
-                                                                        .collect_view()}
-                                                                </div>
-                                                                {section_fields
-                                                                    .into_iter()
-                                                                    .map(|field| {
-                                                                                let field_id = field.id;
-                                                                                let display_label = if field.label.trim().is_empty() {
-                                                                                    format!("Field {field_id}")
-                                                                                } else {
-                                                                                    field.label.clone()
-                                                                                };
-                                                                                let tooltip_label = display_label.clone();
-                                                                                let aria_label = format!("Configure {display_label}");
-                                                                                let heading_label = display_label.clone();
-                                                                                let type_icon = form_builder_field_type_icon(&field.field_type);
-                                                                                view! {
-                                                                                    <button
-                                                                                        class=move || {
-                                                                                            if dragged_builder_field.get() == Some(field_id) {
-                                                                                                "form-builder-grid-tile form-builder-grid-tile--field form-builder-grid-field form-builder-grid-field--summary is-dragging"
-                                                                                            } else {
-                                                                                                "form-builder-grid-tile form-builder-grid-tile--field form-builder-grid-field form-builder-grid-field--summary"
-                                                                                            }
-                                                                                        }
-                                                                                        type="button"
-                                                                                        title=tooltip_label
-                                                                                        aria-label=aria_label
-                                                                                        draggable="true"
-                                                                                        style=format!(
-                                                                                            "grid-column: {} / span {}; grid-row: {} / span {};",
-                                                                                            field.grid_column.max(1),
-                                                                                            field.grid_width.max(1),
-                                                                                            field.grid_row.max(1),
-                                                                                            field.grid_height.max(1),
-                                                                                        )
-                                                                                        on:dragstart=move |_event: leptos::ev::DragEvent| {
-                                                                                            clear_form_builder_drag_intent(
-                                                                                                builder_drag_preview,
-                                                                                                pending_builder_drag_preview,
-                                                                                                builder_drag_preview_timeout,
-                                                                                            );
-                                                                                            dragged_builder_field.set(Some(field_id));
-                                                                                        }
-                                                                                        on:dragenter=move |event| {
-                                                                                            if let Some(dragged_field_id) = dragged_builder_field.get_untracked() {
-                                                                                                event.prevent_default();
-                                                                                                schedule_form_builder_drag_preview(
-                                                                                                    builder_drag_preview,
-                                                                                                    pending_builder_drag_preview,
-                                                                                                    builder_drag_preview_timeout,
-                                                                                                    FormBuilderDragPreview {
-                                                                                                    field_id: dragged_field_id,
-                                                                                                    section_id,
-                                                                                                    row: field.grid_row.max(1),
-                                                                                                    column: field.grid_column.max(1),
-                                                                                                    },
-                                                                                                    format!(
-                                                                                                        "form-builder-section-{section_id}-cell-r{}-c{}",
-                                                                                                        field.grid_row.max(1),
-                                                                                                        field.grid_column.max(1),
-                                                                                                    ),
-                                                                                                );
-                                                                                            }
-                                                                                        }
-                                                                                        on:click=move |_| {
-                                                                                            if suppress_builder_field_click.get_untracked() == Some(field_id) {
-                                                                                                suppress_builder_field_click.set(None);
-                                                                                            } else {
-                                                                                                dragged_builder_field.set(None);
-                                                                                                active_builder_field.set(Some(field_id));
-                                                                                            }
-                                                                                        }
-                                                                                        on:dragend=move |_| {
-                                                                                            clear_form_builder_drag_intent(
-                                                                                                builder_drag_preview,
-                                                                                                pending_builder_drag_preview,
-                                                                                                builder_drag_preview_timeout,
-                                                                                            );
-                                                                                            dragged_builder_field.set(None);
-                                                                                        }
-                                                                                    >
-                                                                                        <div class="form-builder-grid-field__summary">
-                                                                                            <span class="form-builder-field-type-icon">{type_icon}</span>
-                                                                                            <div>
-                                                                                                <h5>{heading_label}</h5>
-                                                                                            </div>
-                                                                                        </div>
-                                                                                    </button>
-                                                                                }
-                                                                            })
-                                                                            .collect_view()}
-                                                                <button
-                                                                    class="form-builder-grid-tile form-builder-grid-tile--add form-builder-add-field-card"
-                                                                    type="button"
-                                                                    aria-label="Add field"
-                                                                    title="Add field"
-                                                                    style=format!(
-                                                                        "grid-column: {add_field_column} / span 1; grid-row: {add_field_row} / span 1;",
-                                                                    )
-                                                                    on:dragenter=move |event| {
-                                                                        if let Some(field_id) = dragged_builder_field.get_untracked() {
-                                                                            event.prevent_default();
-                                                                            schedule_form_builder_drag_preview(
-                                                                                builder_drag_preview,
-                                                                                pending_builder_drag_preview,
-                                                                                builder_drag_preview_timeout,
-                                                                                FormBuilderDragPreview {
-                                                                                field_id,
-                                                                                section_id,
-                                                                                row: add_field_row,
-                                                                                column: add_field_column,
-                                                                                },
-                                                                                format!("form-builder-section-{section_id}-cell-r{add_field_row}-c{add_field_column}"),
-                                                                            );
-                                                                        }
-                                                                    }
-                                                                    on:click=move |_| {
-                                                                        if suppress_builder_field_click.get_untracked().is_some() {
-                                                                            suppress_builder_field_click.set(None);
-                                                                            return;
-                                                                        }
-                                                                        let field_id = next_builder_field_id.get_untracked();
-                                                                        next_builder_field_id.set(field_id + 1);
-                                                                        let existing_fields = builder_fields.get_untracked();
-                                                                        let new_field = blank_form_builder_field(field_id, section_id, &existing_fields, column_count);
-                                                                        builder_fields.update(|fields| fields.push(new_field));
-                                                                    }
-                                                                >
-                                                                    <div class="form-builder-grid-field__summary">
-                                                                        <span class="form-builder-field-type-icon">
-                                                                            <Plus/>
-                                                                        </span>
-                                                                        <div>
-                                                                            <h5>"Add Field"</h5>
-                                                                        </div>
-                                                                    </div>
-                                                                </button>
-                                                            </div>
-                                                        </article>
-                                                    }
-                                                })
-                                                .collect_view()
-                                        }}
+                                        <For
+                                            each=move || {
+                                                builder_sections
+                                                    .get()
+                                                    .into_iter()
+                                                    .filter(|section| {
+                                                        active_builder_section.get() == section.id.to_string()
+                                                    })
+                                                    .map(|section| section.id)
+                                                    .collect::<Vec<_>>()
+                                            }
+                                            key=|section_id| *section_id
+                                            children=move |section_id| {
+                                                view! {
+                                                    <FormBuilderSection
+                                                        section_id=section_id
+                                                        builder_sections=builder_sections
+                                                        builder_fields=builder_fields
+                                                        active_builder_field=active_builder_field
+                                                        dragged_builder_field=dragged_builder_field
+                                                        builder_drag_preview=builder_drag_preview
+                                                        pending_builder_drag_preview=pending_builder_drag_preview
+                                                        builder_drag_preview_timeout=builder_drag_preview_timeout
+                                                        suppress_builder_field_click=suppress_builder_field_click
+                                                        next_builder_field_id=next_builder_field_id
+                                                    />
+                                                }
+                                            }
+                                        />
                                     </div>
                                 </section>
-
                                 {move || message.get().map(|message| view! {
                                     <p class="form-message" role="status">{message}</p>
                                 })}
@@ -5797,244 +6180,11 @@ pub fn FormsNewPage() -> impl IntoView {
                                     </button>
                                 </div>
                             </form>
-                            <Portal>
-                                <Show when=move || active_builder_field.get().is_some()>
-                                    {move || {
-                                        let close = move |_| active_builder_field.set(None);
-                                        let field_id = active_builder_field.get().unwrap_or_default();
-                                        let field = builder_fields
-                                            .get()
-                                            .into_iter()
-                                            .find(|field| field.id == field_id);
-                                        field
-                                            .map(|field| {
-                                                let display_label = if field.label.trim().is_empty() {
-                                                    format!("Field {}", field.id)
-                                                } else {
-                                                    field.label.clone()
-                                                };
-                                                let section_column_count = builder_sections
-                                                    .get()
-                                                    .into_iter()
-                                                    .find(|section| section.id == field.section_id)
-                                                    .map(|section| section.column_count.clamp(1, 12))
-                                                    .unwrap_or(12);
-                                                let section_fields_for_bounds = builder_fields
-                                                    .get()
-                                                    .into_iter()
-                                                    .filter(|candidate| candidate.section_id == field.section_id)
-                                                    .collect::<Vec<_>>();
-                                                let displayed_rows = section_fields_for_bounds
-                                                    .iter()
-                                                    .map(|candidate| {
-                                                        candidate.grid_row.max(1) + candidate.grid_height.max(1) - 1
-                                                    })
-                                                    .max()
-                                                    .unwrap_or(1)
-                                                    .max(3);
-                                                let row_max = displayed_rows + 1;
-                                                let width_max = max_form_builder_field_width(
-                                                    &field,
-                                                    &section_fields_for_bounds,
-                                                    section_column_count,
-                                                );
-                                                let height_max = max_form_builder_field_height(
-                                                    &field,
-                                                    &section_fields_for_bounds,
-                                                );
-                                                view! {
-                                                    <section class="sheet-overlay form-field-config-overlay" aria-label="Field configuration">
-                                                        <button class="sheet-overlay__scrim" type="button" aria-label="Close field configuration" on:click=close></button>
-                                                        <aside class="sheet-panel blurred-surface form-field-config-sheet" role="dialog" aria-modal="true" aria-label="Field configuration">
-                                                            <div class="sheet-panel__actions">
-                                                                <button
-                                                                    class="icon-button icon-button--danger"
-                                                                    type="button"
-                                                                    aria-label="Delete field"
-                                                                    title="Delete field"
-                                                                    on:click=move |_| {
-                                                                        builder_fields.update(|fields| {
-                                                                            fields.retain(|field| field.id != field_id);
-                                                                        });
-                                                                        active_builder_field.set(None);
-                                                                    }
-                                                                >
-                                                                    <Trash2/>
-                                                                </button>
-                                                                <button class="icon-button sheet-panel__close" type="button" aria-label="Close field configuration" title="Close field configuration" on:click=close>
-                                                                    <X/>
-                                                                </button>
-                                                            </div>
-
-                                                            <header class="sheet-panel__header">
-                                                                <p>"Field Configuration"</p>
-                                                                <h2>{display_label}</h2>
-                                                            </header>
-
-                                                            <section class="sheet-panel__section">
-                                                                <div class="form-grid form-builder-field-sheet-controls">
-                                                                    <label class="form-field" for=format!("sheet-form-field-label-{field_id}")>
-                                                                        <span>"Field Label"</span>
-                                                                        <input
-                                                                            id=format!("sheet-form-field-label-{field_id}")
-                                                                            type="text"
-                                                                            autocomplete="off"
-                                                                            prop:value=field.label.clone()
-                                                                            on:input=move |event| {
-                                                                                let next_label = event_target_value(&event);
-                                                                                builder_fields.update(|fields| {
-                                                                                    if let Some(field) = fields.iter_mut().find(|field| field.id == field_id) {
-                                                                                        field.label = next_label.clone();
-                                                                                        if !field.key_was_edited {
-                                                                                            field.key = slug_from_label(&next_label);
-                                                                                        }
-                                                                                    }
-                                                                                });
-                                                                            }
-                                                                        />
-                                                                    </label>
-
-                                                                    <label class="form-field" for=format!("sheet-form-field-key-{field_id}")>
-                                                                        <span>"Field Key"</span>
-                                                                        <input
-                                                                            id=format!("sheet-form-field-key-{field_id}")
-                                                                            type="text"
-                                                                            autocomplete="off"
-                                                                            prop:value=field.key.clone()
-                                                                            on:input=move |event| {
-                                                                                let next_key = slug_from_label(&event_target_value(&event));
-                                                                                builder_fields.update(|fields| {
-                                                                                    if let Some(field) = fields.iter_mut().find(|field| field.id == field_id) {
-                                                                                        field.key = next_key.clone();
-                                                                                        field.key_was_edited = true;
-                                                                                    }
-                                                                                });
-                                                                            }
-                                                                        />
-                                                                    </label>
-
-                                                                    <label class="form-field" for=format!("sheet-form-field-type-{field_id}")>
-                                                                        <span>"Field Type"</span>
-                                                                        <select
-                                                                            id=format!("sheet-form-field-type-{field_id}")
-                                                                            prop:value=field.field_type.clone()
-                                                                            on:change=move |event| {
-                                                                                let next_type = event_target_value(&event);
-                                                                                builder_fields.update(|fields| {
-                                                                                    if let Some(field) = fields.iter_mut().find(|field| field.id == field_id) {
-                                                                                        field.field_type = next_type.clone();
-                                                                                    }
-                                                                                });
-                                                                            }
-                                                                        >
-                                                                            <option value="text">"Text"</option>
-                                                                            <option value="number">"Number"</option>
-                                                                            <option value="date">"Date"</option>
-                                                                            <option value="boolean">"Checkbox"</option>
-                                                                            <option value="single_choice">"Single choice"</option>
-                                                                            <option value="multi_choice">"Multi choice"</option>
-                                                                        </select>
-                                                                    </label>
-
-                                                                    <label class="form-field form-field--checkbox form-builder-field__required">
-                                                                        <input
-                                                                            type="checkbox"
-                                                                            prop:checked=field.required
-                                                                            on:change=move |event| {
-                                                                                let checked = event_target_checked(&event);
-                                                                                builder_fields.update(|fields| {
-                                                                                    if let Some(field) = fields.iter_mut().find(|field| field.id == field_id) {
-                                                                                        field.required = checked;
-                                                                                    }
-                                                                                });
-                                                                            }
-                                                                        />
-                                                                        <span>"Required"</span>
-                                                                    </label>
-
-                                                                    {["Row", "Column", "Width", "Height"]
-                                                                        .into_iter()
-                                                                        .enumerate()
-                                                                        .map(|(index, label)| {
-                                                                            let value = match index {
-                                                                                0 => field.grid_row,
-                                                                                1 => field.grid_column,
-                                                                                2 => field.grid_width,
-                                                                                _ => field.grid_height,
-                                                                            };
-                                                                            let max_value = match index {
-                                                                                0 => row_max,
-                                                                                1 => (section_column_count - field.grid_width.max(1) + 1)
-                                                                                    .clamp(1, section_column_count.max(1)),
-                                                                                2 => width_max,
-                                                                                _ => height_max,
-                                                                            }
-                                                                            .max(1);
-                                                                            let value = value.clamp(1, max_value);
-                                                                            let valid_values = valid_form_builder_layout_values(
-                                                                                &field,
-                                                                                &section_fields_for_bounds,
-                                                                                index,
-                                                                                max_value,
-                                                                                section_column_count,
-                                                                            );
-                                                                            let control_id = format!("sheet-form-field-layout-{index}-{field_id}");
-                                                                            let input_id = control_id.clone();
-                                                                            view! {
-                                                                                <label class="form-field" for=control_id>
-                                                                                    <span>{label}</span>
-                                                                                    <select
-                                                                                        id=input_id
-                                                                                        on:change=move |event| {
-                                                                                            let value = event_target_value(&event)
-                                                                                                .parse::<i32>()
-                                                                                                .unwrap_or(1)
-                                                                                                .clamp(1, max_value);
-                                                                                            builder_fields.update(|fields| {
-                                                                                                if let Some(position) = fields.iter().position(|field| field.id == field_id) {
-                                                                                                    let candidate = form_builder_layout_candidate(
-                                                                                                        &fields[position],
-                                                                                                        index,
-                                                                                                        value,
-                                                                                                        section_column_count,
-                                                                                                    );
-
-                                                                                                    if !form_builder_field_has_collision(&candidate, fields) {
-                                                                                                        fields[position] = candidate;
-                                                                                                    }
-                                                                                                }
-                                                                                            });
-                                                                                        }
-                                                                                    >
-                                                                                        {valid_values
-                                                                                            .into_iter()
-                                                                                            .map(|option_value| {
-                                                                                                view! {
-                                                                                                    <option
-                                                                                                        value=option_value.to_string()
-                                                                                                        selected=option_value == value
-                                                                                                    >
-                                                                                                        {option_value}
-                                                                                                    </option>
-                                                                                                }
-                                                                                            })
-                                                                                            .collect_view()}
-                                                                                    </select>
-                                                                                </label>
-                                                                            }
-                                                                        })
-                                                                        .collect_view()}
-                                                                </div>
-                                                            </section>
-                                                        </aside>
-                                                    </section>
-                                                }
-                                                .into_any()
-                                            })
-                                            .unwrap_or_else(|| view! {}.into_any())
-                                    }}
-                                </Show>
-                            </Portal>
+                            <FieldConfigSheet
+                                active_builder_field=active_builder_field
+                                builder_sections=builder_sections
+                                builder_fields=builder_fields
+                            />
                             </div>
                         }
                         .into_any()
