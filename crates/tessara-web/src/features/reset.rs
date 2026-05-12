@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::collections::HashSet;
+#[cfg(feature = "hydrate")]
+use std::{cell::Cell, cell::RefCell, rc::Rc};
 
 use icons::{
     CalendarDays, ChevronDown, ChevronRight, CircleDot, ExternalLink, Hash, ListChecks, ListFilter,
@@ -751,6 +753,12 @@ struct FormBuilderDragPreview {
     column: i32,
 }
 
+#[derive(Clone, Copy)]
+enum FormBuilderResizeAxis {
+    Width,
+    Height,
+}
+
 fn set_form_builder_drag_preview(
     builder_drag_preview: RwSignal<Option<FormBuilderDragPreview>>,
     next_preview: FormBuilderDragPreview,
@@ -774,6 +782,59 @@ fn form_builder_grid_cell_from_drag_event(
 #[cfg(not(feature = "hydrate"))]
 fn form_builder_grid_cell_from_drag_event(
     _event: &leptos::ev::DragEvent,
+) -> Option<(i32, i32, String)> {
+    None
+}
+
+#[cfg(feature = "hydrate")]
+fn form_builder_grid_cell_from_pointer(
+    event: &leptos::ev::DragEvent,
+    row_count: i32,
+) -> Option<(i32, i32, String)> {
+    let target = event.target()?.dyn_into::<web_sys::Element>().ok()?;
+    let grid = target.closest(".form-builder-layout-grid").ok().flatten()?;
+    let grid_id = grid.get_attribute("data-section-id")?;
+    let bounds_fn = js_sys::Reflect::get(&grid, &"getBoundingClientRect".into())
+        .ok()?
+        .dyn_into::<js_sys::Function>()
+        .ok()?;
+    let bounds = bounds_fn.call0(&grid).ok()?;
+    let left = js_sys::Reflect::get(&bounds, &"left".into())
+        .ok()?
+        .as_f64()?;
+    let top = js_sys::Reflect::get(&bounds, &"top".into())
+        .ok()?
+        .as_f64()?;
+    let width = js_sys::Reflect::get(&bounds, &"width".into())
+        .ok()?
+        .as_f64()?;
+    let height = js_sys::Reflect::get(&bounds, &"height".into())
+        .ok()?
+        .as_f64()?;
+
+    if width <= 0.0 || height <= 0.0 {
+        return None;
+    }
+
+    let row_count = row_count.max(1);
+    let x = (f64::from(event.client_x()) - left).clamp(0.0, width - 1.0);
+    let y = (f64::from(event.client_y()) - top).clamp(0.0, height - 1.0);
+    let column_width = width / f64::from(FORM_BUILDER_COLUMN_COUNT);
+    let row_height = height / f64::from(row_count);
+    let column = ((x / column_width).floor() as i32 + 1).clamp(1, FORM_BUILDER_COLUMN_COUNT);
+    let row = ((y / row_height).floor() as i32 + 1).clamp(1, row_count);
+
+    Some((
+        row,
+        column,
+        format!("form-builder-section-{grid_id}-cell-r{row}-c{column}"),
+    ))
+}
+
+#[cfg(not(feature = "hydrate"))]
+fn form_builder_grid_cell_from_pointer(
+    _event: &leptos::ev::DragEvent,
+    _row_count: i32,
 ) -> Option<(i32, i32, String)> {
     None
 }
@@ -2438,14 +2499,12 @@ fn form_builder_section_layout(
     let section_fields = form_builder_section_fields(section.id, fields);
     let occupied_cells = form_builder_occupancy_map(&section_fields);
     let column_count = FORM_BUILDER_COLUMN_COUNT;
-    let field_row_count = section_fields
+    let bottom_occupied_row = section_fields
         .iter()
         .map(|field| field.grid_row.max(1) + field.grid_height.max(1) - 1)
         .max()
-        .unwrap_or(1)
-        .max(3);
-    let (add_field_row, _) = first_available_form_builder_cell_in_map(&occupied_cells);
-    let row_count = field_row_count.max(add_field_row).max(3);
+        .unwrap_or(0);
+    let row_count = (bottom_occupied_row + 1).max(2);
 
     FormBuilderSectionLayout {
         fields: section_fields,
@@ -2485,7 +2544,7 @@ fn form_builder_field_has_collision(
 ) -> bool {
     fields
         .iter()
-        .any(|candidate| form_builder_fields_overlap(field, candidate))
+        .any(|candidate| candidate.id != field.id && form_builder_fields_overlap(field, candidate))
 }
 
 fn form_builder_linear_grid_index(field: &FormBuilderFieldDraft, column_count: i32) -> i32 {
@@ -2679,6 +2738,211 @@ fn valid_form_builder_layout_values(
     }
 
     values
+}
+
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+fn set_form_builder_field_size(
+    fields: &mut [FormBuilderFieldDraft],
+    field_id: usize,
+    width: i32,
+    height: i32,
+) {
+    let Some(position) = fields.iter().position(|field| field.id == field_id) else {
+        return;
+    };
+
+    let mut candidate = fields[position].clone();
+    candidate.grid_width = width.clamp(1, FORM_BUILDER_COLUMN_COUNT);
+    candidate.grid_height = height.clamp(1, 6);
+
+    let column_end = candidate.grid_column.max(1) + candidate.grid_width.max(1) - 1;
+    if column_end > FORM_BUILDER_COLUMN_COUNT {
+        return;
+    }
+
+    if form_builder_field_has_collision(&candidate, fields) {
+        return;
+    }
+
+    fields[position] = candidate;
+}
+
+fn form_builder_grid_tile_style(field: &FormBuilderFieldDraft) -> String {
+    format!(
+        "grid-column: {} / span {}; grid-row: {} / span {};",
+        field.grid_column.max(1),
+        field.grid_width.max(1),
+        field.grid_row.max(1),
+        field.grid_height.max(1),
+    )
+}
+
+#[cfg(feature = "hydrate")]
+fn start_form_builder_field_resize(
+    event: leptos::ev::MouseEvent,
+    axis: FormBuilderResizeAxis,
+    field_id: usize,
+    builder_fields: RwSignal<Vec<FormBuilderFieldDraft>>,
+    suppress_builder_field_click: RwSignal<Option<usize>>,
+) {
+    event.prevent_default();
+    event.stop_propagation();
+
+    let Some(window) = web_sys::window() else {
+        return;
+    };
+    if window
+        .match_media("(max-width: 767px)")
+        .ok()
+        .flatten()
+        .is_some_and(|query| query.matches())
+    {
+        return;
+    }
+
+    let Some(target) = event
+        .target()
+        .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
+    else {
+        return;
+    };
+    let Some(tile) = target.closest(".form-builder-grid-tile").ok().flatten() else {
+        return;
+    };
+    let Some(grid) = target.closest(".form-builder-layout-grid").ok().flatten() else {
+        return;
+    };
+    let Some(start_field) = builder_fields
+        .get_untracked()
+        .into_iter()
+        .find(|field| field.id == field_id)
+    else {
+        return;
+    };
+
+    let Some(grid_element) = grid.dyn_ref::<web_sys::HtmlElement>() else {
+        return;
+    };
+    let cell_width = f64::from(grid_element.client_width()) / f64::from(FORM_BUILDER_COLUMN_COUNT);
+    let row_height = 80.0;
+    if cell_width <= 0.0 {
+        return;
+    }
+
+    suppress_builder_field_click.set(Some(field_id));
+    let _ = tile.class_list().add_1("is-resizing");
+
+    let active = Rc::new(Cell::new(true));
+    let last_valid_width = Rc::new(Cell::new(start_field.grid_width.max(1)));
+    let last_valid_height = Rc::new(Cell::new(start_field.grid_height.max(1)));
+    let start_x = event.client_x();
+    let start_y = event.client_y();
+
+    let move_callback: Rc<RefCell<Option<Closure<dyn FnMut(web_sys::MouseEvent)>>>> =
+        Rc::new(RefCell::new(None));
+    let up_callback: Rc<RefCell<Option<Closure<dyn FnMut(web_sys::MouseEvent)>>>> =
+        Rc::new(RefCell::new(None));
+
+    let active_for_move = active.clone();
+    let tile_for_move = tile.clone();
+    let last_width_for_move = last_valid_width.clone();
+    let last_height_for_move = last_valid_height.clone();
+    let builder_fields_for_move = builder_fields;
+    let start_field_for_move = start_field.clone();
+    *move_callback.borrow_mut() = Some(Closure::wrap(Box::new(move |event: web_sys::MouseEvent| {
+        if !active_for_move.get() {
+            return;
+        }
+        event.prevent_default();
+
+        let mut candidate = start_field_for_move.clone();
+        match axis {
+            FormBuilderResizeAxis::Width => {
+                let width_delta =
+                    (f64::from(event.client_x() - start_x) / cell_width).round() as i32;
+                candidate.grid_width = (start_field_for_move.grid_width + width_delta)
+                    .clamp(1, FORM_BUILDER_COLUMN_COUNT);
+            }
+            FormBuilderResizeAxis::Height => {
+                let height_delta =
+                    (f64::from(event.client_y() - start_y) / row_height).round() as i32;
+                candidate.grid_height =
+                    (start_field_for_move.grid_height + height_delta).clamp(1, 6);
+            }
+        }
+
+        let column_end = candidate.grid_column.max(1) + candidate.grid_width.max(1) - 1;
+        if column_end > FORM_BUILDER_COLUMN_COUNT {
+            return;
+        }
+
+        let fields = builder_fields_for_move.get_untracked();
+        if form_builder_field_has_collision(&candidate, &fields) {
+            return;
+        }
+
+        last_width_for_move.set(candidate.grid_width.max(1));
+        last_height_for_move.set(candidate.grid_height.max(1));
+        let _ = tile_for_move.set_attribute("style", &form_builder_grid_tile_style(&candidate));
+    }) as Box<dyn FnMut(_)>));
+
+    let active_for_up = active.clone();
+    let tile_for_up = tile.clone();
+    let last_width_for_up = last_valid_width.clone();
+    let last_height_for_up = last_valid_height.clone();
+    let move_callback_for_up = move_callback.clone();
+    let up_callback_for_up = up_callback.clone();
+    *up_callback.borrow_mut() = Some(Closure::wrap(Box::new(move |event: web_sys::MouseEvent| {
+        if !active_for_up.replace(false) {
+            return;
+        }
+        event.prevent_default();
+        let _ = tile_for_up.class_list().remove_1("is-resizing");
+        builder_fields.update(|fields| {
+            set_form_builder_field_size(
+                fields,
+                field_id,
+                last_width_for_up.get(),
+                last_height_for_up.get(),
+            );
+        });
+
+        if let Some(window) = web_sys::window() {
+            if let Some(callback) = move_callback_for_up.borrow().as_ref() {
+                let _ = window.remove_event_listener_with_callback(
+                    "mousemove",
+                    callback.as_ref().unchecked_ref(),
+                );
+            }
+            if let Some(callback) = up_callback_for_up.borrow().as_ref() {
+                let _ = window.remove_event_listener_with_callback(
+                    "mouseup",
+                    callback.as_ref().unchecked_ref(),
+                );
+            }
+        }
+        move_callback_for_up.borrow_mut().take();
+        up_callback_for_up.borrow_mut().take();
+    }) as Box<dyn FnMut(_)>));
+
+    if let Some(callback) = move_callback.borrow().as_ref() {
+        let _ =
+            window.add_event_listener_with_callback("mousemove", callback.as_ref().unchecked_ref());
+    }
+    if let Some(callback) = up_callback.borrow().as_ref() {
+        let _ =
+            window.add_event_listener_with_callback("mouseup", callback.as_ref().unchecked_ref());
+    }
+}
+
+#[cfg(not(feature = "hydrate"))]
+fn start_form_builder_field_resize(
+    _event: leptos::ev::MouseEvent,
+    _axis: FormBuilderResizeAxis,
+    _field_id: usize,
+    _builder_fields: RwSignal<Vec<FormBuilderFieldDraft>>,
+    _suppress_builder_field_click: RwSignal<Option<usize>>,
+) {
 }
 
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
@@ -5488,6 +5752,7 @@ fn FormBuilderGrid(
 
     view! {
         <div
+            data-section-id=section_id
             class=move || {
                 if dragged_builder_field.get().is_some() {
                     "form-builder-layout-grid is-dragging"
@@ -5525,12 +5790,45 @@ fn FormBuilderGrid(
                 );
             }
             on:dragover=move |event| {
-                if dragged_builder_field.get_untracked().is_some() {
-                    event.prevent_default();
-                }
+                let Some(field_id) = dragged_builder_field.get_untracked() else {
+                    return;
+                };
+                event.prevent_default();
+                let Some((row, column, target_id)) =
+                    form_builder_grid_cell_from_pointer(&event, grid_rows.get_untracked())
+                else {
+                    return;
+                };
+                schedule_form_builder_drag_preview(
+                    builder_drag_preview,
+                    pending_builder_drag_preview,
+                    builder_drag_preview_timeout,
+                    FormBuilderDragPreview {
+                        field_id,
+                        section_id,
+                        row,
+                        column,
+                    },
+                    target_id,
+                );
             }
             on:drop=move |event| {
                 event.prevent_default();
+                if let Some(field_id) = dragged_builder_field.get_untracked() {
+                    if let Some((row, column, _)) =
+                        form_builder_grid_cell_from_pointer(&event, grid_rows.get_untracked())
+                    {
+                        set_form_builder_drag_preview(
+                            builder_drag_preview,
+                            FormBuilderDragPreview {
+                                field_id,
+                                section_id,
+                                row,
+                                column,
+                            },
+                        );
+                    }
+                }
                 commit_form_builder_drag_preview(
                     builder_fields,
                     builder_drag_preview,
@@ -5599,8 +5897,9 @@ fn FormBuilderGrid(
                 children=move |field| {
                     view! {
                         <FormBuilderGridTile
-                            field=field
+                            field_id=field.id
                             section_id=section_id
+                            builder_fields=builder_fields
                             active_builder_field=active_builder_field
                             dragged_builder_field=dragged_builder_field
                             builder_drag_preview=builder_drag_preview
@@ -5617,8 +5916,9 @@ fn FormBuilderGrid(
 
 #[component]
 fn FormBuilderGridTile(
-    field: FormBuilderFieldDraft,
+    field_id: usize,
     section_id: usize,
+    builder_fields: RwSignal<Vec<FormBuilderFieldDraft>>,
     active_builder_field: RwSignal<Option<usize>>,
     dragged_builder_field: RwSignal<Option<usize>>,
     builder_drag_preview: RwSignal<Option<FormBuilderDragPreview>>,
@@ -5626,39 +5926,67 @@ fn FormBuilderGridTile(
     builder_drag_preview_timeout: RwSignal<Option<i32>>,
     suppress_builder_field_click: RwSignal<Option<usize>>,
 ) -> impl IntoView {
-    let field_id = field.id;
-    let display_label = if field.label.trim().is_empty() {
-        format!("Field {field_id}")
-    } else {
-        field.label.clone()
-    };
-    let tooltip_label = display_label.clone();
-    let aria_label = format!("Configure {display_label}");
-    let heading_label = display_label.clone();
-    let type_icon = form_builder_field_type_icon(&field.field_type);
-    let field_row = field.grid_row.max(1);
-    let field_column = field.grid_column.max(1);
-    view! {
-        <button
-            class=move || {
-                if dragged_builder_field.get() == Some(field_id) {
-                    "form-builder-grid-tile form-builder-grid-tile--field form-builder-grid-field form-builder-grid-field--summary is-dragging"
+    let field = Memo::new(move |_| {
+        builder_fields
+            .get()
+            .into_iter()
+            .find(|field| field.id == field_id)
+    });
+    let display_label = move || {
+        field
+            .get()
+            .map(|field| {
+                if field.label.trim().is_empty() {
+                    format!("Field {field_id}")
                 } else {
-                    "form-builder-grid-tile form-builder-grid-tile--field form-builder-grid-field form-builder-grid-field--summary"
+                    field.label
+                }
+            })
+            .unwrap_or_else(|| format!("Field {field_id}"))
+    };
+    view! {
+        <div
+            class=move || {
+                let width_class = field
+                    .get()
+                    .map(|field| {
+                        if field.grid_width >= 4 {
+                            " form-builder-grid-tile--mobile-label"
+                        } else {
+                            ""
+                        }
+                    })
+                    .unwrap_or("");
+                if dragged_builder_field.get() == Some(field_id) {
+                    format!(
+                        "form-builder-grid-tile form-builder-grid-tile--field form-builder-grid-field form-builder-grid-field--summary is-dragging{width_class}"
+                    )
+                } else {
+                    format!(
+                        "form-builder-grid-tile form-builder-grid-tile--field form-builder-grid-field form-builder-grid-field--summary{width_class}"
+                    )
                 }
             }
-            type="button"
-            title=tooltip_label
-            aria-label=aria_label
             draggable="true"
-            style=format!(
-                "grid-column: {} / span {}; grid-row: {} / span {};",
-                field_column,
-                field.grid_width.max(1),
-                field_row,
-                field.grid_height.max(1),
-            )
+            style=move || {
+                field
+                    .get()
+                    .map(|field| form_builder_grid_tile_style(&field))
+                    .unwrap_or_else(|| "display: none;".into())
+            }
             on:dragstart=move |_event: leptos::ev::DragEvent| {
+                #[cfg(feature = "hydrate")]
+                {
+                    if let Some(target) = _event
+                        .target()
+                        .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
+                    {
+                        if target.closest(".form-builder-resize-handle").ok().flatten().is_some() {
+                            _event.prevent_default();
+                            return;
+                        }
+                    }
+                }
                 clear_form_builder_drag_intent(
                     builder_drag_preview,
                     pending_builder_drag_preview,
@@ -5669,6 +5997,9 @@ fn FormBuilderGridTile(
             on:dragenter=move |event| {
                 if let Some(dragged_field_id) = dragged_builder_field.get_untracked() {
                     event.prevent_default();
+                    let Some(field) = field.get_untracked() else {
+                        return;
+                    };
                     schedule_form_builder_drag_preview(
                         builder_drag_preview,
                         pending_builder_drag_preview,
@@ -5676,10 +6007,14 @@ fn FormBuilderGridTile(
                         FormBuilderDragPreview {
                             field_id: dragged_field_id,
                             section_id,
-                            row: field_row,
-                            column: field_column,
+                            row: field.grid_row.max(1),
+                            column: field.grid_column.max(1),
                         },
-                        format!("form-builder-section-{section_id}-cell-r{field_row}-c{field_column}"),
+                        format!(
+                            "form-builder-section-{section_id}-cell-r{}-c{}",
+                            field.grid_row.max(1),
+                            field.grid_column.max(1),
+                        ),
                     );
                 }
             }
@@ -5700,13 +6035,62 @@ fn FormBuilderGridTile(
                 dragged_builder_field.set(None);
             }
         >
-            <div class="form-builder-grid-field__summary">
-                <span class="form-builder-field-type-icon">{type_icon}</span>
+            <button
+                class="form-builder-grid-field__summary"
+                type="button"
+                title=display_label
+                aria-label=move || format!("Configure {}", display_label())
+                on:click=move |event| {
+                    event.stop_propagation();
+                    if suppress_builder_field_click.get_untracked() == Some(field_id) {
+                        suppress_builder_field_click.set(None);
+                    } else {
+                        dragged_builder_field.set(None);
+                        active_builder_field.set(Some(field_id));
+                    }
+                }
+            >
+                <span class="form-builder-field-type-icon">
+                    {move || {
+                        field
+                            .get()
+                            .map(|field| form_builder_field_type_icon(&field.field_type))
+                            .unwrap_or_else(|| form_builder_field_type_icon("text"))
+                    }}
+                </span>
                 <div>
-                    <h5>{heading_label}</h5>
+                    <h5>{display_label}</h5>
                 </div>
-            </div>
-        </button>
+            </button>
+            <span
+                class="form-builder-resize-handle form-builder-resize-handle--width"
+                title="Resize field width"
+                aria-hidden="true"
+                on:mousedown=move |event| {
+                    start_form_builder_field_resize(
+                        event,
+                        FormBuilderResizeAxis::Width,
+                        field_id,
+                        builder_fields,
+                        suppress_builder_field_click,
+                    );
+                }
+            ></span>
+            <span
+                class="form-builder-resize-handle form-builder-resize-handle--height"
+                title="Resize field height"
+                aria-hidden="true"
+                on:mousedown=move |event| {
+                    start_form_builder_field_resize(
+                        event,
+                        FormBuilderResizeAxis::Height,
+                        field_id,
+                        builder_fields,
+                        suppress_builder_field_click,
+                    );
+                }
+            ></span>
+        </div>
     }
 }
 
@@ -5742,7 +6126,7 @@ fn FieldConfigSheet(
                             let layout = form_builder_section_layout(&section, &all_fields);
                             let section_column_count = layout.column_count;
                             let section_fields_for_bounds = layout.fields;
-                            let row_max = layout.row_count + 1;
+                            let row_max = layout.row_count;
                             let width_max = max_form_builder_field_width(
                                 &field,
                                 &section_fields_for_bounds,
@@ -5965,18 +6349,7 @@ pub fn FormsNewPage() -> impl IntoView {
     let is_loading = RwSignal::new(true);
     let is_saving = RwSignal::new(false);
     let message = RwSignal::new(None::<String>);
-    let builder_field_count = Memo::new(move |_| {
-        builder_fields
-            .get()
-            .into_iter()
-            .filter(|field| {
-                !field.label.trim().is_empty()
-                    || !field.key.trim().is_empty()
-                    || field.field_type != "text"
-                    || field.required
-            })
-            .count()
-    });
+    let builder_field_count = Memo::new(move |_| builder_fields.get().len());
 
     Effect::new(move |_| {
         load_form_create_options(node_types, existing_forms, is_loading, message);
