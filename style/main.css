@@ -1937,6 +1937,48 @@ input {
   grid-column: 1 / -1;
 }
 
+.workflow-step-list {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.workflow-step-card {
+  display: grid;
+  gap: 0.85rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--color-control) 52%, transparent);
+  padding: 0.85rem;
+}
+
+.workflow-step-card__header,
+.workflow-step-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.workflow-step-card__position {
+  color: var(--semantic-primary);
+  font-size: 0.82rem;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.workflow-step-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.workflow-step-card__footer {
+  color: var(--color-muted);
+  font-size: 0.9rem;
+  font-weight: 750;
+}
+
 .form-field--range span {
   display: flex;
   align-items: center;
