@@ -18,7 +18,7 @@ use wasm_bindgen::JsCast;
 #[cfg(feature = "hydrate")]
 use wasm_bindgen::closure::Closure;
 
-use crate::infra::routing::{NodeRouteParams, require_route_params};
+use crate::infra::routing::{FormRouteParams, NodeRouteParams, require_route_params};
 use crate::ui::components::{
     AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator,
     Button, DataTable, DropdownMenu, EmptyState, InfoListTable, InfoRow, PageHeader,
@@ -94,15 +94,15 @@ const ROUTE_MIGRATIONS: [RouteMigration; 32] = [
     RouteMigration {
         name: "Form Detail",
         route: "/forms/:form_id",
-        href: "/forms/demo-partner-profile",
-        status: "Pending",
+        href: "/forms/650af9e7-f428-4a4f-ae9c-7f4e1ca12edd",
+        status: "Done",
         rbac_status: "Pending",
     },
     RouteMigration {
         name: "Edit Form",
         route: "/forms/:form_id/edit",
-        href: "/forms/demo-partner-profile/edit",
-        status: "Pending",
+        href: "/forms/650af9e7-f428-4a4f-ae9c-7f4e1ca12edd/edit",
+        status: "Done",
         rbac_status: "Pending",
     },
     RouteMigration {
@@ -697,6 +697,14 @@ struct CreateFormPayload {
 
 #[derive(Serialize)]
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+struct UpdateFormPayload {
+    name: String,
+    slug: String,
+    scope_node_type_id: Option<String>,
+}
+
+#[derive(Serialize)]
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
 struct CreateFormSectionPayload {
     title: String,
     position: i32,
@@ -722,6 +730,7 @@ struct CreateFormFieldPayload {
 #[derive(Clone, Debug, PartialEq)]
 struct FormBuilderSectionDraft {
     id: usize,
+    remote_id: Option<String>,
     title: String,
     description: String,
     column_count: i32,
@@ -732,6 +741,7 @@ struct FormBuilderSectionDraft {
 #[derive(Clone, Debug, PartialEq)]
 struct FormBuilderFieldDraft {
     id: usize,
+    remote_id: Option<String>,
     section_id: usize,
     label: String,
     key: String,
@@ -1000,10 +1010,17 @@ struct FormSummary {
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 struct FormVersionSummary {
+    id: String,
     version_label: Option<String>,
     status: String,
+    version_major: Option<i32>,
+    version_minor: Option<i32>,
+    version_patch: Option<i32>,
+    compatibility_group_name: Option<String>,
     published_at: Option<String>,
     field_count: i64,
+    semantic_bump: Option<String>,
+    started_new_major_line: Option<bool>,
     #[serde(default)]
     assignment_nodes: Vec<FormVersionAssignmentNodeSummary>,
 }
@@ -1014,6 +1031,83 @@ struct FormVersionAssignmentNodeSummary {
     node_name: String,
     parent_node_id: Option<String>,
     node_path: String,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+struct FormDefinition {
+    id: String,
+    name: String,
+    slug: String,
+    scope_node_type_id: Option<String>,
+    scope_node_type_name: Option<String>,
+    #[serde(default)]
+    versions: Vec<FormVersionSummary>,
+    #[serde(default)]
+    workflows: Vec<FormWorkflowLink>,
+    #[serde(default)]
+    reports: Vec<FormReportLink>,
+    #[serde(default)]
+    dataset_sources: Vec<FormDatasetSourceLink>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+struct FormWorkflowLink {
+    id: String,
+    name: String,
+    slug: String,
+    current_version_label: Option<String>,
+    current_status: Option<String>,
+    assignment_count: i64,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+struct FormReportLink {
+    id: String,
+    name: String,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+struct FormDatasetSourceLink {
+    dataset_id: String,
+    dataset_name: String,
+    source_alias: String,
+    selection_rule: String,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+struct RenderedForm {
+    form_version_id: String,
+    form_id: String,
+    form_name: String,
+    version_label: Option<String>,
+    status: String,
+    #[serde(default)]
+    sections: Vec<RenderedSection>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+struct RenderedSection {
+    id: String,
+    title: String,
+    description: String,
+    column_count: i32,
+    position: i32,
+    #[serde(default)]
+    fields: Vec<RenderedField>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+struct RenderedField {
+    id: String,
+    key: String,
+    label: String,
+    field_type: String,
+    required: bool,
+    position: i32,
+    grid_row: i32,
+    grid_column: i32,
+    grid_width: i32,
+    grid_height: i32,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -2099,11 +2193,41 @@ fn active_form_version(form: &FormSummary) -> Option<&FormVersionSummary> {
         .or_else(|| form.versions.last())
 }
 
+fn active_form_definition_version(form: &FormDefinition) -> Option<&FormVersionSummary> {
+    form.versions
+        .iter()
+        .rev()
+        .find(|version| version.status == "published")
+        .or_else(|| form.versions.last())
+}
+
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+fn editable_form_definition_version(form: &FormDefinition) -> Option<&FormVersionSummary> {
+    form.versions
+        .iter()
+        .rev()
+        .find(|version| version.status == "draft")
+        .or_else(|| active_form_definition_version(form))
+}
+
 fn form_version_label(version: Option<&FormVersionSummary>) -> String {
     version
         .and_then(|version| version.version_label.as_deref())
         .map(str::to_string)
         .unwrap_or_else(|| "-".to_string())
+}
+
+fn form_version_sort_label(version: &FormVersionSummary) -> String {
+    version.version_label.clone().unwrap_or_else(|| {
+        match (
+            version.version_major,
+            version.version_minor,
+            version.version_patch,
+        ) {
+            (Some(major), Some(minor), Some(patch)) => format!("{major}.{minor}.{patch}"),
+            _ => "-".to_string(),
+        }
+    })
 }
 
 fn form_status_label(version: Option<&FormVersionSummary>) -> String {
@@ -2119,6 +2243,10 @@ fn form_field_count_label(version: Option<&FormVersionSummary>) -> String {
 }
 
 fn form_scope_label(form: &FormSummary) -> String {
+    nonempty_text(form.scope_node_type_name.as_deref(), "All node types")
+}
+
+fn form_definition_scope_label(form: &FormDefinition) -> String {
     nonempty_text(form.scope_node_type_name.as_deref(), "All node types")
 }
 
@@ -2157,6 +2285,16 @@ fn form_attached_nodes(version: Option<&FormVersionSummary>) -> Vec<FormAttachme
         })
         .filter(|nodes| !nodes.is_empty())
         .unwrap_or_default()
+}
+
+fn rendered_field_type_label(field_type: &str) -> String {
+    match field_type {
+        "static_text" => "Static text".to_string(),
+        "single_choice" => "Single choice".to_string(),
+        "multi_choice" => "Multi choice".to_string(),
+        "boolean" => "Checkbox".to_string(),
+        _ => sentence_label(field_type),
+    }
 }
 
 fn form_node_filter_options(forms: &[FormSummary]) -> Vec<FormNodeFilterOption> {
@@ -2392,9 +2530,19 @@ fn existing_form_slugs(forms: &[FormSummary]) -> Vec<String> {
     forms.iter().map(|form| form.slug.clone()).collect()
 }
 
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+fn existing_form_slugs_for_update(forms: &[FormSummary], current_form_id: &str) -> Vec<String> {
+    forms
+        .iter()
+        .filter(|form| form.id != current_form_id)
+        .map(|form| form.slug.clone())
+        .collect()
+}
+
 fn blank_form_builder_section(id: usize) -> FormBuilderSectionDraft {
     FormBuilderSectionDraft {
         id,
+        remote_id: None,
         title: if id == 1 {
             "Main".into()
         } else {
@@ -2416,6 +2564,7 @@ fn blank_form_builder_field_at(
 ) -> FormBuilderFieldDraft {
     FormBuilderFieldDraft {
         id,
+        remote_id: None,
         section_id,
         label: String::new(),
         key: String::new(),
@@ -2625,6 +2774,7 @@ fn max_form_builder_new_field_width_at(
     for candidate_column in column..=FORM_BUILDER_COLUMN_COUNT {
         let candidate = FormBuilderFieldDraft {
             id: usize::MAX,
+            remote_id: None,
             section_id,
             label: String::new(),
             key: String::new(),
@@ -3201,6 +3351,133 @@ fn load_forms(
     }
 }
 
+fn load_form_detail(
+    form_id: String,
+    detail: RwSignal<Option<FormDefinition>>,
+    rendered_form: RwSignal<Option<RenderedForm>>,
+    is_loading: RwSignal<bool>,
+    load_error: RwSignal<Option<String>>,
+) {
+    #[cfg(feature = "hydrate")]
+    {
+        leptos::task::spawn_local(async move {
+            is_loading.set(true);
+            load_error.set(None);
+            rendered_form.set(None);
+
+            match gloo_net::http::Request::get(&format!("/api/forms/{form_id}"))
+                .send()
+                .await
+            {
+                Ok(response) if response.status() == 401 => {
+                    detail.set(None);
+                    rendered_form.set(None);
+                    is_loading.set(false);
+                    redirect_to_login();
+                }
+                Ok(response) if response.ok() => match response.json::<FormDefinition>().await {
+                    Ok(form) => {
+                        let active_version_id =
+                            active_form_definition_version(&form).map(|version| version.id.clone());
+                        detail.set(Some(form));
+                        if let Some(version_id) = active_version_id {
+                            load_rendered_form_version(version_id, rendered_form);
+                        }
+                        is_loading.set(false);
+                    }
+                    Err(error) => {
+                        detail.set(None);
+                        load_error.set(Some(format!("Unable to parse form detail: {error}")));
+                        is_loading.set(false);
+                    }
+                },
+                Ok(response) => {
+                    detail.set(None);
+                    load_error.set(Some(format!(
+                        "Unable to load form detail. Server returned {}.",
+                        response.status()
+                    )));
+                    is_loading.set(false);
+                }
+                Err(error) => {
+                    detail.set(None);
+                    load_error.set(Some(format!("Unable to load form detail: {error}")));
+                    is_loading.set(false);
+                }
+            }
+        });
+    }
+
+    #[cfg(not(feature = "hydrate"))]
+    {
+        let _ = (form_id, detail, rendered_form, is_loading, load_error);
+    }
+}
+
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+fn load_rendered_form_version(
+    form_version_id: String,
+    rendered_form: RwSignal<Option<RenderedForm>>,
+) {
+    #[cfg(feature = "hydrate")]
+    {
+        leptos::task::spawn_local(async move {
+            match gloo_net::http::Request::get(&format!(
+                "/api/form-versions/{form_version_id}/render"
+            ))
+            .send()
+            .await
+            {
+                Ok(response) if response.ok() => {
+                    if let Ok(rendered) = response.json::<RenderedForm>().await {
+                        rendered_form.set(Some(rendered));
+                    }
+                }
+                _ => rendered_form.set(None),
+            }
+        });
+    }
+
+    #[cfg(not(feature = "hydrate"))]
+    {
+        let _ = (form_version_id, rendered_form);
+    }
+}
+
+#[cfg(feature = "hydrate")]
+async fn send_json_id_request(
+    builder: gloo_net::http::RequestBuilder,
+    body: Option<String>,
+    action: &str,
+) -> Result<IdResponse, String> {
+    let response = if let Some(body) = body {
+        builder
+            .header("Content-Type", "application/json")
+            .body(body)
+            .map_err(|_| format!("{action} request could not be prepared."))?
+            .send()
+            .await
+    } else {
+        builder.send().await
+    };
+
+    match response {
+        Ok(response) if response.status() == 401 => {
+            redirect_to_login();
+            Err("Authentication is required.".into())
+        }
+        Ok(response) if response.ok() => response
+            .json::<IdResponse>()
+            .await
+            .map_err(|_| format!("{action} response could not be read.")),
+        Ok(response) => Err(format!(
+            "{action} failed with status {}.",
+            response.status()
+        )),
+        Err(_) => Err(format!("Could not reach the {action} API.")),
+    }
+}
+
 fn load_form_create_options(
     node_types: RwSignal<Vec<NodeTypeCatalogEntry>>,
     existing_forms: RwSignal<Vec<FormSummary>>,
@@ -3274,6 +3551,250 @@ fn load_form_create_options(
     #[cfg(not(feature = "hydrate"))]
     {
         let _ = (node_types, existing_forms, is_loading, message);
+    }
+}
+
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+fn hydrate_form_builder_from_rendered(
+    rendered_form: Option<&RenderedForm>,
+) -> (
+    Vec<FormBuilderSectionDraft>,
+    Vec<FormBuilderFieldDraft>,
+    usize,
+    usize,
+) {
+    let Some(rendered_form) = rendered_form else {
+        return (vec![blank_form_builder_section(1)], Vec::new(), 2, 1);
+    };
+
+    let mut sections = rendered_form.sections.clone();
+    sections.sort_by(|left, right| {
+        left.position
+            .cmp(&right.position)
+            .then(left.title.cmp(&right.title))
+    });
+
+    if sections.is_empty() {
+        return (vec![blank_form_builder_section(1)], Vec::new(), 2, 1);
+    }
+
+    let mut section_id_by_remote = HashMap::new();
+    let mut builder_sections = Vec::new();
+    let mut builder_fields = Vec::new();
+    let mut next_section_id = 1usize;
+    let mut next_field_id = 1usize;
+
+    for section in &sections {
+        let local_section_id = next_section_id;
+        next_section_id += 1;
+        section_id_by_remote.insert(section.id.clone(), local_section_id);
+
+        builder_sections.push(FormBuilderSectionDraft {
+            id: local_section_id,
+            remote_id: Some(section.id.clone()),
+            title: nonempty_text(Some(section.title.as_str()), "Main"),
+            description: section.description.clone(),
+            column_count: FORM_BUILDER_COLUMN_COUNT,
+            default_column_width: 6,
+            position: section.position,
+        });
+    }
+
+    for section in &sections {
+        let Some(section_id) = section_id_by_remote.get(&section.id).copied() else {
+            continue;
+        };
+        let mut fields = section.fields.clone();
+        fields.sort_by(|left, right| {
+            left.position
+                .cmp(&right.position)
+                .then(left.label.cmp(&right.label))
+        });
+
+        for field in fields {
+            let local_field_id = next_field_id;
+            next_field_id += 1;
+            builder_fields.push(FormBuilderFieldDraft {
+                id: local_field_id,
+                remote_id: Some(field.id),
+                section_id,
+                label: field.label,
+                key: field.key,
+                field_type: field.field_type,
+                required: field.required,
+                grid_row: field.grid_row.max(1),
+                grid_column: field.grid_column.clamp(1, FORM_BUILDER_COLUMN_COUNT),
+                grid_width: field.grid_width.clamp(1, FORM_BUILDER_COLUMN_COUNT),
+                grid_height: field.grid_height.clamp(1, 6),
+                key_was_edited: true,
+            });
+        }
+    }
+
+    (
+        builder_sections,
+        builder_fields,
+        next_section_id,
+        next_field_id,
+    )
+}
+
+fn load_form_edit_options(
+    form_id: String,
+    node_types: RwSignal<Vec<NodeTypeCatalogEntry>>,
+    existing_forms: RwSignal<Vec<FormSummary>>,
+    detail: RwSignal<Option<FormDefinition>>,
+    rendered_form: RwSignal<Option<RenderedForm>>,
+    edit_version_id: RwSignal<Option<String>>,
+    edit_version_status: RwSignal<Option<String>>,
+    name: RwSignal<String>,
+    scope_node_type_id: RwSignal<String>,
+    builder_sections: RwSignal<Vec<FormBuilderSectionDraft>>,
+    builder_fields: RwSignal<Vec<FormBuilderFieldDraft>>,
+    active_builder_section: RwSignal<String>,
+    next_builder_section_id: RwSignal<usize>,
+    next_builder_field_id: RwSignal<usize>,
+    is_loading: RwSignal<bool>,
+    message: RwSignal<Option<String>>,
+) {
+    #[cfg(feature = "hydrate")]
+    {
+        leptos::task::spawn_local(async move {
+            is_loading.set(true);
+            message.set(None);
+            detail.set(None);
+            rendered_form.set(None);
+            edit_version_id.set(None);
+            edit_version_status.set(None);
+
+            let node_types_response = gloo_net::http::Request::get("/api/node-types").send().await;
+            let forms_response = gloo_net::http::Request::get("/api/forms").send().await;
+            let detail_response =
+                gloo_net::http::Request::get(&format!("/api/admin/forms/{form_id}"))
+                    .send()
+                    .await;
+
+            match (node_types_response, forms_response, detail_response) {
+                (Ok(response), _, _) if response.status() == 401 => {
+                    is_loading.set(false);
+                    redirect_to_login();
+                }
+                (_, Ok(response), _) if response.status() == 401 => {
+                    is_loading.set(false);
+                    redirect_to_login();
+                }
+                (_, _, Ok(response)) if response.status() == 401 => {
+                    is_loading.set(false);
+                    redirect_to_login();
+                }
+                (Ok(node_types_response), Ok(forms_response), Ok(detail_response))
+                    if node_types_response.ok() && forms_response.ok() && detail_response.ok() =>
+                {
+                    let loaded_node_types = node_types_response
+                        .json::<Vec<NodeTypeCatalogEntry>>()
+                        .await;
+                    let loaded_forms = forms_response.json::<Vec<FormSummary>>().await;
+                    let loaded_detail = detail_response.json::<FormDefinition>().await;
+
+                    match (loaded_node_types, loaded_forms, loaded_detail) {
+                        (Ok(loaded_node_types), Ok(loaded_forms), Ok(form)) => {
+                            let selected_version = editable_form_definition_version(&form).cloned();
+                            let mut loaded_rendered_form = None;
+
+                            if let Some(version) = selected_version.as_ref() {
+                                match gloo_net::http::Request::get(&format!(
+                                    "/api/form-versions/{}/render",
+                                    version.id
+                                ))
+                                .send()
+                                .await
+                                {
+                                    Ok(response) if response.ok() => {
+                                        loaded_rendered_form =
+                                            response.json::<RenderedForm>().await.ok();
+                                    }
+                                    Ok(response) if response.status() == 401 => {
+                                        is_loading.set(false);
+                                        redirect_to_login();
+                                        return;
+                                    }
+                                    _ => {
+                                        loaded_rendered_form = None;
+                                    }
+                                }
+                            }
+
+                            let (sections, fields, next_section, next_field) =
+                                hydrate_form_builder_from_rendered(loaded_rendered_form.as_ref());
+                            let active_section = sections
+                                .first()
+                                .map(|section| section.id.to_string())
+                                .unwrap_or_else(|| "1".to_string());
+
+                            name.set(form.name.clone());
+                            scope_node_type_id
+                                .set(form.scope_node_type_id.clone().unwrap_or_default());
+                            edit_version_id
+                                .set(selected_version.as_ref().map(|version| version.id.clone()));
+                            edit_version_status.set(
+                                selected_version
+                                    .as_ref()
+                                    .map(|version| version.status.clone()),
+                            );
+                            active_builder_section.set(active_section);
+                            next_builder_section_id.set(next_section);
+                            next_builder_field_id.set(next_field);
+                            builder_sections.set(sections);
+                            builder_fields.set(fields);
+                            rendered_form.set(loaded_rendered_form);
+                            detail.set(Some(form));
+                            node_types.set(loaded_node_types);
+                            existing_forms.set(loaded_forms);
+                            is_loading.set(false);
+                        }
+                        _ => {
+                            is_loading.set(false);
+                            message.set(Some("Form edit options could not be read.".into()));
+                        }
+                    }
+                }
+                (Ok(node_types_response), Ok(forms_response), Ok(detail_response)) => {
+                    is_loading.set(false);
+                    message.set(Some(format!(
+                        "Form edit options failed with status {} / {} / {}.",
+                        node_types_response.status(),
+                        forms_response.status(),
+                        detail_response.status()
+                    )));
+                }
+                _ => {
+                    is_loading.set(false);
+                    message.set(Some("Could not reach the form edit APIs.".into()));
+                }
+            }
+        });
+    }
+
+    #[cfg(not(feature = "hydrate"))]
+    {
+        let _ = (
+            form_id,
+            node_types,
+            existing_forms,
+            detail,
+            rendered_form,
+            edit_version_id,
+            edit_version_status,
+            name,
+            scope_node_type_id,
+            builder_sections,
+            builder_fields,
+            active_builder_section,
+            next_builder_section_id,
+            next_builder_field_id,
+            is_loading,
+            message,
+        );
     }
 }
 
@@ -4618,6 +5139,339 @@ fn submit_update_node(
             metadata_fields,
             metadata_values,
             metadata_booleans,
+            is_saving,
+            message,
+        );
+    }
+}
+
+fn submit_update_form(
+    form_id: String,
+    name: RwSignal<String>,
+    scope_node_type_id: RwSignal<String>,
+    sections: RwSignal<Vec<FormBuilderSectionDraft>>,
+    fields: RwSignal<Vec<FormBuilderFieldDraft>>,
+    existing_forms: RwSignal<Vec<FormSummary>>,
+    edit_version_id: RwSignal<Option<String>>,
+    edit_version_status: RwSignal<Option<String>>,
+    rendered_form: RwSignal<Option<RenderedForm>>,
+    is_saving: RwSignal<bool>,
+    message: RwSignal<Option<String>>,
+) {
+    #[cfg(feature = "hydrate")]
+    {
+        if is_saving.get() {
+            return;
+        }
+
+        let form_name = name.get().trim().to_string();
+        if form_name.is_empty() {
+            message.set(Some("Form name is required.".into()));
+            return;
+        }
+
+        let form_slug = unique_slug_from_label(
+            &form_name,
+            &existing_form_slugs_for_update(existing_forms.get_untracked().as_slice(), &form_id),
+        );
+        if form_slug.is_empty() {
+            message.set(Some("Form name must contain letters or numbers.".into()));
+            return;
+        }
+
+        let current_sections = sections.get_untracked();
+        let current_fields = fields.get_untracked();
+        let prepared_sections = match prepared_form_builder_sections(&current_sections) {
+            Ok(sections) => sections,
+            Err(error) => {
+                message.set(Some(error));
+                return;
+            }
+        };
+        let prepared_fields = match prepared_form_builder_fields(&current_fields) {
+            Ok(fields) => fields,
+            Err(error) => {
+                message.set(Some(error));
+                return;
+            }
+        };
+        if prepared_fields.is_empty() {
+            message.set(Some("Add at least one field to the form builder.".into()));
+            return;
+        }
+
+        let payload = UpdateFormPayload {
+            name: form_name,
+            slug: form_slug,
+            scope_node_type_id: scope_node_type_id.get().trim().to_string().into_nonempty(),
+        };
+        let current_rendered_form = rendered_form.get_untracked();
+        let original_section_ids = current_rendered_form
+            .as_ref()
+            .map(|rendered| {
+                rendered
+                    .sections
+                    .iter()
+                    .map(|section| section.id.clone())
+                    .collect::<HashSet<_>>()
+            })
+            .unwrap_or_default();
+        let original_field_ids = current_rendered_form
+            .as_ref()
+            .map(|rendered| {
+                rendered
+                    .sections
+                    .iter()
+                    .flat_map(|section| section.fields.iter().map(|field| field.id.clone()))
+                    .collect::<HashSet<_>>()
+            })
+            .unwrap_or_default();
+        let kept_section_ids = prepared_sections
+            .iter()
+            .filter_map(|section| section.remote_id.clone())
+            .collect::<HashSet<_>>();
+        let kept_field_ids = prepared_fields
+            .iter()
+            .filter_map(|field| field.remote_id.clone())
+            .collect::<HashSet<_>>();
+        let update_existing_draft = edit_version_status.get_untracked().as_deref() == Some("draft");
+        let existing_version_id = edit_version_id.get_untracked();
+
+        leptos::task::spawn_local(async move {
+            is_saving.set(true);
+            message.set(None);
+
+            let body = match serde_json::to_string(&payload) {
+                Ok(body) => body,
+                Err(_) => {
+                    message.set(Some("Update request could not be prepared.".into()));
+                    is_saving.set(false);
+                    return;
+                }
+            };
+
+            if let Err(error) = send_json_id_request(
+                gloo_net::http::Request::put(&format!("/api/admin/forms/{form_id}")),
+                Some(body),
+                "Update form",
+            )
+            .await
+            {
+                message.set(Some(error));
+                is_saving.set(false);
+                return;
+            }
+
+            let version_id = if update_existing_draft {
+                match existing_version_id {
+                    Some(version_id) => version_id,
+                    None => {
+                        message.set(Some("No editable draft version was available.".into()));
+                        is_saving.set(false);
+                        return;
+                    }
+                }
+            } else {
+                match send_json_id_request(
+                    gloo_net::http::Request::post(&format!("/api/admin/forms/{form_id}/versions")),
+                    Some("{}".into()),
+                    "Create draft version",
+                )
+                .await
+                {
+                    Ok(created) => created.id,
+                    Err(error) => {
+                        message.set(Some(error));
+                        is_saving.set(false);
+                        return;
+                    }
+                }
+            };
+
+            if update_existing_draft {
+                for field_id in original_field_ids.difference(&kept_field_ids) {
+                    if let Err(error) = send_json_id_request(
+                        gloo_net::http::Request::delete(&format!(
+                            "/api/admin/form-fields/{field_id}"
+                        )),
+                        None,
+                        "Delete form field",
+                    )
+                    .await
+                    {
+                        message.set(Some(error));
+                        is_saving.set(false);
+                        return;
+                    }
+                }
+
+                for section_id in original_section_ids.difference(&kept_section_ids) {
+                    if let Err(error) = send_json_id_request(
+                        gloo_net::http::Request::delete(&format!(
+                            "/api/admin/form-sections/{section_id}"
+                        )),
+                        None,
+                        "Delete form section",
+                    )
+                    .await
+                    {
+                        message.set(Some(error));
+                        is_saving.set(false);
+                        return;
+                    }
+                }
+            }
+
+            let mut section_ids = HashMap::new();
+            for section in &prepared_sections {
+                let section_payload = CreateFormSectionPayload {
+                    title: section.title.clone(),
+                    position: section.position,
+                    description: section.description.clone(),
+                    column_count: section.column_count,
+                };
+                let section_body = match serde_json::to_string(&section_payload) {
+                    Ok(body) => body,
+                    Err(_) => {
+                        message.set(Some(format!(
+                            "{} section request could not be prepared.",
+                            section.title
+                        )));
+                        is_saving.set(false);
+                        return;
+                    }
+                };
+
+                let request = if update_existing_draft {
+                    section
+                        .remote_id
+                        .as_ref()
+                        .map(|section_id| {
+                            (
+                                gloo_net::http::Request::put(&format!(
+                                    "/api/admin/form-sections/{section_id}"
+                                )),
+                                "Update form section",
+                            )
+                        })
+                        .unwrap_or_else(|| {
+                            (
+                                gloo_net::http::Request::post(&format!(
+                                    "/api/admin/form-versions/{version_id}/sections"
+                                )),
+                                "Create form section",
+                            )
+                        })
+                } else {
+                    (
+                        gloo_net::http::Request::post(&format!(
+                            "/api/admin/form-versions/{version_id}/sections"
+                        )),
+                        "Create form section",
+                    )
+                };
+
+                match send_json_id_request(request.0, Some(section_body), request.1).await {
+                    Ok(saved_section) => {
+                        section_ids.insert(section.id, saved_section.id);
+                    }
+                    Err(error) => {
+                        message.set(Some(error));
+                        is_saving.set(false);
+                        return;
+                    }
+                }
+            }
+
+            for (index, field) in prepared_fields.iter().enumerate() {
+                let Some(section_id) = section_ids.get(&field.section_id) else {
+                    message.set(Some(format!(
+                        "{} field could not be matched to a section.",
+                        field.label
+                    )));
+                    is_saving.set(false);
+                    return;
+                };
+                let field_payload = CreateFormFieldPayload {
+                    section_id: section_id.clone(),
+                    key: field.key.clone(),
+                    label: field.label.clone(),
+                    field_type: field.field_type.clone(),
+                    required: field.required,
+                    position: (index + 1) as i32,
+                    grid_row: field.grid_row,
+                    grid_column: field.grid_column,
+                    grid_width: field.grid_width,
+                    grid_height: field.grid_height,
+                };
+                let field_body = match serde_json::to_string(&field_payload) {
+                    Ok(body) => body,
+                    Err(_) => {
+                        message.set(Some(format!(
+                            "{} field request could not be prepared.",
+                            field.label
+                        )));
+                        is_saving.set(false);
+                        return;
+                    }
+                };
+
+                let request = if update_existing_draft {
+                    field
+                        .remote_id
+                        .as_ref()
+                        .map(|field_id| {
+                            (
+                                gloo_net::http::Request::put(&format!(
+                                    "/api/admin/form-fields/{field_id}"
+                                )),
+                                "Update form field",
+                            )
+                        })
+                        .unwrap_or_else(|| {
+                            (
+                                gloo_net::http::Request::post(&format!(
+                                    "/api/admin/form-versions/{version_id}/fields"
+                                )),
+                                "Create form field",
+                            )
+                        })
+                } else {
+                    (
+                        gloo_net::http::Request::post(&format!(
+                            "/api/admin/form-versions/{version_id}/fields"
+                        )),
+                        "Create form field",
+                    )
+                };
+
+                if let Err(error) =
+                    send_json_id_request(request.0, Some(field_body), request.1).await
+                {
+                    message.set(Some(error));
+                    is_saving.set(false);
+                    return;
+                }
+            }
+
+            if let Some(window) = web_sys::window() {
+                let _ = window.location().set_href(&format!("/forms/{form_id}"));
+            }
+        });
+    }
+
+    #[cfg(not(feature = "hydrate"))]
+    {
+        let _ = (
+            form_id,
+            name,
+            scope_node_type_id,
+            sections,
+            fields,
+            existing_forms,
+            edit_version_id,
+            edit_version_status,
+            rendered_form,
             is_saving,
             message,
         );
@@ -6647,12 +7501,775 @@ pub fn FormsNewPage() -> impl IntoView {
 
 #[component]
 pub fn FormsDetailPage() -> impl IntoView {
-    view! { <ResetRoute active_route="forms" title="Form Detail" route="/forms/:form_id" status="Registered" next_step="Restore published version and field inspection."/> }
+    let params = require_route_params::<FormRouteParams>();
+    let form_id = params.form_id;
+    let detail = RwSignal::new(None::<FormDefinition>);
+    let rendered_form = RwSignal::new(None::<RenderedForm>);
+    let is_loading = RwSignal::new(true);
+    let error = RwSignal::new(None::<String>);
+
+    Effect::new(move |_| {
+        load_form_detail(form_id.clone(), detail, rendered_form, is_loading, error);
+    });
+
+    view! {
+        <AppShell active_route="forms" title="Forms">
+            <Breadcrumb>
+                <BreadcrumbItem>
+                    <BreadcrumbLink href="/forms">"Forms"</BreadcrumbLink>
+                </BreadcrumbItem>
+                <BreadcrumbSeparator/>
+                {move || {
+                    detail.get().map(|form| {
+                        view! {
+                            <BreadcrumbItem>
+                                <BreadcrumbPage>{form.name}</BreadcrumbPage>
+                            </BreadcrumbItem>
+                        }
+                    })
+                }}
+                {move || {
+                    if detail.get().is_none() {
+                        view! {
+                            <BreadcrumbItem>
+                                <BreadcrumbPage>"Detail"</BreadcrumbPage>
+                            </BreadcrumbItem>
+                        }
+                        .into_any()
+                    } else {
+                        view! {}.into_any()
+                    }
+                }}
+            </Breadcrumb>
+
+            <section class="route-panel forms-page form-detail-page">
+                {move || {
+                    if is_loading.get() {
+                        view! {
+                            <section class="organization-state" aria-live="polite">
+                                <h3>"Loading form"</h3>
+                                <p>"Fetching form details."</p>
+                            </section>
+                        }
+                        .into_any()
+                    } else if let Some(message) = error.get() {
+                        view! {
+                            <section class="organization-state is-error" role="alert">
+                                <h3>"Form detail unavailable"</h3>
+                                <p>{message}</p>
+                            </section>
+                        }
+                        .into_any()
+                    } else if let Some(form) = detail.get() {
+                        let edit_href = format!("/forms/{}/edit", form.id);
+                        view! {
+                            <PageHeader title="Form Detail">
+                                <a class="button" href=edit_href>"Edit Form"</a>
+                            </PageHeader>
+                            <FormDetailContent form rendered_form=rendered_form.get()/>
+                        }
+                        .into_any()
+                    } else {
+                        view! {
+                            <EmptyState
+                                title="Form detail unavailable"
+                                message="The selected form could not be loaded."
+                            />
+                        }
+                        .into_any()
+                    }
+                }}
+            </section>
+        </AppShell>
+    }
+}
+
+#[component]
+fn FormDetailContent(form: FormDefinition, rendered_form: Option<RenderedForm>) -> impl IntoView {
+    let active_version = active_form_definition_version(&form).cloned();
+    let attached_nodes = form_attached_nodes(active_version.as_ref());
+    let active_status = active_version
+        .as_ref()
+        .map(|version| version.status.clone())
+        .unwrap_or_else(|| "none".to_string());
+    let active_version_label = form_version_label(active_version.as_ref());
+    let active_status_label = form_status_label(active_version.as_ref());
+    let active_field_count = form_field_count_label(active_version.as_ref());
+    let published_at = active_version
+        .as_ref()
+        .and_then(|version| version.published_at.clone());
+    let form_name = form.name.clone();
+    let form_slug = form.slug.clone();
+    let form_scope = form_definition_scope_label(&form);
+    let version_count = form.versions.len().to_string();
+    let versions = form.versions.clone();
+    let workflows = form.workflows.clone();
+    let reports = form.reports.clone();
+    let dataset_sources = form.dataset_sources.clone();
+
+    view! {
+        <div class="organization-detail-content form-detail-content">
+            <header class="organization-detail-content__header">
+                <p>"Form Detail"</p>
+                <h2>{form_name}</h2>
+            </header>
+
+            <div class="organization-detail-content__grid">
+                <section class="organization-detail-card">
+                    <h3>"Details"</h3>
+                    <InfoListTable>
+                        <tr>
+                            <th scope="row">"Slug"</th>
+                            <td>{form_slug}</td>
+                        </tr>
+                        <tr>
+                            <th scope="row">"Scope"</th>
+                            <td>{form_scope}</td>
+                        </tr>
+                        <tr>
+                            <th scope="row">"Versions"</th>
+                            <td>{version_count}</td>
+                        </tr>
+                    </InfoListTable>
+                </section>
+
+                <section class="organization-detail-card">
+                    <h3>"Active Version"</h3>
+                    <InfoListTable>
+                        <tr>
+                            <th scope="row">"Version"</th>
+                            <td>{active_version_label}</td>
+                        </tr>
+                        <tr>
+                            <th scope="row">"Status"</th>
+                            <td><span class=status_badge_class(&active_status)>{active_status_label}</span></td>
+                        </tr>
+                        <tr>
+                            <th scope="row">"Fields"</th>
+                            <td>{active_field_count}</td>
+                        </tr>
+                        <tr>
+                            <th scope="row">"Published"</th>
+                            <td>
+                                {published_at
+                                    .map(|value| view! { <Timestamp value/> }.into_any())
+                                    .unwrap_or_else(|| view! { <span>"-"</span> }.into_any())}
+                            </td>
+                        </tr>
+                    </InfoListTable>
+                </section>
+
+                <section class="organization-detail-card organization-detail-card--wide">
+                    <h3>"Fields"</h3>
+                    <RenderedFormSections rendered_form/>
+                </section>
+
+                <section class="organization-detail-card organization-detail-card--wide">
+                    <h3>"Versions"</h3>
+                    <FormVersionsTable versions=versions/>
+                </section>
+
+                <section class="organization-detail-card organization-detail-card--wide">
+                    <h3>"Attached To"</h3>
+                    <FormAttachedNodesDetail nodes=attached_nodes/>
+                </section>
+
+                <section class="organization-detail-card organization-detail-card--wide">
+                    <h3>"Related Work"</h3>
+                    <FormRelatedLinks
+                        workflows=workflows
+                        reports=reports
+                        dataset_sources=dataset_sources
+                    />
+                </section>
+            </div>
+        </div>
+    }
+}
+
+#[component]
+fn FormAttachedNodesDetail(nodes: Vec<FormAttachmentLink>) -> impl IntoView {
+    view! {
+        <div class="form-detail-attached-list">
+            {if nodes.is_empty() {
+                view! { <p class="related-work-mobile-empty">"No Attached Nodes to Display"</p> }.into_any()
+            } else {
+                nodes
+                    .into_iter()
+                    .map(|node| {
+                        let title = node.title.clone();
+                        view! {
+                            <a class="forms-attached-sheet__item" href=node.href title=title>
+                                <span>{node.label}</span>
+                                <small>{node.title}</small>
+                            </a>
+                        }
+                    })
+                    .collect_view()
+                    .into_any()
+            }}
+        </div>
+    }
+}
+
+#[component]
+fn FormVersionsTable(versions: Vec<FormVersionSummary>) -> impl IntoView {
+    let table_versions = versions.clone();
+    let card_versions = versions;
+
+    view! {
+        <div class="forms-list-responsive-table">
+            <DataTable>
+                <thead>
+                    <tr>
+                        <th scope="col">"Version"</th>
+                        <th scope="col">"Status"</th>
+                        <th scope="col">"Compatibility"</th>
+                        <th scope="col">"Published"</th>
+                        <th class="data-table__cell--center" scope="col">"Fields"</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {if table_versions.is_empty() {
+                        view! {
+                            <tr>
+                                <td class="data-table__empty" colspan="5">"No Versions to Display"</td>
+                            </tr>
+                        }
+                        .into_any()
+                    } else {
+                        table_versions
+                            .into_iter()
+                            .map(|version| {
+                                let status = version.status.clone();
+                                let published_at = version.published_at.clone();
+                                view! {
+                                    <tr>
+                                        <th scope="row">{form_version_sort_label(&version)}</th>
+                                        <td><span class=status_badge_class(&status)>{sentence_label(&status)}</span></td>
+                                        <td>{nonempty_text(version.compatibility_group_name.as_deref(), "-")}</td>
+                                        <td>
+                                            {published_at
+                                                .map(|value| view! { <Timestamp value/> }.into_any())
+                                                .unwrap_or_else(|| view! { <span>"-"</span> }.into_any())}
+                                        </td>
+                                        <td class="data-table__cell--center">{version.field_count.to_string()}</td>
+                                    </tr>
+                                }
+                            })
+                            .collect_view()
+                            .into_any()
+                    }}
+                </tbody>
+            </DataTable>
+            <div class="forms-list-mobile-cards">
+                {if card_versions.is_empty() {
+                    view! { <p class="forms-list-mobile-empty">"No Versions to Display"</p> }.into_any()
+                } else {
+                    card_versions
+                        .into_iter()
+                        .map(|version| {
+                            let status = version.status.clone();
+                            let published_at = version.published_at.clone();
+                            view! {
+                                <article class="forms-list-mobile-card">
+                                    <div class="forms-list-mobile-card__header">
+                                        <h3>{form_version_sort_label(&version)}</h3>
+                                    </div>
+                                    <dl>
+                                        <div>
+                                            <dt>"Status"</dt>
+                                            <dd><span class=status_badge_class(&status)>{sentence_label(&status)}</span></dd>
+                                        </div>
+                                        <div>
+                                            <dt>"Compatibility"</dt>
+                                            <dd>{nonempty_text(version.compatibility_group_name.as_deref(), "-")}</dd>
+                                        </div>
+                                        <div>
+                                            <dt>"Published"</dt>
+                                            <dd>
+                                                {published_at
+                                                    .map(|value| view! { <Timestamp value/> }.into_any())
+                                                    .unwrap_or_else(|| view! { <span>"-"</span> }.into_any())}
+                                            </dd>
+                                        </div>
+                                        <div>
+                                            <dt>"Fields"</dt>
+                                            <dd>{version.field_count.to_string()}</dd>
+                                        </div>
+                                    </dl>
+                                </article>
+                            }
+                        })
+                        .collect_view()
+                        .into_any()
+                }}
+            </div>
+        </div>
+    }
+}
+
+#[component]
+fn RenderedFormSections(rendered_form: Option<RenderedForm>) -> impl IntoView {
+    view! {
+        <div class="form-detail-sections">
+            {if let Some(rendered_form) = rendered_form {
+                if rendered_form.sections.is_empty() {
+                    view! { <p class="related-work-mobile-empty">"No Fields to Display"</p> }.into_any()
+                } else {
+                    rendered_form
+                        .sections
+                        .into_iter()
+                        .map(|section| {
+                            view! {
+                                <article class="form-detail-section">
+                                    <header>
+                                        <div>
+                                            <h4>{section.title}</h4>
+                                            {if section.description.trim().is_empty() {
+                                                view! {}.into_any()
+                                            } else {
+                                                view! { <p>{section.description}</p> }.into_any()
+                                            }}
+                                        </div>
+                                    </header>
+                                    <DataTable>
+                                        <thead>
+                                            <tr>
+                                                <th scope="col">"Field"</th>
+                                                <th scope="col">"Key"</th>
+                                                <th scope="col">"Type"</th>
+                                                <th scope="col">"Required"</th>
+                                                <th scope="col">"Layout"</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {if section.fields.is_empty() {
+                                                view! {
+                                                    <tr>
+                                                        <td class="data-table__empty" colspan="5">"No Fields to Display"</td>
+                                                    </tr>
+                                                }
+                                                .into_any()
+                                            } else {
+                                                section
+                                                    .fields
+                                                    .into_iter()
+                                                    .map(|field| {
+                                                        view! {
+                                                            <tr>
+                                                                <th scope="row">{field.label}</th>
+                                                                <td>{field.key}</td>
+                                                                <td>{rendered_field_type_label(&field.field_type)}</td>
+                                                                <td>{if field.required { "Yes" } else { "No" }}</td>
+                                                                <td>{format!(
+                                                                    "R{} C{} · W{} H{}",
+                                                                    field.grid_row,
+                                                                    field.grid_column,
+                                                                    field.grid_width,
+                                                                    field.grid_height,
+                                                                )}</td>
+                                                            </tr>
+                                                        }
+                                                    })
+                                                    .collect_view()
+                                                    .into_any()
+                                            }}
+                                        </tbody>
+                                    </DataTable>
+                                </article>
+                            }
+                        })
+                        .collect_view()
+                        .into_any()
+                }
+            } else {
+                view! { <p class="related-work-mobile-empty">"No Fields to Display"</p> }.into_any()
+            }}
+        </div>
+    }
+}
+
+#[component]
+fn FormRelatedLinks(
+    workflows: Vec<FormWorkflowLink>,
+    reports: Vec<FormReportLink>,
+    dataset_sources: Vec<FormDatasetSourceLink>,
+) -> impl IntoView {
+    view! {
+        <div class="related-work-summary related-work-summary--cards-only form-detail-related">
+            <section class="related-work-summary__group">
+                <h4>{format!("Workflows ({})", workflows.len())}</h4>
+                {if workflows.is_empty() {
+                    view! { <p class="related-work-mobile-empty">"No Related Workflows to Display"</p> }.into_any()
+                } else {
+                    workflows
+                        .into_iter()
+                        .map(|workflow| {
+                            let href = format!("/workflows/{}", workflow.id);
+                            let status = workflow.current_status.clone().unwrap_or_else(|| "none".to_string());
+                            view! {
+                                <a class="related-work-card" href=href>
+                                    <span>
+                                        <strong>{workflow.name}</strong>
+                                        <small>{workflow.slug}</small>
+                                    </span>
+                                    <span class="related-work-card__meta">{form_version_label_from_option(workflow.current_version_label)}</span>
+                                    <span class=status_badge_class(&status)>{sentence_label(&status)}</span>
+                                </a>
+                            }
+                        })
+                        .collect_view()
+                        .into_any()
+                }}
+            </section>
+            <section class="related-work-summary__group">
+                <h4>{format!("Reports ({})", reports.len())}</h4>
+                {if reports.is_empty() {
+                    view! { <p class="related-work-mobile-empty">"No Related Reports to Display"</p> }.into_any()
+                } else {
+                    reports
+                        .into_iter()
+                        .map(|report| {
+                            view! {
+                                <a class="related-work-card" href=format!("/reports/{}", report.id)>
+                                    <span>
+                                        <strong>{report.name}</strong>
+                                    </span>
+                                </a>
+                            }
+                        })
+                        .collect_view()
+                        .into_any()
+                }}
+            </section>
+            <section class="related-work-summary__group">
+                <h4>{format!("Dataset Sources ({})", dataset_sources.len())}</h4>
+                {if dataset_sources.is_empty() {
+                    view! { <p class="related-work-mobile-empty">"No Related Dataset Sources to Display"</p> }.into_any()
+                } else {
+                    dataset_sources
+                        .into_iter()
+                        .map(|source| {
+                            view! {
+                                <a class="related-work-card" href=format!("/datasets/{}", source.dataset_id)>
+                                    <span>
+                                        <strong>{source.dataset_name}</strong>
+                                        <small>{source.source_alias}</small>
+                                    </span>
+                                    <span class="related-work-card__meta">{sentence_label(&source.selection_rule)}</span>
+                                </a>
+                            }
+                        })
+                        .collect_view()
+                        .into_any()
+                }}
+            </section>
+        </div>
+    }
+}
+
+fn form_version_label_from_option(label: Option<String>) -> String {
+    label.unwrap_or_else(|| "-".to_string())
 }
 
 #[component]
 pub fn FormsEditPage() -> impl IntoView {
-    view! { <ResetRoute active_route="forms" title="Edit Form" route="/forms/:form_id/edit" status="Registered" next_step="Restore form editing workflow."/> }
+    let params = require_route_params::<FormRouteParams>();
+    let form_id = params.form_id;
+    let form_id_for_load = form_id.clone();
+    let form_id_for_submit = form_id.clone();
+    let cancel_href = format!("/forms/{form_id}");
+    let node_types = RwSignal::new(Vec::<NodeTypeCatalogEntry>::new());
+    let existing_forms = RwSignal::new(Vec::<FormSummary>::new());
+    let detail = RwSignal::new(None::<FormDefinition>);
+    let rendered_form = RwSignal::new(None::<RenderedForm>);
+    let edit_version_id = RwSignal::new(None::<String>);
+    let edit_version_status = RwSignal::new(None::<String>);
+    let name = RwSignal::new(String::new());
+    let scope_node_type_id = RwSignal::new(String::new());
+    let builder_sections = RwSignal::new(vec![blank_form_builder_section(1)]);
+    let active_builder_section = RwSignal::new("1".to_string());
+    let next_builder_section_id = RwSignal::new(2usize);
+    let builder_fields = RwSignal::new(Vec::<FormBuilderFieldDraft>::new());
+    let active_builder_field = RwSignal::new(None::<usize>);
+    let dragged_builder_field = RwSignal::new(None::<usize>);
+    let builder_drag_preview = RwSignal::new(None::<FormBuilderDragPreview>);
+    let pending_builder_drag_preview = RwSignal::new(None::<FormBuilderDragPreview>);
+    let builder_drag_preview_timeout = RwSignal::new(None::<i32>);
+    let suppress_builder_field_click = RwSignal::new(None::<usize>);
+    let next_builder_field_id = RwSignal::new(1usize);
+    let is_loading = RwSignal::new(true);
+    let is_saving = RwSignal::new(false);
+    let message = RwSignal::new(None::<String>);
+    let builder_field_count = Memo::new(move |_| builder_fields.get().len());
+
+    Effect::new(move |_| {
+        load_form_edit_options(
+            form_id_for_load.clone(),
+            node_types,
+            existing_forms,
+            detail,
+            rendered_form,
+            edit_version_id,
+            edit_version_status,
+            name,
+            scope_node_type_id,
+            builder_sections,
+            builder_fields,
+            active_builder_section,
+            next_builder_section_id,
+            next_builder_field_id,
+            is_loading,
+            message,
+        );
+    });
+
+    let can_submit = move || !is_loading.get() && !is_saving.get() && !name.get().trim().is_empty();
+
+    view! {
+        <AppShell active_route="forms" title="Forms">
+            <Breadcrumb>
+                <BreadcrumbItem>
+                    <BreadcrumbLink href="/forms">"Forms"</BreadcrumbLink>
+                </BreadcrumbItem>
+                <BreadcrumbSeparator/>
+                {move || {
+                    detail
+                        .get()
+                        .map(|form| {
+                            let href = format!("/forms/{}", form.id);
+                            view! {
+                                <BreadcrumbItem>
+                                    <BreadcrumbLink href=href>{form.name}</BreadcrumbLink>
+                                </BreadcrumbItem>
+                                <BreadcrumbSeparator/>
+                            }
+                            .into_any()
+                        })
+                        .unwrap_or_else(|| view! {}.into_any())
+                }}
+                <BreadcrumbItem>
+                    <BreadcrumbPage>"Edit Form"</BreadcrumbPage>
+                </BreadcrumbItem>
+            </Breadcrumb>
+
+            <section class="route-panel forms-page form-editor-panel">
+                <PageHeader title="Edit Form"/>
+
+                {move || {
+                    if is_loading.get() {
+                        view! {
+                            <section class="organization-state" aria-live="polite">
+                                <h3>"Loading form"</h3>
+                                <p>"Fetching form definition and editable version."</p>
+                            </section>
+                        }
+                        .into_any()
+                    } else {
+                        let form_id_for_submit = form_id_for_submit.clone();
+                        view! {
+                            <div class="form-create-workspace">
+                                <form
+                                    class="native-form form-create-form"
+                                    on:submit=move |event| {
+                                        event.prevent_default();
+                                        submit_update_form(
+                                            form_id_for_submit.clone(),
+                                            name,
+                                            scope_node_type_id,
+                                            builder_sections,
+                                            builder_fields,
+                                            existing_forms,
+                                            edit_version_id,
+                                            edit_version_status,
+                                            rendered_form,
+                                            is_saving,
+                                            message,
+                                        );
+                                    }
+                                >
+                                    <div class="form-grid">
+                                        <label class="form-field form-field--wide" for="form-name">
+                                            <span>"Form Name"</span>
+                                            <input
+                                                id="form-name"
+                                                type="text"
+                                                autocomplete="off"
+                                                prop:value=move || name.get()
+                                                on:input=move |event| name.set(event_target_value(&event))
+                                                required
+                                            />
+                                        </label>
+
+                                        <label class="form-field" for="form-scope-node-type">
+                                            <span>"Scope"</span>
+                                            <select
+                                                id="form-scope-node-type"
+                                                prop:value=move || scope_node_type_id.get()
+                                                on:change=move |event| scope_node_type_id.set(event_target_value(&event))
+                                            >
+                                                <option value="">"No scope"</option>
+                                                {move || {
+                                                    let mut options = node_types.get();
+                                                    options.sort_by(|left, right| {
+                                                        left.singular_label
+                                                            .cmp(&right.singular_label)
+                                                            .then(left.name.cmp(&right.name))
+                                                    });
+                                                    options
+                                                        .into_iter()
+                                                        .map(|node_type| {
+                                                            view! {
+                                                                <option value=node_type.id>{node_type.singular_label}</option>
+                                                            }
+                                                        })
+                                                        .collect_view()
+                                                }}
+                                            </select>
+                                        </label>
+                                    </div>
+
+                                    <section class="form-section">
+                                        <h3>"Editable Version"</h3>
+                                        <InfoListTable>
+                                            <tr>
+                                                <th scope="row">"Status"</th>
+                                                <td>
+                                                    {move || {
+                                                        edit_version_status
+                                                            .get()
+                                                            .map(|status| {
+                                                                view! {
+                                                                    <span class=status_badge_class(&status)>
+                                                                        {sentence_label(&status)}
+                                                                    </span>
+                                                                }
+                                                                .into_any()
+                                                            })
+                                                            .unwrap_or_else(|| view! { <span>"Draft"</span> }.into_any())
+                                                    }}
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <th scope="row">"Fields"</th>
+                                                <td>
+                                                    {move || builder_field_count.get().to_string()}
+                                                </td>
+                                            </tr>
+                                        </InfoListTable>
+                                    </section>
+
+                                    <section class="form-builder form-section">
+                                        <div class="form-builder__header">
+                                            <h3>"Form Builder"</h3>
+                                        </div>
+
+                                        <Tabs active=active_builder_section>
+                                            <TabsList>
+                                                {move || {
+                                                    builder_sections
+                                                        .get()
+                                                        .into_iter()
+                                                        .map(|section| {
+                                                            let section_value = section.id.to_string();
+                                                            let section_tab_value = section_value.clone();
+                                                            view! {
+                                                                <button
+                                                                    class=move || {
+                                                                        if active_builder_section.get() == section_tab_value {
+                                                                            "tabs-trigger is-active"
+                                                                        } else {
+                                                                            "tabs-trigger"
+                                                                        }
+                                                                    }
+                                                                    type="button"
+                                                                    role="tab"
+                                                                    aria-selected=move || (active_builder_section.get() == section_value).to_string()
+                                                                    on:click=move |_| active_builder_section.set(section.id.to_string())
+                                                                >
+                                                                    {section.title}
+                                                                </button>
+                                                            }
+                                                        })
+                                                        .collect_view()
+                                                }}
+                                                <button
+                                                    class="tabs-trigger form-builder__add-section-tab"
+                                                    type="button"
+                                                    on:click=move |_| {
+                                                        let section_id = next_builder_section_id.get_untracked();
+                                                        next_builder_section_id.set(section_id + 1);
+                                                        builder_sections.update(|sections| {
+                                                            let mut section = blank_form_builder_section(section_id);
+                                                            section.position = (sections.len() + 1) as i32;
+                                                            sections.push(section);
+                                                        });
+                                                        active_builder_section.set(section_id.to_string());
+                                                    }
+                                                >
+                                                    <Plus/>
+                                                    "Section"
+                                                </button>
+                                            </TabsList>
+                                        </Tabs>
+
+                                        <div class="form-builder__sections">
+                                            <For
+                                                each=move || {
+                                                    builder_sections
+                                                        .get()
+                                                        .into_iter()
+                                                        .filter(|section| {
+                                                            active_builder_section.get() == section.id.to_string()
+                                                        })
+                                                        .map(|section| section.id)
+                                                        .collect::<Vec<_>>()
+                                                }
+                                                key=|section_id| *section_id
+                                                children=move |section_id| {
+                                                    view! {
+                                                        <FormBuilderSection
+                                                            section_id=section_id
+                                                            builder_sections=builder_sections
+                                                            builder_fields=builder_fields
+                                                            active_builder_field=active_builder_field
+                                                            dragged_builder_field=dragged_builder_field
+                                                            builder_drag_preview=builder_drag_preview
+                                                            pending_builder_drag_preview=pending_builder_drag_preview
+                                                            builder_drag_preview_timeout=builder_drag_preview_timeout
+                                                            suppress_builder_field_click=suppress_builder_field_click
+                                                            next_builder_field_id=next_builder_field_id
+                                                        />
+                                                    }
+                                                }
+                                            />
+                                        </div>
+                                    </section>
+                                    {move || message.get().map(|message| view! {
+                                        <p class="form-message" role="status">{message}</p>
+                                    })}
+
+                                    <div class="form-actions">
+                                        <a class="button" href=cancel_href.clone()>"Cancel"</a>
+                                        <button class="button button--secondary" type="submit" disabled=move || !can_submit()>
+                                            {move || if is_saving.get() { "Saving..." } else { "Save as Draft" }}
+                                        </button>
+                                    </div>
+                                </form>
+                                <FieldConfigSheet
+                                    active_builder_field=active_builder_field
+                                    builder_sections=builder_sections
+                                    builder_fields=builder_fields
+                                />
+                            </div>
+                        }
+                        .into_any()
+                    }
+                }}
+            </section>
+        </AppShell>
+    }
 }
 
 #[component]

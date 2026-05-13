@@ -45,3 +45,21 @@ This inventory is the migration map for the native Leptos SSR reset worktree. Th
 - `#app-overlays` is a direct child of `body` before `#app-root`.
 - Tailwind 4 is the styling target; Bulma assets and shell CSS have been removed from the active reset baseline.
 - Lists default to shared table primitives unless a route has a specific UX reason to diverge.
+
+## UI-deprecated DTO fields to review
+
+Track DTO fields that remain in API payloads during the UI refresh but are no longer surfaced by the native UI. Do not remove these during the UI-focused reset pass unless we explicitly decide to make a data-model/API cleanup.
+
+| DTO / payload area | Field | Observed route | UI decision | End-of-refresh follow-up |
+| --- | --- | --- | --- | --- |
+| Rendered form sections | `column_count` | `/forms/:form_id` | Do not display section column counts; field layout is now represented by per-field grid row, column, width, and height. | Review whether `column_count` is still needed for compatibility, migration, or persisted form-version rendering before removing or deprecating the DTO field. |
+
+## UI reset follow-ups
+
+Track workflow gaps discovered during the route rebuild without changing the data model during the UI-focused reset pass.
+
+| Area | Route observed | Gap | Follow-up |
+| --- | --- | --- | --- |
+| Form node attachment | `/forms/:form_id/edit` | The reset UI can display current attached organization nodes from existing form assignment data, but the edit route does not yet provide a native workflow to attach or detach a form from nodes. | Decide the intended attach/detach UX and API contract after the UI pass, then implement without guessing at data-model changes during reset. |
+| Assignment source of truth | `/forms/:form_id/edit`, `/workflows/assignments` | Forms can feel directly assigned to users while the current model also has direct `form_assignments` plus first-class `workflow_assignments` with optional linkage back to form assignments. This may be more complicated than the product model needs. | After the UI reset, evaluate a single assignment source of truth that preserves the simple "assign one form" user experience without maintaining parallel assignment concepts unnecessarily. |
+| Form scope semantics | `/forms/new`, `/forms/:form_id/edit` | Current form payloads include a fixed scope node type, but a form can be legitimately usable in multiple node contexts. A form may tend to make sense in a context without being intrinsically about that context. | After the UI reset, reconsider whether form scope should move from the form definition to workflow-step or assignment compatibility rules, allowing one form to be reused across valid contexts without duplication. |

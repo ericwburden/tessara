@@ -2337,6 +2337,11 @@ input {
   text-transform: uppercase;
 }
 
+.form-detail-sections {
+  display: grid;
+  gap: 1.25rem;
+}
+
 .status-badge {
   display: inline-flex;
   align-items: center;
