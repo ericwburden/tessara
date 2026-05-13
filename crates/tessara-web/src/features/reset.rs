@@ -109,7 +109,7 @@ const ROUTE_MIGRATIONS: [RouteMigration; 32] = [
         name: "Workflows",
         route: "/workflows",
         href: "/workflows",
-        status: "Pending",
+        status: "Done",
         rbac_status: "Pending",
     },
     RouteMigration {
@@ -1034,6 +1034,25 @@ struct FormVersionAssignmentNodeSummary {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
+struct WorkflowSummary {
+    id: String,
+    form_id: String,
+    form_name: String,
+    form_slug: String,
+    name: String,
+    slug: String,
+    description: String,
+    current_version_id: Option<String>,
+    current_version_label: Option<String>,
+    current_form_version_id: Option<String>,
+    current_status: Option<String>,
+    assignment_count: i64,
+    version_count: i64,
+    #[serde(default)]
+    assignment_node_names: Vec<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 struct FormDefinition {
     id: String,
     name: String,
@@ -1121,6 +1140,13 @@ struct FormAttachmentLink {
 struct FormsAttachedNodesSheetData {
     form_name: String,
     form_href: String,
+    nodes: Vec<FormAttachmentLink>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct WorkflowAssignedNodesSheetData {
+    workflow_name: String,
+    workflow_href: String,
     nodes: Vec<FormAttachmentLink>,
 }
 
@@ -2250,6 +2276,72 @@ fn form_definition_scope_label(form: &FormDefinition) -> String {
     nonempty_text(form.scope_node_type_name.as_deref(), "All node types")
 }
 
+fn workflow_version_label(workflow: &WorkflowSummary) -> String {
+    nonempty_text(workflow.current_version_label.as_deref(), "-")
+}
+
+fn workflow_status_key(workflow: &WorkflowSummary) -> &str {
+    workflow.current_status.as_deref().unwrap_or("none")
+}
+
+fn workflow_status_label(workflow: &WorkflowSummary) -> String {
+    workflow
+        .current_status
+        .as_deref()
+        .map(sentence_label)
+        .unwrap_or_else(|| "No versions".to_string())
+}
+
+fn workflow_description_label(workflow: &WorkflowSummary) -> String {
+    nonempty_text(Some(workflow.description.as_str()), "No description")
+}
+
+fn workflow_assigned_to_label(workflow: &WorkflowSummary) -> String {
+    if workflow.assignment_node_names.is_empty() {
+        "No active assignments".to_string()
+    } else {
+        workflow.assignment_node_names.join(", ")
+    }
+}
+
+fn workflow_assignment_count_label(workflow: &WorkflowSummary) -> String {
+    workflow.assignment_count.to_string()
+}
+
+fn workflow_assignment_links(
+    workflow: &WorkflowSummary,
+    nodes: &[OrganizationNode],
+) -> Vec<FormAttachmentLink> {
+    workflow
+        .assignment_node_names
+        .iter()
+        .filter_map(|name| {
+            let node = nodes.iter().find(|node| node.name == *name)?;
+            Some(FormAttachmentLink {
+                href: format!("/organization/{}", node.id),
+                label: node.name.clone(),
+                title: organization_node_path(node, nodes),
+            })
+        })
+        .collect()
+}
+
+fn organization_node_path(node: &OrganizationNode, nodes: &[OrganizationNode]) -> String {
+    let mut names = vec![node.name.clone()];
+    let mut current_parent_id = node.parent_node_id.as_deref();
+
+    while let Some(parent_id) = current_parent_id {
+        let Some(parent) = nodes.iter().find(|candidate| candidate.id == parent_id) else {
+            break;
+        };
+        names.push(parent.name.clone());
+        current_parent_id = parent.parent_node_id.as_deref();
+    }
+
+    names.reverse();
+    names.join(" > ")
+}
+
 fn form_attached_to_label(version: Option<&FormVersionSummary>) -> String {
     version
         .map(|version| {
@@ -3348,6 +3440,84 @@ fn load_forms(
     #[cfg(not(feature = "hydrate"))]
     {
         let _ = (forms, is_loading, load_error);
+    }
+}
+
+fn load_workflows(
+    workflows: RwSignal<Vec<WorkflowSummary>>,
+    is_loading: RwSignal<bool>,
+    load_error: RwSignal<Option<String>>,
+) {
+    #[cfg(feature = "hydrate")]
+    {
+        leptos::task::spawn_local(async move {
+            is_loading.set(true);
+            load_error.set(None);
+
+            match gloo_net::http::Request::get("/api/workflows").send().await {
+                Ok(response) if response.status() == 401 => {
+                    workflows.set(Vec::new());
+                    is_loading.set(false);
+                    redirect_to_login();
+                }
+                Ok(response) if response.ok() => {
+                    match response.json::<Vec<WorkflowSummary>>().await {
+                        Ok(loaded_workflows) => {
+                            workflows.set(loaded_workflows);
+                            is_loading.set(false);
+                        }
+                        Err(error) => {
+                            workflows.set(Vec::new());
+                            load_error.set(Some(format!("Unable to parse workflows: {error}")));
+                            is_loading.set(false);
+                        }
+                    }
+                }
+                Ok(response) => {
+                    workflows.set(Vec::new());
+                    load_error.set(Some(format!(
+                        "Unable to load workflows. Server returned {}.",
+                        response.status()
+                    )));
+                    is_loading.set(false);
+                }
+                Err(error) => {
+                    workflows.set(Vec::new());
+                    load_error.set(Some(format!("Unable to load workflows: {error}")));
+                    is_loading.set(false);
+                }
+            }
+        });
+    }
+
+    #[cfg(not(feature = "hydrate"))]
+    {
+        let _ = (workflows, is_loading, load_error);
+    }
+}
+
+fn load_workflow_assignment_nodes(nodes: RwSignal<Vec<OrganizationNode>>) {
+    #[cfg(feature = "hydrate")]
+    {
+        leptos::task::spawn_local(async move {
+            match gloo_net::http::Request::get("/api/nodes").send().await {
+                Ok(response) if response.status() == 401 => {
+                    nodes.set(Vec::new());
+                    redirect_to_login();
+                }
+                Ok(response) if response.ok() => {
+                    if let Ok(loaded_nodes) = response.json::<Vec<OrganizationNode>>().await {
+                        nodes.set(loaded_nodes);
+                    }
+                }
+                _ => nodes.set(Vec::new()),
+            }
+        });
+    }
+
+    #[cfg(not(feature = "hydrate"))]
+    {
+        let _ = nodes;
     }
 }
 
@@ -6512,6 +6682,336 @@ fn FormsAttachedNodesSheet(detail: RwSignal<Option<FormsAttachedNodesSheetData>>
 }
 
 #[component]
+fn WorkflowsList(
+    workflows: Vec<WorkflowSummary>,
+    search: RwSignal<String>,
+    status_filter: RwSignal<String>,
+    status_options: Vec<String>,
+    organization_nodes: Vec<OrganizationNode>,
+) -> impl IntoView {
+    let table_workflows = workflows.clone();
+    let card_workflows = workflows;
+    let table_nodes = organization_nodes.clone();
+    let card_nodes = organization_nodes;
+    let assigned_nodes_sheet = RwSignal::new(None::<WorkflowAssignedNodesSheetData>);
+
+    view! {
+        <div class="forms-list forms-list-responsive-table">
+            <div class="searchable-data-table">
+                <div class="searchable-data-table__toolbar forms-list__toolbar">
+                    <label class="searchable-data-table__search searchable-data-table__control">
+                        <Search class="searchable-data-table__control-icon"/>
+                        <span class="sr-only">"Search workflows"</span>
+                        <input
+                            type="search"
+                            placeholder="Search workflows"
+                            prop:value=move || search.get()
+                            on:input=move |event| search.set(event_target_value(&event))
+                        />
+                    </label>
+                </div>
+                <DataTable>
+                    <thead>
+                        <tr>
+                            <th scope="col">"Workflow name"</th>
+                            <th scope="col">"Form"</th>
+                            <th class="data-table__cell--center" scope="col">"Active version"</th>
+                            <th class="data-table__cell--center" scope="col">
+                                <FilterHeader
+                                    label="Status"
+                                    all_label="All statuses"
+                                    filter=status_filter
+                                    options=status_options
+                                />
+                            </th>
+                            <th class="data-table__cell--center" scope="col">"Assignments"</th>
+                            <th scope="col">"Assigned to"</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {if table_workflows.is_empty() {
+                            view! {
+                                <tr>
+                                    <td class="data-table__empty" colspan="6">"No Workflows to Display"</td>
+                                </tr>
+                            }
+                            .into_any()
+                        } else {
+                            table_workflows
+                                .into_iter()
+                                .map(|workflow| {
+                                    let workflow_href = format!("/workflows/{}", workflow.id);
+                                    let form_href = format!("/forms/{}", workflow.form_id);
+                                    let status_key = workflow_status_key(&workflow).to_string();
+                                    let status_label = workflow_status_label(&workflow);
+                                    let version_label = workflow_version_label(&workflow);
+                                    let assignments = workflow_assignment_count_label(&workflow);
+                                    let assigned_to = workflow_assignment_links(&workflow, &table_nodes);
+                                    let assigned_to_label = workflow_assigned_to_label(&workflow);
+                                    let workflow_name = workflow.name.clone();
+                                    view! {
+                                        <tr>
+                                            <th scope="row">
+                                                <a class="data-table__primary-link" href=workflow_href.clone()>{workflow.name}</a>
+                                            </th>
+                                            <td>
+                                                <a class="data-table__primary-link" href=form_href>{workflow.form_name}</a>
+                                            </td>
+                                            <td class="data-table__cell--center">{version_label}</td>
+                                            <td class="data-table__cell--center">
+                                                <span class=status_badge_class(&status_key)>{status_label}</span>
+                                            </td>
+                                            <td class="data-table__cell--center">{assignments}</td>
+                                            <td>
+                                                <WorkflowAssignedNodesList
+                                                    nodes=assigned_to
+                                                    fallback_label=assigned_to_label
+                                                    workflow_name=workflow_name
+                                                    workflow_href=workflow_href
+                                                    sheet=assigned_nodes_sheet
+                                                />
+                                            </td>
+                                        </tr>
+                                    }
+                                })
+                                .collect_view()
+                                .into_any()
+                        }}
+                    </tbody>
+                </DataTable>
+            </div>
+            <div class="forms-list-mobile-cards">
+                {if card_workflows.is_empty() {
+                    view! { <p class="forms-list-mobile-empty">"No Workflows to Display"</p> }.into_any()
+                } else {
+                    card_workflows
+                        .into_iter()
+                        .map(|workflow| {
+                            let workflow_href = format!("/workflows/{}", workflow.id);
+                            let form_href = format!("/forms/{}", workflow.form_id);
+                            let status_key = workflow_status_key(&workflow).to_string();
+                            let status_label = workflow_status_label(&workflow);
+                            let version_label = workflow_version_label(&workflow);
+                            let assignments = workflow_assignment_count_label(&workflow);
+                            let assigned_to = workflow_assignment_links(&workflow, &card_nodes);
+                            let assigned_to_label = workflow_assigned_to_label(&workflow);
+                            let workflow_name = workflow.name.clone();
+                            view! {
+                                <article class="forms-list-mobile-card">
+                                    <div class="forms-list-mobile-card__header">
+                                        <div>
+                                            <h3><a href=workflow_href.clone()>{workflow.name}</a></h3>
+                                        </div>
+                                    </div>
+                                    <dl>
+                                        <div>
+                                            <dt>"Form"</dt>
+                                            <dd><a href=form_href>{workflow.form_name}</a></dd>
+                                        </div>
+                                        <div>
+                                            <dt>"Active version"</dt>
+                                            <dd>{version_label}</dd>
+                                        </div>
+                                        <div>
+                                            <dt>"Status"</dt>
+                                            <dd><span class=status_badge_class(&status_key)>{status_label}</span></dd>
+                                        </div>
+                                        <div>
+                                            <dt>"Assignments"</dt>
+                                            <dd>{assignments}</dd>
+                                        </div>
+                                        <div>
+                                            <dt>"Assigned to"</dt>
+                                            <dd>
+                                                <WorkflowAssignedNodesList
+                                                    nodes=assigned_to
+                                                    fallback_label=assigned_to_label
+                                                    workflow_name=workflow_name
+                                                    workflow_href=workflow_href
+                                                    sheet=assigned_nodes_sheet
+                                                />
+                                            </dd>
+                                        </div>
+                                    </dl>
+                                </article>
+                            }
+                        })
+                        .collect_view()
+                        .into_any()
+                }}
+            </div>
+            <WorkflowAssignedNodesSheet detail=assigned_nodes_sheet/>
+        </div>
+    }
+}
+
+#[component]
+fn WorkflowAssignedNodesList(
+    nodes: Vec<FormAttachmentLink>,
+    fallback_label: String,
+    workflow_name: String,
+    workflow_href: String,
+    sheet: RwSignal<Option<WorkflowAssignedNodesSheetData>>,
+) -> impl IntoView {
+    let total_nodes = nodes.len();
+    let visible_nodes = if total_nodes > 5 {
+        nodes[total_nodes - 4..].to_vec()
+    } else {
+        nodes.clone()
+    };
+    let nodes_for_sheet = nodes.clone();
+    let workflow_name_for_sheet = workflow_name.clone();
+    let workflow_href_for_sheet = workflow_href.clone();
+
+    view! {
+        <div class="forms-attached-list">
+            {if visible_nodes.is_empty() {
+                view! { <p>{fallback_label}</p> }.into_any()
+            } else {
+                visible_nodes
+                    .into_iter()
+                    .map(|node| {
+                        view! {
+                            <p>
+                                <a href=node.href title=node.title>{node.label}</a>
+                            </p>
+                        }
+                    })
+                    .collect_view()
+                    .into_any()
+            }}
+            {if total_nodes > 5 {
+                view! {
+                    <button
+                        class="forms-attached-list__more"
+                        type="button"
+                        on:click=move |_| {
+                            sheet.set(Some(WorkflowAssignedNodesSheetData {
+                                workflow_name: workflow_name_for_sheet.clone(),
+                                workflow_href: workflow_href_for_sheet.clone(),
+                                nodes: nodes_for_sheet.clone(),
+                            }));
+                        }
+                    >
+                        "More..."
+                    </button>
+                }
+                .into_any()
+            } else {
+                view! {}.into_any()
+            }}
+        </div>
+    }
+}
+
+#[component]
+fn WorkflowAssignedNodesSheet(
+    detail: RwSignal<Option<WorkflowAssignedNodesSheetData>>,
+) -> impl IntoView {
+    let search = RwSignal::new(String::new());
+    let close = move |_| {
+        detail.set(None);
+        search.set(String::new());
+    };
+    let filtered_nodes = move || {
+        let query = search.get().trim().to_lowercase();
+        detail
+            .get()
+            .map(|data| {
+                data.nodes
+                    .into_iter()
+                    .filter(|node| {
+                        query.is_empty()
+                            || node.label.to_lowercase().contains(&query)
+                            || node.title.to_lowercase().contains(&query)
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default()
+    };
+
+    view! {
+        <Portal>
+            <Show when=move || detail.get().is_some()>
+                <section class="sheet-overlay forms-attached-overlay" aria-label="Assigned organization nodes">
+                    <button class="sheet-overlay__scrim" type="button" aria-label="Close assigned nodes" on:click=close></button>
+                    <aside class="sheet-panel blurred-surface forms-attached-sheet" role="dialog" aria-modal="true" aria-label="Assigned organization nodes">
+                        <div class="sheet-panel__actions">
+                            {move || {
+                                detail
+                                    .get()
+                                    .map(|data| {
+                                        view! {
+                                            <a class="icon-button sheet-panel__open" href=data.workflow_href aria-label="Open workflow detail" title="Open workflow detail">
+                                                <ExternalLink class="icon-button__icon"/>
+                                            </a>
+                                        }
+                                        .into_any()
+                                    })
+                                    .unwrap_or_else(|| view! {}.into_any())
+                            }}
+                            <button class="icon-button sheet-panel__close" type="button" aria-label="Close assigned nodes" title="Close assigned nodes" on:click=close>
+                                <X class="icon-button__icon"/>
+                            </button>
+                        </div>
+                        {move || {
+                            detail
+                                .get()
+                                .map(|data| {
+                                    let total = data.nodes.len();
+                                    view! {
+                                        <header class="sheet-panel__header">
+                                            <p>"Assigned Nodes"</p>
+                                            <h2>{data.workflow_name}</h2>
+                                            <span class="forms-attached-sheet__count">{format!("{total} nodes")}</span>
+                                        </header>
+                                        <section class="sheet-panel__section">
+                                            <label class="searchable-data-table__search searchable-data-table__control forms-attached-sheet__search">
+                                                <Search class="searchable-data-table__control-icon"/>
+                                                <span class="sr-only">"Search assigned nodes"</span>
+                                                <input
+                                                    type="search"
+                                                    placeholder="Search assigned nodes"
+                                                    prop:value=move || search.get()
+                                                    on:input=move |event| search.set(event_target_value(&event))
+                                                />
+                                            </label>
+                                            <div class="forms-attached-sheet__list">
+                                                {move || {
+                                                    let nodes = filtered_nodes();
+                                                    if nodes.is_empty() {
+                                                        view! { <p class="forms-attached-sheet__empty">"No Assigned Nodes to Display"</p> }.into_any()
+                                                    } else {
+                                                        nodes
+                                                            .into_iter()
+                                                            .map(|node| {
+                                                                let node_title = node.title.clone();
+                                                                view! {
+                                                                    <a class="forms-attached-sheet__item" href=node.href title=node_title>
+                                                                        <span>{node.label}</span>
+                                                                        <small>{node.title}</small>
+                                                                    </a>
+                                                                }
+                                                            })
+                                                            .collect_view()
+                                                            .into_any()
+                                                    }
+                                                }}
+                                            </div>
+                                        </section>
+                                    }
+                                    .into_any()
+                                })
+                                .unwrap_or_else(|| view! {}.into_any())
+                        }}
+                    </aside>
+                </section>
+            </Show>
+        </Portal>
+    }
+}
+
+#[component]
 fn FormBuilderSection(
     section_id: usize,
     builder_sections: RwSignal<Vec<FormBuilderSectionDraft>>,
@@ -8274,7 +8774,96 @@ pub fn FormsEditPage() -> impl IntoView {
 
 #[component]
 pub fn WorkflowsPage() -> impl IntoView {
-    view! { <ResetRoute active_route="workflows" title="Workflows" route="/workflows" status="Queued" next_step="Restore workflow list and definitions."/> }
+    let workflows = RwSignal::new(Vec::<WorkflowSummary>::new());
+    let organization_nodes = RwSignal::new(Vec::<OrganizationNode>::new());
+    let search = RwSignal::new(String::new());
+    let status_filter = RwSignal::new("all".to_string());
+    let is_loading = RwSignal::new(true);
+    let load_error = RwSignal::new(None::<String>);
+
+    Effect::new(move |_| {
+        load_workflows(workflows, is_loading, load_error);
+        load_workflow_assignment_nodes(organization_nodes);
+    });
+
+    let filtered_workflows = move || {
+        let query = search.get();
+        let selected_status = status_filter.get();
+        workflows
+            .get()
+            .into_iter()
+            .filter(|workflow| {
+                let version_label = workflow_version_label(workflow);
+                let status_label = workflow_status_label(workflow);
+                let assigned_to = workflow_assigned_to_label(workflow);
+                let description = workflow_description_label(workflow);
+                text_matches(
+                    &query,
+                    &[
+                        workflow.name.as_str(),
+                        workflow.slug.as_str(),
+                        description.as_str(),
+                        workflow.form_name.as_str(),
+                        workflow.form_slug.as_str(),
+                        version_label.as_str(),
+                        status_label.as_str(),
+                        assigned_to.as_str(),
+                    ],
+                ) && (selected_status == "all" || selected_status == status_label)
+            })
+            .collect::<Vec<_>>()
+    };
+
+    let status_options = move || {
+        unique_filter_options(
+            workflows
+                .get()
+                .iter()
+                .map(workflow_status_label)
+                .collect::<Vec<_>>(),
+        )
+    };
+
+    view! {
+        <AppShell active_route="workflows" title="Workflows">
+            <section class="route-panel workflows-page">
+                <PageHeader title="Workflows">
+                    <Button label="Create Workflow" href="/workflows/new"/>
+                </PageHeader>
+
+                {move || {
+                    if is_loading.get() {
+                        view! {
+                            <section class="organization-state" aria-live="polite">
+                                <h3>"Loading workflows"</h3>
+                                <p>"Fetching workflow definitions."</p>
+                            </section>
+                        }
+                        .into_any()
+                    } else if let Some(error) = load_error.get() {
+                        view! {
+                            <section class="organization-state is-error" role="alert">
+                                <h3>"Workflows unavailable"</h3>
+                                <p>{error}</p>
+                            </section>
+                        }
+                        .into_any()
+                    } else {
+                        view! {
+                            <WorkflowsList
+                                workflows=filtered_workflows()
+                                search=search
+                                status_filter=status_filter
+                                status_options=status_options()
+                                organization_nodes=organization_nodes.get()
+                            />
+                        }
+                        .into_any()
+                    }
+                }}
+            </section>
+        </AppShell>
+    }
 }
 
 #[component]
