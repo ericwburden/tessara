@@ -1845,6 +1845,16 @@ input {
   height: 100%;
 }
 
+.form-builder-grid-tile--icon-only .form-builder-grid-field__summary {
+  grid-template-columns: 1fr;
+  gap: 0;
+  place-items: center;
+}
+
+.form-builder-grid-tile--icon-only .form-builder-grid-field__summary > div {
+  display: none;
+}
+
 @media (max-width: 767px) {
   .form-builder-grid-field__summary {
     grid-template-columns: 1fr;

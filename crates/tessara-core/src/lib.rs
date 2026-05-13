@@ -36,6 +36,8 @@ pub struct RequiredTextError {
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FieldType {
+    /// Static author-controlled text displayed in the form and not collected.
+    StaticText,
     /// Free-form text stored as a JSON string.
     Text,
     /// Numeric value stored as a JSON number.
@@ -54,6 +56,7 @@ impl FieldType {
     /// Returns the canonical database/API string for this field type.
     pub const fn as_str(self) -> &'static str {
         match self {
+            Self::StaticText => "static_text",
             Self::Text => "text",
             Self::Number => "number",
             Self::Boolean => "boolean",
@@ -69,6 +72,7 @@ impl FieldType {
     /// is present it must match the configured type.
     pub fn validate_json_value(self, value: &Value) -> Result<(), FieldTypeError> {
         let valid = match self {
+            Self::StaticText => value.is_string(),
             Self::Text | Self::Date | Self::SingleChoice => value.is_string(),
             Self::Number => value.is_number(),
             Self::Boolean => value.is_boolean(),
@@ -97,6 +101,7 @@ impl FromStr for FieldType {
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
+            "static_text" => Ok(Self::StaticText),
             "text" => Ok(Self::Text),
             "number" => Ok(Self::Number),
             "boolean" => Ok(Self::Boolean),
@@ -145,6 +150,7 @@ mod tests {
     fn parses_supported_field_types() {
         for (raw, expected) in [
             ("text", FieldType::Text),
+            ("static_text", FieldType::StaticText),
             ("number", FieldType::Number),
             ("boolean", FieldType::Boolean),
             ("date", FieldType::Date),
@@ -161,6 +167,11 @@ mod tests {
     #[test]
     fn validates_json_values_against_field_types() {
         assert!(FieldType::Text.validate_json_value(&json!("hello")).is_ok());
+        assert!(
+            FieldType::StaticText
+                .validate_json_value(&json!("Instructions"))
+                .is_ok()
+        );
         assert!(
             FieldType::Date
                 .validate_json_value(&json!("2026-04-06"))
@@ -183,6 +194,11 @@ mod tests {
     #[test]
     fn rejects_json_values_that_do_not_match_field_types() {
         assert!(FieldType::Text.validate_json_value(&json!(42)).is_err());
+        assert!(
+            FieldType::StaticText
+                .validate_json_value(&json!(42))
+                .is_err()
+        );
         assert!(FieldType::Number.validate_json_value(&json!("42")).is_err());
         assert!(
             FieldType::Boolean

@@ -1092,6 +1092,7 @@ pub async fn create_form_field(
     require_text("field label", &payload.label)?;
     require_form_field_key_available(&state.pool, form_version_id, &payload.key).await?;
     let field_type = parse_field_type(&payload.field_type)?;
+    let required = payload.required && field_type.as_str() != "static_text";
     require_form_field_layout(
         payload.grid_row,
         payload.grid_column,
@@ -1114,7 +1115,7 @@ pub async fn create_form_field(
     .bind(payload.key)
     .bind(payload.label)
     .bind(field_type.as_str())
-    .bind(payload.required)
+    .bind(required)
     .bind(payload.position)
     .bind(payload.grid_row)
     .bind(payload.grid_column)
@@ -1189,6 +1190,7 @@ pub async fn update_form_field(
             .await?;
     }
     let field_type = parse_field_type(&payload.field_type)?;
+    let required = payload.required && field_type.as_str() != "static_text";
     assert_section_belongs_to_form_version(
         &state.pool,
         existing.form_version_id,
@@ -1222,7 +1224,7 @@ pub async fn update_form_field(
     .bind(payload.key)
     .bind(payload.label)
     .bind(field_type.as_str())
-    .bind(payload.required)
+    .bind(required)
     .bind(payload.position)
     .bind(payload.grid_row)
     .bind(payload.grid_column)

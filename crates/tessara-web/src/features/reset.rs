@@ -6,8 +6,8 @@ use std::{cell::Cell, cell::RefCell, rc::Rc};
 
 use icons::{
     CalendarDays, ChevronDown, ChevronRight, CircleDot, ExternalLink, Hash, ListChecks, ListFilter,
-    LockKeyhole, Mail, PanelRight, Pencil, Plus, Search, SquareCheckBig, TextCursorInput, Trash2,
-    X,
+    LockKeyhole, Mail, PanelRight, Pencil, Plus, Search, SquareCheckBig, TextCursorInput,
+    TextQuote, Trash2, X,
 };
 use leptos::portal::Portal;
 use leptos::prelude::*;
@@ -725,6 +725,7 @@ struct FormBuilderSectionDraft {
     title: String,
     description: String,
     column_count: i32,
+    default_column_width: i32,
     position: i32,
 }
 
@@ -2401,18 +2402,9 @@ fn blank_form_builder_section(id: usize) -> FormBuilderSectionDraft {
         },
         description: String::new(),
         column_count: FORM_BUILDER_COLUMN_COUNT,
+        default_column_width: 6,
         position: id as i32,
     }
-}
-
-fn blank_form_builder_field(
-    id: usize,
-    section_id: usize,
-    fields: &[FormBuilderFieldDraft],
-) -> FormBuilderFieldDraft {
-    let (grid_row, grid_column) = first_available_form_builder_cell(section_id, fields);
-
-    blank_form_builder_field_at(id, section_id, grid_row, grid_column)
 }
 
 fn blank_form_builder_field_at(
@@ -2420,6 +2412,7 @@ fn blank_form_builder_field_at(
     section_id: usize,
     grid_row: i32,
     grid_column: i32,
+    grid_width: i32,
 ) -> FormBuilderFieldDraft {
     FormBuilderFieldDraft {
         id,
@@ -2430,9 +2423,17 @@ fn blank_form_builder_field_at(
         required: false,
         grid_row,
         grid_column,
-        grid_width: 1,
+        grid_width: grid_width.clamp(1, FORM_BUILDER_COLUMN_COUNT),
         grid_height: 1,
         key_was_edited: false,
+    }
+}
+
+fn form_builder_field_default_label(field_type: &str, id: usize) -> String {
+    if field_type == "static_text" {
+        "Static text".into()
+    } else {
+        format!("Field {id}")
     }
 }
 
@@ -2478,18 +2479,6 @@ fn form_builder_occupancy_map(fields: &[FormBuilderFieldDraft]) -> HashSet<(i32,
     }
 
     occupied
-}
-
-fn first_available_form_builder_cell_in_map(occupied_cells: &HashSet<(i32, i32)>) -> (i32, i32) {
-    for row in 1..=200 {
-        for column in 1..=FORM_BUILDER_COLUMN_COUNT {
-            if !occupied_cells.contains(&(row, column)) {
-                return (row, column);
-            }
-        }
-    }
-
-    (1, 1)
 }
 
 fn form_builder_section_layout(
@@ -2623,14 +2612,39 @@ fn form_builder_reflow_section_fields(
         .collect()
 }
 
-fn first_available_form_builder_cell(
+fn max_form_builder_new_field_width_at(
     section_id: usize,
+    row: i32,
+    column: i32,
     fields: &[FormBuilderFieldDraft],
-) -> (i32, i32) {
-    let section_fields = form_builder_section_fields(section_id, fields);
-    let occupied_cells = form_builder_occupancy_map(&section_fields);
+) -> i32 {
+    let row = row.max(1);
+    let column = column.clamp(1, FORM_BUILDER_COLUMN_COUNT);
+    let mut width = 0;
 
-    first_available_form_builder_cell_in_map(&occupied_cells)
+    for candidate_column in column..=FORM_BUILDER_COLUMN_COUNT {
+        let candidate = FormBuilderFieldDraft {
+            id: usize::MAX,
+            section_id,
+            label: String::new(),
+            key: String::new(),
+            field_type: "text".into(),
+            required: false,
+            grid_row: row,
+            grid_column: column,
+            grid_width: candidate_column - column + 1,
+            grid_height: 1,
+            key_was_edited: false,
+        };
+
+        if form_builder_field_has_collision(&candidate, fields) {
+            break;
+        }
+
+        width += 1;
+    }
+
+    width.max(1)
 }
 
 fn max_form_builder_field_width(
@@ -3018,6 +3032,7 @@ fn prepared_form_builder_fields(
 
 fn form_builder_field_type_icon(field_type: &str) -> AnyView {
     match field_type {
+        "static_text" => view! { <TextQuote /> }.into_any(),
         "number" => view! { <Hash /> }.into_any(),
         "date" => view! { <CalendarDays /> }.into_any(),
         "boolean" => view! { <SquareCheckBig /> }.into_any(),
@@ -5667,6 +5682,7 @@ fn FormBuilderSection(
         let fields = builder_fields.get();
         form_builder_section_layout(&section, &fields)
     });
+    let default_column_width = Memo::new(move |_| section.get().default_column_width);
 
     view! {
         <article class="form-builder-section-card">
@@ -5693,6 +5709,29 @@ fn FormBuilderSection(
                     />
                 </label>
 
+                <label class="form-field" for=format!("form-section-default-width-{section_id}")>
+                    <span>"Default Column Width"</span>
+                    <select
+                        id=format!("form-section-default-width-{section_id}")
+                        prop:value=move || section.get().default_column_width.to_string()
+                        on:change=move |event| {
+                            let next_width = event_target_value(&event)
+                                .parse::<i32>()
+                                .unwrap_or(6)
+                                .clamp(1, FORM_BUILDER_COLUMN_COUNT);
+                            builder_sections.update(|sections| {
+                                if let Some(section) = sections.iter_mut().find(|section| section.id == section_id) {
+                                    section.default_column_width = next_width;
+                                }
+                            });
+                        }
+                    >
+                        {(1..=FORM_BUILDER_COLUMN_COUNT)
+                            .map(|width| view! { <option value=width.to_string()>{width}</option> })
+                            .collect_view()}
+                    </select>
+                </label>
+
                 <label class="form-field form-field--wide" for=format!("form-section-description-{section_id}")>
                     <span>"Description"</span>
                     <textarea
@@ -5713,6 +5752,7 @@ fn FormBuilderSection(
             <FormBuilderGrid
                 section_id=section_id
                 layout=layout
+                default_column_width=default_column_width
                 builder_fields=builder_fields
                 active_builder_field=active_builder_field
                 dragged_builder_field=dragged_builder_field
@@ -5730,6 +5770,7 @@ fn FormBuilderSection(
 fn FormBuilderGrid(
     section_id: usize,
     layout: Memo<FormBuilderSectionLayout>,
+    default_column_width: Memo<i32>,
     builder_fields: RwSignal<Vec<FormBuilderFieldDraft>>,
     active_builder_field: RwSignal<Option<usize>>,
     dragged_builder_field: RwSignal<Option<usize>>,
@@ -5856,8 +5897,8 @@ fn FormBuilderGrid(
                     suppress_builder_field_click.set(None);
                     return;
                 }
+                let fields = builder_fields.get_untracked();
                 let occupied_cells = {
-                    let fields = builder_fields.get_untracked();
                     let section_fields = form_builder_section_fields(section_id, &fields);
                     form_builder_occupancy_map(&section_fields)
                 };
@@ -5866,8 +5907,20 @@ fn FormBuilderGrid(
                 }
                 let field_id = next_builder_field_id.get_untracked();
                 next_builder_field_id.set(field_id + 1);
-                let new_field = blank_form_builder_field_at(field_id, section_id, row, column);
+                let default_width = default_column_width
+                    .get_untracked()
+                    .clamp(1, FORM_BUILDER_COLUMN_COUNT);
+                let available_width =
+                    max_form_builder_new_field_width_at(section_id, row, column, &fields);
+                let new_field = blank_form_builder_field_at(
+                    field_id,
+                    section_id,
+                    row,
+                    column,
+                    default_width.min(available_width),
+                );
                 builder_fields.update(|fields| fields.push(new_field));
+                active_builder_field.set(Some(field_id));
             }
         >
             <div class="form-builder-grid-cells">
@@ -5937,7 +5990,7 @@ fn FormBuilderGridTile(
             .get()
             .map(|field| {
                 if field.label.trim().is_empty() {
-                    format!("Field {field_id}")
+                    form_builder_field_default_label(&field.field_type, field_id)
                 } else {
                     field.label
                 }
@@ -5950,7 +6003,9 @@ fn FormBuilderGridTile(
                 let width_class = field
                     .get()
                     .map(|field| {
-                        if field.grid_width >= 4 {
+                        if field.grid_width <= 2 {
+                            " form-builder-grid-tile--icon-only"
+                        } else if field.grid_width >= 4 {
                             " form-builder-grid-tile--mobile-label"
                         } else {
                             ""
@@ -6214,12 +6269,31 @@ fn FieldConfigSheet(
                                                         on:change=move |event| {
                                                             let next_type = event_target_value(&event);
                                                             builder_fields.update(|fields| {
-                                                                if let Some(field) = fields.iter_mut().find(|field| field.id == field_id) {
-                                                                    field.field_type = next_type.clone();
+                                                                if let Some(position) = fields.iter().position(|field| field.id == field_id) {
+                                                                    let mut next_field = fields[position].clone();
+                                                                    next_field.field_type = next_type.clone();
+                                                                    if next_type == "static_text" {
+                                                                        next_field.required = false;
+                                                                        if next_field.label.trim().is_empty() {
+                                                                            next_field.label = form_builder_field_default_label(&next_type, next_field.id);
+                                                                        }
+                                                                        if next_field.key.trim().is_empty() || !next_field.key_was_edited {
+                                                                            next_field.key = slug_from_label(&next_field.label);
+                                                                        }
+                                                                        let mut candidate = next_field.clone();
+                                                                        candidate.grid_width = candidate.grid_width.max(4);
+                                                                        if candidate.grid_column + candidate.grid_width - 1 <= FORM_BUILDER_COLUMN_COUNT
+                                                                            && !form_builder_field_has_collision(&candidate, fields)
+                                                                        {
+                                                                            next_field.grid_width = candidate.grid_width;
+                                                                        }
+                                                                    }
+                                                                    fields[position] = next_field;
                                                                 }
                                                             });
                                                         }
                                                     >
+                                                        <option value="static_text">"Static text"</option>
                                                         <option value="text">"Text"</option>
                                                         <option value="number">"Number"</option>
                                                         <option value="date">"Date"</option>
@@ -6233,11 +6307,14 @@ fn FieldConfigSheet(
                                                     <input
                                                         type="checkbox"
                                                         prop:checked=field.required
+                                                        disabled=field.field_type == "static_text"
                                                         on:change=move |event| {
                                                             let checked = event_target_checked(&event);
                                                             builder_fields.update(|fields| {
                                                                 if let Some(field) = fields.iter_mut().find(|field| field.id == field_id) {
-                                                                    field.required = checked;
+                                                                    if field.field_type != "static_text" {
+                                                                        field.required = checked;
+                                                                    }
                                                                 }
                                                             });
                                                         }
@@ -6338,14 +6415,14 @@ pub fn FormsNewPage() -> impl IntoView {
     let builder_sections = RwSignal::new(vec![blank_form_builder_section(1)]);
     let active_builder_section = RwSignal::new("1".to_string());
     let next_builder_section_id = RwSignal::new(2usize);
-    let builder_fields = RwSignal::new(vec![blank_form_builder_field(1, 1, &[])]);
+    let builder_fields = RwSignal::new(Vec::<FormBuilderFieldDraft>::new());
     let active_builder_field = RwSignal::new(None::<usize>);
     let dragged_builder_field = RwSignal::new(None::<usize>);
     let builder_drag_preview = RwSignal::new(None::<FormBuilderDragPreview>);
     let pending_builder_drag_preview = RwSignal::new(None::<FormBuilderDragPreview>);
     let builder_drag_preview_timeout = RwSignal::new(None::<i32>);
     let suppress_builder_field_click = RwSignal::new(None::<usize>);
-    let next_builder_field_id = RwSignal::new(2usize);
+    let next_builder_field_id = RwSignal::new(1usize);
     let is_loading = RwSignal::new(true);
     let is_saving = RwSignal::new(false);
     let message = RwSignal::new(None::<String>);
