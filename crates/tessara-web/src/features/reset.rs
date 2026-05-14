@@ -138,8 +138,8 @@ const ROUTE_MIGRATIONS: [RouteMigration; 32] = [
     RouteMigration {
         name: "Edit Workflow",
         route: "/workflows/:workflow_id/edit",
-        href: "/workflows/demo-intake-workflow/edit",
-        status: "Pending",
+        href: "/workflows/1eb282e5-0c90-4f86-bfde-2ce1cac39413/edit",
+        status: "Done",
         rbac_status: "Pending",
     },
     RouteMigration {
@@ -716,9 +716,24 @@ struct CreateWorkflowPayload {
 
 #[derive(Serialize)]
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+struct UpdateWorkflowPayload {
+    form_id: Option<String>,
+    name: String,
+    slug: String,
+    description: Option<String>,
+}
+
+#[derive(Serialize)]
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
 struct CreateWorkflowVersionPayload {
     form_version_id: Option<String>,
     title: Option<String>,
+    steps: Vec<CreateWorkflowStepPayload>,
+}
+
+#[derive(Serialize)]
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+struct UpdateWorkflowVersionStepsPayload {
     steps: Vec<CreateWorkflowStepPayload>,
 }
 
@@ -6375,6 +6390,165 @@ fn submit_create_workflow(
 }
 
 #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
+fn submit_update_workflow(
+    workflow_id: String,
+    version_id: Option<String>,
+    version_is_draft: bool,
+    name: RwSignal<String>,
+    slug: RwSignal<String>,
+    steps: RwSignal<Vec<WorkflowStepDraft>>,
+    description: RwSignal<String>,
+    is_saving: RwSignal<bool>,
+    message: RwSignal<Option<String>>,
+) {
+    #[cfg(feature = "hydrate")]
+    {
+        if is_saving.get() {
+            return;
+        }
+
+        let workflow_name = name.get().trim().to_string();
+        if workflow_name.is_empty() {
+            message.set(Some("Workflow name is required.".into()));
+            return;
+        }
+
+        let workflow_slug = slug.get().trim().to_string();
+        if workflow_slug.is_empty() {
+            message.set(Some(
+                "Workflow slug is missing. Reload the workflow and try again.".into(),
+            ));
+            return;
+        }
+
+        let current_steps = steps.get();
+        let step_payload = if version_is_draft {
+            if current_steps.is_empty() {
+                message.set(Some("Add at least one workflow step.".into()));
+                return;
+            }
+            if current_steps
+                .iter()
+                .any(|step| step.form_version_id.trim().is_empty())
+            {
+                message.set(Some("Select a form version for each workflow step.".into()));
+                return;
+            }
+
+            version_id.as_ref().map(|_| UpdateWorkflowVersionStepsPayload {
+                steps: current_steps
+                    .into_iter()
+                    .enumerate()
+                    .map(|(index, step)| CreateWorkflowStepPayload {
+                        title: step
+                            .title
+                            .trim()
+                            .to_string()
+                            .into_nonempty()
+                            .unwrap_or_else(|| format!("Step {}", index + 1)),
+                        form_version_id: step.form_version_id,
+                    })
+                    .collect(),
+            })
+        } else {
+            None
+        };
+
+        let payload = UpdateWorkflowPayload {
+            form_id: None,
+            name: workflow_name,
+            slug: workflow_slug,
+            description: description.get().trim().to_string().into_nonempty(),
+        };
+
+        leptos::task::spawn_local(async move {
+            is_saving.set(true);
+            message.set(None);
+
+            let workflow_body = match serde_json::to_string(&payload) {
+                Ok(body) => body,
+                Err(_) => {
+                    message.set(Some("Update request could not be prepared.".into()));
+                    is_saving.set(false);
+                    return;
+                }
+            };
+
+            let workflow_url = format!("/api/workflows/{workflow_id}");
+            match send_json_id_request(
+                gloo_net::http::Request::put(&workflow_url),
+                Some(workflow_body),
+                "Update workflow",
+            )
+            .await
+            {
+                Ok(_) => {
+                    if let (Some(version_id), Some(step_payload)) = (version_id, step_payload) {
+                        let step_body = match serde_json::to_string(&step_payload) {
+                            Ok(body) => body,
+                            Err(_) => {
+                                message.set(Some(
+                                    "Workflow step update request could not be prepared.".into(),
+                                ));
+                                is_saving.set(false);
+                                return;
+                            }
+                        };
+                        let steps_url = format!("/api/workflow-versions/{version_id}/steps");
+                        match send_json_id_request(
+                            gloo_net::http::Request::put(&steps_url),
+                            Some(step_body),
+                            "Update workflow steps",
+                        )
+                        .await
+                        {
+                            Ok(_) => {
+                                if let Some(window) = web_sys::window() {
+                                    let _ = window
+                                        .location()
+                                        .set_href(&format!("/workflows/{workflow_id}"));
+                                }
+                            }
+                            Err(error) => {
+                                if error != "Authentication is required." {
+                                    message.set(Some(error));
+                                }
+                                is_saving.set(false);
+                            }
+                        }
+                    } else if let Some(window) = web_sys::window() {
+                        let _ = window
+                            .location()
+                            .set_href(&format!("/workflows/{workflow_id}"));
+                    }
+                }
+                Err(error) => {
+                    if error != "Authentication is required." {
+                        message.set(Some(error));
+                    }
+                    is_saving.set(false);
+                }
+            }
+        });
+    }
+
+    #[cfg(not(feature = "hydrate"))]
+    {
+        let _ = (
+            workflow_id,
+            version_id,
+            version_is_draft,
+            name,
+            slug,
+            steps,
+            description,
+            is_saving,
+            message,
+        );
+    }
+}
+
+#[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
 fn submit_workflow_assignment_bulk(
     selected_candidate_id: RwSignal<String>,
     candidates: RwSignal<Vec<WorkflowAssignmentCandidate>>,
@@ -11425,7 +11599,449 @@ fn WorkflowDetailAssignmentsTable(assignments: Vec<WorkflowAssignmentSummary>) -
 
 #[component]
 pub fn WorkflowsEditPage() -> impl IntoView {
-    view! { <ResetRoute active_route="workflows" title="Edit Workflow" route="/workflows/:workflow_id/edit" status="Registered" next_step="Restore workflow editor."/> }
+    let params = require_route_params::<WorkflowRouteParams>();
+    let workflow_id = params.workflow_id;
+    let detail = RwSignal::new(None::<WorkflowDefinition>);
+    let forms = RwSignal::new(Vec::<FormSummary>::new());
+    let existing_workflows = RwSignal::new(Vec::<WorkflowSummary>::new());
+    let name = RwSignal::new(String::new());
+    let slug = RwSignal::new(String::new());
+    let description = RwSignal::new(String::new());
+    let steps = RwSignal::new(Vec::<WorkflowStepDraft>::new());
+    let next_step_id = RwSignal::new(1_usize);
+    let edit_version_id = RwSignal::new(None::<String>);
+    let edit_version_label = RwSignal::new(String::new());
+    let edit_version_status = RwSignal::new(String::new());
+    let version_is_draft = RwSignal::new(false);
+    let initialized = RwSignal::new(false);
+    let detail_loading = RwSignal::new(true);
+    let options_loading = RwSignal::new(true);
+    let detail_error = RwSignal::new(None::<String>);
+    let message = RwSignal::new(None::<String>);
+    let is_saving = RwSignal::new(false);
+
+    {
+        let workflow_id = workflow_id.clone();
+        Effect::new(move |_| {
+            load_workflow_detail(workflow_id.clone(), detail, detail_loading, detail_error);
+        });
+    }
+
+    Effect::new(move |_| {
+        load_workflow_create_options(forms, existing_workflows, options_loading, message);
+    });
+
+    Effect::new(move |_| {
+        if initialized.get_untracked() {
+            return;
+        }
+        let Some(workflow) = detail.get() else {
+            return;
+        };
+
+        name.set(workflow.name.clone());
+        slug.set(workflow.slug.clone());
+        description.set(workflow.description.clone());
+
+        let active_version = active_workflow_definition_version(&workflow).cloned();
+        edit_version_id.set(active_version.as_ref().map(|version| version.id.clone()));
+        edit_version_label.set(
+            active_version
+                .as_ref()
+                .and_then(|version| version.form_version_label.clone())
+                .unwrap_or_else(|| "-".to_string()),
+        );
+        edit_version_status.set(
+            active_version
+                .as_ref()
+                .map(|version| sentence_label(&version.status))
+                .unwrap_or_else(|| "No versions".to_string()),
+        );
+        version_is_draft.set(
+            active_version
+                .as_ref()
+                .map(|version| version.status.eq_ignore_ascii_case("draft"))
+                .unwrap_or(false),
+        );
+
+        let mut step_summaries = active_version
+            .as_ref()
+            .map(|version| version.steps.clone())
+            .unwrap_or_default();
+        step_summaries.sort_by_key(|step| step.position);
+        let draft_steps = step_summaries
+            .into_iter()
+            .enumerate()
+            .map(|(index, step)| WorkflowStepDraft {
+                id: index + 1,
+                title: step.title,
+                form_version_id: step.form_version_id,
+            })
+            .collect::<Vec<_>>();
+        let next_id = draft_steps.len() + 1;
+        steps.set(draft_steps);
+        next_step_id.set(next_id);
+        initialized.set(true);
+    });
+
+    let add_step = move || {
+        if !version_is_draft.get_untracked() {
+            return;
+        }
+        let id = next_step_id.get_untracked();
+        next_step_id.set(id + 1);
+        steps.update(|steps| {
+            steps.push(WorkflowStepDraft {
+                id,
+                title: format!("Step {}", steps.len() + 1),
+                form_version_id: String::new(),
+            });
+        });
+    };
+
+    let can_submit = move || {
+        if is_saving.get() || name.get().trim().is_empty() {
+            return false;
+        }
+        if !version_is_draft.get() {
+            return true;
+        }
+        let current_steps = steps.get();
+        !current_steps.is_empty()
+            && current_steps
+                .iter()
+                .all(|step| !step.form_version_id.trim().is_empty())
+    };
+
+    view! {
+        <AppShell active_route="workflows" title="Workflows">
+            <div class="app-page">
+                <Breadcrumb>
+                    <BreadcrumbItem>
+                        <BreadcrumbLink href="/workflows">"Workflows"</BreadcrumbLink>
+                    </BreadcrumbItem>
+                    {move || detail.get().map(|workflow| view! {
+                        <>
+                            <BreadcrumbSeparator/>
+                            <BreadcrumbItem>
+                                <BreadcrumbLink href=format!("/workflows/{}", workflow.id)>{workflow.name}</BreadcrumbLink>
+                            </BreadcrumbItem>
+                        </>
+                    })}
+                    <BreadcrumbSeparator/>
+                    <BreadcrumbItem>
+                        <BreadcrumbPage>"Edit Workflow"</BreadcrumbPage>
+                    </BreadcrumbItem>
+                </Breadcrumb>
+
+                <section class="route-panel workflows-page workflow-edit-page">
+                    <PageHeader title="Edit Workflow"/>
+
+                    {move || {
+                        if detail_loading.get() || options_loading.get() {
+                            view! {
+                                <section class="organization-state" aria-live="polite">
+                                    <h3>"Loading workflow"</h3>
+                                    <p>"Fetching workflow details and form versions."</p>
+                                </section>
+                            }
+                            .into_any()
+                        } else if let Some(error) = detail_error.get() {
+                            view! {
+                                <section class="organization-state is-error" role="alert">
+                                    <h3>"Workflow unavailable"</h3>
+                                    <p>{error}</p>
+                                </section>
+                            }
+                            .into_any()
+                        } else {
+                            let workflow_id_for_href = workflow_id.clone();
+                            let workflow_id_for_submit = workflow_id.clone();
+                            let workflow_href = format!("/workflows/{}", workflow_id_for_href);
+                            view! {
+                                <form
+                                    class="native-form workflow-create-form"
+                                    on:submit=move |event| {
+                                        event.prevent_default();
+                                        submit_update_workflow(
+                                            workflow_id_for_submit.clone(),
+                                            edit_version_id.get_untracked(),
+                                            version_is_draft.get_untracked(),
+                                            name,
+                                            slug,
+                                            steps,
+                                            description,
+                                            is_saving,
+                                            message,
+                                        );
+                                    }
+                                >
+                                    <div class="form-grid">
+                                        <label class="form-field">
+                                            <span>"Workflow Name"</span>
+                                            <input
+                                                type="text"
+                                                value=move || name.get()
+                                                on:input=move |event| {
+                                                    name.set(event_target_value(&event));
+                                                }
+                                            />
+                                        </label>
+                                        <label class="form-field form-field--wide">
+                                            <span>"Description"</span>
+                                            <textarea
+                                                prop:value=move || description.get()
+                                                on:input=move |event| {
+                                                    description.set(event_target_value(&event));
+                                                }
+                                            ></textarea>
+                                        </label>
+                                    </div>
+
+                                    <section class="form-section">
+                                        <h3>"Active Version"</h3>
+                                        <table class="info-list-table">
+                                            <tbody>
+                                                <tr>
+                                                    <th scope="row">"Version"</th>
+                                                    <td>{move || edit_version_label.get()}</td>
+                                                </tr>
+                                                <tr>
+                                                    <th scope="row">"Status"</th>
+                                                    <td>{move || {
+                                                        let status = edit_version_status.get();
+                                                        let key = status.to_lowercase().replace(' ', "-");
+                                                        view! { <span class=status_badge_class(&key)>{status}</span> }
+                                                    }}</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </section>
+
+                                    <section class="form-section">
+                                        <div class="form-builder-section-card__header">
+                                            <h3>"Workflow Steps"</h3>
+                                            <button
+                                                class="button button--secondary"
+                                                type="button"
+                                                disabled=move || {
+                                                    !version_is_draft.get()
+                                                        || workflow_form_version_options(&forms.get()).is_empty()
+                                                }
+                                                on:click=move |_| add_step()
+                                            >
+                                                "+ Add Step"
+                                            </button>
+                                        </div>
+
+                                        {move || {
+                                            if workflow_form_version_options(&forms.get()).is_empty() {
+                                                return view! {
+                                                    <section class="organization-state">
+                                                        <h3>"No published forms available"</h3>
+                                                        <p>"Publish at least one form version before editing workflow steps."</p>
+                                                    </section>
+                                                }
+                                                .into_any();
+                                            }
+
+                                            if !version_is_draft.get() {
+                                                view! {
+                                                    <p class="form-message" role="status">
+                                                        "Published workflow steps are locked in this UI pass. Workflow metadata can still be updated."
+                                                    </p>
+                                                }
+                                                .into_any()
+                                            } else {
+                                                view! { <></> }.into_any()
+                                            }
+                                        }}
+
+                                        {move || {
+                                            if steps.get().is_empty() {
+                                                return view! {
+                                                    <section class="organization-state">
+                                                        <h3>"No workflow steps"</h3>
+                                                        <p>"This workflow version does not have steps yet."</p>
+                                                    </section>
+                                                }
+                                                .into_any();
+                                            }
+
+                                            view! {
+                                                <div class="workflow-step-list">
+                                                    <For
+                                                        each=move || {
+                                                            steps.get().into_iter().enumerate().collect::<Vec<_>>()
+                                                        }
+                                                        key=|(_, step)| step.id
+                                                        children=move |(index, step)| {
+                                                            let step_id = step.id;
+                                                            let step_title = step.title.clone();
+                                                            let step_form_version_id = step.form_version_id.clone();
+                                                            let step_position = move || {
+                                                                steps
+                                                                    .get()
+                                                                    .iter()
+                                                                    .position(|step| step.id == step_id)
+                                                                    .map(|index| index + 1)
+                                                                    .unwrap_or(index + 1)
+                                                            };
+                                                            view! {
+                                                                <article class="workflow-step-card">
+                                                                    <header class="workflow-step-card__header">
+                                                                        <span class="workflow-step-card__position">{move || format!("Step {}", step_position())}</span>
+                                                                        <div class="workflow-step-card__actions">
+                                                                            <button
+                                                                                class="icon-button icon-button--control"
+                                                                                type="button"
+                                                                                title="Move step up"
+                                                                                disabled=move || !version_is_draft.get() || step_position() <= 1
+                                                                                on:click=move |_| {
+                                                                                    if !version_is_draft.get_untracked() {
+                                                                                        return;
+                                                                                    }
+                                                                                    steps.update(|steps| {
+                                                                                        if let Some(index) = steps.iter().position(|step| step.id == step_id) {
+                                                                                            if index > 0 {
+                                                                                                steps.swap(index, index - 1);
+                                                                                            }
+                                                                                        }
+                                                                                    });
+                                                                                }
+                                                                            >
+                                                                                <ArrowUp/>
+                                                                            </button>
+                                                                            <button
+                                                                                class="icon-button icon-button--control"
+                                                                                type="button"
+                                                                                title="Move step down"
+                                                                                disabled=move || {
+                                                                                    let step_count = steps.get().len();
+                                                                                    !version_is_draft.get() || step_position() >= step_count
+                                                                                }
+                                                                                on:click=move |_| {
+                                                                                    if !version_is_draft.get_untracked() {
+                                                                                        return;
+                                                                                    }
+                                                                                    steps.update(|steps| {
+                                                                                        if let Some(index) = steps.iter().position(|step| step.id == step_id) {
+                                                                                            if index + 1 < steps.len() {
+                                                                                                steps.swap(index, index + 1);
+                                                                                            }
+                                                                                        }
+                                                                                    });
+                                                                                }
+                                                                            >
+                                                                                <ArrowDown/>
+                                                                            </button>
+                                                                            <button
+                                                                                class="icon-button icon-button--danger"
+                                                                                type="button"
+                                                                                title="Remove step"
+                                                                                disabled=move || !version_is_draft.get()
+                                                                                on:click=move |_| {
+                                                                                    if !version_is_draft.get_untracked() {
+                                                                                        return;
+                                                                                    }
+                                                                                    steps.update(|steps| {
+                                                                                        steps.retain(|step| step.id != step_id);
+                                                                                    });
+                                                                                }
+                                                                            >
+                                                                                <Trash2/>
+                                                                            </button>
+                                                                        </div>
+                                                                    </header>
+                                                                    <div class="form-grid">
+                                                                        <label class="form-field">
+                                                                            <span>"Step Title"</span>
+                                                                            <input
+                                                                                type="text"
+                                                                                value=step_title
+                                                                                disabled=move || !version_is_draft.get()
+                                                                                on:input=move |event| {
+                                                                                    if !version_is_draft.get_untracked() {
+                                                                                        return;
+                                                                                    }
+                                                                                    let value = event_target_value(&event);
+                                                                                    steps.update(|steps| {
+                                                                                        if let Some(step) = steps.iter_mut().find(|step| step.id == step_id) {
+                                                                                            step.title = value;
+                                                                                        }
+                                                                                    });
+                                                                                }
+                                                                            />
+                                                                        </label>
+                                                                        <label class="form-field">
+                                                                            <span>"Form Version"</span>
+                                                                            <select
+                                                                                prop:value=step_form_version_id
+                                                                                disabled=move || !version_is_draft.get()
+                                                                                on:change=move |event| {
+                                                                                    if !version_is_draft.get_untracked() {
+                                                                                        return;
+                                                                                    }
+                                                                                    let value = event_target_value(&event);
+                                                                                    steps.update(|steps| {
+                                                                                        if let Some(step) = steps.iter_mut().find(|step| step.id == step_id) {
+                                                                                            step.form_version_id = value;
+                                                                                        }
+                                                                                    });
+                                                                                }
+                                                                            >
+                                                                                <option value="">"Select form version"</option>
+                                                                                {workflow_form_version_options(&forms.get())
+                                                                                    .into_iter()
+                                                                                    .map(|(id, label, _)| {
+                                                                                        view! {
+                                                                                            <option value=id>{label}</option>
+                                                                                        }
+                                                                                    })
+                                                                                    .collect_view()}
+                                                                            </select>
+                                                                        </label>
+                                                                    </div>
+                                                                    <div class="workflow-step-card__footer">
+                                                                        <span>{move || {
+                                                                            let selected_form_version_id = steps
+                                                                                .get()
+                                                                                .into_iter()
+                                                                                .find(|step| step.id == step_id)
+                                                                                .map(|step| step.form_version_id)
+                                                                                .unwrap_or_default();
+                                                                            workflow_step_form_label(&forms.get(), &selected_form_version_id)
+                                                                        }}</span>
+                                                                    </div>
+                                                                </article>
+                                                            }
+                                                        }
+                                                    />
+                                                </div>
+                                            }
+                                            .into_any()
+                                        }}
+                                    </section>
+
+                                    {move || message.get().map(|message| view! {
+                                        <p class="form-message" role="status">{message}</p>
+                                    })}
+
+                                    <div class="form-actions">
+                                        <a class="button" href=workflow_href>"Cancel"</a>
+                                        <button class="button button--secondary" type="submit" disabled=move || !can_submit()>
+                                            {move || if is_saving.get() { "Saving..." } else { "Save Changes" }}
+                                        </button>
+                                    </div>
+                                </form>
+                            }
+                            .into_any()
+                        }
+                    }}
+                </section>
+            </div>
+        </AppShell>
+    }
 }
 
 #[component]
