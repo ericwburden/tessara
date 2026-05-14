@@ -7,6 +7,8 @@ use leptos::prelude::*;
 #[cfg(feature = "hydrate")]
 use serde::Deserialize;
 #[cfg(feature = "hydrate")]
+use wasm_bindgen::JsCast;
+#[cfg(feature = "hydrate")]
 use wasm_bindgen::JsValue;
 
 #[cfg(feature = "hydrate")]
@@ -597,6 +599,22 @@ fn format_local_timestamp(value: &str) -> String {
     format!("{month:02}/{day:02}/{year:02} {hour:02}:{minute:02}:{second:02} {meridiem}")
 }
 
+#[cfg(feature = "hydrate")]
+fn scroll_app_main_by(delta_y: f64) {
+    let Some(scroller) = web_sys::window()
+        .and_then(|window| window.document())
+        .and_then(|document| document.query_selector(".app-main").ok().flatten())
+        .and_then(|element| element.dyn_into::<web_sys::HtmlElement>().ok())
+    else {
+        return;
+    };
+
+    let next_scroll_top = (scroller.scroll_top() as f64 + delta_y)
+        .round()
+        .max(0.0) as i32;
+    scroller.set_scroll_top(next_scroll_top);
+}
+
 #[component]
 pub fn DropdownMenu(#[prop(into)] label: String, children: Children) -> impl IntoView {
     let is_open = RwSignal::new(false);
@@ -627,6 +645,14 @@ pub fn DropdownMenu(#[prop(into)] label: String, children: Children) -> impl Int
                 class="dropdown-menu__scrim"
                 type="button"
                 aria-label="Close menu"
+                on:wheel=move |event| {
+                    let _ = &event;
+                    #[cfg(feature = "hydrate")]
+                    {
+                        event.prevent_default();
+                        scroll_app_main_by(event.delta_y());
+                    }
+                }
                 on:click=move |_| is_open.set(false)
             ></button>
             <div

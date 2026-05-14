@@ -296,6 +296,10 @@ input {
   padding: 1.5rem;
 }
 
+.app-main:has(.workflow-detail-assignments-card .dropdown-menu.is-open) {
+  padding-bottom: 7.5rem;
+}
+
 .top-app-bar {
   display: flex;
   align-items: center;
@@ -568,7 +572,8 @@ input {
   border-radius: var(--radius);
 }
 
-.table-wrap:has(.data-table-filter.is-open) {
+.table-wrap:has(.data-table-filter.is-open),
+.table-wrap:has(.dropdown-menu.is-open) {
   overflow: visible;
 }
 
@@ -2548,6 +2553,20 @@ input {
   font-size: 0.95rem;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+}
+
+.workflow-detail-assignments-card,
+.workflow-detail-assignments-card .table-wrap {
+  max-height: none;
+  overflow: visible;
+}
+
+.workflow-assignments-list .table-wrap {
+  overflow: visible;
+}
+
+.workflow-detail-assignments-card .dropdown-menu {
+  z-index: 35;
 }
 
 .form-detail-sections {
