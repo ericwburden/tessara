@@ -1979,6 +1979,177 @@ input {
   font-weight: 750;
 }
 
+.workflow-assignment-create-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.workflow-assignment-create-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+  align-items: stretch;
+}
+
+.workflow-assignment-candidate-search {
+  width: auto;
+  max-width: none;
+}
+
+.workflow-assignment-pair-list {
+  display: grid;
+  gap: 0.65rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--color-control) 36%, transparent);
+  padding: 0.75rem;
+}
+
+.workflow-assignment-pair-list__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.workflow-assignment-pair-list__header h4 {
+  margin: 0;
+  color: var(--semantic-primary);
+  font-size: 0.78rem;
+  font-weight: 850;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.workflow-assignment-pair-list__options {
+  display: grid;
+  gap: 0.45rem;
+  max-height: 18rem;
+  overflow: auto;
+  padding-right: 0.15rem;
+}
+
+.workflow-assignment-pair-option {
+  display: grid;
+  gap: 0.2rem;
+  width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-control);
+  color: var(--color-text);
+  cursor: pointer;
+  font: inherit;
+  padding: 0.65rem 0.75rem;
+  text-align: left;
+}
+
+.workflow-assignment-pair-option:hover,
+.workflow-assignment-pair-option.is-selected {
+  border-color: var(--semantic-primary-border);
+  background: var(--semantic-primary-soft);
+}
+
+.workflow-assignment-pair-option strong {
+  color: var(--semantic-link);
+  font-weight: 850;
+  overflow-wrap: anywhere;
+}
+
+.workflow-assignment-pair-option span {
+  color: var(--color-muted);
+  font-size: 0.84rem;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.workflow-assignment-selected-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border: 1px solid var(--semantic-primary-border);
+  border-radius: var(--radius);
+  background: var(--semantic-primary-soft);
+  padding: 0.65rem 0.75rem;
+}
+
+.workflow-assignment-selected-option > div {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.workflow-assignment-selected-option strong {
+  color: var(--semantic-link);
+  font-weight: 850;
+  overflow-wrap: anywhere;
+}
+
+.workflow-assignment-selected-option span {
+  color: var(--color-muted);
+  font-size: 0.84rem;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.workflow-assignment-selected-option .icon-button {
+  flex: 0 0 auto;
+}
+
+.workflow-assignee-picker {
+  display: grid;
+  gap: 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--color-control) 42%, transparent);
+  padding: 0.85rem;
+}
+
+.workflow-assignee-picker h4 {
+  margin: 0;
+  color: var(--semantic-primary);
+  font-size: 0.78rem;
+  font-weight: 850;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.workflow-assignee-picker__empty {
+  margin: 0;
+  color: var(--color-muted);
+}
+
+.workflow-assignee-option {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-control);
+  padding: 0.65rem 0.75rem;
+  font-weight: 750;
+}
+
+.workflow-assignee-option input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--semantic-primary);
+}
+
+.workflow-assignment-step-meta {
+  display: block;
+  color: var(--color-muted);
+  font-size: 0.82rem;
+  font-weight: 650;
+  margin-top: 0.15rem;
+}
+
+.workflow-assignment-mobile-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
 .form-field--range span {
   display: flex;
   align-items: center;
@@ -2730,6 +2901,10 @@ input {
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: stretch;
     gap: 0.5rem;
+  }
+
+  .workflow-assignment-create-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .forms-node-filter {
