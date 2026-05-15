@@ -175,56 +175,56 @@ const ROUTE_MIGRATIONS: [RouteMigration; 32] = [
         name: "Components",
         route: "/components",
         href: "/components",
-        status: "Pending",
+        status: "Registered",
         rbac_status: "Pending",
     },
     RouteMigration {
         name: "Component Detail",
         route: "/components/:component_ref",
         href: "/components/demo-component",
-        status: "Pending",
+        status: "Registered",
         rbac_status: "Pending",
     },
     RouteMigration {
         name: "Dashboards",
         route: "/dashboards",
         href: "/dashboards",
-        status: "Pending",
+        status: "Registered",
         rbac_status: "Pending",
     },
     RouteMigration {
         name: "Create Dashboard",
         route: "/dashboards/new",
         href: "/dashboards/new",
-        status: "Pending",
+        status: "Registered",
         rbac_status: "Pending",
     },
     RouteMigration {
         name: "Dashboard Detail",
         route: "/dashboards/:dashboard_id",
         href: "/dashboards/demo-operations-dashboard",
-        status: "Pending",
+        status: "Registered",
         rbac_status: "Pending",
     },
     RouteMigration {
         name: "Edit Dashboard",
         route: "/dashboards/:dashboard_id/edit",
         href: "/dashboards/demo-operations-dashboard/edit",
-        status: "Pending",
+        status: "Registered",
         rbac_status: "Pending",
     },
     RouteMigration {
         name: "Datasets",
         route: "/datasets",
         href: "/datasets",
-        status: "Pending",
+        status: "Registered",
         rbac_status: "Pending",
     },
     RouteMigration {
         name: "Dataset Detail",
         route: "/datasets/:dataset_id",
         href: "/datasets/demo-dataset",
-        status: "Pending",
+        status: "Registered",
         rbac_status: "Pending",
     },
     RouteMigration {
@@ -14720,42 +14720,42 @@ fn ResponseFieldInput(
 
 #[component]
 pub fn ComponentsPage() -> impl IntoView {
-    view! { <ResetRoute active_route="components" title="Components" route="/components" status="Queued" next_step="Restore component catalog."/> }
+    view! { <ResetRoute active_route="components" title="Components" route="/components" status="Registered" next_step="Placeholder only. Component functionality will be filled in with dashboards and datasets."/> }
 }
 
 #[component]
 pub fn ComponentsDetailPage() -> impl IntoView {
-    view! { <ResetRoute active_route="components" title="Component Detail" route="/components/:component_ref" status="Registered" next_step="Restore component detail view."/> }
+    view! { <ResetRoute active_route="components" title="Component Detail" route="/components/:component_ref" status="Registered" next_step="Placeholder only. Component detail will be filled in with the component model."/> }
 }
 
 #[component]
 pub fn DashboardsPage() -> impl IntoView {
-    view! { <ResetRoute active_route="dashboards" title="Dashboards" route="/dashboards" status="Queued" next_step="Restore dashboard list and chart cards."/> }
+    view! { <ResetRoute active_route="dashboards" title="Dashboards" route="/dashboards" status="Registered" next_step="Placeholder only. Dashboard functionality will be filled in later."/> }
 }
 
 #[component]
 pub fn DashboardsNewPage() -> impl IntoView {
-    view! { <ResetRoute active_route="dashboards" title="Create Dashboard" route="/dashboards/new" status="Registered" next_step="Restore dashboard builder."/> }
+    view! { <ResetRoute active_route="dashboards" title="Create Dashboard" route="/dashboards/new" status="Registered" next_step="Placeholder only. Dashboard functionality will be filled in later."/> }
 }
 
 #[component]
 pub fn DashboardsDetailPage() -> impl IntoView {
-    view! { <ResetRoute active_route="dashboards" title="Dashboard Detail" route="/dashboards/:dashboard_id" status="Registered" next_step="Restore dashboard detail."/> }
+    view! { <ResetRoute active_route="dashboards" title="Dashboard Detail" route="/dashboards/:dashboard_id" status="Registered" next_step="Placeholder only. Dashboard functionality will be filled in later."/> }
 }
 
 #[component]
 pub fn DashboardsEditPage() -> impl IntoView {
-    view! { <ResetRoute active_route="dashboards" title="Edit Dashboard" route="/dashboards/:dashboard_id/edit" status="Registered" next_step="Restore dashboard edit workflow."/> }
+    view! { <ResetRoute active_route="dashboards" title="Edit Dashboard" route="/dashboards/:dashboard_id/edit" status="Registered" next_step="Placeholder only. Dashboard functionality will be filled in later."/> }
 }
 
 #[component]
 pub fn DatasetsPage() -> impl IntoView {
-    view! { <ResetRoute active_route="datasets" title="Datasets" route="/datasets" status="Queued" next_step="Restore dataset list and definitions."/> }
+    view! { <ResetRoute active_route="datasets" title="Datasets" route="/datasets" status="Registered" next_step="Placeholder only. Dataset functionality will be filled in later."/> }
 }
 
 #[component]
 pub fn DatasetsDetailPage() -> impl IntoView {
-    view! { <ResetRoute active_route="datasets" title="Dataset Detail" route="/datasets/:dataset_id" status="Registered" next_step="Restore dataset detail."/> }
+    view! { <ResetRoute active_route="datasets" title="Dataset Detail" route="/datasets/:dataset_id" status="Registered" next_step="Placeholder only. Dataset functionality will be filled in later."/> }
 }
 
 #[component]
