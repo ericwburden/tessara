@@ -19,7 +19,8 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::closure::Closure;
 
 use crate::infra::routing::{
-    FormRouteParams, NodeRouteParams, WorkflowRouteParams, require_route_params,
+    FormRouteParams, NodeRouteParams, SubmissionRouteParams, WorkflowRouteParams,
+    require_route_params,
 };
 use crate::ui::components::{
     AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator,
@@ -146,28 +147,28 @@ const ROUTE_MIGRATIONS: [RouteMigration; 32] = [
         name: "Responses",
         route: "/responses",
         href: "/responses",
-        status: "Pending",
+        status: "Done",
         rbac_status: "Pending",
     },
     RouteMigration {
         name: "Start Response",
         route: "/responses/new",
         href: "/responses/new",
-        status: "Pending",
+        status: "Done",
         rbac_status: "Pending",
     },
     RouteMigration {
         name: "Response Detail",
         route: "/responses/:submission_id",
-        href: "/responses/demo-submission",
-        status: "Pending",
+        href: "/responses/eb6cf546-1413-4bf3-b8e8-6f734972a3d2",
+        status: "Done",
         rbac_status: "Pending",
     },
     RouteMigration {
         name: "Edit Response",
         route: "/responses/:submission_id/edit",
-        href: "/responses/demo-submission/edit",
-        status: "Pending",
+        href: "/responses/a2bb1939-e25e-4fef-9c85-44dc1c3de8fb/edit",
+        status: "Done",
         rbac_status: "Pending",
     },
     RouteMigration {
@@ -815,6 +816,116 @@ struct SubmissionSummary {
     created_at: String,
     last_modified_at: String,
     submitted_at: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+struct SubmissionDetail {
+    id: String,
+    form_id: String,
+    form_version_id: String,
+    form_name: String,
+    version_label: String,
+    node_id: String,
+    node_name: String,
+    status: String,
+    created_at: String,
+    submitted_at: Option<String>,
+    #[serde(default)]
+    values: Vec<SubmissionValueDetail>,
+    #[serde(default)]
+    audit_events: Vec<SubmissionAuditEventSummary>,
+    runtime: Option<SubmissionRuntimeDetail>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+struct SubmissionRuntimeDetail {
+    workflow_name: String,
+    current_step_title: String,
+    current_step_position: i32,
+    step_count: i64,
+    next_step_title: Option<String>,
+    #[serde(default)]
+    history: Vec<SubmissionRuntimeStepHistory>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+struct SubmissionRuntimeStepHistory {
+    title: String,
+    form_name: String,
+    status: String,
+    position: i32,
+    completed_at: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+struct SubmissionValueDetail {
+    field_id: String,
+    key: String,
+    label: String,
+    field_type: String,
+    required: bool,
+    value: Option<Value>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+struct SubmissionAuditEventSummary {
+    event_type: String,
+    account_email: Option<String>,
+    created_at: String,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+struct PublishedFormVersionOption {
+    form_id: String,
+    form_name: String,
+    form_slug: String,
+    form_version_id: String,
+    version_label: String,
+    published_at: Option<String>,
+    field_count: i64,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+struct ResponseNodeOption {
+    id: String,
+    name: String,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+struct ResponseStartAssignmentOption {
+    form_id: String,
+    form_name: String,
+    form_version_id: String,
+    version_label: String,
+    node_id: String,
+    node_name: String,
+    delegate_account_id: Option<String>,
+    delegate_display_name: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+struct ResponseStartOptions {
+    mode: String,
+    #[serde(default)]
+    published_forms: Vec<PublishedFormVersionOption>,
+    #[serde(default)]
+    nodes: Vec<ResponseNodeOption>,
+    #[serde(default)]
+    assignments: Vec<ResponseStartAssignmentOption>,
+}
+
+#[derive(Serialize)]
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+struct CreateDraftPayload {
+    form_version_id: String,
+    node_id: String,
+    delegate_account_id: Option<String>,
+}
+
+#[derive(Serialize)]
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+struct SaveSubmissionValuesPayload {
+    values: HashMap<String, Value>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -2678,6 +2789,163 @@ fn submission_progress_label(submission: &SubmissionSummary) -> String {
     }
 }
 
+fn response_value_label(value: Option<&Value>) -> String {
+    match value {
+        None | Some(Value::Null) => "Missing".into(),
+        Some(Value::String(value)) if value.trim().is_empty() => "Missing".into(),
+        Some(Value::String(value)) => value.clone(),
+        Some(Value::Bool(value)) => {
+            if *value {
+                "Yes".into()
+            } else {
+                "No".into()
+            }
+        }
+        Some(Value::Array(values)) if values.is_empty() => "Missing".into(),
+        Some(Value::Array(values)) => values
+            .iter()
+            .filter_map(|value| value.as_str())
+            .filter(|value| !value.trim().is_empty())
+            .collect::<Vec<_>>()
+            .join(", "),
+        Some(value) => value.to_string(),
+    }
+}
+
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+fn response_input_value(value: Option<&Value>) -> String {
+    match value {
+        Some(Value::String(value)) => value.clone(),
+        Some(Value::Number(value)) => value.to_string(),
+        Some(Value::Array(values)) => values
+            .iter()
+            .filter_map(|value| value.as_str())
+            .collect::<Vec<_>>()
+            .join(", "),
+        Some(Value::Bool(value)) => value.to_string(),
+        Some(value) if !value.is_null() => value.to_string(),
+        _ => String::new(),
+    }
+}
+
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+fn submission_value_maps(
+    detail: &SubmissionDetail,
+) -> (HashMap<String, String>, HashMap<String, bool>) {
+    let mut text_values = HashMap::new();
+    let mut boolean_values = HashMap::new();
+
+    for value in &detail.values {
+        if value.field_type == "boolean" {
+            boolean_values.insert(
+                value.key.clone(),
+                value
+                    .value
+                    .as_ref()
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false),
+            );
+        } else {
+            text_values.insert(
+                value.key.clone(),
+                response_input_value(value.value.as_ref()),
+            );
+        }
+    }
+
+    (text_values, boolean_values)
+}
+
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+fn collect_response_values(
+    rendered_form: &RenderedForm,
+    text_values: &HashMap<String, String>,
+    boolean_values: &HashMap<String, bool>,
+) -> Result<HashMap<String, Value>, String> {
+    let mut values = HashMap::new();
+
+    for section in &rendered_form.sections {
+        for field in &section.fields {
+            if field.field_type == "boolean" {
+                values.insert(
+                    field.key.clone(),
+                    Value::Bool(*boolean_values.get(&field.key).unwrap_or(&false)),
+                );
+                continue;
+            }
+
+            let raw = text_values
+                .get(&field.key)
+                .map(String::as_str)
+                .unwrap_or_default()
+                .trim();
+            if raw.is_empty() {
+                if field.required {
+                    return Err(format!("Required fields missing: {}", field.label));
+                }
+                continue;
+            }
+
+            let value = match field.field_type.as_str() {
+                "number" => {
+                    let parsed = raw
+                        .parse::<f64>()
+                        .map_err(|_| format!("{} must be a number.", field.label))?;
+                    Value::Number(
+                        serde_json::Number::from_f64(parsed)
+                            .ok_or_else(|| format!("{} must be a finite number.", field.label))?,
+                    )
+                }
+                "multi_choice" => Value::Array(
+                    raw.split(',')
+                        .map(str::trim)
+                        .filter(|value| !value.is_empty())
+                        .map(|value| Value::String(value.to_string()))
+                        .collect(),
+                ),
+                _ => Value::String(raw.to_string()),
+            };
+
+            values.insert(field.key.clone(), value);
+        }
+    }
+
+    Ok(values)
+}
+
+fn response_selected_assignment(
+    options: RwSignal<Option<ResponseStartOptions>>,
+    selected_assignment_index: RwSignal<String>,
+) -> Option<ResponseStartAssignmentOption> {
+    let index = selected_assignment_index.get().parse::<usize>().ok()?;
+    options
+        .get()
+        .and_then(|options| options.assignments.get(index).cloned())
+}
+
+fn response_start_can_submit(
+    options: RwSignal<Option<ResponseStartOptions>>,
+    is_loading: RwSignal<bool>,
+    is_saving: RwSignal<bool>,
+    selected_form_version_id: RwSignal<String>,
+    selected_node_id: RwSignal<String>,
+    selected_assignment_index: RwSignal<String>,
+) -> bool {
+    if is_loading.get() || is_saving.get() {
+        return false;
+    }
+
+    if let Some(loaded_options) = options.get() {
+        if loaded_options.mode == "assignment" {
+            response_selected_assignment(options, selected_assignment_index).is_some()
+        } else {
+            !selected_form_version_id.get().is_empty() && !selected_node_id.get().is_empty()
+        }
+    } else {
+        false
+    }
+}
+
 fn active_workflow_definition_version(
     workflow: &WorkflowDefinition,
 ) -> Option<&WorkflowVersionSummary> {
@@ -4139,6 +4407,468 @@ fn load_submissions(
     #[cfg(not(feature = "hydrate"))]
     {
         let _ = (submissions, is_loading, load_error);
+    }
+}
+
+fn load_submission_detail(
+    submission_id: String,
+    detail: RwSignal<Option<SubmissionDetail>>,
+    is_loading: RwSignal<bool>,
+    load_error: RwSignal<Option<String>>,
+) {
+    #[cfg(feature = "hydrate")]
+    {
+        leptos::task::spawn_local(async move {
+            is_loading.set(true);
+            load_error.set(None);
+
+            match gloo_net::http::Request::get(&format!("/api/submissions/{submission_id}"))
+                .send()
+                .await
+            {
+                Ok(response) if response.status() == 401 => {
+                    detail.set(None);
+                    is_loading.set(false);
+                    redirect_to_login();
+                }
+                Ok(response) if response.ok() => match response.json::<SubmissionDetail>().await {
+                    Ok(loaded_detail) => {
+                        detail.set(Some(loaded_detail));
+                        is_loading.set(false);
+                    }
+                    Err(error) => {
+                        detail.set(None);
+                        load_error.set(Some(format!("Unable to parse response: {error}")));
+                        is_loading.set(false);
+                    }
+                },
+                Ok(response) => {
+                    detail.set(None);
+                    load_error.set(Some(format!(
+                        "Unable to load response. Server returned {}.",
+                        response.status()
+                    )));
+                    is_loading.set(false);
+                }
+                Err(error) => {
+                    detail.set(None);
+                    load_error.set(Some(format!("Unable to load response: {error}")));
+                    is_loading.set(false);
+                }
+            }
+        });
+    }
+
+    #[cfg(not(feature = "hydrate"))]
+    {
+        let _ = (submission_id, detail, is_loading, load_error);
+    }
+}
+
+fn load_submission_edit_context(
+    submission_id: String,
+    detail: RwSignal<Option<SubmissionDetail>>,
+    rendered_form: RwSignal<Option<RenderedForm>>,
+    text_values: RwSignal<HashMap<String, String>>,
+    boolean_values: RwSignal<HashMap<String, bool>>,
+    is_loading: RwSignal<bool>,
+    load_error: RwSignal<Option<String>>,
+) {
+    #[cfg(feature = "hydrate")]
+    {
+        leptos::task::spawn_local(async move {
+            is_loading.set(true);
+            load_error.set(None);
+
+            let loaded_detail =
+                match gloo_net::http::Request::get(&format!("/api/submissions/{submission_id}"))
+                    .send()
+                    .await
+                {
+                    Ok(response) if response.status() == 401 => {
+                        is_loading.set(false);
+                        redirect_to_login();
+                        return;
+                    }
+                    Ok(response) if response.ok() => {
+                        match response.json::<SubmissionDetail>().await {
+                            Ok(detail) => detail,
+                            Err(error) => {
+                                load_error.set(Some(format!("Unable to parse response: {error}")));
+                                is_loading.set(false);
+                                return;
+                            }
+                        }
+                    }
+                    Ok(response) => {
+                        load_error.set(Some(format!(
+                            "Unable to load response. Server returned {}.",
+                            response.status()
+                        )));
+                        is_loading.set(false);
+                        return;
+                    }
+                    Err(error) => {
+                        load_error.set(Some(format!("Unable to load response: {error}")));
+                        is_loading.set(false);
+                        return;
+                    }
+                };
+
+            if loaded_detail.status != "draft" {
+                let (loaded_text_values, loaded_boolean_values) =
+                    submission_value_maps(&loaded_detail);
+                text_values.set(loaded_text_values);
+                boolean_values.set(loaded_boolean_values);
+                detail.set(Some(loaded_detail));
+                rendered_form.set(None);
+                is_loading.set(false);
+                return;
+            }
+
+            let loaded_rendered = match gloo_net::http::Request::get(&format!(
+                "/api/form-versions/{}/render",
+                loaded_detail.form_version_id
+            ))
+            .send()
+            .await
+            {
+                Ok(response) if response.status() == 401 => {
+                    is_loading.set(false);
+                    redirect_to_login();
+                    return;
+                }
+                Ok(response) if response.ok() => match response.json::<RenderedForm>().await {
+                    Ok(rendered) => rendered,
+                    Err(error) => {
+                        load_error.set(Some(format!("Unable to parse response form: {error}")));
+                        is_loading.set(false);
+                        return;
+                    }
+                },
+                Ok(response) => {
+                    load_error.set(Some(format!(
+                        "Unable to load response form. Server returned {}.",
+                        response.status()
+                    )));
+                    is_loading.set(false);
+                    return;
+                }
+                Err(error) => {
+                    load_error.set(Some(format!("Unable to load response form: {error}")));
+                    is_loading.set(false);
+                    return;
+                }
+            };
+
+            let (loaded_text_values, loaded_boolean_values) = submission_value_maps(&loaded_detail);
+            text_values.set(loaded_text_values);
+            boolean_values.set(loaded_boolean_values);
+            detail.set(Some(loaded_detail));
+            rendered_form.set(Some(loaded_rendered));
+            is_loading.set(false);
+        });
+    }
+
+    #[cfg(not(feature = "hydrate"))]
+    {
+        let _ = (
+            submission_id,
+            detail,
+            rendered_form,
+            text_values,
+            boolean_values,
+            is_loading,
+            load_error,
+        );
+    }
+}
+
+fn load_response_start_options(
+    options: RwSignal<Option<ResponseStartOptions>>,
+    is_loading: RwSignal<bool>,
+    message: RwSignal<Option<String>>,
+    delegate_account_id: Option<String>,
+) {
+    #[cfg(feature = "hydrate")]
+    {
+        leptos::task::spawn_local(async move {
+            is_loading.set(true);
+            message.set(None);
+
+            let path = delegate_account_id
+                .as_deref()
+                .filter(|value| !value.trim().is_empty())
+                .map(|value| format!("/api/responses/options?delegate_account_id={value}"))
+                .unwrap_or_else(|| "/api/responses/options".to_string());
+
+            match gloo_net::http::Request::get(&path).send().await {
+                Ok(response) if response.status() == 401 => {
+                    options.set(None);
+                    is_loading.set(false);
+                    redirect_to_login();
+                }
+                Ok(response) if response.ok() => {
+                    match response.json::<ResponseStartOptions>().await {
+                        Ok(loaded_options) => {
+                            options.set(Some(loaded_options));
+                            is_loading.set(false);
+                        }
+                        Err(error) => {
+                            options.set(None);
+                            message.set(Some(format!(
+                                "Unable to parse response start options: {error}"
+                            )));
+                            is_loading.set(false);
+                        }
+                    }
+                }
+                Ok(response) => {
+                    options.set(None);
+                    message.set(Some(format!(
+                        "Unable to load response start options. Server returned {}.",
+                        response.status()
+                    )));
+                    is_loading.set(false);
+                }
+                Err(error) => {
+                    options.set(None);
+                    message.set(Some(format!(
+                        "Unable to load response start options: {error}"
+                    )));
+                    is_loading.set(false);
+                }
+            }
+        });
+    }
+
+    #[cfg(not(feature = "hydrate"))]
+    {
+        let _ = (options, is_loading, message, delegate_account_id);
+    }
+}
+
+fn create_response_draft(
+    payload: CreateDraftPayload,
+    is_saving: RwSignal<bool>,
+    message: RwSignal<Option<String>>,
+) {
+    #[cfg(feature = "hydrate")]
+    {
+        leptos::task::spawn_local(async move {
+            is_saving.set(true);
+            message.set(None);
+
+            let body = match serde_json::to_string(&payload) {
+                Ok(body) => body,
+                Err(error) => {
+                    message.set(Some(format!(
+                        "Response draft could not be prepared: {error}"
+                    )));
+                    is_saving.set(false);
+                    return;
+                }
+            };
+
+            match send_json_id_request(
+                gloo_net::http::Request::post("/api/submissions/drafts"),
+                Some(body),
+                "Create response draft",
+            )
+            .await
+            {
+                Ok(response) => navigate_to_href(&format!("/responses/{}/edit", response.id)),
+                Err(error) => {
+                    message.set(Some(error));
+                    is_saving.set(false);
+                }
+            }
+        });
+    }
+
+    #[cfg(not(feature = "hydrate"))]
+    {
+        let _ = (payload, is_saving, message);
+    }
+}
+
+fn start_workflow_assignment_response(
+    workflow_assignment_id: String,
+    is_saving: RwSignal<bool>,
+    message: RwSignal<Option<String>>,
+) {
+    #[cfg(feature = "hydrate")]
+    {
+        leptos::task::spawn_local(async move {
+            is_saving.set(true);
+            message.set(Some("Starting assigned response...".into()));
+
+            match send_json_id_request(
+                gloo_net::http::Request::post(&format!(
+                    "/api/workflow-assignments/{workflow_assignment_id}/start"
+                )),
+                Some("{}".into()),
+                "Start assigned response",
+            )
+            .await
+            {
+                Ok(response) => navigate_to_href(&format!("/responses/{}/edit", response.id)),
+                Err(error) => {
+                    message.set(Some(error));
+                    is_saving.set(false);
+                }
+            }
+        });
+    }
+
+    #[cfg(not(feature = "hydrate"))]
+    {
+        let _ = (workflow_assignment_id, is_saving, message);
+    }
+}
+
+fn save_submission_values(
+    submission_id: String,
+    rendered_form: RenderedForm,
+    text_values: HashMap<String, String>,
+    boolean_values: HashMap<String, bool>,
+    is_saving: RwSignal<bool>,
+    message: RwSignal<Option<String>>,
+) {
+    #[cfg(feature = "hydrate")]
+    {
+        leptos::task::spawn_local(async move {
+            is_saving.set(true);
+            message.set(None);
+
+            let values =
+                match collect_response_values(&rendered_form, &text_values, &boolean_values) {
+                    Ok(values) => values,
+                    Err(error) => {
+                        message.set(Some(error));
+                        is_saving.set(false);
+                        return;
+                    }
+                };
+
+            let body = match serde_json::to_string(&SaveSubmissionValuesPayload { values }) {
+                Ok(body) => body,
+                Err(error) => {
+                    message.set(Some(format!(
+                        "Response values could not be prepared: {error}"
+                    )));
+                    is_saving.set(false);
+                    return;
+                }
+            };
+
+            match send_json_id_request(
+                gloo_net::http::Request::put(&format!("/api/submissions/{submission_id}/values")),
+                Some(body),
+                "Save response draft",
+            )
+            .await
+            {
+                Ok(_) => {
+                    message.set(Some("Draft saved.".into()));
+                    is_saving.set(false);
+                }
+                Err(error) => {
+                    message.set(Some(error));
+                    is_saving.set(false);
+                }
+            }
+        });
+    }
+
+    #[cfg(not(feature = "hydrate"))]
+    {
+        let _ = (
+            submission_id,
+            rendered_form,
+            text_values,
+            boolean_values,
+            is_saving,
+            message,
+        );
+    }
+}
+
+fn submit_response_values(
+    submission_id: String,
+    rendered_form: RenderedForm,
+    text_values: HashMap<String, String>,
+    boolean_values: HashMap<String, bool>,
+    is_saving: RwSignal<bool>,
+    message: RwSignal<Option<String>>,
+) {
+    #[cfg(feature = "hydrate")]
+    {
+        leptos::task::spawn_local(async move {
+            is_saving.set(true);
+            message.set(None);
+
+            let values =
+                match collect_response_values(&rendered_form, &text_values, &boolean_values) {
+                    Ok(values) => values,
+                    Err(error) => {
+                        message.set(Some(error));
+                        is_saving.set(false);
+                        return;
+                    }
+                };
+
+            let body = match serde_json::to_string(&SaveSubmissionValuesPayload { values }) {
+                Ok(body) => body,
+                Err(error) => {
+                    message.set(Some(format!(
+                        "Response values could not be prepared: {error}"
+                    )));
+                    is_saving.set(false);
+                    return;
+                }
+            };
+
+            match send_json_id_request(
+                gloo_net::http::Request::put(&format!("/api/submissions/{submission_id}/values")),
+                Some(body),
+                "Save response draft",
+            )
+            .await
+            {
+                Ok(_) => match send_json_id_request(
+                    gloo_net::http::Request::post(&format!(
+                        "/api/submissions/{submission_id}/submit"
+                    )),
+                    Some("{}".into()),
+                    "Submit response",
+                )
+                .await
+                {
+                    Ok(response) => navigate_to_href(&format!("/responses/{}", response.id)),
+                    Err(error) => {
+                        message.set(Some(error));
+                        is_saving.set(false);
+                    }
+                },
+                Err(error) => {
+                    message.set(Some(error));
+                    is_saving.set(false);
+                }
+            }
+        });
+    }
+
+    #[cfg(not(feature = "hydrate"))]
+    {
+        let _ = (
+            submission_id,
+            rendered_form,
+            text_values,
+            boolean_values,
+            is_saving,
+            message,
+        );
     }
 }
 
@@ -13089,17 +13819,903 @@ fn ResponsesList(
 
 #[component]
 pub fn ResponsesNewPage() -> impl IntoView {
-    view! { <ResetRoute active_route="responses" title="Start Response" route="/responses/new" status="Registered" next_step="Restore response start workflow."/> }
+    let options = RwSignal::new(None::<ResponseStartOptions>);
+    let is_loading = RwSignal::new(true);
+    let is_saving = RwSignal::new(false);
+    let message = RwSignal::new(None::<String>);
+    let selected_form_version_id = RwSignal::new(String::new());
+    let selected_node_id = RwSignal::new(String::new());
+    let selected_assignment_index = RwSignal::new(String::new());
+
+    #[cfg(feature = "hydrate")]
+    let requested_workflow_assignment_id = current_search_param("workflowAssignmentId")
+        .or_else(|| current_search_param("workflow_assignment_id"));
+    #[cfg(not(feature = "hydrate"))]
+    let requested_workflow_assignment_id = None::<String>;
+
+    #[cfg(feature = "hydrate")]
+    let delegate_account_id = current_search_param("delegateAccountId")
+        .or_else(|| current_search_param("delegate_account_id"));
+    #[cfg(not(feature = "hydrate"))]
+    let delegate_account_id = None::<String>;
+    let delegate_account_id_signal = RwSignal::new(delegate_account_id.clone());
+
+    let requested_workflow_assignment_id_for_effect = requested_workflow_assignment_id.clone();
+    let requested_workflow_assignment_id_for_view = requested_workflow_assignment_id.clone();
+    let delegate_account_id_for_effect = delegate_account_id.clone();
+
+    Effect::new(move |_| {
+        if let Some(workflow_assignment_id) = requested_workflow_assignment_id_for_effect.clone() {
+            is_loading.set(false);
+            start_workflow_assignment_response(workflow_assignment_id, is_saving, message);
+        } else {
+            load_response_start_options(
+                options,
+                is_loading,
+                message,
+                delegate_account_id_for_effect.clone(),
+            );
+        }
+    });
+
+    view! {
+        <AppShell active_route="responses" title="Start Response">
+            <div class="app-page">
+                <Breadcrumb>
+                    <BreadcrumbItem>
+                        <BreadcrumbLink href="/responses">"Responses"</BreadcrumbLink>
+                    </BreadcrumbItem>
+                    <BreadcrumbSeparator/>
+                    <BreadcrumbItem>
+                        <BreadcrumbPage>"Start Response"</BreadcrumbPage>
+                    </BreadcrumbItem>
+                </Breadcrumb>
+                <section class="route-panel responses-page">
+                    <PageHeader title="Start Response"/>
+
+                    {move || {
+                        if requested_workflow_assignment_id_for_view.is_some() && is_saving.get() {
+                            view! {
+                                <section class="organization-state" aria-live="polite">
+                                    <h3>"Starting assigned response"</h3>
+                                    <p>"Creating a draft from the selected workflow assignment."</p>
+                                </section>
+                            }
+                            .into_any()
+                        } else if is_loading.get() {
+                            view! {
+                                <section class="organization-state" aria-live="polite">
+                                    <h3>"Loading start options"</h3>
+                                    <p>"Fetching available response contexts."</p>
+                                </section>
+                            }
+                            .into_any()
+                        } else if let Some(error) = message.get().filter(|_| options.get().is_none()) {
+                            view! {
+                                <section class="organization-state is-error" role="alert">
+                                    <h3>"Response start unavailable"</h3>
+                                    <p>{error}</p>
+                                </section>
+                            }
+                            .into_any()
+                        } else if let Some(loaded_options) = options.get() {
+                            view! {
+                                <form
+                                    class="native-form response-start-form"
+                                    on:submit=move |event| {
+                                        event.prevent_default();
+                                        if !response_start_can_submit(
+                                            options,
+                                            is_loading,
+                                            is_saving,
+                                            selected_form_version_id,
+                                            selected_node_id,
+                                            selected_assignment_index,
+                                        ) {
+                                            message.set(Some("Select the response context before starting a draft.".into()));
+                                            return;
+                                        }
+
+                                        if let Some(assignment) = response_selected_assignment(options, selected_assignment_index) {
+                                            create_response_draft(
+                                                CreateDraftPayload {
+                                                    form_version_id: assignment.form_version_id,
+                                                    node_id: assignment.node_id,
+                                                    delegate_account_id: assignment.delegate_account_id,
+                                                },
+                                                is_saving,
+                                                message,
+                                            );
+                                            return;
+                                        }
+
+                                        create_response_draft(
+                                            CreateDraftPayload {
+                                                form_version_id: selected_form_version_id.get(),
+                                                node_id: selected_node_id.get(),
+                                                delegate_account_id: delegate_account_id_signal.get(),
+                                            },
+                                            is_saving,
+                                            message,
+                                        );
+                                    }
+                                >
+                                    {if loaded_options.mode == "assignment" {
+                                        view! {
+                                            <ResponseAssignmentStartFields
+                                                assignments=loaded_options.assignments
+                                                selected_assignment_index
+                                            />
+                                        }
+                                        .into_any()
+                                    } else {
+                                        view! {
+                                            <ResponseManualStartFields
+                                                published_forms=loaded_options.published_forms
+                                                nodes=loaded_options.nodes
+                                                selected_form_version_id
+                                                selected_node_id
+                                            />
+                                        }
+                                        .into_any()
+                                    }}
+
+                                    {move || {
+                                        message
+                                            .get()
+                                            .map(|message| {
+                                                let class = if message.to_lowercase().contains("failed")
+                                                    || message.to_lowercase().contains("unable")
+                                                    || message.to_lowercase().contains("select")
+                                                {
+                                                    "form-message is-error"
+                                                } else {
+                                                    "form-message"
+                                                };
+                                                view! { <p class=class role="status">{message}</p> }
+                                            })
+                                    }}
+
+                                    <div class="form-actions">
+                                        <a class="button button--secondary" href="/responses">"Cancel"</a>
+                                        <button
+                                            class="button"
+                                            type="submit"
+                                            disabled=move || {
+                                                !response_start_can_submit(
+                                                    options,
+                                                    is_loading,
+                                                    is_saving,
+                                                    selected_form_version_id,
+                                                    selected_node_id,
+                                                    selected_assignment_index,
+                                                )
+                                            }
+                                        >
+                                            {move || if is_saving.get() { "Starting..." } else { "Start Draft" }}
+                                        </button>
+                                    </div>
+                                </form>
+                            }
+                            .into_any()
+                        } else {
+                            view! {
+                                <section class="organization-state is-error" role="alert">
+                                    <h3>"Response start unavailable"</h3>
+                                    <p>"Response start options could not be loaded."</p>
+                                </section>
+                            }
+                            .into_any()
+                        }
+                    }}
+                </section>
+            </div>
+        </AppShell>
+    }
+}
+
+#[component]
+fn ResponseManualStartFields(
+    published_forms: Vec<PublishedFormVersionOption>,
+    nodes: Vec<ResponseNodeOption>,
+    selected_form_version_id: RwSignal<String>,
+    selected_node_id: RwSignal<String>,
+) -> impl IntoView {
+    let has_forms = !published_forms.is_empty();
+    let has_nodes = !nodes.is_empty();
+
+    view! {
+        <div class="form-grid">
+            <label class="form-field">
+                <span>"Published Form"</span>
+                <select
+                    prop:value=move || selected_form_version_id.get()
+                    disabled=!has_forms
+                    on:change=move |event| selected_form_version_id.set(event_target_value(&event))
+                >
+                    <option value="">"Select published form"</option>
+                    {published_forms
+                        .into_iter()
+                        .map(|form| {
+                            view! {
+                                <option value=form.form_version_id>
+                                    {format!("{} ({})", form.form_name, form.version_label)}
+                                </option>
+                            }
+                        })
+                        .collect_view()}
+                </select>
+            </label>
+            <label class="form-field">
+                <span>"Target Node"</span>
+                <select
+                    prop:value=move || selected_node_id.get()
+                    disabled=!has_nodes
+                    on:change=move |event| selected_node_id.set(event_target_value(&event))
+                >
+                    <option value="">"Select target node"</option>
+                    {nodes
+                        .into_iter()
+                        .map(|node| {
+                            view! {
+                                <option value=node.id>{node.name}</option>
+                            }
+                        })
+                        .collect_view()}
+                </select>
+            </label>
+        </div>
+        {if !has_forms || !has_nodes {
+            view! {
+                <section class="organization-state" aria-live="polite">
+                    <h3>"No manual response contexts"</h3>
+                    <p>"Published forms and visible organization nodes are required before a manual response draft can be started."</p>
+                </section>
+            }
+            .into_any()
+        } else {
+            view! {}.into_any()
+        }}
+    }
+}
+
+#[component]
+fn ResponseAssignmentStartFields(
+    assignments: Vec<ResponseStartAssignmentOption>,
+    selected_assignment_index: RwSignal<String>,
+) -> impl IntoView {
+    let has_assignments = !assignments.is_empty();
+    let assignments_for_summary = assignments.clone();
+    let selected_summary = move || {
+        let index = selected_assignment_index.get().parse::<usize>().ok()?;
+        assignments_for_summary.get(index).cloned()
+    };
+
+    view! {
+        <div class="form-grid">
+            <label class="form-field wide-field">
+                <span>"Assigned Work"</span>
+                <select
+                    prop:value=move || selected_assignment_index.get()
+                    disabled=!has_assignments
+                    on:change=move |event| selected_assignment_index.set(event_target_value(&event))
+                >
+                    <option value="">"Select assigned response"</option>
+                    {assignments
+                        .into_iter()
+                        .enumerate()
+                        .map(|(index, assignment)| {
+                            let assignee = nonempty_text(
+                                assignment.delegate_display_name.as_deref(),
+                                "Assigned response",
+                            );
+                            view! {
+                                <option value=index.to_string()>
+                                    {format!(
+                                        "{} ({}) at {} - {}",
+                                        assignment.form_name,
+                                        assignment.version_label,
+                                        assignment.node_name,
+                                        assignee,
+                                    )}
+                                </option>
+                            }
+                        })
+                        .collect_view()}
+                </select>
+            </label>
+        </div>
+        {move || {
+            if !has_assignments {
+                view! {
+                    <section class="organization-state" aria-live="polite">
+                        <h3>"No assigned responses"</h3>
+                        <p>"There is no pending workflow work available for this response context."</p>
+                    </section>
+                }
+                .into_any()
+            } else if let Some(assignment) = selected_summary() {
+                view! {
+                    <section class="organization-state response-start-summary" aria-live="polite">
+                        <h3>{assignment.form_name}</h3>
+                        <p>{format!("Form Version {} at {}", assignment.version_label, assignment.node_name)}</p>
+                        <p>{nonempty_text(assignment.delegate_display_name.as_deref(), "Assigned response")}</p>
+                    </section>
+                }
+                .into_any()
+            } else {
+                view! {}.into_any()
+            }
+        }}
+    }
 }
 
 #[component]
 pub fn ResponsesDetailPage() -> impl IntoView {
-    view! { <ResetRoute active_route="responses" title="Response Detail" route="/responses/:submission_id" status="Registered" next_step="Restore response detail inspection."/> }
+    let params = require_route_params::<SubmissionRouteParams>();
+    let submission_id = params.submission_id;
+    let detail = RwSignal::new(None::<SubmissionDetail>);
+    let is_loading = RwSignal::new(true);
+    let load_error = RwSignal::new(None::<String>);
+
+    Effect::new(move |_| {
+        load_submission_detail(submission_id.clone(), detail, is_loading, load_error);
+    });
+
+    view! {
+        <AppShell active_route="responses" title="Response Detail">
+            <div class="app-page">
+                <Breadcrumb>
+                    <BreadcrumbItem>
+                        <BreadcrumbLink href="/responses">"Responses"</BreadcrumbLink>
+                    </BreadcrumbItem>
+                    <BreadcrumbSeparator/>
+                    <BreadcrumbItem>
+                        <BreadcrumbPage>"Response Detail"</BreadcrumbPage>
+                    </BreadcrumbItem>
+                </Breadcrumb>
+                <section class="route-panel responses-page">
+                    <PageHeader title="Response Detail"/>
+
+                    {move || {
+                        if is_loading.get() {
+                            view! {
+                                <section class="organization-state" aria-live="polite">
+                                    <h3>"Loading response"</h3>
+                                    <p>"Fetching response values and audit history."</p>
+                                </section>
+                            }
+                            .into_any()
+                        } else if let Some(message) = load_error.get() {
+                            view! {
+                                <section class="organization-state is-error" role="alert">
+                                    <h3>"Response unavailable"</h3>
+                                    <p>{message}</p>
+                                </section>
+                            }
+                            .into_any()
+                        } else if let Some(detail) = detail.get() {
+                            view! { <ResponseDetailContent detail/> }.into_any()
+                        } else {
+                            view! {
+                                <section class="organization-state is-error" role="alert">
+                                    <h3>"Response unavailable"</h3>
+                                    <p>"The selected response could not be loaded."</p>
+                                </section>
+                            }
+                            .into_any()
+                        }
+                    }}
+                </section>
+            </div>
+        </AppShell>
+    }
 }
 
 #[component]
 pub fn ResponsesEditPage() -> impl IntoView {
-    view! { <ResetRoute active_route="responses" title="Edit Response" route="/responses/:submission_id/edit" status="Registered" next_step="Restore response edit workflow."/> }
+    let params = require_route_params::<SubmissionRouteParams>();
+    let submission_id = params.submission_id;
+    let detail = RwSignal::new(None::<SubmissionDetail>);
+    let rendered_form = RwSignal::new(None::<RenderedForm>);
+    let text_values = RwSignal::new(HashMap::<String, String>::new());
+    let boolean_values = RwSignal::new(HashMap::<String, bool>::new());
+    let is_loading = RwSignal::new(true);
+    let is_saving = RwSignal::new(false);
+    let load_error = RwSignal::new(None::<String>);
+    let message = RwSignal::new(None::<String>);
+
+    Effect::new(move |_| {
+        load_submission_edit_context(
+            submission_id.clone(),
+            detail,
+            rendered_form,
+            text_values,
+            boolean_values,
+            is_loading,
+            load_error,
+        );
+    });
+
+    view! {
+        <AppShell active_route="responses" title="Edit Response">
+            <div class="app-page">
+                <Breadcrumb>
+                    <BreadcrumbItem>
+                        <BreadcrumbLink href="/responses">"Responses"</BreadcrumbLink>
+                    </BreadcrumbItem>
+                    <BreadcrumbSeparator/>
+                    <BreadcrumbItem>
+                        <BreadcrumbPage>"Edit Response"</BreadcrumbPage>
+                    </BreadcrumbItem>
+                </Breadcrumb>
+                <section class="route-panel responses-page">
+                    <PageHeader title="Edit Response"/>
+
+                    {move || {
+                        if is_loading.get() {
+                            view! {
+                                <section class="organization-state" aria-live="polite">
+                                    <h3>"Loading response form"</h3>
+                                    <p>"Fetching response values and form fields."</p>
+                                </section>
+                            }
+                            .into_any()
+                        } else if let Some(message) = load_error.get() {
+                            view! {
+                                <section class="organization-state is-error" role="alert">
+                                    <h3>"Response unavailable"</h3>
+                                    <p>{message}</p>
+                                </section>
+                            }
+                            .into_any()
+                        } else if let Some(detail) = detail.get() {
+                            if detail.status != "draft" {
+                                let detail_href = format!("/responses/{}", detail.id);
+                                view! {
+                                    <section class="organization-state" aria-live="polite">
+                                        <h3>"Submitted response"</h3>
+                                        <p>"This response has been submitted and is read-only."</p>
+                                        <a class="button button--secondary" href=detail_href>"Back to Detail"</a>
+                                    </section>
+                                }
+                                .into_any()
+                            } else if let Some(rendered_form) = rendered_form.get() {
+                                view! {
+                                    <ResponseEditForm
+                                        detail
+                                        rendered_form
+                                        text_values
+                                        boolean_values
+                                        is_saving
+                                        message
+                                    />
+                                }
+                                .into_any()
+                            } else {
+                                view! {
+                                    <section class="organization-state is-error" role="alert">
+                                        <h3>"Response form unavailable"</h3>
+                                        <p>"The selected response form could not be loaded."</p>
+                                    </section>
+                                }
+                                .into_any()
+                            }
+                        } else {
+                            view! {
+                                <section class="organization-state is-error" role="alert">
+                                    <h3>"Response unavailable"</h3>
+                                    <p>"The selected response could not be loaded."</p>
+                                </section>
+                            }
+                            .into_any()
+                        }
+                    }}
+                </section>
+            </div>
+        </AppShell>
+    }
+}
+
+#[component]
+fn ResponseDetailContent(detail: SubmissionDetail) -> impl IntoView {
+    let status_key = detail.status.trim().to_lowercase();
+    let status_label = metadata_label(&detail.status);
+    let edit_href = format!("/responses/{}/edit", detail.id);
+    let node_href = format!("/organization/{}", detail.node_id);
+    let form_href = format!("/forms/{}", detail.form_id);
+    let submitted_at = detail.submitted_at.clone();
+    let runtime = detail.runtime.clone();
+    let values = detail.values.clone();
+    let audit_events = detail.audit_events.clone();
+    let is_draft = status_key == "draft";
+
+    view! {
+        <div class="organization-detail-content response-detail-content">
+            <header class="organization-detail-content__header">
+                <p>"Response Detail"</p>
+                <h2>{detail.form_name.clone()}</h2>
+            </header>
+
+            <div class="organization-detail-content__grid">
+                <section class="organization-detail-card">
+                    <h3>"Summary"</h3>
+                    <InfoListTable>
+                        <tr>
+                            <th scope="row">"Form"</th>
+                            <td><a href=form_href>{detail.form_name}</a></td>
+                        </tr>
+                        <tr>
+                            <th scope="row">"Form Version"</th>
+                            <td>{detail.version_label}</td>
+                        </tr>
+                        <tr>
+                            <th scope="row">"Node"</th>
+                            <td><a href=node_href>{detail.node_name}</a></td>
+                        </tr>
+                        <tr>
+                            <th scope="row">"Status"</th>
+                            <td><span class=status_badge_class(&status_key)>{status_label}</span></td>
+                        </tr>
+                        <tr>
+                            <th scope="row">"Created"</th>
+                            <td><Timestamp value=detail.created_at/></td>
+                        </tr>
+                        <tr>
+                            <th scope="row">"Submitted"</th>
+                            <td>
+                                {submitted_at
+                                    .map(|value| view! { <Timestamp value/> }.into_any())
+                                    .unwrap_or_else(|| view! { <span>"-"</span> }.into_any())}
+                            </td>
+                        </tr>
+                    </InfoListTable>
+                    <div class="form-actions">
+                        <a class="button button--secondary" href="/responses">"Back to Responses"</a>
+                        {if is_draft {
+                            view! { <a class="button" href=edit_href>"Edit Draft"</a> }.into_any()
+                        } else {
+                            view! {}.into_any()
+                        }}
+                    </div>
+                </section>
+
+                {runtime
+                    .map(|runtime| view! { <ResponseRuntimeCard runtime/> }.into_any())
+                    .unwrap_or_else(|| view! {}.into_any())}
+
+                <section class="organization-detail-card organization-detail-card--wide">
+                    <h3>"Response Values"</h3>
+                    <ResponseValuesTable values/>
+                </section>
+
+                <section class="organization-detail-card organization-detail-card--wide">
+                    <h3>"Audit Trail"</h3>
+                    <ResponseAuditTable events=audit_events/>
+                </section>
+            </div>
+        </div>
+    }
+}
+
+#[component]
+fn ResponseRuntimeCard(runtime: SubmissionRuntimeDetail) -> impl IntoView {
+    let current_position = runtime.current_step_position + 1;
+    let next_step = nonempty_text(runtime.next_step_title.as_deref(), "Final step");
+    let history = runtime.history.clone();
+
+    view! {
+        <section class="organization-detail-card">
+            <h3>"Workflow Runtime"</h3>
+            <InfoListTable>
+                <tr>
+                    <th scope="row">"Workflow"</th>
+                    <td>{runtime.workflow_name}</td>
+                </tr>
+                <tr>
+                    <th scope="row">"Current Step"</th>
+                    <td>{format!("{} of {}: {}", current_position, runtime.step_count, runtime.current_step_title)}</td>
+                </tr>
+                <tr>
+                    <th scope="row">"Next Step"</th>
+                    <td>{next_step}</td>
+                </tr>
+            </InfoListTable>
+            <div class="form-detail-attached-list">
+                {if history.is_empty() {
+                    view! { <p class="related-work-mobile-empty">"No runtime steps to display"</p> }.into_any()
+                } else {
+                    history
+                        .into_iter()
+                        .map(|step| {
+                            let status = step.status.clone();
+                            view! {
+                                <div class="forms-attached-sheet__item">
+                                    <span>{format!("Step {}: {}", step.position + 1, step.title)}</span>
+                                    <small>{format!("{} - {}", step.form_name, metadata_label(&status))}</small>
+                                </div>
+                            }
+                        })
+                        .collect_view()
+                        .into_any()
+                }}
+            </div>
+        </section>
+    }
+}
+
+#[component]
+fn ResponseValuesTable(values: Vec<SubmissionValueDetail>) -> impl IntoView {
+    view! {
+        <DataTable>
+            <thead>
+                <tr>
+                    <th scope="col">"Field"</th>
+                    <th scope="col">"Type"</th>
+                    <th scope="col">"Value"</th>
+                </tr>
+            </thead>
+            <tbody>
+                {if values.is_empty() {
+                    view! {
+                        <tr>
+                            <td class="data-table__empty" colspan="3">"No Response Values to Display"</td>
+                        </tr>
+                    }
+                    .into_any()
+                } else {
+                    values
+                        .into_iter()
+                        .map(|value| {
+                            let rendered_value = response_value_label(value.value.as_ref());
+                            view! {
+                                <tr>
+                                    <th scope="row">{value.label}</th>
+                                    <td>{metadata_label(&value.field_type)}</td>
+                                    <td>{rendered_value}</td>
+                                </tr>
+                            }
+                        })
+                        .collect_view()
+                        .into_any()
+                }}
+            </tbody>
+        </DataTable>
+    }
+}
+
+#[component]
+fn ResponseAuditTable(events: Vec<SubmissionAuditEventSummary>) -> impl IntoView {
+    view! {
+        <DataTable>
+            <thead>
+                <tr>
+                    <th scope="col">"Event"</th>
+                    <th scope="col">"Account"</th>
+                    <th scope="col">"When"</th>
+                </tr>
+            </thead>
+            <tbody>
+                {if events.is_empty() {
+                    view! {
+                        <tr>
+                            <td class="data-table__empty" colspan="3">"No Audit Events to Display"</td>
+                        </tr>
+                    }
+                    .into_any()
+                } else {
+                    events
+                        .into_iter()
+                        .map(|event| {
+                            view! {
+                                <tr>
+                                    <th scope="row">{metadata_label(&event.event_type)}</th>
+                                    <td>{nonempty_text(event.account_email.as_deref(), "System")}</td>
+                                    <td><Timestamp value=event.created_at/></td>
+                                </tr>
+                            }
+                        })
+                        .collect_view()
+                        .into_any()
+                }}
+            </tbody>
+        </DataTable>
+    }
+}
+
+#[component]
+fn ResponseEditForm(
+    detail: SubmissionDetail,
+    rendered_form: RenderedForm,
+    text_values: RwSignal<HashMap<String, String>>,
+    boolean_values: RwSignal<HashMap<String, bool>>,
+    is_saving: RwSignal<bool>,
+    message: RwSignal<Option<String>>,
+) -> impl IntoView {
+    let detail_href = format!("/responses/{}", detail.id);
+    let save_submission_id = detail.id.clone();
+    let submit_submission_id = detail.id.clone();
+    let rendered_for_save = rendered_form.clone();
+    let rendered_for_submit = rendered_form.clone();
+
+    view! {
+        <form class="native-form response-edit-form" on:submit=move |event| event.prevent_default()>
+            <section class="organization-detail-card">
+                <h3>{detail.form_name}</h3>
+                <InfoListTable>
+                    <tr>
+                        <th scope="row">"Form Version"</th>
+                        <td>{detail.version_label}</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">"Node"</th>
+                        <td>{detail.node_name}</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">"Status"</th>
+                        <td><span class=status_badge_class(&detail.status)>{metadata_label(&detail.status)}</span></td>
+                    </tr>
+                </InfoListTable>
+            </section>
+
+            {rendered_form
+                .sections
+                .into_iter()
+                .map(|section| {
+                    view! {
+                        <section class="organization-detail-card organization-detail-card--wide response-form-section">
+                            <h3>{section.title}</h3>
+                            {if !section.description.trim().is_empty() {
+                                view! { <p>{section.description}</p> }.into_any()
+                            } else {
+                                view! {}.into_any()
+                            }}
+                            <div class="form-grid">
+                                {section
+                                    .fields
+                                    .into_iter()
+                                    .map(|field| {
+                                        view! {
+                                            <ResponseFieldInput
+                                                field
+                                                text_values
+                                                boolean_values
+                                            />
+                                        }
+                                    })
+                                    .collect_view()}
+                            </div>
+                        </section>
+                    }
+                })
+                .collect_view()}
+
+            {move || {
+                message
+                    .get()
+                    .map(|message| {
+                        let class = if message.to_lowercase().contains("saved") {
+                            "form-message"
+                        } else {
+                            "form-message is-error"
+                        };
+                        view! { <p class=class role="status">{message}</p> }
+                    })
+            }}
+
+            <div class="form-actions">
+                <a class="button button--secondary" href=detail_href>"Back to Detail"</a>
+                <button
+                    class="button button--secondary"
+                    type="button"
+                    disabled=move || is_saving.get()
+                    on:click=move |_| {
+                        save_submission_values(
+                            save_submission_id.clone(),
+                            rendered_for_save.clone(),
+                            text_values.get(),
+                            boolean_values.get(),
+                            is_saving,
+                            message,
+                        );
+                    }
+                >
+                    {move || if is_saving.get() { "Saving..." } else { "Save Draft" }}
+                </button>
+                <button
+                    class="button"
+                    type="button"
+                    disabled=move || is_saving.get()
+                    on:click=move |_| {
+                        submit_response_values(
+                            submit_submission_id.clone(),
+                            rendered_for_submit.clone(),
+                            text_values.get(),
+                            boolean_values.get(),
+                            is_saving,
+                            message,
+                        );
+                    }
+                >
+                    {move || if is_saving.get() { "Submitting..." } else { "Submit Response" }}
+                </button>
+            </div>
+        </form>
+    }
+}
+
+#[component]
+fn ResponseFieldInput(
+    field: RenderedField,
+    text_values: RwSignal<HashMap<String, String>>,
+    boolean_values: RwSignal<HashMap<String, bool>>,
+) -> impl IntoView {
+    let field_key = field.key.clone();
+    let field_key_for_input = field.key.clone();
+    let field_key_for_bool = field.key.clone();
+    let input_id = format!("response-field-{}", field.id);
+    let required_label = if field.required { " *" } else { "" };
+
+    view! {
+        <div class="form-field">
+            <span>{format!("{}{}", field.label, required_label)}</span>
+            {if field.field_type == "boolean" {
+                let input_id_for_label = input_id.clone();
+                view! {
+                    <label class="form-field--checkbox" for=input_id_for_label>
+                        <input
+                            id=input_id
+                            type="checkbox"
+                            prop:checked=move || {
+                                boolean_values
+                                    .get()
+                                    .get(&field_key_for_bool)
+                                    .copied()
+                                    .unwrap_or(false)
+                            }
+                            on:change=move |event| {
+                                let checked = event_target_checked(&event);
+                                boolean_values.update(|values| {
+                                    values.insert(field_key.clone(), checked);
+                                });
+                            }
+                        />
+                        <span>"Yes"</span>
+                    </label>
+                }
+                .into_any()
+            } else {
+                let input_type = if field.field_type == "number" {
+                    "number"
+                } else if field.field_type == "date" {
+                    "date"
+                } else {
+                    "text"
+                };
+                view! {
+                    <input
+                        id=input_id
+                        type=input_type
+                        required=field.required
+                        prop:value=move || {
+                            text_values
+                                .get()
+                                .get(&field_key_for_input)
+                                .cloned()
+                                .unwrap_or_default()
+                        }
+                        on:input=move |event| {
+                            let value = event_target_value(&event);
+                            text_values.update(|values| {
+                                values.insert(field.key.clone(), value);
+                            });
+                        }
+                    />
+                }
+                .into_any()
+            }}
+        </div>
+    }
 }
 
 #[component]
