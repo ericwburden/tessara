@@ -793,6 +793,31 @@ struct WorkflowAssignmentSummary {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
+struct SubmissionSummary {
+    id: String,
+    form_id: String,
+    form_version_id: String,
+    form_name: String,
+    workflow_name: Option<String>,
+    workflow_description: Option<String>,
+    workflow_step_position: Option<i32>,
+    workflow_step_count: Option<i64>,
+    workflow_steps_completed: Option<i64>,
+    current_workflow_step_title: Option<String>,
+    next_workflow_step_title: Option<String>,
+    next_workflow_step_form_name: Option<String>,
+    assigned_to_display_name: Option<String>,
+    version_label: String,
+    node_id: String,
+    node_name: String,
+    status: String,
+    value_count: i64,
+    created_at: String,
+    last_modified_at: String,
+    submitted_at: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 struct WorkflowAssignmentCandidate {
     workflow_version_id: String,
     workflow_id: String,
@@ -2098,7 +2123,12 @@ fn FilterHeader(
     filter: RwSignal<String>,
     options: Vec<String>,
 ) -> impl IntoView {
+    const FILTER_SEARCH_THRESHOLD: usize = 8;
+
     let is_open = RwSignal::new(false);
+    let filter_query = RwSignal::new(String::new());
+    let is_searchable = options.len() > FILTER_SEARCH_THRESHOLD;
+    let options_for_buttons = options.clone();
     let menu_class = move || {
         if is_open.get() {
             "data-table-filter is-open"
@@ -2121,29 +2151,16 @@ fn FilterHeader(
             "icon-button data-table-filter__trigger is-filtered"
         }
     };
-    let option_buttons = options
-        .into_iter()
-        .map(|option| {
-            let option_for_class = option.clone();
-            let option_for_checked = option.clone();
-            let option_for_click = option.clone();
-            let option_label = metadata_label(&option);
-            view! {
-                <button
-                    class=move || filter_option_class(&filter.get(), &option_for_class)
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked=move || (filter.get() == option_for_checked).to_string()
-                    on:click=move |_| {
-                        filter.set(option_for_click.clone());
-                        is_open.set(false);
-                    }
-                >
-                    {option_label}
-                </button>
-            }
-        })
-        .collect_view();
+    let filtered_options = move || {
+        let query = filter_query.get();
+        options_for_buttons
+            .iter()
+            .filter(|option| {
+                text_matches(&query, &[option.as_str(), metadata_label(option).as_str()])
+            })
+            .cloned()
+            .collect::<Vec<_>>()
+    };
 
     view! {
         <div class=menu_class>
@@ -2163,9 +2180,29 @@ fn FilterHeader(
                 class="data-table-filter__scrim"
                 type="button"
                 aria-label=format!("Close {label} filter")
-                on:click=move |_| is_open.set(false)
+                on:click=move |_| {
+                    is_open.set(false);
+                    filter_query.set(String::new());
+                }
             ></button>
             <div class="data-table-filter__menu blurred-surface" role="menu">
+                {if is_searchable {
+                    view! {
+                        <label class="data-table-filter__search">
+                            <Search/>
+                            <span class="sr-only">{format!("Search {label} filters")}</span>
+                            <input
+                                type="search"
+                                placeholder=format!("Search {label}")
+                                prop:value=move || filter_query.get()
+                                on:input=move |event| filter_query.set(event_target_value(&event))
+                            />
+                        </label>
+                    }
+                    .into_any()
+                } else {
+                    view! {}.into_any()
+                }}
                 <button
                     class=move || filter_option_class(&filter.get(), "all")
                     type="button"
@@ -2174,11 +2211,46 @@ fn FilterHeader(
                     on:click=move |_| {
                         filter.set("all".to_string());
                         is_open.set(false);
+                        filter_query.set(String::new());
                     }
                 >
                     {all_label}
                 </button>
-                {option_buttons}
+                {move || {
+                    let visible_options = filtered_options();
+                    if visible_options.is_empty() {
+                        view! {
+                            <p class="data-table-filter__empty">"No matching filters"</p>
+                        }
+                        .into_any()
+                    } else {
+                        visible_options
+                            .into_iter()
+                            .map(|option| {
+                                let option_for_class = option.clone();
+                                let option_for_checked = option.clone();
+                                let option_for_click = option.clone();
+                                let option_label = metadata_label(&option);
+                                view! {
+                                    <button
+                                        class=move || filter_option_class(&filter.get(), &option_for_class)
+                                        type="button"
+                                        role="menuitemradio"
+                                        aria-checked=move || (filter.get() == option_for_checked).to_string()
+                                        on:click=move |_| {
+                                            filter.set(option_for_click.clone());
+                                            is_open.set(false);
+                                            filter_query.set(String::new());
+                                        }
+                                    >
+                                        {option_label}
+                                    </button>
+                                }
+                            })
+                            .collect_view()
+                            .into_any()
+                    }
+                }}
             </div>
         </div>
     }
@@ -2561,6 +2633,48 @@ fn workflow_assignment_status_label(assignment: &WorkflowAssignmentSummary) -> &
         "Active"
     } else {
         "Inactive"
+    }
+}
+
+fn submission_status_key(submission: &SubmissionSummary) -> String {
+    submission.status.trim().to_lowercase()
+}
+
+fn submission_status_label(submission: &SubmissionSummary) -> String {
+    metadata_label(&submission.status)
+}
+
+fn submission_workflow_label(submission: &SubmissionSummary) -> String {
+    nonempty_text(submission.workflow_name.as_deref(), "Standalone Response")
+}
+
+fn submission_assignee_label(submission: &SubmissionSummary) -> String {
+    nonempty_text(submission.assigned_to_display_name.as_deref(), "Unassigned")
+}
+
+fn submission_step_label(submission: &SubmissionSummary) -> String {
+    let title = nonempty_text(
+        submission.current_workflow_step_title.as_deref(),
+        "No active step",
+    );
+    match (
+        submission.workflow_step_position,
+        submission.workflow_step_count,
+    ) {
+        (Some(position), Some(count)) if count > 0 => {
+            format!("Step {} of {count}: {title}", position + 1)
+        }
+        _ => title,
+    }
+}
+
+fn submission_progress_label(submission: &SubmissionSummary) -> String {
+    match (
+        submission.workflow_steps_completed,
+        submission.workflow_step_count,
+    ) {
+        (Some(completed), Some(count)) if count > 0 => format!("{completed} of {count} completed"),
+        _ => format!("{} saved values", submission.value_count),
     }
 }
 
@@ -3677,7 +3791,7 @@ fn form_builder_field_type_icon(field_type: &str) -> AnyView {
 
 fn status_badge_class(status: &str) -> &'static str {
     match status {
-        "published" | "done" | "active" => "status-badge is-success",
+        "published" | "done" | "active" | "submitted" => "status-badge is-success",
         "draft" | "in_progress" => "status-badge is-warning",
         "error" | "archived" => "status-badge is-danger",
         _ => "status-badge is-info",
@@ -3969,6 +4083,62 @@ fn load_workflow_assignments(
     #[cfg(not(feature = "hydrate"))]
     {
         let _ = (assignments, is_loading, load_error);
+    }
+}
+
+fn load_submissions(
+    submissions: RwSignal<Vec<SubmissionSummary>>,
+    is_loading: RwSignal<bool>,
+    load_error: RwSignal<Option<String>>,
+) {
+    #[cfg(feature = "hydrate")]
+    {
+        leptos::task::spawn_local(async move {
+            is_loading.set(true);
+            load_error.set(None);
+
+            match gloo_net::http::Request::get("/api/submissions")
+                .send()
+                .await
+            {
+                Ok(response) if response.status() == 401 => {
+                    submissions.set(Vec::new());
+                    is_loading.set(false);
+                    redirect_to_login();
+                }
+                Ok(response) if response.ok() => {
+                    match response.json::<Vec<SubmissionSummary>>().await {
+                        Ok(loaded_submissions) => {
+                            submissions.set(loaded_submissions);
+                            is_loading.set(false);
+                        }
+                        Err(error) => {
+                            submissions.set(Vec::new());
+                            load_error.set(Some(format!("Unable to parse responses: {error}")));
+                            is_loading.set(false);
+                        }
+                    }
+                }
+                Ok(response) => {
+                    submissions.set(Vec::new());
+                    load_error.set(Some(format!(
+                        "Unable to load responses. Server returned {}.",
+                        response.status()
+                    )));
+                    is_loading.set(false);
+                }
+                Err(error) => {
+                    submissions.set(Vec::new());
+                    load_error.set(Some(format!("Unable to load responses: {error}")));
+                    is_loading.set(false);
+                }
+            }
+        });
+    }
+
+    #[cfg(not(feature = "hydrate"))]
+    {
+        let _ = (submissions, is_loading, load_error);
     }
 }
 
@@ -4783,6 +4953,13 @@ fn load_organization_detail(
 fn redirect_to_login() {
     if let Some(window) = web_sys::window() {
         let _ = window.location().set_href("/login");
+    }
+}
+
+#[cfg(feature = "hydrate")]
+fn navigate_to_href(href: &str) {
+    if let Some(window) = web_sys::window() {
+        let _ = window.location().set_href(href);
     }
 }
 
@@ -12568,7 +12745,346 @@ pub fn WorkflowsEditPage() -> impl IntoView {
 
 #[component]
 pub fn ResponsesPage() -> impl IntoView {
-    view! { <ResetRoute active_route="responses" title="Responses" route="/responses" status="Queued" next_step="Restore response list and RFC2822 timestamp formatting."/> }
+    let submissions = RwSignal::new(Vec::<SubmissionSummary>::new());
+    let is_loading = RwSignal::new(true);
+    let load_error = RwSignal::new(None::<String>);
+    let search = RwSignal::new(String::new());
+    let assignee_filter = RwSignal::new("all".to_string());
+    let status_filter = RwSignal::new("all".to_string());
+
+    Effect::new(move |_| {
+        load_submissions(submissions, is_loading, load_error);
+    });
+
+    let filtered_submissions = move || {
+        let query = search.get();
+        let assignee = assignee_filter.get();
+        let status = status_filter.get();
+        submissions
+            .get()
+            .into_iter()
+            .filter(|submission| {
+                let status_key = submission_status_key(submission);
+                let assignee_label = submission_assignee_label(submission);
+                let matches_assignee = assignee == "all" || assignee_label == assignee;
+                (status == "all" || status_key == status)
+                    && matches_assignee
+                    && text_matches(
+                        &query,
+                        &[
+                            submission.form_name.as_str(),
+                            submission.workflow_name.as_deref().unwrap_or_default(),
+                            submission
+                                .current_workflow_step_title
+                                .as_deref()
+                                .unwrap_or_default(),
+                            submission
+                                .next_workflow_step_title
+                                .as_deref()
+                                .unwrap_or_default(),
+                            submission
+                                .next_workflow_step_form_name
+                                .as_deref()
+                                .unwrap_or_default(),
+                            submission.node_name.as_str(),
+                            submission
+                                .assigned_to_display_name
+                                .as_deref()
+                                .unwrap_or_default(),
+                            submission.status.as_str(),
+                        ],
+                    )
+            })
+            .collect::<Vec<_>>()
+    };
+    let status_options = move || {
+        unique_filter_options(
+            submissions
+                .get()
+                .iter()
+                .map(submission_status_key)
+                .collect::<Vec<_>>(),
+        )
+    };
+    let assignee_options = move || {
+        unique_filter_options(
+            submissions
+                .get()
+                .iter()
+                .map(submission_assignee_label)
+                .collect::<Vec<_>>(),
+        )
+    };
+
+    view! {
+        <AppShell active_route="responses" title="Responses">
+            <section class="route-panel responses-page">
+                <PageHeader title="Responses"/>
+
+                {move || {
+                    if is_loading.get() {
+                        view! {
+                            <section class="organization-state" aria-live="polite">
+                                <h3>"Loading responses"</h3>
+                                <p>"Fetching visible response records."</p>
+                            </section>
+                        }
+                        .into_any()
+                    } else if let Some(message) = load_error.get() {
+                        view! {
+                            <section class="organization-state is-error" role="alert">
+                                <h3>"Responses unavailable"</h3>
+                                <p>{message}</p>
+                            </section>
+                        }
+                        .into_any()
+                    } else {
+                        view! {
+                            <ResponsesList
+                                submissions=filtered_submissions()
+                                search
+                                assignee_filter
+                                status_filter
+                                assignee_options=assignee_options()
+                                status_options=status_options()
+                            />
+                        }
+                        .into_any()
+                    }
+                }}
+            </section>
+        </AppShell>
+    }
+}
+
+#[component]
+fn ResponsesList(
+    submissions: Vec<SubmissionSummary>,
+    search: RwSignal<String>,
+    assignee_filter: RwSignal<String>,
+    status_filter: RwSignal<String>,
+    assignee_options: Vec<String>,
+    status_options: Vec<String>,
+) -> impl IntoView {
+    let table_submissions = submissions.clone();
+    let card_submissions = submissions;
+
+    view! {
+        <div class="forms-list forms-list-responsive-table responses-list">
+            <div class="searchable-data-table">
+                <div class="searchable-data-table__toolbar forms-list__toolbar">
+                    <label class="searchable-data-table__search searchable-data-table__control">
+                        <Search class="searchable-data-table__control-icon"/>
+                        <span class="sr-only">"Search responses"</span>
+                        <input
+                            type="search"
+                            placeholder="Search responses"
+                            prop:value=move || search.get()
+                            on:input=move |event| search.set(event_target_value(&event))
+                        />
+                    </label>
+                </div>
+                <DataTable>
+                    <thead>
+                        <tr>
+                            <th scope="col">"Response"</th>
+                            <th scope="col">"Workflow"</th>
+                            <th scope="col">"Node"</th>
+                            <th scope="col">
+                                <FilterHeader
+                                    label="Assignee"
+                                    all_label="All Assignees"
+                                    filter=assignee_filter
+                                    options=assignee_options
+                                />
+                            </th>
+                            <th class="data-table__cell--center" scope="col">
+                                <FilterHeader
+                                    label="Status"
+                                    all_label="All Statuses"
+                                    filter=status_filter
+                                    options=status_options
+                                />
+                            </th>
+                            <th scope="col">"Last Updated"</th>
+                            <th class="data-table__cell--center" scope="col">"Actions"</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {if table_submissions.is_empty() {
+                            view! {
+                                <tr>
+                                    <td class="data-table__empty" colspan="7">"No Responses to Display"</td>
+                                </tr>
+                            }
+                            .into_any()
+                        } else {
+                            table_submissions
+                                .into_iter()
+                                .map(|submission| {
+                                    let detail_href = format!("/responses/{}", submission.id);
+                                    let edit_href = format!("/responses/{}/edit", submission.id);
+                                    let form_href = format!("/forms/{}", submission.form_id);
+                                    let node_href = format!("/organization/{}", submission.node_id);
+                                    let form_name = submission.form_name.clone();
+                                    let form_version_label =
+                                        format!("Form Version {}", submission.version_label);
+                                    let status_key = submission_status_key(&submission);
+                                    let status_label = submission_status_label(&submission);
+                                    let workflow_label = submission_workflow_label(&submission);
+                                    let step_label = submission_step_label(&submission);
+                                    let progress_label = submission_progress_label(&submission);
+                                    let assignee = submission_assignee_label(&submission);
+                                    let is_draft = status_key == "draft";
+                                    let detail_href_for_click = detail_href.clone();
+                                    let edit_href_for_click = edit_href.clone();
+                                    view! {
+                                        <tr>
+                                            <th scope="row">
+                                                <a class="data-table__primary-link" href=detail_href.clone()>{form_name.clone()}</a>
+                                                <small class="workflow-assignment-step-meta">
+                                                    <a href=form_href>{form_version_label}</a>
+                                                </small>
+                                            </th>
+                                            <td>
+                                                <span>{workflow_label}</span>
+                                                <small class="workflow-assignment-step-meta">{step_label}</small>
+                                                <small class="workflow-assignment-step-meta">{progress_label}</small>
+                                            </td>
+                                            <td><a href=node_href>{submission.node_name}</a></td>
+                                            <td>{assignee}</td>
+                                            <td class="data-table__cell--center">
+                                                <span class=status_badge_class(&status_key)>{status_label}</span>
+                                            </td>
+                                            <td><Timestamp value=submission.last_modified_at/></td>
+                                            <td class="data-table__cell--center">
+                                                <DropdownMenu label=format!("Open actions for {form_name}")>
+                                                    <button
+                                                        class="dropdown-menu__item"
+                                                        type="button"
+                                                        role="menuitem"
+                                                        on:click=move |_| {
+                                                            #[cfg(feature = "hydrate")]
+                                                            navigate_to_href(&detail_href_for_click);
+                                                            #[cfg(not(feature = "hydrate"))]
+                                                            let _ = &detail_href_for_click;
+                                                        }
+                                                    >
+                                                        <PanelRight class="dropdown-menu__item-icon"/>
+                                                        <span>"View Details"</span>
+                                                    </button>
+                                                    {if is_draft {
+                                                        view! {
+                                                            <button
+                                                                class="dropdown-menu__item"
+                                                                type="button"
+                                                                role="menuitem"
+                                                                on:click=move |_| {
+                                                                    #[cfg(feature = "hydrate")]
+                                                                    navigate_to_href(&edit_href_for_click);
+                                                                    #[cfg(not(feature = "hydrate"))]
+                                                                    let _ = &edit_href_for_click;
+                                                                }
+                                                            >
+                                                                <Pencil class="dropdown-menu__item-icon"/>
+                                                                <span>"Edit Draft"</span>
+                                                            </button>
+                                                        }
+                                                        .into_any()
+                                                    } else {
+                                                        view! {}.into_any()
+                                                    }}
+                                                </DropdownMenu>
+                                            </td>
+                                        </tr>
+                                    }
+                                })
+                                .collect_view()
+                                .into_any()
+                        }}
+                    </tbody>
+                </DataTable>
+            </div>
+            <div class="forms-list-mobile-cards responses-mobile-cards">
+                {if card_submissions.is_empty() {
+                    view! { <p class="forms-list-mobile-empty">"No Responses to Display"</p> }.into_any()
+                } else {
+                    card_submissions
+                        .into_iter()
+                        .map(|submission| {
+                            let detail_href = format!("/responses/{}", submission.id);
+                            let edit_href = format!("/responses/{}/edit", submission.id);
+                            let node_href = format!("/organization/{}", submission.node_id);
+                            let status_key = submission_status_key(&submission);
+                            let status_label = submission_status_label(&submission);
+                            let workflow_label = submission_workflow_label(&submission);
+                            let step_label = submission_step_label(&submission);
+                            let progress_label = submission_progress_label(&submission);
+                            let assignee = submission_assignee_label(&submission);
+                            let is_draft = status_key == "draft";
+                            view! {
+                                <article class="forms-list-mobile-card response-mobile-card">
+                                    <div class="forms-list-mobile-card__header">
+                                        <div>
+                                            <h3><a href=detail_href.clone()>{submission.form_name}</a></h3>
+                                            <span>{format!("Form Version {}", submission.version_label)}</span>
+                                        </div>
+                                        <span class=status_badge_class(&status_key)>{status_label}</span>
+                                    </div>
+                                    <dl>
+                                        <div>
+                                            <dt>"Workflow"</dt>
+                                            <dd>{workflow_label}</dd>
+                                        </div>
+                                        <div>
+                                            <dt>"Step"</dt>
+                                            <dd>{step_label}</dd>
+                                        </div>
+                                        <div>
+                                            <dt>"Progress"</dt>
+                                            <dd>{progress_label}</dd>
+                                        </div>
+                                        <div>
+                                            <dt>"Node"</dt>
+                                            <dd><a href=node_href>{submission.node_name}</a></dd>
+                                        </div>
+                                        <div>
+                                            <dt>"Assignee"</dt>
+                                            <dd>{assignee}</dd>
+                                        </div>
+                                        <div>
+                                            <dt>"Last Updated"</dt>
+                                            <dd><Timestamp value=submission.last_modified_at/></dd>
+                                        </div>
+                                        {if let Some(submitted_at) = submission.submitted_at {
+                                            view! {
+                                                <div>
+                                                    <dt>"Submitted"</dt>
+                                                    <dd><Timestamp value=submitted_at/></dd>
+                                                </div>
+                                            }
+                                            .into_any()
+                                        } else {
+                                            view! {}.into_any()
+                                        }}
+                                    </dl>
+                                    <div class="workflow-assignment-mobile-card__actions">
+                                        <a class="button button--compact" href=detail_href>"View Details"</a>
+                                        {if is_draft {
+                                            view! { <a class="button button--compact" href=edit_href>"Edit Draft"</a> }.into_any()
+                                        } else {
+                                            view! {}.into_any()
+                                        }}
+                                    </div>
+                                </article>
+                            }
+                        })
+                        .collect_view()
+                        .into_any()
+                }}
+            </div>
+        </div>
+    }
 }
 
 #[component]
