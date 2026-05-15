@@ -59,6 +59,9 @@ pub struct DemoSeedSummary {
     pub intake_activity_form_version_id: Uuid,
     pub workshop_activity_form_version_id: Uuid,
     pub session_form_version_id: Uuid,
+    pub program_workflow_id: Uuid,
+    pub program_workflow_version_id: Uuid,
+    pub program_workflow_assignment_id: Uuid,
     pub analytics_values: i64,
 }
 
@@ -101,6 +104,12 @@ struct SeedSubmissionSpec<'a> {
     seed_key: &'a str,
     status: &'a str,
     values: Vec<(&'a str, Value)>,
+}
+
+struct WorkflowStepSeed<'a> {
+    form_version_id: Uuid,
+    title: &'a str,
+    position: i32,
 }
 
 struct EnsuredForm {
@@ -1192,6 +1201,33 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
     )
     .await?;
 
+    let (program_workflow_id, program_workflow_version_id, program_workflow_assignment_id) =
+        ensure_program_checkpoint_workflow(
+            pool,
+            program_form.form_id,
+            program_type_id,
+            program_a,
+            respondent_account_id,
+            &[
+                WorkflowStepSeed {
+                    form_version_id: program_form.form_version_id,
+                    title: "Program Snapshot",
+                    position: 0,
+                },
+                WorkflowStepSeed {
+                    form_version_id: intake_activity_form.form_version_id,
+                    title: "Intake Activity Checkpoint",
+                    position: 1,
+                },
+                WorkflowStepSeed {
+                    form_version_id: workshop_activity_form.form_version_id,
+                    title: "Workshop Activity Checkpoint",
+                    position: 2,
+                },
+            ],
+        )
+        .await?;
+
     let analytics_status = analytics::refresh_projection(pool).await?;
 
     let partner_report_id = ensure_report(
@@ -1317,6 +1353,9 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         intake_activity_form_version_id: intake_activity_form.form_version_id,
         workshop_activity_form_version_id: workshop_activity_form.form_version_id,
         session_form_version_id: session_form.form_version_id,
+        program_workflow_id,
+        program_workflow_version_id,
+        program_workflow_assignment_id,
         analytics_values: analytics_status.value_count,
     })
 }
@@ -1770,6 +1809,135 @@ async fn publish_form_version(pool: &PgPool, form_version_id: Uuid) -> ApiResult
     .execute(pool)
     .await?;
     Ok(())
+}
+
+async fn ensure_program_checkpoint_workflow(
+    pool: &PgPool,
+    form_id: Uuid,
+    scope_node_type_id: Uuid,
+    node_id: Uuid,
+    account_id: Uuid,
+    steps: &[WorkflowStepSeed<'_>],
+) -> ApiResult<(Uuid, Uuid, Uuid)> {
+    let workflow_id: Uuid = sqlx::query_scalar(
+        r#"
+        INSERT INTO workflows (form_id, scope_node_type_id, name, slug, description)
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (slug)
+        DO UPDATE SET
+            form_id = EXCLUDED.form_id,
+            scope_node_type_id = EXCLUDED.scope_node_type_id,
+            name = EXCLUDED.name,
+            description = EXCLUDED.description
+        RETURNING id
+        "#,
+    )
+    .bind(form_id)
+    .bind(scope_node_type_id)
+    .bind("Demo Program Checkpoint Workflow")
+    .bind("demo-program-checkpoint-workflow")
+    .bind("Program-scoped workflow that uses Program and Activity form revisions.")
+    .fetch_one(pool)
+    .await?;
+
+    let first_form_version_id = steps
+        .first()
+        .map(|step| step.form_version_id)
+        .ok_or_else(|| ApiError::BadRequest("demo workflow requires a step".into()))?;
+    let workflow_version_id: Uuid = if let Some(existing) = sqlx::query_scalar(
+        "SELECT id FROM workflow_versions WHERE workflow_id = $1 AND version_label = '1' LIMIT 1",
+    )
+    .bind(workflow_id)
+    .fetch_optional(pool)
+    .await?
+    {
+        sqlx::query(
+            r#"
+            UPDATE workflow_versions
+            SET form_version_id = $2,
+                status = 'published'::form_version_status,
+                published_at = COALESCE(published_at, now())
+            WHERE id = $1
+            "#,
+        )
+        .bind(existing)
+        .bind(first_form_version_id)
+        .execute(pool)
+        .await?;
+        existing
+    } else {
+        sqlx::query_scalar(
+            r#"
+            INSERT INTO workflow_versions (
+                workflow_id,
+                form_version_id,
+                version_label,
+                status,
+                published_at
+            )
+            VALUES ($1, $2, '1', 'published'::form_version_status, now())
+            RETURNING id
+            "#,
+        )
+        .bind(workflow_id)
+        .bind(first_form_version_id)
+        .fetch_one(pool)
+        .await?
+    };
+
+    let mut first_step_id = None;
+    for step in steps {
+        let step_id: Uuid = sqlx::query_scalar(
+            r#"
+            INSERT INTO workflow_steps (workflow_version_id, form_version_id, title, position)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (workflow_version_id, position)
+            DO UPDATE SET
+                form_version_id = EXCLUDED.form_version_id,
+                title = EXCLUDED.title
+            RETURNING id
+            "#,
+        )
+        .bind(workflow_version_id)
+        .bind(step.form_version_id)
+        .bind(step.title)
+        .bind(step.position)
+        .fetch_one(pool)
+        .await?;
+        if step.position == 0 {
+            first_step_id = Some(step_id);
+        }
+    }
+
+    let first_step_id = first_step_id
+        .ok_or_else(|| ApiError::BadRequest("demo workflow requires step 0".into()))?;
+    let workflow_assignment_id: Uuid = sqlx::query_scalar(
+        r#"
+        INSERT INTO workflow_assignments (
+            workflow_version_id,
+            workflow_step_id,
+            node_id,
+            account_id,
+            form_assignment_id,
+            is_active
+        )
+        VALUES ($1, $2, $3, $4, NULL, true)
+        ON CONFLICT (workflow_step_id, node_id, account_id)
+        DO UPDATE SET
+            workflow_version_id = EXCLUDED.workflow_version_id,
+            form_assignment_id = NULL,
+            is_active = true
+        RETURNING id
+        "#,
+    )
+    .bind(workflow_version_id)
+    .bind(first_step_id)
+    .bind(node_id)
+    .bind(account_id)
+    .fetch_one(pool)
+    .await?;
+
+    Ok((workflow_id, workflow_version_id, workflow_assignment_id))
 }
 
 async fn ensure_form_assignment(

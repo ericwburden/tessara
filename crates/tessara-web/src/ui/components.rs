@@ -609,9 +609,7 @@ fn scroll_app_main_by(delta_y: f64) {
         return;
     };
 
-    let next_scroll_top = (scroller.scroll_top() as f64 + delta_y)
-        .round()
-        .max(0.0) as i32;
+    let next_scroll_top = (scroller.scroll_top() as f64 + delta_y).round().max(0.0) as i32;
     scroller.set_scroll_top(next_scroll_top);
 }
 

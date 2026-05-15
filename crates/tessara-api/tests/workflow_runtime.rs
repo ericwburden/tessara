@@ -131,6 +131,48 @@ async fn demo_seed_backfills_workflows_and_form_links() {
             .iter()
             .any(|assignment| assignment["is_active"] == true)
     );
+
+    let scoped_workflow = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!(
+                "/api/workflows/{}",
+                seed["program_workflow_id"]
+                    .as_str()
+                    .expect("seed should expose scoped workflow id")
+            ),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(scoped_workflow["scope_node_type_name"], "Program");
+    assert_eq!(scoped_workflow["versions"][0]["form_version_label"], "1");
+    assert_eq!(scoped_workflow["versions"][0]["step_count"], 3);
+    let scoped_steps = scoped_workflow["versions"][0]["steps"]
+        .as_array()
+        .expect("scoped workflow revision should include steps");
+    assert_eq!(scoped_steps[0]["form_name"], "Demo Program Snapshot");
+    assert_eq!(
+        scoped_steps[1]["form_name"],
+        "Demo Intake Activity Checkpoint"
+    );
+    assert_eq!(
+        scoped_steps[2]["form_name"],
+        "Demo Workshop Activity Checkpoint"
+    );
+    assert!(
+        scoped_workflow["assignments"]
+            .as_array()
+            .expect("scoped workflow should include assignments")
+            .iter()
+            .any(|assignment| {
+                assignment["id"] == seed["program_workflow_assignment_id"]
+                    && assignment["node_name"] == "Demo Program Family Outreach"
+                    && assignment["account_email"] == "respondent@tessara.local"
+            })
+    );
 }
 
 #[tokio::test]

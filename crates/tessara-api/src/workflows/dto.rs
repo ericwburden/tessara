@@ -5,6 +5,7 @@ use uuid::Uuid;
 #[derive(Deserialize)]
 pub struct CreateWorkflowRequest {
     pub form_id: Option<Uuid>,
+    pub scope_node_type_id: Option<Uuid>,
     pub name: String,
     pub slug: String,
     pub description: Option<String>,
@@ -13,6 +14,7 @@ pub struct CreateWorkflowRequest {
 #[derive(Deserialize)]
 pub struct UpdateWorkflowRequest {
     pub form_id: Option<Uuid>,
+    pub scope_node_type_id: Option<Uuid>,
     pub name: String,
     pub slug: String,
     pub description: Option<String>,
@@ -88,6 +90,8 @@ pub struct WorkflowSummary {
     pub form_id: Uuid,
     pub form_name: String,
     pub form_slug: String,
+    pub scope_node_type_id: Option<Uuid>,
+    pub scope_node_type_name: Option<String>,
     pub name: String,
     pub slug: String,
     pub description: String,
@@ -154,6 +158,8 @@ pub struct WorkflowDefinition {
     pub form_id: Uuid,
     pub form_name: String,
     pub form_slug: String,
+    pub scope_node_type_id: Option<Uuid>,
+    pub scope_node_type_name: Option<String>,
     pub name: String,
     pub slug: String,
     pub description: String,

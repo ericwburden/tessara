@@ -672,6 +672,13 @@ struct IdResponse {
     id: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+struct ApiErrorResponse {
+    message: Option<String>,
+    error: Option<String>,
+}
+
 #[derive(Serialize)]
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
 struct CreateNodePayload {
@@ -709,6 +716,7 @@ struct UpdateFormPayload {
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
 struct CreateWorkflowPayload {
     form_id: Option<String>,
+    scope_node_type_id: Option<String>,
     name: String,
     slug: String,
     description: Option<String>,
@@ -718,6 +726,7 @@ struct CreateWorkflowPayload {
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
 struct UpdateWorkflowPayload {
     form_id: Option<String>,
+    scope_node_type_id: Option<String>,
     name: String,
     slug: String,
     description: Option<String>,
@@ -750,6 +759,13 @@ struct WorkflowStepDraft {
     id: usize,
     title: String,
     form_version_id: String,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+enum WorkflowSaveIntent {
+    Draft,
+    Publish,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -1112,6 +1128,7 @@ struct FormSummary {
     id: String,
     name: String,
     slug: String,
+    scope_node_type_id: Option<String>,
     scope_node_type_name: Option<String>,
     #[serde(default)]
     versions: Vec<FormVersionSummary>,
@@ -1148,6 +1165,8 @@ struct WorkflowSummary {
     form_id: String,
     form_name: String,
     form_slug: String,
+    scope_node_type_id: Option<String>,
+    scope_node_type_name: Option<String>,
     name: String,
     slug: String,
     description: String,
@@ -1167,6 +1186,8 @@ struct WorkflowDefinition {
     form_id: String,
     form_name: String,
     form_slug: String,
+    scope_node_type_id: Option<String>,
+    scope_node_type_name: Option<String>,
     name: String,
     slug: String,
     description: String,
@@ -2426,8 +2447,37 @@ fn form_definition_scope_label(form: &FormDefinition) -> String {
     nonempty_text(form.scope_node_type_name.as_deref(), "All node types")
 }
 
+fn workflow_revision_label_from_raw(label: &str) -> String {
+    let trimmed = label.trim();
+    if trimmed.is_empty() {
+        return "-".to_string();
+    }
+
+    if let Ok(revision) = trimmed.parse::<u64>() {
+        return revision.to_string();
+    }
+
+    trimmed
+        .split('.')
+        .next()
+        .and_then(|part| part.trim().parse::<u64>().ok())
+        .map(|revision| revision.to_string())
+        .unwrap_or_else(|| trimmed.to_string())
+}
+
+fn workflow_revision_label_from_option(label: Option<String>) -> String {
+    label
+        .as_deref()
+        .map(workflow_revision_label_from_raw)
+        .unwrap_or_else(|| "-".to_string())
+}
+
 fn workflow_version_label(workflow: &WorkflowSummary) -> String {
-    nonempty_text(workflow.current_version_label.as_deref(), "-")
+    workflow
+        .current_version_label
+        .as_deref()
+        .map(workflow_revision_label_from_raw)
+        .unwrap_or_else(|| "-".to_string())
 }
 
 fn workflow_status_key(workflow: &WorkflowSummary) -> &str {
@@ -2439,11 +2489,15 @@ fn workflow_status_label(workflow: &WorkflowSummary) -> String {
         .current_status
         .as_deref()
         .map(sentence_label)
-        .unwrap_or_else(|| "No versions".to_string())
+        .unwrap_or_else(|| "No revisions".to_string())
 }
 
 fn workflow_description_label(workflow: &WorkflowSummary) -> String {
     nonempty_text(Some(workflow.description.as_str()), "No description")
+}
+
+fn workflow_scope_label(scope_node_type_name: Option<&str>) -> String {
+    nonempty_text(scope_node_type_name, "-")
 }
 
 fn workflow_assigned_to_label(workflow: &WorkflowSummary) -> String {
@@ -2523,14 +2577,20 @@ fn active_workflow_definition_version(
 fn workflow_definition_version_label(version: Option<&WorkflowVersionSummary>) -> String {
     version
         .and_then(|version| version.form_version_label.as_deref())
-        .map(str::to_string)
+        .map(workflow_revision_label_from_raw)
         .unwrap_or_else(|| "-".to_string())
 }
 
 fn workflow_definition_status_label(version: Option<&WorkflowVersionSummary>) -> String {
     version
         .map(|version| sentence_label(&version.status))
-        .unwrap_or_else(|| "No versions".to_string())
+        .unwrap_or_else(|| "No revisions".to_string())
+}
+
+fn workflow_assignment_revision_label(label: Option<&str>) -> String {
+    label
+        .map(workflow_revision_label_from_raw)
+        .unwrap_or_else(|| "-".to_string())
 }
 
 fn workflow_assignment_candidate_key(candidate: &WorkflowAssignmentCandidate) -> String {
@@ -2859,10 +2919,69 @@ fn existing_workflow_slugs(workflows: &[WorkflowSummary]) -> Vec<String> {
 }
 
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
-fn workflow_form_version_options(forms: &[FormSummary]) -> Vec<(String, String, String)> {
+fn node_type_contains_descendant(
+    node_types: &[NodeTypeCatalogEntry],
+    ancestor_id: &str,
+    descendant_id: &str,
+) -> bool {
+    if ancestor_id == descendant_id {
+        return true;
+    }
+
+    let mut stack = vec![ancestor_id.to_string()];
+    let mut seen = HashSet::new();
+    while let Some(node_type_id) = stack.pop() {
+        if !seen.insert(node_type_id.clone()) {
+            continue;
+        }
+        let Some(node_type) = node_types
+            .iter()
+            .find(|node_type| node_type.id == node_type_id)
+        else {
+            continue;
+        };
+        for child in &node_type.child_relationships {
+            if child.node_type_id == descendant_id {
+                return true;
+            }
+            stack.push(child.node_type_id.clone());
+        }
+    }
+
+    false
+}
+
+fn workflow_form_is_in_scope(
+    form: &FormSummary,
+    node_types: &[NodeTypeCatalogEntry],
+    workflow_scope_node_type_id: &str,
+) -> bool {
+    if workflow_scope_node_type_id.trim().is_empty() {
+        return false;
+    }
+    form.scope_node_type_id
+        .as_deref()
+        .map(|form_scope_node_type_id| {
+            node_type_contains_descendant(
+                node_types,
+                workflow_scope_node_type_id,
+                form_scope_node_type_id,
+            )
+        })
+        .unwrap_or(true)
+}
+
+fn workflow_form_version_options(
+    forms: &[FormSummary],
+    node_types: &[NodeTypeCatalogEntry],
+    workflow_scope_node_type_id: &str,
+) -> Vec<(String, String, String)> {
     let mut options = Vec::new();
 
     for form in forms {
+        if !workflow_form_is_in_scope(form, node_types, workflow_scope_node_type_id) {
+            continue;
+        }
         let mut versions = form
             .versions
             .iter()
@@ -2888,10 +3007,18 @@ fn workflow_form_version_options(forms: &[FormSummary]) -> Vec<(String, String, 
 
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
 fn workflow_step_form_label(forms: &[FormSummary], form_version_id: &str) -> String {
-    workflow_form_version_options(forms)
-        .into_iter()
-        .find(|(id, _, _)| id == form_version_id)
-        .map(|(_, label, _)| label)
+    forms
+        .iter()
+        .flat_map(|form| {
+            form.versions.iter().map(move |version| {
+                (
+                    version.id.as_str(),
+                    format!("{} ({})", form.name, form_version_label(Some(version))),
+                )
+            })
+        })
+        .find(|(id, _)| *id == form_version_id)
+        .map(|(_, label)| label)
         .unwrap_or_else(|| "Select form version".to_string())
 }
 
@@ -4154,10 +4281,16 @@ async fn send_json_id_request(
             .json::<IdResponse>()
             .await
             .map_err(|_| format!("{action} response could not be read.")),
-        Ok(response) => Err(format!(
-            "{action} failed with status {}.",
-            response.status()
-        )),
+        Ok(response) => {
+            let status = response.status();
+            if let Ok(body) = response.json::<ApiErrorResponse>().await {
+                let message = body.message.or(body.error).unwrap_or_default();
+                if !message.trim().is_empty() {
+                    return Err(message);
+                }
+            }
+            Err(format!("{action} failed with status {status}."))
+        }
         Err(_) => Err(format!("Could not reach the {action} API.")),
     }
 }
@@ -4239,6 +4372,7 @@ fn load_form_create_options(
 }
 
 fn load_workflow_create_options(
+    node_types: RwSignal<Vec<NodeTypeCatalogEntry>>,
     forms: RwSignal<Vec<FormSummary>>,
     workflows: RwSignal<Vec<WorkflowSummary>>,
     is_loading: RwSignal<bool>,
@@ -4250,30 +4384,54 @@ fn load_workflow_create_options(
             is_loading.set(true);
             message.set(None);
 
+            let node_types_response = gloo_net::http::Request::get("/api/node-types").send().await;
             let forms_response = gloo_net::http::Request::get("/api/forms").send().await;
             let workflows_response = gloo_net::http::Request::get("/api/workflows").send().await;
 
-            match (forms_response, workflows_response) {
-                (Ok(response), _) if response.status() == 401 => {
+            match (node_types_response, forms_response, workflows_response) {
+                (Ok(response), _, _) if response.status() == 401 => {
+                    node_types.set(Vec::new());
                     forms.set(Vec::new());
                     workflows.set(Vec::new());
                     is_loading.set(false);
                     redirect_to_login();
                 }
-                (_, Ok(response)) if response.status() == 401 => {
+                (_, Ok(response), _) if response.status() == 401 => {
+                    node_types.set(Vec::new());
                     forms.set(Vec::new());
                     workflows.set(Vec::new());
                     is_loading.set(false);
                     redirect_to_login();
                 }
-                (Ok(forms_response), Ok(workflows_response))
-                    if forms_response.ok() && workflows_response.ok() =>
+                (_, _, Ok(response)) if response.status() == 401 => {
+                    node_types.set(Vec::new());
+                    forms.set(Vec::new());
+                    workflows.set(Vec::new());
+                    is_loading.set(false);
+                    redirect_to_login();
+                }
+                (Ok(node_types_response), Ok(forms_response), Ok(workflows_response))
+                    if node_types_response.ok()
+                        && forms_response.ok()
+                        && workflows_response.ok() =>
                 {
+                    let loaded_node_types = node_types_response
+                        .json::<Vec<NodeTypeCatalogEntry>>()
+                        .await;
                     let loaded_forms = forms_response.json::<Vec<FormSummary>>().await;
                     let loaded_workflows = workflows_response.json::<Vec<WorkflowSummary>>().await;
 
-                    match (loaded_forms, loaded_workflows) {
-                        (Ok(mut loaded_forms), Ok(mut loaded_workflows)) => {
+                    match (loaded_node_types, loaded_forms, loaded_workflows) {
+                        (
+                            Ok(mut loaded_node_types),
+                            Ok(mut loaded_forms),
+                            Ok(mut loaded_workflows),
+                        ) => {
+                            loaded_node_types.sort_by(|left, right| {
+                                left.singular_label
+                                    .cmp(&right.singular_label)
+                                    .then(left.name.cmp(&right.name))
+                            });
                             loaded_forms.sort_by(|left, right| {
                                 left.name.cmp(&right.name).then(left.slug.cmp(&right.slug))
                             });
@@ -4281,11 +4439,13 @@ fn load_workflow_create_options(
                                 left.name.cmp(&right.name).then(left.slug.cmp(&right.slug))
                             });
 
+                            node_types.set(loaded_node_types);
                             forms.set(loaded_forms);
                             workflows.set(loaded_workflows);
                             is_loading.set(false);
                         }
                         _ => {
+                            node_types.set(Vec::new());
                             forms.set(Vec::new());
                             workflows.set(Vec::new());
                             message.set(Some("Workflow options could not be read.".into()));
@@ -4293,17 +4453,20 @@ fn load_workflow_create_options(
                         }
                     }
                 }
-                (Ok(forms_response), Ok(workflows_response)) => {
+                (Ok(node_types_response), Ok(forms_response), Ok(workflows_response)) => {
+                    node_types.set(Vec::new());
                     forms.set(Vec::new());
                     workflows.set(Vec::new());
                     message.set(Some(format!(
-                        "Workflow options failed with status {} / {}.",
+                        "Workflow options failed with status {} / {} / {}.",
+                        node_types_response.status(),
                         forms_response.status(),
                         workflows_response.status()
                     )));
                     is_loading.set(false);
                 }
                 _ => {
+                    node_types.set(Vec::new());
                     forms.set(Vec::new());
                     workflows.set(Vec::new());
                     message.set(Some("Could not reach the workflow option APIs.".into()));
@@ -4315,7 +4478,7 @@ fn load_workflow_create_options(
 
     #[cfg(not(feature = "hydrate"))]
     {
-        let _ = (forms, workflows, is_loading, message);
+        let _ = (node_types, forms, workflows, is_loading, message);
     }
 }
 
@@ -6246,6 +6409,7 @@ fn submit_update_form(
 #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
 fn submit_create_workflow(
     name: RwSignal<String>,
+    workflow_node_type_id: RwSignal<String>,
     steps: RwSignal<Vec<WorkflowStepDraft>>,
     description: RwSignal<String>,
     existing_workflows: RwSignal<Vec<WorkflowSummary>>,
@@ -6261,6 +6425,11 @@ fn submit_create_workflow(
         let workflow_name = name.get().trim().to_string();
         if workflow_name.is_empty() {
             message.set(Some("Workflow name is required.".into()));
+            return;
+        }
+        let workflow_node_type_id = workflow_node_type_id.get().trim().to_string();
+        if workflow_node_type_id.is_empty() {
+            message.set(Some("Workflow node type is required.".into()));
             return;
         }
 
@@ -6304,6 +6473,7 @@ fn submit_create_workflow(
 
         let payload = CreateWorkflowPayload {
             form_id: None,
+            scope_node_type_id: Some(workflow_node_type_id),
             name: workflow_name,
             slug: workflow_slug,
             description: description.get().trim().to_string().into_nonempty(),
@@ -6380,6 +6550,7 @@ fn submit_create_workflow(
     {
         let _ = (
             name,
+            workflow_node_type_id,
             steps,
             description,
             existing_workflows,
@@ -6389,6 +6560,38 @@ fn submit_create_workflow(
     }
 }
 
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+fn workflow_step_payloads_from_drafts(
+    steps: Vec<WorkflowStepDraft>,
+) -> Vec<CreateWorkflowStepPayload> {
+    steps
+        .into_iter()
+        .enumerate()
+        .map(|(index, step)| CreateWorkflowStepPayload {
+            title: step
+                .title
+                .trim()
+                .to_string()
+                .into_nonempty()
+                .unwrap_or_else(|| format!("Step {}", index + 1)),
+            form_version_id: step.form_version_id,
+        })
+        .collect()
+}
+
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+fn workflow_step_signature(steps: &[WorkflowStepDraft]) -> Vec<(String, String)> {
+    steps
+        .iter()
+        .map(|step| {
+            (
+                step.title.trim().to_string(),
+                step.form_version_id.trim().to_string(),
+            )
+        })
+        .collect()
+}
+
 #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
 fn submit_update_workflow(
     workflow_id: String,
@@ -6396,10 +6599,14 @@ fn submit_update_workflow(
     version_is_draft: bool,
     name: RwSignal<String>,
     slug: RwSignal<String>,
+    workflow_node_type_id: RwSignal<String>,
     steps: RwSignal<Vec<WorkflowStepDraft>>,
+    original_steps: RwSignal<Vec<WorkflowStepDraft>>,
     description: RwSignal<String>,
     is_saving: RwSignal<bool>,
+    save_intent: RwSignal<Option<WorkflowSaveIntent>>,
     message: RwSignal<Option<String>>,
+    intent: WorkflowSaveIntent,
 ) {
     #[cfg(feature = "hydrate")]
     {
@@ -6420,9 +6627,23 @@ fn submit_update_workflow(
             ));
             return;
         }
+        let workflow_node_type_id = workflow_node_type_id.get().trim().to_string();
+        if workflow_node_type_id.is_empty() {
+            message.set(Some("Workflow node type is required.".into()));
+            return;
+        }
 
         let current_steps = steps.get();
-        let step_payload = if version_is_draft {
+        let steps_changed = workflow_step_signature(&current_steps)
+            != workflow_step_signature(&original_steps.get_untracked());
+        if intent == WorkflowSaveIntent::Publish && !version_is_draft && !steps_changed {
+            message.set(Some(
+                "Make a workflow step change before publishing a new revision.".into(),
+            ));
+            return;
+        }
+
+        let step_payload = if steps_changed {
             if current_steps.is_empty() {
                 message.set(Some("Add at least one workflow step.".into()));
                 return;
@@ -6435,27 +6656,14 @@ fn submit_update_workflow(
                 return;
             }
 
-            version_id.as_ref().map(|_| UpdateWorkflowVersionStepsPayload {
-                steps: current_steps
-                    .into_iter()
-                    .enumerate()
-                    .map(|(index, step)| CreateWorkflowStepPayload {
-                        title: step
-                            .title
-                            .trim()
-                            .to_string()
-                            .into_nonempty()
-                            .unwrap_or_else(|| format!("Step {}", index + 1)),
-                        form_version_id: step.form_version_id,
-                    })
-                    .collect(),
-            })
+            Some(workflow_step_payloads_from_drafts(current_steps))
         } else {
             None
         };
 
         let payload = UpdateWorkflowPayload {
             form_id: None,
+            scope_node_type_id: Some(workflow_node_type_id),
             name: workflow_name,
             slug: workflow_slug,
             description: description.get().trim().to_string().into_nonempty(),
@@ -6463,6 +6671,7 @@ fn submit_update_workflow(
 
         leptos::task::spawn_local(async move {
             is_saving.set(true);
+            save_intent.set(Some(intent));
             message.set(None);
 
             let workflow_body = match serde_json::to_string(&payload) {
@@ -6470,6 +6679,7 @@ fn submit_update_workflow(
                 Err(_) => {
                     message.set(Some("Update request could not be prepared.".into()));
                     is_saving.set(false);
+                    save_intent.set(None);
                     return;
                 }
             };
@@ -6483,38 +6693,151 @@ fn submit_update_workflow(
             .await
             {
                 Ok(_) => {
-                    if let (Some(version_id), Some(step_payload)) = (version_id, step_payload) {
-                        let step_body = match serde_json::to_string(&step_payload) {
-                            Ok(body) => body,
-                            Err(_) => {
-                                message.set(Some(
-                                    "Workflow step update request could not be prepared.".into(),
-                                ));
-                                is_saving.set(false);
-                                return;
-                            }
+                    let mut version_to_publish =
+                        if intent == WorkflowSaveIntent::Publish && version_is_draft {
+                            version_id.clone()
+                        } else {
+                            None
                         };
-                        let steps_url = format!("/api/workflow-versions/{version_id}/steps");
-                        match send_json_id_request(
-                            gloo_net::http::Request::put(&steps_url),
-                            Some(step_body),
-                            "Update workflow steps",
-                        )
-                        .await
-                        {
-                            Ok(_) => {
-                                if let Some(window) = web_sys::window() {
-                                    let _ = window
-                                        .location()
-                                        .set_href(&format!("/workflows/{workflow_id}"));
-                                }
+
+                    let had_step_update = step_payload.is_some();
+                    if let Some(step_payload) = step_payload {
+                        let step_result = if version_is_draft {
+                            if let Some(version_id) = version_id.clone() {
+                                let update_payload = UpdateWorkflowVersionStepsPayload {
+                                    steps: step_payload,
+                                };
+                                let step_body = match serde_json::to_string(&update_payload) {
+                                    Ok(body) => body,
+                                    Err(_) => {
+                                        message.set(Some(
+                                            "Workflow step update request could not be prepared."
+                                                .into(),
+                                        ));
+                                        is_saving.set(false);
+                                        save_intent.set(None);
+                                        return;
+                                    }
+                                };
+                                let steps_url =
+                                    format!("/api/workflow-versions/{version_id}/steps");
+                                send_json_id_request(
+                                    gloo_net::http::Request::put(&steps_url),
+                                    Some(step_body),
+                                    "Update workflow steps",
+                                )
+                                .await
+                            } else {
+                                let version_payload = CreateWorkflowVersionPayload {
+                                    form_version_id: None,
+                                    title: None,
+                                    steps: step_payload,
+                                };
+                                let version_body = match serde_json::to_string(&version_payload) {
+                                    Ok(body) => body,
+                                    Err(_) => {
+                                        message.set(Some(
+                                            "Workflow revision request could not be prepared."
+                                                .into(),
+                                        ));
+                                        is_saving.set(false);
+                                        save_intent.set(None);
+                                        return;
+                                    }
+                                };
+                                let version_url = format!("/api/workflows/{workflow_id}/versions");
+                                send_json_id_request(
+                                    gloo_net::http::Request::post(&version_url),
+                                    Some(version_body),
+                                    "Create workflow revision",
+                                )
+                                .await
                             }
+                        } else {
+                            let version_payload = CreateWorkflowVersionPayload {
+                                form_version_id: None,
+                                title: None,
+                                steps: step_payload,
+                            };
+                            let version_body = match serde_json::to_string(&version_payload) {
+                                Ok(body) => body,
+                                Err(_) => {
+                                    message.set(Some(
+                                        "Workflow revision request could not be prepared.".into(),
+                                    ));
+                                    is_saving.set(false);
+                                    save_intent.set(None);
+                                    return;
+                                }
+                            };
+                            let version_url = format!("/api/workflows/{workflow_id}/versions");
+                            send_json_id_request(
+                                gloo_net::http::Request::post(&version_url),
+                                Some(version_body),
+                                "Create workflow revision",
+                            )
+                            .await
+                        };
+
+                        let saved_version = match step_result {
+                            Ok(body) => body,
                             Err(error) => {
                                 if error != "Authentication is required." {
                                     message.set(Some(error));
                                 }
                                 is_saving.set(false);
+                                save_intent.set(None);
+                                return;
                             }
+                        };
+
+                        if intent == WorkflowSaveIntent::Publish {
+                            version_to_publish = Some(saved_version.id);
+                        }
+                    }
+
+                    if intent == WorkflowSaveIntent::Publish {
+                        if let Some(version_id) = version_to_publish {
+                            let publish_url =
+                                format!("/api/workflow-versions/{version_id}/publish");
+                            match send_json_id_request(
+                                gloo_net::http::Request::post(&publish_url),
+                                None,
+                                "Publish workflow revision",
+                            )
+                            .await
+                            {
+                                Ok(_) => {
+                                    if let Some(window) = web_sys::window() {
+                                        let _ = window
+                                            .location()
+                                            .set_href(&format!("/workflows/{workflow_id}"));
+                                    }
+                                }
+                                Err(error) => {
+                                    if error != "Authentication is required." {
+                                        message.set(Some(error));
+                                    }
+                                    is_saving.set(false);
+                                    save_intent.set(None);
+                                }
+                            }
+                            return;
+                        }
+
+                        message.set(Some(
+                            "No draft workflow revision is available to publish.".into(),
+                        ));
+                        is_saving.set(false);
+                        save_intent.set(None);
+                        return;
+                    }
+
+                    if had_step_update {
+                        if let Some(window) = web_sys::window() {
+                            let _ = window
+                                .location()
+                                .set_href(&format!("/workflows/{workflow_id}"));
                         }
                     } else if let Some(window) = web_sys::window() {
                         let _ = window
@@ -6527,6 +6850,7 @@ fn submit_update_workflow(
                         message.set(Some(error));
                     }
                     is_saving.set(false);
+                    save_intent.set(None);
                 }
             }
         });
@@ -6540,10 +6864,14 @@ fn submit_update_workflow(
             version_is_draft,
             name,
             slug,
+            workflow_node_type_id,
             steps,
+            original_steps,
             description,
             is_saving,
+            save_intent,
             message,
+            intent,
         );
     }
 }
@@ -7807,7 +8135,7 @@ fn WorkflowsList(
                         <tr>
                             <th scope="col">"Workflow name"</th>
                             <th scope="col">"Form"</th>
-                            <th class="data-table__cell--center" scope="col">"Active version"</th>
+                            <th class="data-table__cell--center" scope="col">"Active revision"</th>
                             <th class="data-table__cell--center" scope="col">
                                 <FilterHeader
                                     label="Status"
@@ -7901,7 +8229,7 @@ fn WorkflowsList(
                                             <dd><a href=form_href>{workflow.form_name}</a></dd>
                                         </div>
                                         <div>
-                                            <dt>"Active version"</dt>
+                                            <dt>"Active revision"</dt>
                                             <dd>{version_label}</dd>
                                         </div>
                                         <div>
@@ -9506,7 +9834,7 @@ fn FormRelatedLinks(
                                         <strong>{workflow.name}</strong>
                                         <small>{workflow.slug}</small>
                                     </span>
-                                    <span class="related-work-card__meta">{form_version_label_from_option(workflow.current_version_label)}</span>
+                                    <span class="related-work-card__meta">{workflow_revision_label_from_option(workflow.current_version_label)}</span>
                                     <span class=status_badge_class(&status)>{sentence_label(&status)}</span>
                                 </a>
                             }
@@ -9559,10 +9887,6 @@ fn FormRelatedLinks(
             </section>
         </div>
     }
-}
-
-fn form_version_label_from_option(label: Option<String>) -> String {
-    label.unwrap_or_else(|| "-".to_string())
 }
 
 #[component]
@@ -9889,6 +10213,7 @@ pub fn WorkflowsPage() -> impl IntoView {
                 let status_label = workflow_status_label(workflow);
                 let assigned_to = workflow_assigned_to_label(workflow);
                 let description = workflow_description_label(workflow);
+                let scope = workflow_scope_label(workflow.scope_node_type_name.as_deref());
                 text_matches(
                     &query,
                     &[
@@ -9900,6 +10225,7 @@ pub fn WorkflowsPage() -> impl IntoView {
                         version_label.as_str(),
                         status_label.as_str(),
                         assigned_to.as_str(),
+                        scope.as_str(),
                     ],
                 ) && (selected_status == "all" || selected_status == status_label)
             })
@@ -9960,9 +10286,11 @@ pub fn WorkflowsPage() -> impl IntoView {
 
 #[component]
 pub fn WorkflowsNewPage() -> impl IntoView {
+    let node_types = RwSignal::new(Vec::<NodeTypeCatalogEntry>::new());
     let forms = RwSignal::new(Vec::<FormSummary>::new());
     let existing_workflows = RwSignal::new(Vec::<WorkflowSummary>::new());
     let name = RwSignal::new(String::new());
+    let workflow_node_type_id = RwSignal::new(String::new());
     let steps = RwSignal::new(Vec::<WorkflowStepDraft>::new());
     let next_step_id = RwSignal::new(1_usize);
     let description = RwSignal::new(String::new());
@@ -9971,7 +10299,24 @@ pub fn WorkflowsNewPage() -> impl IntoView {
     let message = RwSignal::new(None::<String>);
 
     Effect::new(move |_| {
-        load_workflow_create_options(forms, existing_workflows, is_loading, message);
+        load_workflow_create_options(node_types, forms, existing_workflows, is_loading, message);
+    });
+
+    Effect::new(move |_| {
+        if is_loading.get() {
+            return;
+        }
+        let scope_id = workflow_node_type_id.get();
+        let available_options =
+            workflow_form_version_options(&forms.get(), &node_types.get(), &scope_id);
+        steps.update(|steps| {
+            steps.retain(|step| {
+                step.form_version_id.is_empty()
+                    || available_options
+                        .iter()
+                        .any(|(id, _, _)| id == &step.form_version_id)
+            });
+        });
     });
 
     let add_step = move || {
@@ -9987,13 +10332,16 @@ pub fn WorkflowsNewPage() -> impl IntoView {
     };
 
     let can_submit = move || {
-        !is_saving.get() && !name.get().trim().is_empty() && {
-            let current_steps = steps.get();
-            !current_steps.is_empty()
-                && current_steps
-                    .iter()
-                    .all(|step| !step.form_version_id.trim().is_empty())
-        }
+        !is_saving.get()
+            && !name.get().trim().is_empty()
+            && !workflow_node_type_id.get().trim().is_empty()
+            && {
+                let current_steps = steps.get();
+                !current_steps.is_empty()
+                    && current_steps
+                        .iter()
+                        .all(|step| !step.form_version_id.trim().is_empty())
+            }
     };
 
     view! {
@@ -10029,6 +10377,7 @@ pub fn WorkflowsNewPage() -> impl IntoView {
                                         event.prevent_default();
                                         submit_create_workflow(
                                             name,
+                                            workflow_node_type_id,
                                             steps,
                                             description,
                                             existing_workflows,
@@ -10048,6 +10397,22 @@ pub fn WorkflowsNewPage() -> impl IntoView {
                                                 }
                                             />
                                         </label>
+                                        <label class="form-field">
+                                            <span>"Workflow Node Type"</span>
+                                            <select
+                                                prop:value=move || workflow_node_type_id.get()
+                                                on:change=move |event| {
+                                                    workflow_node_type_id.set(event_target_value(&event));
+                                                }
+                                            >
+                                                <option value="">"Select node type"</option>
+                                                {move || node_types.get().into_iter().map(|node_type| {
+                                                    view! {
+                                                        <option value=node_type.id>{node_type.singular_label}</option>
+                                                    }
+                                                }).collect_view()}
+                                            </select>
+                                        </label>
                                         <label class="form-field form-field--wide">
                                             <span>"Description"</span>
                                             <textarea
@@ -10065,14 +10430,34 @@ pub fn WorkflowsNewPage() -> impl IntoView {
                                             <button
                                                 class="button button--secondary"
                                                 type="button"
-                                                disabled=move || workflow_form_version_options(&forms.get()).is_empty()
+                                                disabled=move || {
+                                                    workflow_form_version_options(
+                                                        &forms.get(),
+                                                        &node_types.get(),
+                                                        &workflow_node_type_id.get(),
+                                                    ).is_empty()
+                                                }
                                                 on:click=move |_| add_step()
                                             >
                                                 "+ Add Step"
                                             </button>
                                         </div>
                                         {move || {
-                                            let options = workflow_form_version_options(&forms.get());
+                                            let scope_id = workflow_node_type_id.get();
+                                            if scope_id.trim().is_empty() {
+                                                return view! {
+                                                    <section class="organization-state">
+                                                        <h3>"Select a workflow node type"</h3>
+                                                        <p>"Workflow steps are filtered by the selected node type."</p>
+                                                    </section>
+                                                }
+                                                .into_any();
+                                            }
+                                            let options = workflow_form_version_options(
+                                                &forms.get(),
+                                                &node_types.get(),
+                                                &scope_id,
+                                            );
                                             if options.is_empty() {
                                                 return view! {
                                                     <section class="organization-state">
@@ -10198,7 +10583,11 @@ pub fn WorkflowsNewPage() -> impl IntoView {
                                                                                 }
                                                                             >
                                                                                 <option value="">"Select form version"</option>
-                                                                                {workflow_form_version_options(&forms.get())
+                                                                                {workflow_form_version_options(
+                                                                                    &forms.get(),
+                                                                                    &node_types.get(),
+                                                                                    &workflow_node_type_id.get(),
+                                                                                )
                                                                                     .into_iter()
                                                                                     .map(|(id, label, _)| {
                                                                                         view! {
@@ -10430,8 +10819,9 @@ pub fn WorkflowAssignmentsPage() -> impl IntoView {
             .into_iter()
             .find(|candidate| candidate.workflow_version_id == selected_id)
             .map(|candidate| {
-                let version = nonempty_text(candidate.workflow_version_label.as_deref(), "-");
-                (candidate.workflow_name, format!("Version {version}"))
+                let revision =
+                    workflow_assignment_revision_label(candidate.workflow_version_label.as_deref());
+                (candidate.workflow_name, format!("Revision {revision}"))
             })
     };
     let selected_node_summary = move || {
@@ -10580,7 +10970,7 @@ pub fn WorkflowAssignmentsPage() -> impl IntoView {
                                                             options.into_iter().map(|candidate| {
                                                                 let workflow_version_id = candidate.workflow_version_id.clone();
                                                                 let workflow_version_id_for_class = workflow_version_id.clone();
-                                                                let version = nonempty_text(candidate.workflow_version_label.as_deref(), "-");
+                                                                let revision = workflow_assignment_revision_label(candidate.workflow_version_label.as_deref());
                                                                 view! {
                                                                     <button
                                                                         class=move || if selected_workflow_version_id.get() == workflow_version_id_for_class {
@@ -10605,7 +10995,7 @@ pub fn WorkflowAssignmentsPage() -> impl IntoView {
                                                                         }
                                                                     >
                                                                         <strong>{candidate.workflow_name}</strong>
-                                                                        <span>{format!("Version {version}")}</span>
+                                                                        <span>{format!("Revision {revision}")}</span>
                                                                     </button>
                                                                 }
                                                             }).collect_view().into_any()
@@ -11078,8 +11468,8 @@ fn WorkflowAssignmentsList(
                                                 <td><a class="data-table__primary-link" href=workflow_href.clone()>{assignment.workflow_name.clone()}</a></td>
                                         </tr>
                                         <tr>
-                                            <th scope="row">"Version"</th>
-                                            <td>{nonempty_text(assignment.workflow_version_label.as_deref(), "-")}</td>
+                                            <th scope="row">"Revision"</th>
+                                            <td>{workflow_assignment_revision_label(assignment.workflow_version_label.as_deref())}</td>
                                         </tr>
                                         <tr>
                                             <th scope="row">"Step"</th>
@@ -11196,12 +11586,10 @@ pub fn WorkflowsDetailPage() -> impl IntoView {
                         }
                         .into_any()
                     } else if let Some(workflow) = detail.get() {
-                        let edit_href = format!("/workflows/{}/edit", workflow.id);
                         let assignments_href =
                             format!("/workflows/assignments?workflow_id={}", workflow.id);
                         view! {
                             <PageHeader title="Workflow Detail">
-                                <a class="button" href=edit_href>"Edit Workflow"</a>
                                 <a class="button button--secondary" href=assignments_href>"Manage Assignments"</a>
                             </PageHeader>
                             <WorkflowDetailContent workflow/>
@@ -11241,7 +11629,8 @@ fn WorkflowDetailContent(workflow: WorkflowDefinition) -> impl IntoView {
     let workflow_name = workflow.name.clone();
     let workflow_slug = workflow.slug.clone();
     let workflow_description = nonempty_text(Some(workflow.description.as_str()), "No description");
-    let version_count = workflow.versions.len().to_string();
+    let workflow_scope = workflow_scope_label(workflow.scope_node_type_name.as_deref());
+    let revision_count = workflow.versions.len().to_string();
     let assignment_count = workflow.assignments.len().to_string();
     let steps = active_version
         .as_ref()
@@ -11270,8 +11659,12 @@ fn WorkflowDetailContent(workflow: WorkflowDefinition) -> impl IntoView {
                             <td>{workflow_description}</td>
                         </tr>
                         <tr>
-                            <th scope="row">"Versions"</th>
-                            <td>{version_count}</td>
+                            <th scope="row">"Workflow Node Type"</th>
+                            <td>{workflow_scope}</td>
+                        </tr>
+                        <tr>
+                            <th scope="row">"Revisions"</th>
+                            <td>{revision_count}</td>
                         </tr>
                         <tr>
                             <th scope="row">"Assignments"</th>
@@ -11281,10 +11674,10 @@ fn WorkflowDetailContent(workflow: WorkflowDefinition) -> impl IntoView {
                 </section>
 
                 <section class="organization-detail-card">
-                    <h3>"Active Version"</h3>
+                    <h3>"Active Revision"</h3>
                     <InfoListTable>
                         <tr>
-                            <th scope="row">"Version"</th>
+                            <th scope="row">"Revision"</th>
                             <td>{active_version_label}</td>
                         </tr>
                         <tr>
@@ -11312,8 +11705,8 @@ fn WorkflowDetailContent(workflow: WorkflowDefinition) -> impl IntoView {
                 </section>
 
                 <section class="organization-detail-card organization-detail-card--wide">
-                    <h3>"Versions"</h3>
-                    <WorkflowVersionsTable versions/>
+                    <h3>"Revisions"</h3>
+                    <WorkflowVersionsTable workflow_id=workflow.id.clone() versions/>
                 </section>
 
                 <section class="organization-detail-card organization-detail-card--wide workflow-detail-assignments-card">
@@ -11349,12 +11742,10 @@ fn WorkflowStepsTable(steps: Vec<WorkflowStepSummary>) -> impl IntoView {
                         .into_iter()
                         .map(|step| {
                             let form_href = format!("/forms/{}", step.form_id);
+                            let step_title = nonempty_text(Some(&step.title), "Untitled step");
                             view! {
                                 <tr>
-                                    <th scope="row">
-                                        <span>{format!("Step {}", step.position)}</span>
-                                        <small>{step.title}</small>
-                                    </th>
+                                    <th scope="row">{step_title}</th>
                                     <td><a class="data-table__primary-link" href=form_href>{step.form_name}</a></td>
                                     <td>{nonempty_text(step.form_version_label.as_deref(), "-")}</td>
                                 </tr>
@@ -11369,22 +11760,26 @@ fn WorkflowStepsTable(steps: Vec<WorkflowStepSummary>) -> impl IntoView {
 }
 
 #[component]
-fn WorkflowVersionsTable(versions: Vec<WorkflowVersionSummary>) -> impl IntoView {
+fn WorkflowVersionsTable(
+    workflow_id: String,
+    versions: Vec<WorkflowVersionSummary>,
+) -> impl IntoView {
     view! {
         <DataTable>
             <thead>
                 <tr>
-                    <th scope="col">"Version"</th>
+                    <th scope="col">"Revision"</th>
                     <th scope="col">"Status"</th>
                     <th scope="col">"Published"</th>
                     <th class="data-table__cell--center" scope="col">"Steps"</th>
+                    <th class="data-table__cell--center" scope="col">"Actions"</th>
                 </tr>
             </thead>
             <tbody>
                 {if versions.is_empty() {
                     view! {
                         <tr>
-                            <td class="data-table__empty" colspan="4">"No Versions to Display"</td>
+                            <td class="data-table__empty" colspan="5">"No Revisions to Display"</td>
                         </tr>
                     }
                     .into_any()
@@ -11394,7 +11789,9 @@ fn WorkflowVersionsTable(versions: Vec<WorkflowVersionSummary>) -> impl IntoView
                         .map(|version| {
                             let status = version.status.clone();
                             let published_at = version.published_at.clone();
-                            let version_label = nonempty_text(version.form_version_label.as_deref(), "-");
+                            let version_label = workflow_revision_label_from_option(version.form_version_label);
+                            let edit_href = format!("/workflows/{}/edit?version_id={}", workflow_id, version.id);
+                            let edit_title = format!("Edit {} workflow revision", sentence_label(&status));
                             view! {
                                 <tr>
                                     <th scope="row">{version_label}</th>
@@ -11405,6 +11802,11 @@ fn WorkflowVersionsTable(versions: Vec<WorkflowVersionSummary>) -> impl IntoView
                                             .unwrap_or_else(|| view! { <span>"-"</span> }.into_any())}
                                     </td>
                                     <td class="data-table__cell--center">{version.step_count.to_string()}</td>
+                                    <td class="data-table__cell--center">
+                                        <a class="data-table__action" href=edit_href aria-label=edit_title.clone() title=edit_title>
+                                            <Pencil class="icon-button__icon"/>
+                                        </a>
+                                    </td>
                                 </tr>
                             }
                         })
@@ -11540,8 +11942,8 @@ fn WorkflowDetailAssignmentsTable(assignments: Vec<WorkflowAssignmentSummary>) -
                                             <td><a class="data-table__primary-link" href=workflow_href.clone()>{assignment.workflow_name.clone()}</a></td>
                                         </tr>
                                         <tr>
-                                            <th scope="row">"Version"</th>
-                                            <td>{nonempty_text(assignment.workflow_version_label.as_deref(), "-")}</td>
+                                            <th scope="row">"Revision"</th>
+                                            <td>{workflow_assignment_revision_label(assignment.workflow_version_label.as_deref())}</td>
                                         </tr>
                                         <tr>
                                             <th scope="row">"Step"</th>
@@ -11602,12 +12004,15 @@ pub fn WorkflowsEditPage() -> impl IntoView {
     let params = require_route_params::<WorkflowRouteParams>();
     let workflow_id = params.workflow_id;
     let detail = RwSignal::new(None::<WorkflowDefinition>);
+    let node_types = RwSignal::new(Vec::<NodeTypeCatalogEntry>::new());
     let forms = RwSignal::new(Vec::<FormSummary>::new());
     let existing_workflows = RwSignal::new(Vec::<WorkflowSummary>::new());
     let name = RwSignal::new(String::new());
     let slug = RwSignal::new(String::new());
+    let workflow_node_type_id = RwSignal::new(String::new());
     let description = RwSignal::new(String::new());
     let steps = RwSignal::new(Vec::<WorkflowStepDraft>::new());
+    let original_steps = RwSignal::new(Vec::<WorkflowStepDraft>::new());
     let next_step_id = RwSignal::new(1_usize);
     let edit_version_id = RwSignal::new(None::<String>);
     let edit_version_label = RwSignal::new(String::new());
@@ -11619,6 +12024,7 @@ pub fn WorkflowsEditPage() -> impl IntoView {
     let detail_error = RwSignal::new(None::<String>);
     let message = RwSignal::new(None::<String>);
     let is_saving = RwSignal::new(false);
+    let save_intent = RwSignal::new(None::<WorkflowSaveIntent>);
 
     {
         let workflow_id = workflow_id.clone();
@@ -11628,7 +12034,13 @@ pub fn WorkflowsEditPage() -> impl IntoView {
     }
 
     Effect::new(move |_| {
-        load_workflow_create_options(forms, existing_workflows, options_loading, message);
+        load_workflow_create_options(
+            node_types,
+            forms,
+            existing_workflows,
+            options_loading,
+            message,
+        );
     });
 
     Effect::new(move |_| {
@@ -11641,30 +12053,53 @@ pub fn WorkflowsEditPage() -> impl IntoView {
 
         name.set(workflow.name.clone());
         slug.set(workflow.slug.clone());
+        workflow_node_type_id.set(workflow.scope_node_type_id.clone().unwrap_or_default());
         description.set(workflow.description.clone());
 
-        let active_version = active_workflow_definition_version(&workflow).cloned();
-        edit_version_id.set(active_version.as_ref().map(|version| version.id.clone()));
+        let requested_version_id = {
+            #[cfg(feature = "hydrate")]
+            {
+                current_search_param("version_id")
+            }
+            #[cfg(not(feature = "hydrate"))]
+            {
+                None::<String>
+            }
+        };
+        let edit_version = requested_version_id
+            .as_ref()
+            .and_then(|version_id| {
+                workflow
+                    .versions
+                    .iter()
+                    .find(|version| version.id == *version_id)
+                    .cloned()
+            })
+            .or_else(|| active_workflow_definition_version(&workflow).cloned());
+
+        edit_version_id.set(edit_version.as_ref().map(|version| version.id.clone()));
         edit_version_label.set(
-            active_version
+            edit_version
                 .as_ref()
                 .and_then(|version| version.form_version_label.clone())
+                .as_deref()
+                .map(workflow_revision_label_from_raw)
                 .unwrap_or_else(|| "-".to_string()),
         );
         edit_version_status.set(
-            active_version
+            edit_version
                 .as_ref()
                 .map(|version| sentence_label(&version.status))
-                .unwrap_or_else(|| "No versions".to_string()),
+                .unwrap_or_else(|| "No revisions".to_string()),
         );
         version_is_draft.set(
-            active_version
+            edit_version
                 .as_ref()
                 .map(|version| version.status.eq_ignore_ascii_case("draft"))
                 .unwrap_or(false),
         );
 
-        let mut step_summaries = active_version
+        let mut step_summaries = edit_version
             .as_ref()
             .map(|version| version.steps.clone())
             .unwrap_or_default();
@@ -11679,15 +12114,33 @@ pub fn WorkflowsEditPage() -> impl IntoView {
             })
             .collect::<Vec<_>>();
         let next_id = draft_steps.len() + 1;
+        original_steps.set(draft_steps.clone());
         steps.set(draft_steps);
         next_step_id.set(next_id);
         initialized.set(true);
     });
 
-    let add_step = move || {
-        if !version_is_draft.get_untracked() {
+    Effect::new(move |_| {
+        if !initialized.get() {
             return;
         }
+        if options_loading.get() {
+            return;
+        }
+        let scope_id = workflow_node_type_id.get();
+        let available_options =
+            workflow_form_version_options(&forms.get(), &node_types.get(), &scope_id);
+        steps.update(|steps| {
+            steps.retain(|step| {
+                step.form_version_id.is_empty()
+                    || available_options
+                        .iter()
+                        .any(|(id, _, _)| id == &step.form_version_id)
+            });
+        });
+    });
+
+    let add_step = move || {
         let id = next_step_id.get_untracked();
         next_step_id.set(id + 1);
         steps.update(|steps| {
@@ -11703,14 +12156,17 @@ pub fn WorkflowsEditPage() -> impl IntoView {
         if is_saving.get() || name.get().trim().is_empty() {
             return false;
         }
-        if !version_is_draft.get() {
-            return true;
+        if workflow_node_type_id.get().trim().is_empty() {
+            return false;
         }
         let current_steps = steps.get();
         !current_steps.is_empty()
             && current_steps
                 .iter()
                 .all(|step| !step.form_version_id.trim().is_empty())
+    };
+    let has_step_changes = move || {
+        workflow_step_signature(&steps.get()) != workflow_step_signature(&original_steps.get())
     };
 
     view! {
@@ -11757,6 +12213,7 @@ pub fn WorkflowsEditPage() -> impl IntoView {
                         } else {
                             let workflow_id_for_href = workflow_id.clone();
                             let workflow_id_for_submit = workflow_id.clone();
+                            let workflow_id_for_publish = workflow_id.clone();
                             let workflow_href = format!("/workflows/{}", workflow_id_for_href);
                             view! {
                                 <form
@@ -11769,10 +12226,14 @@ pub fn WorkflowsEditPage() -> impl IntoView {
                                             version_is_draft.get_untracked(),
                                             name,
                                             slug,
+                                            workflow_node_type_id,
                                             steps,
+                                            original_steps,
                                             description,
                                             is_saving,
+                                            save_intent,
                                             message,
+                                            WorkflowSaveIntent::Draft,
                                         );
                                     }
                                 >
@@ -11787,6 +12248,22 @@ pub fn WorkflowsEditPage() -> impl IntoView {
                                                 }
                                             />
                                         </label>
+                                        <label class="form-field">
+                                            <span>"Workflow Node Type"</span>
+                                            <select
+                                                prop:value=move || workflow_node_type_id.get()
+                                                on:change=move |event| {
+                                                    workflow_node_type_id.set(event_target_value(&event));
+                                                }
+                                            >
+                                                <option value="">"Select node type"</option>
+                                                {move || node_types.get().into_iter().map(|node_type| {
+                                                    view! {
+                                                        <option value=node_type.id>{node_type.singular_label}</option>
+                                                    }
+                                                }).collect_view()}
+                                            </select>
+                                        </label>
                                         <label class="form-field form-field--wide">
                                             <span>"Description"</span>
                                             <textarea
@@ -11799,11 +12276,11 @@ pub fn WorkflowsEditPage() -> impl IntoView {
                                     </div>
 
                                     <section class="form-section">
-                                        <h3>"Active Version"</h3>
+                                        <h3>"Active Revision"</h3>
                                         <table class="info-list-table">
                                             <tbody>
                                                 <tr>
-                                                    <th scope="row">"Version"</th>
+                                                    <th scope="row">"Revision"</th>
                                                     <td>{move || edit_version_label.get()}</td>
                                                 </tr>
                                                 <tr>
@@ -11825,8 +12302,12 @@ pub fn WorkflowsEditPage() -> impl IntoView {
                                                 class="button button--secondary"
                                                 type="button"
                                                 disabled=move || {
-                                                    !version_is_draft.get()
-                                                        || workflow_form_version_options(&forms.get()).is_empty()
+                                                    workflow_form_version_options(
+                                                        &forms.get(),
+                                                        &node_types.get(),
+                                                        &workflow_node_type_id.get(),
+                                                    )
+                                                    .is_empty()
                                                 }
                                                 on:click=move |_| add_step()
                                             >
@@ -11835,7 +12316,21 @@ pub fn WorkflowsEditPage() -> impl IntoView {
                                         </div>
 
                                         {move || {
-                                            if workflow_form_version_options(&forms.get()).is_empty() {
+                                            let scope_id = workflow_node_type_id.get();
+                                            if scope_id.trim().is_empty() {
+                                                return view! {
+                                                    <section class="organization-state">
+                                                        <h3>"Select a workflow node type"</h3>
+                                                        <p>"Workflow steps are filtered by the selected node type."</p>
+                                                    </section>
+                                                }
+                                                .into_any();
+                                            }
+                                            if workflow_form_version_options(
+                                                &forms.get(),
+                                                &node_types.get(),
+                                                &scope_id,
+                                            ).is_empty() {
                                                 return view! {
                                                     <section class="organization-state">
                                                         <h3>"No published forms available"</h3>
@@ -11848,7 +12343,7 @@ pub fn WorkflowsEditPage() -> impl IntoView {
                                             if !version_is_draft.get() {
                                                 view! {
                                                     <p class="form-message" role="status">
-                                                        "Published workflow steps are locked in this UI pass. Workflow metadata can still be updated."
+                                                        "Step changes will create a new draft workflow revision."
                                                     </p>
                                                 }
                                                 .into_any()
@@ -11862,7 +12357,7 @@ pub fn WorkflowsEditPage() -> impl IntoView {
                                                 return view! {
                                                     <section class="organization-state">
                                                         <h3>"No workflow steps"</h3>
-                                                        <p>"This workflow version does not have steps yet."</p>
+                                                        <p>"This workflow revision does not have steps yet."</p>
                                                     </section>
                                                 }
                                                 .into_any();
@@ -11896,11 +12391,8 @@ pub fn WorkflowsEditPage() -> impl IntoView {
                                                                                 class="icon-button icon-button--control"
                                                                                 type="button"
                                                                                 title="Move step up"
-                                                                                disabled=move || !version_is_draft.get() || step_position() <= 1
+                                                                                disabled=move || step_position() <= 1
                                                                                 on:click=move |_| {
-                                                                                    if !version_is_draft.get_untracked() {
-                                                                                        return;
-                                                                                    }
                                                                                     steps.update(|steps| {
                                                                                         if let Some(index) = steps.iter().position(|step| step.id == step_id) {
                                                                                             if index > 0 {
@@ -11918,12 +12410,9 @@ pub fn WorkflowsEditPage() -> impl IntoView {
                                                                                 title="Move step down"
                                                                                 disabled=move || {
                                                                                     let step_count = steps.get().len();
-                                                                                    !version_is_draft.get() || step_position() >= step_count
+                                                                                    step_position() >= step_count
                                                                                 }
                                                                                 on:click=move |_| {
-                                                                                    if !version_is_draft.get_untracked() {
-                                                                                        return;
-                                                                                    }
                                                                                     steps.update(|steps| {
                                                                                         if let Some(index) = steps.iter().position(|step| step.id == step_id) {
                                                                                             if index + 1 < steps.len() {
@@ -11939,11 +12428,7 @@ pub fn WorkflowsEditPage() -> impl IntoView {
                                                                                 class="icon-button icon-button--danger"
                                                                                 type="button"
                                                                                 title="Remove step"
-                                                                                disabled=move || !version_is_draft.get()
                                                                                 on:click=move |_| {
-                                                                                    if !version_is_draft.get_untracked() {
-                                                                                        return;
-                                                                                    }
                                                                                     steps.update(|steps| {
                                                                                         steps.retain(|step| step.id != step_id);
                                                                                     });
@@ -11959,11 +12444,7 @@ pub fn WorkflowsEditPage() -> impl IntoView {
                                                                             <input
                                                                                 type="text"
                                                                                 value=step_title
-                                                                                disabled=move || !version_is_draft.get()
                                                                                 on:input=move |event| {
-                                                                                    if !version_is_draft.get_untracked() {
-                                                                                        return;
-                                                                                    }
                                                                                     let value = event_target_value(&event);
                                                                                     steps.update(|steps| {
                                                                                         if let Some(step) = steps.iter_mut().find(|step| step.id == step_id) {
@@ -11977,11 +12458,7 @@ pub fn WorkflowsEditPage() -> impl IntoView {
                                                                             <span>"Form Version"</span>
                                                                             <select
                                                                                 prop:value=step_form_version_id
-                                                                                disabled=move || !version_is_draft.get()
                                                                                 on:change=move |event| {
-                                                                                    if !version_is_draft.get_untracked() {
-                                                                                        return;
-                                                                                    }
                                                                                     let value = event_target_value(&event);
                                                                                     steps.update(|steps| {
                                                                                         if let Some(step) = steps.iter_mut().find(|step| step.id == step_id) {
@@ -11991,7 +12468,11 @@ pub fn WorkflowsEditPage() -> impl IntoView {
                                                                                 }
                                                                             >
                                                                                 <option value="">"Select form version"</option>
-                                                                                {workflow_form_version_options(&forms.get())
+                                                                                {workflow_form_version_options(
+                                                                                    &forms.get(),
+                                                                                    &node_types.get(),
+                                                                                    &workflow_node_type_id.get(),
+                                                                                )
                                                                                     .into_iter()
                                                                                     .map(|(id, label, _)| {
                                                                                         view! {
@@ -12030,7 +12511,48 @@ pub fn WorkflowsEditPage() -> impl IntoView {
                                     <div class="form-actions">
                                         <a class="button" href=workflow_href>"Cancel"</a>
                                         <button class="button button--secondary" type="submit" disabled=move || !can_submit()>
-                                            {move || if is_saving.get() { "Saving..." } else { "Save Changes" }}
+                                            {move || {
+                                                if save_intent.get() == Some(WorkflowSaveIntent::Draft) {
+                                                    "Saving..."
+                                                } else if has_step_changes() {
+                                                    "Save as Draft"
+                                                } else {
+                                                    "Save Changes"
+                                                }
+                                            }}
+                                        </button>
+                                        <button
+                                            class="button button--secondary"
+                                            type="button"
+                                            disabled=move || {
+                                                !can_submit()
+                                                    || (!version_is_draft.get() && !has_step_changes())
+                                            }
+                                            on:click=move |_| {
+                                                submit_update_workflow(
+                                                    workflow_id_for_publish.clone(),
+                                                    edit_version_id.get_untracked(),
+                                                    version_is_draft.get_untracked(),
+                                                    name,
+                                                    slug,
+                                                    workflow_node_type_id,
+                                                    steps,
+                                                    original_steps,
+                                                    description,
+                                                    is_saving,
+                                                    save_intent,
+                                                    message,
+                                                    WorkflowSaveIntent::Publish,
+                                                );
+                                            }
+                                        >
+                                            {move || {
+                                                if save_intent.get() == Some(WorkflowSaveIntent::Publish) {
+                                                    "Publishing..."
+                                                } else {
+                                                    "Save and Publish"
+                                                }
+                                            }}
                                         </button>
                                     </div>
                                 </form>

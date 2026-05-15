@@ -5,7 +5,6 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use sqlx::{Postgres, Row, Transaction};
-use std::collections::HashMap;
 use uuid::Uuid;
 
 use crate::{
@@ -24,6 +23,50 @@ use super::dto::{
     WorkflowAssignmentQuery, WorkflowAssignmentSummary, WorkflowDefinition, WorkflowStepSummary,
     WorkflowSummary, WorkflowVersionSummary,
 };
+
+fn workflow_revision_number(label: &str) -> Option<u64> {
+    let trimmed = label.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    if let Ok(revision) = trimmed.parse::<u64>() {
+        return Some(revision);
+    }
+
+    trimmed
+        .split('.')
+        .next()
+        .and_then(|part| part.trim().parse::<u64>().ok())
+}
+
+fn workflow_revision_label(label: &str) -> Option<String> {
+    workflow_revision_number(label).map(|revision| revision.to_string())
+}
+
+async fn next_workflow_version_label_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    workflow_id: Uuid,
+) -> ApiResult<String> {
+    let rows = sqlx::query("SELECT version_label FROM workflow_versions WHERE workflow_id = $1")
+        .bind(workflow_id)
+        .fetch_all(&mut **tx)
+        .await?;
+
+    let next = rows
+        .iter()
+        .filter_map(|row| {
+            row.try_get::<Option<String>, _>("version_label")
+                .ok()
+                .flatten()
+        })
+        .filter_map(|label| workflow_revision_number(&label))
+        .max()
+        .map(|revision| revision + 1)
+        .unwrap_or(1);
+
+    Ok(next.to_string())
+}
 
 pub async fn list_workflows(
     State(state): State<AppState>,
@@ -49,16 +92,25 @@ pub async fn create_workflow(
 ) -> ApiResult<Json<IdResponse>> {
     auth::require_capability(&state.pool, &headers, "workflows:write").await?;
     let form_id = resolve_legacy_workflow_form_id(&state.pool, payload.form_id, None).await?;
-    require_workflow_payload(&state.pool, form_id, &payload.name, &payload.slug, None).await?;
+    require_workflow_payload(
+        &state.pool,
+        form_id,
+        payload.scope_node_type_id,
+        &payload.name,
+        &payload.slug,
+        None,
+    )
+    .await?;
 
     let id: Uuid = sqlx::query_scalar(
         r#"
-        INSERT INTO workflows (form_id, name, slug, description)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO workflows (form_id, scope_node_type_id, name, slug, description)
+        VALUES ($1, $2, $3, $4, $5)
         RETURNING id
         "#,
     )
     .bind(form_id)
+    .bind(payload.scope_node_type_id)
     .bind(payload.name.trim())
     .bind(payload.slug.trim())
     .bind(payload.description.unwrap_or_default().trim())
@@ -80,6 +132,7 @@ pub async fn update_workflow(
     require_workflow_payload(
         &state.pool,
         form_id,
+        payload.scope_node_type_id,
         &payload.name,
         &payload.slug,
         Some(workflow_id),
@@ -90,14 +143,16 @@ pub async fn update_workflow(
         r#"
         UPDATE workflows
         SET form_id = $2,
-            name = $3,
-            slug = $4,
-            description = $5
+            scope_node_type_id = $3,
+            name = $4,
+            slug = $5,
+            description = $6
         WHERE id = $1
         "#,
     )
     .bind(workflow_id)
     .bind(form_id)
+    .bind(payload.scope_node_type_id)
     .bind(payload.name.trim())
     .bind(payload.slug.trim())
     .bind(payload.description.unwrap_or_default().trim())
@@ -129,7 +184,7 @@ pub async fn create_workflow_version(
         .ok_or_else(|| ApiError::NotFound(format!("workflow {workflow_id}")))?;
     let version_row = sqlx::query(
         r#"
-        SELECT form_id, version_label, status::text AS status
+        SELECT form_id, status::text AS status
         FROM form_versions
         WHERE id = $1
         "#,
@@ -153,20 +208,56 @@ pub async fn create_workflow_version(
     }
 
     let source_status: String = version_row.try_get("status")?;
+    require_workflow_steps_match_scope_tx(&mut tx, workflow_id, &steps).await?;
     let status = if explicit_steps {
         "draft".to_string()
     } else {
         source_status
     };
-    let version_label: Option<String> = version_row.try_get("version_label")?;
     if explicit_steps {
-        if let Some(existing_draft_id) = sqlx::query_scalar::<_, Uuid>(
-            "SELECT id FROM workflow_versions WHERE workflow_id = $1 AND status = 'draft'::form_version_status ORDER BY created_at DESC LIMIT 1",
+        if let Some(existing_draft) = sqlx::query(
+            r#"
+            SELECT id, version_label
+            FROM workflow_versions
+            WHERE workflow_id = $1
+              AND status = 'draft'::form_version_status
+            ORDER BY created_at DESC
+            LIMIT 1
+            "#,
         )
         .bind(workflow_id)
         .fetch_optional(&mut *tx)
         .await?
         {
+            let existing_draft_id: Uuid = existing_draft.try_get("id")?;
+            let existing_version_label: Option<String> = existing_draft.try_get("version_label")?;
+            let draft_version_label = match existing_version_label {
+                Some(label) if !label.trim().is_empty() => {
+                    let label_in_use_elsewhere: Option<Uuid> = sqlx::query_scalar(
+                        r#"
+                        SELECT id
+                        FROM workflow_versions
+                        WHERE workflow_id = $1
+                          AND version_label = $2
+                          AND id <> $3
+                        LIMIT 1
+                        "#,
+                    )
+                    .bind(workflow_id)
+                    .bind(&label)
+                    .bind(existing_draft_id)
+                    .fetch_optional(&mut *tx)
+                    .await?;
+
+                    if label_in_use_elsewhere.is_some() {
+                        next_workflow_version_label_tx(&mut tx, workflow_id).await?
+                    } else {
+                        workflow_revision_label(&label).unwrap_or(label)
+                    }
+                }
+                _ => next_workflow_version_label_tx(&mut tx, workflow_id).await?,
+            };
+
             sqlx::query(
                 r#"
                 UPDATE workflow_versions
@@ -178,7 +269,7 @@ pub async fn create_workflow_version(
             )
             .bind(existing_draft_id)
             .bind(steps[0].form_version_id)
-            .bind(version_label)
+            .bind(draft_version_label)
             .execute(&mut *tx)
             .await?;
             replace_workflow_steps_tx(&mut tx, existing_draft_id, &steps).await?;
@@ -188,6 +279,7 @@ pub async fn create_workflow_version(
             }));
         }
     }
+    let version_label = next_workflow_version_label_tx(&mut tx, workflow_id).await?;
     let workflow_version_id: Uuid = sqlx::query_scalar(
         r#"
         INSERT INTO workflow_versions (workflow_id, form_version_id, version_label, status, published_at)
@@ -229,12 +321,20 @@ pub async fn replace_workflow_version_steps(
             .bind(workflow_version_id)
             .fetch_optional(&mut *tx)
             .await?
-            .ok_or_else(|| ApiError::NotFound(format!("workflow version {workflow_version_id}")))?;
+            .ok_or_else(|| {
+                ApiError::NotFound(format!("workflow revision {workflow_version_id}"))
+            })?;
     if status != "draft" {
         return Err(ApiError::BadRequest(
-            "workflow version steps can only be changed while the version is draft".into(),
+            "workflow revision steps can only be changed while the revision is draft".into(),
         ));
     }
+    let workflow_id: Uuid =
+        sqlx::query_scalar("SELECT workflow_id FROM workflow_versions WHERE id = $1")
+            .bind(workflow_version_id)
+            .fetch_one(&mut *tx)
+            .await?;
+    require_workflow_steps_match_scope_tx(&mut tx, workflow_id, &steps).await?;
     replace_workflow_steps_tx(&mut tx, workflow_version_id, &steps).await?;
     tx.commit().await?;
     Ok(Json(IdResponse {
@@ -255,10 +355,12 @@ pub async fn delete_workflow_version(
             .bind(workflow_version_id)
             .fetch_optional(&mut *tx)
             .await?
-            .ok_or_else(|| ApiError::NotFound(format!("workflow version {workflow_version_id}")))?;
+            .ok_or_else(|| {
+                ApiError::NotFound(format!("workflow revision {workflow_version_id}"))
+            })?;
     if status != "draft" {
         return Err(ApiError::BadRequest(
-            "workflow versions can only be deleted while they are draft".into(),
+            "workflow revisions can only be deleted while they are draft".into(),
         ));
     }
     sqlx::query("DELETE FROM workflow_versions WHERE id = $1")
@@ -294,12 +396,12 @@ pub async fn publish_workflow_version(
     .bind(workflow_version_id)
     .fetch_optional(&mut *tx)
     .await?
-    .ok_or_else(|| ApiError::NotFound(format!("workflow version {workflow_version_id}")))?;
+    .ok_or_else(|| ApiError::NotFound(format!("workflow revision {workflow_version_id}")))?;
     let workflow_id: Uuid = row.try_get("workflow_id")?;
     let form_status: String = row.try_get("form_status")?;
     if form_status != "published" {
         return Err(ApiError::BadRequest(
-            "workflow versions can only be published when every step form version is published"
+            "workflow revisions can only be published when every step form version is published"
                 .into(),
         ));
     }
@@ -563,7 +665,7 @@ pub async fn ensure_workflow_for_published_form_version_tx(
             forms.id AS form_id,
             forms.name AS form_name,
             forms.slug AS form_slug,
-            form_versions.version_label,
+            forms.scope_node_type_id,
             form_versions.status::text AS status,
             form_versions.published_at
         FROM form_versions
@@ -579,6 +681,7 @@ pub async fn ensure_workflow_for_published_form_version_tx(
     let form_id: Uuid = row.try_get("form_id")?;
     let form_name: String = row.try_get("form_name")?;
     let form_slug: String = row.try_get("form_slug")?;
+    let scope_node_type_id: Option<Uuid> = row.try_get("scope_node_type_id")?;
     let default_workflow_slug = format!("{form_slug}-workflow");
     let workflow_id: Uuid = if let Some(existing) =
         sqlx::query_scalar("SELECT id FROM workflows WHERE slug = $1")
@@ -590,12 +693,13 @@ pub async fn ensure_workflow_for_published_form_version_tx(
     } else {
         sqlx::query_scalar(
             r#"
-            INSERT INTO workflows (form_id, name, slug, description)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO workflows (form_id, scope_node_type_id, name, slug, description)
+            VALUES ($1, $2, $3, $4, $5)
             RETURNING id
             "#,
         )
         .bind(form_id)
+        .bind(scope_node_type_id)
         .bind(format!("{form_name} Workflow"))
         .bind(default_workflow_slug)
         .bind("Generated for Sprint 2A single-step runtime compatibility.")
@@ -603,8 +707,19 @@ pub async fn ensure_workflow_for_published_form_version_tx(
         .await?
     };
 
+    sqlx::query(
+        r#"
+        UPDATE workflows
+        SET scope_node_type_id = COALESCE(scope_node_type_id, $2)
+        WHERE id = $1
+        "#,
+    )
+    .bind(workflow_id)
+    .bind(scope_node_type_id)
+    .execute(&mut **tx)
+    .await?;
+
     let status: String = row.try_get("status")?;
-    let version_label: Option<String> = row.try_get("version_label")?;
     let published_at: Option<DateTime<Utc>> = row.try_get("published_at")?;
     let workflow_version_id: Uuid = if let Some(existing) = sqlx::query_scalar(
         "SELECT id FROM workflow_versions WHERE workflow_id = $1 AND form_version_id = $2",
@@ -617,20 +732,19 @@ pub async fn ensure_workflow_for_published_form_version_tx(
         sqlx::query(
             r#"
             UPDATE workflow_versions
-            SET version_label = $2,
-                status = $3::form_version_status,
-                published_at = $4
+            SET status = $2::form_version_status,
+                published_at = $3
             WHERE id = $1
             "#,
         )
         .bind(existing)
-        .bind(version_label)
         .bind(status)
         .bind(published_at)
         .execute(&mut **tx)
         .await?;
         existing
     } else {
+        let version_label = next_workflow_version_label_tx(tx, workflow_id).await?;
         sqlx::query_scalar(
             r#"
             INSERT INTO workflow_versions (workflow_id, form_version_id, version_label, status, published_at)
@@ -992,7 +1106,7 @@ pub async fn start_workflow_assignment(
     let workflow_status: String = row.try_get("workflow_status")?;
     if workflow_status != "published" {
         return Err(ApiError::BadRequest(
-            "only published workflow versions can start response work".into(),
+            "only published workflow revisions can start response work".into(),
         ));
     }
 
@@ -1303,6 +1417,8 @@ async fn list_workflows_inner(pool: &sqlx::PgPool) -> ApiResult<Vec<WorkflowSumm
             workflows.form_id,
             forms.name AS form_name,
             forms.slug AS form_slug,
+            workflows.scope_node_type_id,
+            node_types.name AS scope_node_type_name,
             workflows.name,
             workflows.slug,
             workflows.description,
@@ -1318,6 +1434,7 @@ async fn list_workflows_inner(pool: &sqlx::PgPool) -> ApiResult<Vec<WorkflowSumm
             ) AS assignment_node_names
         FROM workflows
         JOIN forms ON forms.id = workflows.form_id
+        LEFT JOIN node_types ON node_types.id = workflows.scope_node_type_id
         LEFT JOIN LATERAL (
             SELECT id, form_version_id, version_label, status
             FROM workflow_versions
@@ -1340,6 +1457,8 @@ async fn list_workflows_inner(pool: &sqlx::PgPool) -> ApiResult<Vec<WorkflowSumm
             workflows.form_id,
             forms.name,
             forms.slug,
+            workflows.scope_node_type_id,
+            node_types.name,
             workflows.name,
             workflows.slug,
             workflows.description,
@@ -1360,6 +1479,8 @@ async fn list_workflows_inner(pool: &sqlx::PgPool) -> ApiResult<Vec<WorkflowSumm
                 form_id: row.try_get("form_id")?,
                 form_name: row.try_get("form_name")?,
                 form_slug: row.try_get("form_slug")?,
+                scope_node_type_id: row.try_get("scope_node_type_id")?,
+                scope_node_type_name: row.try_get("scope_node_type_name")?,
                 name: row.try_get("name")?,
                 slug: row.try_get("slug")?,
                 description: row.try_get("description")?,
@@ -1387,11 +1508,14 @@ async fn get_workflow_inner(
             workflows.form_id,
             forms.name AS form_name,
             forms.slug AS form_slug,
+            workflows.scope_node_type_id,
+            node_types.name AS scope_node_type_name,
             workflows.name,
             workflows.slug,
             workflows.description
         FROM workflows
         JOIN forms ON forms.id = workflows.form_id
+        LEFT JOIN node_types ON node_types.id = workflows.scope_node_type_id
         WHERE workflows.id = $1
         "#,
     )
@@ -1452,6 +1576,8 @@ async fn get_workflow_inner(
         form_id: row.try_get("form_id")?,
         form_name: row.try_get("form_name")?,
         form_slug: row.try_get("form_slug")?,
+        scope_node_type_id: row.try_get("scope_node_type_id")?,
+        scope_node_type_name: row.try_get("scope_node_type_name")?,
         name: row.try_get("name")?,
         slug: row.try_get("slug")?,
         description: row.try_get("description")?,
@@ -1530,21 +1656,6 @@ async fn list_assignment_candidates_inner(
             FROM node_descendants
             JOIN nodes AS child_nodes ON child_nodes.parent_node_id = node_descendants.node_id
         ),
-        node_type_lineage AS (
-            SELECT
-                node_types.id AS ancestor_node_type_id,
-                node_types.id AS descendant_node_type_id,
-                0 AS depth
-            FROM node_types
-            UNION ALL
-            SELECT
-                node_type_lineage.ancestor_node_type_id,
-                node_type_relationships.child_node_type_id AS descendant_node_type_id,
-                node_type_lineage.depth + 1 AS depth
-            FROM node_type_lineage
-            JOIN node_type_relationships
-                ON node_type_relationships.parent_node_type_id = node_type_lineage.descendant_node_type_id
-        ),
         step_totals AS (
             SELECT
                 workflow_steps.workflow_version_id,
@@ -1560,21 +1671,6 @@ async fn list_assignment_candidates_inner(
             JOIN form_versions ON form_versions.id = workflow_steps.form_version_id
             JOIN forms ON forms.id = form_versions.form_id
             WHERE forms.scope_node_type_id IS NOT NULL
-        ),
-        workflow_anchor AS (
-            SELECT
-                scoped.workflow_version_id,
-                scoped.scope_node_type_id AS anchor_node_type_id
-            FROM step_scopes AS scoped
-            WHERE NOT EXISTS (
-                SELECT 1
-                FROM step_scopes AS other_scoped
-                JOIN node_type_lineage
-                    ON node_type_lineage.ancestor_node_type_id = other_scoped.scope_node_type_id
-                   AND node_type_lineage.descendant_node_type_id = scoped.scope_node_type_id
-                WHERE other_scoped.workflow_version_id = scoped.workflow_version_id
-                  AND other_scoped.scope_node_type_id <> scoped.scope_node_type_id
-            )
         )
         SELECT
             workflow_versions.id AS workflow_version_id,
@@ -1588,15 +1684,14 @@ async fn list_assignment_candidates_inner(
         FROM workflow_versions
         JOIN workflows ON workflows.id = workflow_versions.workflow_id
         JOIN step_totals ON step_totals.workflow_version_id = workflow_versions.id
-        LEFT JOIN workflow_anchor ON workflow_anchor.workflow_version_id = workflow_versions.id
         JOIN nodes ON ($1::uuid IS NULL OR nodes.id = $1)
         LEFT JOIN nodes AS parent_nodes ON parent_nodes.id = nodes.parent_node_id
         WHERE workflow_versions.status = 'published'::form_version_status
           AND step_totals.step_count > 0
           AND ($2::uuid[] IS NULL OR nodes.id = ANY($2))
           AND (
-              workflow_anchor.anchor_node_type_id IS NULL
-              OR nodes.node_type_id = workflow_anchor.anchor_node_type_id
+              workflows.scope_node_type_id IS NULL
+              OR nodes.node_type_id = workflows.scope_node_type_id
           )
           AND NOT EXISTS (
               SELECT 1
@@ -1607,24 +1702,6 @@ async fn list_assignment_candidates_inner(
                     FROM node_descendants
                     WHERE node_descendants.root_id = nodes.id
                       AND node_descendants.node_type_id = step_scopes.scope_node_type_id
-                )
-          )
-          AND NOT EXISTS (
-              SELECT 1
-              FROM workflow_steps AS assigned_steps
-              WHERE assigned_steps.workflow_version_id = workflow_versions.id
-                AND EXISTS (
-                    SELECT 1
-                    FROM form_assignments AS any_assignment
-                    WHERE any_assignment.form_version_id = assigned_steps.form_version_id
-                )
-                AND NOT EXISTS (
-                    SELECT 1
-                    FROM form_assignments AS step_assignment
-                    JOIN node_descendants
-                        ON node_descendants.root_id = nodes.id
-                       AND node_descendants.node_id = step_assignment.node_id
-                    WHERE step_assignment.form_version_id = assigned_steps.form_version_id
                 )
           )
           AND (
@@ -1809,7 +1886,7 @@ fn normalize_workflow_steps(
 ) -> ApiResult<Vec<CreateWorkflowStepRequest>> {
     if payload.steps.is_empty() {
         let form_version_id = payload.form_version_id.ok_or_else(|| {
-            ApiError::BadRequest("workflow version requires at least one step".into())
+            ApiError::BadRequest("workflow revision requires at least one step".into())
         })?;
         let title = payload
             .title
@@ -1830,7 +1907,7 @@ fn normalize_step_collection(
 ) -> ApiResult<Vec<CreateWorkflowStepRequest>> {
     if steps.is_empty() {
         return Err(ApiError::BadRequest(
-            "workflow version requires at least one step".into(),
+            "workflow revision requires at least one step".into(),
         ));
     }
     steps
@@ -1850,6 +1927,78 @@ fn normalize_step_collection(
             })
         })
         .collect()
+}
+
+async fn require_workflow_steps_match_scope_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    workflow_id: Uuid,
+    steps: &[CreateWorkflowStepRequest],
+) -> ApiResult<()> {
+    let workflow_scope_node_type_id: Option<Uuid> =
+        sqlx::query_scalar("SELECT scope_node_type_id FROM workflows WHERE id = $1")
+            .bind(workflow_id)
+            .fetch_optional(&mut **tx)
+            .await?
+            .ok_or_else(|| ApiError::NotFound(format!("workflow {workflow_id}")))?;
+
+    let Some(workflow_scope_node_type_id) = workflow_scope_node_type_id else {
+        return Ok(());
+    };
+
+    for step in steps {
+        let row = sqlx::query(
+            r#"
+            SELECT
+                forms.name AS form_name,
+                forms.scope_node_type_id
+            FROM form_versions
+            JOIN forms ON forms.id = form_versions.form_id
+            WHERE form_versions.id = $1
+            "#,
+        )
+        .bind(step.form_version_id)
+        .fetch_optional(&mut **tx)
+        .await?
+        .ok_or_else(|| ApiError::NotFound(format!("form version {}", step.form_version_id)))?;
+
+        let form_scope_node_type_id: Option<Uuid> = row.try_get("scope_node_type_id")?;
+        let Some(form_scope_node_type_id) = form_scope_node_type_id else {
+            continue;
+        };
+
+        let is_in_workflow_scope: bool = sqlx::query_scalar(
+            r#"
+            WITH RECURSIVE descendants AS (
+                SELECT node_types.id
+                FROM node_types
+                WHERE node_types.id = $1
+                UNION ALL
+                SELECT node_type_relationships.child_node_type_id
+                FROM descendants
+                JOIN node_type_relationships
+                    ON node_type_relationships.parent_node_type_id = descendants.id
+            )
+            SELECT EXISTS (
+                SELECT 1
+                FROM descendants
+                WHERE id = $2
+            )
+            "#,
+        )
+        .bind(workflow_scope_node_type_id)
+        .bind(form_scope_node_type_id)
+        .fetch_one(&mut **tx)
+        .await?;
+
+        if !is_in_workflow_scope {
+            let form_name: String = row.try_get("form_name")?;
+            return Err(ApiError::BadRequest(format!(
+                "form '{form_name}' is outside the workflow node type scope"
+            )));
+        }
+    }
+
+    Ok(())
 }
 
 async fn replace_workflow_steps_tx(
@@ -1895,11 +2044,17 @@ async fn validate_workflow_version_publish_tx(
     tx: &mut Transaction<'_, Postgres>,
     workflow_version_id: Uuid,
 ) -> ApiResult<()> {
+    let workflow_id: Uuid =
+        sqlx::query_scalar("SELECT workflow_id FROM workflow_versions WHERE id = $1")
+            .bind(workflow_version_id)
+            .fetch_one(&mut **tx)
+            .await?;
     let rows = sqlx::query(
         r#"
         SELECT
             workflow_steps.title,
             workflow_steps.position,
+            workflow_steps.form_version_id,
             form_versions.status::text AS form_status
         FROM workflow_steps
         JOIN form_versions ON form_versions.id = workflow_steps.form_version_id
@@ -1913,7 +2068,7 @@ async fn validate_workflow_version_publish_tx(
 
     if rows.is_empty() {
         return Err(ApiError::BadRequest(
-            "workflow versions require at least one step before publish".into(),
+            "workflow revisions require at least one step before publish".into(),
         ));
     }
 
@@ -1938,200 +2093,17 @@ async fn validate_workflow_version_publish_tx(
             ));
         }
     }
-
-    let has_branching_scope: bool = sqlx::query_scalar(
-        r#"
-        WITH RECURSIVE node_type_lineage AS (
-            SELECT
-                node_types.id AS ancestor_node_type_id,
-                node_types.id AS descendant_node_type_id
-            FROM node_types
-            UNION ALL
-            SELECT
-                node_type_lineage.ancestor_node_type_id,
-                node_type_relationships.child_node_type_id AS descendant_node_type_id
-            FROM node_type_lineage
-            JOIN node_type_relationships
-                ON node_type_relationships.parent_node_type_id = node_type_lineage.descendant_node_type_id
-        ),
-        step_scopes AS (
-            SELECT DISTINCT forms.scope_node_type_id
-            FROM workflow_steps
-            JOIN form_versions ON form_versions.id = workflow_steps.form_version_id
-            JOIN forms ON forms.id = form_versions.form_id
-            WHERE workflow_steps.workflow_version_id = $1
-              AND forms.scope_node_type_id IS NOT NULL
-        )
-        SELECT EXISTS (
-            SELECT 1
-            FROM step_scopes AS left_scope
-            JOIN step_scopes AS right_scope
-                ON left_scope.scope_node_type_id::text < right_scope.scope_node_type_id::text
-            WHERE NOT EXISTS (
-                SELECT 1
-                FROM node_type_lineage
-                WHERE node_type_lineage.ancestor_node_type_id = left_scope.scope_node_type_id
-                  AND node_type_lineage.descendant_node_type_id = right_scope.scope_node_type_id
-            )
-              AND NOT EXISTS (
-                SELECT 1
-                FROM node_type_lineage
-                WHERE node_type_lineage.ancestor_node_type_id = right_scope.scope_node_type_id
-                  AND node_type_lineage.descendant_node_type_id = left_scope.scope_node_type_id
-            )
-        )
-        "#,
-    )
-    .bind(workflow_version_id)
-    .fetch_one(&mut **tx)
-    .await?;
-    if has_branching_scope {
-        return Err(ApiError::BadRequest(
-            "workflow step form scopes must stay on one hierarchy lineage".into(),
-        ));
-    }
-    validate_workflow_step_node_lineage_tx(tx, workflow_version_id).await?;
-    Ok(())
-}
-
-struct StepLineageOptions {
-    form_version_id: Uuid,
-    assignment_node_ids: Vec<Uuid>,
-}
-
-async fn validate_workflow_step_node_lineage_tx(
-    tx: &mut Transaction<'_, Postgres>,
-    workflow_version_id: Uuid,
-) -> ApiResult<()> {
-    let rows = sqlx::query(
-        r#"
-        SELECT
-            workflow_steps.form_version_id,
-            COALESCE(
-                array_remove(array_agg(DISTINCT form_assignments.node_id), NULL),
-                ARRAY[]::uuid[]
-            ) AS assignment_node_ids
-        FROM workflow_steps
-        JOIN form_versions ON form_versions.id = workflow_steps.form_version_id
-        LEFT JOIN form_assignments
-            ON form_assignments.form_version_id = workflow_steps.form_version_id
-        WHERE workflow_steps.workflow_version_id = $1
-        GROUP BY workflow_steps.position, workflow_steps.form_version_id
-        ORDER BY workflow_steps.position
-        "#,
-    )
-    .bind(workflow_version_id)
-    .fetch_all(&mut **tx)
-    .await?;
-
     let steps = rows
-        .into_iter()
+        .iter()
         .map(|row| {
-            Ok(StepLineageOptions {
+            Ok(CreateWorkflowStepRequest {
+                title: row.try_get("title")?,
                 form_version_id: row.try_get("form_version_id")?,
-                assignment_node_ids: row.try_get("assignment_node_ids")?,
             })
         })
         .collect::<Result<Vec<_>, sqlx::Error>>()?;
-
-    let mut all_node_ids = Vec::new();
-    for step in &steps {
-        for node_id in &step.assignment_node_ids {
-            if !all_node_ids.contains(node_id) {
-                all_node_ids.push(*node_id);
-            }
-        }
-    }
-    let parent_map = load_node_parent_map_tx(tx, &all_node_ids).await?;
-
-    for left_index in 0..steps.len() {
-        for right_index in (left_index + 1)..steps.len() {
-            let left = &steps[left_index];
-            let right = &steps[right_index];
-            if !step_lineage_options_are_composable(left, right, &parent_map) {
-                return Err(ApiError::BadRequest(format!(
-                    "workflow step form assignments must stay on one hierarchy lineage ({} and {})",
-                    left.form_version_id, right.form_version_id
-                )));
-            }
-        }
-    }
-
+    require_workflow_steps_match_scope_tx(tx, workflow_id, &steps).await?;
     Ok(())
-}
-
-async fn load_node_parent_map_tx(
-    tx: &mut Transaction<'_, Postgres>,
-    seed_node_ids: &[Uuid],
-) -> ApiResult<HashMap<Uuid, Option<Uuid>>> {
-    if seed_node_ids.is_empty() {
-        return Ok(HashMap::new());
-    }
-
-    let rows = sqlx::query(
-        r#"
-        WITH RECURSIVE ancestors AS (
-            SELECT nodes.id, nodes.parent_node_id
-            FROM nodes
-            WHERE nodes.id = ANY($1)
-            UNION
-            SELECT parent_nodes.id, parent_nodes.parent_node_id
-            FROM nodes AS parent_nodes
-            JOIN ancestors ON ancestors.parent_node_id = parent_nodes.id
-        )
-        SELECT id, parent_node_id
-        FROM ancestors
-        "#,
-    )
-    .bind(seed_node_ids)
-    .fetch_all(&mut **tx)
-    .await?;
-
-    rows.into_iter()
-        .map(|row| Ok((row.try_get("id")?, row.try_get("parent_node_id")?)))
-        .collect::<Result<HashMap<Uuid, Option<Uuid>>, sqlx::Error>>()
-        .map_err(Into::into)
-}
-
-fn step_lineage_options_are_composable(
-    left: &StepLineageOptions,
-    right: &StepLineageOptions,
-    parent_map: &HashMap<Uuid, Option<Uuid>>,
-) -> bool {
-    if !left.assignment_node_ids.is_empty() && !right.assignment_node_ids.is_empty() {
-        return left.assignment_node_ids.iter().any(|left_node_id| {
-            right.assignment_node_ids.iter().any(|right_node_id| {
-                node_ids_are_comparable(*left_node_id, *right_node_id, parent_map)
-            })
-        });
-    }
-
-    true
-}
-
-fn node_ids_are_comparable(
-    left_node_id: Uuid,
-    right_node_id: Uuid,
-    parent_map: &HashMap<Uuid, Option<Uuid>>,
-) -> bool {
-    left_node_id == right_node_id
-        || node_id_is_ancestor(left_node_id, right_node_id, parent_map)
-        || node_id_is_ancestor(right_node_id, left_node_id, parent_map)
-}
-
-fn node_id_is_ancestor(
-    ancestor_node_id: Uuid,
-    descendant_node_id: Uuid,
-    parent_map: &HashMap<Uuid, Option<Uuid>>,
-) -> bool {
-    let mut current = Some(descendant_node_id);
-    while let Some(node_id) = current {
-        if node_id == ancestor_node_id {
-            return true;
-        }
-        current = parent_map.get(&node_id).copied().flatten();
-    }
-    false
 }
 
 async fn resolve_workflow_step_node_tx(
@@ -2139,51 +2111,6 @@ async fn resolve_workflow_step_node_tx(
     assignment_node_id: Uuid,
     form_version_id: Uuid,
 ) -> ApiResult<Uuid> {
-    let assigned_node_id: Option<Uuid> = sqlx::query_scalar(
-        r#"
-        WITH RECURSIVE descendants AS (
-            SELECT
-                nodes.id,
-                nodes.name,
-                0 AS depth
-            FROM nodes
-            WHERE nodes.id = $1
-            UNION ALL
-            SELECT
-                child_nodes.id,
-                child_nodes.name,
-                descendants.depth + 1 AS depth
-            FROM descendants
-            JOIN nodes AS child_nodes ON child_nodes.parent_node_id = descendants.id
-        )
-        SELECT form_assignments.node_id
-        FROM form_assignments
-        JOIN descendants ON descendants.id = form_assignments.node_id
-        WHERE form_assignments.form_version_id = $2
-        ORDER BY descendants.depth, descendants.name, form_assignments.node_id
-        LIMIT 1
-        "#,
-    )
-    .bind(assignment_node_id)
-    .bind(form_version_id)
-    .fetch_optional(&mut **tx)
-    .await?;
-    if let Some(node_id) = assigned_node_id {
-        return Ok(node_id);
-    }
-
-    let has_form_assignments: bool = sqlx::query_scalar(
-        "SELECT EXISTS (SELECT 1 FROM form_assignments WHERE form_version_id = $1)",
-    )
-    .bind(form_version_id)
-    .fetch_one(&mut **tx)
-    .await?;
-    if has_form_assignments {
-        return Err(ApiError::BadRequest(
-            "workflow step form is not linked to the assignment node or descendants".into(),
-        ));
-    }
-
     let scope_node_type_id: Option<Uuid> = sqlx::query_scalar(
         r#"
         SELECT forms.scope_node_type_id
@@ -2270,6 +2197,7 @@ async fn resolve_legacy_workflow_form_id(
 async fn require_workflow_payload(
     pool: &sqlx::PgPool,
     form_id: Uuid,
+    scope_node_type_id: Option<Uuid>,
     name: &str,
     slug: &str,
     current_workflow_id: Option<Uuid>,
@@ -2286,6 +2214,18 @@ async fn require_workflow_payload(
         .await?;
     if !form_exists {
         return Err(ApiError::NotFound(format!("form {form_id}")));
+    }
+    if let Some(scope_node_type_id) = scope_node_type_id {
+        let node_type_exists: bool =
+            sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM node_types WHERE id = $1)")
+                .bind(scope_node_type_id)
+                .fetch_one(pool)
+                .await?;
+        if !node_type_exists {
+            return Err(ApiError::NotFound(format!(
+                "node type {scope_node_type_id}"
+            )));
+        }
     }
 
     let duplicate_slug: bool = if let Some(current_workflow_id) = current_workflow_id {
@@ -2348,7 +2288,7 @@ async fn ensure_workflow_assignment_with_status_tx(
     .fetch_optional(&mut **tx)
     .await?
     .ok_or_else(|| {
-        ApiError::BadRequest("workflow versions must have at least one response step".into())
+        ApiError::BadRequest("workflow revisions must have at least one response step".into())
     })?;
     let step_id: Uuid = row.try_get("id")?;
 
