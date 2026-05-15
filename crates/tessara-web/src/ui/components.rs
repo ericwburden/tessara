@@ -66,15 +66,15 @@ const NAV_ITEMS: [NavItem; 10] = [
         section: "Main",
     },
     NavItem {
-        key: "datasets",
-        href: "/datasets",
-        label: "Datasets",
-        section: "Admin",
-    },
-    NavItem {
         key: "administration",
         href: "/administration",
         label: "Administration",
+        section: "Admin",
+    },
+    NavItem {
+        key: "datasets",
+        href: "/datasets",
+        label: "Datasets",
         section: "Admin",
     },
     NavItem {

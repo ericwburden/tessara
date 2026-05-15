@@ -231,28 +231,28 @@ const ROUTE_MIGRATIONS: [RouteMigration; 32] = [
         name: "Administration",
         route: "/administration",
         href: "/administration",
-        status: "Pending",
+        status: "Done",
         rbac_status: "Pending",
     },
     RouteMigration {
         name: "Users",
         route: "/administration/users",
         href: "/administration/users",
-        status: "Pending",
+        status: "Registered",
         rbac_status: "Pending",
     },
     RouteMigration {
         name: "Node Types",
         route: "/administration/node-types",
         href: "/administration/node-types",
-        status: "Pending",
+        status: "Registered",
         rbac_status: "Pending",
     },
     RouteMigration {
         name: "Roles",
         route: "/administration/roles",
         href: "/administration/roles",
-        status: "Pending",
+        status: "Registered",
         rbac_status: "Pending",
     },
     RouteMigration {
@@ -14760,7 +14760,60 @@ pub fn DatasetsDetailPage() -> impl IntoView {
 
 #[component]
 pub fn AdministrationPage() -> impl IntoView {
-    view! { <ResetRoute active_route="administration" title="Administration" route="/administration" status="Queued" next_step="Restore admin landing links and summaries."/> }
+    view! {
+        <AppShell active_route="administration" title="Administration">
+            <section class="route-panel administration-page">
+                <PageHeader
+                    title="Administration"
+                    description="Internal configuration routes are registered natively while their detailed management screens are restored."
+                />
+
+                <div class="organization-detail-content administration-landing">
+                    <div class="organization-detail-content__grid">
+                        <section class="organization-detail-card">
+                            <h3>"User Management"</h3>
+                            <p>"Manage local users, passwords, role memberships, and active status."</p>
+                            <div class="form-actions">
+                                <a class="button" href="/administration/users">"Open Users"</a>
+                            </div>
+                        </section>
+
+                        <section class="organization-detail-card">
+                            <h3>"Roles And Access"</h3>
+                            <p>"Review reusable capability bundles and the access assignments that control application visibility."</p>
+                            <div class="form-actions">
+                                <a class="button" href="/administration/roles">"Open Roles"</a>
+                            </div>
+                        </section>
+
+                        <section class="organization-detail-card">
+                            <h3>"Organization Schema"</h3>
+                            <p>"Manage node type labels and hierarchy rules for the organization model."</p>
+                            <div class="form-actions">
+                                <a class="button" href="/administration/node-types">"Open Node Types"</a>
+                            </div>
+                        </section>
+
+                        <section class="organization-detail-card">
+                            <h3>"Datasets"</h3>
+                            <p>"Review imported dataset catalogs and supporting reference data."</p>
+                            <div class="form-actions">
+                                <a class="button" href="/datasets">"Open Datasets"</a>
+                            </div>
+                        </section>
+
+                        <section class="organization-detail-card">
+                            <h3>"Migration"</h3>
+                            <p>"Validate, dry-run, and import representative legacy fixtures."</p>
+                            <div class="form-actions">
+                                <a class="button button--secondary" href="/migration">"Open Migration"</a>
+                            </div>
+                        </section>
+                    </div>
+                </div>
+            </section>
+        </AppShell>
+    }
 }
 
 #[component]
