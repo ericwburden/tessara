@@ -65,6 +65,9 @@ pub fn App() -> impl IntoView {
                 <Route path=path!("/datasets") view=reset::DatasetsPage ssr=PRIMARY_SSR_MODE/>
                 <Route path=path!("/datasets/:dataset_id") view=reset::DatasetsDetailPage ssr=PRIMARY_SSR_MODE/>
                 <Route path=path!("/administration") view=reset::AdministrationPage ssr=PRIMARY_SSR_MODE/>
+                <Route path=path!("/administration/users/:account_id/access") view=reset::AdministrationUserAccessPage ssr=PRIMARY_SSR_MODE/>
+                <Route path=path!("/administration/users/:account_id/edit") view=reset::AdministrationUserEditPage ssr=PRIMARY_SSR_MODE/>
+                <Route path=path!("/administration/users/:account_id") view=reset::AdministrationUserDetailPage ssr=PRIMARY_SSR_MODE/>
                 <Route path=path!("/administration/users") view=reset::AdministrationUsersPage ssr=PRIMARY_SSR_MODE/>
                 <Route path=path!("/administration/node-types") view=reset::AdministrationNodeTypesPage ssr=PRIMARY_SSR_MODE/>
                 <Route path=path!("/administration/roles") view=reset::AdministrationRolesPage ssr=PRIMARY_SSR_MODE/>

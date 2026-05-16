@@ -317,6 +317,36 @@ pub fn router(state: AppState) -> Router {
             }),
         )
         .route(
+            "/administration/users/{account_id}",
+            get(|Path(account_id): Path<String>| async move {
+                native_app(
+                    format!("/administration/users/{account_id}"),
+                    "Tessara User Detail",
+                    "Inspect a Tessara user.",
+                )
+            }),
+        )
+        .route(
+            "/administration/users/{account_id}/access",
+            get(|Path(account_id): Path<String>| async move {
+                native_app(
+                    format!("/administration/users/{account_id}/access"),
+                    "Tessara User Permissions",
+                    "Manage Tessara user permissions.",
+                )
+            }),
+        )
+        .route(
+            "/administration/users/{account_id}/edit",
+            get(|Path(account_id): Path<String>| async move {
+                native_app(
+                    format!("/administration/users/{account_id}/edit"),
+                    "Edit Tessara User",
+                    "Edit a Tessara user account.",
+                )
+            }),
+        )
+        .route(
             "/administration/node-types",
             get(|| async {
                 native_app(

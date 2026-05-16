@@ -19,8 +19,8 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::closure::Closure;
 
 use crate::infra::routing::{
-    FormRouteParams, NodeRouteParams, SubmissionRouteParams, WorkflowRouteParams,
-    require_route_params,
+    AccountRouteParams, FormRouteParams, NodeRouteParams, SubmissionRouteParams,
+    WorkflowRouteParams, require_route_params,
 };
 use crate::ui::components::{
     AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator,
@@ -37,7 +37,7 @@ struct RouteMigration {
     rbac_status: &'static str,
 }
 
-const ROUTE_MIGRATIONS: [RouteMigration; 32] = [
+const ROUTE_MIGRATIONS: [RouteMigration; 35] = [
     RouteMigration {
         name: "Home",
         route: "/",
@@ -238,7 +238,28 @@ const ROUTE_MIGRATIONS: [RouteMigration; 32] = [
         name: "Users",
         route: "/administration/users",
         href: "/administration/users",
-        status: "Registered",
+        status: "Done",
+        rbac_status: "Pending",
+    },
+    RouteMigration {
+        name: "User Detail",
+        route: "/administration/users/:account_id",
+        href: "/administration/users/ffa86962-8fa3-4104-bb34-e9e8f68196af",
+        status: "Done",
+        rbac_status: "Pending",
+    },
+    RouteMigration {
+        name: "Edit User",
+        route: "/administration/users/:account_id/edit",
+        href: "/administration/users/ffa86962-8fa3-4104-bb34-e9e8f68196af/edit",
+        status: "Done",
+        rbac_status: "Pending",
+    },
+    RouteMigration {
+        name: "User Permissions",
+        route: "/administration/users/:account_id/access",
+        href: "/administration/users/ffa86962-8fa3-4104-bb34-e9e8f68196af/access",
+        status: "Done",
         rbac_status: "Pending",
     },
     RouteMigration {
@@ -678,6 +699,96 @@ struct IdResponse {
 struct ApiErrorResponse {
     message: Option<String>,
     error: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+struct AdminRoleSummary {
+    id: String,
+    name: String,
+    capability_count: i64,
+    account_count: i64,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+struct AdminUserSummary {
+    id: String,
+    email: String,
+    display_name: String,
+    is_active: bool,
+    #[serde(default)]
+    roles: Vec<AdminRoleSummary>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+struct AdminScopeNodeSummary {
+    node_id: String,
+    node_name: String,
+    node_type_name: String,
+    parent_node_id: Option<String>,
+    parent_node_name: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+struct AdminDelegationSummary {
+    account_id: String,
+    email: String,
+    display_name: String,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+struct AdminUserDetail {
+    id: String,
+    email: String,
+    display_name: String,
+    is_active: bool,
+    ui_access_profile: String,
+    #[serde(default)]
+    capabilities: Vec<String>,
+    #[serde(default)]
+    roles: Vec<AdminRoleSummary>,
+    #[serde(default)]
+    scope_nodes: Vec<AdminScopeNodeSummary>,
+    #[serde(default)]
+    delegations: Vec<AdminDelegationSummary>,
+    #[serde(default)]
+    delegated_by: Vec<AdminDelegationSummary>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+struct AdminUserAccessDetail {
+    account_id: String,
+    email: String,
+    display_name: String,
+    ui_access_profile: String,
+    #[serde(default)]
+    capabilities: Vec<String>,
+    #[serde(default)]
+    scope_nodes: Vec<AdminScopeNodeSummary>,
+    #[serde(default)]
+    available_scope_nodes: Vec<AdminScopeNodeSummary>,
+    #[serde(default)]
+    delegations: Vec<AdminDelegationSummary>,
+    #[serde(default)]
+    available_delegate_accounts: Vec<AdminDelegationSummary>,
+    scope_assignments_editable: bool,
+    delegation_assignments_editable: bool,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+struct UpdateAdminUserPayload {
+    email: String,
+    display_name: String,
+    password: Option<String>,
+    is_active: bool,
+    role_ids: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+struct UpdateAdminUserAccessPayload {
+    scope_node_ids: Vec<String>,
+    delegate_account_ids: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -4407,6 +4518,422 @@ fn load_submissions(
     #[cfg(not(feature = "hydrate"))]
     {
         let _ = (submissions, is_loading, load_error);
+    }
+}
+
+fn load_admin_users(
+    users: RwSignal<Vec<AdminUserSummary>>,
+    is_loading: RwSignal<bool>,
+    load_error: RwSignal<Option<String>>,
+) {
+    #[cfg(feature = "hydrate")]
+    {
+        leptos::task::spawn_local(async move {
+            is_loading.set(true);
+            load_error.set(None);
+
+            match gloo_net::http::Request::get("/api/admin/users")
+                .send()
+                .await
+            {
+                Ok(response) if response.status() == 401 => {
+                    users.set(Vec::new());
+                    is_loading.set(false);
+                    redirect_to_login();
+                }
+                Ok(response) if response.ok() => {
+                    match response.json::<Vec<AdminUserSummary>>().await {
+                        Ok(loaded_users) => {
+                            users.set(loaded_users);
+                            is_loading.set(false);
+                        }
+                        Err(error) => {
+                            users.set(Vec::new());
+                            load_error.set(Some(format!("Unable to parse users: {error}")));
+                            is_loading.set(false);
+                        }
+                    }
+                }
+                Ok(response) => {
+                    users.set(Vec::new());
+                    load_error.set(Some(format!(
+                        "Unable to load users. Server returned {}.",
+                        response.status()
+                    )));
+                    is_loading.set(false);
+                }
+                Err(error) => {
+                    users.set(Vec::new());
+                    load_error.set(Some(format!("Unable to load users: {error}")));
+                    is_loading.set(false);
+                }
+            }
+        });
+    }
+
+    #[cfg(not(feature = "hydrate"))]
+    {
+        let _ = (users, is_loading, load_error);
+    }
+}
+
+fn load_admin_user_detail(
+    account_id: String,
+    detail: RwSignal<Option<AdminUserDetail>>,
+    is_loading: RwSignal<bool>,
+    load_error: RwSignal<Option<String>>,
+) {
+    #[cfg(feature = "hydrate")]
+    {
+        leptos::task::spawn_local(async move {
+            is_loading.set(true);
+            load_error.set(None);
+
+            match gloo_net::http::Request::get(&format!("/api/admin/users/{account_id}"))
+                .send()
+                .await
+            {
+                Ok(response) if response.status() == 401 => {
+                    detail.set(None);
+                    is_loading.set(false);
+                    redirect_to_login();
+                }
+                Ok(response) if response.ok() => match response.json::<AdminUserDetail>().await {
+                    Ok(loaded_detail) => {
+                        detail.set(Some(loaded_detail));
+                        is_loading.set(false);
+                    }
+                    Err(error) => {
+                        detail.set(None);
+                        load_error.set(Some(format!("Unable to parse user: {error}")));
+                        is_loading.set(false);
+                    }
+                },
+                Ok(response) => {
+                    detail.set(None);
+                    load_error.set(Some(format!(
+                        "Unable to load user. Server returned {}.",
+                        response.status()
+                    )));
+                    is_loading.set(false);
+                }
+                Err(error) => {
+                    detail.set(None);
+                    load_error.set(Some(format!("Unable to load user: {error}")));
+                    is_loading.set(false);
+                }
+            }
+        });
+    }
+
+    #[cfg(not(feature = "hydrate"))]
+    {
+        let _ = (account_id, detail, is_loading, load_error);
+    }
+}
+
+fn load_admin_user_access(
+    account_id: String,
+    detail: RwSignal<Option<AdminUserAccessDetail>>,
+    selected_scope_node_ids: RwSignal<Vec<String>>,
+    selected_delegate_account_ids: RwSignal<Vec<String>>,
+    is_loading: RwSignal<bool>,
+    load_error: RwSignal<Option<String>>,
+) {
+    #[cfg(feature = "hydrate")]
+    {
+        leptos::task::spawn_local(async move {
+            is_loading.set(true);
+            load_error.set(None);
+
+            match gloo_net::http::Request::get(&format!("/api/admin/users/{account_id}/access"))
+                .send()
+                .await
+            {
+                Ok(response) if response.status() == 401 => {
+                    detail.set(None);
+                    is_loading.set(false);
+                    redirect_to_login();
+                }
+                Ok(response) if response.ok() => {
+                    match response.json::<AdminUserAccessDetail>().await {
+                        Ok(loaded_detail) => {
+                            selected_scope_node_ids.set(
+                                loaded_detail
+                                    .scope_nodes
+                                    .iter()
+                                    .map(|node| node.node_id.clone())
+                                    .collect(),
+                            );
+                            selected_delegate_account_ids.set(
+                                loaded_detail
+                                    .delegations
+                                    .iter()
+                                    .map(|delegation| delegation.account_id.clone())
+                                    .collect(),
+                            );
+                            detail.set(Some(loaded_detail));
+                            is_loading.set(false);
+                        }
+                        Err(error) => {
+                            detail.set(None);
+                            load_error
+                                .set(Some(format!("Unable to parse user permissions: {error}")));
+                            is_loading.set(false);
+                        }
+                    }
+                }
+                Ok(response) => {
+                    detail.set(None);
+                    load_error.set(Some(format!(
+                        "Unable to load user permissions. Server returned {}.",
+                        response.status()
+                    )));
+                    is_loading.set(false);
+                }
+                Err(error) => {
+                    detail.set(None);
+                    load_error.set(Some(format!("Unable to load user permissions: {error}")));
+                    is_loading.set(false);
+                }
+            }
+        });
+    }
+
+    #[cfg(not(feature = "hydrate"))]
+    {
+        let _ = (
+            account_id,
+            detail,
+            selected_scope_node_ids,
+            selected_delegate_account_ids,
+            is_loading,
+            load_error,
+        );
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn load_admin_user_edit_context(
+    account_id: String,
+    detail: RwSignal<Option<AdminUserDetail>>,
+    roles: RwSignal<Vec<AdminRoleSummary>>,
+    email: RwSignal<String>,
+    display_name: RwSignal<String>,
+    is_active: RwSignal<bool>,
+    selected_role_ids: RwSignal<Vec<String>>,
+    is_loading: RwSignal<bool>,
+    load_error: RwSignal<Option<String>>,
+) {
+    #[cfg(feature = "hydrate")]
+    {
+        leptos::task::spawn_local(async move {
+            is_loading.set(true);
+            load_error.set(None);
+
+            let user_response =
+                gloo_net::http::Request::get(&format!("/api/admin/users/{account_id}"))
+                    .send()
+                    .await;
+            let roles_response = gloo_net::http::Request::get("/api/admin/roles")
+                .send()
+                .await;
+
+            match (user_response, roles_response) {
+                (Ok(user_response), _) if user_response.status() == 401 => {
+                    is_loading.set(false);
+                    redirect_to_login();
+                }
+                (Ok(user_response), Ok(roles_response))
+                    if user_response.ok() && roles_response.ok() =>
+                {
+                    let loaded_user = user_response.json::<AdminUserDetail>().await;
+                    let loaded_roles = roles_response.json::<Vec<AdminRoleSummary>>().await;
+                    match (loaded_user, loaded_roles) {
+                        (Ok(user), Ok(available_roles)) => {
+                            email.set(user.email.clone());
+                            display_name.set(user.display_name.clone());
+                            is_active.set(user.is_active);
+                            selected_role_ids
+                                .set(user.roles.iter().map(|role| role.id.clone()).collect());
+                            detail.set(Some(user));
+                            roles.set(available_roles);
+                            is_loading.set(false);
+                        }
+                        (Err(error), _) => {
+                            load_error.set(Some(format!("Unable to parse user: {error}")));
+                            is_loading.set(false);
+                        }
+                        (_, Err(error)) => {
+                            load_error.set(Some(format!("Unable to parse roles: {error}")));
+                            is_loading.set(false);
+                        }
+                    }
+                }
+                (Ok(user_response), _) if !user_response.ok() => {
+                    detail.set(None);
+                    load_error.set(Some(format!(
+                        "Unable to load user. Server returned {}.",
+                        user_response.status()
+                    )));
+                    is_loading.set(false);
+                }
+                (_, Ok(roles_response)) if !roles_response.ok() => {
+                    roles.set(Vec::new());
+                    load_error.set(Some(format!(
+                        "Unable to load roles. Server returned {}.",
+                        roles_response.status()
+                    )));
+                    is_loading.set(false);
+                }
+                (Err(error), _) => {
+                    load_error.set(Some(format!("Unable to load user: {error}")));
+                    is_loading.set(false);
+                }
+                (_, Err(error)) => {
+                    load_error.set(Some(format!("Unable to load roles: {error}")));
+                    is_loading.set(false);
+                }
+                _ => {
+                    load_error.set(Some("Unable to load user edit context.".into()));
+                    is_loading.set(false);
+                }
+            }
+        });
+    }
+
+    #[cfg(not(feature = "hydrate"))]
+    {
+        let _ = (
+            account_id,
+            detail,
+            roles,
+            email,
+            display_name,
+            is_active,
+            selected_role_ids,
+            is_loading,
+            load_error,
+        );
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn submit_update_admin_user(
+    account_id: String,
+    email: RwSignal<String>,
+    display_name: RwSignal<String>,
+    password: RwSignal<String>,
+    is_active: RwSignal<bool>,
+    selected_role_ids: RwSignal<Vec<String>>,
+    is_saving: RwSignal<bool>,
+    message: RwSignal<Option<String>>,
+) {
+    #[cfg(feature = "hydrate")]
+    {
+        leptos::task::spawn_local(async move {
+            is_saving.set(true);
+            message.set(None);
+            let password_value = password.get().trim().to_string();
+            let payload = UpdateAdminUserPayload {
+                email: email.get().trim().to_string(),
+                display_name: display_name.get().trim().to_string(),
+                password: (!password_value.is_empty()).then_some(password_value),
+                is_active: is_active.get(),
+                role_ids: selected_role_ids.get(),
+            };
+
+            let body = match serde_json::to_string(&payload) {
+                Ok(body) => body,
+                Err(_) => {
+                    message.set(Some("User update could not be prepared.".into()));
+                    is_saving.set(false);
+                    return;
+                }
+            };
+
+            match send_json_id_request(
+                gloo_net::http::Request::put(&format!("/api/admin/users/{account_id}")),
+                Some(body),
+                "Update user",
+            )
+            .await
+            {
+                Ok(_) => navigate_to_href(&format!("/administration/users/{account_id}")),
+                Err(error) => {
+                    message.set(Some(error));
+                    is_saving.set(false);
+                }
+            }
+        });
+    }
+
+    #[cfg(not(feature = "hydrate"))]
+    {
+        let _ = (
+            account_id,
+            email,
+            display_name,
+            password,
+            is_active,
+            selected_role_ids,
+            is_saving,
+            message,
+        );
+    }
+}
+
+fn submit_update_admin_user_access(
+    account_id: String,
+    selected_scope_node_ids: RwSignal<Vec<String>>,
+    selected_delegate_account_ids: RwSignal<Vec<String>>,
+    is_saving: RwSignal<bool>,
+    message: RwSignal<Option<String>>,
+) {
+    #[cfg(feature = "hydrate")]
+    {
+        leptos::task::spawn_local(async move {
+            is_saving.set(true);
+            message.set(None);
+            let payload = UpdateAdminUserAccessPayload {
+                scope_node_ids: selected_scope_node_ids.get(),
+                delegate_account_ids: selected_delegate_account_ids.get(),
+            };
+
+            let body = match serde_json::to_string(&payload) {
+                Ok(body) => body,
+                Err(_) => {
+                    message.set(Some("Permission update could not be prepared.".into()));
+                    is_saving.set(false);
+                    return;
+                }
+            };
+
+            match send_json_id_request(
+                gloo_net::http::Request::put(&format!("/api/admin/users/{account_id}/access")),
+                Some(body),
+                "Update permissions",
+            )
+            .await
+            {
+                Ok(_) => navigate_to_href(&format!("/administration/users/{account_id}/access")),
+                Err(error) => {
+                    message.set(Some(error));
+                    is_saving.set(false);
+                }
+            }
+        });
+    }
+
+    #[cfg(not(feature = "hydrate"))]
+    {
+        let _ = (
+            account_id,
+            selected_scope_node_ids,
+            selected_delegate_account_ids,
+            is_saving,
+            message,
+        );
     }
 }
 
@@ -14818,7 +15345,1094 @@ pub fn AdministrationPage() -> impl IntoView {
 
 #[component]
 pub fn AdministrationUsersPage() -> impl IntoView {
-    view! { <ResetRoute active_route="administration" title="Users" route="/administration/users" status="Registered" next_step="Restore user management."/> }
+    let users = RwSignal::new(Vec::<AdminUserSummary>::new());
+    let is_loading = RwSignal::new(true);
+    let load_error = RwSignal::new(None::<String>);
+    let search = RwSignal::new(String::new());
+    let status_filter = RwSignal::new("all".to_string());
+    let role_filter = RwSignal::new("all".to_string());
+
+    Effect::new(move |_| {
+        load_admin_users(users, is_loading, load_error);
+    });
+
+    let filtered_users = move || {
+        let query = search.get();
+        let status = status_filter.get();
+        let role = role_filter.get();
+        users
+            .get()
+            .into_iter()
+            .filter(|user| {
+                let status_key = admin_user_status_key(user);
+                let role_names = admin_user_role_names(user);
+                let matches_status = status == "all" || status == status_key;
+                let matches_role =
+                    role == "all" || user.roles.iter().any(|user_role| user_role.name == role);
+                matches_status
+                    && matches_role
+                    && text_matches(
+                        &query,
+                        &[
+                            user.display_name.as_str(),
+                            user.email.as_str(),
+                            status_key,
+                            role_names.as_str(),
+                        ],
+                    )
+            })
+            .collect::<Vec<_>>()
+    };
+    let role_options = move || {
+        unique_filter_options(users.get().iter().flat_map(|user| {
+            user.roles
+                .iter()
+                .map(|role| role.name.clone())
+                .collect::<Vec<_>>()
+        }))
+    };
+
+    view! {
+        <AppShell active_route="administration" title="Users">
+            <section class="route-panel administration-users-page">
+                <Breadcrumb>
+                    <BreadcrumbItem>
+                        <BreadcrumbLink href="/administration">"Administration"</BreadcrumbLink>
+                    </BreadcrumbItem>
+                    <BreadcrumbSeparator/>
+                    <BreadcrumbItem>
+                        <BreadcrumbPage>"Users"</BreadcrumbPage>
+                    </BreadcrumbItem>
+                </Breadcrumb>
+
+                <PageHeader
+                    title="Users"
+                    description="Manage local Tessara users, active status, and assigned roles."
+                />
+
+                {move || {
+                    if is_loading.get() {
+                        view! {
+                            <section class="organization-state" aria-live="polite">
+                                <h3>"Loading users"</h3>
+                                <p>"Fetching administrative user records."</p>
+                            </section>
+                        }
+                        .into_any()
+                    } else if let Some(message) = load_error.get() {
+                        view! {
+                            <section class="organization-state is-error" role="alert">
+                                <h3>"Users unavailable"</h3>
+                                <p>{message}</p>
+                            </section>
+                        }
+                        .into_any()
+                    } else {
+                        view! {
+                            <AdministrationUsersList
+                                users=filtered_users()
+                                search
+                                status_filter
+                                role_filter
+                                role_options=role_options()
+                            />
+                        }
+                        .into_any()
+                    }
+                }}
+            </section>
+        </AppShell>
+    }
+}
+
+#[component]
+fn AdministrationUsersList(
+    users: Vec<AdminUserSummary>,
+    search: RwSignal<String>,
+    status_filter: RwSignal<String>,
+    role_filter: RwSignal<String>,
+    role_options: Vec<String>,
+) -> impl IntoView {
+    let table_users = users.clone();
+    let card_users = users;
+
+    view! {
+        <div class="forms-list forms-list-responsive-table administration-users-list">
+            <div class="searchable-data-table">
+                <div class="searchable-data-table__toolbar forms-list__toolbar">
+                    <label class="searchable-data-table__search searchable-data-table__control">
+                        <Search class="searchable-data-table__control-icon"/>
+                        <span class="sr-only">"Search users"</span>
+                        <input
+                            type="search"
+                            placeholder="Search users"
+                            prop:value=move || search.get()
+                            on:input=move |event| search.set(event_target_value(&event))
+                        />
+                    </label>
+                </div>
+
+                <DataTable>
+                    <thead>
+                        <tr>
+                            <th scope="col">"User"</th>
+                            <th scope="col">
+                                <FilterHeader
+                                    label="Role"
+                                    all_label="All Roles"
+                                    filter=role_filter
+                                    options=role_options
+                                />
+                            </th>
+                            <th class="data-table__cell--center" scope="col">
+                                <FilterHeader
+                                    label="Status"
+                                    all_label="All Statuses"
+                                    filter=status_filter
+                                    options=vec!["active".to_string(), "inactive".to_string()]
+                                />
+                            </th>
+                            <th class="data-table__cell--center" scope="col">"Roles"</th>
+                            <th class="data-table__cell--center" scope="col">"Actions"</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {if table_users.is_empty() {
+                            view! {
+                                <tr>
+                                    <td class="data-table__empty" colspan="5">"No Users to Display"</td>
+                                </tr>
+                            }
+                            .into_any()
+                        } else {
+                            table_users
+                                .into_iter()
+                                .map(|user| {
+                                    let status_key = admin_user_status_key(&user);
+                                    let status_label = admin_user_status_label(&user);
+                                    let role_names = admin_user_role_names(&user);
+                                    let detail_href = format!("/administration/users/{}", user.id);
+                                    let edit_href = format!("/administration/users/{}/edit", user.id);
+                                    let access_href = format!("/administration/users/{}/access", user.id);
+                                    let display_name = user.display_name.clone();
+                                    let detail_href_for_click = detail_href.clone();
+                                    let edit_href_for_click = edit_href.clone();
+                                    let access_href_for_click = access_href.clone();
+                                    view! {
+                                        <tr>
+                                            <th scope="row">
+                                                <a class="data-table__primary-link" href=detail_href>{user.display_name}</a>
+                                                <small class="workflow-assignment-step-meta">{user.email}</small>
+                                            </th>
+                                            <td>{role_names}</td>
+                                            <td class="data-table__cell--center">
+                                                <span class=status_badge_class(status_key)>{status_label}</span>
+                                            </td>
+                                            <td class="data-table__cell--center">{user.roles.len()}</td>
+                                            <td class="data-table__cell--center">
+                                                <DropdownMenu label=format!("Open actions for {display_name}")>
+                                                    <button
+                                                        class="dropdown-menu__item"
+                                                        type="button"
+                                                        role="menuitem"
+                                                        on:click=move |_| {
+                                                            #[cfg(feature = "hydrate")]
+                                                            navigate_to_href(&detail_href_for_click);
+                                                            #[cfg(not(feature = "hydrate"))]
+                                                            let _ = &detail_href_for_click;
+                                                        }
+                                                    >
+                                                        <PanelRight class="dropdown-menu__item-icon"/>
+                                                        <span>"View Details"</span>
+                                                    </button>
+                                                    <button
+                                                        class="dropdown-menu__item"
+                                                        type="button"
+                                                        role="menuitem"
+                                                        on:click=move |_| {
+                                                            #[cfg(feature = "hydrate")]
+                                                            navigate_to_href(&edit_href_for_click);
+                                                            #[cfg(not(feature = "hydrate"))]
+                                                            let _ = &edit_href_for_click;
+                                                        }
+                                                    >
+                                                        <Pencil class="dropdown-menu__item-icon"/>
+                                                        <span>"Edit Account"</span>
+                                                    </button>
+                                                    <button
+                                                        class="dropdown-menu__item"
+                                                        type="button"
+                                                        role="menuitem"
+                                                        on:click=move |_| {
+                                                            #[cfg(feature = "hydrate")]
+                                                            navigate_to_href(&access_href_for_click);
+                                                            #[cfg(not(feature = "hydrate"))]
+                                                            let _ = &access_href_for_click;
+                                                        }
+                                                    >
+                                                        <LockKeyhole class="dropdown-menu__item-icon"/>
+                                                        <span>"Manage Permissions"</span>
+                                                    </button>
+                                                </DropdownMenu>
+                                            </td>
+                                        </tr>
+                                    }
+                                })
+                                .collect_view()
+                                .into_any()
+                        }}
+                    </tbody>
+                </DataTable>
+            </div>
+
+            <div class="forms-list-mobile-cards administration-users-mobile-cards">
+                {if card_users.is_empty() {
+                    view! { <p class="forms-list-mobile-empty">"No Users to Display"</p> }.into_any()
+                } else {
+                    card_users
+                        .into_iter()
+                        .map(|user| {
+                            let status_key = admin_user_status_key(&user);
+                            let status_label = admin_user_status_label(&user);
+                            let role_names = admin_user_role_names(&user);
+                            let detail_href = format!("/administration/users/{}", user.id);
+                            let edit_href = format!("/administration/users/{}/edit", user.id);
+                            let access_href = format!("/administration/users/{}/access", user.id);
+                            view! {
+                                <article class="forms-list-mobile-card administration-user-mobile-card">
+                                    <div class="forms-list-mobile-card__header">
+                                        <div>
+                                            <h3><a href=detail_href.clone()>{user.display_name}</a></h3>
+                                            <span>{user.email}</span>
+                                        </div>
+                                        <span class=status_badge_class(status_key)>{status_label}</span>
+                                    </div>
+                                    <dl>
+                                        <div>
+                                            <dt>"Roles"</dt>
+                                            <dd>{role_names}</dd>
+                                        </div>
+                                        <div>
+                                            <dt>"Role Count"</dt>
+                                            <dd>{user.roles.len()}</dd>
+                                        </div>
+                                    </dl>
+                                    <div class="workflow-assignment-mobile-card__actions">
+                                        <a class="button button--compact" href=detail_href>"View Details"</a>
+                                        <a class="button button--compact button--secondary" href=edit_href>"Edit Account"</a>
+                                        <a class="button button--compact button--secondary" href=access_href>"Manage Permissions"</a>
+                                    </div>
+                                </article>
+                            }
+                        })
+                        .collect_view()
+                        .into_any()
+                }}
+            </div>
+        </div>
+    }
+}
+
+fn admin_user_status_key(user: &AdminUserSummary) -> &'static str {
+    if user.is_active { "active" } else { "inactive" }
+}
+
+fn admin_user_status_label(user: &AdminUserSummary) -> &'static str {
+    if user.is_active { "Active" } else { "Inactive" }
+}
+
+fn admin_user_role_names(user: &AdminUserSummary) -> String {
+    if user.roles.is_empty() {
+        "No roles".to_string()
+    } else {
+        user.roles
+            .iter()
+            .map(|role| role.name.as_str())
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+}
+
+fn toggle_string_selection(selection: RwSignal<Vec<String>>, value: String, selected: bool) {
+    selection.update(|values| {
+        if selected {
+            if !values.iter().any(|existing| existing == &value) {
+                values.push(value);
+            }
+        } else {
+            values.retain(|existing| existing != &value);
+        }
+    });
+}
+
+#[component]
+pub fn AdministrationUserDetailPage() -> impl IntoView {
+    let params = require_route_params::<AccountRouteParams>();
+    let account_id = params.account_id;
+    let detail = RwSignal::new(None::<AdminUserDetail>);
+    let is_loading = RwSignal::new(true);
+    let load_error = RwSignal::new(None::<String>);
+
+    Effect::new({
+        let account_id = account_id.clone();
+        move |_| {
+            load_admin_user_detail(account_id.clone(), detail, is_loading, load_error);
+        }
+    });
+
+    view! {
+        <AppShell active_route="administration" title="User Detail">
+            <section class="route-panel administration-user-detail-page">
+                <Breadcrumb>
+                    <BreadcrumbItem>
+                        <BreadcrumbLink href="/administration">"Administration"</BreadcrumbLink>
+                    </BreadcrumbItem>
+                    <BreadcrumbSeparator/>
+                    <BreadcrumbItem>
+                        <BreadcrumbLink href="/administration/users">"Users"</BreadcrumbLink>
+                    </BreadcrumbItem>
+                    <BreadcrumbSeparator/>
+                    <BreadcrumbItem>
+                        <BreadcrumbPage>"User Detail"</BreadcrumbPage>
+                    </BreadcrumbItem>
+                </Breadcrumb>
+
+                {move || {
+                    if is_loading.get() {
+                        view! {
+                            <section class="organization-state" aria-live="polite">
+                                <h3>"Loading user"</h3>
+                                <p>"Fetching user profile and effective access."</p>
+                            </section>
+                        }
+                        .into_any()
+                    } else if let Some(message) = load_error.get() {
+                        view! {
+                            <section class="organization-state is-error" role="alert">
+                                <h3>"User unavailable"</h3>
+                                <p>{message}</p>
+                            </section>
+                        }
+                        .into_any()
+                    } else if let Some(user) = detail.get() {
+                        let access_href = format!("/administration/users/{}/access", user.id);
+                        let edit_href = format!("/administration/users/{}/edit", user.id);
+                        let status_key = admin_user_status_key_from_bool(user.is_active);
+                        let status_label = admin_user_status_label_from_bool(user.is_active);
+                        let access_profile_label = admin_access_profile_label(&user.ui_access_profile);
+                        let role_names = admin_role_names(&user.roles);
+                        let capability_count = user.capabilities.len().to_string();
+                        view! {
+                            <header class="page-header">
+                                <div>
+                                    <h2>{user.display_name.clone()}</h2>
+                                    <p>{user.email.clone()}</p>
+                                </div>
+                                <div class="page-header__actions">
+                                    <span class=status_badge_class(status_key)>{status_label}</span>
+                                </div>
+                            </header>
+
+                            <div class="organization-detail-content">
+                                <section class="organization-detail-card organization-detail-card--wide">
+                                    <h3>"Account"</h3>
+                                    <InfoListTable>
+                                        <tr>
+                                            <th scope="row">"Email"</th>
+                                            <td>{user.email.clone()}</td>
+                                        </tr>
+                                        <tr>
+                                            <th scope="row">"Access Profile"</th>
+                                            <td>{access_profile_label}</td>
+                                        </tr>
+                                        <tr>
+                                            <th scope="row">"Roles"</th>
+                                            <td>{role_names}</td>
+                                        </tr>
+                                        <tr>
+                                            <th scope="row">"Capabilities"</th>
+                                            <td>{capability_count}</td>
+                                        </tr>
+                                    </InfoListTable>
+                                    <div class="form-actions">
+                                        <a class="button" href=edit_href>"Edit Account"</a>
+                                        <a class="button" href=access_href>"Manage Permissions"</a>
+                                        <a class="button button--secondary" href="/administration/users">"Back to Users"</a>
+                                    </div>
+                                </section>
+
+                                <section class="organization-detail-card">
+                                    <h3>"Scope Nodes"</h3>
+                                    <AdminScopeNodeList nodes=user.scope_nodes/>
+                                </section>
+
+                                <section class="organization-detail-card">
+                                    <h3>"Delegations"</h3>
+                                    <AdminDelegationList delegations=user.delegations empty_label="No delegations assigned."/>
+                                </section>
+                            </div>
+                        }
+                        .into_any()
+                    } else {
+                        view! {
+                            <section class="organization-state">
+                                <h3>"User not found"</h3>
+                                <p>"No user record was returned for this account."</p>
+                            </section>
+                        }
+                        .into_any()
+                    }
+                }}
+            </section>
+        </AppShell>
+    }
+}
+
+#[component]
+pub fn AdministrationUserEditPage() -> impl IntoView {
+    let params = require_route_params::<AccountRouteParams>();
+    let account_id = params.account_id;
+    let detail = RwSignal::new(None::<AdminUserDetail>);
+    let roles = RwSignal::new(Vec::<AdminRoleSummary>::new());
+    let email = RwSignal::new(String::new());
+    let display_name = RwSignal::new(String::new());
+    let password = RwSignal::new(String::new());
+    let is_active = RwSignal::new(true);
+    let selected_role_ids = RwSignal::new(Vec::<String>::new());
+    let is_loading = RwSignal::new(true);
+    let is_saving = RwSignal::new(false);
+    let load_error = RwSignal::new(None::<String>);
+    let message = RwSignal::new(None::<String>);
+
+    Effect::new({
+        let account_id = account_id.clone();
+        move |_| {
+            load_admin_user_edit_context(
+                account_id.clone(),
+                detail,
+                roles,
+                email,
+                display_name,
+                is_active,
+                selected_role_ids,
+                is_loading,
+                load_error,
+            );
+        }
+    });
+
+    view! {
+        <AppShell active_route="administration" title="Edit User">
+            <section class="route-panel administration-user-edit-page">
+                <Breadcrumb>
+                    <BreadcrumbItem>
+                        <BreadcrumbLink href="/administration">"Administration"</BreadcrumbLink>
+                    </BreadcrumbItem>
+                    <BreadcrumbSeparator/>
+                    <BreadcrumbItem>
+                        <BreadcrumbLink href="/administration/users">"Users"</BreadcrumbLink>
+                    </BreadcrumbItem>
+                    <BreadcrumbSeparator/>
+                    <BreadcrumbItem>
+                        <BreadcrumbPage>"Edit User"</BreadcrumbPage>
+                    </BreadcrumbItem>
+                </Breadcrumb>
+
+                {move || {
+                    if is_loading.get() {
+                        view! {
+                            <section class="organization-state" aria-live="polite">
+                                <h3>"Loading user"</h3>
+                                <p>"Fetching account and role options."</p>
+                            </section>
+                        }
+                        .into_any()
+                    } else if let Some(error) = load_error.get() {
+                        view! {
+                            <section class="organization-state is-error" role="alert">
+                                <h3>"User unavailable"</h3>
+                                <p>{error}</p>
+                            </section>
+                        }
+                        .into_any()
+                    } else {
+                        let cancel_href = format!("/administration/users/{account_id}");
+                        view! {
+                            <PageHeader
+                                title="Edit User"
+                                description="Update the account profile, active status, password, and assigned roles."
+                            />
+                            <form
+                                class="native-form administration-user-form"
+                                on:submit={
+                                    let account_id = account_id.clone();
+                                    move |event| {
+                                        event.prevent_default();
+                                        submit_update_admin_user(
+                                            account_id.clone(),
+                                            email,
+                                            display_name,
+                                            password,
+                                            is_active,
+                                            selected_role_ids,
+                                            is_saving,
+                                            message,
+                                        );
+                                    }
+                                }
+                            >
+                                <div class="form-grid">
+                                    <label class="form-field" for="admin-user-display-name">
+                                        <span>"Display Name"</span>
+                                        <input
+                                            id="admin-user-display-name"
+                                            type="text"
+                                            autocomplete="name"
+                                            prop:value=move || display_name.get()
+                                            on:input=move |event| display_name.set(event_target_value(&event))
+                                            required
+                                        />
+                                    </label>
+                                    <label class="form-field" for="admin-user-email">
+                                        <span>"Email"</span>
+                                        <input
+                                            id="admin-user-email"
+                                            type="email"
+                                            autocomplete="email"
+                                            prop:value=move || email.get()
+                                            on:input=move |event| email.set(event_target_value(&event))
+                                            required
+                                        />
+                                    </label>
+                                    <label class="form-field" for="admin-user-password">
+                                        <span>"New Password"</span>
+                                        <input
+                                            id="admin-user-password"
+                                            type="password"
+                                            autocomplete="new-password"
+                                            placeholder="Leave blank to keep current password"
+                                            prop:value=move || password.get()
+                                            on:input=move |event| password.set(event_target_value(&event))
+                                        />
+                                    </label>
+                                    <label class="form-field">
+                                        <span>"Active"</span>
+                                        <label class="toggle-row toggle-row--compact">
+                                            <input
+                                                type="checkbox"
+                                                prop:checked=move || is_active.get()
+                                                on:change=move |event| is_active.set(event_target_checked(&event))
+                                            />
+                                            <span>{move || if is_active.get() { "Active" } else { "Inactive" }}</span>
+                                        </label>
+                                    </label>
+                                </div>
+
+                                <section class="form-section">
+                                    <h3>"Roles"</h3>
+                                    <div class="checkbox-list">
+                                        {move || {
+                                            let selected = selected_role_ids.get();
+                                            roles
+                                                .get()
+                                                .into_iter()
+                                                .map(|role| {
+                                                    let role_id = role.id.clone();
+                                                    let checked = selected.iter().any(|id| id == &role.id);
+                                                    view! {
+                                                        <label class="checkbox-list__item">
+                                                            <input
+                                                                type="checkbox"
+                                                                prop:checked=checked
+                                                                on:change=move |event| {
+                                                                    toggle_string_selection(
+                                                                        selected_role_ids,
+                                                                        role_id.clone(),
+                                                                        event_target_checked(&event),
+                                                                    );
+                                                                }
+                                                            />
+                                                            <span>
+                                                                <strong>{role.name}</strong>
+                                                                <small>{format!("{} capabilities, {} users", role.capability_count, role.account_count)}</small>
+                                                            </span>
+                                                        </label>
+                                                    }
+                                                })
+                                                .collect_view()
+                                        }}
+                                    </div>
+                                </section>
+
+                                {move || message
+                                    .get()
+                                    .map(|text| view! { <p class="form-message" role="status">{text}</p> })}
+
+                                <div class="form-actions">
+                                    <a class="button button--secondary" href=cancel_href.clone()>"Cancel"</a>
+                                    <button class="button" type="submit" disabled=move || is_saving.get()>
+                                        {move || if is_saving.get() { "Saving..." } else { "Save User" }}
+                                    </button>
+                                </div>
+                            </form>
+                        }
+                        .into_any()
+                    }
+                }}
+            </section>
+        </AppShell>
+    }
+}
+
+#[component]
+pub fn AdministrationUserAccessPage() -> impl IntoView {
+    let params = require_route_params::<AccountRouteParams>();
+    let account_id = params.account_id;
+    let detail = RwSignal::new(None::<AdminUserAccessDetail>);
+    let selected_scope_node_ids = RwSignal::new(Vec::<String>::new());
+    let selected_delegate_account_ids = RwSignal::new(Vec::<String>::new());
+    let is_loading = RwSignal::new(true);
+    let is_saving = RwSignal::new(false);
+    let load_error = RwSignal::new(None::<String>);
+    let message = RwSignal::new(None::<String>);
+
+    Effect::new({
+        let account_id = account_id.clone();
+        move |_| {
+            load_admin_user_access(
+                account_id.clone(),
+                detail,
+                selected_scope_node_ids,
+                selected_delegate_account_ids,
+                is_loading,
+                load_error,
+            );
+        }
+    });
+
+    view! {
+        <AppShell active_route="administration" title="User Permissions">
+            <section class="route-panel administration-user-access-page">
+                <Breadcrumb>
+                    <BreadcrumbItem>
+                        <BreadcrumbLink href="/administration">"Administration"</BreadcrumbLink>
+                    </BreadcrumbItem>
+                    <BreadcrumbSeparator/>
+                    <BreadcrumbItem>
+                        <BreadcrumbLink href="/administration/users">"Users"</BreadcrumbLink>
+                    </BreadcrumbItem>
+                    <BreadcrumbSeparator/>
+                    <BreadcrumbItem>
+                        <BreadcrumbPage>"Permissions"</BreadcrumbPage>
+                    </BreadcrumbItem>
+                </Breadcrumb>
+
+                {move || {
+                    if is_loading.get() {
+                        view! {
+                            <section class="organization-state" aria-live="polite">
+                                <h3>"Loading permissions"</h3>
+                                <p>"Fetching effective capabilities, scope nodes, and delegations."</p>
+                            </section>
+                        }
+                        .into_any()
+                    } else if let Some(message) = load_error.get() {
+                        view! {
+                            <section class="organization-state is-error" role="alert">
+                                <h3>"Permissions unavailable"</h3>
+                                <p>{message}</p>
+                            </section>
+                        }
+                        .into_any()
+                    } else if let Some(access) = detail.get() {
+                        let detail_href = format!("/administration/users/{}", access.account_id);
+                        let edit_href = format!("/administration/users/{}/edit", access.account_id);
+                        let page_title = format!("{} Permissions", access.display_name);
+                        let access_profile_label = admin_access_profile_label(&access.ui_access_profile);
+                        let capability_count = access.capabilities.len().to_string();
+                        let scope_editing = admin_editable_label(access.scope_assignments_editable);
+                        let delegation_editing =
+                            admin_editable_label(access.delegation_assignments_editable);
+                        view! {
+                            <header class="page-header">
+                                <div>
+                                    <h2>{page_title}</h2>
+                                    <p>{access.email.clone()}</p>
+                                </div>
+                            </header>
+
+                            <form
+                                class="native-form administration-user-access-form"
+                                on:submit={
+                                    let account_id = account_id.clone();
+                                    move |event| {
+                                        event.prevent_default();
+                                        submit_update_admin_user_access(
+                                            account_id.clone(),
+                                            selected_scope_node_ids,
+                                            selected_delegate_account_ids,
+                                            is_saving,
+                                            message,
+                                        );
+                                    }
+                                }
+                            >
+                            <div class="organization-detail-content">
+                                <section class="organization-detail-card organization-detail-card--wide">
+                                    <h3>"Effective Access"</h3>
+                                    <InfoListTable>
+                                        <tr>
+                                            <th scope="row">"Access Profile"</th>
+                                            <td>{access_profile_label}</td>
+                                        </tr>
+                                        <tr>
+                                            <th scope="row">"Capabilities"</th>
+                                            <td>{capability_count}</td>
+                                        </tr>
+                                        <tr>
+                                            <th scope="row">"Scope Editing"</th>
+                                            <td>{scope_editing}</td>
+                                        </tr>
+                                        <tr>
+                                            <th scope="row">"Delegation Editing"</th>
+                                            <td>{delegation_editing}</td>
+                                        </tr>
+                                    </InfoListTable>
+                                </section>
+
+                                <section class="organization-detail-card">
+                                    <h3>"Scope Nodes"</h3>
+                                    {if access.scope_assignments_editable {
+                                        view! {
+                                            <AdminScopeNodeChecklist
+                                                nodes=access.available_scope_nodes
+                                                selected_node_ids=selected_scope_node_ids
+                                            />
+                                        }
+                                        .into_any()
+                                    } else {
+                                        view! { <AdminScopeNodeList nodes=access.scope_nodes/> }.into_any()
+                                    }}
+                                </section>
+
+                                <section class="organization-detail-card">
+                                    <h3>"Delegations"</h3>
+                                    {if access.delegation_assignments_editable {
+                                        view! {
+                                            <AdminDelegationChecklist
+                                                delegations=access.available_delegate_accounts
+                                                selected_delegate_account_ids=selected_delegate_account_ids
+                                            />
+                                        }
+                                        .into_any()
+                                    } else {
+                                        view! { <AdminDelegationList delegations=access.delegations empty_label="No delegated accounts."/> }.into_any()
+                                    }}
+                                </section>
+
+                                <section class="organization-detail-card organization-detail-card--wide">
+                                    <h3>"Capabilities"</h3>
+                                    <AdminCapabilityList capabilities=access.capabilities/>
+                                    <p class="helper-text">"Capabilities are inherited from assigned roles."</p>
+                                    <div class="form-actions">
+                                        <a class="button button--secondary" href=edit_href>"Edit Account Roles"</a>
+                                    </div>
+                                </section>
+                            </div>
+                            {move || message
+                                .get()
+                                .map(|text| view! { <p class="form-message" role="status">{text}</p> })}
+                            <div class="form-actions">
+                                <a class="button button--secondary" href=detail_href>"Back to User"</a>
+                                <button class="button" type="submit" disabled=move || is_saving.get()>
+                                    {move || if is_saving.get() { "Saving..." } else { "Save Permissions" }}
+                                </button>
+                            </div>
+                            </form>
+                        }
+                        .into_any()
+                    } else {
+                        view! {
+                            <section class="organization-state">
+                                <h3>"Permissions not found"</h3>
+                                <p>"No permissions record was returned for this account."</p>
+                            </section>
+                        }
+                        .into_any()
+                    }
+                }}
+            </section>
+        </AppShell>
+    }
+}
+
+#[component]
+fn AdminScopeNodeList(nodes: Vec<AdminScopeNodeSummary>) -> impl IntoView {
+    if nodes.is_empty() {
+        view! { <p>"No scope nodes assigned."</p> }.into_any()
+    } else {
+        view! {
+            <DataTable>
+                <thead>
+                    <tr>
+                        <th scope="col">"Node"</th>
+                        <th scope="col">"Type"</th>
+                        <th scope="col">"Parent"</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {nodes
+                        .into_iter()
+                        .map(|node| {
+                            view! {
+                                <tr>
+                                    <th scope="row">
+                                        <a class="data-table__primary-link" href=format!("/organization/{}", node.node_id)>{node.node_name}</a>
+                                    </th>
+                                    <td>{node.node_type_name}</td>
+                                    <td>{node.parent_node_name.unwrap_or_else(|| "-".to_string())}</td>
+                                </tr>
+                            }
+                        })
+                        .collect_view()}
+                </tbody>
+            </DataTable>
+        }
+        .into_any()
+    }
+}
+
+#[component]
+fn AdminScopeNodeChecklist(
+    nodes: Vec<AdminScopeNodeSummary>,
+    selected_node_ids: RwSignal<Vec<String>>,
+) -> impl IntoView {
+    let search = RwSignal::new(String::new());
+    let node_count = nodes.len();
+    if nodes.is_empty() {
+        view! { <p>"No scope nodes are available."</p> }.into_any()
+    } else {
+        view! {
+            <div class="permission-picker">
+                <label class="searchable-data-table__search searchable-data-table__control">
+                    <Search class="searchable-data-table__control-icon"/>
+                    <span class="sr-only">"Search scope nodes"</span>
+                    <input
+                        type="search"
+                        placeholder=format!("Search {node_count} scope nodes")
+                        prop:value=move || search.get()
+                        on:input=move |event| search.set(event_target_value(&event))
+                    />
+                </label>
+                <div class="checkbox-list permission-picker__list">
+                    {move || {
+                        let query = search.get();
+                        nodes
+                            .iter()
+                            .filter(|node| {
+                                text_matches(
+                                    &query,
+                                    &[
+                                        node.node_name.as_str(),
+                                        node.node_type_name.as_str(),
+                                        node.parent_node_name.as_deref().unwrap_or(""),
+                                    ],
+                                )
+                            })
+                            .cloned()
+                            .map(|node| {
+                                let node_id = node.node_id.clone();
+                                let selected = selected_node_ids
+                                    .get()
+                                    .iter()
+                                    .any(|selected_id| selected_id == &node.node_id);
+                                let parent = node
+                                    .parent_node_name
+                                    .clone()
+                                    .unwrap_or_else(|| "No parent".to_string());
+                                view! {
+                                    <label class="checkbox-list__item permission-picker__item">
+                                        <input
+                                            type="checkbox"
+                                            prop:checked=selected
+                                            on:change=move |event| {
+                                                toggle_string_selection(
+                                                    selected_node_ids,
+                                                    node_id.clone(),
+                                                    event_target_checked(&event),
+                                                );
+                                            }
+                                        />
+                                        <span>
+                                            <strong>{node.node_name}</strong>
+                                            <small>{node.node_type_name}</small>
+                                            <small>{parent}</small>
+                                        </span>
+                                    </label>
+                                }
+                            })
+                            .collect_view()
+                    }}
+                </div>
+            </div>
+        }
+        .into_any()
+    }
+}
+
+#[component]
+fn AdminDelegationList(
+    delegations: Vec<AdminDelegationSummary>,
+    empty_label: &'static str,
+) -> impl IntoView {
+    if delegations.is_empty() {
+        view! { <p>{empty_label}</p> }.into_any()
+    } else {
+        view! {
+            <DataTable>
+                <thead>
+                    <tr>
+                        <th scope="col">"Account"</th>
+                        <th scope="col">"Email"</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {delegations
+                        .into_iter()
+                        .map(|delegation| {
+                            view! {
+                                <tr>
+                                    <th scope="row">
+                                        <a class="data-table__primary-link" href=format!("/administration/users/{}", delegation.account_id)>{delegation.display_name}</a>
+                                    </th>
+                                    <td>{delegation.email}</td>
+                                </tr>
+                            }
+                        })
+                        .collect_view()}
+                </tbody>
+            </DataTable>
+        }
+        .into_any()
+    }
+}
+
+#[component]
+fn AdminDelegationChecklist(
+    delegations: Vec<AdminDelegationSummary>,
+    selected_delegate_account_ids: RwSignal<Vec<String>>,
+) -> impl IntoView {
+    let search = RwSignal::new(String::new());
+    let delegation_count = delegations.len();
+    if delegations.is_empty() {
+        view! { <p>"No delegate accounts are available."</p> }.into_any()
+    } else {
+        view! {
+            <div class="permission-picker">
+                <label class="searchable-data-table__search searchable-data-table__control">
+                    <Search class="searchable-data-table__control-icon"/>
+                    <span class="sr-only">"Search delegate accounts"</span>
+                    <input
+                        type="search"
+                        placeholder=format!("Search {delegation_count} accounts")
+                        prop:value=move || search.get()
+                        on:input=move |event| search.set(event_target_value(&event))
+                    />
+                </label>
+                <div class="checkbox-list permission-picker__list permission-picker__list--compact">
+                    {move || {
+                        let query = search.get();
+                        delegations
+                            .iter()
+                            .filter(|delegation| {
+                                text_matches(
+                                    &query,
+                                    &[delegation.display_name.as_str(), delegation.email.as_str()],
+                                )
+                            })
+                            .cloned()
+                            .map(|delegation| {
+                                let account_id = delegation.account_id.clone();
+                                let selected = selected_delegate_account_ids
+                                    .get()
+                                    .iter()
+                                    .any(|selected_id| selected_id == &delegation.account_id);
+                                view! {
+                                    <label class="checkbox-list__item permission-picker__item">
+                                        <input
+                                            type="checkbox"
+                                            prop:checked=selected
+                                            on:change=move |event| {
+                                                toggle_string_selection(
+                                                    selected_delegate_account_ids,
+                                                    account_id.clone(),
+                                                    event_target_checked(&event),
+                                                );
+                                            }
+                                        />
+                                        <span>
+                                            <strong>{delegation.display_name}</strong>
+                                            <small>{delegation.email}</small>
+                                        </span>
+                                    </label>
+                                }
+                            })
+                            .collect_view()
+                    }}
+                </div>
+            </div>
+        }
+        .into_any()
+    }
+}
+
+#[component]
+fn AdminCapabilityList(capabilities: Vec<String>) -> impl IntoView {
+    if capabilities.is_empty() {
+        view! { <p>"No effective capabilities."</p> }.into_any()
+    } else {
+        view! {
+            <ul class="capability-list">
+                {capabilities
+                    .into_iter()
+                    .map(|capability| view! { <li class="capability-list__item">{capability}</li> })
+                    .collect_view()}
+            </ul>
+        }
+        .into_any()
+    }
+}
+
+fn admin_user_status_key_from_bool(is_active: bool) -> &'static str {
+    if is_active { "active" } else { "inactive" }
+}
+
+fn admin_user_status_label_from_bool(is_active: bool) -> &'static str {
+    if is_active { "Active" } else { "Inactive" }
+}
+
+fn admin_role_names(roles: &[AdminRoleSummary]) -> String {
+    if roles.is_empty() {
+        "No roles".to_string()
+    } else {
+        roles
+            .iter()
+            .map(|role| role.name.as_str())
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+}
+
+fn admin_access_profile_label(profile: &str) -> String {
+    metadata_label(profile)
+}
+
+fn admin_editable_label(is_editable: bool) -> &'static str {
+    if is_editable {
+        "Editable"
+    } else {
+        "Not editable"
+    }
 }
 
 #[component]
