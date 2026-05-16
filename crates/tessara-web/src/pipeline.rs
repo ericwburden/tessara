@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 pub const OUTPUT_NAME: &str = "tessara-web";
 pub const APP_ROOT_ID: &str = "app-root";
+const ASSET_VERSION: &str = "20260516-node-types-sheet";
 
 pub fn site_root() -> PathBuf {
     std::env::var("LEPTOS_SITE_ROOT")
@@ -37,6 +38,6 @@ pub fn hydration_module_tag() -> String {
     let js_path = js_path();
     let wasm_path = wasm_path();
     format!(
-        "<script type=\"module\">\nimport init from \"{js_path}\";\nawait init(\"{wasm_path}\");\n</script>"
+        "<script type=\"module\">\nimport init from \"{js_path}?v={ASSET_VERSION}\";\nawait init(\"{wasm_path}?v={ASSET_VERSION}\");\n</script>"
     )
 }
