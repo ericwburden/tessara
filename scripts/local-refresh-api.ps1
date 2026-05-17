@@ -84,7 +84,7 @@ try {
     }
 
     Wait-ForHttpOk -Uri "http://127.0.0.1:8080/health"
-    Wait-ForHttpOk -Uri "http://127.0.0.1:8080/app"
+    Wait-ForHttpOk -Uri "http://127.0.0.1:8080/"
 
     if (-not $SkipSeed) {
         Invoke-CheckedStep -Label "Ensuring UAT demo data" -Command {
@@ -95,10 +95,11 @@ try {
     }
 
     Write-Host "`nFast API refresh complete." -ForegroundColor Green
-    Write-Host "Application shell: http://localhost:8080/app"
-    Write-Host "Administration:   http://localhost:8080/app/administration"
-    Write-Host "Reports:          http://localhost:8080/app/reports"
-    Write-Host "Migration:        http://localhost:8080/app/migration"
+    Write-Host "Application shell: http://localhost:8080/"
+    Write-Host "Administration:   http://localhost:8080/administration"
+    Write-Host "Node Types:       http://localhost:8080/administration/node-types"
+    Write-Host "Roles:            http://localhost:8080/administration/roles"
+    Write-Host "Migration:        http://localhost:8080/migration"
     if ($SkipBuild) {
         Write-Host "API image rebuild was skipped because -SkipBuild was supplied." -ForegroundColor Yellow
     }

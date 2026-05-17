@@ -80,9 +80,8 @@ function Assert-ProtectedShell {
 
     foreach ($needle in @(
         "top-app-bar",
-        "global-search",
-        "Loading Session",
-        "Loading session state..."
+        "Search Tessara",
+        "Primary navigation"
     ) + $Needles) {
         if ($Content -notlike "*$needle*") {
             throw "Smoke failure in $Context. Missing marker: $needle"
@@ -257,58 +256,44 @@ try {
 
     $adminBrowserSession = New-BrowserSession -Email "admin@tessara.local" -Password "tessara-dev-admin"
 
-    $shell = Invoke-Html -Uri "$baseUrl/"
-    if (-not ($shell -like "*Admin Shell*") -or -not ($shell -like "*Create Draft*") -or -not ($shell -like "*Validate Legacy Fixture*")) {
-        throw "Expected local shell HTML to include admin and submission controls"
-    }
-    if (-not ($shell -like "*Open Application Shell*")) {
-        throw "Expected local shell HTML to link to application shell"
+    $appShell = Invoke-Html -Uri "$baseUrl/" -CookieJarPath $adminBrowserSession
+    Assert-ProtectedShell -Content $appShell -Needles @("Native UI Route Inventory", "/forms", "/administration/roles") -Context "application home shell"
+    if ($appShell -like "*/bridge/app-legacy.js*" -or $appShell -like "*/bridge/admin-legacy.js*") {
+        throw "Expected native home shell to exclude legacy bridge scripts"
     }
 
-    $appShell = Invoke-Html -Uri "$baseUrl/app" -CookieJarPath $adminBrowserSession
-    Assert-ProtectedShell -Content $appShell -Needles @("Tessara Home", "app-shell--home", "Current Work", "Primary navigation") -Context "application home shell"
-    $loginShell = Invoke-Html -Uri "$baseUrl/app/login"
+    $loginShell = Invoke-Html -Uri "$baseUrl/login"
     if (
-        -not ($loginShell -like "*Tessara Sign In*") `
-        -or -not ($loginShell -like "*data-auth-surface*") `
+        -not ($loginShell -like "*Welcome back*") `
         -or -not ($loginShell -like "*login-form*") `
-        -or -not ($loginShell -like "*login-email*") `
-        -or -not ($loginShell -like "*login-password*") `
-        -or -not ($loginShell -like "*Checking your current session...*") `
         -or ($loginShell -like "*operator@tessara.local*")
     ) {
         throw "Expected login HTML to expose native sign-in controls without public demo credentials"
     }
-    $organizationShell = Invoke-Html -Uri "$baseUrl/app/organization" -CookieJarPath $adminBrowserSession
+    $organizationShell = Invoke-Html -Uri "$baseUrl/organization" -CookieJarPath $adminBrowserSession
     Assert-ProtectedShell -Content $organizationShell -Needles @("Organization") -Context "organization list shell"
-    $formsShell = Invoke-Html -Uri "$baseUrl/app/forms" -CookieJarPath $adminBrowserSession
+    $formsShell = Invoke-Html -Uri "$baseUrl/forms" -CookieJarPath $adminBrowserSession
     Assert-ProtectedShell -Content $formsShell -Needles @("Forms") -Context "forms list shell"
-    $workflowsShell = Invoke-Html -Uri "$baseUrl/app/workflows" -CookieJarPath $adminBrowserSession
-    Assert-ProtectedShell -Content $workflowsShell -Needles @("Tessara Workflows", "app-shell--workflows", "Workflows") -Context "workflows list shell"
-    $workflowAssignmentsShell = Invoke-Html -Uri "$baseUrl/app/workflows/assignments" -CookieJarPath $adminBrowserSession
-    Assert-ProtectedShell -Content $workflowAssignmentsShell -Needles @("Workflow Assignments", "app-shell--workflows", "Workflows") -Context "workflow assignments shell"
-    $responsesShell = Invoke-Html -Uri "$baseUrl/app/responses" -CookieJarPath $adminBrowserSession
-    Assert-ProtectedShell -Content $responsesShell -Needles @("Tessara Responses", "app-shell--responses", "Responses") -Context "responses list shell"
-    $submissionAppShell = Invoke-Html -Uri "$baseUrl/app/submissions" -CookieJarPath $adminBrowserSession
-    Assert-ProtectedShell -Content $submissionAppShell -Needles @("Responses") -Context "submissions compatibility shell"
-    $administrationShell = Invoke-Html -Uri "$baseUrl/app/administration" -CookieJarPath $adminBrowserSession
+    $workflowsShell = Invoke-Html -Uri "$baseUrl/workflows" -CookieJarPath $adminBrowserSession
+    Assert-ProtectedShell -Content $workflowsShell -Needles @("Workflows") -Context "workflows list shell"
+    $workflowAssignmentsShell = Invoke-Html -Uri "$baseUrl/workflows/assignments" -CookieJarPath $adminBrowserSession
+    Assert-ProtectedShell -Content $workflowAssignmentsShell -Needles @("Workflow Assignments", "Workflows") -Context "workflow assignments shell"
+    $responsesShell = Invoke-Html -Uri "$baseUrl/responses" -CookieJarPath $adminBrowserSession
+    Assert-ProtectedShell -Content $responsesShell -Needles @("Responses") -Context "responses list shell"
+    $administrationShell = Invoke-Html -Uri "$baseUrl/administration" -CookieJarPath $adminBrowserSession
     Assert-ProtectedShell -Content $administrationShell -Needles @("Administration") -Context "administration shell"
-    $nodeTypesShell = Invoke-Html -Uri "$baseUrl/app/administration/node-types" -CookieJarPath $adminBrowserSession
-    Assert-ProtectedShell -Content $nodeTypesShell -Needles @("Organization Node Types") -Context "node type list shell"
-    $nodeTypeCreateShell = Invoke-Html -Uri "$baseUrl/app/administration/node-types/new" -CookieJarPath $adminBrowserSession
-    Assert-ProtectedShell -Content $nodeTypeCreateShell -Needles @("Create Organization Node Type") -Context "node type create shell"
-    $adminAppShell = Invoke-Html -Uri "$baseUrl/app/admin" -CookieJarPath $adminBrowserSession
-    if (-not ($adminAppShell -like "*<!doctype html>*") -or -not ($adminAppShell -like "*<body*")) {
-        throw "Expected /app/admin to remain a reachable HTML surface"
-    }
-    $reportingAppShell = Invoke-Html -Uri "$baseUrl/app/reports" -CookieJarPath $adminBrowserSession
-    if (-not ($reportingAppShell -like "*Reports*") -or -not ($reportingAppShell -like "*Create Report*") -or -not ($reportingAppShell -like "*report-list*")) {
-        throw "Expected reporting application shell HTML to include report and dashboard workflow controls"
-    }
-    $dashboardsShell = Invoke-Html -Uri "$baseUrl/app/dashboards" -CookieJarPath $adminBrowserSession
+    $usersShell = Invoke-Html -Uri "$baseUrl/administration/users" -CookieJarPath $adminBrowserSession
+    Assert-ProtectedShell -Content $usersShell -Needles @("Users") -Context "users shell"
+    $nodeTypesShell = Invoke-Html -Uri "$baseUrl/administration/node-types" -CookieJarPath $adminBrowserSession
+    Assert-ProtectedShell -Content $nodeTypesShell -Needles @("Node Types") -Context "node type list shell"
+    $rolesShell = Invoke-Html -Uri "$baseUrl/administration/roles" -CookieJarPath $adminBrowserSession
+    Assert-ProtectedShell -Content $rolesShell -Needles @("Roles") -Context "roles shell"
+    $dashboardsShell = Invoke-Html -Uri "$baseUrl/dashboards" -CookieJarPath $adminBrowserSession
     Assert-ProtectedShell -Content $dashboardsShell -Needles @("Dashboards") -Context "dashboards shell"
-    $migrationAppShell = Invoke-Html -Uri "$baseUrl/app/migration" -CookieJarPath $adminBrowserSession
-    Assert-ProtectedShell -Content $migrationAppShell -Needles @("Migration Workbench") -Context "migration shell"
+    $datasetsShell = Invoke-Html -Uri "$baseUrl/datasets" -CookieJarPath $adminBrowserSession
+    Assert-ProtectedShell -Content $datasetsShell -Needles @("Datasets") -Context "datasets shell"
+    $migrationAppShell = Invoke-Html -Uri "$baseUrl/migration" -CookieJarPath $adminBrowserSession
+    Assert-ProtectedShell -Content $migrationAppShell -Needles @("Migration") -Context "migration shell"
 
     $login = Invoke-Json `
         -Method "Post" `
@@ -316,7 +301,7 @@ try {
         -Body @{ email = "admin@tessara.local"; password = "tessara-dev-admin" }
     $headers = @{ Authorization = "Bearer $($login.token)" }
     $seed = Invoke-Json -Method "Post" -Uri "$baseUrl/api/demo/seed" -Headers $headers
-    $summary = Invoke-Json -Method "Get" -Uri "$baseUrl/api/app/summary" -Headers $headers
+    $summary = Invoke-Json -Method "Get" -Uri "$baseUrl/api/summary" -Headers $headers
     $operatorLogin = Invoke-Json `
         -Method "Post" `
         -Uri "$baseUrl/api/auth/login" `
@@ -403,31 +388,23 @@ try {
         throw "Expected readable node-type catalog to include singular/plural labels"
     }
 
-    $organizationDetail = Invoke-Html -Uri "$baseUrl/app/organization/$($seed.organization_node_id)" -CookieJarPath $adminBrowserSession
+    $organizationDetail = Invoke-Html -Uri "$baseUrl/organization/$($seed.organization_node_id)" -CookieJarPath $adminBrowserSession
     Assert-ProtectedShell -Content $organizationDetail -Needles @("Organization Detail") -Context "organization detail shell"
-    $organizationNew = Invoke-Html -Uri "$baseUrl/app/organization/new" -CookieJarPath $adminBrowserSession
+    $organizationNew = Invoke-Html -Uri "$baseUrl/organization/new" -CookieJarPath $adminBrowserSession
     Assert-ProtectedShell -Content $organizationNew -Needles @("Create Organization") -Context "organization create shell"
-    $formDetail = Invoke-Html -Uri "$baseUrl/app/forms/$($seed.form_id)" -CookieJarPath $adminBrowserSession
+    $formDetail = Invoke-Html -Uri "$baseUrl/forms/$($seed.form_id)" -CookieJarPath $adminBrowserSession
     Assert-ProtectedShell -Content $formDetail -Needles @("Form Detail") -Context "form detail shell"
-    $formNew = Invoke-Html -Uri "$baseUrl/app/forms/new" -CookieJarPath $adminBrowserSession
+    $formNew = Invoke-Html -Uri "$baseUrl/forms/new" -CookieJarPath $adminBrowserSession
     Assert-ProtectedShell -Content $formNew -Needles @("Create Form") -Context "form create shell"
-    $formEdit = Invoke-Html -Uri "$baseUrl/app/forms/$($seed.form_id)/edit" -CookieJarPath $adminBrowserSession
+    $formEdit = Invoke-Html -Uri "$baseUrl/forms/$($seed.form_id)/edit" -CookieJarPath $adminBrowserSession
     Assert-ProtectedShell -Content $formEdit -Needles @("Edit Form") -Context "form edit shell"
-    $responseDetail = Invoke-Html -Uri "$baseUrl/app/responses/$($seed.submission_id)" -CookieJarPath $adminBrowserSession
+    $responseDetail = Invoke-Html -Uri "$baseUrl/responses/$($seed.submission_id)" -CookieJarPath $adminBrowserSession
     Assert-ProtectedShell -Content $responseDetail -Needles @("Response Detail") -Context "response detail shell"
-    $responseNew = Invoke-Html -Uri "$baseUrl/app/responses/new" -CookieJarPath $adminBrowserSession
+    $responseNew = Invoke-Html -Uri "$baseUrl/responses/new" -CookieJarPath $adminBrowserSession
     Assert-ProtectedShell -Content $responseNew -Needles @("Start Response") -Context "response create shell"
-    $reportDetailPage = Invoke-Html -Uri "$baseUrl/app/reports/$($seed.report_id)" -CookieJarPath $adminBrowserSession
-    if (-not ($reportDetailPage -like "*Report Detail*") -or -not ($reportDetailPage -like "*Run*")) {
-        throw "Expected report detail HTML to include dedicated detail framing"
-    }
-    $reportNew = Invoke-Html -Uri "$baseUrl/app/reports/new" -CookieJarPath $adminBrowserSession
-    if (-not ($reportNew -like "*Create Report*") -or -not ($reportNew -like "*Bindings*") -or -not ($reportNew -like "*Submit*")) {
-        throw "Expected report create HTML to include binding editor controls"
-    }
-    $dashboardDetailPage = Invoke-Html -Uri "$baseUrl/app/dashboards/$($seed.dashboard_id)" -CookieJarPath $adminBrowserSession
+    $dashboardDetailPage = Invoke-Html -Uri "$baseUrl/dashboards/$($seed.dashboard_id)" -CookieJarPath $adminBrowserSession
     Assert-ProtectedShell -Content $dashboardDetailPage -Needles @("Dashboard Detail") -Context "dashboard detail shell"
-    $dashboardNew = Invoke-Html -Uri "$baseUrl/app/dashboards/new" -CookieJarPath $adminBrowserSession
+    $dashboardNew = Invoke-Html -Uri "$baseUrl/dashboards/new" -CookieJarPath $adminBrowserSession
     Assert-ProtectedShell -Content $dashboardNew -Needles @("Create Dashboard") -Context "dashboard create shell"
 
     [pscustomobject]@{

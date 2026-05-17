@@ -64,7 +64,7 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
     );
     let app_summary = request_json(
         app.clone(),
-        authorized_request("GET", "/api/app/summary", &token, None),
+        authorized_request("GET", "/api/summary", &token, None),
     )
     .await;
     assert_eq!(app_summary["published_form_versions"], 6);

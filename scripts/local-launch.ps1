@@ -116,7 +116,7 @@ try {
     }
 
     Wait-ForHttpOk -Uri "http://127.0.0.1:8080/health"
-    Wait-ForHttpOk -Uri "http://127.0.0.1:8080/app"
+    Wait-ForHttpOk -Uri "http://127.0.0.1:8080/"
 
     if (-not $SkipSeed) {
         Invoke-CheckedStep -Label "Ensuring UAT demo data" -Command {
@@ -127,10 +127,11 @@ try {
     }
 
     Write-Host "`nTessara is ready." -ForegroundColor Green
-    Write-Host "Application shell: http://localhost:8080/app"
-    Write-Host "Administration:   http://localhost:8080/app/administration"
-    Write-Host "Reports:          http://localhost:8080/app/reports"
-    Write-Host "Migration:        http://localhost:8080/app/migration"
+    Write-Host "Application shell: http://localhost:8080/"
+    Write-Host "Administration:   http://localhost:8080/administration"
+    Write-Host "Node Types:       http://localhost:8080/administration/node-types"
+    Write-Host "Roles:            http://localhost:8080/administration/roles"
+    Write-Host "Migration:        http://localhost:8080/migration"
     Write-Host ""
     Write-Host "Demo accounts:" -ForegroundColor Green
     Write-Host "  admin@tessara.local       / tessara-dev-admin"

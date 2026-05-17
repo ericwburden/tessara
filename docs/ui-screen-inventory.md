@@ -4,7 +4,7 @@ This inventory is the migration map for the native Leptos SSR reset worktree. Th
 
 | Old path | New path | Nav section | Data/API dependencies | Actions | Overlays | Tables/forms | Functional code worth preserving |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `/app` | `/` | Main | `/api/auth/session`, `/api/me`, `/api/app/summary` | Open work queues, navigate to product areas | None initially | Summary cards, assignment queue | Auth/session DTOs, home summary DTOs, queue filtering |
+| `/app` | `/` | Main | `/api/auth/session`, `/api/me`, `/api/summary` | Navigate to product and administration routes | None initially | Route inventory table/cards | Auth/session DTOs and route inventory behavior |
 | `/app/login` | `/login` | Session | `/api/auth/login`, `/api/auth/session`, `/api/auth/logout` | Sign in, sign out, session verification | Auth feedback | Login form | Auth request/response contracts and session bootstrap behavior |
 | `/app/organization` | `/organization` | Main | `/api/hierarchy`, `/api/node-types`, `/api/forms`, `/api/submissions`, `/api/dashboards` | Create node, details, edit, create child | Sheet for node details, dropdown row menus | Nested collapsibles, info-list tables, related-work accordions | Hierarchy DTOs, node relationship helpers, metadata label handling, RFC2822 timestamp formatting |
 | `/app/organization/new` | `/organization/new` | Main | `/api/admin/nodes`, `/api/node-types` | Create node, cancel | Validation feedback | Node create form | Node payload assembly and metadata field handling |

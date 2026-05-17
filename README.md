@@ -74,7 +74,7 @@ That script:
 - stops the existing Compose stack
 - rebuilds the API image
 - recreates the Compose services
-- waits for `/health` and `/app` to return `200`
+- waits for `/health` and `/` to return `200`
 - ensures the UAT demo dataset is present in the local database
 
 Useful options:
@@ -104,7 +104,7 @@ That script:
 - keeps Postgres running
 - rebuilds only the API image unless `-SkipBuild` is supplied
 - recreates only the API container
-- waits for `/health` and `/app` to return `200`
+- waits for `/health` and `/` to return `200`
 - reseeds demo data unless `-SkipSeed` is supplied
 
 Useful options:
@@ -225,39 +225,36 @@ $env:DATABASE_URL='postgres://tessara:tessara@localhost:5432/tessara'
 cargo run -p tessara-api -- import-legacy-fixture .\fixtures\legacy-rehearsal.json
 ```
 
-The API serves the admin workbench shell at:
+The API serves the native Tessara interface at:
 
 ```text
 http://localhost:8080/
 ```
 
-It also serves the first replacement-oriented application shell at:
+Core product routes are mounted at root-level paths:
 
 ```text
-http://localhost:8080/app
+http://localhost:8080/organization
+http://localhost:8080/forms
+http://localhost:8080/workflows
+http://localhost:8080/responses
 ```
 
-Focused admin setup screens are available at:
+Administration routes are also mounted at root-level paths:
 
 ```text
-http://localhost:8080/app/admin
+http://localhost:8080/administration
+http://localhost:8080/administration/users
+http://localhost:8080/administration/node-types
+http://localhost:8080/administration/roles
+http://localhost:8080/datasets
+http://localhost:8080/migration
 ```
 
-Focused reporting and dashboard screens are available at:
-
-```text
-http://localhost:8080/app/reports
-```
-
-The focused migration workbench is available at:
-
-```text
-http://localhost:8080/app/migration
-```
-
-For user testing, start the Compose stack and open that URL in a browser. The
-local launch helper now ensures a near-realistic Partner/Program/Activity/Session
-demo hierarchy, published forms, sample responses, and a compact reporting path.
+The former `/app` shell and JavaScript bridge assets have been retired. For user
+testing, start the Compose stack and open the root URL in a browser. The local
+launch helper now ensures a near-realistic Partner/Program/Activity/Session demo
+hierarchy, published forms, sample responses, and a compact reporting path.
 Stop and reset the local test deployment with:
 
 ```powershell
@@ -270,40 +267,17 @@ To rebuild and relaunch the user-testing stack with the latest UI/backend code:
 .\scripts\local-launch.ps1
 ```
 
-The local shell now covers the main demo workflow surfaces:
+The local shell now covers the main demo workflow surfaces through native
+Leptos SSR routes:
 
-- Leptos SSR-first route shell rendered through the cargo-leptos build
-  pipeline, using `cargo leptos ... --split` for selective lazy-route
-  splitting, with the current JavaScript controller retained only as a
-  transitional bridge for immediate workflow continuity.
-- Focused `/app`, `/app/reports`, and `/app/migration` screens now use a
-  smaller application controller with session-token reuse, current-user
-  inspection, and logout; `/app/admin` still uses the full builder controller.
-- Separate `/app` application shell focused on the published form, draft,
-  submit, submission review, report viewing workflow, and a one-click demo
-  submission quick start.
-- Separate `/app/admin` setup shell focused on hierarchy, form, and report
-  builder workflows without the full migration workbench surface.
-- Separate `/app/reports` reporting shell focused on report inspection,
-  analytics refresh, report execution, dashboard preview, and a one-click demo
-  dashboard quick start.
-- Separate `/app/migration` operator shell focused on legacy fixture example
-  loading, validation, dry-run rehearsal, and fixture import.
-- Shared `/api/app/summary` readiness counters for focused application screens.
-- Roadmap-aligned workflow sections and an in-browser user testing guide for
-  the Compose deployment path.
-- Admin read screens for hierarchy types, forms, reports, dashboards, nodes,
-  and submissions.
-- Admin builder controls for node types, forms, form versions, sections, fields,
-  reports, charts, dashboards, and dashboard components.
-- External workflow controls for draft creation, value save, submit, analytics
-  refresh, report execution, and dashboard inspection.
-- Selection-driven shortcuts for choosing node types, nodes, forms, form
-  versions, sections, fields, reports, charts, and dashboards without copying
-  raw IDs between most shell workflows.
-- Report-builder controls for assembling binding JSON from selected form fields.
-- Migration workbench controls for validating and dry-running pasted legacy
-  fixture JSON through the API.
+- Route inventory at `/`, with direct navigation to product and administration
+  surfaces.
+- Root-level organization, forms, workflows, responses, administration, dataset,
+  dashboard, component, and migration paths.
+- Workflow revision, assignment, response, user administration, node type, role,
+  and metadata management surfaces rebuilt without the legacy bridge.
+- Placeholder routes for components, dashboards, datasets, and migration where
+  the route is mounted but deeper product functionality is intentionally deferred.
 
 ## Migration Planning
 

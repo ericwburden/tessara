@@ -51,9 +51,8 @@ function Assert-ProtectedShell {
 
     foreach ($needle in @(
         "top-app-bar",
-        "global-search",
-        "Loading Session",
-        "Loading session state..."
+        "Search Tessara",
+        "Primary navigation"
     ) + $Needles) {
         if ($Content -notlike "*$needle*") {
             throw "Sprint UAT failure in $Context. Missing marker: $needle"
@@ -113,15 +112,14 @@ if ($seedSummary.seed_version -ne "uat-demo-v1") {
 }
 $adminBrowserSession = New-BrowserSession -Email "admin@tessara.local" -Password "tessara-dev-admin"
 
-$homeShell = Invoke-Html -Uri "$BaseUrl/app" -CookieJarPath $adminBrowserSession
+$homeShell = Invoke-Html -Uri "$BaseUrl/" -CookieJarPath $adminBrowserSession
 Assert-ProtectedShell -Content $homeShell -Needles @(
-    "Tessara Home",
-    "app-shell--home",
-    "Current Work",
-    "Primary navigation"
+    "Native UI Route Inventory",
+    "/forms",
+    "/administration/roles"
 ) -Context "home shell"
 
-$orgList = Invoke-Html -Uri "$BaseUrl/app/organization" -CookieJarPath $adminBrowserSession
+$orgList = Invoke-Html -Uri "$BaseUrl/organization" -CookieJarPath $adminBrowserSession
 Assert-ProtectedShell -Content $orgList -Needles @("Organization") -Context "organization directory"
 
 $nodes = Invoke-RestMethod -Uri "$BaseUrl/api/nodes" -Headers $headers -TimeoutSec 30
@@ -130,41 +128,38 @@ if (-not $nodes -or $nodes.Count -eq 0) {
 }
 
 $detailId = $nodes[0].id
-$orgDetail = Invoke-Html -Uri "$BaseUrl/app/organization/$detailId" -CookieJarPath $adminBrowserSession
+$orgDetail = Invoke-Html -Uri "$BaseUrl/organization/$detailId" -CookieJarPath $adminBrowserSession
 Assert-ProtectedShell -Content $orgDetail -Needles @("Organization Detail") -Context "organization detail"
 
-$orgCreate = Invoke-Html -Uri "$BaseUrl/app/organization/new" -CookieJarPath $adminBrowserSession
+$orgCreate = Invoke-Html -Uri "$BaseUrl/organization/new" -CookieJarPath $adminBrowserSession
 Assert-ProtectedShell -Content $orgCreate -Needles @("Create Organization") -Context "organization create"
 
-$orgEdit = Invoke-Html -Uri "$BaseUrl/app/organization/$detailId/edit" -CookieJarPath $adminBrowserSession
+$orgEdit = Invoke-Html -Uri "$BaseUrl/organization/$detailId/edit" -CookieJarPath $adminBrowserSession
 Assert-ProtectedShell -Content $orgEdit -Needles @("Edit Organization") -Context "organization edit"
 
-$formsList = Invoke-Html -Uri "$BaseUrl/app/forms" -CookieJarPath $adminBrowserSession
+$formsList = Invoke-Html -Uri "$BaseUrl/forms" -CookieJarPath $adminBrowserSession
 Assert-ProtectedShell -Content $formsList -Needles @("Forms") -Context "forms list"
 
-$formCreate = Invoke-Html -Uri "$BaseUrl/app/forms/new" -CookieJarPath $adminBrowserSession
+$formCreate = Invoke-Html -Uri "$BaseUrl/forms/new" -CookieJarPath $adminBrowserSession
 Assert-ProtectedShell -Content $formCreate -Needles @("Create Form") -Context "form create"
 
-$formDetail = Invoke-Html -Uri "$BaseUrl/app/forms/$($seedSummary.form_id)" -CookieJarPath $adminBrowserSession
+$formDetail = Invoke-Html -Uri "$BaseUrl/forms/$($seedSummary.form_id)" -CookieJarPath $adminBrowserSession
 Assert-ProtectedShell -Content $formDetail -Needles @("Form Detail") -Context "form detail"
 
-$formEdit = Invoke-Html -Uri "$BaseUrl/app/forms/$($seedSummary.form_id)/edit" -CookieJarPath $adminBrowserSession
+$formEdit = Invoke-Html -Uri "$BaseUrl/forms/$($seedSummary.form_id)/edit" -CookieJarPath $adminBrowserSession
 Assert-ProtectedShell -Content $formEdit -Needles @("Edit Form") -Context "form edit"
 
-$workflowsList = Invoke-Html -Uri "$BaseUrl/app/workflows" -CookieJarPath $adminBrowserSession
-Assert-ProtectedShell -Content $workflowsList -Needles @("Tessara Workflows", "app-shell--workflows", "Workflows") -Context "workflow directory"
+$workflowsList = Invoke-Html -Uri "$BaseUrl/workflows" -CookieJarPath $adminBrowserSession
+Assert-ProtectedShell -Content $workflowsList -Needles @("Workflows") -Context "workflow directory"
 
-$workflowAssignments = Invoke-Html -Uri "$BaseUrl/app/workflows/assignments" -CookieJarPath $adminBrowserSession
-Assert-ProtectedShell -Content $workflowAssignments -Needles @("Workflow Assignments", "app-shell--workflows", "Workflows") -Context "workflow assignments"
+$workflowAssignments = Invoke-Html -Uri "$BaseUrl/workflows/assignments" -CookieJarPath $adminBrowserSession
+Assert-ProtectedShell -Content $workflowAssignments -Needles @("Workflow Assignments", "Workflows") -Context "workflow assignments"
 
-$responsesList = Invoke-Html -Uri "$BaseUrl/app/responses" -CookieJarPath $adminBrowserSession
-Assert-ProtectedShell -Content $responsesList -Needles @("Tessara Responses", "app-shell--responses", "Responses") -Context "responses queue"
+$responsesList = Invoke-Html -Uri "$BaseUrl/responses" -CookieJarPath $adminBrowserSession
+Assert-ProtectedShell -Content $responsesList -Needles @("Responses") -Context "responses queue"
 
-$nodeTypesList = Invoke-Html -Uri "$BaseUrl/app/administration/node-types" -CookieJarPath $adminBrowserSession
-Assert-ProtectedShell -Content $nodeTypesList -Needles @("Organization Node Types") -Context "node-type directory"
-
-$nodeTypesCreate = Invoke-Html -Uri "$BaseUrl/app/administration/node-types/new" -CookieJarPath $adminBrowserSession
-Assert-ProtectedShell -Content $nodeTypesCreate -Needles @("Create Organization Node Type") -Context "node-type create"
+$nodeTypesList = Invoke-Html -Uri "$BaseUrl/administration/node-types" -CookieJarPath $adminBrowserSession
+Assert-ProtectedShell -Content $nodeTypesList -Needles @("Node Types") -Context "node-type directory"
 
 $nodeTypeCatalog = Invoke-RestMethod -Uri "$BaseUrl/api/node-types" -Headers $headers -TimeoutSec 30
 if (-not $nodeTypeCatalog -or -not ($nodeTypeCatalog | Where-Object { $_.singular_label -and $_.plural_label })) {
