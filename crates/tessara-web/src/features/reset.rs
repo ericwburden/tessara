@@ -16520,21 +16520,6 @@ pub fn AdministrationNodeTypesPage() -> impl IntoView {
         }
     });
 
-    let filtered_node_types = move || {
-        let query = search.get().trim().to_lowercase();
-        node_types
-            .get()
-            .into_iter()
-            .filter(|node_type| {
-                query.is_empty()
-                    || node_type.name.to_lowercase().contains(&query)
-                    || node_type.slug.to_lowercase().contains(&query)
-                    || node_type.singular_label.to_lowercase().contains(&query)
-                    || node_type.plural_label.to_lowercase().contains(&query)
-            })
-            .collect::<Vec<_>>()
-    };
-
     let begin_new = move |_| {
         selected_node_type_id.set(None);
         selected_detail.set(None);
@@ -16678,9 +16663,10 @@ pub fn AdministrationNodeTypesPage() -> impl IntoView {
                         view! {
                             <div class="administration-node-types-layout">
                                 <AdministrationNodeTypesList
-                                    node_types=filtered_node_types()
+                                    node_types=node_types.get()
                                     search
                                     selected_node_type_id
+                                    is_creating=is_creating.get()
                                 />
                                 <AdministrationNodeTypeEditor
                                     all_node_types=node_types.get()
@@ -16714,58 +16700,131 @@ fn AdministrationNodeTypesList(
     node_types: Vec<NodeTypeCatalogEntry>,
     search: RwSignal<String>,
     selected_node_type_id: RwSignal<Option<String>>,
+    is_creating: bool,
 ) -> impl IntoView {
+    let is_open = RwSignal::new(false);
+    let options_for_label = node_types.clone();
+    let options_for_visible = node_types;
+    let selected_label = move || {
+        if is_creating {
+            "New node type".to_string()
+        } else {
+            selected_node_type_id
+                .get()
+                .as_deref()
+                .and_then(|selected| {
+                    options_for_label
+                        .iter()
+                        .find(|node_type| node_type.id == selected)
+                })
+                .map(|node_type| {
+                    format!(
+                        "{} ({}, {} nodes)",
+                        node_type.name, node_type.slug, node_type.node_count
+                    )
+                })
+                .unwrap_or_else(|| "Select node type".to_string())
+        }
+    };
+    let visible_node_types = move || {
+        let query = search.get().trim().to_lowercase();
+        options_for_visible
+            .iter()
+            .filter(|node_type| {
+                query.is_empty()
+                    || node_type.name.to_lowercase().contains(&query)
+                    || node_type.slug.to_lowercase().contains(&query)
+                    || node_type.singular_label.to_lowercase().contains(&query)
+                    || node_type.plural_label.to_lowercase().contains(&query)
+            })
+            .cloned()
+            .collect::<Vec<_>>()
+    };
     view! {
-        <section class="organization-detail-card administration-node-types-list-card">
+        <section class="administration-node-types-selector">
             <h2>"Node Type Catalog"</h2>
-            <label class="searchable-data-table__search searchable-data-table__control">
-                <Search class="searchable-data-table__control-icon"/>
-                <span class="sr-only">"Search node types"</span>
-                <input
-                    type="search"
-                    placeholder="Search node types"
-                    prop:value=move || search.get()
-                    on:input=move |event| search.set(event_target_value(&event))
-                />
-            </label>
-            <div class="node-type-list" role="list">
-                {if node_types.is_empty() {
-                    view! { <p class="forms-list-mobile-empty">"No Node Types to Display"</p> }.into_any()
-                } else {
-                    node_types
-                        .into_iter()
-                        .map(|node_type| {
-                            let node_type_id = node_type.id.clone();
-                            let node_type_id_for_click = node_type_id.clone();
-                            let is_selected = move || {
-                                selected_node_type_id
-                                    .get()
-                                    .map(|selected| selected == node_type_id)
-                                    .unwrap_or(false)
-                            };
-                            view! {
-                                <button
-                                    type="button"
-                                    class=move || {
-                                        if is_selected() {
-                                            "node-type-list__item is-active"
-                                        } else {
-                                            "node-type-list__item"
+            <div class=move || if is_open.get() { "forms-node-filter node-type-selector is-open" } else { "forms-node-filter node-type-selector" }>
+                <button
+                    class=move || if selected_node_type_id.get().is_some() && !is_creating { "forms-node-filter__trigger is-filtered" } else { "forms-node-filter__trigger" }
+                    type="button"
+                    role="combobox"
+                    aria-haspopup="listbox"
+                    aria-expanded=move || is_open.get().to_string()
+                    aria-label="Select node type"
+                    title="Select node type"
+                    on:click=move |_| is_open.update(|open| *open = !*open)
+                >
+                    <ListFilter/>
+                    <span>{selected_label}</span>
+                    <ChevronDown/>
+                </button>
+                <button
+                    class="forms-node-filter__scrim"
+                    type="button"
+                    aria-label="Close node type selector"
+                    on:click=move |_| is_open.set(false)
+                ></button>
+                <div
+                    class="forms-node-filter__menu blurred-surface floating-layer"
+                    data-mobile-behavior="dialog"
+                    role="dialog"
+                    aria-label="Select node type"
+                >
+                    <label class="forms-node-filter__search">
+                        <Search/>
+                        <span class="sr-only">"Search node types"</span>
+                        <input
+                            type="search"
+                            placeholder="Search node types"
+                            prop:value=move || search.get()
+                            on:input=move |event| search.set(event_target_value(&event))
+                        />
+                    </label>
+                    <div class="forms-node-filter__options" role="listbox">
+                        {move || {
+                            let visible = visible_node_types();
+                            if visible.is_empty() {
+                                view! {
+                                    <p class="forms-node-filter__empty">"No matching node types to display"</p>
+                                }
+                                .into_any()
+                            } else {
+                                visible
+                                    .into_iter()
+                                    .map(|node_type| {
+                                        let node_type_id = node_type.id.clone();
+                                        let selected_node_type_id_for_option = selected_node_type_id;
+                                        let search_for_option = search;
+                                        let is_selected = selected_node_type_id
+                                            .get()
+                                            .map(|selected| selected == node_type_id)
+                                            .unwrap_or(false);
+                                        view! {
+                                            <button
+                                                class=if is_selected { "forms-node-filter__option is-active node-type-selector__option" } else { "forms-node-filter__option node-type-selector__option" }
+                                                type="button"
+                                                role="option"
+                                                aria-selected=is_selected.to_string()
+                                                on:click=move |_| {
+                                                    selected_node_type_id_for_option.set(Some(node_type_id.clone()));
+                                                    search_for_option.set(String::new());
+                                                    is_open.set(false);
+                                                }
+                                            >
+                                                <span>
+                                                    <strong>{node_type.name}</strong>
+                                                    <small>{node_type.slug}</small>
+                                                </span>
+                                                <span class="node-type-list__meta">{node_type.node_count} " nodes"</span>
+                                            </button>
                                         }
-                                    }
-                                    on:click=move |_| selected_node_type_id.set(Some(node_type_id_for_click.clone()))
-                                >
-                                    <span>
-                                        <strong>{node_type.name}</strong>
-                                        <small>{node_type.slug}</small>
-                                    </span>
-                                    <span class="node-type-list__meta">{node_type.node_count} " nodes"</span>
-                                </button>
+                                    })
+                                    .collect_view()
+                                    .into_any()
                             }
-                        })
-                        .collect_view()
-                        .into_any()
-                }}
+                        }}
+                    </div>
+                </div>
             </div>
         </section>
     }
@@ -17095,10 +17154,24 @@ fn NodeTypeMetadataList(
     let field_message = RwSignal::new(None::<String>);
     let sheet_open = RwSignal::new(false);
     let has_fields = !fields.is_empty();
-    let searchable_fields = fields.clone();
-    let filtered_fields = move || {
+    let table_searchable_fields = fields.clone();
+    let card_searchable_fields = fields;
+    let table_fields = move || {
         let query = search.get().trim().to_lowercase();
-        searchable_fields
+        table_searchable_fields
+            .iter()
+            .filter(|field| {
+                query.is_empty()
+                    || field.label.to_lowercase().contains(&query)
+                    || field.key.to_lowercase().contains(&query)
+                    || field.field_type.to_lowercase().contains(&query)
+            })
+            .cloned()
+            .collect::<Vec<_>>()
+    };
+    let card_fields = move || {
+        let query = search.get().trim().to_lowercase();
+        card_searchable_fields
             .iter()
             .filter(|field| {
                 query.is_empty()
@@ -17131,135 +17204,230 @@ fn NodeTypeMetadataList(
             <div class="node-type-detail-list__header">
                 <h3>"Metadata Fields"</h3>
             </div>
-            <div class="searchable-data-table">
-                <div class="searchable-data-table__toolbar forms-list__toolbar">
-                    <label class="searchable-data-table__search searchable-data-table__control">
-                        <Search class="searchable-data-table__control-icon"/>
-                        <span class="sr-only">"Search metadata fields"</span>
-                        <input
-                            type="search"
-                            placeholder="Search metadata"
-                            prop:value=move || search.get()
-                            on:input=move |event| search.set(event_target_value(&event))
-                        />
-                    </label>
-                    <button
-                        class="button button--compact button--secondary node-type-add-field-button"
-                        type="button"
-                        on:click=open_new_field_sheet
-                    >
-                        <Plus class="button__icon"/>
-                        "Add Field"
-                    </button>
+            <div class="forms-list forms-list-responsive-table node-type-metadata-list">
+                <div class="searchable-data-table">
+                    <div class="searchable-data-table__toolbar forms-list__toolbar">
+                        <label class="searchable-data-table__search searchable-data-table__control">
+                            <Search class="searchable-data-table__control-icon"/>
+                            <span class="sr-only">"Search metadata fields"</span>
+                            <input
+                                type="search"
+                                placeholder="Search metadata"
+                                prop:value=move || search.get()
+                                on:input=move |event| search.set(event_target_value(&event))
+                            />
+                        </label>
+                        <button
+                            class="button button--compact button--secondary node-type-add-field-button"
+                            type="button"
+                            on:click=open_new_field_sheet
+                        >
+                            <Plus class="button__icon"/>
+                            "Add Field"
+                        </button>
+                    </div>
+                    <Show when=move || field_message.get().is_some() && !sheet_open.get()>
+                        <p class="form-message">{move || field_message.get().unwrap_or_default()}</p>
+                    </Show>
+                    {if !has_fields {
+                        view! { <p class="muted">"No metadata fields configured."</p> }.into_any()
+                    } else {
+                        view! {
+                            <DataTable>
+                                <thead>
+                                    <tr>
+                                        <th scope="col">"Field"</th>
+                                        <th scope="col">"Key"</th>
+                                        <th scope="col">"Type"</th>
+                                        <th scope="col">"Required"</th>
+                                        <th class="data-table__cell--center" scope="col">"Actions"</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {move || {
+                                        let visible_fields = table_fields();
+                                        if visible_fields.is_empty() {
+                                            view! {
+                                                <tr>
+                                                    <td class="data-table__empty" colspan="5">"No Metadata Fields to Display"</td>
+                                                </tr>
+                                            }
+                                            .into_any()
+                                        } else {
+                                            visible_fields
+                                                .into_iter()
+                                                .map(|field| {
+                                                    let edit_field = field.clone();
+                                                    let delete_field = field.clone();
+                                                    let row_label = field.label.clone();
+                                                    view! {
+                                                        <tr>
+                                                            <th scope="row">{field.label}</th>
+                                                            <td>{field.key}</td>
+                                                            <td>{metadata_label(&field.field_type)}</td>
+                                                            <td>{if field.required { "Yes" } else { "No" }}</td>
+                                                            <td class="data-table__cell--center">
+                                                                <DropdownMenu label=format!("Open actions for {row_label}")>
+                                                                    <button
+                                                                        class="dropdown-menu__item"
+                                                                        type="button"
+                                                                        role="menuitem"
+                                                                        on:click=move |_| {
+                                                                            editing_field_id.set(Some(edit_field.id.clone()));
+                                                                            field_label.set(edit_field.label.clone());
+                                                                            field_key.set(edit_field.key.clone());
+                                                                            field_type.set(edit_field.field_type.clone());
+                                                                            field_required.set(edit_field.required);
+                                                                            field_message.set(None);
+                                                                            sheet_open.set(true);
+                                                                        }
+                                                                    >
+                                                                        <Pencil class="dropdown-menu__item-icon"/>
+                                                                        <span>"Edit Field"</span>
+                                                                    </button>
+                                                                    <button
+                                                                        class="dropdown-menu__item"
+                                                                        type="button"
+                                                                        role="menuitem"
+                                                                        on:click=move |_| {
+                                                                            #[cfg(feature = "hydrate")]
+                                                                            {
+                                                                                let field_id = delete_field.id.clone();
+                                                                                leptos::task::spawn_local(async move {
+                                                                                    field_message.set(None);
+                                                                                    match send_json_id_request(
+                                                                                        gloo_net::http::Request::delete(&format!(
+                                                                                            "/api/admin/node-metadata-fields/{field_id}"
+                                                                                        )),
+                                                                                        None,
+                                                                                        "Delete metadata field",
+                                                                                    )
+                                                                                    .await
+                                                                                    {
+                                                                                        Ok(_) => {
+                                                                                            sheet_open.set(false);
+                                                                                            clear_field_editor();
+                                                                                            on_metadata_changed();
+                                                                                        }
+                                                                                        Err(error) => field_message.set(Some(error)),
+                                                                                    }
+                                                                                });
+                                                                            }
+                                                                            #[cfg(not(feature = "hydrate"))]
+                                                                            let _ = &delete_field;
+                                                                        }
+                                                                    >
+                                                                        <Trash2 class="dropdown-menu__item-icon"/>
+                                                                        <span>"Delete Field"</span>
+                                                                    </button>
+                                                                </DropdownMenu>
+                                                            </td>
+                                                        </tr>
+                                                    }
+                                                })
+                                                .collect_view()
+                                                .into_any()
+                                        }
+                                    }}
+                                </tbody>
+                            </DataTable>
+                        }
+                        .into_any()
+                    }}
                 </div>
-                <Show when=move || field_message.get().is_some() && !sheet_open.get()>
-                    <p class="form-message">{move || field_message.get().unwrap_or_default()}</p>
-                </Show>
-                {if !has_fields {
-                    view! { <p class="muted">"No metadata fields configured."</p> }.into_any()
-                } else {
-                    view! {
-                    <DataTable>
-                        <thead>
-                            <tr>
-                                <th scope="col">"Field"</th>
-                                <th scope="col">"Key"</th>
-                                <th scope="col">"Type"</th>
-                                <th scope="col">"Required"</th>
-                                <th class="data-table__cell--center" scope="col">"Actions"</th>
-                            </tr>
-                        </thead>
-                        <tbody>
+                <div class="forms-list-mobile-cards node-type-metadata-mobile-cards">
+                    {if !has_fields {
+                        view! { <p class="forms-list-mobile-empty">"No Metadata Fields to Display"</p> }.into_any()
+                    } else {
+                        view! {
                             {move || {
-                                let visible_fields = filtered_fields();
+                                let visible_fields = card_fields();
                                 if visible_fields.is_empty() {
-                                    view! {
-                                        <tr>
-                                            <td class="data-table__empty" colspan="5">"No Metadata Fields to Display"</td>
-                                        </tr>
-                                    }
-                                    .into_any()
+                                    view! { <p class="forms-list-mobile-empty">"No Metadata Fields to Display"</p> }.into_any()
                                 } else {
                                     visible_fields
                                         .into_iter()
                                         .map(|field| {
                                             let edit_field = field.clone();
                                             let delete_field = field.clone();
-                                            let row_label = field.label.clone();
                                             view! {
-                                                <tr>
-                                                    <th scope="row">{field.label}</th>
-                                                    <td>{field.key}</td>
-                                                    <td>{metadata_label(&field.field_type)}</td>
-                                                    <td>{if field.required { "Yes" } else { "No" }}</td>
-                                                    <td class="data-table__cell--center">
-                                                        <DropdownMenu label=format!("Open actions for {row_label}")>
-                                                            <button
-                                                                class="dropdown-menu__item"
-                                                                type="button"
-                                                                role="menuitem"
-                                                                on:click=move |_| {
-                                                                    editing_field_id.set(Some(edit_field.id.clone()));
-                                                                    field_label.set(edit_field.label.clone());
-                                                                    field_key.set(edit_field.key.clone());
-                                                                    field_type.set(edit_field.field_type.clone());
-                                                                    field_required.set(edit_field.required);
-                                                                    field_message.set(None);
-                                                                    sheet_open.set(true);
-                                                                }
-                                                            >
-                                                                <Pencil class="dropdown-menu__item-icon"/>
-                                                                <span>"Edit Field"</span>
-                                                            </button>
-                                                            <button
-                                                                class="dropdown-menu__item"
-                                                                type="button"
-                                                                role="menuitem"
-                                                                on:click=move |_| {
-                                                                    #[cfg(feature = "hydrate")]
-                                                                    {
-                                                                        let field_id = delete_field.id.clone();
-                                                                        leptos::task::spawn_local(async move {
-                                                                            field_message.set(None);
-                                                                            match send_json_id_request(
-                                                                                gloo_net::http::Request::delete(&format!(
-                                                                                    "/api/admin/node-metadata-fields/{field_id}"
-                                                                                )),
-                                                                                None,
-                                                                                "Delete metadata field",
-                                                                            )
-                                                                            .await
-                                                                            {
-                                                                                Ok(_) => {
-                                                                                    sheet_open.set(false);
-                                                                                    clear_field_editor();
-                                                                                    on_metadata_changed();
-                                                                                }
-                                                                                Err(error) => field_message.set(Some(error)),
+                                                <article class="forms-list-mobile-card node-type-metadata-mobile-card">
+                                                    <div class="forms-list-mobile-card__header">
+                                                        <div>
+                                                            <h3>{field.label}</h3>
+                                                            <span>{field.key}</span>
+                                                        </div>
+                                                        <span class=status_badge_class(if field.required { "active" } else { "inactive" })>
+                                                            {if field.required { "Required" } else { "Optional" }}
+                                                        </span>
+                                                    </div>
+                                                    <dl>
+                                                        <div>
+                                                            <dt>"Type"</dt>
+                                                            <dd>{metadata_label(&field.field_type)}</dd>
+                                                        </div>
+                                                    </dl>
+                                                    <div class="workflow-assignment-mobile-card__actions">
+                                                        <button
+                                                            class="button button--compact button--secondary"
+                                                            type="button"
+                                                            on:click=move |_| {
+                                                                editing_field_id.set(Some(edit_field.id.clone()));
+                                                                field_label.set(edit_field.label.clone());
+                                                                field_key.set(edit_field.key.clone());
+                                                                field_type.set(edit_field.field_type.clone());
+                                                                field_required.set(edit_field.required);
+                                                                field_message.set(None);
+                                                                sheet_open.set(true);
+                                                            }
+                                                        >
+                                                            "Edit Field"
+                                                        </button>
+                                                        <button
+                                                            class="button button--compact button--secondary"
+                                                            type="button"
+                                                            on:click=move |_| {
+                                                                #[cfg(feature = "hydrate")]
+                                                                {
+                                                                    let field_id = delete_field.id.clone();
+                                                                    leptos::task::spawn_local(async move {
+                                                                        field_message.set(None);
+                                                                        match send_json_id_request(
+                                                                            gloo_net::http::Request::delete(&format!(
+                                                                                "/api/admin/node-metadata-fields/{field_id}"
+                                                                            )),
+                                                                            None,
+                                                                            "Delete metadata field",
+                                                                        )
+                                                                        .await
+                                                                        {
+                                                                            Ok(_) => {
+                                                                                sheet_open.set(false);
+                                                                                clear_field_editor();
+                                                                                on_metadata_changed();
                                                                             }
-                                                                        });
-                                                                    }
-                                                                    #[cfg(not(feature = "hydrate"))]
-                                                                    let _ = &delete_field;
+                                                                            Err(error) => field_message.set(Some(error)),
+                                                                        }
+                                                                    });
                                                                 }
-                                                            >
-                                                                <Trash2 class="dropdown-menu__item-icon"/>
-                                                                <span>"Delete Field"</span>
-                                                            </button>
-                                                        </DropdownMenu>
-                                                    </td>
-                                                </tr>
+                                                                #[cfg(not(feature = "hydrate"))]
+                                                                let _ = &delete_field;
+                                                            }
+                                                        >
+                                                            "Delete Field"
+                                                        </button>
+                                                    </div>
+                                                </article>
                                             }
                                         })
                                         .collect_view()
                                         .into_any()
                                 }
                             }}
-                        </tbody>
-                    </DataTable>
-                    }
-                    .into_any()
-                }}
+                        }
+                        .into_any()
+                    }}
+                </div>
             </div>
             <Portal>
                 <Show when=move || sheet_open.get()>

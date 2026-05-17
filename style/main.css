@@ -1653,52 +1653,63 @@ input {
 
 .administration-node-types-layout {
   display: grid;
-  grid-template-columns: minmax(15rem, 0.8fr) minmax(0, 1.8fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 1rem;
   align-items: start;
 }
 
-.administration-node-types-list-card,
 .administration-node-type-editor {
   min-width: 0;
 }
 
-.administration-node-types-list-card .searchable-data-table__search {
-  width: 100%;
-  max-width: none;
-  margin-bottom: 0.85rem;
-}
-
-.node-type-list {
-  display: grid;
-  gap: 0.5rem;
-}
-
-.node-type-list__item {
+.administration-node-types-selector {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  width: 100%;
+  min-width: 0;
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
-  background: var(--color-control);
-  color: var(--color-text);
+  background: var(--color-panel);
   padding: 0.75rem;
-  text-align: left;
 }
 
-.node-type-list__item.is-active {
-  border-color: var(--semantic-primary);
-  background: color-mix(in srgb, var(--semantic-primary) 18%, var(--color-control));
+.administration-node-types-selector h2 {
+  margin: 0;
+  font-size: 1rem;
 }
 
-.node-type-list__item span {
+.node-type-selector {
+  width: min(30rem, 100%);
   min-width: 0;
 }
 
-.node-type-list__item strong,
-.node-type-list__item small,
+.node-type-selector .forms-node-filter__trigger {
+  width: 100%;
+}
+
+.node-type-selector .forms-node-filter__menu {
+  left: auto;
+  right: 0;
+}
+
+.node-type-selector__option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.node-type-selector__option.is-active {
+  background: color-mix(in srgb, var(--semantic-primary) 18%, transparent);
+}
+
+.node-type-selector__option span {
+  min-width: 0;
+}
+
+.node-type-selector__option strong,
+.node-type-selector__option small,
 .capability-list__item strong,
 .capability-list__item small {
   display: block;
@@ -1706,7 +1717,7 @@ input {
   overflow-wrap: anywhere;
 }
 
-.node-type-list__item small,
+.node-type-selector__option small,
 .node-type-list__meta,
 .capability-list__item small {
   color: var(--color-muted);
@@ -3334,6 +3345,15 @@ input {
   .administration-node-type-relationships,
   .administration-node-type-collections {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .administration-node-types-selector {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .node-type-selector {
+    width: 100%;
   }
 
   .node-type-detail-list--wide {
