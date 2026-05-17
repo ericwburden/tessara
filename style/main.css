@@ -620,6 +620,21 @@ input {
   font-weight: 800;
 }
 
+.link-button {
+  border: 0;
+  background: transparent;
+  color: var(--semantic-link);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+  padding: 0;
+  text-align: left;
+}
+
+.link-button:hover {
+  color: var(--color-text);
+}
+
 .route-migration-overview {
   display: block;
 }
@@ -1783,6 +1798,36 @@ input {
   list-style: none;
   margin: 0;
   padding: 0;
+}
+
+.administration-roles-layout {
+  display: grid;
+  grid-template-columns: minmax(20rem, 0.9fr) minmax(0, 1.2fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.administration-roles-list,
+.administration-role-detail-card {
+  min-width: 0;
+}
+
+.administration-role-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.administration-role-capability-picker {
+  max-height: 22rem;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.administration-role-sheet__search {
+  width: 100%;
+  max-width: none;
 }
 
 .administration-node-type-relationships,
@@ -3341,6 +3386,8 @@ input {
   }
 
   .administration-node-types-layout,
+  .administration-roles-layout,
+  .administration-role-detail-grid,
   .administration-node-type-fields,
   .administration-node-type-relationships,
   .administration-node-type-collections {
