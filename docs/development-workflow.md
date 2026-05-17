@@ -46,7 +46,7 @@ What this does:
 - ensures Postgres is running
 - rebuilds only the `api` image unless `-SkipBuild` is supplied
 - recreates only the `api` container
-- waits for `/health` and `/app`
+- waits for `/health` and `/`
 - reseeds demo data unless `-SkipSeed` is supplied
 
 Use this loop when:

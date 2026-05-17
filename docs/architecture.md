@@ -71,15 +71,15 @@ In the target model:
 
 ## Frontend Delivery Architecture
 
-The current application-layer crate is `tessara-web`. It is the transitional implementation of the target application/UI layer even though the long-term crate naming direction may still converge on `tessara_app`.
+The current application-layer crate is `tessara-web`. It owns the native Leptos SSR UI and may still be renamed or split as the long-term application boundary settles.
 
 Frontend delivery should follow these rules:
 
 - use `cargo-leptos` as the canonical workspace build pipeline
-- keep a single `axum` binary (`tessara-api`) that serves API routes, SSR HTML, bridge assets, and the built wasm/js package
+- keep a single `axum` binary (`tessara-api`) that serves API routes, SSR HTML, SVG assets, and the built wasm/js package
 - organize `tessara-web` by application shell, feature modules, shared UI primitives, and transport/infra boundaries rather than by one large shell file
 - keep REST endpoints as the stable transport contract during the migration; UI components should read and mutate data through feature-local adapters rather than embedding raw fetch logic throughout the component tree
-- preserve existing application URLs during the migration even while the route implementation moves into Leptos
+- keep the root-level native application URLs as the active UI contract
 
 ### Rendering policy
 
@@ -101,7 +101,7 @@ Route and widget splitting should be selective:
 
 Current first-class lazy-route candidate:
 
-- `/app/migration`
+- `/migration`
 
 ## Asset Model
 

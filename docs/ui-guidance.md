@@ -3,7 +3,7 @@
 **Status:** Canonical UI guidance for Tessara  
 **Date:** 2026-04-14  
 **Audience:** Designers, engineers, and reviewers implementing or auditing the Tessara user interface  
-**Scope:** Naming, brand expression, information architecture, shell behavior, rendering strategy, layout, components, states, messaging, responsiveness, and transitional UI constraints
+**Scope:** Naming, brand expression, information architecture, shell behavior, rendering strategy, layout, components, states, messaging, responsiveness, and migration compatibility constraints
 
 ## Purpose, authority, and interpretation
 
@@ -21,7 +21,7 @@ Authority rules:
 
 - If another active UI document disagrees with this file, this file wins.
 - `roadmap.md`, `requirements.md`, and `architecture.md` remain authoritative for delivery scope, product requirements, and system architecture.
-- Historical or transitional route behavior does not override the standards in this file unless the behavior is required to preserve a usable application during migration.
+- Historical route behavior does not override the standards in this file unless the behavior is explicitly required for short-lived compatibility during migration.
 
 Interpretation:
 
@@ -357,7 +357,7 @@ Navigation structure:
   - Datasets
   - Administration
   - Migration
-- Transitional `Reports` SHOULD NOT appear in the default sidebar contract.
+- `Reports` SHOULD NOT appear in the default sidebar contract unless a future product slice restores reporting as a native route.
 
 Navigation item style:
 
@@ -521,7 +521,7 @@ Do not lazy-load by default:
 
 First-class route or widget candidates:
 
-- `/app/migration`
+- `/migration`
 - administration capability or scope management grids once they become larger and more interactive
 - future dataset or component authoring routes
 - dashboard viewer enrichments, chart renderers, JSON or fixture editors, large preview or result tables, and drilldown or inspector panels
@@ -1027,7 +1027,7 @@ Mobile form actions:
 
 ### Form builder and draft version authoring
 
-The canonical builder guidance for `/app/forms/{form_id}/edit` applies to draft version authoring, not to read-only form detail or respondent completion views.
+The canonical builder guidance for `/forms/{form_id}/edit` applies to draft version authoring, not to read-only form detail or respondent completion views.
 
 The screenshots in `docs/form-builder-examples/` are interaction references only. They are useful because both the Google Forms and JotForm examples converge on similar builder patterns, but Tessara MUST keep its own calmer palette, typography, density, and shell behavior.
 

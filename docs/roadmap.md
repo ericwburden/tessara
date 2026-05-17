@@ -1,6 +1,6 @@
 # Tessara Roadmap
 
-This roadmap is authoritative as of May 3, 2026. It starts from the current implemented baseline after Sprint 2B and the UI Overhaul 2.0 detour, identifies the transition from the current reporting stack to the re-aligned target model, and defines future delivery as explicit vertical-slice sprints.
+This roadmap is authoritative as of May 17, 2026. It starts from the current implemented baseline after the native UI refresh, identifies the transition from the current reporting stack to the re-aligned target model, and defines future delivery as explicit vertical-slice sprints.
 
 ## Delivery Rule
 
@@ -10,9 +10,9 @@ Every future sprint is a full vertical slice.
 - The application must remain in a user-testable condition in the intended end-user-facing shape after each sprint.
 - Backend-only completion does not satisfy roadmap completion.
 - Internal/admin/configuration screens may evolve inside the same sprint, but they do not replace the requirement for coherent application UI.
-- Any sprint that touches existing route or UI surfaces must migrate those touched surfaces onto the native Leptos SSR platform in that same sprint.
-- Touched surfaces do not count as complete if they still depend on the hybrid shell pattern through `application.rs` HTML-string shells, `inner_html` route injection, or `app-legacy.js`.
-- Every sprint must reduce the remaining hybrid-shell footprint, with the explicit end-state that the hybrid shell is fully gone when the roadmap is complete.
+- Existing route and UI surfaces must stay on the native Leptos SSR platform.
+- Touched surfaces do not count as complete if they reintroduce HTML-string route shells, `inner_html` route injection, `/bridge/*` assets, or JavaScript controller ownership for application UI.
+- The hybrid shell is gone from active routing; future work must preserve that baseline.
 
 ## Sprint completion protocol (applies to every sprint)
 
@@ -21,15 +21,15 @@ Every future sprint is a full vertical slice.
 - Print and run the sprint UAT script:
   - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`
 - Confirm the UAT script output includes current route ownership and role-gated behavior before closing the sprint.
-- Confirm every route surface touched in the sprint runs through native SSR ownership rather than the retained hybrid shell before closing the sprint.
+- Confirm every route surface touched in the sprint remains under native SSR ownership before closing the sprint.
 - Confirm route ownership, hydration, and browser-console cleanliness for every touched route before closing the sprint.
 - If a detour sprint lands outside the numbered roadmap, reconcile this file with the codebase before selecting the next roadmap sprint.
 
 ## Cross-Cutting Delivery Constraints
 
-- No new user-facing behavior may be added through `application.rs`, `inner_html` injection, `/bridge/*`, or any retained legacy bridge asset unless that behavior is a temporary compatibility shim scheduled for deletion in the same sprint.
+- No new user-facing behavior may be added through HTML-string route shells, `inner_html` injection, `/bridge/*`, or retained legacy bridge assets.
 - Any sprint that touches `auth`, `hierarchy`, `forms`, `workflows`, `submissions`, or `reporting` must move touched backend behavior toward bounded-context structure with explicit `router`, `handlers`, `service`, `repo`, and `dto` boundaries rather than expanding large vertical files.
-- Browser authentication for `/app` routes must use a server-managed session contract. JavaScript-managed bearer tokens may remain only for explicit CLI, script, or testing flows.
+- Browser authentication for native UI routes must use a server-managed session contract. JavaScript-managed bearer tokens may remain only for explicit CLI, script, or testing flows.
 - Client-visible error payloads must use stable application codes and messages. Raw database and internal error strings must not be exposed to end users.
 - Any sprint that exposes scoped analytical, workflow, response, dataset, component, chart, or dashboard data must prove operator scope filtering with negative regression coverage before closeout.
 - Dependency-audit failures are treated as release blockers unless the advisory is documented as unreachable, accepted, and tied to a replacement or removal path.
@@ -50,7 +50,7 @@ The codebase already includes a substantial vertical foundation:
 - draft/save/submit response flows and review behavior
 - reporting/storage slices for datasets, reports, aggregations, charts, and dashboards
 - legacy fixture validation, dry-run, import rehearsal, and demo seed paths
-- a Leptos SSR shell with native product routes for Home, Organization, Forms, Workflows, Responses, Components, Datasets, Dashboards, Administration, and Migration
+- a Leptos SSR shell with root-level native product routes for Home, Organization, Forms, Workflows, Responses, Components, Datasets, Dashboards, Administration, and Migration
 - Sprint 2B authentication hardening: Argon2id credential storage, server-side session expiry/revocation/last-seen tracking, same-origin `HttpOnly` browser cookies, stable auth/session errors, and native SSR login/session behavior
 - UI Overhaul 2.0 detour work: approved shell navigation posture, access-denied redirect plus transient feedback, sidebar footer account/scope/theme context, queue-first home posture, explorer-oriented organization work, section-oriented form-builder UI, and section description/column-count persistence
 
@@ -64,7 +64,7 @@ The application shell already exposes meaningful user-testable surfaces:
 - dedicated administration list/detail/create/edit/access flows for users and roles
 - visible separation between product-facing and internal/operator areas
 - Components and Datasets are native internal inspection surfaces
-- Reports remain reachable as a transitional compatibility surface, but they are no longer the forward planning model
+- Report, aggregation, and chart APIs remain compatibility implementation details, but reports are no longer mounted as a primary UI route or forward planning model
 
 ### Current implementation gaps
 
@@ -72,7 +72,7 @@ The main gaps are no longer raw backend feasibility. The remaining work is to:
 
 - finish backend decomposition for workflow, response, reporting, dashboard, and dataset behavior so new work does not compound large route modules
 - complete response/runtime, dataset, component, and dashboard authoring in end-user-facing application shape
-- retire or clearly isolate remaining transitional reporting and bridge-backed compatibility paths
+- retire or clearly isolate remaining transitional reporting compatibility APIs
 - transition the reporting stack from the current `Report/Aggregation/Chart` model to the target `Component` model
 - close known scope leaks in report execution and chart/component inspection before expanding dataset/component authoring
 - restore a green dependency-audit posture and document any accepted advisory exceptions
@@ -130,7 +130,7 @@ Sprint 1C mandatory acceptance points (must be present to close Sprint 1C):
 
 ## Frontend Platform Foundation
 
-Before deeper application-surface replacement continues, the frontend platform should follow this explicit sequence.
+This section records the completed foundation sequence that led to the current native UI baseline. It is historical planning context, not permission to reintroduce bridge-backed surfaces.
 
 ### Platform Sprint A: Cargo-Leptos Foundation
 
@@ -142,17 +142,14 @@ Before deeper application-surface replacement continues, the frontend platform s
 - built wasm/js package served by the existing `axum` binary
 - shared stylesheet emitted through the `cargo-leptos` pipeline
 - hydrated Leptos router preserving the current route surface
-- transitional bridge scripts isolated from Rust string literals into explicit frontend assets
+- cargo-leptos assets isolated from Rust string literals and served through the API binary
 
 **Application UI delivered this sprint:**
 
 - preserved existing routes remain user-testable
 - the app shell and current route bodies still render while the runtime/build contract moves under them
 
-**Bridge surfaces still expected after this sprint:**
-
-- admin workbench
-- current product/internal route bodies backed by the retained bridge controller
+**Historical bridge status after this sprint:** bridge-backed surfaces still existed at that point; they have since been removed from active routing.
 
 ### Platform Sprint B: Route Parity With Isolated Bridge
 
@@ -180,7 +177,7 @@ Before deeper application-surface replacement continues, the frontend platform s
 
 **Build:**
 
-- route-level code splitting for heavy operator routes, starting with `/app/migration`
+- route-level code splitting for heavy operator routes, starting with `/migration`
 - bundle-loading verification in end-to-end coverage
 - removal of the bridge from the first product/internal surfaces that have native replacements
 - browser-console and hydration-error enforcement in end-to-end tests
@@ -318,15 +315,15 @@ Before deeper application-surface replacement continues, the frontend platform s
 
 **Build:**
 
-- establish `tessara-ui` as the shared internal component library for Tessara
+- establish shared UI primitives as the internal component layer for Tessara
 - use the consolidated `ui-guidance.md` as the specification source for component appearance and behavior
 - extract the first stable primitives for shared page headers, action groups, cards, panels, metadata strips, inputs, field wrappers, and table or list toolbar patterns
-- move touched route surfaces onto `tessara-ui` incrementally while keeping the shared shell stable and SSR-first
+- move touched route surfaces onto shared primitives incrementally while keeping the shared shell stable and SSR-first
 - stop adding new bespoke route-level UI patterns when an approved component spec already exists
 
 **Application UI delivered this sprint:**
 
-- current shared routes begin rendering through a recognizable `tessara-ui` visual system instead of route-by-route markup drift
+- current shared routes begin rendering through a recognizable shared visual system instead of route-by-route markup drift
 - new Sprint 2A assignment and response-start work can land on top of shared component primitives rather than introducing another parallel styling layer
 
 **User-testable exit condition:** a tester can move through the current shared application surfaces and see consistent headers, actions, cards, panels, and common control styling, and engineers can extend the same component layer for the next workflow-runtime sprint without inventing a new surface pattern each time.
@@ -387,10 +384,10 @@ Before deeper application-surface replacement continues, the frontend platform s
 - replace plaintext password comparison with Argon2id password-hash verification
 - add password-hash migration and backfill for seeded and demo accounts plus user create and edit flows
 - add session expiry, revocation, last-seen tracking, and logout invalidation semantics
-- move browser `/app` authentication to a same-origin `HttpOnly` cookie session contract while keeping bearer tokens only for explicit scripted access
+- keep browser UI authentication on a same-origin `HttpOnly` cookie session contract while keeping bearer tokens only for explicit scripted access
 - introduce a central authenticated-account extractor and request-context boundary instead of ad hoc header parsing in handlers
 - replace raw internal and database error exposure with stable auth and session error responses plus traceable server logs
-- migrate these settled routes off the hybrid shell and onto native SSR ownership: `/app/login`, `/app`, `/app/organization*`, `/app/forms*`
+- keep these settled routes on native SSR ownership: `/login`, `/`, `/organization*`, `/forms*`
 - remove shipped demo passwords from the public login surface while keeping local-development guidance in docs or internal-only tooling
 - stop adding inline action handlers for newly migrated shared UI surfaces
 
@@ -407,8 +404,8 @@ Before deeper application-surface replacement continues, the frontend platform s
 
 **Build:**
 
-- preserve the native route ownership already present for `/app/workflows*`, `/app/responses*`, response-start and resume entry surfaces, and touched administration links
-- keep `/app/admin` as explicitly legacy-only for now, but forbid new product behavior from landing there
+- preserve native route ownership for `/workflows*`, `/responses*`, response-start and resume entry surfaces, and administration links
+- do not restore `/app/admin`; administration work belongs under `/administration*`
 - decompose touched backend slices into bounded-context modules, starting with `workflows` and `submissions` and continuing the `auth`, `hierarchy`, and `forms` movement already started
 - keep `tessara-api::lib` as router, middleware, and state composition only; no new workflow or business orchestration should land there
 - move transport decoding and response shaping into handlers, orchestration into services, and SQL into repositories for touched slices
@@ -684,11 +681,11 @@ Before deeper application-surface replacement continues, the frontend platform s
 - permission hardening
 - performance cleanup
 - explicit unsupported-v1 documentation
-- close the roadmap only when the hybrid shell is fully gone from primary application routes
+- keep the roadmap closed to any reintroduction of the hybrid shell
 - complete a final permission and session audit, stable error-envelope cleanup, and performance hardening
 - replace permissive production CORS with environment-specific/same-origin policy suitable for cookie sessions
 - verify browser login no longer exposes bearer tokens except through explicit script/test/API token flows
-- verify that no remaining primary route depends on `application.rs`, `/bridge/*`, or retained legacy bridge assets
+- verify that no primary route depends on HTML-string route shells, `/bridge/*`, or retained legacy bridge assets
 
 **Application UI delivered this sprint:**
 
