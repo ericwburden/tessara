@@ -9,23 +9,17 @@ use super::dto::{DelegationSummary, ScopeNodeSummary};
 #[derive(Clone)]
 pub struct AccountCredentialRow {
     pub account_id: Uuid,
-    pub email: String,
-    pub display_name: String,
     pub is_active: bool,
     pub password_hash: Option<String>,
-    pub password_scheme: Option<String>,
-    pub legacy_password: Option<String>,
 }
 
 #[derive(Clone)]
 pub struct SessionAccountRow {
-    pub token: Uuid,
     pub account_id: Uuid,
     pub email: String,
     pub display_name: String,
     pub is_active: bool,
     pub expires_at: DateTime<Utc>,
-    pub last_seen_at: DateTime<Utc>,
     pub revoked_at: Option<DateTime<Utc>>,
 }
 
@@ -37,12 +31,8 @@ pub async fn find_account_credential_by_email(
         r#"
         SELECT
             accounts.id,
-            accounts.email,
-            accounts.display_name,
             accounts.is_active,
-            account_credentials.password_hash,
-            account_credentials.password_scheme,
-            account_credentials.legacy_password
+            account_credentials.password_hash
         FROM accounts
         LEFT JOIN account_credentials ON account_credentials.account_id = accounts.id
         WHERE accounts.email = $1
@@ -55,12 +45,8 @@ pub async fn find_account_credential_by_email(
     row.map(|row| {
         Ok(AccountCredentialRow {
             account_id: row.try_get("id")?,
-            email: row.try_get("email")?,
-            display_name: row.try_get("display_name")?,
             is_active: row.try_get("is_active")?,
             password_hash: row.try_get("password_hash")?,
-            password_scheme: row.try_get("password_scheme")?,
-            legacy_password: row.try_get("legacy_password")?,
         })
     })
     .transpose()
@@ -133,10 +119,8 @@ pub async fn find_session_account_by_token(
     let row = sqlx::query(
         r#"
         SELECT
-            auth_sessions.token,
             auth_sessions.account_id,
             auth_sessions.expires_at,
-            auth_sessions.last_seen_at,
             auth_sessions.revoked_at,
             accounts.email,
             accounts.display_name,
@@ -152,13 +136,11 @@ pub async fn find_session_account_by_token(
 
     row.map(|row| {
         Ok(SessionAccountRow {
-            token: row.try_get("token")?,
             account_id: row.try_get("account_id")?,
             email: row.try_get("email")?,
             display_name: row.try_get("display_name")?,
             is_active: row.try_get("is_active")?,
             expires_at: row.try_get("expires_at")?,
-            last_seen_at: row.try_get("last_seen_at")?,
             revoked_at: row.try_get("revoked_at")?,
         })
     })

@@ -43,10 +43,6 @@ pub enum SessionTransport {
 #[derive(Clone, Debug)]
 pub struct SessionContext {
     pub token: Uuid,
-    pub account_id: Uuid,
-    pub expires_at: DateTime<Utc>,
-    pub last_seen_at: DateTime<Utc>,
-    pub transport: SessionTransport,
 }
 
 #[derive(Clone, Serialize)]

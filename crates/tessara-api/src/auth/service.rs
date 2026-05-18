@@ -119,7 +119,7 @@ async fn authenticate_request_with_cookie_name(
     headers: &HeaderMap,
     cookie_name: &str,
 ) -> ApiResult<(AccountContext, SessionContext)> {
-    let (token, transport) = extract_session_token(headers, cookie_name)?;
+    let (token, _transport) = extract_session_token(headers, cookie_name)?;
     let session_row = repo::find_session_account_by_token(pool, token)
         .await?
         .ok_or(ApiError::Unauthorized)?;
@@ -152,16 +152,7 @@ async fn authenticate_request_with_cookie_name(
         delegations: repo::load_delegations(pool, session_row.account_id).await?,
     };
 
-    Ok((
-        account,
-        SessionContext {
-            token,
-            account_id: session_row.account_id,
-            expires_at: session_row.expires_at,
-            last_seen_at: touched_at,
-            transport,
-        },
-    ))
+    Ok((account, SessionContext { token }))
 }
 
 pub async fn logout(pool: &PgPool, session: &SessionContext) -> ApiResult<bool> {

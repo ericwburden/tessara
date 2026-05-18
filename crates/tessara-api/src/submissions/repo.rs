@@ -347,29 +347,6 @@ pub async fn mark_submission_submitted(pool: &PgPool, submission_id: Uuid) -> Ap
     Ok(result.rows_affected() == 1)
 }
 
-pub async fn complete_workflow_step_for_submission(
-    pool: &PgPool,
-    submission_id: Uuid,
-) -> ApiResult<()> {
-    sqlx::query(
-        r#"
-        UPDATE workflow_step_instances
-        SET status = 'completed',
-            completed_at = now()
-        WHERE id = (
-            SELECT workflow_step_instance_id
-            FROM submissions
-            WHERE id = $1
-        )
-        "#,
-    )
-    .bind(submission_id)
-    .execute(pool)
-    .await?;
-
-    Ok(())
-}
-
 pub async fn delete_workflow_step_instance_for_submission(
     pool: &PgPool,
     submission_id: Uuid,
