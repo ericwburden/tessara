@@ -7,7 +7,7 @@ Sprint 2D completes the end-user response lifecycle by making pending starts, dr
 ## Sprint Specifications
 
 - Deliver pending, draft, submitted, and read-only review flows through `/app/responses*`.
-- Preserve existing public routes and endpoints: `/app/responses*`, `/api/responses/options`, `/api/submissions*`, and workflow-assignment start endpoints.
+- Preserve existing public routes and endpoints: `/app/responses*`, assignment-only `/api/responses/options`, `/api/submissions*`, and workflow-assignment start endpoints.
 - Keep response edit, save, submit, and review routes native SSR-owned from first delivery with no new bridge fallback.
 - Continue the Sprint 2C `handler`, `service`, and `repo` split for touched `submissions` and workflow-runtime behavior.
 - Move response-facing browser auth/session use onto `AuthenticatedRequest` or config-aware helpers so customized browser cookie names work across touched flows.

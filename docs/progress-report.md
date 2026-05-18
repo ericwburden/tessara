@@ -204,7 +204,7 @@
   - `cargo fmt --all`
   - `cargo check -p tessara-api`
   - `cargo check -p tessara-web --target wasm32-unknown-unknown --no-default-features --features hydrate`
-  - `TEST_DATABASE_URL=postgres://tessara:tessara@localhost:5432/tessara_test cargo test -p tessara-api workflow_publish_rejects_sibling_step_form_assignment_nodes -- --nocapture`
+  - `TEST_DATABASE_URL=postgres://tessara:tessara@localhost:5432/tessara_test cargo test -p tessara-api workflow_publish_rejects_sibling_step_assignment_nodes -- --nocapture`
   - `TEST_DATABASE_URL=postgres://tessara:tessara@localhost:5432/tessara_test cargo test -p tessara-api demo_seed_creates_full_uat_dataset_and_is_repeatable -- --nocapture`
   - `.\scripts\local-launch.ps1`
 - Remaining:
@@ -2699,3 +2699,15 @@ Next UI steps:
   - `cargo clippy -p tessara-api -p tessara-web --all-targets -- -D warnings` passed
   - `D:\Projects\dms-migration\tessara\scripts\smoke.ps1` passed
   - `D:\Projects\dms-migration\tessara\scripts\local-launch.ps1` passed and left the refreshed stack running
+## 2026-05-18 - Workflow-Mediated Response Start Cleanup
+
+- Confirmed response access now derives from workflow assignment ownership or delegation for respondent-style access:
+  - submission access loads through `submissions.workflow_assignment_id`
+  - response starts use workflow assignment start authorization
+  - delegated starts/options resolve through account delegation before listing pending assignment work
+- Clarified that admin/operator response access remains capability/scope-gated, but no response path relies on direct form assignment storage.
+- Removed the separate form/node response-start concept from the current implementation notes:
+  - `/api/responses/options` is assignment-only
+  - form-first "Assign Form" is a UI convenience over generated single-form workflows plus normal workflow assignments
+  - response drafts start through `/api/workflow-assignments/{workflow_assignment_id}/start`
+- Tightened DTO naming around assignment-backed response start options so future work does not reintroduce a manual form/node start mode.

@@ -18,7 +18,7 @@ Sprint 2C hardens Tessara workflow and response-entry behavior by decomposing th
 
 ## Acceptance Criteria
 
-- Public HTTP endpoints and response shapes remain compatible for `/api/workflows*`, `/api/workflow-assignments*`, `/api/responses/options`, and `/api/submissions*`.
+- Public HTTP endpoints and response shapes remain compatible for `/api/workflows*`, `/api/workflow-assignments*`, assignment-only `/api/responses/options`, and `/api/submissions*`.
 - Workflow and submission handlers primarily decode input, call service functions, and shape responses.
 - SQL for touched workflow/submission flows lives in repositories instead of expanding route handlers.
 - Admins can start any workflow assignment, operators can only start workflow assignments whose assignment node is in effective scope, and response users can only start their own or delegated assignments.

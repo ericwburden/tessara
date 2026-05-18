@@ -466,13 +466,17 @@ pub async fn list_dashboards(
                 LEFT JOIN forms AS direct_forms ON direct_forms.id = reports.form_id
                 LEFT JOIN form_versions AS direct_form_versions
                     ON direct_form_versions.form_id = direct_forms.id
-                LEFT JOIN form_assignments AS direct_assignments
-                    ON direct_assignments.form_version_id = direct_form_versions.id
+                LEFT JOIN workflow_steps AS direct_steps
+                    ON direct_steps.form_version_id = direct_form_versions.id
+                LEFT JOIN workflow_assignments AS direct_assignments
+                    ON direct_assignments.workflow_step_id = direct_steps.id
                 LEFT JOIN forms AS aggregation_forms ON aggregation_forms.id = aggregation_reports.form_id
                 LEFT JOIN form_versions AS aggregation_form_versions
                     ON aggregation_form_versions.form_id = aggregation_forms.id
-                LEFT JOIN form_assignments AS aggregation_assignments
-                    ON aggregation_assignments.form_version_id = aggregation_form_versions.id
+                LEFT JOIN workflow_steps AS aggregation_steps
+                    ON aggregation_steps.form_version_id = aggregation_form_versions.id
+                LEFT JOIN workflow_assignments AS aggregation_assignments
+                    ON aggregation_assignments.workflow_step_id = aggregation_steps.id
                 WHERE dashboard_components.dashboard_id = dashboards.id
                   AND (
                       direct_assignments.node_id = ANY($1)
@@ -536,13 +540,17 @@ pub async fn get_dashboard(
                 LEFT JOIN forms AS direct_forms ON direct_forms.id = reports.form_id
                 LEFT JOIN form_versions AS direct_form_versions
                     ON direct_form_versions.form_id = direct_forms.id
-                LEFT JOIN form_assignments AS direct_assignments
-                    ON direct_assignments.form_version_id = direct_form_versions.id
+                LEFT JOIN workflow_steps AS direct_steps
+                    ON direct_steps.form_version_id = direct_form_versions.id
+                LEFT JOIN workflow_assignments AS direct_assignments
+                    ON direct_assignments.workflow_step_id = direct_steps.id
                 LEFT JOIN forms AS aggregation_forms ON aggregation_forms.id = aggregation_reports.form_id
                 LEFT JOIN form_versions AS aggregation_form_versions
                     ON aggregation_form_versions.form_id = aggregation_forms.id
-                LEFT JOIN form_assignments AS aggregation_assignments
-                    ON aggregation_assignments.form_version_id = aggregation_form_versions.id
+                LEFT JOIN workflow_steps AS aggregation_steps
+                    ON aggregation_steps.form_version_id = aggregation_form_versions.id
+                LEFT JOIN workflow_assignments AS aggregation_assignments
+                    ON aggregation_assignments.workflow_step_id = aggregation_steps.id
                 WHERE dashboard_components.dashboard_id = $1
                   AND (
                       direct_assignments.node_id = ANY($2)

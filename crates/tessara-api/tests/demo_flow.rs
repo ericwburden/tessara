@@ -415,22 +415,13 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
                 .unwrap_or_default()
                 .starts_with("seed_demo:"))
     );
-    let draft = request_json(
+    let draft_id = start_generated_form_response(
         app.clone(),
-        authorized_request(
-            "POST",
-            "/api/submissions/drafts",
-            &token,
-            Some(json!({
-                "form_version_id": seed["form_version_id"],
-                "node_id": seed["organization_node_id"]
-            })),
-        ),
+        &token,
+        id_from_value(&seed["form_id"]),
+        id_from_value(&seed["organization_node_id"]),
     )
     .await;
-    let draft_id = draft["id"]
-        .as_str()
-        .expect("draft response should contain id");
     request_json(
         app.clone(),
         authorized_request(
@@ -612,7 +603,7 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
             Some(json!({
                 "name": "Follow Up Report",
                 "slug": "follow-up-report",
-                "scope_node_type_id": null
+                "scope_node_type_id": form_scope_node_type_id(app.clone(), &token, id_from_value(&seed["form_id"])).await
             })),
         ),
     )
@@ -640,20 +631,13 @@ async fn demo_seed_report_and_dashboard_flow_works_against_database() {
         ),
     )
     .await;
-    let follow_up_draft = request_json(
+    let follow_up_submission_id = start_generated_form_response(
         app.clone(),
-        authorized_request(
-            "POST",
-            "/api/submissions/drafts",
-            &token,
-            Some(json!({
-                "form_version_id": follow_up_version_id,
-                "node_id": seed["organization_node_id"]
-            })),
-        ),
+        &token,
+        follow_up_form_id,
+        id_from_value(&seed["organization_node_id"]),
     )
     .await;
-    let follow_up_submission_id = id_from(&follow_up_draft);
     request_json(
         app.clone(),
         authorized_request(
@@ -1580,7 +1564,6 @@ async fn role_based_access_respects_scope_and_respondent_context() {
         authorized_request("GET", "/api/responses/options", &respondent_token, None),
     )
     .await;
-    assert_eq!(respondent_options["mode"], "assignment");
     assert!(
         respondent_options["assignments"]
             .as_array()
@@ -1606,7 +1589,6 @@ async fn role_based_access_respects_scope_and_respondent_context() {
         ),
     )
     .await;
-    assert_eq!(delegated_options["mode"], "assignment");
     assert!(
         delegated_options["assignments"]
             .as_array()
@@ -2266,7 +2248,6 @@ async fn form_builder_guards_cross_version_sections_and_supersedes_previous_publ
             Some(json!({
                 "title": "Updated Main",
                 "description": "Monthly service counts and staffing context.",
-                "column_count": 2,
                 "position": 1
             })),
         ),
@@ -2540,7 +2521,6 @@ async fn form_builder_guards_cross_version_sections_and_supersedes_previous_publ
         version_one["sections"][0]["description"],
         "Monthly service counts and staffing context."
     );
-    assert_eq!(version_one["sections"][0]["column_count"], 2);
     assert_eq!(
         version_one["sections"][0]["fields"][0]["key"],
         "staff_count"
@@ -2617,7 +2597,6 @@ async fn form_publish_preview_treats_section_metadata_changes_as_patch() {
             Some(json!({
                 "title": "Main",
                 "description": "Show monthly summary counts first.",
-                "column_count": 2,
                 "position": 0
             })),
         ),
@@ -4057,20 +4036,13 @@ async fn dataset_selection_rules_pick_latest_and_earliest_submissions() {
     )
     .await;
 
-    let follow_up_draft = request_json(
+    let follow_up_submission_id = start_generated_form_response(
         app.clone(),
-        authorized_request(
-            "POST",
-            "/api/submissions/drafts",
-            &token,
-            Some(json!({
-                "form_version_id": seed["form_version_id"],
-                "node_id": seed["organization_node_id"]
-            })),
-        ),
+        &token,
+        id_from_value(&seed["form_id"]),
+        id_from_value(&seed["organization_node_id"]),
     )
     .await;
-    let follow_up_submission_id = id_from(&follow_up_draft);
     request_json(
         app.clone(),
         authorized_request(
@@ -4219,7 +4191,7 @@ async fn join_mode_datasets_merge_selected_source_rows_by_node() {
             Some(json!({
                 "name": "Join Follow Up",
                 "slug": "join-follow-up",
-                "scope_node_type_id": null
+                "scope_node_type_id": form_scope_node_type_id(app.clone(), &token, id_from_value(&seed["form_id"])).await
             })),
         ),
     )
@@ -4248,20 +4220,13 @@ async fn join_mode_datasets_merge_selected_source_rows_by_node() {
     )
     .await;
 
-    let follow_up_draft = request_json(
+    let follow_up_submission_id = start_generated_form_response(
         app.clone(),
-        authorized_request(
-            "POST",
-            "/api/submissions/drafts",
-            &token,
-            Some(json!({
-                "form_version_id": follow_up_version_id,
-                "node_id": seed["organization_node_id"]
-            })),
-        ),
+        &token,
+        follow_up_form_id,
+        id_from_value(&seed["organization_node_id"]),
     )
     .await;
-    let follow_up_submission_id = id_from(&follow_up_draft);
     request_json(
         app.clone(),
         authorized_request(
@@ -4644,20 +4609,13 @@ async fn aggregations_support_avg_min_and_max_metrics() {
     )
     .await;
 
-    let second_draft = request_json(
+    let second_submission_id = start_generated_form_response(
         app.clone(),
-        authorized_request(
-            "POST",
-            "/api/submissions/drafts",
-            &token,
-            Some(json!({
-                "form_version_id": seed["form_version_id"],
-                "node_id": seed["organization_node_id"]
-            })),
-        ),
+        &token,
+        id_from_value(&seed["form_id"]),
+        id_from_value(&seed["organization_node_id"]),
     )
     .await;
-    let second_submission_id = id_from(&second_draft);
     request_json(
         app.clone(),
         authorized_request(
@@ -5510,6 +5468,114 @@ async fn create_form_version(
     id_from(&version)
 }
 
+async fn form_scope_node_type_id(app: axum::Router, token: &str, form_id: Uuid) -> Uuid {
+    let form = request_json(
+        app,
+        authorized_request("GET", &format!("/api/forms/{form_id}"), token, None),
+    )
+    .await;
+
+    form["scope_node_type_id"]
+        .as_str()
+        .and_then(|value| Uuid::parse_str(value).ok())
+        .expect("form should expose a scope node type id")
+}
+
+async fn start_generated_form_response(
+    app: axum::Router,
+    token: &str,
+    form_id: Uuid,
+    node_id: Uuid,
+) -> Uuid {
+    let account_id = create_response_test_account(app.clone(), token).await;
+    let workflow_version_id =
+        current_generated_workflow_version_id(app.clone(), token, form_id).await;
+    let assignment = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/workflow-assignments",
+            token,
+            Some(json!({
+                "workflow_version_id": workflow_version_id,
+                "node_id": node_id,
+                "account_id": account_id
+            })),
+        ),
+    )
+    .await;
+    let assignment_id = id_from(&assignment);
+    let submission = request_json(
+        app,
+        authorized_request(
+            "POST",
+            &format!("/api/workflow-assignments/{assignment_id}/start"),
+            token,
+            None,
+        ),
+    )
+    .await;
+
+    id_from(&submission)
+}
+
+async fn current_generated_workflow_version_id(
+    app: axum::Router,
+    token: &str,
+    form_id: Uuid,
+) -> Uuid {
+    let form = request_json(
+        app,
+        authorized_request("GET", &format!("/api/forms/{form_id}"), token, None),
+    )
+    .await;
+
+    form["workflows"]
+        .as_array()
+        .expect("form detail should include workflows")
+        .iter()
+        .find(|workflow| {
+            workflow["source"] == "generated_form" && workflow["current_status"] == "published"
+        })
+        .and_then(|workflow| workflow["current_version_id"].as_str())
+        .and_then(|value| Uuid::parse_str(value).ok())
+        .expect("published form should have a generated workflow revision")
+}
+
+async fn create_response_test_account(app: axum::Router, token: &str) -> Uuid {
+    let roles = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/admin/roles", token, None),
+    )
+    .await;
+    let respondent_role_id = roles
+        .as_array()
+        .expect("roles should be an array")
+        .iter()
+        .find(|role| role["name"] == "respondent")
+        .and_then(|role| role["id"].as_str())
+        .expect("respondent role should be present");
+    let suffix = Uuid::new_v4();
+    let created = request_json(
+        app,
+        authorized_request(
+            "POST",
+            "/api/admin/users",
+            token,
+            Some(json!({
+                "email": format!("response-start-{suffix}@tessara.local"),
+                "display_name": format!("Response Start {suffix}"),
+                "password": "tessara-dev-response-start",
+                "is_active": true,
+                "role_ids": [respondent_role_id]
+            })),
+        ),
+    )
+    .await;
+
+    id_from(&created)
+}
+
 async fn create_node_type(app: axum::Router, token: &str, name: &str, slug: &str) -> Uuid {
     let node_type = request_json(
         app,
@@ -5564,7 +5630,6 @@ async fn create_form_section(
             Some(json!({
                 "title": title,
                 "description": "",
-                "column_count": 1,
                 "position": 0
             })),
         ),
@@ -5690,6 +5755,14 @@ fn id_from(value: &Value) -> Uuid {
         .expect("response should contain id")
         .parse()
         .expect("response id should be a UUID")
+}
+
+fn id_from_value(value: &Value) -> Uuid {
+    value
+        .as_str()
+        .expect("value should contain id")
+        .parse()
+        .expect("value id should be a UUID")
 }
 
 async fn reset_database(database_url: &str) {

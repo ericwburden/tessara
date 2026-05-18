@@ -5,7 +5,7 @@ edition = "2024"
 
 [features]
 default = []
-ssr = ["tessara-web/ssr"]
+ssr = ["dep:tessara-web", "tessara-web/ssr"]
 
 [dependencies]
 anyhow = { workspace = true }
@@ -26,7 +26,7 @@ tessara-forms = { path = "../tessara-forms" }
 tessara-hierarchy = { path = "../tessara-hierarchy" }
 tessara-reporting = { path = "../tessara-reporting" }
 tessara-submissions = { path = "../tessara-submissions" }
-tessara-web = { path = "../tessara-web" }
+tessara-web = { path = "../tessara-web", default-features = false, optional = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }

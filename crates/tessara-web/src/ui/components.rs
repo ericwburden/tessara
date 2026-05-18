@@ -20,6 +20,7 @@ struct NavItem {
     href: &'static str,
     label: &'static str,
     section: &'static str,
+    capabilities: &'static [&'static str],
 }
 
 const NAV_ITEMS: [NavItem; 10] = [
@@ -28,60 +29,70 @@ const NAV_ITEMS: [NavItem; 10] = [
         href: "/",
         label: "Home",
         section: "Main",
+        capabilities: &[],
     },
     NavItem {
         key: "organization",
         href: "/organization",
         label: "Organization",
         section: "Main",
+        capabilities: &["hierarchy:read", "hierarchy:write"],
     },
     NavItem {
         key: "forms",
         href: "/forms",
         label: "Forms",
         section: "Main",
+        capabilities: &["forms:read", "forms:write"],
     },
     NavItem {
         key: "workflows",
         href: "/workflows",
         label: "Workflows",
         section: "Main",
+        capabilities: &["workflows:read", "workflows:write"],
     },
     NavItem {
         key: "responses",
         href: "/responses",
         label: "Responses",
         section: "Main",
+        capabilities: &["submissions:write"],
     },
     NavItem {
         key: "components",
         href: "/components",
         label: "Components",
         section: "Main",
+        capabilities: &["reports:read", "reports:write"],
     },
     NavItem {
         key: "dashboards",
         href: "/dashboards",
         label: "Dashboards",
         section: "Main",
+        capabilities: &["reports:read", "reports:write"],
     },
     NavItem {
         key: "administration",
         href: "/administration",
         label: "Administration",
         section: "Admin",
+        capabilities: &["admin:all"],
     },
     NavItem {
         key: "datasets",
         href: "/datasets",
         label: "Datasets",
         section: "Admin",
+        capabilities: &["datasets:read", "datasets:write"],
     },
     NavItem {
         key: "migration",
         href: "/migration",
         label: "Migration",
         section: "Admin",
+        capabilities: &["admin:all"],
     },
 ];
 
@@ -118,18 +129,32 @@ fn require_authenticated_route(active_route: &'static str) {
                 .send()
                 .await;
 
-            let authenticated = match response {
-                Ok(response) if response.ok() => response
-                    .json::<SessionStateResponse>()
-                    .await
-                    .map(|session| session.authenticated)
-                    .unwrap_or(false),
-                _ => false,
+            let session = match response {
+                Ok(response) if response.ok() => response.json::<SessionStateResponse>().await.ok(),
+                _ => None,
             };
+
+            let authenticated = session
+                .as_ref()
+                .map(|session| session.authenticated)
+                .unwrap_or(false);
 
             if !authenticated {
                 if let Some(window) = web_sys::window() {
                     let _ = window.location().set_href("/login");
+                }
+                return;
+            }
+
+            if let Some(item) = nav_item_for_route(active_route) {
+                let capabilities = session
+                    .and_then(|session| session.account)
+                    .map(|account| account.capabilities)
+                    .unwrap_or_default();
+                if !nav_item_is_allowed(item, &capabilities) {
+                    if let Some(window) = web_sys::window() {
+                        let _ = window.location().set_href("/");
+                    }
                 }
             }
         });
@@ -145,25 +170,34 @@ fn require_authenticated_route(active_route: &'static str) {
 #[derive(Deserialize)]
 struct SessionStateResponse {
     authenticated: bool,
+    account: Option<ShellAccountContext>,
+}
+
+#[cfg(feature = "hydrate")]
+#[derive(Clone, Deserialize)]
+struct ShellAccountContext {
+    email: String,
+    display_name: String,
+    capabilities: Vec<String>,
 }
 
 #[component]
 pub fn Sidebar(active_route: &'static str) -> impl IntoView {
-    let main_items = nav_items_for("Main", active_route);
-    let admin_items = nav_items_for("Admin", active_route);
-
     view! {
         <aside class="sidebar" aria-label="Primary navigation">
-            <SidebarContent main_items admin_items/>
+            <SidebarContent active_route/>
         </aside>
     }
 }
 
 #[component]
-fn SidebarContent(
-    main_items: impl IntoView + 'static,
-    admin_items: impl IntoView + 'static,
-) -> impl IntoView {
+fn SidebarContent(active_route: &'static str) -> impl IntoView {
+    let account = RwSignal::new(None::<ShellAccountSummary>);
+
+    Effect::new(move |_| {
+        load_shell_account(account);
+    });
+
     view! {
         <a class="brand-lockup" href="/">
             <span class="brand-mark" aria-hidden="true">
@@ -174,16 +208,52 @@ fn SidebarContent(
             </span>
         </a>
         <nav class="sidebar-nav" aria-label="Primary">
-            <p class="sidebar-section">"Main"</p>
-            {main_items}
-            <p class="sidebar-section">"Admin"</p>
-            {admin_items}
+            {move || nav_section_for("Main", active_route, account.get())}
+            {move || nav_section_for("Admin", active_route, account.get())}
         </nav>
+        <AccountCard account/>
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct ShellAccountSummary {
+    email: String,
+    display_name: String,
+    capabilities: Vec<String>,
+}
+
+#[component]
+fn AccountCard(account: RwSignal<Option<ShellAccountSummary>>) -> impl IntoView {
+    view! {
         <section class="account-card" aria-label="Account context">
-            <span class="account-avatar">"TA"</span>
+            <span class="account-avatar">
+                {move || {
+                    account
+                        .get()
+                        .as_ref()
+                        .map(|account| account_initials(&account.display_name, &account.email))
+                        .unwrap_or_else(|| "--".to_string())
+                }}
+            </span>
             <span class="account-copy">
-                <strong>"Tessara Admin"</strong>
-                <small>"admin@tessara.local"</small>
+                <strong>
+                    {move || {
+                        account
+                            .get()
+                            .as_ref()
+                            .map(|account| account.display_name.clone())
+                            .unwrap_or_else(|| "Signed out".to_string())
+                    }}
+                </strong>
+                <small>
+                    {move || {
+                        account
+                            .get()
+                            .as_ref()
+                            .map(|account| account.email.clone())
+                            .unwrap_or_else(|| "No active session".to_string())
+                    }}
+                </small>
             </span>
             <button
                 class="icon-button account-card__logout"
@@ -195,6 +265,54 @@ fn SidebarContent(
                 <LogOut class="icon-button__icon"/>
             </button>
         </section>
+    }
+}
+
+fn account_initials(display_name: &str, email: &str) -> String {
+    let initials = display_name
+        .split_whitespace()
+        .filter_map(|part| part.chars().next())
+        .take(2)
+        .collect::<String>()
+        .to_uppercase();
+
+    if !initials.is_empty() {
+        return initials;
+    }
+
+    email.chars().take(2).collect::<String>().to_uppercase()
+}
+
+fn load_shell_account(account: RwSignal<Option<ShellAccountSummary>>) {
+    #[cfg(feature = "hydrate")]
+    {
+        leptos::task::spawn_local(async move {
+            let response = gloo_net::http::Request::get("/api/auth/session")
+                .send()
+                .await;
+
+            match response {
+                Ok(response) if response.ok() => {
+                    let session = response.json::<SessionStateResponse>().await.ok();
+                    account.set(session.and_then(|session| {
+                        if !session.authenticated {
+                            return None;
+                        }
+                        session.account.map(|account| ShellAccountSummary {
+                            email: account.email,
+                            display_name: account.display_name,
+                            capabilities: account.capabilities,
+                        })
+                    }));
+                }
+                _ => account.set(None),
+            }
+        });
+    }
+
+    #[cfg(not(feature = "hydrate"))]
+    {
+        let _ = account;
     }
 }
 
@@ -213,24 +331,65 @@ fn submit_logout() {
     }
 }
 
-fn nav_items_for(section: &'static str, active_route: &'static str) -> impl IntoView {
-    NAV_ITEMS
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+fn nav_item_for_route(route_key: &str) -> Option<&'static NavItem> {
+    NAV_ITEMS.iter().find(|item| item.key == route_key)
+}
+
+fn nav_item_is_allowed(item: &NavItem, capabilities: &[String]) -> bool {
+    item.capabilities.is_empty()
+        || capabilities
+            .iter()
+            .any(|capability| capability == "admin:all")
+        || item
+            .capabilities
+            .iter()
+            .any(|required| capabilities.iter().any(|capability| capability == required))
+}
+
+fn nav_section_for(
+    section: &'static str,
+    active_route: &'static str,
+    account: Option<ShellAccountSummary>,
+) -> impl IntoView {
+    let capabilities = account
+        .as_ref()
+        .map(|account| account.capabilities.as_slice())
+        .unwrap_or(&[]);
+    let items = NAV_ITEMS
         .iter()
         .filter(move |item| item.section == section)
-        .map(move |item| {
-            let class = if item.key == active_route {
-                "sidebar-link is-active"
-            } else {
-                "sidebar-link"
-            };
-            view! {
-                <a class=class href=item.href title=item.label aria-label=item.label>
-                    <NavIcon route_key=item.key/>
-                    <span class="sidebar-link__label">{item.label}</span>
-                </a>
-            }
-        })
-        .collect_view()
+        .filter(|item| nav_item_is_allowed(item, capabilities))
+        .collect::<Vec<_>>();
+
+    if items.is_empty() {
+        return view! {}.into_any();
+    }
+
+    view! {
+        <p class="sidebar-section">{section}</p>
+        {items
+            .into_iter()
+            .map(move |item| {
+                nav_item_link(item, active_route)
+            })
+            .collect_view()}
+    }
+    .into_any()
+}
+
+fn nav_item_link(item: &'static NavItem, active_route: &'static str) -> impl IntoView {
+    let class = if item.key == active_route {
+        "sidebar-link is-active"
+    } else {
+        "sidebar-link"
+    };
+    view! {
+        <a class=class href=item.href title=item.label aria-label=item.label>
+            <NavIcon route_key=item.key/>
+            <span class="sidebar-link__label">{item.label}</span>
+        </a>
+    }
 }
 
 #[component]
@@ -442,8 +601,6 @@ fn set_theme_preference(preference: &'static str) {
 
 #[component]
 fn MobileNav(active_route: &'static str) -> impl IntoView {
-    let main_items = nav_items_for("Main", active_route);
-    let admin_items = nav_items_for("Admin", active_route);
     let is_open = RwSignal::new(false);
     let nav_class = move || {
         if is_open.get() {
@@ -471,7 +628,7 @@ fn MobileNav(active_route: &'static str) -> impl IntoView {
                 on:click=move |_| is_open.set(false)
             ></button>
             <aside class="mobile-nav__panel blurred-surface" aria-label="Primary navigation">
-                <SidebarContent main_items admin_items/>
+                <SidebarContent active_route/>
             </aside>
         </div>
     }

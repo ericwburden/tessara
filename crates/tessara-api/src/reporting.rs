@@ -662,8 +662,9 @@ pub async fn list_reports(
             LEFT JOIN forms ON forms.id = reports.form_id
             LEFT JOIN datasets ON datasets.id = reports.dataset_id
             JOIN form_versions ON form_versions.form_id = forms.id
-            JOIN form_assignments ON form_assignments.form_version_id = form_versions.id
-            WHERE form_assignments.node_id = ANY($1)
+            JOIN workflow_steps ON workflow_steps.form_version_id = form_versions.id
+            JOIN workflow_assignments ON workflow_assignments.workflow_step_id = workflow_steps.id
+            WHERE workflow_assignments.node_id = ANY($1)
             ORDER BY reports.name, reports.created_at
             "#,
         )
@@ -726,9 +727,10 @@ pub async fn get_report(
                 FROM reports
                 JOIN forms ON forms.id = reports.form_id
                 JOIN form_versions ON form_versions.form_id = forms.id
-                JOIN form_assignments ON form_assignments.form_version_id = form_versions.id
+                JOIN workflow_steps ON workflow_steps.form_version_id = form_versions.id
+                JOIN workflow_assignments ON workflow_assignments.workflow_step_id = workflow_steps.id
                 WHERE reports.id = $1
-                  AND form_assignments.node_id = ANY($2)
+                  AND workflow_assignments.node_id = ANY($2)
             )
             "#,
         )
@@ -882,9 +884,10 @@ pub async fn run_report(
                 FROM reports
                 JOIN forms ON forms.id = reports.form_id
                 JOIN form_versions ON form_versions.form_id = forms.id
-                JOIN form_assignments ON form_assignments.form_version_id = form_versions.id
+                JOIN workflow_steps ON workflow_steps.form_version_id = form_versions.id
+                JOIN workflow_assignments ON workflow_assignments.workflow_step_id = workflow_steps.id
                 WHERE reports.id = $1
-                  AND form_assignments.node_id = ANY($2)
+                  AND workflow_assignments.node_id = ANY($2)
             )
             "#,
         )

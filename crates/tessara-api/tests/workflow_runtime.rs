@@ -44,7 +44,7 @@ async fn demo_seed_backfills_workflows_and_form_links() {
         .as_array()
         .expect("workflow list should be an array")
         .iter()
-        .find(|workflow| workflow["form_id"] == seed["form_id"])
+        .find(|workflow| workflow["slug"] == "demo-session-log-workflow")
         .cloned()
         .expect("seeded form should expose a linked workflow");
     assert!(
@@ -104,7 +104,7 @@ async fn demo_seed_backfills_workflows_and_form_links() {
         ),
     )
     .await;
-    assert_eq!(workflow_detail["form_id"], seed["form_id"]);
+    assert_eq!(workflow_detail["workflow_node_type_name"], "Session");
     assert!(
         workflow_detail["assignments"]
             .as_array()
@@ -147,8 +147,11 @@ async fn demo_seed_backfills_workflows_and_form_links() {
         ),
     )
     .await;
-    assert_eq!(scoped_workflow["scope_node_type_name"], "Program");
-    assert_eq!(scoped_workflow["versions"][0]["form_version_label"], "1");
+    assert_eq!(scoped_workflow["workflow_node_type_name"], "Program");
+    assert_eq!(
+        scoped_workflow["versions"][0]["workflow_revision_label"],
+        "1"
+    );
     assert_eq!(scoped_workflow["versions"][0]["step_count"], 3);
     let scoped_steps = scoped_workflow["versions"][0]["steps"]
         .as_array()
@@ -186,12 +189,12 @@ async fn form_versions_can_be_reused_across_workflows() {
         authorized_request("POST", "/api/demo/seed", &admin_token, None),
     )
     .await;
-    let form_id = seed["form_id"]
-        .as_str()
-        .expect("seed should expose form id");
     let form_version_id = seed["form_version_id"]
         .as_str()
         .expect("seed should expose form version id");
+    let workflow_node_type_id =
+        workflow_node_type_id_for_slug(app.clone(), &admin_token, "demo-session-log-workflow")
+            .await;
 
     let first_workflow = request_json(
         app.clone(),
@@ -200,7 +203,7 @@ async fn form_versions_can_be_reused_across_workflows() {
             "/api/workflows",
             &admin_token,
             Some(json!({
-                "form_id": form_id,
+                "workflow_node_type_id": workflow_node_type_id,
                 "name": "Reusable Intake Workflow A",
                 "slug": "reusable-intake-workflow-a",
                 "description": "Uses the same form as another workflow."
@@ -215,7 +218,7 @@ async fn form_versions_can_be_reused_across_workflows() {
             "/api/workflows",
             &admin_token,
             Some(json!({
-                "form_id": form_id,
+                "workflow_node_type_id": workflow_node_type_id,
                 "name": "Reusable Intake Workflow B",
                 "slug": "reusable-intake-workflow-b",
                 "description": "Also uses the same form."
@@ -624,7 +627,7 @@ async fn multi_step_workflow_advances_to_next_form_for_same_assignee() {
         .as_array()
         .expect("workflow list should be an array")
         .iter()
-        .find(|workflow| workflow["form_id"] == seed["form_id"])
+        .find(|workflow| workflow["slug"] == "demo-session-log-workflow")
         .and_then(|workflow| workflow["id"].as_str())
         .expect("seed form should expose workflow")
         .to_string();
@@ -877,15 +880,18 @@ async fn multi_step_workflow_can_target_descendant_step_form_nodes() {
         "tessara-dev-respondent",
     )
     .await;
-    let program_form_id = seed["program_form_id"]
-        .as_str()
-        .expect("seed should expose program form id");
     let program_form_version_id = seed["program_form_version_id"]
         .as_str()
         .expect("seed should expose program form version id");
     let activity_form_version_id = seed["activity_form_version_id"]
         .as_str()
         .expect("seed should expose activity form version id");
+    let workflow_node_type_id = workflow_node_type_id_for_slug(
+        app.clone(),
+        &admin_token,
+        "demo-program-checkpoint-workflow",
+    )
+    .await;
     let program_node_id = seed["program_node_id"]
         .as_str()
         .expect("seed should expose program node id");
@@ -905,7 +911,7 @@ async fn multi_step_workflow_can_target_descendant_step_form_nodes() {
             "/api/workflows",
             &admin_token,
             Some(json!({
-                "form_id": program_form_id,
+                "workflow_node_type_id": workflow_node_type_id,
                 "name": "Program With Activity Follow-up",
                 "slug": "program-with-activity-follow-up",
                 "description": "Program assignment that collects an activity-scoped second step."
@@ -1167,12 +1173,15 @@ async fn workflow_publish_rejects_branching_step_form_scopes() {
         authorized_request("POST", "/api/demo/seed", &admin_token, None),
     )
     .await;
-    let program_form_id = seed["program_form_id"]
-        .as_str()
-        .expect("seed should expose program form id");
     let activity_form_version_id = seed["activity_form_version_id"]
         .as_str()
         .expect("seed should expose activity form version id");
+    let workflow_node_type_id = workflow_node_type_id_for_slug(
+        app.clone(),
+        &admin_token,
+        "demo-program-checkpoint-workflow",
+    )
+    .await;
 
     let program_type_id: uuid::Uuid =
         sqlx::query_scalar("SELECT id FROM node_types WHERE name = 'Program'")
@@ -1227,7 +1236,7 @@ async fn workflow_publish_rejects_branching_step_form_scopes() {
             "/api/workflows",
             &admin_token,
             Some(json!({
-                "form_id": program_form_id,
+                "workflow_node_type_id": workflow_node_type_id,
                 "name": "Branching Workflow",
                 "slug": "branching-workflow",
                 "description": "Should not publish because child scopes branch."
@@ -1281,7 +1290,7 @@ async fn workflow_publish_rejects_branching_step_form_scopes() {
 }
 
 #[tokio::test]
-async fn workflow_publish_rejects_sibling_step_form_assignment_nodes() {
+async fn workflow_publish_rejects_sibling_step_assignment_nodes() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
     let Some(app) = test_app().await else { return };
     let admin_token = login_token(app.clone()).await;
@@ -1297,6 +1306,12 @@ async fn workflow_publish_rejects_sibling_step_form_assignment_nodes() {
     let workshop_activity_form_version_id = seed["workshop_activity_form_version_id"]
         .as_str()
         .expect("seed should expose workshop activity form version id");
+    let workflow_node_type_id = workflow_node_type_id_for_slug(
+        app.clone(),
+        &admin_token,
+        "demo-intake-activity-checkpoint-workflow",
+    )
+    .await;
 
     let workflow = request_json(
         app.clone(),
@@ -1305,6 +1320,7 @@ async fn workflow_publish_rejects_sibling_step_form_assignment_nodes() {
             "/api/workflows",
             &admin_token,
             Some(json!({
+                "workflow_node_type_id": workflow_node_type_id,
                 "name": "Sibling Activity Workflow",
                 "slug": "sibling-activity-workflow",
                 "description": "Should not publish because concrete activity nodes are siblings."
@@ -1354,7 +1370,7 @@ async fn workflow_publish_rejects_sibling_step_form_assignment_nodes() {
         rejected.1["error"]
             .as_str()
             .unwrap_or_default()
-            .contains("form assignments must stay on one hierarchy lineage")
+            .contains("one hierarchy lineage")
     );
 }
 
@@ -2336,6 +2352,22 @@ async fn authenticated_requests_update_last_seen_timestamp() {
 async fn test_app() -> Option<axum::Router> {
     LazyLock::force(&TEST_TRACING);
     Some(router(test_state().await?))
+}
+
+async fn workflow_node_type_id_for_slug(app: axum::Router, token: &str, slug: &str) -> String {
+    let workflows = request_json(
+        app,
+        authorized_request("GET", "/api/workflows", token, None),
+    )
+    .await;
+    workflows
+        .as_array()
+        .expect("workflow list should be an array")
+        .iter()
+        .find(|workflow| workflow["slug"] == slug)
+        .and_then(|workflow| workflow["workflow_node_type_id"].as_str())
+        .unwrap_or_else(|| panic!("workflow {slug} should expose a node type id"))
+        .to_string()
 }
 
 async fn test_state() -> Option<db::AppState> {

@@ -4,8 +4,7 @@ use uuid::Uuid;
 
 #[derive(Deserialize)]
 pub struct CreateWorkflowRequest {
-    pub form_id: Option<Uuid>,
-    pub scope_node_type_id: Option<Uuid>,
+    pub workflow_node_type_id: Uuid,
     pub name: String,
     pub slug: String,
     pub description: Option<String>,
@@ -13,18 +12,14 @@ pub struct CreateWorkflowRequest {
 
 #[derive(Deserialize)]
 pub struct UpdateWorkflowRequest {
-    pub form_id: Option<Uuid>,
-    pub scope_node_type_id: Option<Uuid>,
+    pub workflow_node_type_id: Uuid,
     pub name: String,
     pub slug: String,
     pub description: Option<String>,
 }
 
 #[derive(Deserialize)]
-pub struct CreateWorkflowVersionRequest {
-    pub form_version_id: Option<Uuid>,
-    pub title: Option<String>,
-    #[serde(default)]
+pub struct CreateWorkflowRevisionRequest {
     pub steps: Vec<CreateWorkflowStepRequest>,
 }
 
@@ -35,8 +30,7 @@ pub struct CreateWorkflowStepRequest {
 }
 
 #[derive(Deserialize)]
-pub struct UpdateWorkflowVersionStepsRequest {
-    #[serde(default)]
+pub struct UpdateWorkflowRevisionStepsRequest {
     pub steps: Vec<CreateWorkflowStepRequest>,
 }
 
@@ -87,17 +81,15 @@ pub struct WorkflowAssignmentQuery {
 #[derive(Serialize)]
 pub struct WorkflowSummary {
     pub id: Uuid,
-    pub form_id: Uuid,
-    pub form_name: String,
-    pub form_slug: String,
-    pub scope_node_type_id: Option<Uuid>,
-    pub scope_node_type_name: Option<String>,
+    pub workflow_node_type_id: Uuid,
+    pub workflow_node_type_name: String,
     pub name: String,
     pub slug: String,
     pub description: String,
+    pub source: String,
+    pub source_form_id: Option<Uuid>,
     pub current_version_id: Option<Uuid>,
     pub current_version_label: Option<String>,
-    pub current_form_version_id: Option<Uuid>,
     pub current_status: Option<String>,
     pub assignment_count: i64,
     pub version_count: i64,
@@ -107,8 +99,7 @@ pub struct WorkflowSummary {
 #[derive(Serialize)]
 pub struct WorkflowVersionSummary {
     pub id: Uuid,
-    pub form_version_id: Uuid,
-    pub form_version_label: Option<String>,
+    pub workflow_revision_label: Option<String>,
     pub title: String,
     pub status: String,
     pub published_at: Option<DateTime<Utc>>,
@@ -155,14 +146,13 @@ pub struct WorkflowAssignmentSummary {
 #[derive(Serialize)]
 pub struct WorkflowDefinition {
     pub id: Uuid,
-    pub form_id: Uuid,
-    pub form_name: String,
-    pub form_slug: String,
-    pub scope_node_type_id: Option<Uuid>,
-    pub scope_node_type_name: Option<String>,
+    pub workflow_node_type_id: Uuid,
+    pub workflow_node_type_name: String,
     pub name: String,
     pub slug: String,
     pub description: String,
+    pub source: String,
+    pub source_form_id: Option<Uuid>,
     pub versions: Vec<WorkflowVersionSummary>,
     pub assignments: Vec<WorkflowAssignmentSummary>,
 }

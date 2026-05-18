@@ -1,8 +1,3 @@
-ALTER TABLE form_sections
-    DROP CONSTRAINT form_sections_column_count_check,
-    ADD CONSTRAINT form_sections_column_count_check
-        CHECK (column_count BETWEEN 1 AND 12);
-
 ALTER TABLE form_fields
     ADD COLUMN grid_row integer NOT NULL DEFAULT 1,
     ADD COLUMN grid_column integer NOT NULL DEFAULT 1,

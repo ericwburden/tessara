@@ -60,6 +60,7 @@ mod tests {
         let html = application_html("/login", "Tessara Sign In", "Sign in.");
 
         assert!(html.contains("Sign In"));
-        assert!(html.contains(r#"href="/login""#));
+        assert!(html.contains(r#"<form class="login-form""#));
+        assert!(html.contains(r#"href="/""#));
     }
 }

@@ -13,6 +13,6 @@ pub use handlers::{
 };
 pub use service::{
     complete_workflow_step_and_advance, ensure_submission_runtime_linkage,
-    ensure_workflow_assignment_for_form_assignment, ensure_workflow_for_published_form_version_tx,
-    list_pending_assignments_for_account, start_workflow_assignment,
+    ensure_workflow_assignment_for_form_version, ensure_workflow_for_published_form_version_tx,
+    list_pending_assignments_for_account,
 };

@@ -71,9 +71,10 @@ pub async fn get_summary(
                 (
                     SELECT COUNT(DISTINCT form_versions.id)
                     FROM form_versions
-                    JOIN form_assignments ON form_assignments.form_version_id = form_versions.id
+                    JOIN workflow_steps ON workflow_steps.form_version_id = form_versions.id
+                    JOIN workflow_assignments ON workflow_assignments.workflow_step_id = workflow_steps.id
                     WHERE form_versions.status = 'published'::form_version_status
-                      AND form_assignments.node_id = ANY($1)
+                      AND workflow_assignments.node_id = ANY($1)
                 ) AS published_form_versions,
                 (
                     SELECT COUNT(*)
@@ -93,8 +94,9 @@ pub async fn get_summary(
                     FROM reports
                     JOIN forms ON forms.id = reports.form_id
                     JOIN form_versions ON form_versions.form_id = forms.id
-                    JOIN form_assignments ON form_assignments.form_version_id = form_versions.id
-                    WHERE form_assignments.node_id = ANY($1)
+                    JOIN workflow_steps ON workflow_steps.form_version_id = form_versions.id
+                    JOIN workflow_assignments ON workflow_assignments.workflow_step_id = workflow_steps.id
+                    WHERE workflow_assignments.node_id = ANY($1)
                 ) AS reports,
                 0::bigint AS aggregations,
                 (
@@ -109,8 +111,10 @@ pub async fn get_summary(
                     LEFT JOIN forms AS aggregation_forms ON aggregation_forms.id = aggregation_reports.form_id
                     LEFT JOIN form_versions AS direct_form_versions ON direct_form_versions.form_id = direct_forms.id
                     LEFT JOIN form_versions AS aggregation_form_versions ON aggregation_form_versions.form_id = aggregation_forms.id
-                    LEFT JOIN form_assignments AS direct_assignments ON direct_assignments.form_version_id = direct_form_versions.id
-                    LEFT JOIN form_assignments AS aggregation_assignments ON aggregation_assignments.form_version_id = aggregation_form_versions.id
+                    LEFT JOIN workflow_steps AS direct_steps ON direct_steps.form_version_id = direct_form_versions.id
+                    LEFT JOIN workflow_assignments AS direct_assignments ON direct_assignments.workflow_step_id = direct_steps.id
+                    LEFT JOIN workflow_steps AS aggregation_steps ON aggregation_steps.form_version_id = aggregation_form_versions.id
+                    LEFT JOIN workflow_assignments AS aggregation_assignments ON aggregation_assignments.workflow_step_id = aggregation_steps.id
                     WHERE direct_assignments.node_id = ANY($1)
                        OR aggregation_assignments.node_id = ANY($1)
                 ) AS dashboards,
@@ -150,16 +154,16 @@ pub async fn get_summary(
             (
                 SELECT COUNT(*)
                 FROM submissions
-                JOIN form_assignments ON form_assignments.id = submissions.assignment_id
+                JOIN workflow_assignments ON workflow_assignments.id = submissions.workflow_assignment_id
                 WHERE submissions.status = 'draft'::submission_status
-                  AND form_assignments.account_id = ANY($1)
+                  AND workflow_assignments.account_id = ANY($1)
             ) AS draft_submissions,
             (
                 SELECT COUNT(*)
                 FROM submissions
-                JOIN form_assignments ON form_assignments.id = submissions.assignment_id
+                JOIN workflow_assignments ON workflow_assignments.id = submissions.workflow_assignment_id
                 WHERE submissions.status = 'submitted'::submission_status
-                  AND form_assignments.account_id = ANY($1)
+                  AND workflow_assignments.account_id = ANY($1)
             ) AS submitted_submissions,
             0::bigint AS datasets,
             0::bigint AS reports,

@@ -7,28 +7,23 @@ use uuid::Uuid;
 use crate::{auth::AuthenticatedRequest, db::AppState, error::ApiResult, hierarchy::IdResponse};
 
 use super::dto::{
-    CreateDraftRequest, ListSubmissionsQuery, ResponseStartOptions, SaveSubmissionValuesRequest,
+    AssignmentResponseStartOptions, ListSubmissionsQuery, SaveSubmissionValuesRequest,
     SubmissionDetail, SubmissionSummary,
 };
 use super::service;
 
+/// Returns workflow-assignment-backed response start choices only.
+///
+/// Form-first shortcuts must create or reuse a generated single-form workflow
+/// assignment before a response can be started.
 pub async fn list_response_start_options(
     State(state): State<AppState>,
     request: AuthenticatedRequest,
     Query(query): Query<ListSubmissionsQuery>,
-) -> ApiResult<Json<ResponseStartOptions>> {
+) -> ApiResult<Json<AssignmentResponseStartOptions>> {
     Ok(Json(
         service::list_response_start_options(&state.pool, &request.account, query).await?,
     ))
-}
-
-pub async fn create_draft(
-    State(state): State<AppState>,
-    request: AuthenticatedRequest,
-    Json(payload): Json<CreateDraftRequest>,
-) -> ApiResult<Json<IdResponse>> {
-    let id = service::create_draft(&state.pool, &request.account, payload).await?;
-    Ok(Json(IdResponse { id }))
 }
 
 /// Lists submissions for the current local workflow shell.

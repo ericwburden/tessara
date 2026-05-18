@@ -8,7 +8,7 @@ use uuid::Uuid;
 use crate::{error::ApiResult, hierarchy::parse_field_type};
 
 use super::dto::{
-    ResponseNodeSummary, SubmissionAuditEventSummary, SubmissionDetail, SubmissionRuntimeDetail,
+    SubmissionAuditEventSummary, SubmissionDetail, SubmissionRuntimeDetail,
     SubmissionRuntimeStepHistory, SubmissionSummary, SubmissionValueDetail,
 };
 
@@ -33,169 +33,6 @@ pub struct SubmissionListFilters<'a> {
     pub search: Option<&'a str>,
 }
 
-pub async fn list_all_published_form_versions(
-    pool: &PgPool,
-) -> ApiResult<Vec<crate::forms::PublishedFormVersionSummary>> {
-    let rows = sqlx::query(
-        r#"
-        SELECT
-            forms.id AS form_id,
-            forms.name AS form_name,
-            forms.slug AS form_slug,
-            form_versions.id AS form_version_id,
-            form_versions.version_label,
-            form_versions.published_at,
-            COUNT(form_fields.id) AS field_count
-        FROM form_versions
-        JOIN forms ON forms.id = form_versions.form_id
-        LEFT JOIN form_fields ON form_fields.form_version_id = form_versions.id
-        WHERE form_versions.status = 'published'::form_version_status
-        GROUP BY
-            forms.id,
-            forms.name,
-            forms.slug,
-            form_versions.id,
-            form_versions.version_label,
-            form_versions.published_at,
-            form_versions.created_at
-        ORDER BY forms.name, form_versions.created_at
-        "#,
-    )
-    .fetch_all(pool)
-    .await?;
-
-    rows.into_iter()
-        .map(published_form_version_summary_from_row)
-        .collect::<Result<Vec<_>, sqlx::Error>>()
-        .map_err(Into::into)
-}
-
-pub async fn list_scoped_published_form_versions(
-    pool: &PgPool,
-    scope_ids: &[Uuid],
-) -> ApiResult<Vec<crate::forms::PublishedFormVersionSummary>> {
-    let rows = sqlx::query(
-        r#"
-        SELECT DISTINCT
-            forms.id AS form_id,
-            forms.name AS form_name,
-            forms.slug AS form_slug,
-            form_versions.id AS form_version_id,
-            form_versions.version_label,
-            form_versions.published_at,
-            COUNT(form_fields.id) AS field_count
-        FROM form_versions
-        JOIN forms ON forms.id = form_versions.form_id
-        JOIN form_assignments ON form_assignments.form_version_id = form_versions.id
-        LEFT JOIN form_fields ON form_fields.form_version_id = form_versions.id
-        WHERE form_versions.status = 'published'::form_version_status
-          AND form_assignments.node_id = ANY($1)
-        GROUP BY
-            forms.id,
-            forms.name,
-            forms.slug,
-            form_versions.id,
-            form_versions.version_label,
-            form_versions.published_at,
-            form_versions.created_at
-        ORDER BY forms.name, form_versions.created_at
-        "#,
-    )
-    .bind(scope_ids)
-    .fetch_all(pool)
-    .await?;
-
-    rows.into_iter()
-        .map(published_form_version_summary_from_row)
-        .collect::<Result<Vec<_>, sqlx::Error>>()
-        .map_err(Into::into)
-}
-
-pub async fn list_response_nodes(
-    pool: &PgPool,
-    scope_ids: Option<&[Uuid]>,
-) -> ApiResult<Vec<ResponseNodeSummary>> {
-    let rows = if let Some(scope_ids) = scope_ids {
-        sqlx::query("SELECT id, name FROM nodes WHERE id = ANY($1) ORDER BY name, id")
-            .bind(scope_ids)
-            .fetch_all(pool)
-            .await?
-    } else {
-        sqlx::query("SELECT id, name FROM nodes ORDER BY name, id")
-            .fetch_all(pool)
-            .await?
-    };
-
-    rows.into_iter()
-        .map(|row| {
-            Ok(ResponseNodeSummary {
-                id: row.try_get("id")?,
-                name: row.try_get("name")?,
-            })
-        })
-        .collect::<Result<Vec<_>, sqlx::Error>>()
-        .map_err(Into::into)
-}
-
-pub async fn form_version_status(
-    pool: &PgPool,
-    form_version_id: Uuid,
-) -> ApiResult<Option<String>> {
-    sqlx::query_scalar("SELECT status::text FROM form_versions WHERE id = $1")
-        .bind(form_version_id)
-        .fetch_optional(pool)
-        .await
-        .map_err(Into::into)
-}
-
-pub async fn create_form_assignment(
-    pool: &PgPool,
-    form_version_id: Uuid,
-    node_id: Uuid,
-    account_id: Uuid,
-) -> ApiResult<Uuid> {
-    sqlx::query_scalar(
-        r#"
-        INSERT INTO form_assignments (form_version_id, node_id, account_id)
-        VALUES ($1, $2, $3)
-        RETURNING id
-        "#,
-    )
-    .bind(form_version_id)
-    .bind(node_id)
-    .bind(account_id)
-    .fetch_one(pool)
-    .await
-    .map_err(Into::into)
-}
-
-pub async fn find_active_workflow_assignment(
-    pool: &PgPool,
-    form_version_id: Uuid,
-    node_id: Uuid,
-    account_id: Uuid,
-) -> ApiResult<Option<Uuid>> {
-    sqlx::query_scalar(
-        r#"
-        SELECT workflow_assignments.id
-        FROM workflow_assignments
-        JOIN workflow_steps ON workflow_steps.id = workflow_assignments.workflow_step_id
-        WHERE workflow_steps.form_version_id = $1
-          AND workflow_assignments.node_id = $2
-          AND workflow_assignments.account_id = $3
-          AND workflow_assignments.is_active = true
-        ORDER BY workflow_assignments.created_at
-        LIMIT 1
-        "#,
-    )
-    .bind(form_version_id)
-    .bind(node_id)
-    .bind(account_id)
-    .fetch_optional(pool)
-    .await
-    .map_err(Into::into)
-}
-
 pub async fn load_submission_access(
     pool: &PgPool,
     submission_id: Uuid,
@@ -206,10 +43,9 @@ pub async fn load_submission_access(
             submissions.form_version_id,
             submissions.node_id,
             submissions.status::text AS status,
-            COALESCE(workflow_assignments.account_id, form_assignments.account_id) AS assignment_account_id
+            workflow_assignments.account_id AS assignment_account_id
         FROM submissions
-        JOIN form_assignments ON form_assignments.id = submissions.assignment_id
-        LEFT JOIN workflow_assignments ON workflow_assignments.id = submissions.workflow_assignment_id
+        JOIN workflow_assignments ON workflow_assignments.id = submissions.workflow_assignment_id
         WHERE submissions.id = $1
         "#,
     )
@@ -684,20 +520,6 @@ async fn load_submission_audit_events(
         })
         .collect::<Result<Vec<_>, sqlx::Error>>()
         .map_err(Into::into)
-}
-
-fn published_form_version_summary_from_row(
-    row: PgRow,
-) -> Result<crate::forms::PublishedFormVersionSummary, sqlx::Error> {
-    Ok(crate::forms::PublishedFormVersionSummary {
-        form_id: row.try_get("form_id")?,
-        form_name: row.try_get("form_name")?,
-        form_slug: row.try_get("form_slug")?,
-        form_version_id: row.try_get("form_version_id")?,
-        version_label: row.try_get("version_label")?,
-        published_at: row.try_get("published_at")?,
-        field_count: row.try_get("field_count")?,
-    })
 }
 
 fn submission_summary_from_row(row: PgRow) -> Result<SubmissionSummary, sqlx::Error> {

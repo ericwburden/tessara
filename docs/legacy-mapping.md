@@ -109,7 +109,7 @@ multi-selector field types before importing selector-based legacy forms.
 
 | Legacy concept | Tessara target | Notes |
 | --- | --- | --- |
-| `ClientFormAssignment` | `form_assignments` | `assigned_to` maps to account/participant relationship after participant modeling. |
+| `ClientFormAssignment` | `workflow_assignments` via generated single-form workflows | Direct `form_assignments` storage has been removed. Form assignment is now only a UI/import convenience: create or reuse the generated single-step workflow for the form, then create normal workflow assignments. |
 | `uuid` assignment link | assignment public token or invitation table | Current Tessara assignment model does not expose public tokens yet. |
 | `FormEntry` | `submissions` | Import as submitted records unless a legacy incomplete state is found. |
 | `FormFieldEntry` subclasses | `submission_values` and `submission_value_multi` | Values must be normalized through target field definitions. |

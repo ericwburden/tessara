@@ -1275,29 +1275,29 @@ async fn ensure_submission(
         sqlx::query_scalar("SELECT id FROM accounts WHERE email = 'admin@tessara.local' LIMIT 1")
             .fetch_one(pool)
             .await?;
-    let assignment_id: Uuid = sqlx::query_scalar(
-        r#"
-        INSERT INTO form_assignments (form_version_id, node_id, account_id)
-        VALUES ($1, $2, $3)
-        RETURNING id
-        "#,
+    let workflow_assignment_id = workflows::ensure_workflow_assignment_for_form_version(
+        pool,
+        form_version_id,
+        node_id,
+        account_id,
     )
-    .bind(form_version_id)
-    .bind(node_id)
-    .bind(account_id)
-    .fetch_one(pool)
     .await?;
-    let _ = workflows::ensure_workflow_assignment_for_form_assignment(pool, assignment_id).await?;
     let submission_id: Uuid = sqlx::query_scalar(
         r#"
-        INSERT INTO submissions (assignment_id, form_version_id, node_id, status, submitted_at)
+        INSERT INTO submissions (
+            form_version_id,
+            node_id,
+            workflow_assignment_id,
+            status,
+            submitted_at
+        )
         VALUES ($1, $2, $3, 'submitted'::submission_status, now())
         RETURNING id
         "#,
     )
-    .bind(assignment_id)
     .bind(form_version_id)
     .bind(node_id)
+    .bind(workflow_assignment_id)
     .fetch_one(pool)
     .await?;
 
@@ -1333,6 +1333,15 @@ async fn ensure_submission(
     .bind(event_type)
     .bind(account_id)
     .execute(pool)
+    .await?;
+
+    workflows::ensure_submission_runtime_linkage(
+        pool,
+        submission_id,
+        workflow_assignment_id,
+        account_id,
+        true,
+    )
     .await?;
 
     Ok(submission_id)

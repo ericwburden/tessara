@@ -44,8 +44,6 @@ pub struct CreateFormSectionRequest {
     position: i32,
     #[serde(default = "default_form_section_description")]
     description: String,
-    #[serde(default = "default_form_section_column_count")]
-    column_count: i32,
 }
 
 #[derive(Deserialize)]
@@ -72,8 +70,6 @@ pub struct UpdateFormSectionRequest {
     position: i32,
     #[serde(default = "default_form_section_description")]
     description: String,
-    #[serde(default = "default_form_section_column_count")]
-    column_count: i32,
 }
 
 #[derive(Deserialize)]
@@ -109,17 +105,12 @@ pub struct RenderedSection {
     id: Uuid,
     title: String,
     description: String,
-    column_count: i32,
     position: i32,
     fields: Vec<RenderedField>,
 }
 
 fn default_form_section_description() -> String {
     String::new()
-}
-
-fn default_form_section_column_count() -> i32 {
-    1
 }
 
 fn default_form_field_grid_row() -> i32 {
@@ -248,6 +239,7 @@ pub struct FormWorkflowLink {
     id: Uuid,
     name: String,
     slug: String,
+    source: String,
     current_version_id: Option<Uuid>,
     current_version_label: Option<String>,
     current_status: Option<String>,
@@ -276,17 +268,18 @@ async fn load_form_version_assignment_nodes(
     let rows = sqlx::query(
         r#"
         SELECT DISTINCT
-            form_assignments.form_version_id,
+            workflow_steps.form_version_id,
             nodes.id AS node_id,
             nodes.name AS node_name,
             nodes.parent_node_id,
             node_types.name AS node_type_name,
             COALESCE(parent_nodes.name || ' / ' || nodes.name, nodes.name) AS node_path
-        FROM form_assignments
-        JOIN nodes ON nodes.id = form_assignments.node_id
+        FROM workflow_assignments
+        JOIN workflow_steps ON workflow_steps.id = workflow_assignments.workflow_step_id
+        JOIN nodes ON nodes.id = workflow_assignments.node_id
         JOIN node_types ON node_types.id = nodes.node_type_id
         LEFT JOIN nodes AS parent_nodes ON parent_nodes.id = nodes.parent_node_id
-        WHERE form_assignments.form_version_id = ANY($1)
+        WHERE workflow_steps.form_version_id = ANY($1)
         ORDER BY node_path, nodes.name, nodes.id
         "#,
     )
@@ -541,9 +534,10 @@ pub async fn list_published_form_versions(
             r#"
             SELECT DISTINCT form_versions.id
             FROM form_versions
-            JOIN form_assignments ON form_assignments.form_version_id = form_versions.id
+            JOIN workflow_steps ON workflow_steps.form_version_id = form_versions.id
+            JOIN workflow_assignments ON workflow_assignments.workflow_step_id = workflow_steps.id
             WHERE form_versions.status = 'published'::form_version_status
-              AND form_assignments.node_id = ANY($1)
+              AND workflow_assignments.node_id = ANY($1)
             "#,
         )
         .bind(scope_ids)
@@ -579,8 +573,9 @@ pub async fn list_readable_forms(
             FROM forms
             LEFT JOIN node_types ON node_types.id = forms.scope_node_type_id
             JOIN form_versions ON form_versions.form_id = forms.id
-            JOIN form_assignments ON form_assignments.form_version_id = form_versions.id
-            WHERE form_assignments.node_id = ANY($1)
+            JOIN workflow_steps ON workflow_steps.form_version_id = form_versions.id
+            JOIN workflow_assignments ON workflow_assignments.workflow_step_id = workflow_steps.id
+            WHERE workflow_assignments.node_id = ANY($1)
             ORDER BY forms.name, forms.id
             "#,
         )
@@ -712,9 +707,10 @@ pub async fn get_readable_form(
             SELECT EXISTS (
                 SELECT 1
                 FROM form_versions
-                JOIN form_assignments ON form_assignments.form_version_id = form_versions.id
+                JOIN workflow_steps ON workflow_steps.form_version_id = form_versions.id
+                JOIN workflow_assignments ON workflow_assignments.workflow_step_id = workflow_steps.id
                 WHERE form_versions.form_id = $1
-                  AND form_assignments.node_id = ANY($2)
+                  AND workflow_assignments.node_id = ANY($2)
             )
             "#,
         )
@@ -846,6 +842,7 @@ async fn get_form_definition(pool: &sqlx::PgPool, form_id: Uuid) -> ApiResult<Fo
             workflows.id,
             workflows.name,
             workflows.slug,
+            workflows.source,
             current_versions.id AS current_version_id,
             current_versions.version_label AS current_version_label,
             current_versions.status::text AS current_status,
@@ -867,8 +864,7 @@ async fn get_form_definition(pool: &sqlx::PgPool, form_id: Uuid) -> ApiResult<Fo
         LEFT JOIN workflow_versions ON workflow_versions.workflow_id = workflows.id
         LEFT JOIN workflow_assignments
             ON workflow_assignments.workflow_version_id = workflow_versions.id
-        WHERE workflows.form_id = $1
-           OR EXISTS (
+        WHERE EXISTS (
                 SELECT 1
                 FROM workflow_versions AS step_workflow_versions
                 JOIN workflow_steps
@@ -882,6 +878,7 @@ async fn get_form_definition(pool: &sqlx::PgPool, form_id: Uuid) -> ApiResult<Fo
             workflows.id,
             workflows.name,
             workflows.slug,
+            workflows.source,
             current_versions.id,
             current_versions.version_label,
             current_versions.status
@@ -897,6 +894,7 @@ async fn get_form_definition(pool: &sqlx::PgPool, form_id: Uuid) -> ApiResult<Fo
             id: row.try_get("id")?,
             name: row.try_get("name")?,
             slug: row.try_get("slug")?,
+            source: row.try_get("source")?,
             current_version_id: row.try_get("current_version_id")?,
             current_version_label: row.try_get("current_version_label")?,
             current_status: row.try_get("current_status")?,
@@ -1060,19 +1058,17 @@ pub async fn create_form_section(
     assert_form_version_draft(&state.pool, form_version_id).await?;
     require_text("section title", &payload.title)?;
     let description = normalize_form_section_description(&payload.description);
-    let column_count = require_form_section_column_count(payload.column_count)?;
 
     let id = sqlx::query_scalar(
         r#"
-        INSERT INTO form_sections (form_version_id, title, description, column_count, position)
-        VALUES ($1, $2, $3, $4, $5)
+        INSERT INTO form_sections (form_version_id, title, description, position)
+        VALUES ($1, $2, $3, $4)
         RETURNING id
         "#,
     )
     .bind(form_version_id)
     .bind(payload.title)
     .bind(description)
-    .bind(column_count)
     .bind(payload.position)
     .fetch_one(&state.pool)
     .await?;
@@ -1139,18 +1135,16 @@ pub async fn update_form_section(
     assert_form_version_draft(&state.pool, form_version_id).await?;
     require_text("section title", &payload.title)?;
     let description = normalize_form_section_description(&payload.description);
-    let column_count = require_form_section_column_count(payload.column_count)?;
 
     sqlx::query(
-        "UPDATE form_sections SET title = $1, description = $2, column_count = $3, position = $4 WHERE id = $5",
+        "UPDATE form_sections SET title = $1, description = $2, position = $3 WHERE id = $4",
     )
-        .bind(payload.title)
-        .bind(description)
-        .bind(column_count)
-        .bind(payload.position)
-        .bind(section_id)
-        .execute(&state.pool)
-        .await?;
+    .bind(payload.title)
+    .bind(description)
+    .bind(payload.position)
+    .bind(section_id)
+    .execute(&state.pool)
+    .await?;
 
     Ok(Json(IdResponse { id: section_id }))
 }
@@ -1360,7 +1354,7 @@ pub async fn render_form_version(
 
     let section_rows = sqlx::query(
         r#"
-        SELECT id, title, description, column_count, position
+        SELECT id, title, description, position
         FROM form_sections
         WHERE form_version_id = $1
         ORDER BY position, title
@@ -1419,7 +1413,6 @@ pub async fn render_form_version(
             id: section_id,
             title: section.try_get("title")?,
             description: section.try_get("description")?,
-            column_count: section.try_get("column_count")?,
             position: section.try_get("position")?,
             fields,
         });
@@ -1463,16 +1456,6 @@ async fn require_form_field(pool: &sqlx::PgPool, field_id: Uuid) -> ApiResult<Ex
 
 fn normalize_form_section_description(description: &str) -> String {
     description.trim().to_string()
-}
-
-fn require_form_section_column_count(column_count: i32) -> ApiResult<i32> {
-    if (1..=12).contains(&column_count) {
-        Ok(column_count)
-    } else {
-        Err(ApiError::BadRequest(
-            "section column count must be between 1 and 12".into(),
-        ))
-    }
 }
 
 fn require_form_field_layout(
@@ -1872,7 +1855,7 @@ async fn load_form_version_contract(
 ) -> ApiResult<FormVersionContract> {
     let sections = sqlx::query(
         r#"
-        SELECT title, description, column_count, position
+        SELECT title, description, position
         FROM form_sections
         WHERE form_version_id = $1
         ORDER BY position, title
@@ -1909,11 +1892,10 @@ async fn load_form_version_contract(
         .into_iter()
         .map(|row| {
             Ok(format!(
-                "{}:{}:{}:{}",
+                "{}:{}:{}",
                 row.try_get::<i32, _>("position")?,
                 row.try_get::<String, _>("title")?,
                 row.try_get::<String, _>("description")?,
-                row.try_get::<i32, _>("column_count")?,
             ))
         })
         .collect::<Result<Vec<_>, sqlx::Error>>()?;

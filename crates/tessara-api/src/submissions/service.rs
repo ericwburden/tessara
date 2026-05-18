@@ -2,9 +2,7 @@ use std::collections::HashMap;
 
 use serde_json::Value;
 use sqlx::PgPool;
-use tessara_submissions::{
-    RequiredFieldStatus, ensure_form_version_accepts_submission, ensure_required_values_present,
-};
+use tessara_submissions::{RequiredFieldStatus, ensure_required_values_present};
 use uuid::Uuid;
 
 use crate::{
@@ -15,7 +13,7 @@ use crate::{
 };
 
 use super::dto::{
-    CreateDraftRequest, ListSubmissionsQuery, ResponseStartAssignment, ResponseStartOptions,
+    AssignmentResponseStartOption, AssignmentResponseStartOptions, ListSubmissionsQuery,
     SubmissionDetail, SubmissionSummary,
 };
 use super::repo::{self, SubmissionListFilters};
@@ -39,100 +37,35 @@ pub async fn list_response_start_options(
     pool: &PgPool,
     account: &auth::AccountContext,
     query: ListSubmissionsQuery,
-) -> ApiResult<ResponseStartOptions> {
-    if account.is_admin() || account.is_operator() {
-        let scope_ids = if account.is_operator() {
-            Some(auth::effective_scope_node_ids(pool, account.account_id).await?)
-        } else {
-            None
-        };
-        let published_forms = if let Some(scope_ids) = scope_ids.as_deref() {
-            repo::list_scoped_published_form_versions(pool, scope_ids).await?
-        } else {
-            repo::list_all_published_form_versions(pool).await?
-        };
-        let nodes = repo::list_response_nodes(pool, scope_ids.as_deref()).await?;
-
-        return Ok(ResponseStartOptions {
-            mode: "scoped".into(),
-            published_forms,
-            nodes,
-            assignments: Vec::new(),
-        });
-    }
-
-    let delegate_account_id =
+) -> ApiResult<AssignmentResponseStartOptions> {
+    let delegate_account_id = if account.is_admin() || account.is_operator() {
+        query.delegate_account_id.unwrap_or(account.account_id)
+    } else {
         auth::resolve_accessible_delegate_account_id(pool, account, query.delegate_account_id)
-            .await?;
+            .await?
+    };
     let assignments = workflows::list_pending_assignments_for_account(pool, delegate_account_id)
         .await?
         .into_iter()
-        .map(|item| ResponseStartAssignment {
+        .map(|item| AssignmentResponseStartOption {
+            workflow_assignment_id: item.workflow_assignment_id,
+            workflow_name: item.workflow_name,
+            workflow_version_label: item.workflow_version_label,
+            workflow_step_title: item.workflow_step_title,
+            workflow_step_position: item.workflow_step_position,
+            workflow_step_count: item.workflow_step_count,
             form_id: item.form_id,
             form_name: item.form_name,
             form_version_id: item.form_version_id,
-            version_label: item
-                .form_version_label
-                .unwrap_or_else(|| "Published".into()),
+            form_version_label: item.form_version_label,
             node_id: item.node_id,
             node_name: item.node_name,
-            delegate_account_id: Some(item.account_id),
-            delegate_display_name: Some(item.account_display_name),
+            account_id: item.account_id,
+            account_display_name: item.account_display_name,
         })
         .collect::<Vec<_>>();
 
-    Ok(ResponseStartOptions {
-        mode: "assignment".into(),
-        published_forms: Vec::new(),
-        nodes: Vec::new(),
-        assignments,
-    })
-}
-
-pub async fn create_draft(
-    pool: &PgPool,
-    account: &auth::AccountContext,
-    payload: CreateDraftRequest,
-) -> ApiResult<Uuid> {
-    let status = repo::form_version_status(pool, payload.form_version_id).await?;
-    ensure_form_version_accepts_submission(status.as_deref().unwrap_or_default())
-        .map_err(|error| ApiError::BadRequest(error.to_string()))?;
-
-    let workflow_assignment_id = if account.is_admin() || account.is_operator() {
-        if account.is_operator() {
-            let scope_ids = auth::effective_scope_node_ids(pool, account.account_id).await?;
-            if !scope_ids.contains(&payload.node_id) {
-                return Err(ApiError::Forbidden("submissions:write".into()));
-            }
-        }
-
-        let form_assignment_id = repo::create_form_assignment(
-            pool,
-            payload.form_version_id,
-            payload.node_id,
-            account.account_id,
-        )
-        .await?;
-        workflows::ensure_workflow_assignment_for_form_assignment(pool, form_assignment_id).await?
-    } else {
-        let delegate_account_id = auth::resolve_accessible_delegate_account_id(
-            pool,
-            account,
-            payload.delegate_account_id,
-        )
-        .await?;
-
-        repo::find_active_workflow_assignment(
-            pool,
-            payload.form_version_id,
-            payload.node_id,
-            delegate_account_id,
-        )
-        .await?
-        .ok_or_else(|| ApiError::Forbidden("submissions:write".into()))?
-    };
-
-    workflows::start_workflow_assignment(pool, account, workflow_assignment_id).await
+    Ok(AssignmentResponseStartOptions { assignments })
 }
 
 pub async fn list_submissions(

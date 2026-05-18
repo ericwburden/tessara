@@ -692,8 +692,7 @@ struct UpdateFormPayload {
 #[derive(Serialize)]
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
 struct CreateWorkflowPayload {
-    form_id: Option<String>,
-    scope_node_type_id: Option<String>,
+    workflow_node_type_id: String,
     name: String,
     slug: String,
     description: Option<String>,
@@ -702,8 +701,7 @@ struct CreateWorkflowPayload {
 #[derive(Serialize)]
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
 struct UpdateWorkflowPayload {
-    form_id: Option<String>,
-    scope_node_type_id: Option<String>,
+    workflow_node_type_id: String,
     name: String,
     slug: String,
     description: Option<String>,
@@ -711,15 +709,13 @@ struct UpdateWorkflowPayload {
 
 #[derive(Serialize)]
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
-struct CreateWorkflowVersionPayload {
-    form_version_id: Option<String>,
-    title: Option<String>,
+struct CreateWorkflowRevisionPayload {
     steps: Vec<CreateWorkflowStepPayload>,
 }
 
 #[derive(Serialize)]
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
-struct UpdateWorkflowVersionStepsPayload {
+struct UpdateWorkflowRevisionStepsPayload {
     steps: Vec<CreateWorkflowStepPayload>,
 }
 
@@ -767,6 +763,31 @@ struct WorkflowAssignmentSummary {
     has_draft: bool,
     has_submitted: bool,
     created_at: String,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+struct PendingWorkflowWork {
+    workflow_assignment_id: String,
+    workflow_id: String,
+    workflow_name: String,
+    workflow_description: String,
+    workflow_version_id: String,
+    workflow_version_label: Option<String>,
+    workflow_step_title: String,
+    workflow_step_position: i32,
+    workflow_step_count: i64,
+    next_workflow_step_title: Option<String>,
+    next_workflow_step_form_name: Option<String>,
+    form_id: String,
+    form_name: String,
+    form_version_id: String,
+    form_version_label: Option<String>,
+    node_id: String,
+    node_name: String,
+    account_id: String,
+    account_display_name: String,
+    assigned_at: String,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -851,51 +872,27 @@ struct SubmissionAuditEventSummary {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
-struct PublishedFormVersionOption {
-    form_id: String,
-    form_name: String,
-    form_slug: String,
-    form_version_id: String,
-    version_label: String,
-    published_at: Option<String>,
-    field_count: i64,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-struct ResponseNodeOption {
-    id: String,
-    name: String,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-struct ResponseStartAssignmentOption {
+struct AssignmentResponseStartOption {
+    workflow_assignment_id: String,
+    workflow_name: String,
+    workflow_version_label: Option<String>,
+    workflow_step_title: String,
+    workflow_step_position: i32,
+    workflow_step_count: i64,
     form_id: String,
     form_name: String,
     form_version_id: String,
-    version_label: String,
+    form_version_label: Option<String>,
     node_id: String,
     node_name: String,
-    delegate_account_id: Option<String>,
-    delegate_display_name: Option<String>,
+    account_id: String,
+    account_display_name: String,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
-struct ResponseStartOptions {
-    mode: String,
+struct AssignmentResponseStartOptions {
     #[serde(default)]
-    published_forms: Vec<PublishedFormVersionOption>,
-    #[serde(default)]
-    nodes: Vec<ResponseNodeOption>,
-    #[serde(default)]
-    assignments: Vec<ResponseStartAssignmentOption>,
-}
-
-#[derive(Serialize)]
-#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
-struct CreateDraftPayload {
-    form_version_id: String,
-    node_id: String,
-    delegate_account_id: Option<String>,
+    assignments: Vec<AssignmentResponseStartOption>,
 }
 
 #[derive(Serialize)]
@@ -946,7 +943,6 @@ struct CreateFormSectionPayload {
     title: String,
     position: i32,
     description: String,
-    column_count: i32,
 }
 
 #[derive(Serialize)]
@@ -970,7 +966,6 @@ struct FormBuilderSectionDraft {
     remote_id: Option<String>,
     title: String,
     description: String,
-    column_count: i32,
     default_column_width: i32,
     position: i32,
 }
@@ -1274,17 +1269,16 @@ struct FormVersionAssignmentNodeSummary {
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 struct WorkflowSummary {
     id: String,
-    form_id: String,
-    form_name: String,
-    form_slug: String,
-    scope_node_type_id: Option<String>,
-    scope_node_type_name: Option<String>,
+    workflow_node_type_id: String,
+    workflow_node_type_name: String,
     name: String,
     slug: String,
     description: String,
+    #[serde(default)]
+    source: String,
+    source_form_id: Option<String>,
     current_version_id: Option<String>,
     current_version_label: Option<String>,
-    current_form_version_id: Option<String>,
     current_status: Option<String>,
     assignment_count: i64,
     version_count: i64,
@@ -1295,14 +1289,14 @@ struct WorkflowSummary {
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 struct WorkflowDefinition {
     id: String,
-    form_id: String,
-    form_name: String,
-    form_slug: String,
-    scope_node_type_id: Option<String>,
-    scope_node_type_name: Option<String>,
+    workflow_node_type_id: String,
+    workflow_node_type_name: String,
     name: String,
     slug: String,
     description: String,
+    #[serde(default)]
+    source: String,
+    source_form_id: Option<String>,
     #[serde(default)]
     versions: Vec<WorkflowVersionSummary>,
     #[serde(default)]
@@ -1312,8 +1306,7 @@ struct WorkflowDefinition {
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 struct WorkflowVersionSummary {
     id: String,
-    form_version_id: String,
-    form_version_label: Option<String>,
+    workflow_revision_label: Option<String>,
     title: String,
     status: String,
     published_at: Option<String>,
@@ -1356,6 +1349,8 @@ struct FormWorkflowLink {
     id: String,
     name: String,
     slug: String,
+    #[serde(default)]
+    source: String,
     current_version_label: Option<String>,
     current_status: Option<String>,
     assignment_count: i64,
@@ -1391,7 +1386,6 @@ struct RenderedSection {
     id: String,
     title: String,
     description: String,
-    column_count: i32,
     position: i32,
     #[serde(default)]
     fields: Vec<RenderedField>,
@@ -2655,8 +2649,8 @@ fn workflow_description_label(workflow: &WorkflowSummary) -> String {
     nonempty_text(Some(workflow.description.as_str()), "No description")
 }
 
-fn workflow_scope_label(scope_node_type_name: Option<&str>) -> String {
-    nonempty_text(scope_node_type_name, "-")
+fn workflow_scope_label(workflow_node_type_name: &str) -> String {
+    nonempty_text(Some(workflow_node_type_name), "-")
 }
 
 fn workflow_assigned_to_label(workflow: &WorkflowSummary) -> String {
@@ -2669,6 +2663,32 @@ fn workflow_assigned_to_label(workflow: &WorkflowSummary) -> String {
 
 fn workflow_assignment_count_label(workflow: &WorkflowSummary) -> String {
     workflow.assignment_count.to_string()
+}
+
+fn workflow_source_label(source: &str) -> Option<&'static str> {
+    if source == "generated_form" {
+        Some("Generated single-form")
+    } else {
+        None
+    }
+}
+
+#[component]
+fn WorkflowSourceMarker(source: String) -> impl IntoView {
+    if source == "generated_form" {
+        view! {
+            <span
+                class="workflow-source-marker"
+                title="Single-Form, Generated Workflow"
+                aria-label="Single-Form, Generated Workflow"
+            >
+                "①"
+            </span>
+        }
+        .into_any()
+    } else {
+        view! {}.into_any()
+    }
 }
 
 fn workflow_assignment_links(
@@ -2890,9 +2910,9 @@ fn collect_response_values(
 }
 
 fn response_selected_assignment(
-    options: RwSignal<Option<ResponseStartOptions>>,
+    options: RwSignal<Option<AssignmentResponseStartOptions>>,
     selected_assignment_index: RwSignal<String>,
-) -> Option<ResponseStartAssignmentOption> {
+) -> Option<AssignmentResponseStartOption> {
     let index = selected_assignment_index.get().parse::<usize>().ok()?;
     options
         .get()
@@ -2900,11 +2920,9 @@ fn response_selected_assignment(
 }
 
 fn response_start_can_submit(
-    options: RwSignal<Option<ResponseStartOptions>>,
+    options: RwSignal<Option<AssignmentResponseStartOptions>>,
     is_loading: RwSignal<bool>,
     is_saving: RwSignal<bool>,
-    selected_form_version_id: RwSignal<String>,
-    selected_node_id: RwSignal<String>,
     selected_assignment_index: RwSignal<String>,
 ) -> bool {
     if is_loading.get() || is_saving.get() {
@@ -2912,11 +2930,8 @@ fn response_start_can_submit(
     }
 
     if let Some(loaded_options) = options.get() {
-        if loaded_options.mode == "assignment" {
-            response_selected_assignment(options, selected_assignment_index).is_some()
-        } else {
-            !selected_form_version_id.get().is_empty() && !selected_node_id.get().is_empty()
-        }
+        !loaded_options.assignments.is_empty()
+            && response_selected_assignment(options, selected_assignment_index).is_some()
     } else {
         false
     }
@@ -2934,7 +2949,7 @@ fn active_workflow_definition_version(
 
 fn workflow_definition_version_label(version: Option<&WorkflowVersionSummary>) -> String {
     version
-        .and_then(|version| version.form_version_label.as_deref())
+        .and_then(|version| version.workflow_revision_label.as_deref())
         .map(workflow_revision_label_from_raw)
         .unwrap_or_else(|| "-".to_string())
 }
@@ -3312,9 +3327,9 @@ fn node_type_contains_descendant(
 fn workflow_form_is_in_scope(
     form: &FormSummary,
     node_types: &[NodeTypeCatalogEntry],
-    workflow_scope_node_type_id: &str,
+    workflow_node_type_id: &str,
 ) -> bool {
-    if workflow_scope_node_type_id.trim().is_empty() {
+    if workflow_node_type_id.trim().is_empty() {
         return false;
     }
     form.scope_node_type_id
@@ -3322,7 +3337,7 @@ fn workflow_form_is_in_scope(
         .map(|form_scope_node_type_id| {
             node_type_contains_descendant(
                 node_types,
-                workflow_scope_node_type_id,
+                workflow_node_type_id,
                 form_scope_node_type_id,
             )
         })
@@ -3332,12 +3347,12 @@ fn workflow_form_is_in_scope(
 fn workflow_form_version_options(
     forms: &[FormSummary],
     node_types: &[NodeTypeCatalogEntry],
-    workflow_scope_node_type_id: &str,
+    workflow_node_type_id: &str,
 ) -> Vec<(String, String, String)> {
     let mut options = Vec::new();
 
     for form in forms {
-        if !workflow_form_is_in_scope(form, node_types, workflow_scope_node_type_id) {
+        if !workflow_form_is_in_scope(form, node_types, workflow_node_type_id) {
             continue;
         }
         let mut versions = form
@@ -3390,7 +3405,6 @@ fn blank_form_builder_section(id: usize) -> FormBuilderSectionDraft {
             format!("Section {id}")
         },
         description: String::new(),
-        column_count: FORM_BUILDER_COLUMN_COUNT,
         default_column_width: 6,
         position: id as i32,
     }
@@ -3782,6 +3796,26 @@ fn form_builder_grid_tile_style(field: &FormBuilderFieldDraft) -> String {
     )
 }
 
+fn rendered_form_field_layout_style(field: &RenderedField) -> String {
+    let width = field.grid_width.clamp(1, FORM_BUILDER_COLUMN_COUNT);
+    let max_column = (FORM_BUILDER_COLUMN_COUNT - width + 1).max(1);
+    let column = field.grid_column.clamp(1, max_column);
+    let row = field.grid_row.max(1);
+    let height = field.grid_height.max(1);
+    let control_min_height = 2.65 + ((height - 1) as f32 * 1.0);
+
+    format!(
+        "--response-field-column: {column}; --response-field-width: {width}; --response-field-row: {row}; --response-field-height: {height}; --response-control-min-height: {control_min_height:.2}rem;",
+    )
+}
+
+fn response_field_class(field_type: &str) -> String {
+    format!(
+        "form-field response-form-field response-form-field--{}",
+        field_type.replace('_', "-")
+    )
+}
+
 #[cfg(feature = "hydrate")]
 fn start_form_builder_field_resize(
     event: leptos::ev::MouseEvent,
@@ -3962,7 +3996,6 @@ fn prepared_form_builder_sections(
             return Err("Every section needs a title.".into());
         }
         let mut section = section.clone();
-        section.column_count = FORM_BUILDER_COLUMN_COUNT;
         section.title = title.to_string();
         section.description = section.description.trim().to_string();
         section.position = (index + 1) as i32;
@@ -4327,6 +4360,63 @@ fn load_workflow_assignments(
     #[cfg(not(feature = "hydrate"))]
     {
         let _ = (assignments, is_loading, load_error);
+    }
+}
+
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+fn load_pending_work(
+    pending_work: RwSignal<Vec<PendingWorkflowWork>>,
+    is_loading: RwSignal<bool>,
+    load_error: RwSignal<Option<String>>,
+) {
+    #[cfg(feature = "hydrate")]
+    {
+        leptos::task::spawn_local(async move {
+            is_loading.set(true);
+            load_error.set(None);
+
+            match gloo_net::http::Request::get("/api/workflow-assignments/pending")
+                .send()
+                .await
+            {
+                Ok(response) if response.status() == 401 => {
+                    pending_work.set(Vec::new());
+                    is_loading.set(false);
+                    redirect_to_login();
+                }
+                Ok(response) if response.ok() => {
+                    match response.json::<Vec<PendingWorkflowWork>>().await {
+                        Ok(loaded_work) => {
+                            pending_work.set(loaded_work);
+                            is_loading.set(false);
+                        }
+                        Err(error) => {
+                            pending_work.set(Vec::new());
+                            load_error.set(Some(format!("Unable to parse assigned work: {error}")));
+                            is_loading.set(false);
+                        }
+                    }
+                }
+                Ok(response) => {
+                    pending_work.set(Vec::new());
+                    load_error.set(Some(format!(
+                        "Unable to load assigned work. Server returned {}.",
+                        response.status()
+                    )));
+                    is_loading.set(false);
+                }
+                Err(error) => {
+                    pending_work.set(Vec::new());
+                    load_error.set(Some(format!("Unable to load assigned work: {error}")));
+                    is_loading.set(false);
+                }
+            }
+        });
+    }
+
+    #[cfg(not(feature = "hydrate"))]
+    {
+        let _ = (pending_work, is_loading, load_error);
     }
 }
 
@@ -4977,7 +5067,7 @@ fn load_submission_edit_context(
 }
 
 fn load_response_start_options(
-    options: RwSignal<Option<ResponseStartOptions>>,
+    options: RwSignal<Option<AssignmentResponseStartOptions>>,
     is_loading: RwSignal<bool>,
     message: RwSignal<Option<String>>,
     delegate_account_id: Option<String>,
@@ -5001,7 +5091,7 @@ fn load_response_start_options(
                     redirect_to_login();
                 }
                 Ok(response) if response.ok() => {
-                    match response.json::<ResponseStartOptions>().await {
+                    match response.json::<AssignmentResponseStartOptions>().await {
                         Ok(loaded_options) => {
                             options.set(Some(loaded_options));
                             is_loading.set(false);
@@ -5009,7 +5099,7 @@ fn load_response_start_options(
                         Err(error) => {
                             options.set(None);
                             message.set(Some(format!(
-                                "Unable to parse response start options: {error}"
+                                "Unable to parse assigned response start options: {error}"
                             )));
                             is_loading.set(false);
                         }
@@ -5018,7 +5108,7 @@ fn load_response_start_options(
                 Ok(response) => {
                     options.set(None);
                     message.set(Some(format!(
-                        "Unable to load response start options. Server returned {}.",
+                        "Unable to load assigned response start options. Server returned {}.",
                         response.status()
                     )));
                     is_loading.set(false);
@@ -5026,7 +5116,7 @@ fn load_response_start_options(
                 Err(error) => {
                     options.set(None);
                     message.set(Some(format!(
-                        "Unable to load response start options: {error}"
+                        "Unable to load assigned response start options: {error}"
                     )));
                     is_loading.set(false);
                 }
@@ -5037,50 +5127,6 @@ fn load_response_start_options(
     #[cfg(not(feature = "hydrate"))]
     {
         let _ = (options, is_loading, message, delegate_account_id);
-    }
-}
-
-fn create_response_draft(
-    payload: CreateDraftPayload,
-    is_saving: RwSignal<bool>,
-    message: RwSignal<Option<String>>,
-) {
-    #[cfg(feature = "hydrate")]
-    {
-        leptos::task::spawn_local(async move {
-            is_saving.set(true);
-            message.set(None);
-
-            let body = match serde_json::to_string(&payload) {
-                Ok(body) => body,
-                Err(error) => {
-                    message.set(Some(format!(
-                        "Response draft could not be prepared: {error}"
-                    )));
-                    is_saving.set(false);
-                    return;
-                }
-            };
-
-            match send_json_id_request(
-                gloo_net::http::Request::post("/api/submissions/drafts"),
-                Some(body),
-                "Create response draft",
-            )
-            .await
-            {
-                Ok(response) => navigate_to_href(&format!("/responses/{}/edit", response.id)),
-                Err(error) => {
-                    message.set(Some(error));
-                    is_saving.set(false);
-                }
-            }
-        });
-    }
-
-    #[cfg(not(feature = "hydrate"))]
-    {
-        let _ = (payload, is_saving, message);
     }
 }
 
@@ -5814,7 +5860,6 @@ fn hydrate_form_builder_from_rendered(
             remote_id: Some(section.id.clone()),
             title: nonempty_text(Some(section.title.as_str()), "Main"),
             description: section.description.clone(),
-            column_count: FORM_BUILDER_COLUMN_COUNT,
             default_column_width: 6,
             position: section.position,
         });
@@ -5868,7 +5913,7 @@ fn load_form_edit_options(
     edit_version_id: RwSignal<Option<String>>,
     edit_version_status: RwSignal<Option<String>>,
     name: RwSignal<String>,
-    scope_node_type_id: RwSignal<String>,
+    workflow_node_type_id: RwSignal<String>,
     builder_sections: RwSignal<Vec<FormBuilderSectionDraft>>,
     builder_fields: RwSignal<Vec<FormBuilderFieldDraft>>,
     active_builder_section: RwSignal<String>,
@@ -5952,7 +5997,7 @@ fn load_form_edit_options(
                                 .unwrap_or_else(|| "1".to_string());
 
                             name.set(form.name.clone());
-                            scope_node_type_id
+                            workflow_node_type_id
                                 .set(form.scope_node_type_id.clone().unwrap_or_default());
                             edit_version_id
                                 .set(selected_version.as_ref().map(|version| version.id.clone()));
@@ -6006,7 +6051,7 @@ fn load_form_edit_options(
             edit_version_id,
             edit_version_status,
             name,
-            scope_node_type_id,
+            workflow_node_type_id,
             builder_sections,
             builder_fields,
             active_builder_section,
@@ -6816,12 +6861,13 @@ fn submit_create_node(
 #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
 fn submit_create_form(
     name: RwSignal<String>,
-    scope_node_type_id: RwSignal<String>,
+    workflow_node_type_id: RwSignal<String>,
     sections: RwSignal<Vec<FormBuilderSectionDraft>>,
     fields: RwSignal<Vec<FormBuilderFieldDraft>>,
     existing_forms: RwSignal<Vec<FormSummary>>,
     is_saving: RwSignal<bool>,
     message: RwSignal<Option<String>>,
+    publish_after_save: bool,
 ) {
     #[cfg(feature = "hydrate")]
     {
@@ -6867,7 +6913,11 @@ fn submit_create_form(
         let payload = CreateFormPayload {
             name: form_name,
             slug: form_slug,
-            scope_node_type_id: scope_node_type_id.get().trim().to_string().into_nonempty(),
+            scope_node_type_id: workflow_node_type_id
+                .get()
+                .trim()
+                .to_string()
+                .into_nonempty(),
         };
 
         leptos::task::spawn_local(async move {
@@ -6931,7 +6981,6 @@ fn submit_create_form(
                                         title: section.title.clone(),
                                         position: section.position,
                                         description: section.description.clone(),
-                                        column_count: section.column_count,
                                     };
                                     let section_body = match serde_json::to_string(&section_payload)
                                     {
@@ -7065,6 +7114,23 @@ fn submit_create_form(
                                     }
                                 }
 
+                                if publish_after_save {
+                                    if let Err(error) = send_json_id_request(
+                                        gloo_net::http::Request::post(&format!(
+                                            "/api/admin/form-versions/{}/publish",
+                                            created_version.id
+                                        )),
+                                        None,
+                                        "Publish form version",
+                                    )
+                                    .await
+                                    {
+                                        message.set(Some(error));
+                                        is_saving.set(false);
+                                        return;
+                                    }
+                                }
+
                                 if let Some(window) = web_sys::window() {
                                     let _ = window
                                         .location()
@@ -7111,11 +7177,12 @@ fn submit_create_form(
     {
         let _ = (
             name,
-            scope_node_type_id,
+            workflow_node_type_id,
             fields,
             existing_forms,
             is_saving,
             message,
+            publish_after_save,
         );
     }
 }
@@ -7375,7 +7442,7 @@ fn submit_update_node(
 fn submit_update_form(
     form_id: String,
     name: RwSignal<String>,
-    scope_node_type_id: RwSignal<String>,
+    workflow_node_type_id: RwSignal<String>,
     sections: RwSignal<Vec<FormBuilderSectionDraft>>,
     fields: RwSignal<Vec<FormBuilderFieldDraft>>,
     existing_forms: RwSignal<Vec<FormSummary>>,
@@ -7384,6 +7451,7 @@ fn submit_update_form(
     rendered_form: RwSignal<Option<RenderedForm>>,
     is_saving: RwSignal<bool>,
     message: RwSignal<Option<String>>,
+    publish_after_save: bool,
 ) {
     #[cfg(feature = "hydrate")]
     {
@@ -7430,7 +7498,11 @@ fn submit_update_form(
         let payload = UpdateFormPayload {
             name: form_name,
             slug: form_slug,
-            scope_node_type_id: scope_node_type_id.get().trim().to_string().into_nonempty(),
+            scope_node_type_id: workflow_node_type_id
+                .get()
+                .trim()
+                .to_string()
+                .into_nonempty(),
         };
         let current_rendered_form = rendered_form.get_untracked();
         let original_section_ids = current_rendered_form
@@ -7555,7 +7627,6 @@ fn submit_update_form(
                     title: section.title.clone(),
                     position: section.position,
                     description: section.description.clone(),
-                    column_count: section.column_count,
                 };
                 let section_body = match serde_json::to_string(&section_payload) {
                     Ok(body) => body,
@@ -7681,6 +7752,22 @@ fn submit_update_form(
                 }
             }
 
+            if publish_after_save {
+                if let Err(error) = send_json_id_request(
+                    gloo_net::http::Request::post(&format!(
+                        "/api/admin/form-versions/{version_id}/publish"
+                    )),
+                    None,
+                    "Publish form version",
+                )
+                .await
+                {
+                    message.set(Some(error));
+                    is_saving.set(false);
+                    return;
+                }
+            }
+
             if let Some(window) = web_sys::window() {
                 let _ = window.location().set_href(&format!("/forms/{form_id}"));
             }
@@ -7692,7 +7779,7 @@ fn submit_update_form(
         let _ = (
             form_id,
             name,
-            scope_node_type_id,
+            workflow_node_type_id,
             sections,
             fields,
             existing_forms,
@@ -7701,6 +7788,7 @@ fn submit_update_form(
             rendered_form,
             is_saving,
             message,
+            publish_after_save,
         );
     }
 }
@@ -7771,15 +7859,12 @@ fn submit_create_workflow(
         }
 
         let payload = CreateWorkflowPayload {
-            form_id: None,
-            scope_node_type_id: Some(workflow_node_type_id),
+            workflow_node_type_id,
             name: workflow_name,
             slug: workflow_slug,
             description: description.get().trim().to_string().into_nonempty(),
         };
-        let version_payload = CreateWorkflowVersionPayload {
-            form_version_id: None,
-            title: None,
+        let version_payload = CreateWorkflowRevisionPayload {
             steps: workflow_steps,
         };
 
@@ -7891,6 +7976,22 @@ fn workflow_step_signature(steps: &[WorkflowStepDraft]) -> Vec<(String, String)>
         .collect()
 }
 
+fn workflow_step_title_by_id(steps: &[WorkflowStepDraft], step_id: usize) -> String {
+    steps
+        .iter()
+        .find(|step| step.id == step_id)
+        .map(|step| step.title.clone())
+        .unwrap_or_default()
+}
+
+fn workflow_step_form_version_id_by_id(steps: &[WorkflowStepDraft], step_id: usize) -> String {
+    steps
+        .iter()
+        .find(|step| step.id == step_id)
+        .map(|step| step.form_version_id.clone())
+        .unwrap_or_default()
+}
+
 #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
 fn submit_update_workflow(
     workflow_id: String,
@@ -7961,8 +8062,7 @@ fn submit_update_workflow(
         };
 
         let payload = UpdateWorkflowPayload {
-            form_id: None,
-            scope_node_type_id: Some(workflow_node_type_id),
+            workflow_node_type_id,
             name: workflow_name,
             slug: workflow_slug,
             description: description.get().trim().to_string().into_nonempty(),
@@ -8003,7 +8103,7 @@ fn submit_update_workflow(
                     if let Some(step_payload) = step_payload {
                         let step_result = if version_is_draft {
                             if let Some(version_id) = version_id.clone() {
-                                let update_payload = UpdateWorkflowVersionStepsPayload {
+                                let update_payload = UpdateWorkflowRevisionStepsPayload {
                                     steps: step_payload,
                                 };
                                 let step_body = match serde_json::to_string(&update_payload) {
@@ -8027,9 +8127,7 @@ fn submit_update_workflow(
                                 )
                                 .await
                             } else {
-                                let version_payload = CreateWorkflowVersionPayload {
-                                    form_version_id: None,
-                                    title: None,
+                                let version_payload = CreateWorkflowRevisionPayload {
                                     steps: step_payload,
                                 };
                                 let version_body = match serde_json::to_string(&version_payload) {
@@ -8053,9 +8151,7 @@ fn submit_update_workflow(
                                 .await
                             }
                         } else {
-                            let version_payload = CreateWorkflowVersionPayload {
-                                form_version_id: None,
-                                title: None,
+                            let version_payload = CreateWorkflowRevisionPayload {
                                 steps: step_payload,
                             };
                             let version_body = match serde_json::to_string(&version_payload) {
@@ -9433,7 +9529,7 @@ fn WorkflowsList(
                     <thead>
                         <tr>
                             <th scope="col">"Workflow name"</th>
-                            <th scope="col">"Form"</th>
+                            <th scope="col">"Node type"</th>
                             <th class="data-table__cell--center" scope="col">"Active revision"</th>
                             <th class="data-table__cell--center" scope="col">
                                 <FilterHeader
@@ -9460,7 +9556,6 @@ fn WorkflowsList(
                                 .into_iter()
                                 .map(|workflow| {
                                     let workflow_href = format!("/workflows/{}", workflow.id);
-                                    let form_href = format!("/forms/{}", workflow.form_id);
                                     let status_key = workflow_status_key(&workflow).to_string();
                                     let status_label = workflow_status_label(&workflow);
                                     let version_label = workflow_version_label(&workflow);
@@ -9468,13 +9563,15 @@ fn WorkflowsList(
                                     let assigned_to = workflow_assignment_links(&workflow, &table_nodes);
                                     let assigned_to_label = workflow_assigned_to_label(&workflow);
                                     let workflow_name = workflow.name.clone();
+                                    let workflow_source = workflow.source.clone();
                                     view! {
                                         <tr>
                                             <th scope="row">
                                                 <a class="data-table__primary-link" href=workflow_href.clone()>{workflow.name}</a>
+                                                <WorkflowSourceMarker source=workflow_source/>
                                             </th>
                                             <td>
-                                                <a class="data-table__primary-link" href=form_href>{workflow.form_name}</a>
+                                                {workflow.workflow_node_type_name}
                                             </td>
                                             <td class="data-table__cell--center">{version_label}</td>
                                             <td class="data-table__cell--center">
@@ -9507,7 +9604,6 @@ fn WorkflowsList(
                         .into_iter()
                         .map(|workflow| {
                             let workflow_href = format!("/workflows/{}", workflow.id);
-                            let form_href = format!("/forms/{}", workflow.form_id);
                             let status_key = workflow_status_key(&workflow).to_string();
                             let status_label = workflow_status_label(&workflow);
                             let version_label = workflow_version_label(&workflow);
@@ -9515,17 +9611,19 @@ fn WorkflowsList(
                             let assigned_to = workflow_assignment_links(&workflow, &card_nodes);
                             let assigned_to_label = workflow_assigned_to_label(&workflow);
                             let workflow_name = workflow.name.clone();
+                            let workflow_source = workflow.source.clone();
                             view! {
                                 <article class="forms-list-mobile-card">
                                     <div class="forms-list-mobile-card__header">
                                         <div>
                                             <h3><a href=workflow_href.clone()>{workflow.name}</a></h3>
+                                            <WorkflowSourceMarker source=workflow_source/>
                                         </div>
                                     </div>
                                     <dl>
                                         <div>
-                                            <dt>"Form"</dt>
-                                            <dd><a href=form_href>{workflow.form_name}</a></dd>
+                                            <dt>"Node type"</dt>
+                                            <dd>{workflow.workflow_node_type_name}</dd>
                                         </div>
                                         <div>
                                             <dt>"Active revision"</dt>
@@ -10484,7 +10582,7 @@ pub fn FormsNewPage() -> impl IntoView {
     let node_types = RwSignal::new(Vec::<NodeTypeCatalogEntry>::new());
     let existing_forms = RwSignal::new(Vec::<FormSummary>::new());
     let name = RwSignal::new(String::new());
-    let scope_node_type_id = RwSignal::new(String::new());
+    let workflow_node_type_id = RwSignal::new(String::new());
     let builder_sections = RwSignal::new(vec![blank_form_builder_section(1)]);
     let active_builder_section = RwSignal::new("1".to_string());
     let next_builder_section_id = RwSignal::new(2usize);
@@ -10539,12 +10637,13 @@ pub fn FormsNewPage() -> impl IntoView {
                                     event.prevent_default();
                                     submit_create_form(
                                         name,
-                                        scope_node_type_id,
+                                        workflow_node_type_id,
                                         builder_sections,
                                         builder_fields,
                                         existing_forms,
                                         is_saving,
                                         message,
+                                        false,
                                     );
                                 }
                             >
@@ -10565,8 +10664,8 @@ pub fn FormsNewPage() -> impl IntoView {
                                         <span>"Scope"</span>
                                         <select
                                             id="form-scope-node-type"
-                                            prop:value=move || scope_node_type_id.get()
-                                            on:change=move |event| scope_node_type_id.set(event_target_value(&event))
+                                            prop:value=move || workflow_node_type_id.get()
+                                            on:change=move |event| workflow_node_type_id.set(event_target_value(&event))
                                         >
                                             <option value="">"No scope"</option>
                                             {move || {
@@ -10698,8 +10797,24 @@ pub fn FormsNewPage() -> impl IntoView {
                                     <button class="button button--secondary" type="submit" disabled=move || !can_submit()>
                                         {move || if is_saving.get() { "Saving..." } else { "Save as Draft" }}
                                     </button>
-                                    <button class="button" type="submit" disabled=move || !can_submit()>
-                                        {move || if is_saving.get() { "Creating..." } else { "Create Form" }}
+                                    <button
+                                        class="button"
+                                        type="button"
+                                        disabled=move || !can_submit()
+                                        on:click=move |_| {
+                                            submit_create_form(
+                                                name,
+                                                workflow_node_type_id,
+                                                builder_sections,
+                                                builder_fields,
+                                                existing_forms,
+                                                is_saving,
+                                                message,
+                                                true,
+                                            );
+                                        }
+                                    >
+                                        {move || if is_saving.get() { "Publishing..." } else { "Create and Publish" }}
                                     </button>
                                 </div>
                             </form>
@@ -10781,8 +10896,23 @@ pub fn FormsDetailPage() -> impl IntoView {
                         .into_any()
                     } else if let Some(form) = detail.get() {
                         let edit_href = format!("/forms/{}/edit", form.id);
+                        let create_workflow_href = format!("/workflows/new?form_id={}", form.id);
+                        let assign_form_href = form
+                            .workflows
+                            .iter()
+                            .find(|workflow| {
+                                workflow.source == "generated_form"
+                                    && workflow.current_version_label.is_some()
+                            })
+                            .map(|workflow| format!("/workflows/assignments?workflow_id={}", workflow.id));
                         view! {
                             <PageHeader title="Form Detail">
+                                <a class="button button--secondary" href=create_workflow_href>"Create Workflow"</a>
+                                {assign_form_href
+                                    .map(|href| {
+                                        view! { <a class="button button--secondary" href=href>"Assign Form"</a> }
+                                    })
+                                    .into_view()}
                                 <a class="button" href=edit_href>"Edit Form"</a>
                             </PageHeader>
                             <FormDetailContent form rendered_form=rendered_form.get()/>
@@ -11127,10 +11257,14 @@ fn FormRelatedLinks(
                         .map(|workflow| {
                             let href = format!("/workflows/{}", workflow.id);
                             let status = workflow.current_status.clone().unwrap_or_else(|| "none".to_string());
+                            let workflow_source = workflow.source.clone();
                             view! {
                                 <a class="related-work-card" href=href>
                                     <span>
-                                        <strong>{workflow.name}</strong>
+                                        <strong>
+                                            {workflow.name}
+                                            <WorkflowSourceMarker source=workflow_source/>
+                                        </strong>
                                         <small>{workflow.slug}</small>
                                     </span>
                                     <span class="related-work-card__meta">{workflow_revision_label_from_option(workflow.current_version_label)}</span>
@@ -11202,7 +11336,7 @@ pub fn FormsEditPage() -> impl IntoView {
     let edit_version_id = RwSignal::new(None::<String>);
     let edit_version_status = RwSignal::new(None::<String>);
     let name = RwSignal::new(String::new());
-    let scope_node_type_id = RwSignal::new(String::new());
+    let workflow_node_type_id = RwSignal::new(String::new());
     let builder_sections = RwSignal::new(vec![blank_form_builder_section(1)]);
     let active_builder_section = RwSignal::new("1".to_string());
     let next_builder_section_id = RwSignal::new(2usize);
@@ -11229,7 +11363,7 @@ pub fn FormsEditPage() -> impl IntoView {
             edit_version_id,
             edit_version_status,
             name,
-            scope_node_type_id,
+            workflow_node_type_id,
             builder_sections,
             builder_fields,
             active_builder_section,
@@ -11283,6 +11417,8 @@ pub fn FormsEditPage() -> impl IntoView {
                         .into_any()
                     } else {
                         let form_id_for_submit = form_id_for_submit.clone();
+                        let form_id_for_draft_submit = form_id_for_submit.clone();
+                        let form_id_for_publish_submit = form_id_for_submit.clone();
                         view! {
                             <div class="form-create-workspace">
                                 <form
@@ -11290,9 +11426,9 @@ pub fn FormsEditPage() -> impl IntoView {
                                     on:submit=move |event| {
                                         event.prevent_default();
                                         submit_update_form(
-                                            form_id_for_submit.clone(),
+                                            form_id_for_draft_submit.clone(),
                                             name,
-                                            scope_node_type_id,
+                                            workflow_node_type_id,
                                             builder_sections,
                                             builder_fields,
                                             existing_forms,
@@ -11301,6 +11437,7 @@ pub fn FormsEditPage() -> impl IntoView {
                                             rendered_form,
                                             is_saving,
                                             message,
+                                            false,
                                         );
                                     }
                                 >
@@ -11321,8 +11458,8 @@ pub fn FormsEditPage() -> impl IntoView {
                                             <span>"Scope"</span>
                                             <select
                                                 id="form-scope-node-type"
-                                                prop:value=move || scope_node_type_id.get()
-                                                on:change=move |event| scope_node_type_id.set(event_target_value(&event))
+                                                prop:value=move || workflow_node_type_id.get()
+                                                on:change=move |event| workflow_node_type_id.set(event_target_value(&event))
                                             >
                                                 <option value="">"No scope"</option>
                                                 {move || {
@@ -11470,6 +11607,29 @@ pub fn FormsEditPage() -> impl IntoView {
                                         <button class="button button--secondary" type="submit" disabled=move || !can_submit()>
                                             {move || if is_saving.get() { "Saving..." } else { "Save as Draft" }}
                                         </button>
+                                        <button
+                                            class="button"
+                                            type="button"
+                                            disabled=move || !can_submit()
+                                            on:click=move |_| {
+                                                submit_update_form(
+                                                    form_id_for_publish_submit.clone(),
+                                                    name,
+                                                    workflow_node_type_id,
+                                                    builder_sections,
+                                                    builder_fields,
+                                                    existing_forms,
+                                                    edit_version_id,
+                                                    edit_version_status,
+                                                    rendered_form,
+                                                    is_saving,
+                                                    message,
+                                                    true,
+                                                );
+                                            }
+                                        >
+                                            {move || if is_saving.get() { "Publishing..." } else { "Save and Publish" }}
+                                        </button>
                                     </div>
                                 </form>
                                 <FieldConfigSheet
@@ -11512,15 +11672,13 @@ pub fn WorkflowsPage() -> impl IntoView {
                 let status_label = workflow_status_label(workflow);
                 let assigned_to = workflow_assigned_to_label(workflow);
                 let description = workflow_description_label(workflow);
-                let scope = workflow_scope_label(workflow.scope_node_type_name.as_deref());
+                let scope = workflow_scope_label(workflow.workflow_node_type_name.as_str());
                 text_matches(
                     &query,
                     &[
                         workflow.name.as_str(),
                         workflow.slug.as_str(),
                         description.as_str(),
-                        workflow.form_name.as_str(),
-                        workflow.form_slug.as_str(),
                         version_label.as_str(),
                         status_label.as_str(),
                         assigned_to.as_str(),
@@ -11588,6 +11746,7 @@ pub fn WorkflowsNewPage() -> impl IntoView {
     let node_types = RwSignal::new(Vec::<NodeTypeCatalogEntry>::new());
     let forms = RwSignal::new(Vec::<FormSummary>::new());
     let existing_workflows = RwSignal::new(Vec::<WorkflowSummary>::new());
+    let seeded_from_form = RwSignal::new(false);
     let name = RwSignal::new(String::new());
     let workflow_node_type_id = RwSignal::new(String::new());
     let steps = RwSignal::new(Vec::<WorkflowStepDraft>::new());
@@ -11599,6 +11758,56 @@ pub fn WorkflowsNewPage() -> impl IntoView {
 
     Effect::new(move |_| {
         load_workflow_create_options(node_types, forms, existing_workflows, is_loading, message);
+    });
+
+    Effect::new(move |_| {
+        if is_loading.get() || seeded_from_form.get_untracked() {
+            return;
+        }
+
+        let form_id: Option<String> = {
+            #[cfg(feature = "hydrate")]
+            {
+                current_search_param("form_id")
+            }
+            #[cfg(not(feature = "hydrate"))]
+            {
+                None
+            }
+        };
+        let Some(form_id) = form_id else {
+            seeded_from_form.set(true);
+            return;
+        };
+
+        let available_forms = forms.get();
+        let Some(form) = available_forms.iter().find(|form| form.id == form_id) else {
+            seeded_from_form.set(true);
+            return;
+        };
+        let Some(scope_node_type_id) = form.scope_node_type_id.clone() else {
+            seeded_from_form.set(true);
+            return;
+        };
+        let Some(version) = form
+            .versions
+            .iter()
+            .find(|version| version.status == "published")
+        else {
+            seeded_from_form.set(true);
+            return;
+        };
+
+        name.set(format!("{} Workflow", form.name));
+        workflow_node_type_id.set(scope_node_type_id);
+        description.set(format!("Workflow for {}.", form.name));
+        steps.set(vec![WorkflowStepDraft {
+            id: 1,
+            title: format!("{} Response", form.name),
+            form_version_id: version.id.clone(),
+        }]);
+        next_step_id.set(2);
+        seeded_from_form.set(true);
     });
 
     Effect::new(move |_| {
@@ -11786,8 +11995,6 @@ pub fn WorkflowsNewPage() -> impl IntoView {
                                                         key=|(_, step)| step.id
                                                         children=move |(index, step)| {
                                                             let step_id = step.id;
-                                                            let step_title = step.title.clone();
-                                                            let step_form_version_id = step.form_version_id.clone();
                                                             let step_position = move || {
                                                                 steps
                                                                     .get()
@@ -11857,7 +12064,9 @@ pub fn WorkflowsNewPage() -> impl IntoView {
                                                                             <span>"Step Title"</span>
                                                                             <input
                                                                                 type="text"
-                                                                                value=step_title
+                                                                                prop:value=move || {
+                                                                                    workflow_step_title_by_id(&steps.get(), step_id)
+                                                                                }
                                                                                 on:input=move |event| {
                                                                                     let value = event_target_value(&event);
                                                                                     steps.update(|steps| {
@@ -11871,7 +12080,9 @@ pub fn WorkflowsNewPage() -> impl IntoView {
                                                                         <label class="form-field">
                                                                             <span>"Form Version"</span>
                                                                             <select
-                                                                                prop:value=step_form_version_id
+                                                                                prop:value=move || {
+                                                                                    workflow_step_form_version_id_by_id(&steps.get(), step_id)
+                                                                                }
                                                                                 on:change=move |event| {
                                                                                     let value = event_target_value(&event);
                                                                                     steps.update(|steps| {
@@ -12928,7 +13139,10 @@ fn WorkflowDetailContent(workflow: WorkflowDefinition) -> impl IntoView {
     let workflow_name = workflow.name.clone();
     let workflow_slug = workflow.slug.clone();
     let workflow_description = nonempty_text(Some(workflow.description.as_str()), "No description");
-    let workflow_scope = workflow_scope_label(workflow.scope_node_type_name.as_deref());
+    let workflow_scope = workflow_scope_label(workflow.workflow_node_type_name.as_str());
+    let workflow_source = workflow_source_label(&workflow.source)
+        .unwrap_or("Authored")
+        .to_string();
     let revision_count = workflow.versions.len().to_string();
     let assignment_count = workflow.assignments.len().to_string();
     let steps = active_version
@@ -12960,6 +13174,10 @@ fn WorkflowDetailContent(workflow: WorkflowDefinition) -> impl IntoView {
                         <tr>
                             <th scope="row">"Workflow Node Type"</th>
                             <td>{workflow_scope}</td>
+                        </tr>
+                        <tr>
+                            <th scope="row">"Source"</th>
+                            <td>{workflow_source}</td>
                         </tr>
                         <tr>
                             <th scope="row">"Revisions"</th>
@@ -13088,7 +13306,7 @@ fn WorkflowVersionsTable(
                         .map(|version| {
                             let status = version.status.clone();
                             let published_at = version.published_at.clone();
-                            let version_label = workflow_revision_label_from_option(version.form_version_label);
+                            let version_label = workflow_revision_label_from_option(version.workflow_revision_label);
                             let edit_href = format!("/workflows/{}/edit?version_id={}", workflow_id, version.id);
                             let edit_title = format!("Edit {} workflow revision", sentence_label(&status));
                             view! {
@@ -13352,7 +13570,7 @@ pub fn WorkflowsEditPage() -> impl IntoView {
 
         name.set(workflow.name.clone());
         slug.set(workflow.slug.clone());
-        workflow_node_type_id.set(workflow.scope_node_type_id.clone().unwrap_or_default());
+        workflow_node_type_id.set(workflow.workflow_node_type_id.clone());
         description.set(workflow.description.clone());
 
         let requested_version_id = {
@@ -13380,7 +13598,7 @@ pub fn WorkflowsEditPage() -> impl IntoView {
         edit_version_label.set(
             edit_version
                 .as_ref()
-                .and_then(|version| version.form_version_label.clone())
+                .and_then(|version| version.workflow_revision_label.clone())
                 .as_deref()
                 .map(workflow_revision_label_from_raw)
                 .unwrap_or_else(|| "-".to_string()),
@@ -13671,8 +13889,6 @@ pub fn WorkflowsEditPage() -> impl IntoView {
                                                         key=|(_, step)| step.id
                                                         children=move |(index, step)| {
                                                             let step_id = step.id;
-                                                            let step_title = step.title.clone();
-                                                            let step_form_version_id = step.form_version_id.clone();
                                                             let step_position = move || {
                                                                 steps
                                                                     .get()
@@ -13742,7 +13958,9 @@ pub fn WorkflowsEditPage() -> impl IntoView {
                                                                             <span>"Step Title"</span>
                                                                             <input
                                                                                 type="text"
-                                                                                value=step_title
+                                                                                prop:value=move || {
+                                                                                    workflow_step_title_by_id(&steps.get(), step_id)
+                                                                                }
                                                                                 on:input=move |event| {
                                                                                     let value = event_target_value(&event);
                                                                                     steps.update(|steps| {
@@ -13756,7 +13974,9 @@ pub fn WorkflowsEditPage() -> impl IntoView {
                                                                         <label class="form-field">
                                                                             <span>"Form Version"</span>
                                                                             <select
-                                                                                prop:value=step_form_version_id
+                                                                                prop:value=move || {
+                                                                                    workflow_step_form_version_id_by_id(&steps.get(), step_id)
+                                                                                }
                                                                                 on:change=move |event| {
                                                                                     let value = event_target_value(&event);
                                                                                     steps.update(|steps| {
@@ -14211,12 +14431,10 @@ fn ResponsesList(
 
 #[component]
 pub fn ResponsesNewPage() -> impl IntoView {
-    let options = RwSignal::new(None::<ResponseStartOptions>);
+    let options = RwSignal::new(None::<AssignmentResponseStartOptions>);
     let is_loading = RwSignal::new(true);
     let is_saving = RwSignal::new(false);
     let message = RwSignal::new(None::<String>);
-    let selected_form_version_id = RwSignal::new(String::new());
-    let selected_node_id = RwSignal::new(String::new());
     let selected_assignment_index = RwSignal::new(String::new());
 
     #[cfg(feature = "hydrate")]
@@ -14225,16 +14443,13 @@ pub fn ResponsesNewPage() -> impl IntoView {
     #[cfg(not(feature = "hydrate"))]
     let requested_workflow_assignment_id = None::<String>;
 
-    #[cfg(feature = "hydrate")]
-    let delegate_account_id = current_search_param("delegateAccountId")
-        .or_else(|| current_search_param("delegate_account_id"));
-    #[cfg(not(feature = "hydrate"))]
-    let delegate_account_id = None::<String>;
-    let delegate_account_id_signal = RwSignal::new(delegate_account_id.clone());
-
     let requested_workflow_assignment_id_for_effect = requested_workflow_assignment_id.clone();
     let requested_workflow_assignment_id_for_view = requested_workflow_assignment_id.clone();
-    let delegate_account_id_for_effect = delegate_account_id.clone();
+    #[cfg(feature = "hydrate")]
+    let delegate_account_id_for_effect = current_search_param("delegateAccountId")
+        .or_else(|| current_search_param("delegate_account_id"));
+    #[cfg(not(feature = "hydrate"))]
+    let delegate_account_id_for_effect = None::<String>;
 
     Effect::new(move |_| {
         if let Some(workflow_assignment_id) = requested_workflow_assignment_id_for_effect.clone() {
@@ -14300,57 +14515,25 @@ pub fn ResponsesNewPage() -> impl IntoView {
                                             options,
                                             is_loading,
                                             is_saving,
-                                            selected_form_version_id,
-                                            selected_node_id,
                                             selected_assignment_index,
                                         ) {
-                                            message.set(Some("Select the response context before starting a draft.".into()));
+                                            message.set(Some("Select assigned workflow work before starting a draft.".into()));
                                             return;
                                         }
 
                                         if let Some(assignment) = response_selected_assignment(options, selected_assignment_index) {
-                                            create_response_draft(
-                                                CreateDraftPayload {
-                                                    form_version_id: assignment.form_version_id,
-                                                    node_id: assignment.node_id,
-                                                    delegate_account_id: assignment.delegate_account_id,
-                                                },
+                                            start_workflow_assignment_response(
+                                                assignment.workflow_assignment_id,
                                                 is_saving,
                                                 message,
                                             );
-                                            return;
                                         }
-
-                                        create_response_draft(
-                                            CreateDraftPayload {
-                                                form_version_id: selected_form_version_id.get(),
-                                                node_id: selected_node_id.get(),
-                                                delegate_account_id: delegate_account_id_signal.get(),
-                                            },
-                                            is_saving,
-                                            message,
-                                        );
                                     }
                                 >
-                                    {if loaded_options.mode == "assignment" {
-                                        view! {
-                                            <ResponseAssignmentStartFields
-                                                assignments=loaded_options.assignments
-                                                selected_assignment_index
-                                            />
-                                        }
-                                        .into_any()
-                                    } else {
-                                        view! {
-                                            <ResponseManualStartFields
-                                                published_forms=loaded_options.published_forms
-                                                nodes=loaded_options.nodes
-                                                selected_form_version_id
-                                                selected_node_id
-                                            />
-                                        }
-                                        .into_any()
-                                    }}
+                                    <ResponseAssignmentStartFields
+                                        assignments=loaded_options.assignments
+                                        selected_assignment_index
+                                    />
 
                                     {move || {
                                         message
@@ -14378,8 +14561,6 @@ pub fn ResponsesNewPage() -> impl IntoView {
                                                     options,
                                                     is_loading,
                                                     is_saving,
-                                                    selected_form_version_id,
-                                                    selected_node_id,
                                                     selected_assignment_index,
                                                 )
                                             }
@@ -14407,73 +14588,8 @@ pub fn ResponsesNewPage() -> impl IntoView {
 }
 
 #[component]
-fn ResponseManualStartFields(
-    published_forms: Vec<PublishedFormVersionOption>,
-    nodes: Vec<ResponseNodeOption>,
-    selected_form_version_id: RwSignal<String>,
-    selected_node_id: RwSignal<String>,
-) -> impl IntoView {
-    let has_forms = !published_forms.is_empty();
-    let has_nodes = !nodes.is_empty();
-
-    view! {
-        <div class="form-grid">
-            <label class="form-field">
-                <span>"Published Form"</span>
-                <select
-                    prop:value=move || selected_form_version_id.get()
-                    disabled=!has_forms
-                    on:change=move |event| selected_form_version_id.set(event_target_value(&event))
-                >
-                    <option value="">"Select published form"</option>
-                    {published_forms
-                        .into_iter()
-                        .map(|form| {
-                            view! {
-                                <option value=form.form_version_id>
-                                    {format!("{} ({})", form.form_name, form.version_label)}
-                                </option>
-                            }
-                        })
-                        .collect_view()}
-                </select>
-            </label>
-            <label class="form-field">
-                <span>"Target Node"</span>
-                <select
-                    prop:value=move || selected_node_id.get()
-                    disabled=!has_nodes
-                    on:change=move |event| selected_node_id.set(event_target_value(&event))
-                >
-                    <option value="">"Select target node"</option>
-                    {nodes
-                        .into_iter()
-                        .map(|node| {
-                            view! {
-                                <option value=node.id>{node.name}</option>
-                            }
-                        })
-                        .collect_view()}
-                </select>
-            </label>
-        </div>
-        {if !has_forms || !has_nodes {
-            view! {
-                <section class="organization-state" aria-live="polite">
-                    <h3>"No manual response contexts"</h3>
-                    <p>"Published forms and visible organization nodes are required before a manual response draft can be started."</p>
-                </section>
-            }
-            .into_any()
-        } else {
-            view! {}.into_any()
-        }}
-    }
-}
-
-#[component]
 fn ResponseAssignmentStartFields(
-    assignments: Vec<ResponseStartAssignmentOption>,
+    assignments: Vec<AssignmentResponseStartOption>,
     selected_assignment_index: RwSignal<String>,
 ) -> impl IntoView {
     let has_assignments = !assignments.is_empty();
@@ -14497,16 +14613,20 @@ fn ResponseAssignmentStartFields(
                         .into_iter()
                         .enumerate()
                         .map(|(index, assignment)| {
+                            let workflow_revision = workflow_revision_label_from_option(
+                                assignment.workflow_version_label.clone(),
+                            );
                             let assignee = nonempty_text(
-                                assignment.delegate_display_name.as_deref(),
+                                Some(assignment.account_display_name.as_str()),
                                 "Assigned response",
                             );
                             view! {
                                 <option value=index.to_string()>
                                     {format!(
-                                        "{} ({}) at {} - {}",
-                                        assignment.form_name,
-                                        assignment.version_label,
+                                        "{} - {} (Revision {}) at {} - {}",
+                                        assignment.workflow_name,
+                                        assignment.workflow_step_title,
+                                        workflow_revision,
                                         assignment.node_name,
                                         assignee,
                                     )}
@@ -14527,11 +14647,27 @@ fn ResponseAssignmentStartFields(
                 }
                 .into_any()
             } else if let Some(assignment) = selected_summary() {
+                let workflow_revision =
+                    workflow_revision_label_from_option(assignment.workflow_version_label);
+                let form_version =
+                    nonempty_text(assignment.form_version_label.as_deref(), "-");
                 view! {
                     <section class="organization-state response-start-summary" aria-live="polite">
-                        <h3>{assignment.form_name}</h3>
-                        <p>{format!("Form Version {} at {}", assignment.version_label, assignment.node_name)}</p>
-                        <p>{nonempty_text(assignment.delegate_display_name.as_deref(), "Assigned response")}</p>
+                        <h3>{assignment.workflow_name}</h3>
+                        <p>{format!(
+                            "Revision {} - Step {} of {}: {}",
+                            workflow_revision,
+                            assignment.workflow_step_position + 1,
+                            assignment.workflow_step_count,
+                            assignment.workflow_step_title,
+                        )}</p>
+                        <p>{format!(
+                            "{} - Form Version {} at {}",
+                            assignment.form_name,
+                            form_version,
+                            assignment.node_name,
+                        )}</p>
+                        <p>{nonempty_text(Some(assignment.account_display_name.as_str()), "Assigned response")}</p>
                     </section>
                 }
                 .into_any()
@@ -14962,7 +15098,7 @@ fn ResponseEditForm(
                             } else {
                                 view! {}.into_any()
                             }}
-                            <div class="form-grid">
+                            <div class="form-grid response-form-grid">
                                 {section
                                     .fields
                                     .into_iter()
@@ -15047,11 +15183,23 @@ fn ResponseFieldInput(
     let field_key_for_bool = field.key.clone();
     let input_id = format!("response-field-{}", field.id);
     let required_label = if field.required { " *" } else { "" };
+    let layout_style = rendered_form_field_layout_style(&field);
+    let field_height = field.grid_height;
+    let field_class = response_field_class(&field.field_type);
 
     view! {
-        <div class="form-field">
-            <span>{format!("{}{}", field.label, required_label)}</span>
-            {if field.field_type == "boolean" {
+        <div class=field_class style=layout_style>
+            {if field.field_type == "static_text" {
+                view! {}.into_any()
+            } else {
+                view! { <span>{format!("{}{}", field.label, required_label)}</span> }.into_any()
+            }}
+            {if field.field_type == "static_text" {
+                view! {
+                    <p class="response-form-field__static-text">{field.label.clone()}</p>
+                }
+                .into_any()
+            } else if field.field_type == "boolean" {
                 let input_id_for_label = input_id.clone();
                 view! {
                     <label class="form-field--checkbox" for=input_id_for_label>
@@ -15084,27 +15232,50 @@ fn ResponseFieldInput(
                 } else {
                     "text"
                 };
-                view! {
-                    <input
-                        id=input_id
-                        type=input_type
-                        required=field.required
-                        prop:value=move || {
-                            text_values
-                                .get()
-                                .get(&field_key_for_input)
-                                .cloned()
-                                .unwrap_or_default()
-                        }
-                        on:input=move |event| {
-                            let value = event_target_value(&event);
-                            text_values.update(|values| {
-                                values.insert(field.key.clone(), value);
-                            });
-                        }
-                    />
+                if input_type == "text" && field_height > 1 {
+                    view! {
+                        <textarea
+                            id=input_id
+                            required=field.required
+                            prop:value=move || {
+                                text_values
+                                    .get()
+                                    .get(&field_key_for_input)
+                                    .cloned()
+                                    .unwrap_or_default()
+                            }
+                            on:input=move |event| {
+                                let value = event_target_value(&event);
+                                text_values.update(|values| {
+                                    values.insert(field.key.clone(), value);
+                                });
+                            }
+                        ></textarea>
+                    }
+                    .into_any()
+                } else {
+                    view! {
+                        <input
+                            id=input_id
+                            type=input_type
+                            required=field.required
+                            prop:value=move || {
+                                text_values
+                                    .get()
+                                    .get(&field_key_for_input)
+                                    .cloned()
+                                    .unwrap_or_default()
+                            }
+                            on:input=move |event| {
+                                let value = event_target_value(&event);
+                                text_values.update(|values| {
+                                    values.insert(field.key.clone(), value);
+                                });
+                            }
+                        />
+                    }
+                    .into_any()
                 }
-                .into_any()
             }}
         </div>
     }

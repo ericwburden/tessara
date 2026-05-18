@@ -964,7 +964,8 @@ pub async fn get_node(
             active_form_versions.version_label AS active_version_label
         FROM forms
         JOIN form_versions ON form_versions.form_id = forms.id
-        JOIN form_assignments ON form_assignments.form_version_id = form_versions.id
+        JOIN workflow_steps ON workflow_steps.form_version_id = form_versions.id
+        JOIN workflow_assignments ON workflow_assignments.workflow_step_id = workflow_steps.id
         LEFT JOIN LATERAL (
             SELECT form_versions.version_label
             FROM form_versions
@@ -979,7 +980,7 @@ pub async fn get_node(
                 form_versions.id DESC
             LIMIT 1
         ) AS active_form_versions ON TRUE
-        WHERE form_assignments.node_id = $1
+        WHERE workflow_assignments.node_id = $1
         GROUP BY forms.id, forms.name, forms.slug, active_form_versions.version_label
         ORDER BY forms.name, forms.id
         "#,
@@ -1077,10 +1078,14 @@ pub async fn get_node(
             LEFT JOIN form_versions AS aggregation_form_versions
                 ON aggregation_form_versions.form_id = aggregation_forms.id
                AND aggregation_form_versions.status = 'published'::form_version_status
-            LEFT JOIN form_assignments AS direct_assignments
-                ON direct_assignments.form_version_id = direct_form_versions.id
-            LEFT JOIN form_assignments AS aggregation_assignments
-                ON aggregation_assignments.form_version_id = aggregation_form_versions.id
+            LEFT JOIN workflow_steps AS direct_steps
+                ON direct_steps.form_version_id = direct_form_versions.id
+            LEFT JOIN workflow_assignments AS direct_assignments
+                ON direct_assignments.workflow_step_id = direct_steps.id
+            LEFT JOIN workflow_steps AS aggregation_steps
+                ON aggregation_steps.form_version_id = aggregation_form_versions.id
+            LEFT JOIN workflow_assignments AS aggregation_assignments
+                ON aggregation_assignments.workflow_step_id = aggregation_steps.id
             WHERE dashboard_components.dashboard_id = dashboards.id
               AND (
                   direct_assignments.node_id = $1

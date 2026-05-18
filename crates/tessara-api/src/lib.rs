@@ -22,10 +22,12 @@ mod submissions;
 mod users;
 mod workflows;
 
+#[cfg(feature = "ssr")]
+use axum::http::header;
 use axum::{
     Router,
     extract::{Path, Request, State},
-    http::{Method, StatusCode, header},
+    http::{Method, StatusCode},
     middleware::{self, Next},
     response::{Html, IntoResponse, Redirect, Response},
     routing::{delete, get, post, put},
@@ -35,11 +37,34 @@ use error::ApiError;
 use tower_http::{cors::CorsLayer, services::ServeDir, trace::TraceLayer};
 
 fn native_app(path: impl AsRef<str>, title: &str, description: &str) -> Html<String> {
-    Html(tessara_web::application_html(
-        path.as_ref(),
-        title,
-        description,
-    ))
+    #[cfg(feature = "ssr")]
+    {
+        Html(tessara_web::application_html(
+            path.as_ref(),
+            title,
+            description,
+        ))
+    }
+
+    #[cfg(not(feature = "ssr"))]
+    {
+        let path = path.as_ref();
+        Html(format!(
+            r#"<!doctype html><html lang="en"><head><meta charset="utf-8"><title>{title}</title><meta name="description" content="{description}"></head><body><main id="app-root" data-path="{path}"></main></body></html>"#
+        ))
+    }
+}
+
+fn shell_pkg_dir() -> std::path::PathBuf {
+    #[cfg(feature = "ssr")]
+    {
+        tessara_web::pkg_dir()
+    }
+
+    #[cfg(not(feature = "ssr"))]
+    {
+        std::path::PathBuf::from("target/site/pkg")
+    }
 }
 
 /// Builds the complete Tessara HTTP router for the supplied application state.
@@ -61,7 +86,7 @@ pub fn router(state: AppState) -> Router {
             get(|| async { native_app("/login", "Tessara Sign In", "Sign in to Tessara.") }),
         )
         .route("/assets/{asset_name}", get(svg_asset))
-        .nest_service("/pkg", ServeDir::new(tessara_web::pkg_dir()))
+        .nest_service("/pkg", ServeDir::new(shell_pkg_dir()))
         .route(
             "/organization",
             get(|| async {
@@ -532,7 +557,6 @@ pub fn router(state: AppState) -> Router {
             "/api/responses/options",
             get(submissions::list_response_start_options),
         )
-        .route("/api/submissions/drafts", post(submissions::create_draft))
         .route("/api/submissions", get(submissions::list_submissions))
         .route(
             "/api/submissions/{submission_id}",
@@ -678,6 +702,7 @@ fn is_protected_ui_request(request: &Request) -> bool {
 }
 
 async fn svg_asset(Path(asset_name): Path<String>) -> impl IntoResponse {
+    #[cfg(feature = "ssr")]
     match tessara_web::svg_asset(&asset_name) {
         Some(svg) => (
             [(header::CONTENT_TYPE, "image/svg+xml; charset=utf-8")],
@@ -685,5 +710,15 @@ async fn svg_asset(Path(asset_name): Path<String>) -> impl IntoResponse {
         )
             .into_response(),
         None => (StatusCode::NOT_FOUND, "asset not found").into_response(),
+    }
+
+    #[cfg(not(feature = "ssr"))]
+    {
+        let _ = asset_name;
+        (
+            StatusCode::NOT_FOUND,
+            "asset not available in API test build",
+        )
+            .into_response()
     }
 }

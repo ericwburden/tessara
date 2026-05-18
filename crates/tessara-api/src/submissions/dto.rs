@@ -5,13 +5,6 @@ use serde_json::Value;
 use uuid::Uuid;
 
 #[derive(Deserialize)]
-pub struct CreateDraftRequest {
-    pub form_version_id: Uuid,
-    pub node_id: Uuid,
-    pub delegate_account_id: Option<Uuid>,
-}
-
-#[derive(Deserialize)]
 pub struct SaveSubmissionValuesRequest {
     pub values: HashMap<String, Value>,
 }
@@ -26,29 +19,26 @@ pub struct ListSubmissionsQuery {
 }
 
 #[derive(Serialize)]
-pub struct ResponseNodeSummary {
-    pub id: Uuid,
-    pub name: String,
-}
-
-#[derive(Serialize)]
-pub struct ResponseStartAssignment {
+pub struct AssignmentResponseStartOption {
+    pub workflow_assignment_id: Uuid,
+    pub workflow_name: String,
+    pub workflow_version_label: Option<String>,
+    pub workflow_step_title: String,
+    pub workflow_step_position: i32,
+    pub workflow_step_count: i64,
     pub form_id: Uuid,
     pub form_name: String,
     pub form_version_id: Uuid,
-    pub version_label: String,
+    pub form_version_label: Option<String>,
     pub node_id: Uuid,
     pub node_name: String,
-    pub delegate_account_id: Option<Uuid>,
-    pub delegate_display_name: Option<String>,
+    pub account_id: Uuid,
+    pub account_display_name: String,
 }
 
 #[derive(Serialize)]
-pub struct ResponseStartOptions {
-    pub mode: String,
-    pub published_forms: Vec<crate::forms::PublishedFormVersionSummary>,
-    pub nodes: Vec<ResponseNodeSummary>,
-    pub assignments: Vec<ResponseStartAssignment>,
+pub struct AssignmentResponseStartOptions {
+    pub assignments: Vec<AssignmentResponseStartOption>,
 }
 
 #[derive(Serialize)]

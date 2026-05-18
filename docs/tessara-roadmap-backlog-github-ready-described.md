@@ -1089,7 +1089,7 @@ Split the workflow backend into bounded `dto`, `handlers`, `service`, and `repo`
 Split response-start and submissions backend behavior into bounded `dto`, `handlers`, `service`, and `repo` modules for options, draft creation, list/detail, value save, submit, and delete flows. Keep the endpoint contract stable for the native response entry surfaces.
 
 **Acceptance criteria:**
-- `/api/responses/options` and `/api/submissions*` keep their existing public behavior.
+- `/api/responses/options` remains the response-entry options endpoint, but its behavior is assignment-only: it returns pending workflow assignment starts rather than manual form/node start choices.
 - Touched submission handlers call services instead of embedding orchestration and SQL.
 - Service/repo boundaries remain clear enough for Sprint 2D draft/submit continuation.
 

@@ -17,9 +17,9 @@ use crate::{
 use super::dto::{
     AssignmentCandidateAssigneeQuery, AssignmentCandidateQuery, BulkWorkflowAssignmentRequest,
     BulkWorkflowAssignmentResponse, BulkWorkflowAssignmentResult, CreateWorkflowAssignmentRequest,
-    CreateWorkflowRequest, CreateWorkflowStepRequest, CreateWorkflowVersionRequest,
+    CreateWorkflowRequest, CreateWorkflowRevisionRequest, CreateWorkflowStepRequest,
     PendingWorkflowWork, UpdateWorkflowAssignmentRequest, UpdateWorkflowRequest,
-    UpdateWorkflowVersionStepsRequest, WorkflowAssigneeOption, WorkflowAssignmentCandidate,
+    UpdateWorkflowRevisionStepsRequest, WorkflowAssigneeOption, WorkflowAssignmentCandidate,
     WorkflowAssignmentQuery, WorkflowAssignmentSummary, WorkflowDefinition, WorkflowStepSummary,
     WorkflowSummary, WorkflowVersionSummary,
 };
@@ -91,11 +91,9 @@ pub async fn create_workflow(
     Json(payload): Json<CreateWorkflowRequest>,
 ) -> ApiResult<Json<IdResponse>> {
     auth::require_capability(&state.pool, &headers, "workflows:write").await?;
-    let form_id = resolve_legacy_workflow_form_id(&state.pool, payload.form_id, None).await?;
     require_workflow_payload(
         &state.pool,
-        form_id,
-        payload.scope_node_type_id,
+        payload.workflow_node_type_id,
         &payload.name,
         &payload.slug,
         None,
@@ -104,13 +102,12 @@ pub async fn create_workflow(
 
     let id: Uuid = sqlx::query_scalar(
         r#"
-        INSERT INTO workflows (form_id, scope_node_type_id, name, slug, description)
-        VALUES ($1, $2, $3, $4, $5)
+        INSERT INTO workflows (workflow_node_type_id, name, slug, description)
+        VALUES ($1, $2, $3, $4)
         RETURNING id
         "#,
     )
-    .bind(form_id)
-    .bind(payload.scope_node_type_id)
+    .bind(payload.workflow_node_type_id)
     .bind(payload.name.trim())
     .bind(payload.slug.trim())
     .bind(payload.description.unwrap_or_default().trim())
@@ -127,12 +124,9 @@ pub async fn update_workflow(
     Json(payload): Json<UpdateWorkflowRequest>,
 ) -> ApiResult<Json<IdResponse>> {
     auth::require_capability(&state.pool, &headers, "workflows:write").await?;
-    let form_id =
-        resolve_legacy_workflow_form_id(&state.pool, payload.form_id, Some(workflow_id)).await?;
     require_workflow_payload(
         &state.pool,
-        form_id,
-        payload.scope_node_type_id,
+        payload.workflow_node_type_id,
         &payload.name,
         &payload.slug,
         Some(workflow_id),
@@ -142,17 +136,15 @@ pub async fn update_workflow(
     let updated = sqlx::query(
         r#"
         UPDATE workflows
-        SET form_id = $2,
-            scope_node_type_id = $3,
-            name = $4,
-            slug = $5,
-            description = $6
+        SET workflow_node_type_id = $2,
+            name = $3,
+            slug = $4,
+            description = $5
         WHERE id = $1
         "#,
     )
     .bind(workflow_id)
-    .bind(form_id)
-    .bind(payload.scope_node_type_id)
+    .bind(payload.workflow_node_type_id)
     .bind(payload.name.trim())
     .bind(payload.slug.trim())
     .bind(payload.description.unwrap_or_default().trim())
@@ -170,136 +162,72 @@ pub async fn create_workflow_version(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(workflow_id): Path<Uuid>,
-    Json(payload): Json<CreateWorkflowVersionRequest>,
+    Json(payload): Json<CreateWorkflowRevisionRequest>,
 ) -> ApiResult<Json<IdResponse>> {
     auth::require_capability(&state.pool, &headers, "workflows:write").await?;
 
-    let explicit_steps = !payload.steps.is_empty();
-    let steps = normalize_workflow_steps(&payload)?;
+    let steps = normalize_step_collection(payload.steps)?;
     let mut tx = state.pool.begin().await?;
     sqlx::query_scalar::<_, Uuid>("SELECT id FROM workflows WHERE id = $1")
         .bind(workflow_id)
         .fetch_optional(&mut *tx)
         .await?
         .ok_or_else(|| ApiError::NotFound(format!("workflow {workflow_id}")))?;
-    let version_row = sqlx::query(
+    require_workflow_steps_match_scope_tx(&mut tx, workflow_id, &steps).await?;
+    if let Some(existing_draft) = sqlx::query(
         r#"
-        SELECT form_id, status::text AS status
-        FROM form_versions
-        WHERE id = $1
+        SELECT id, version_label
+        FROM workflow_versions
+        WHERE workflow_id = $1
+          AND status = 'draft'::form_version_status
+        ORDER BY created_at DESC
+        LIMIT 1
         "#,
     )
-    .bind(steps[0].form_version_id)
+    .bind(workflow_id)
     .fetch_optional(&mut *tx)
     .await?
-    .ok_or_else(|| ApiError::NotFound(format!("form version {}", steps[0].form_version_id)))?;
+    {
+        let existing_draft_id: Uuid = existing_draft.try_get("id")?;
+        let existing_version_label: Option<String> = existing_draft.try_get("version_label")?;
+        let draft_version_label = existing_version_label
+            .as_deref()
+            .and_then(workflow_revision_label)
+            .unwrap_or(next_workflow_version_label_tx(&mut tx, workflow_id).await?);
 
-    if !explicit_steps {
-        let existing: Option<Uuid> = sqlx::query_scalar(
-            "SELECT id FROM workflow_versions WHERE workflow_id = $1 AND form_version_id = $2",
-        )
-        .bind(workflow_id)
-        .bind(steps[0].form_version_id)
-        .fetch_optional(&mut *tx)
-        .await?;
-        if let Some(id) = existing {
-            return Ok(Json(IdResponse { id }));
-        }
-    }
-
-    let source_status: String = version_row.try_get("status")?;
-    require_workflow_steps_match_scope_tx(&mut tx, workflow_id, &steps).await?;
-    let status = if explicit_steps {
-        "draft".to_string()
-    } else {
-        source_status
-    };
-    if explicit_steps {
-        if let Some(existing_draft) = sqlx::query(
+        sqlx::query(
             r#"
-            SELECT id, version_label
-            FROM workflow_versions
-            WHERE workflow_id = $1
-              AND status = 'draft'::form_version_status
-            ORDER BY created_at DESC
-            LIMIT 1
+            UPDATE workflow_versions
+            SET version_label = $2,
+                published_at = NULL
+            WHERE id = $1
             "#,
         )
-        .bind(workflow_id)
-        .fetch_optional(&mut *tx)
-        .await?
-        {
-            let existing_draft_id: Uuid = existing_draft.try_get("id")?;
-            let existing_version_label: Option<String> = existing_draft.try_get("version_label")?;
-            let draft_version_label = match existing_version_label {
-                Some(label) if !label.trim().is_empty() => {
-                    let label_in_use_elsewhere: Option<Uuid> = sqlx::query_scalar(
-                        r#"
-                        SELECT id
-                        FROM workflow_versions
-                        WHERE workflow_id = $1
-                          AND version_label = $2
-                          AND id <> $3
-                        LIMIT 1
-                        "#,
-                    )
-                    .bind(workflow_id)
-                    .bind(&label)
-                    .bind(existing_draft_id)
-                    .fetch_optional(&mut *tx)
-                    .await?;
-
-                    if label_in_use_elsewhere.is_some() {
-                        next_workflow_version_label_tx(&mut tx, workflow_id).await?
-                    } else {
-                        workflow_revision_label(&label).unwrap_or(label)
-                    }
-                }
-                _ => next_workflow_version_label_tx(&mut tx, workflow_id).await?,
-            };
-
-            sqlx::query(
-                r#"
-                UPDATE workflow_versions
-                SET form_version_id = $2,
-                    version_label = $3,
-                    published_at = NULL
-                WHERE id = $1
-                "#,
-            )
-            .bind(existing_draft_id)
-            .bind(steps[0].form_version_id)
-            .bind(draft_version_label)
-            .execute(&mut *tx)
-            .await?;
-            replace_workflow_steps_tx(&mut tx, existing_draft_id, &steps).await?;
-            tx.commit().await?;
-            return Ok(Json(IdResponse {
-                id: existing_draft_id,
-            }));
-        }
+        .bind(existing_draft_id)
+        .bind(draft_version_label)
+        .execute(&mut *tx)
+        .await?;
+        replace_workflow_steps_tx(&mut tx, existing_draft_id, &steps).await?;
+        promote_generated_workflow_if_needed_tx(&mut tx, workflow_id).await?;
+        tx.commit().await?;
+        return Ok(Json(IdResponse {
+            id: existing_draft_id,
+        }));
     }
     let version_label = next_workflow_version_label_tx(&mut tx, workflow_id).await?;
     let workflow_version_id: Uuid = sqlx::query_scalar(
         r#"
-        INSERT INTO workflow_versions (workflow_id, form_version_id, version_label, status, published_at)
-        VALUES (
-            $1,
-            $2,
-            $3,
-            $4::form_version_status,
-            CASE WHEN $4 = 'published' THEN now() ELSE NULL END
-        )
+        INSERT INTO workflow_versions (workflow_id, version_label, status, published_at)
+        VALUES ($1, $2, 'draft'::form_version_status, NULL)
         RETURNING id
         "#,
     )
     .bind(workflow_id)
-    .bind(steps[0].form_version_id)
     .bind(version_label)
-    .bind(status)
     .fetch_one(&mut *tx)
     .await?;
     replace_workflow_steps_tx(&mut tx, workflow_version_id, &steps).await?;
+    promote_generated_workflow_if_needed_tx(&mut tx, workflow_id).await?;
     tx.commit().await?;
 
     Ok(Json(IdResponse {
@@ -311,7 +239,7 @@ pub async fn replace_workflow_version_steps(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(workflow_version_id): Path<Uuid>,
-    Json(payload): Json<UpdateWorkflowVersionStepsRequest>,
+    Json(payload): Json<UpdateWorkflowRevisionStepsRequest>,
 ) -> ApiResult<Json<IdResponse>> {
     auth::require_capability(&state.pool, &headers, "workflows:write").await?;
     let steps = normalize_step_collection(payload.steps)?;
@@ -336,6 +264,7 @@ pub async fn replace_workflow_version_steps(
             .await?;
     require_workflow_steps_match_scope_tx(&mut tx, workflow_id, &steps).await?;
     replace_workflow_steps_tx(&mut tx, workflow_version_id, &steps).await?;
+    promote_generated_workflow_if_needed_tx(&mut tx, workflow_id).await?;
     tx.commit().await?;
     Ok(Json(IdResponse {
         id: workflow_version_id,
@@ -382,29 +311,14 @@ pub async fn publish_workflow_version(
     auth::require_capability(&state.pool, &headers, "workflows:write").await?;
 
     let mut tx = state.pool.begin().await?;
-    let row = sqlx::query(
-        r#"
-        SELECT
-            workflow_versions.workflow_id,
-            workflow_versions.form_version_id,
-            form_versions.status::text AS form_status
-        FROM workflow_versions
-        JOIN form_versions ON form_versions.id = workflow_versions.form_version_id
-        WHERE workflow_versions.id = $1
-        "#,
-    )
-    .bind(workflow_version_id)
-    .fetch_optional(&mut *tx)
-    .await?
-    .ok_or_else(|| ApiError::NotFound(format!("workflow revision {workflow_version_id}")))?;
-    let workflow_id: Uuid = row.try_get("workflow_id")?;
-    let form_status: String = row.try_get("form_status")?;
-    if form_status != "published" {
-        return Err(ApiError::BadRequest(
-            "workflow revisions can only be published when every step form version is published"
-                .into(),
-        ));
-    }
+    let workflow_id: Uuid =
+        sqlx::query_scalar("SELECT workflow_id FROM workflow_versions WHERE id = $1")
+            .bind(workflow_version_id)
+            .fetch_optional(&mut *tx)
+            .await?
+            .ok_or_else(|| {
+                ApiError::NotFound(format!("workflow revision {workflow_version_id}"))
+            })?;
     validate_workflow_version_publish_tx(&mut tx, workflow_version_id).await?;
 
     sqlx::query(
@@ -469,7 +383,6 @@ pub async fn create_workflow_assignment(
         payload.workflow_version_id,
         payload.node_id,
         payload.account_id,
-        None,
     )
     .await?;
     tx.commit().await?;
@@ -541,7 +454,6 @@ pub async fn bulk_create_workflow_assignments(
             payload.workflow_version_id,
             payload.node_id,
             account_id,
-            None,
         )
         .await?;
         results.push(BulkWorkflowAssignmentResult {
@@ -565,7 +477,7 @@ pub async fn update_workflow_assignment(
     let account = auth::require_capability(&state.pool, &headers, "workflows:write").await?;
     let current = sqlx::query(
         r#"
-        SELECT workflow_version_id, form_assignment_id
+        SELECT workflow_version_id
         FROM workflow_assignments
         WHERE id = $1
         "#,
@@ -575,7 +487,6 @@ pub async fn update_workflow_assignment(
     .await?
     .ok_or_else(|| ApiError::NotFound(format!("workflow assignment {workflow_assignment_id}")))?;
     let workflow_version_id: Uuid = current.try_get("workflow_version_id")?;
-    let form_assignment_id: Option<Uuid> = current.try_get("form_assignment_id")?;
     let step_id: Uuid = sqlx::query_scalar(
         "SELECT id FROM workflow_steps WHERE workflow_version_id = $1 ORDER BY position LIMIT 1",
     )
@@ -607,22 +518,6 @@ pub async fn update_workflow_assignment(
     .bind(payload.is_active)
     .execute(&state.pool)
     .await?;
-
-    if let Some(form_assignment_id) = form_assignment_id {
-        sqlx::query(
-            r#"
-            UPDATE form_assignments
-            SET node_id = $2,
-                account_id = $3
-            WHERE id = $1
-            "#,
-        )
-        .bind(form_assignment_id)
-        .bind(payload.node_id)
-        .bind(payload.account_id)
-        .execute(&state.pool)
-        .await?;
-    }
 
     Ok(Json(IdResponse {
         id: workflow_assignment_id,
@@ -681,48 +576,80 @@ pub async fn ensure_workflow_for_published_form_version_tx(
     let form_id: Uuid = row.try_get("form_id")?;
     let form_name: String = row.try_get("form_name")?;
     let form_slug: String = row.try_get("form_slug")?;
-    let scope_node_type_id: Option<Uuid> = row.try_get("scope_node_type_id")?;
-    let default_workflow_slug = format!("{form_slug}-workflow");
-    let workflow_id: Uuid = if let Some(existing) =
-        sqlx::query_scalar("SELECT id FROM workflows WHERE slug = $1")
-            .bind(&default_workflow_slug)
-            .fetch_optional(&mut **tx)
+    let workflow_node_type_id: Uuid = row
+        .try_get::<Option<Uuid>, _>("scope_node_type_id")?
+        .ok_or_else(|| {
+            ApiError::BadRequest(
+                "cannot generate a workflow for a form without a scope node type".into(),
+            )
+        })?;
+
+    let existing_generated: Option<Uuid> = sqlx::query_scalar(
+        r#"
+        SELECT id
+        FROM workflows
+        WHERE source = 'generated_form'
+          AND source_form_id = $1
+        ORDER BY created_at
+        LIMIT 1
+        "#,
+    )
+    .bind(form_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+
+    let workflow_id: Uuid = if let Some(existing) = existing_generated {
+        if generated_workflow_is_single_form_shortcut_tx(tx, existing, form_id).await? {
+            existing
+        } else {
+            promote_generated_workflow_tx(tx, existing).await?;
+            create_generated_form_workflow_tx(
+                tx,
+                form_id,
+                workflow_node_type_id,
+                &form_name,
+                &form_slug,
+            )
             .await?
-    {
-        existing
+        }
     } else {
-        sqlx::query_scalar(
-            r#"
-            INSERT INTO workflows (form_id, scope_node_type_id, name, slug, description)
-            VALUES ($1, $2, $3, $4, $5)
-            RETURNING id
-            "#,
+        create_generated_form_workflow_tx(
+            tx,
+            form_id,
+            workflow_node_type_id,
+            &form_name,
+            &form_slug,
         )
-        .bind(form_id)
-        .bind(scope_node_type_id)
-        .bind(format!("{form_name} Workflow"))
-        .bind(default_workflow_slug)
-        .bind("Generated for Sprint 2A single-step runtime compatibility.")
-        .fetch_one(&mut **tx)
         .await?
     };
 
     sqlx::query(
         r#"
         UPDATE workflows
-        SET scope_node_type_id = COALESCE(scope_node_type_id, $2)
+        SET workflow_node_type_id = $2,
+            source = 'generated_form',
+            source_form_id = $3
         WHERE id = $1
         "#,
     )
     .bind(workflow_id)
-    .bind(scope_node_type_id)
+    .bind(workflow_node_type_id)
+    .bind(form_id)
     .execute(&mut **tx)
     .await?;
 
     let status: String = row.try_get("status")?;
     let published_at: Option<DateTime<Utc>> = row.try_get("published_at")?;
     let workflow_version_id: Uuid = if let Some(existing) = sqlx::query_scalar(
-        "SELECT id FROM workflow_versions WHERE workflow_id = $1 AND form_version_id = $2",
+        r#"
+        SELECT workflow_versions.id
+        FROM workflow_versions
+        JOIN workflow_steps ON workflow_steps.workflow_version_id = workflow_versions.id
+        WHERE workflow_versions.workflow_id = $1
+          AND workflow_steps.form_version_id = $2
+          AND workflow_steps.position = 0
+        LIMIT 1
+        "#,
     )
     .bind(workflow_id)
     .bind(form_version_id)
@@ -747,13 +674,12 @@ pub async fn ensure_workflow_for_published_form_version_tx(
         let version_label = next_workflow_version_label_tx(tx, workflow_id).await?;
         sqlx::query_scalar(
             r#"
-            INSERT INTO workflow_versions (workflow_id, form_version_id, version_label, status, published_at)
-            VALUES ($1, $2, $3, $4::form_version_status, $5)
+            INSERT INTO workflow_versions (workflow_id, version_label, status, published_at)
+            VALUES ($1, $2, $3::form_version_status, $4)
             RETURNING id
             "#,
         )
         .bind(workflow_id)
-        .bind(form_version_id)
         .bind(version_label)
         .bind(status)
         .bind(published_at)
@@ -800,40 +726,150 @@ pub async fn ensure_workflow_for_published_form_version_tx(
     Ok((workflow_id, workflow_version_id, step_id))
 }
 
-pub async fn ensure_workflow_assignment_for_form_assignment(
-    pool: &sqlx::PgPool,
-    form_assignment_id: Uuid,
+async fn create_generated_form_workflow_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    form_id: Uuid,
+    workflow_node_type_id: Uuid,
+    form_name: &str,
+    form_slug: &str,
 ) -> ApiResult<Uuid> {
-    let mut tx = pool.begin().await?;
-    let row = sqlx::query(
+    let workflow_slug = unique_generated_workflow_slug_tx(tx, form_slug).await?;
+    let workflow_id = sqlx::query_scalar(
         r#"
-        SELECT form_version_id, node_id, account_id
-        FROM form_assignments
-        WHERE id = $1
+        INSERT INTO workflows (
+            workflow_node_type_id,
+            name,
+            slug,
+            description,
+            source,
+            source_form_id
+        )
+        VALUES ($1, $2, $3, $4, 'generated_form', $5)
+        RETURNING id
         "#,
     )
-    .bind(form_assignment_id)
-    .fetch_optional(&mut *tx)
+    .bind(workflow_node_type_id)
+    .bind(format!("{form_name} Workflow"))
+    .bind(workflow_slug)
+    .bind("Generated single-form workflow.")
+    .bind(form_id)
+    .fetch_one(&mut **tx)
+    .await?;
+
+    Ok(workflow_id)
+}
+
+async fn unique_generated_workflow_slug_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    form_slug: &str,
+) -> ApiResult<String> {
+    for suffix in 0..100 {
+        let candidate = if suffix == 0 {
+            format!("{form_slug}-workflow")
+        } else {
+            format!("{form_slug}-workflow-{suffix}")
+        };
+        let exists: bool =
+            sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM workflows WHERE slug = $1)")
+                .bind(&candidate)
+                .fetch_one(&mut **tx)
+                .await?;
+        if !exists {
+            return Ok(candidate);
+        }
+    }
+
+    Err(ApiError::BadRequest(format!(
+        "could not generate a unique workflow slug for form '{form_slug}'"
+    )))
+}
+
+async fn generated_workflow_is_single_form_shortcut_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    workflow_id: Uuid,
+    form_id: Uuid,
+) -> ApiResult<bool> {
+    let Some(row) = sqlx::query(
+        r#"
+        SELECT
+            COUNT(workflow_steps.id) AS step_count,
+            BOOL_AND(form_versions.form_id = $2) AS steps_match_form
+        FROM workflow_versions
+        LEFT JOIN workflow_steps ON workflow_steps.workflow_version_id = workflow_versions.id
+        LEFT JOIN form_versions ON form_versions.id = workflow_steps.form_version_id
+        WHERE workflow_versions.workflow_id = $1
+        GROUP BY workflow_versions.id
+        ORDER BY workflow_versions.published_at DESC NULLS LAST, workflow_versions.created_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(workflow_id)
+    .bind(form_id)
+    .fetch_optional(&mut **tx)
     .await?
-    .ok_or_else(|| ApiError::NotFound(format!("form assignment {form_assignment_id}")))?;
-    let form_version_id: Uuid = row.try_get("form_version_id")?;
-    let node_id: Uuid = row.try_get("node_id")?;
-    let account_id: Option<Uuid> = row.try_get("account_id")?;
-    let account_id = account_id.ok_or_else(|| {
-        ApiError::BadRequest(
-            "cannot convert an unassigned form assignment into workflow work".into(),
-        )
-    })?;
+    else {
+        return Ok(true);
+    };
+
+    let step_count: i64 = row.try_get("step_count")?;
+    let steps_match_form: Option<bool> = row.try_get("steps_match_form")?;
+    Ok(step_count == 1 && steps_match_form.unwrap_or(false))
+}
+
+async fn promote_generated_workflow_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    workflow_id: Uuid,
+) -> ApiResult<()> {
+    sqlx::query(
+        r#"
+        UPDATE workflows
+        SET source = 'authored',
+            source_form_id = NULL
+        WHERE id = $1
+          AND source = 'generated_form'
+        "#,
+    )
+    .bind(workflow_id)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+async fn promote_generated_workflow_if_needed_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    workflow_id: Uuid,
+) -> ApiResult<()> {
+    let Some(row) = sqlx::query("SELECT source, source_form_id FROM workflows WHERE id = $1")
+        .bind(workflow_id)
+        .fetch_optional(&mut **tx)
+        .await?
+    else {
+        return Ok(());
+    };
+
+    let source: String = row.try_get("source")?;
+    let source_form_id: Option<Uuid> = row.try_get("source_form_id")?;
+    if source == "generated_form" {
+        if let Some(form_id) = source_form_id {
+            if !generated_workflow_is_single_form_shortcut_tx(tx, workflow_id, form_id).await? {
+                promote_generated_workflow_tx(tx, workflow_id).await?;
+            }
+        }
+    }
+    Ok(())
+}
+
+pub async fn ensure_workflow_assignment_for_form_version(
+    pool: &sqlx::PgPool,
+    form_version_id: Uuid,
+    node_id: Uuid,
+    account_id: Uuid,
+) -> ApiResult<Uuid> {
+    let mut tx = pool.begin().await?;
     let (_, workflow_version_id, _) =
         ensure_workflow_for_published_form_version_tx(&mut tx, form_version_id).await?;
-    let workflow_assignment_id = ensure_workflow_assignment_tx(
-        &mut tx,
-        workflow_version_id,
-        node_id,
-        account_id,
-        Some(form_assignment_id),
-    )
-    .await?;
+    let workflow_assignment_id =
+        ensure_workflow_assignment_tx(&mut tx, workflow_version_id, node_id, account_id).await?;
     tx.commit().await?;
     Ok(workflow_assignment_id)
 }
@@ -1043,7 +1079,6 @@ pub async fn complete_workflow_step_and_advance(
             next_step_id,
             node_id,
             assignee_account_id,
-            None,
         )
         .await?;
     } else {
@@ -1077,7 +1112,6 @@ pub async fn start_workflow_assignment(
             workflow_assignments.workflow_step_id,
             workflow_assignments.node_id,
             workflow_assignments.account_id,
-            workflow_assignments.form_assignment_id,
             workflow_assignments.is_active,
             workflow_steps.form_version_id,
             workflow_steps.position AS workflow_step_position,
@@ -1104,9 +1138,9 @@ pub async fn start_workflow_assignment(
     }
 
     let workflow_status: String = row.try_get("workflow_status")?;
-    if workflow_status != "published" {
+    if workflow_status != "published" && workflow_status != "superseded" {
         return Err(ApiError::BadRequest(
-            "only published workflow revisions can start response work".into(),
+            "only published or superseded workflow revisions can start response work".into(),
         ));
     }
 
@@ -1150,7 +1184,6 @@ pub async fn start_workflow_assignment(
     let workflow_step_id: Uuid = row.try_get("workflow_step_id")?;
     let node_id: Uuid = row.try_get("node_id")?;
     let form_version_id: Uuid = row.try_get("form_version_id")?;
-    let form_assignment_id: Option<Uuid> = row.try_get("form_assignment_id")?;
     let step_node_id = resolve_workflow_step_node_tx(&mut tx, node_id, form_version_id).await?;
     let workflow_step_position: i32 = row.try_get("workflow_step_position")?;
 
@@ -1204,23 +1237,6 @@ pub async fn start_workflow_assignment(
         }
     }
 
-    let form_assignment_id = if let Some(existing) = form_assignment_id {
-        existing
-    } else {
-        sqlx::query_scalar(
-            r#"
-            INSERT INTO form_assignments (form_version_id, node_id, account_id)
-            VALUES ($1, $2, $3)
-            RETURNING id
-            "#,
-        )
-        .bind(form_version_id)
-        .bind(step_node_id)
-        .bind(assignee_account_id)
-        .fetch_one(&mut *tx)
-        .await?
-    };
-
     let workflow_instance_id: Uuid = if let Some(existing) = in_progress_instance_id {
         existing
     } else {
@@ -1249,17 +1265,15 @@ pub async fn start_workflow_assignment(
     let submission_id: Uuid = sqlx::query_scalar(
         r#"
         INSERT INTO submissions (
-            assignment_id,
             form_version_id,
             node_id,
             workflow_assignment_id,
             workflow_instance_id
         )
-        VALUES ($1, $2, $3, $4, $5)
+        VALUES ($1, $2, $3, $4)
         RETURNING id
         "#,
     )
-    .bind(form_assignment_id)
     .bind(form_version_id)
     .bind(step_node_id)
     .bind(workflow_assignment_id)
@@ -1300,7 +1314,7 @@ pub async fn start_workflow_assignment(
     sqlx::query(
         r#"
         INSERT INTO submission_audit_events (submission_id, event_type, account_id)
-        VALUES ($1, 'create_draft', $2)
+        VALUES ($1, 'start_response', $2)
         "#,
     )
     .bind(submission_id)
@@ -1360,7 +1374,10 @@ pub async fn list_pending_assignments_for_account(
         JOIN accounts ON accounts.id = workflow_assignments.account_id
         WHERE workflow_assignments.account_id = $1
           AND workflow_assignments.is_active = true
-          AND workflow_versions.status = 'published'::form_version_status
+          AND workflow_versions.status IN (
+              'published'::form_version_status,
+              'superseded'::form_version_status
+          )
           AND NOT EXISTS (
               SELECT 1
               FROM submissions
@@ -1414,17 +1431,15 @@ async fn list_workflows_inner(pool: &sqlx::PgPool) -> ApiResult<Vec<WorkflowSumm
         r#"
         SELECT
             workflows.id,
-            workflows.form_id,
-            forms.name AS form_name,
-            forms.slug AS form_slug,
-            workflows.scope_node_type_id,
-            node_types.name AS scope_node_type_name,
+            workflows.workflow_node_type_id,
+            node_types.name AS workflow_node_type_name,
             workflows.name,
             workflows.slug,
             workflows.description,
+            workflows.source,
+            workflows.source_form_id,
             current_versions.id AS current_version_id,
             current_versions.version_label AS current_version_label,
-            current_versions.form_version_id AS current_form_version_id,
             current_versions.status::text AS current_status,
             COUNT(DISTINCT workflow_assignments.id) FILTER (WHERE workflow_assignments.is_active) AS assignment_count,
             COUNT(DISTINCT workflow_versions.id) AS version_count,
@@ -1433,10 +1448,9 @@ async fn list_workflows_inner(pool: &sqlx::PgPool) -> ApiResult<Vec<WorkflowSumm
                 ARRAY[]::text[]
             ) AS assignment_node_names
         FROM workflows
-        JOIN forms ON forms.id = workflows.form_id
-        LEFT JOIN node_types ON node_types.id = workflows.scope_node_type_id
+        JOIN node_types ON node_types.id = workflows.workflow_node_type_id
         LEFT JOIN LATERAL (
-            SELECT id, form_version_id, version_label, status
+            SELECT id, version_label, status
             FROM workflow_versions
             WHERE workflow_id = workflows.id
             ORDER BY
@@ -1454,17 +1468,15 @@ async fn list_workflows_inner(pool: &sqlx::PgPool) -> ApiResult<Vec<WorkflowSumm
         LEFT JOIN nodes ON nodes.id = workflow_assignments.node_id
         GROUP BY
             workflows.id,
-            workflows.form_id,
-            forms.name,
-            forms.slug,
-            workflows.scope_node_type_id,
+            workflows.workflow_node_type_id,
             node_types.name,
             workflows.name,
             workflows.slug,
             workflows.description,
+            workflows.source,
+            workflows.source_form_id,
             current_versions.id,
             current_versions.version_label,
-            current_versions.form_version_id,
             current_versions.status
         ORDER BY workflows.name, workflows.slug
         "#,
@@ -1476,17 +1488,15 @@ async fn list_workflows_inner(pool: &sqlx::PgPool) -> ApiResult<Vec<WorkflowSumm
         .map(|row| {
             Ok(WorkflowSummary {
                 id: row.try_get("id")?,
-                form_id: row.try_get("form_id")?,
-                form_name: row.try_get("form_name")?,
-                form_slug: row.try_get("form_slug")?,
-                scope_node_type_id: row.try_get("scope_node_type_id")?,
-                scope_node_type_name: row.try_get("scope_node_type_name")?,
+                workflow_node_type_id: row.try_get("workflow_node_type_id")?,
+                workflow_node_type_name: row.try_get("workflow_node_type_name")?,
                 name: row.try_get("name")?,
                 slug: row.try_get("slug")?,
                 description: row.try_get("description")?,
+                source: row.try_get("source")?,
+                source_form_id: row.try_get("source_form_id")?,
                 current_version_id: row.try_get("current_version_id")?,
                 current_version_label: row.try_get("current_version_label")?,
-                current_form_version_id: row.try_get("current_form_version_id")?,
                 current_status: row.try_get("current_status")?,
                 assignment_count: row.try_get("assignment_count")?,
                 version_count: row.try_get("version_count")?,
@@ -1505,17 +1515,15 @@ async fn get_workflow_inner(
         r#"
         SELECT
             workflows.id,
-            workflows.form_id,
-            forms.name AS form_name,
-            forms.slug AS form_slug,
-            workflows.scope_node_type_id,
-            node_types.name AS scope_node_type_name,
+            workflows.workflow_node_type_id,
+            node_types.name AS workflow_node_type_name,
             workflows.name,
             workflows.slug,
-            workflows.description
+            workflows.description,
+            workflows.source,
+            workflows.source_form_id
         FROM workflows
-        JOIN forms ON forms.id = workflows.form_id
-        LEFT JOIN node_types ON node_types.id = workflows.scope_node_type_id
+        JOIN node_types ON node_types.id = workflows.workflow_node_type_id
         WHERE workflows.id = $1
         "#,
     )
@@ -1528,8 +1536,7 @@ async fn get_workflow_inner(
         r#"
         SELECT
             workflow_versions.id,
-            workflow_versions.form_version_id,
-            workflow_versions.version_label AS form_version_label,
+            workflow_versions.version_label AS workflow_revision_label,
             workflow_versions.status::text AS status,
             workflow_versions.published_at,
             workflow_versions.created_at
@@ -1551,8 +1558,7 @@ async fn get_workflow_inner(
             .unwrap_or_else(|| "Primary Response".into());
         versions.push(WorkflowVersionSummary {
             id: version_id,
-            form_version_id: version_row.try_get("form_version_id")?,
-            form_version_label: version_row.try_get("form_version_label")?,
+            workflow_revision_label: version_row.try_get("workflow_revision_label")?,
             title,
             status: version_row.try_get("status")?,
             published_at: version_row.try_get("published_at")?,
@@ -1573,14 +1579,13 @@ async fn get_workflow_inner(
 
     Ok(WorkflowDefinition {
         id: row.try_get("id")?,
-        form_id: row.try_get("form_id")?,
-        form_name: row.try_get("form_name")?,
-        form_slug: row.try_get("form_slug")?,
-        scope_node_type_id: row.try_get("scope_node_type_id")?,
-        scope_node_type_name: row.try_get("scope_node_type_name")?,
+        workflow_node_type_id: row.try_get("workflow_node_type_id")?,
+        workflow_node_type_name: row.try_get("workflow_node_type_name")?,
         name: row.try_get("name")?,
         slug: row.try_get("slug")?,
         description: row.try_get("description")?,
+        source: row.try_get("source")?,
+        source_form_id: row.try_get("source_form_id")?,
         versions,
         assignments,
     })
@@ -1689,10 +1694,7 @@ async fn list_assignment_candidates_inner(
         WHERE workflow_versions.status = 'published'::form_version_status
           AND step_totals.step_count > 0
           AND ($2::uuid[] IS NULL OR nodes.id = ANY($2))
-          AND (
-              workflows.scope_node_type_id IS NULL
-              OR nodes.node_type_id = workflows.scope_node_type_id
-          )
+          AND nodes.node_type_id = workflows.workflow_node_type_id
           AND NOT EXISTS (
               SELECT 1
               FROM step_scopes
@@ -1881,27 +1883,6 @@ async fn list_workflow_assignments_inner(
         .map_err(Into::into)
 }
 
-fn normalize_workflow_steps(
-    payload: &CreateWorkflowVersionRequest,
-) -> ApiResult<Vec<CreateWorkflowStepRequest>> {
-    if payload.steps.is_empty() {
-        let form_version_id = payload.form_version_id.ok_or_else(|| {
-            ApiError::BadRequest("workflow revision requires at least one step".into())
-        })?;
-        let title = payload
-            .title
-            .clone()
-            .map(|value| value.trim().to_string())
-            .filter(|value| !value.is_empty())
-            .unwrap_or_else(|| "Primary Response".into());
-        return Ok(vec![CreateWorkflowStepRequest {
-            title,
-            form_version_id,
-        }]);
-    }
-    normalize_step_collection(payload.steps.clone())
-}
-
 fn normalize_step_collection(
     steps: Vec<CreateWorkflowStepRequest>,
 ) -> ApiResult<Vec<CreateWorkflowStepRequest>> {
@@ -1934,16 +1915,12 @@ async fn require_workflow_steps_match_scope_tx(
     workflow_id: Uuid,
     steps: &[CreateWorkflowStepRequest],
 ) -> ApiResult<()> {
-    let workflow_scope_node_type_id: Option<Uuid> =
-        sqlx::query_scalar("SELECT scope_node_type_id FROM workflows WHERE id = $1")
+    let workflow_node_type_id: Uuid =
+        sqlx::query_scalar("SELECT workflow_node_type_id FROM workflows WHERE id = $1")
             .bind(workflow_id)
             .fetch_optional(&mut **tx)
             .await?
             .ok_or_else(|| ApiError::NotFound(format!("workflow {workflow_id}")))?;
-
-    let Some(workflow_scope_node_type_id) = workflow_scope_node_type_id else {
-        return Ok(());
-    };
 
     for step in steps {
         let row = sqlx::query(
@@ -1985,7 +1962,7 @@ async fn require_workflow_steps_match_scope_tx(
             )
             "#,
         )
-        .bind(workflow_scope_node_type_id)
+        .bind(workflow_node_type_id)
         .bind(form_scope_node_type_id)
         .fetch_one(&mut **tx)
         .await?;
@@ -2165,39 +2142,9 @@ async fn resolve_workflow_step_node_tx(
     })
 }
 
-async fn resolve_legacy_workflow_form_id(
-    pool: &sqlx::PgPool,
-    requested_form_id: Option<Uuid>,
-    workflow_id: Option<Uuid>,
-) -> ApiResult<Uuid> {
-    if let Some(form_id) = requested_form_id {
-        return Ok(form_id);
-    }
-
-    if let Some(workflow_id) = workflow_id {
-        let existing_form_id: Option<Uuid> =
-            sqlx::query_scalar("SELECT form_id FROM workflows WHERE id = $1")
-                .bind(workflow_id)
-                .fetch_optional(pool)
-                .await?;
-        if let Some(form_id) = existing_form_id {
-            return Ok(form_id);
-        }
-        return Err(ApiError::NotFound(format!("workflow {workflow_id}")));
-    }
-
-    sqlx::query_scalar("SELECT id FROM forms ORDER BY created_at, id LIMIT 1")
-        .fetch_optional(pool)
-        .await?
-        .ok_or_else(|| {
-            ApiError::BadRequest("create at least one form before creating a workflow".into())
-        })
-}
-
 async fn require_workflow_payload(
     pool: &sqlx::PgPool,
-    form_id: Uuid,
-    scope_node_type_id: Option<Uuid>,
+    workflow_node_type_id: Uuid,
     name: &str,
     slug: &str,
     current_workflow_id: Option<Uuid>,
@@ -2208,24 +2155,15 @@ async fn require_workflow_payload(
     if slug.trim().is_empty() {
         return Err(ApiError::BadRequest("workflow slug is required".into()));
     }
-    let form_exists: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM forms WHERE id = $1)")
-        .bind(form_id)
-        .fetch_one(pool)
-        .await?;
-    if !form_exists {
-        return Err(ApiError::NotFound(format!("form {form_id}")));
-    }
-    if let Some(scope_node_type_id) = scope_node_type_id {
-        let node_type_exists: bool =
-            sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM node_types WHERE id = $1)")
-                .bind(scope_node_type_id)
-                .fetch_one(pool)
-                .await?;
-        if !node_type_exists {
-            return Err(ApiError::NotFound(format!(
-                "node type {scope_node_type_id}"
-            )));
-        }
+    let node_type_exists: bool =
+        sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM node_types WHERE id = $1)")
+            .bind(workflow_node_type_id)
+            .fetch_one(pool)
+            .await?;
+    if !node_type_exists {
+        return Err(ApiError::NotFound(format!(
+            "node type {workflow_node_type_id}"
+        )));
     }
 
     let duplicate_slug: bool = if let Some(current_workflow_id) = current_workflow_id {
@@ -2255,16 +2193,10 @@ async fn ensure_workflow_assignment_tx(
     workflow_version_id: Uuid,
     node_id: Uuid,
     account_id: Uuid,
-    form_assignment_id: Option<Uuid>,
 ) -> ApiResult<Uuid> {
-    let (id, _) = ensure_workflow_assignment_with_status_tx(
-        tx,
-        workflow_version_id,
-        node_id,
-        account_id,
-        form_assignment_id,
-    )
-    .await?;
+    let (id, _) =
+        ensure_workflow_assignment_with_status_tx(tx, workflow_version_id, node_id, account_id)
+            .await?;
     Ok(id)
 }
 
@@ -2273,7 +2205,6 @@ async fn ensure_workflow_assignment_with_status_tx(
     workflow_version_id: Uuid,
     node_id: Uuid,
     account_id: Uuid,
-    form_assignment_id: Option<Uuid>,
 ) -> ApiResult<(Uuid, String)> {
     let row = sqlx::query(
         r#"
@@ -2292,15 +2223,8 @@ async fn ensure_workflow_assignment_with_status_tx(
     })?;
     let step_id: Uuid = row.try_get("id")?;
 
-    ensure_specific_workflow_assignment_tx(
-        tx,
-        workflow_version_id,
-        step_id,
-        node_id,
-        account_id,
-        form_assignment_id,
-    )
-    .await
+    ensure_specific_workflow_assignment_tx(tx, workflow_version_id, step_id, node_id, account_id)
+        .await
 }
 
 async fn ensure_specific_workflow_assignment_tx(
@@ -2309,7 +2233,6 @@ async fn ensure_specific_workflow_assignment_tx(
     step_id: Uuid,
     node_id: Uuid,
     account_id: Uuid,
-    form_assignment_id: Option<Uuid>,
 ) -> ApiResult<(Uuid, String)> {
     if let Some(existing) = sqlx::query(
         r#"
@@ -2332,14 +2255,12 @@ async fn ensure_specific_workflow_assignment_tx(
             r#"
             UPDATE workflow_assignments
             SET workflow_version_id = $2,
-                form_assignment_id = COALESCE($3, form_assignment_id),
                 is_active = true
             WHERE id = $1
         "#,
         )
         .bind(existing_id)
         .bind(workflow_version_id)
-        .bind(form_assignment_id)
         .execute(&mut **tx)
         .await?;
         return Ok((
@@ -2355,10 +2276,9 @@ async fn ensure_specific_workflow_assignment_tx(
             workflow_step_id,
             node_id,
             account_id,
-            form_assignment_id,
             is_active
         )
-        VALUES ($1, $2, $3, $4, $5, true)
+        VALUES ($1, $2, $3, $4, true)
         RETURNING id
         "#,
     )
@@ -2366,7 +2286,6 @@ async fn ensure_specific_workflow_assignment_tx(
     .bind(step_id)
     .bind(node_id)
     .bind(account_id)
-    .bind(form_assignment_id)
     .fetch_one(&mut **tx)
     .await
     .map_err(ApiError::from)?;

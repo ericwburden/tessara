@@ -150,17 +150,8 @@ CREATE TABLE choice_list_items (
     position integer NOT NULL DEFAULT 0
 );
 
-CREATE TABLE form_assignments (
-    id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-    form_version_id uuid NOT NULL REFERENCES form_versions(id) ON DELETE RESTRICT,
-    node_id uuid NOT NULL REFERENCES nodes(id) ON DELETE RESTRICT,
-    account_id uuid REFERENCES accounts(id) ON DELETE SET NULL,
-    created_at timestamptz NOT NULL DEFAULT now()
-);
-
 CREATE TABLE submissions (
     id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-    assignment_id uuid NOT NULL REFERENCES form_assignments(id) ON DELETE RESTRICT,
     form_version_id uuid NOT NULL REFERENCES form_versions(id) ON DELETE RESTRICT,
     node_id uuid NOT NULL REFERENCES nodes(id) ON DELETE RESTRICT,
     status submission_status NOT NULL DEFAULT 'draft',

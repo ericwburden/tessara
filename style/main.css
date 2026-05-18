@@ -1030,6 +1030,16 @@ input {
   color: var(--color-text);
 }
 
+.workflow-source-marker {
+  display: inline;
+  margin-left: 0.35rem;
+  vertical-align: baseline;
+  color: var(--color-text);
+  font-size: 1em;
+  font-weight: 900;
+  line-height: 1;
+}
+
 .forms-attached-sheet__count {
   color: var(--color-muted);
   font-size: 0.85rem;
@@ -1973,6 +1983,62 @@ input {
   width: 1rem;
   min-height: 1rem;
   padding: 0;
+}
+
+.response-form-grid {
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-auto-rows: minmax(2.65rem, auto);
+  align-items: stretch;
+}
+
+.response-form-field {
+  --response-field-column: 1;
+  --response-field-width: 6;
+  --response-field-row: auto;
+  --response-field-height: 1;
+  --response-control-min-height: 2.65rem;
+  grid-column: var(--response-field-column) / span var(--response-field-width);
+  grid-row: var(--response-field-row) / span var(--response-field-height);
+  min-width: 0;
+  align-content: stretch;
+}
+
+.response-form-field > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.2;
+}
+
+.response-form-field input,
+.response-form-field select,
+.response-form-field textarea,
+.response-form-field .form-field--checkbox {
+  min-height: var(--response-control-min-height);
+  min-width: 0;
+}
+
+.response-form-field textarea {
+  height: 100%;
+}
+
+.response-form-field--boolean .form-field--checkbox {
+  justify-content: flex-start;
+}
+
+.response-form-field--static-text {
+  min-height: var(--response-control-min-height);
+  align-content: center;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--color-control) 72%, transparent);
+  padding: 0.8rem;
+}
+
+.response-form-field__static-text {
+  margin: 0;
+  min-width: 0;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
 }
 
 .form-message {
@@ -3303,6 +3369,11 @@ input {
 
   .form-grid {
     grid-template-columns: 1fr;
+  }
+
+  .response-form-field {
+    grid-column: 1 / -1;
+    grid-row: auto;
   }
 
   .form-builder__header {
