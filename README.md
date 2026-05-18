@@ -174,16 +174,19 @@ cargo leptos end-to-end
 Useful checks:
 
 ```powershell
-cargo fmt --all --check
-cargo check -p tessara-api
-cargo check -p tessara-web
-cargo check -p tessara-web --no-default-features --features hydrate --target wasm32-unknown-unknown
-cargo test --workspace
+.\scripts\validate.ps1
+.\scripts\validate.ps1 -Fast
 cargo clippy --workspace --all-targets -- -D warnings
 .\scripts\smoke.ps1
 .\scripts\smoke.ps1 -ComposeApi
 .\scripts\rehearse-legacy-import.ps1
 ```
+
+`.\scripts\validate.ps1` is the standard pre-commit Rust validation path. It
+runs formatting, API checks, the API SSR check, web checks, wasm hydrate checks,
+and API/web tests sequentially so Windows Cargo builds do not fight over the
+same artifact locks. Use `-Fast` for the inner loop when SSR and wasm hydrate
+checks are not relevant to the change.
 
 Testing should focus on behavior that protects domain and workflow boundaries:
 validation rules, compatibility/missing-data behavior, projection/reporting
