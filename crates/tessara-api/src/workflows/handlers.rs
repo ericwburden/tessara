@@ -346,6 +346,7 @@ pub async fn publish_workflow_version(
     .bind(workflow_version_id)
     .execute(&mut *tx)
     .await?;
+    promote_generated_workflow_if_needed_tx(&mut tx, workflow_id).await?;
     tx.commit().await?;
 
     Ok(Json(IdResponse {

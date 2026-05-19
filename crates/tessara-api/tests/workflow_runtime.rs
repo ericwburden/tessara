@@ -270,6 +270,179 @@ async fn form_versions_can_be_reused_across_workflows() {
 }
 
 #[tokio::test]
+async fn generated_form_workflow_is_replaced_after_shortcut_is_promoted() {
+    let _guard = TEST_DATABASE_LOCK.lock().await;
+    let Some(app) = test_app().await else { return };
+    let admin_token = login_token(app.clone()).await;
+
+    let _seed = request_json(
+        app.clone(),
+        authorized_request("POST", "/api/demo/seed", &admin_token, None),
+    )
+    .await;
+    let activity_node_type_id = node_type_id_for_slug(app.clone(), &admin_token, "activity").await;
+    let (form_id, first_version_id) = create_publishable_form(
+        app.clone(),
+        &admin_token,
+        "Workflow Shortcut Regression",
+        "workflow-shortcut-regression",
+        &activity_node_type_id,
+        "first",
+    )
+    .await;
+
+    request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            &format!("/api/admin/form-versions/{first_version_id}/publish"),
+            &admin_token,
+            Some(json!({})),
+        ),
+    )
+    .await;
+
+    let initial_workflow =
+        current_generated_workflow_for_form(app.clone(), &admin_token, &form_id).await;
+    let initial_workflow_id = initial_workflow["id"]
+        .as_str()
+        .expect("generated workflow should expose id")
+        .to_string();
+    let initial_revision_id = initial_workflow["current_version_id"]
+        .as_str()
+        .expect("generated workflow should expose current revision")
+        .to_string();
+    let initial_detail = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/workflows/{initial_workflow_id}"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(initial_detail["source"], "generated_form");
+    assert_eq!(initial_detail["source_form_id"], form_id);
+    assert_eq!(
+        initial_detail["versions"]
+            .as_array()
+            .expect("workflow should include revisions")
+            .iter()
+            .find(|version| version["id"] == initial_revision_id)
+            .expect("current generated revision should be present")["step_count"],
+        1
+    );
+
+    let multi_step_revision = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            &format!("/api/workflows/{initial_workflow_id}/versions"),
+            &admin_token,
+            Some(json!({
+                "steps": [
+                    {
+                        "title": "Initial response",
+                        "form_version_id": first_version_id
+                    },
+                    {
+                        "title": "Follow-up response",
+                        "form_version_id": first_version_id
+                    }
+                ]
+            })),
+        ),
+    )
+    .await;
+    let multi_step_revision_id = multi_step_revision["id"]
+        .as_str()
+        .expect("created workflow revision should expose id");
+    request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            &format!("/api/workflow-versions/{multi_step_revision_id}/publish"),
+            &admin_token,
+            Some(json!({})),
+        ),
+    )
+    .await;
+
+    let promoted_detail = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/workflows/{initial_workflow_id}"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(promoted_detail["source"], "authored");
+    assert!(promoted_detail["source_form_id"].is_null());
+
+    let second_version_id = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            &format!("/api/admin/forms/{form_id}/versions"),
+            &admin_token,
+            Some(json!({})),
+        ),
+    )
+    .await["id"]
+        .as_str()
+        .expect("new form revision should expose id")
+        .to_string();
+    add_publishable_form_contents(app.clone(), &admin_token, &second_version_id, "second").await;
+    request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            &format!("/api/admin/form-versions/{second_version_id}/publish"),
+            &admin_token,
+            Some(json!({})),
+        ),
+    )
+    .await;
+
+    let regenerated =
+        current_generated_workflow_for_form(app.clone(), &admin_token, &form_id).await;
+    let regenerated_workflow_id = regenerated["id"]
+        .as_str()
+        .expect("regenerated workflow should expose id");
+    assert_ne!(regenerated_workflow_id, initial_workflow_id);
+
+    let regenerated_detail = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/workflows/{regenerated_workflow_id}"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(regenerated_detail["source"], "generated_form");
+    assert_eq!(regenerated_detail["source_form_id"], form_id);
+    let regenerated_revision_id = regenerated["current_version_id"]
+        .as_str()
+        .expect("regenerated workflow should expose current revision");
+    let regenerated_revision = regenerated_detail["versions"]
+        .as_array()
+        .expect("regenerated workflow should include revisions")
+        .iter()
+        .find(|version| version["id"] == regenerated_revision_id)
+        .expect("regenerated current revision should be present");
+    assert_eq!(regenerated_revision["step_count"], 1);
+    assert_eq!(
+        regenerated_revision["steps"][0]["form_version_id"],
+        second_version_id
+    );
+}
+
+#[tokio::test]
 async fn assignee_pending_work_can_start_workflow_response() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
     let Some(app) = test_app().await else { return };
@@ -2368,6 +2541,136 @@ async fn workflow_node_type_id_for_slug(app: axum::Router, token: &str, slug: &s
         .and_then(|workflow| workflow["workflow_node_type_id"].as_str())
         .unwrap_or_else(|| panic!("workflow {slug} should expose a node type id"))
         .to_string()
+}
+
+async fn node_type_id_for_slug(app: axum::Router, token: &str, slug: &str) -> String {
+    let node_types = request_json(
+        app,
+        authorized_request("GET", "/api/admin/node-types", token, None),
+    )
+    .await;
+    node_types
+        .as_array()
+        .expect("node type list should be an array")
+        .iter()
+        .find(|node_type| node_type["slug"] == slug)
+        .and_then(|node_type| node_type["id"].as_str())
+        .unwrap_or_else(|| panic!("node type {slug} should be present"))
+        .to_string()
+}
+
+async fn create_publishable_form(
+    app: axum::Router,
+    token: &str,
+    name: &str,
+    slug: &str,
+    scope_node_type_id: &str,
+    key_suffix: &str,
+) -> (String, String) {
+    let form = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/forms",
+            token,
+            Some(json!({
+                "name": name,
+                "slug": slug,
+                "scope_node_type_id": scope_node_type_id
+            })),
+        ),
+    )
+    .await;
+    let form_id = form["id"]
+        .as_str()
+        .expect("created form should expose id")
+        .to_string();
+    let version = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            &format!("/api/admin/forms/{form_id}/versions"),
+            token,
+            Some(json!({})),
+        ),
+    )
+    .await;
+    let version_id = version["id"]
+        .as_str()
+        .expect("created form revision should expose id")
+        .to_string();
+    add_publishable_form_contents(app, token, &version_id, key_suffix).await;
+
+    (form_id, version_id)
+}
+
+async fn add_publishable_form_contents(
+    app: axum::Router,
+    token: &str,
+    form_version_id: &str,
+    key_suffix: &str,
+) {
+    let section = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            &format!("/api/admin/form-versions/{form_version_id}/sections"),
+            token,
+            Some(json!({
+                "title": "Main",
+                "description": "",
+                "position": 0
+            })),
+        ),
+    )
+    .await;
+    let section_id = section["id"]
+        .as_str()
+        .expect("created form section should expose id");
+    request_json(
+        app,
+        authorized_request(
+            "POST",
+            &format!("/api/admin/form-versions/{form_version_id}/fields"),
+            token,
+            Some(json!({
+                "section_id": section_id,
+                "key": format!("uat_field_{key_suffix}"),
+                "label": "UAT Field",
+                "field_type": "text",
+                "required": true,
+                "position": 0,
+                "grid_row": 1,
+                "grid_column": 1,
+                "grid_width": 12,
+                "grid_height": 2
+            })),
+        ),
+    )
+    .await;
+}
+
+async fn current_generated_workflow_for_form(
+    app: axum::Router,
+    token: &str,
+    form_id: &str,
+) -> Value {
+    let form = request_json(
+        app,
+        authorized_request("GET", &format!("/api/forms/{form_id}"), token, None),
+    )
+    .await;
+    form["workflows"]
+        .as_array()
+        .expect("form detail should include workflows")
+        .iter()
+        .find(|workflow| {
+            workflow["source"] == "generated_form"
+                && workflow["current_status"] == "published"
+                && workflow["current_version_id"].as_str().is_some()
+        })
+        .cloned()
+        .expect("form should expose a current generated workflow")
 }
 
 async fn test_state() -> Option<db::AppState> {

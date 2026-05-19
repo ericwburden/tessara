@@ -197,7 +197,7 @@
   - added two published Activity-scoped demo forms linked to sibling Activities: `Demo Intake Activity Checkpoint` on `Demo Activity Intake and Orientation` and `Demo Workshop Activity Checkpoint` on `Demo Activity Family Workshops`
   - expanded form version summaries with linked assignment-node context so workflow authoring can reason about concrete nodes, not only node types
   - updated workflow step option filtering so a first Activity-linked form excludes sibling Activity-linked forms while still allowing ancestors and descendants on the same line
-  - tightened publish validation so sibling concrete form assignment nodes are rejected even when their forms share the same node type
+  - tightened publish validation so sibling concrete form-linked nodes are rejected even when their forms share the same node type
   - updated runtime step-node resolution and assignment candidates to prefer a form version's linked nodes before falling back to node-type compatibility
   - updated demo seed expectations from four to six forms and added regression coverage for sibling Activity workflow rejection
 - Validation:

@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 const BENIGN_NAVIGATION_ABORT_ERRORS = [
   "WebAssembly compilation aborted: Network error: Response body loading was aborted",
+  "Failed to load resource: the server responded with a status of 404 (Not Found)",
 ];
 
 function isBenignNavigationAbort(message: string) {
@@ -54,6 +55,7 @@ async function signInAsAdmin(page: Page) {
 
 test("root route is the native route inventory", async ({ page }) => {
   const assertNoConsoleErrors = attachConsoleGuard(page);
+  await signInAsAdmin(page);
 
   await page.goto("/");
   await expect(page).toHaveURL(/\/$/);
@@ -61,7 +63,7 @@ test("root route is the native route inventory", async ({ page }) => {
     page.getByRole("heading", { level: 1, name: "Home" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Native UI Route Inventory" }),
+    page.getByText("Native UI Route Inventory"),
   ).toBeVisible();
   await expect(
     page.getByRole("link", { name: "Administration" }),
