@@ -2711,3 +2711,15 @@ Next UI steps:
   - form-first "Assign Form" is a UI convenience over generated single-form workflows plus normal workflow assignments
   - response drafts start through `/api/workflow-assignments/{workflow_assignment_id}/start`
 - Tightened DTO naming around assignment-backed response start options so future work does not reintroduce a manual form/node start mode.
+
+## 2026-05-19 - Form Scope Direction
+
+- Captured the product direction that forms should not be intrinsically scoped to a node type.
+- Captured the related product direction that workflows should be available at an explicit list of concrete nodes, not constrained by a workflow node type.
+- Workflow steps should become the owner of context and target semantics, including future nonlinear branching, forward-passed form data, prefills, hidden or locked carried-forward values, and derived target nodes.
+- Started removing form scope as a workflow compatibility rule:
+  - workflow step form-version options are no longer filtered by form node scope
+  - workflow assignment candidates no longer require every step form scope to appear under the assignment node
+  - workflow response starts no longer retarget a step to a descendant node solely because the form had a legacy scope node type
+- Added `workflow_available_nodes` so assignment candidates are driven by explicit workflow/node availability.
+- Left persisted form `scope_node_type_id` and workflow `workflow_node_type_id` in place temporarily because generated single-form workflow creation still needs an explicit replacement for choosing default workflow availability.

@@ -5,6 +5,7 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use sqlx::{Postgres, Row, Transaction};
+use std::collections::BTreeMap;
 use uuid::Uuid;
 
 use crate::{
@@ -19,9 +20,10 @@ use super::dto::{
     BulkWorkflowAssignmentResponse, BulkWorkflowAssignmentResult, CreateWorkflowAssignmentRequest,
     CreateWorkflowRequest, CreateWorkflowRevisionRequest, CreateWorkflowStepRequest,
     PendingWorkflowWork, UpdateWorkflowAssignmentRequest, UpdateWorkflowRequest,
-    UpdateWorkflowRevisionStepsRequest, WorkflowAssigneeOption, WorkflowAssignmentCandidate,
-    WorkflowAssignmentQuery, WorkflowAssignmentSummary, WorkflowDefinition, WorkflowStepSummary,
-    WorkflowSummary, WorkflowVersionSummary,
+    UpdateWorkflowRevisionStepsRequest, WorkflowAssignedUserSummary, WorkflowAssigneeOption,
+    WorkflowAssignmentCandidate, WorkflowAssignmentQuery, WorkflowAssignmentSummary,
+    WorkflowAvailableNodeSummary, WorkflowDefinition, WorkflowStepSummary, WorkflowSummary,
+    WorkflowVersionSummary,
 };
 
 fn workflow_revision_number(label: &str) -> Option<u64> {
@@ -93,13 +95,17 @@ pub async fn create_workflow(
     auth::require_capability(&state.pool, &headers, "workflows:write").await?;
     require_workflow_payload(
         &state.pool,
-        payload.workflow_node_type_id,
+        &payload.available_node_ids,
         &payload.name,
         &payload.slug,
         None,
     )
     .await?;
+    let workflow_node_type_id =
+        legacy_workflow_node_type_for_available_nodes(&state.pool, &payload.available_node_ids)
+            .await?;
 
+    let mut tx = state.pool.begin().await?;
     let id: Uuid = sqlx::query_scalar(
         r#"
         INSERT INTO workflows (workflow_node_type_id, name, slug, description)
@@ -107,12 +113,14 @@ pub async fn create_workflow(
         RETURNING id
         "#,
     )
-    .bind(payload.workflow_node_type_id)
+    .bind(workflow_node_type_id)
     .bind(payload.name.trim())
     .bind(payload.slug.trim())
     .bind(payload.description.unwrap_or_default().trim())
-    .fetch_one(&state.pool)
+    .fetch_one(&mut *tx)
     .await?;
+    replace_workflow_available_nodes_tx(&mut tx, id, &payload.available_node_ids).await?;
+    tx.commit().await?;
 
     Ok(Json(IdResponse { id }))
 }
@@ -126,13 +134,17 @@ pub async fn update_workflow(
     auth::require_capability(&state.pool, &headers, "workflows:write").await?;
     require_workflow_payload(
         &state.pool,
-        payload.workflow_node_type_id,
+        &payload.available_node_ids,
         &payload.name,
         &payload.slug,
         Some(workflow_id),
     )
     .await?;
+    let workflow_node_type_id =
+        legacy_workflow_node_type_for_available_nodes(&state.pool, &payload.available_node_ids)
+            .await?;
 
+    let mut tx = state.pool.begin().await?;
     let updated = sqlx::query(
         r#"
         UPDATE workflows
@@ -144,16 +156,18 @@ pub async fn update_workflow(
         "#,
     )
     .bind(workflow_id)
-    .bind(payload.workflow_node_type_id)
+    .bind(workflow_node_type_id)
     .bind(payload.name.trim())
     .bind(payload.slug.trim())
     .bind(payload.description.unwrap_or_default().trim())
-    .execute(&state.pool)
+    .execute(&mut *tx)
     .await?;
 
     if updated.rows_affected() == 0 {
         return Err(ApiError::NotFound(format!("workflow {workflow_id}")));
     }
+    replace_workflow_available_nodes_tx(&mut tx, workflow_id, &payload.available_node_ids).await?;
+    tx.commit().await?;
 
     Ok(Json(IdResponse { id: workflow_id }))
 }
@@ -173,7 +187,6 @@ pub async fn create_workflow_version(
         .fetch_optional(&mut *tx)
         .await?
         .ok_or_else(|| ApiError::NotFound(format!("workflow {workflow_id}")))?;
-    require_workflow_steps_match_scope_tx(&mut tx, workflow_id, &steps).await?;
     if let Some(existing_draft) = sqlx::query(
         r#"
         SELECT id, version_label
@@ -262,7 +275,6 @@ pub async fn replace_workflow_version_steps(
             .bind(workflow_version_id)
             .fetch_one(&mut *tx)
             .await?;
-    require_workflow_steps_match_scope_tx(&mut tx, workflow_id, &steps).await?;
     replace_workflow_steps_tx(&mut tx, workflow_version_id, &steps).await?;
     promote_generated_workflow_if_needed_tx(&mut tx, workflow_id).await?;
     tx.commit().await?;
@@ -638,6 +650,8 @@ pub async fn ensure_workflow_for_published_form_version_tx(
     .bind(form_id)
     .execute(&mut **tx)
     .await?;
+    replace_workflow_available_nodes_for_node_type_tx(tx, workflow_id, workflow_node_type_id)
+        .await?;
 
     let status: String = row.try_get("status")?;
     let published_at: Option<DateTime<Utc>> = row.try_get("published_at")?;
@@ -757,7 +771,35 @@ async fn create_generated_form_workflow_tx(
     .fetch_one(&mut **tx)
     .await?;
 
+    replace_workflow_available_nodes_for_node_type_tx(tx, workflow_id, workflow_node_type_id)
+        .await?;
+
     Ok(workflow_id)
+}
+
+async fn replace_workflow_available_nodes_for_node_type_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    workflow_id: Uuid,
+    node_type_id: Uuid,
+) -> ApiResult<()> {
+    sqlx::query("DELETE FROM workflow_available_nodes WHERE workflow_id = $1")
+        .bind(workflow_id)
+        .execute(&mut **tx)
+        .await?;
+    sqlx::query(
+        r#"
+        INSERT INTO workflow_available_nodes (workflow_id, node_id)
+        SELECT $1, nodes.id
+        FROM nodes
+        WHERE nodes.node_type_id = $2
+        ON CONFLICT DO NOTHING
+        "#,
+    )
+    .bind(workflow_id)
+    .bind(node_type_id)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
 }
 
 async fn unique_generated_workflow_slug_tx(
@@ -1185,7 +1227,7 @@ pub async fn start_workflow_assignment(
     let workflow_step_id: Uuid = row.try_get("workflow_step_id")?;
     let node_id: Uuid = row.try_get("node_id")?;
     let form_version_id: Uuid = row.try_get("form_version_id")?;
-    let step_node_id = resolve_workflow_step_node_tx(&mut tx, node_id, form_version_id).await?;
+    let step_node_id = node_id;
     let workflow_step_position: i32 = row.try_get("workflow_step_position")?;
 
     let in_progress_instance_id: Option<Uuid> = sqlx::query_scalar(
@@ -1484,13 +1526,24 @@ async fn list_workflows_inner(pool: &sqlx::PgPool) -> ApiResult<Vec<WorkflowSumm
     )
     .fetch_all(pool)
     .await?;
+    let workflow_ids = rows
+        .iter()
+        .map(|row| row.try_get::<Uuid, _>("id"))
+        .collect::<Result<Vec<_>, sqlx::Error>>()?;
+    let available_nodes = load_workflow_available_nodes(pool, &workflow_ids).await?;
+    let assigned_users = load_workflow_assigned_users(pool, &workflow_ids).await?;
 
     rows.into_iter()
         .map(|row| {
+            let workflow_id: Uuid = row.try_get("id")?;
             Ok(WorkflowSummary {
-                id: row.try_get("id")?,
+                id: workflow_id,
                 workflow_node_type_id: row.try_get("workflow_node_type_id")?,
                 workflow_node_type_name: row.try_get("workflow_node_type_name")?,
+                available_nodes: available_nodes
+                    .get(&workflow_id)
+                    .cloned()
+                    .unwrap_or_default(),
                 name: row.try_get("name")?,
                 slug: row.try_get("slug")?,
                 description: row.try_get("description")?,
@@ -1500,6 +1553,10 @@ async fn list_workflows_inner(pool: &sqlx::PgPool) -> ApiResult<Vec<WorkflowSumm
                 current_version_label: row.try_get("current_version_label")?,
                 current_status: row.try_get("current_status")?,
                 assignment_count: row.try_get("assignment_count")?,
+                assigned_users: assigned_users
+                    .get(&workflow_id)
+                    .cloned()
+                    .unwrap_or_default(),
                 version_count: row.try_get("version_count")?,
                 assignment_node_names: row.try_get("assignment_node_names")?,
             })
@@ -1577,11 +1634,16 @@ async fn get_workflow_inner(
         },
     )
     .await?;
+    let available_nodes = load_workflow_available_nodes(pool, &[workflow_id])
+        .await?
+        .remove(&workflow_id)
+        .unwrap_or_default();
 
     Ok(WorkflowDefinition {
         id: row.try_get("id")?,
         workflow_node_type_id: row.try_get("workflow_node_type_id")?,
         workflow_node_type_name: row.try_get("workflow_node_type_name")?,
+        available_nodes,
         name: row.try_get("name")?,
         slug: row.try_get("slug")?,
         description: row.try_get("description")?,
@@ -1633,6 +1695,101 @@ async fn load_workflow_steps(
         .map_err(Into::into)
 }
 
+async fn load_workflow_available_nodes(
+    pool: &sqlx::PgPool,
+    workflow_ids: &[Uuid],
+) -> ApiResult<BTreeMap<Uuid, Vec<WorkflowAvailableNodeSummary>>> {
+    if workflow_ids.is_empty() {
+        return Ok(BTreeMap::new());
+    }
+
+    let rows = sqlx::query(
+        r#"
+        SELECT
+            workflow_available_nodes.workflow_id,
+            nodes.id,
+            nodes.name,
+            node_types.name AS node_type_name,
+            COALESCE(parent_nodes.name || ' / ' || nodes.name, nodes.name) AS node_path
+        FROM workflow_available_nodes
+        JOIN nodes ON nodes.id = workflow_available_nodes.node_id
+        JOIN node_types ON node_types.id = nodes.node_type_id
+        LEFT JOIN nodes AS parent_nodes ON parent_nodes.id = nodes.parent_node_id
+        WHERE workflow_available_nodes.workflow_id = ANY($1)
+        ORDER BY node_path, nodes.name, nodes.id
+        "#,
+    )
+    .bind(workflow_ids)
+    .fetch_all(pool)
+    .await?;
+
+    let mut grouped = BTreeMap::<Uuid, Vec<WorkflowAvailableNodeSummary>>::new();
+    for row in rows {
+        let workflow_id: Uuid = row.try_get("workflow_id")?;
+        grouped
+            .entry(workflow_id)
+            .or_default()
+            .push(WorkflowAvailableNodeSummary {
+                id: row.try_get("id")?,
+                name: row.try_get("name")?,
+                node_type_name: row.try_get("node_type_name")?,
+                path: row.try_get("node_path")?,
+            });
+    }
+
+    Ok(grouped)
+}
+
+async fn load_workflow_assigned_users(
+    pool: &sqlx::PgPool,
+    workflow_ids: &[Uuid],
+) -> ApiResult<BTreeMap<Uuid, Vec<WorkflowAssignedUserSummary>>> {
+    if workflow_ids.is_empty() {
+        return Ok(BTreeMap::new());
+    }
+
+    let rows = sqlx::query(
+        r#"
+        SELECT
+            workflow_versions.workflow_id,
+            accounts.id,
+            accounts.display_name,
+            accounts.email,
+            COUNT(DISTINCT workflow_assignments.id) AS assignment_count
+        FROM workflow_assignments
+        JOIN workflow_versions ON workflow_versions.id = workflow_assignments.workflow_version_id
+        JOIN accounts ON accounts.id = workflow_assignments.account_id
+        WHERE workflow_assignments.is_active
+          AND workflow_versions.workflow_id = ANY($1)
+        GROUP BY
+            workflow_versions.workflow_id,
+            accounts.id,
+            accounts.display_name,
+            accounts.email
+        ORDER BY accounts.display_name, accounts.email, accounts.id
+        "#,
+    )
+    .bind(workflow_ids)
+    .fetch_all(pool)
+    .await?;
+
+    let mut grouped = BTreeMap::<Uuid, Vec<WorkflowAssignedUserSummary>>::new();
+    for row in rows {
+        let workflow_id: Uuid = row.try_get("workflow_id")?;
+        grouped
+            .entry(workflow_id)
+            .or_default()
+            .push(WorkflowAssignedUserSummary {
+                id: row.try_get("id")?,
+                display_name: row.try_get("display_name")?,
+                email: row.try_get("email")?,
+                assignment_count: row.try_get("assignment_count")?,
+            });
+    }
+
+    Ok(grouped)
+}
+
 async fn list_assignment_candidates_inner(
     pool: &sqlx::PgPool,
     account: &auth::AccountContext,
@@ -1646,37 +1803,12 @@ async fn list_assignment_candidates_inner(
     };
     let rows = sqlx::query(
         r#"
-        WITH RECURSIVE node_descendants AS (
-            SELECT
-                nodes.id AS root_id,
-                nodes.id AS node_id,
-                nodes.node_type_id,
-                0 AS depth
-            FROM nodes
-            UNION ALL
-            SELECT
-                node_descendants.root_id,
-                child_nodes.id AS node_id,
-                child_nodes.node_type_id,
-                node_descendants.depth + 1 AS depth
-            FROM node_descendants
-            JOIN nodes AS child_nodes ON child_nodes.parent_node_id = node_descendants.node_id
-        ),
-        step_totals AS (
+        WITH step_totals AS (
             SELECT
                 workflow_steps.workflow_version_id,
                 COUNT(*) AS step_count
             FROM workflow_steps
             GROUP BY workflow_steps.workflow_version_id
-        ),
-        step_scopes AS (
-            SELECT DISTINCT
-                workflow_steps.workflow_version_id,
-                forms.scope_node_type_id
-            FROM workflow_steps
-            JOIN form_versions ON form_versions.id = workflow_steps.form_version_id
-            JOIN forms ON forms.id = form_versions.form_id
-            WHERE forms.scope_node_type_id IS NOT NULL
         )
         SELECT
             workflow_versions.id AS workflow_version_id,
@@ -1690,23 +1822,13 @@ async fn list_assignment_candidates_inner(
         FROM workflow_versions
         JOIN workflows ON workflows.id = workflow_versions.workflow_id
         JOIN step_totals ON step_totals.workflow_version_id = workflow_versions.id
-        JOIN nodes ON ($1::uuid IS NULL OR nodes.id = $1)
+        JOIN workflow_available_nodes ON workflow_available_nodes.workflow_id = workflows.id
+        JOIN nodes ON nodes.id = workflow_available_nodes.node_id
         LEFT JOIN nodes AS parent_nodes ON parent_nodes.id = nodes.parent_node_id
         WHERE workflow_versions.status = 'published'::form_version_status
           AND step_totals.step_count > 0
+          AND ($1::uuid IS NULL OR nodes.id = $1)
           AND ($2::uuid[] IS NULL OR nodes.id = ANY($2))
-          AND nodes.node_type_id = workflows.workflow_node_type_id
-          AND NOT EXISTS (
-              SELECT 1
-              FROM step_scopes
-              WHERE step_scopes.workflow_version_id = workflow_versions.id
-                AND NOT EXISTS (
-                    SELECT 1
-                    FROM node_descendants
-                    WHERE node_descendants.root_id = nodes.id
-                      AND node_descendants.node_type_id = step_scopes.scope_node_type_id
-                )
-          )
           AND (
               $3::text IS NULL
               OR workflows.name ILIKE '%' || $3 || '%'
@@ -1911,74 +2033,6 @@ fn normalize_step_collection(
         .collect()
 }
 
-async fn require_workflow_steps_match_scope_tx(
-    tx: &mut Transaction<'_, Postgres>,
-    workflow_id: Uuid,
-    steps: &[CreateWorkflowStepRequest],
-) -> ApiResult<()> {
-    let workflow_node_type_id: Uuid =
-        sqlx::query_scalar("SELECT workflow_node_type_id FROM workflows WHERE id = $1")
-            .bind(workflow_id)
-            .fetch_optional(&mut **tx)
-            .await?
-            .ok_or_else(|| ApiError::NotFound(format!("workflow {workflow_id}")))?;
-
-    for step in steps {
-        let row = sqlx::query(
-            r#"
-            SELECT
-                forms.name AS form_name,
-                forms.scope_node_type_id
-            FROM form_versions
-            JOIN forms ON forms.id = form_versions.form_id
-            WHERE form_versions.id = $1
-            "#,
-        )
-        .bind(step.form_version_id)
-        .fetch_optional(&mut **tx)
-        .await?
-        .ok_or_else(|| ApiError::NotFound(format!("form version {}", step.form_version_id)))?;
-
-        let form_scope_node_type_id: Option<Uuid> = row.try_get("scope_node_type_id")?;
-        let Some(form_scope_node_type_id) = form_scope_node_type_id else {
-            continue;
-        };
-
-        let is_in_workflow_scope: bool = sqlx::query_scalar(
-            r#"
-            WITH RECURSIVE descendants AS (
-                SELECT node_types.id
-                FROM node_types
-                WHERE node_types.id = $1
-                UNION ALL
-                SELECT node_type_relationships.child_node_type_id
-                FROM descendants
-                JOIN node_type_relationships
-                    ON node_type_relationships.parent_node_type_id = descendants.id
-            )
-            SELECT EXISTS (
-                SELECT 1
-                FROM descendants
-                WHERE id = $2
-            )
-            "#,
-        )
-        .bind(workflow_node_type_id)
-        .bind(form_scope_node_type_id)
-        .fetch_one(&mut **tx)
-        .await?;
-
-        if !is_in_workflow_scope {
-            let form_name: String = row.try_get("form_name")?;
-            return Err(ApiError::BadRequest(format!(
-                "form '{form_name}' is outside the workflow node type scope"
-            )));
-        }
-    }
-
-    Ok(())
-}
-
 async fn replace_workflow_steps_tx(
     tx: &mut Transaction<'_, Postgres>,
     workflow_version_id: Uuid,
@@ -2022,17 +2076,11 @@ async fn validate_workflow_version_publish_tx(
     tx: &mut Transaction<'_, Postgres>,
     workflow_version_id: Uuid,
 ) -> ApiResult<()> {
-    let workflow_id: Uuid =
-        sqlx::query_scalar("SELECT workflow_id FROM workflow_versions WHERE id = $1")
-            .bind(workflow_version_id)
-            .fetch_one(&mut **tx)
-            .await?;
     let rows = sqlx::query(
         r#"
         SELECT
             workflow_steps.title,
             workflow_steps.position,
-            workflow_steps.form_version_id,
             form_versions.status::text AS form_status
         FROM workflow_steps
         JOIN form_versions ON form_versions.id = workflow_steps.form_version_id
@@ -2071,81 +2119,12 @@ async fn validate_workflow_version_publish_tx(
             ));
         }
     }
-    let steps = rows
-        .iter()
-        .map(|row| {
-            Ok(CreateWorkflowStepRequest {
-                title: row.try_get("title")?,
-                form_version_id: row.try_get("form_version_id")?,
-            })
-        })
-        .collect::<Result<Vec<_>, sqlx::Error>>()?;
-    require_workflow_steps_match_scope_tx(tx, workflow_id, &steps).await?;
     Ok(())
-}
-
-async fn resolve_workflow_step_node_tx(
-    tx: &mut Transaction<'_, Postgres>,
-    assignment_node_id: Uuid,
-    form_version_id: Uuid,
-) -> ApiResult<Uuid> {
-    let scope_node_type_id: Option<Uuid> = sqlx::query_scalar(
-        r#"
-        SELECT forms.scope_node_type_id
-        FROM form_versions
-        JOIN forms ON forms.id = form_versions.form_id
-        WHERE form_versions.id = $1
-        "#,
-    )
-    .bind(form_version_id)
-    .fetch_optional(&mut **tx)
-    .await?
-    .ok_or_else(|| ApiError::NotFound(format!("form version {form_version_id}")))?;
-
-    let Some(scope_node_type_id) = scope_node_type_id else {
-        return Ok(assignment_node_id);
-    };
-
-    sqlx::query_scalar(
-        r#"
-        WITH RECURSIVE descendants AS (
-            SELECT
-                nodes.id,
-                nodes.node_type_id,
-                nodes.name,
-                0 AS depth
-            FROM nodes
-            WHERE nodes.id = $1
-            UNION ALL
-            SELECT
-                child_nodes.id,
-                child_nodes.node_type_id,
-                child_nodes.name,
-                descendants.depth + 1 AS depth
-            FROM descendants
-            JOIN nodes AS child_nodes ON child_nodes.parent_node_id = descendants.id
-        )
-        SELECT id
-        FROM descendants
-        WHERE node_type_id = $2
-        ORDER BY depth, name, id
-        LIMIT 1
-        "#,
-    )
-    .bind(assignment_node_id)
-    .bind(scope_node_type_id)
-    .fetch_optional(&mut **tx)
-    .await?
-    .ok_or_else(|| {
-        ApiError::BadRequest(
-            "workflow step form is not compatible with the assignment node or descendants".into(),
-        )
-    })
 }
 
 async fn require_workflow_payload(
     pool: &sqlx::PgPool,
-    workflow_node_type_id: Uuid,
+    available_node_ids: &[Uuid],
     name: &str,
     slug: &str,
     current_workflow_id: Option<Uuid>,
@@ -2156,15 +2135,20 @@ async fn require_workflow_payload(
     if slug.trim().is_empty() {
         return Err(ApiError::BadRequest("workflow slug is required".into()));
     }
-    let node_type_exists: bool =
-        sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM node_types WHERE id = $1)")
-            .bind(workflow_node_type_id)
+    if available_node_ids.is_empty() {
+        return Err(ApiError::BadRequest(
+            "workflow requires at least one available node".into(),
+        ));
+    }
+    let distinct_node_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(DISTINCT id) FROM nodes WHERE id = ANY($1)")
+            .bind(available_node_ids)
             .fetch_one(pool)
             .await?;
-    if !node_type_exists {
-        return Err(ApiError::NotFound(format!(
-            "node type {workflow_node_type_id}"
-        )));
+    if distinct_node_count != available_node_ids.len() as i64 {
+        return Err(ApiError::BadRequest(
+            "workflow availability includes an unknown node".into(),
+        ));
     }
 
     let duplicate_slug: bool = if let Some(current_workflow_id) = current_workflow_id {
@@ -2184,6 +2168,50 @@ async fn require_workflow_payload(
             "workflow slug '{}' is already in use",
             slug.trim()
         )));
+    }
+
+    Ok(())
+}
+
+async fn legacy_workflow_node_type_for_available_nodes(
+    pool: &sqlx::PgPool,
+    available_node_ids: &[Uuid],
+) -> ApiResult<Uuid> {
+    sqlx::query_scalar(
+        r#"
+        SELECT node_type_id
+        FROM nodes
+        WHERE id = $1
+        "#,
+    )
+    .bind(available_node_ids[0])
+    .fetch_optional(pool)
+    .await?
+    .ok_or_else(|| ApiError::BadRequest("workflow availability includes an unknown node".into()))
+}
+
+async fn replace_workflow_available_nodes_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    workflow_id: Uuid,
+    available_node_ids: &[Uuid],
+) -> ApiResult<()> {
+    sqlx::query("DELETE FROM workflow_available_nodes WHERE workflow_id = $1")
+        .bind(workflow_id)
+        .execute(&mut **tx)
+        .await?;
+
+    for node_id in available_node_ids {
+        sqlx::query(
+            r#"
+            INSERT INTO workflow_available_nodes (workflow_id, node_id)
+            VALUES ($1, $2)
+            ON CONFLICT DO NOTHING
+            "#,
+        )
+        .bind(workflow_id)
+        .bind(node_id)
+        .execute(&mut **tx)
+        .await?;
     }
 
     Ok(())

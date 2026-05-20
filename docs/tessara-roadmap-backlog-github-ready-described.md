@@ -1414,7 +1414,7 @@ This issue implements **Typed workflow step and runtime states** in **Sprint 2E 
 This issue implements **2E-07: Contextual workflow assignment UX and eligibility APIs** in **Sprint 2E - Multi-Step Workflow Authoring And Execution**. The primary goal is to make assignment creation follow the operator's natural path: navigate to an organization node, choose an eligible workflow, and assign it to one or more valid assignees. The global assignment console should use the same validation rules through a searchable `Node path - Workflow` picker.
 
 **Work:**
-- Add assignment-candidate APIs that return valid published workflow/node combinations, filtered by form scope node type, assigner permissions, and effective node scope.
+- Add assignment-candidate APIs that return valid published workflow/node combinations, filtered by explicit workflow availability, assigner permissions, and effective node scope. Do not use form node scope or workflow node type as the compatibility rule; workflow-step context metadata should own future target resolution, branching, and data-forwarding behavior.
 - Add assignee-option APIs for a selected candidate that return only users who can receive and start that assignment under role, scope, and delegation rules.
 - Add bulk assignment creation for one workflow/node candidate and multiple assignees, creating missing assignments, reactivating inactive duplicates, skipping active duplicates, and returning a per-assignee summary.
 - Add an `Assign Workflow` action from the selected organization node and replace the global assignment console's independent workflow/node/assignee selects with a searchable `Node path - Workflow` picker plus assignee multiselect.

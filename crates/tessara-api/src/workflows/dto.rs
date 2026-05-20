@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 #[derive(Deserialize)]
 pub struct CreateWorkflowRequest {
-    pub workflow_node_type_id: Uuid,
+    pub available_node_ids: Vec<Uuid>,
     pub name: String,
     pub slug: String,
     pub description: Option<String>,
@@ -12,7 +12,7 @@ pub struct CreateWorkflowRequest {
 
 #[derive(Deserialize)]
 pub struct UpdateWorkflowRequest {
-    pub workflow_node_type_id: Uuid,
+    pub available_node_ids: Vec<Uuid>,
     pub name: String,
     pub slug: String,
     pub description: Option<String>,
@@ -83,6 +83,7 @@ pub struct WorkflowSummary {
     pub id: Uuid,
     pub workflow_node_type_id: Uuid,
     pub workflow_node_type_name: String,
+    pub available_nodes: Vec<WorkflowAvailableNodeSummary>,
     pub name: String,
     pub slug: String,
     pub description: String,
@@ -92,8 +93,25 @@ pub struct WorkflowSummary {
     pub current_version_label: Option<String>,
     pub current_status: Option<String>,
     pub assignment_count: i64,
+    pub assigned_users: Vec<WorkflowAssignedUserSummary>,
     pub version_count: i64,
     pub assignment_node_names: Vec<String>,
+}
+
+#[derive(Clone, Serialize)]
+pub struct WorkflowAvailableNodeSummary {
+    pub id: Uuid,
+    pub name: String,
+    pub node_type_name: String,
+    pub path: String,
+}
+
+#[derive(Clone, Serialize)]
+pub struct WorkflowAssignedUserSummary {
+    pub id: Uuid,
+    pub display_name: String,
+    pub email: String,
+    pub assignment_count: i64,
 }
 
 #[derive(Serialize)]
@@ -148,6 +166,7 @@ pub struct WorkflowDefinition {
     pub id: Uuid,
     pub workflow_node_type_id: Uuid,
     pub workflow_node_type_name: String,
+    pub available_nodes: Vec<WorkflowAvailableNodeSummary>,
     pub name: String,
     pub slug: String,
     pub description: String,

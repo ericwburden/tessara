@@ -692,7 +692,7 @@ struct UpdateFormPayload {
 #[derive(Serialize)]
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
 struct CreateWorkflowPayload {
-    workflow_node_type_id: String,
+    available_node_ids: Vec<String>,
     name: String,
     slug: String,
     description: Option<String>,
@@ -701,7 +701,7 @@ struct CreateWorkflowPayload {
 #[derive(Serialize)]
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
 struct UpdateWorkflowPayload {
-    workflow_node_type_id: String,
+    available_node_ids: Vec<String>,
     name: String,
     slug: String,
     description: Option<String>,
@@ -1271,6 +1271,8 @@ struct WorkflowSummary {
     id: String,
     workflow_node_type_id: String,
     workflow_node_type_name: String,
+    #[serde(default)]
+    available_nodes: Vec<WorkflowAvailableNodeSummary>,
     name: String,
     slug: String,
     description: String,
@@ -1280,10 +1282,25 @@ struct WorkflowSummary {
     current_version_id: Option<String>,
     current_version_label: Option<String>,
     current_status: Option<String>,
-    assignment_count: i64,
-    version_count: i64,
     #[serde(default)]
-    assignment_node_names: Vec<String>,
+    assigned_users: Vec<WorkflowAssignedUserSummary>,
+    version_count: i64,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+struct WorkflowAvailableNodeSummary {
+    id: String,
+    name: String,
+    node_type_name: String,
+    path: String,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+struct WorkflowAssignedUserSummary {
+    id: String,
+    display_name: String,
+    email: String,
+    assignment_count: i64,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -1291,6 +1308,8 @@ struct WorkflowDefinition {
     id: String,
     workflow_node_type_id: String,
     workflow_node_type_name: String,
+    #[serde(default)]
+    available_nodes: Vec<WorkflowAvailableNodeSummary>,
     name: String,
     slug: String,
     description: String,
@@ -1420,7 +1439,14 @@ struct FormsAttachedNodesSheetData {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-struct WorkflowAssignedNodesSheetData {
+struct WorkflowAssignedUsersSheetData {
+    workflow_name: String,
+    workflow_href: String,
+    users: Vec<FormAttachmentLink>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct WorkflowAvailableNodesSheetData {
     workflow_name: String,
     workflow_href: String,
     nodes: Vec<FormAttachmentLink>,
@@ -2600,6 +2626,13 @@ fn form_definition_scope_label(form: &FormDefinition) -> String {
     nonempty_text(form.scope_node_type_name.as_deref(), "All node types")
 }
 
+fn node_display_path(node: &OrganizationNode) -> String {
+    node.parent_node_name
+        .as_deref()
+        .map(|parent| format!("{parent} / {}", node.name))
+        .unwrap_or_else(|| node.name.clone())
+}
+
 fn workflow_revision_label_from_raw(label: &str) -> String {
     let trimmed = label.trim();
     if trimmed.is_empty() {
@@ -2649,20 +2682,41 @@ fn workflow_description_label(workflow: &WorkflowSummary) -> String {
     nonempty_text(Some(workflow.description.as_str()), "No description")
 }
 
-fn workflow_scope_label(workflow_node_type_name: &str) -> String {
-    nonempty_text(Some(workflow_node_type_name), "-")
-}
-
-fn workflow_assigned_to_label(workflow: &WorkflowSummary) -> String {
-    if workflow.assignment_node_names.is_empty() {
-        "No active assignments".to_string()
-    } else {
-        workflow.assignment_node_names.join(", ")
+fn workflow_available_nodes_label(nodes: &[WorkflowAvailableNodeSummary]) -> String {
+    match nodes.len() {
+        0 => "-".to_string(),
+        1 => nodes[0].name.clone(),
+        2 => nodes
+            .iter()
+            .map(|node| node.name.clone())
+            .collect::<Vec<_>>()
+            .join(", "),
+        count => format!("{count} nodes"),
     }
 }
 
-fn workflow_assignment_count_label(workflow: &WorkflowSummary) -> String {
-    workflow.assignment_count.to_string()
+fn node_count_label(count: usize) -> String {
+    if count == 1 {
+        "1 Node".to_string()
+    } else {
+        format!("{count} Nodes")
+    }
+}
+
+fn user_count_label(count: usize) -> String {
+    if count == 1 {
+        "1 User".to_string()
+    } else {
+        format!("{count} Users")
+    }
+}
+
+fn assignment_count_label(count: usize) -> String {
+    if count == 1 {
+        "1 Assignment".to_string()
+    } else {
+        format!("{count} Assignments")
+    }
 }
 
 fn workflow_source_label(source: &str) -> Option<&'static str> {
@@ -2691,20 +2745,44 @@ fn WorkflowSourceMarker(source: String) -> impl IntoView {
     }
 }
 
-fn workflow_assignment_links(
-    workflow: &WorkflowSummary,
-    nodes: &[OrganizationNode],
-) -> Vec<FormAttachmentLink> {
+fn workflow_assigned_user_links(workflow: &WorkflowSummary) -> Vec<FormAttachmentLink> {
     workflow
-        .assignment_node_names
+        .assigned_users
         .iter()
-        .filter_map(|name| {
-            let node = nodes.iter().find(|node| node.name == *name)?;
-            Some(FormAttachmentLink {
-                href: format!("/organization/{}", node.id),
-                label: node.name.clone(),
-                title: organization_node_path(node, nodes),
-            })
+        .map(|user| FormAttachmentLink {
+            href: format!("/administration/users/{}", user.id),
+            label: user.display_name.clone(),
+            title: format!(
+                "{} - {}",
+                user.email,
+                assignment_count_label(user.assignment_count.max(0) as usize)
+            ),
+        })
+        .collect()
+}
+
+fn workflow_assigned_users_label(workflow: &WorkflowSummary) -> String {
+    if workflow.assigned_users.is_empty() {
+        "No active assignments".to_string()
+    } else {
+        workflow
+            .assigned_users
+            .iter()
+            .map(|user| format!("{} {}", user.display_name, user.email))
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+}
+
+fn workflow_available_node_links(
+    nodes: &[WorkflowAvailableNodeSummary],
+) -> Vec<FormAttachmentLink> {
+    nodes
+        .iter()
+        .map(|node| FormAttachmentLink {
+            href: format!("/organization/{}", node.id),
+            label: node.name.clone(),
+            title: format!("{} - {}", node.node_type_name, node.path),
         })
         .collect()
 }
@@ -2976,22 +3054,6 @@ fn workflow_assignee_label(assignee: &WorkflowAssigneeOption) -> String {
     } else {
         format!("{} ({})", assignee.display_name, assignee.email)
     }
-}
-
-fn organization_node_path(node: &OrganizationNode, nodes: &[OrganizationNode]) -> String {
-    let mut names = vec![node.name.clone()];
-    let mut current_parent_id = node.parent_node_id.as_deref();
-
-    while let Some(parent_id) = current_parent_id {
-        let Some(parent) = nodes.iter().find(|candidate| candidate.id == parent_id) else {
-            break;
-        };
-        names.push(parent.name.clone());
-        current_parent_id = parent.parent_node_id.as_deref();
-    }
-
-    names.reverse();
-    names.join(" > ")
 }
 
 fn form_attached_to_label(version: Option<&FormVersionSummary>) -> String {
@@ -3291,57 +3353,13 @@ fn existing_workflow_slugs(workflows: &[WorkflowSummary]) -> Vec<String> {
         .collect()
 }
 
-#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
-fn node_type_contains_descendant(
-    node_types: &[NodeTypeCatalogEntry],
-    ancestor_id: &str,
-    descendant_id: &str,
-) -> bool {
-    if ancestor_id == descendant_id {
-        return true;
-    }
-
-    let mut stack = vec![ancestor_id.to_string()];
-    let mut seen = HashSet::new();
-    while let Some(node_type_id) = stack.pop() {
-        if !seen.insert(node_type_id.clone()) {
-            continue;
-        }
-        let Some(node_type) = node_types
-            .iter()
-            .find(|node_type| node_type.id == node_type_id)
-        else {
-            continue;
-        };
-        for child in &node_type.child_relationships {
-            if child.node_type_id == descendant_id {
-                return true;
-            }
-            stack.push(child.node_type_id.clone());
-        }
-    }
-
-    false
-}
-
 fn workflow_form_is_in_scope(
     form: &FormSummary,
     node_types: &[NodeTypeCatalogEntry],
     workflow_node_type_id: &str,
 ) -> bool {
-    if workflow_node_type_id.trim().is_empty() {
-        return false;
-    }
-    form.scope_node_type_id
-        .as_deref()
-        .map(|form_scope_node_type_id| {
-            node_type_contains_descendant(
-                node_types,
-                workflow_node_type_id,
-                form_scope_node_type_id,
-            )
-        })
-        .unwrap_or(true)
+    let _ = (form, node_types, workflow_node_type_id);
+    true
 }
 
 fn workflow_form_version_options(
@@ -5711,6 +5729,7 @@ fn load_form_create_options(
 
 fn load_workflow_create_options(
     node_types: RwSignal<Vec<NodeTypeCatalogEntry>>,
+    organization_nodes: RwSignal<Vec<OrganizationNode>>,
     forms: RwSignal<Vec<FormSummary>>,
     workflows: RwSignal<Vec<WorkflowSummary>>,
     is_loading: RwSignal<bool>,
@@ -5723,45 +5742,74 @@ fn load_workflow_create_options(
             message.set(None);
 
             let node_types_response = gloo_net::http::Request::get("/api/node-types").send().await;
+            let nodes_response = gloo_net::http::Request::get("/api/nodes").send().await;
             let forms_response = gloo_net::http::Request::get("/api/forms").send().await;
             let workflows_response = gloo_net::http::Request::get("/api/workflows").send().await;
 
-            match (node_types_response, forms_response, workflows_response) {
-                (Ok(response), _, _) if response.status() == 401 => {
+            match (
+                node_types_response,
+                nodes_response,
+                forms_response,
+                workflows_response,
+            ) {
+                (Ok(response), _, _, _) if response.status() == 401 => {
                     node_types.set(Vec::new());
+                    organization_nodes.set(Vec::new());
                     forms.set(Vec::new());
                     workflows.set(Vec::new());
                     is_loading.set(false);
                     redirect_to_login();
                 }
-                (_, Ok(response), _) if response.status() == 401 => {
+                (_, Ok(response), _, _) if response.status() == 401 => {
                     node_types.set(Vec::new());
+                    organization_nodes.set(Vec::new());
                     forms.set(Vec::new());
                     workflows.set(Vec::new());
                     is_loading.set(false);
                     redirect_to_login();
                 }
-                (_, _, Ok(response)) if response.status() == 401 => {
+                (_, _, Ok(response), _) if response.status() == 401 => {
                     node_types.set(Vec::new());
+                    organization_nodes.set(Vec::new());
                     forms.set(Vec::new());
                     workflows.set(Vec::new());
                     is_loading.set(false);
                     redirect_to_login();
                 }
-                (Ok(node_types_response), Ok(forms_response), Ok(workflows_response))
-                    if node_types_response.ok()
-                        && forms_response.ok()
-                        && workflows_response.ok() =>
+                (_, _, _, Ok(response)) if response.status() == 401 => {
+                    node_types.set(Vec::new());
+                    organization_nodes.set(Vec::new());
+                    forms.set(Vec::new());
+                    workflows.set(Vec::new());
+                    is_loading.set(false);
+                    redirect_to_login();
+                }
+                (
+                    Ok(node_types_response),
+                    Ok(nodes_response),
+                    Ok(forms_response),
+                    Ok(workflows_response),
+                ) if node_types_response.ok()
+                    && nodes_response.ok()
+                    && forms_response.ok()
+                    && workflows_response.ok() =>
                 {
                     let loaded_node_types = node_types_response
                         .json::<Vec<NodeTypeCatalogEntry>>()
                         .await;
+                    let loaded_nodes = nodes_response.json::<Vec<OrganizationNode>>().await;
                     let loaded_forms = forms_response.json::<Vec<FormSummary>>().await;
                     let loaded_workflows = workflows_response.json::<Vec<WorkflowSummary>>().await;
 
-                    match (loaded_node_types, loaded_forms, loaded_workflows) {
+                    match (
+                        loaded_node_types,
+                        loaded_nodes,
+                        loaded_forms,
+                        loaded_workflows,
+                    ) {
                         (
                             Ok(mut loaded_node_types),
+                            Ok(mut loaded_nodes),
                             Ok(mut loaded_forms),
                             Ok(mut loaded_workflows),
                         ) => {
@@ -5773,17 +5821,24 @@ fn load_workflow_create_options(
                             loaded_forms.sort_by(|left, right| {
                                 left.name.cmp(&right.name).then(left.slug.cmp(&right.slug))
                             });
+                            loaded_nodes.sort_by(|left, right| {
+                                node_display_path(left)
+                                    .cmp(&node_display_path(right))
+                                    .then(left.name.cmp(&right.name))
+                            });
                             loaded_workflows.sort_by(|left, right| {
                                 left.name.cmp(&right.name).then(left.slug.cmp(&right.slug))
                             });
 
                             node_types.set(loaded_node_types);
+                            organization_nodes.set(loaded_nodes);
                             forms.set(loaded_forms);
                             workflows.set(loaded_workflows);
                             is_loading.set(false);
                         }
                         _ => {
                             node_types.set(Vec::new());
+                            organization_nodes.set(Vec::new());
                             forms.set(Vec::new());
                             workflows.set(Vec::new());
                             message.set(Some("Workflow options could not be read.".into()));
@@ -5791,13 +5846,20 @@ fn load_workflow_create_options(
                         }
                     }
                 }
-                (Ok(node_types_response), Ok(forms_response), Ok(workflows_response)) => {
+                (
+                    Ok(node_types_response),
+                    Ok(nodes_response),
+                    Ok(forms_response),
+                    Ok(workflows_response),
+                ) => {
                     node_types.set(Vec::new());
+                    organization_nodes.set(Vec::new());
                     forms.set(Vec::new());
                     workflows.set(Vec::new());
                     message.set(Some(format!(
-                        "Workflow options failed with status {} / {} / {}.",
+                        "Workflow options failed with status {} / {} / {} / {}.",
                         node_types_response.status(),
+                        nodes_response.status(),
                         forms_response.status(),
                         workflows_response.status()
                     )));
@@ -5805,6 +5867,7 @@ fn load_workflow_create_options(
                 }
                 _ => {
                     node_types.set(Vec::new());
+                    organization_nodes.set(Vec::new());
                     forms.set(Vec::new());
                     workflows.set(Vec::new());
                     message.set(Some("Could not reach the workflow option APIs.".into()));
@@ -5816,7 +5879,14 @@ fn load_workflow_create_options(
 
     #[cfg(not(feature = "hydrate"))]
     {
-        let _ = (node_types, forms, workflows, is_loading, message);
+        let _ = (
+            node_types,
+            organization_nodes,
+            forms,
+            workflows,
+            is_loading,
+            message,
+        );
     }
 }
 
@@ -7796,7 +7866,7 @@ fn submit_update_form(
 #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
 fn submit_create_workflow(
     name: RwSignal<String>,
-    workflow_node_type_id: RwSignal<String>,
+    available_node_ids: RwSignal<HashSet<String>>,
     steps: RwSignal<Vec<WorkflowStepDraft>>,
     description: RwSignal<String>,
     existing_workflows: RwSignal<Vec<WorkflowSummary>>,
@@ -7814,9 +7884,11 @@ fn submit_create_workflow(
             message.set(Some("Workflow name is required.".into()));
             return;
         }
-        let workflow_node_type_id = workflow_node_type_id.get().trim().to_string();
-        if workflow_node_type_id.is_empty() {
-            message.set(Some("Workflow node type is required.".into()));
+        let mut selected_available_node_ids =
+            available_node_ids.get().into_iter().collect::<Vec<_>>();
+        selected_available_node_ids.sort();
+        if selected_available_node_ids.is_empty() {
+            message.set(Some("Select at least one available node.".into()));
             return;
         }
 
@@ -7859,7 +7931,7 @@ fn submit_create_workflow(
         }
 
         let payload = CreateWorkflowPayload {
-            workflow_node_type_id,
+            available_node_ids: selected_available_node_ids,
             name: workflow_name,
             slug: workflow_slug,
             description: description.get().trim().to_string().into_nonempty(),
@@ -7934,7 +8006,7 @@ fn submit_create_workflow(
     {
         let _ = (
             name,
-            workflow_node_type_id,
+            available_node_ids,
             steps,
             description,
             existing_workflows,
@@ -7999,7 +8071,7 @@ fn submit_update_workflow(
     version_is_draft: bool,
     name: RwSignal<String>,
     slug: RwSignal<String>,
-    workflow_node_type_id: RwSignal<String>,
+    available_node_ids: RwSignal<HashSet<String>>,
     steps: RwSignal<Vec<WorkflowStepDraft>>,
     original_steps: RwSignal<Vec<WorkflowStepDraft>>,
     description: RwSignal<String>,
@@ -8027,9 +8099,11 @@ fn submit_update_workflow(
             ));
             return;
         }
-        let workflow_node_type_id = workflow_node_type_id.get().trim().to_string();
-        if workflow_node_type_id.is_empty() {
-            message.set(Some("Workflow node type is required.".into()));
+        let mut selected_available_node_ids =
+            available_node_ids.get().into_iter().collect::<Vec<_>>();
+        selected_available_node_ids.sort();
+        if selected_available_node_ids.is_empty() {
+            message.set(Some("Select at least one available node.".into()));
             return;
         }
 
@@ -8062,7 +8136,7 @@ fn submit_update_workflow(
         };
 
         let payload = UpdateWorkflowPayload {
-            workflow_node_type_id,
+            available_node_ids: selected_available_node_ids,
             name: workflow_name,
             slug: workflow_slug,
             description: description.get().trim().to_string().into_nonempty(),
@@ -8259,7 +8333,7 @@ fn submit_update_workflow(
             version_is_draft,
             name,
             slug,
-            workflow_node_type_id,
+            available_node_ids,
             steps,
             original_steps,
             description,
@@ -9506,9 +9580,9 @@ fn WorkflowsList(
 ) -> impl IntoView {
     let table_workflows = workflows.clone();
     let card_workflows = workflows;
-    let table_nodes = organization_nodes.clone();
-    let card_nodes = organization_nodes;
-    let assigned_nodes_sheet = RwSignal::new(None::<WorkflowAssignedNodesSheetData>);
+    let _ = organization_nodes;
+    let available_nodes_sheet = RwSignal::new(None::<WorkflowAvailableNodesSheetData>);
+    let assigned_users_sheet = RwSignal::new(None::<WorkflowAssignedUsersSheetData>);
 
     view! {
         <div class="forms-list forms-list-responsive-table">
@@ -9529,7 +9603,7 @@ fn WorkflowsList(
                     <thead>
                         <tr>
                             <th scope="col">"Workflow name"</th>
-                            <th scope="col">"Node type"</th>
+                            <th scope="col">"Available at"</th>
                             <th class="data-table__cell--center" scope="col">"Active revision"</th>
                             <th class="data-table__cell--center" scope="col">
                                 <FilterHeader
@@ -9539,15 +9613,14 @@ fn WorkflowsList(
                                     options=status_options
                                 />
                             </th>
-                            <th class="data-table__cell--center" scope="col">"Assignments"</th>
-                            <th scope="col">"Assigned to"</th>
+                            <th scope="col">"Active assignments"</th>
                         </tr>
                     </thead>
                     <tbody>
                         {if table_workflows.is_empty() {
                             view! {
                                 <tr>
-                                    <td class="data-table__empty" colspan="6">"No Workflows to Display"</td>
+                                    <td class="data-table__empty" colspan="5">"No Workflows to Display"</td>
                                 </tr>
                             }
                             .into_any()
@@ -9559,9 +9632,8 @@ fn WorkflowsList(
                                     let status_key = workflow_status_key(&workflow).to_string();
                                     let status_label = workflow_status_label(&workflow);
                                     let version_label = workflow_version_label(&workflow);
-                                    let assignments = workflow_assignment_count_label(&workflow);
-                                    let assigned_to = workflow_assignment_links(&workflow, &table_nodes);
-                                    let assigned_to_label = workflow_assigned_to_label(&workflow);
+                                    let available_at = workflow_available_node_links(&workflow.available_nodes);
+                                    let assigned_users = workflow_assigned_user_links(&workflow);
                                     let workflow_name = workflow.name.clone();
                                     let workflow_source = workflow.source.clone();
                                     view! {
@@ -9571,20 +9643,23 @@ fn WorkflowsList(
                                                 <WorkflowSourceMarker source=workflow_source/>
                                             </th>
                                             <td>
-                                                {workflow.workflow_node_type_name}
+                                                <WorkflowAvailableNodesList
+                                                    nodes=available_at
+                                                    workflow_name=workflow_name.clone()
+                                                    workflow_href=workflow_href.clone()
+                                                    sheet=available_nodes_sheet
+                                                />
                                             </td>
                                             <td class="data-table__cell--center">{version_label}</td>
                                             <td class="data-table__cell--center">
                                                 <span class=status_badge_class(&status_key)>{status_label}</span>
                                             </td>
-                                            <td class="data-table__cell--center">{assignments}</td>
                                             <td>
-                                                <WorkflowAssignedNodesList
-                                                    nodes=assigned_to
-                                                    fallback_label=assigned_to_label
+                                                <WorkflowAssignedUsersList
+                                                    users=assigned_users
                                                     workflow_name=workflow_name
                                                     workflow_href=workflow_href
-                                                    sheet=assigned_nodes_sheet
+                                                    sheet=assigned_users_sheet
                                                 />
                                             </td>
                                         </tr>
@@ -9607,9 +9682,8 @@ fn WorkflowsList(
                             let status_key = workflow_status_key(&workflow).to_string();
                             let status_label = workflow_status_label(&workflow);
                             let version_label = workflow_version_label(&workflow);
-                            let assignments = workflow_assignment_count_label(&workflow);
-                            let assigned_to = workflow_assignment_links(&workflow, &card_nodes);
-                            let assigned_to_label = workflow_assigned_to_label(&workflow);
+                            let available_at = workflow_available_node_links(&workflow.available_nodes);
+                            let assigned_users = workflow_assigned_user_links(&workflow);
                             let workflow_name = workflow.name.clone();
                             let workflow_source = workflow.source.clone();
                             view! {
@@ -9622,8 +9696,15 @@ fn WorkflowsList(
                                     </div>
                                     <dl>
                                         <div>
-                                            <dt>"Node type"</dt>
-                                            <dd>{workflow.workflow_node_type_name}</dd>
+                                            <dt>"Available at"</dt>
+                                            <dd>
+                                                <WorkflowAvailableNodesList
+                                                    nodes=available_at
+                                                    workflow_name=workflow_name.clone()
+                                                    workflow_href=workflow_href.clone()
+                                                    sheet=available_nodes_sheet
+                                                />
+                                            </dd>
                                         </div>
                                         <div>
                                             <dt>"Active revision"</dt>
@@ -9634,18 +9715,13 @@ fn WorkflowsList(
                                             <dd><span class=status_badge_class(&status_key)>{status_label}</span></dd>
                                         </div>
                                         <div>
-                                            <dt>"Assignments"</dt>
-                                            <dd>{assignments}</dd>
-                                        </div>
-                                        <div>
-                                            <dt>"Assigned to"</dt>
+                                            <dt>"Active assignments"</dt>
                                             <dd>
-                                                <WorkflowAssignedNodesList
-                                                    nodes=assigned_to
-                                                    fallback_label=assigned_to_label
+                                                <WorkflowAssignedUsersList
+                                                    users=assigned_users
                                                     workflow_name=workflow_name
                                                     workflow_href=workflow_href
-                                                    sheet=assigned_nodes_sheet
+                                                    sheet=assigned_users_sheet
                                                 />
                                             </dd>
                                         </div>
@@ -9657,73 +9733,53 @@ fn WorkflowsList(
                         .into_any()
                 }}
             </div>
-            <WorkflowAssignedNodesSheet detail=assigned_nodes_sheet/>
+            <WorkflowAvailableNodesSheet detail=available_nodes_sheet/>
+            <WorkflowAssignedUsersSheet detail=assigned_users_sheet/>
         </div>
     }
 }
 
 #[component]
-fn WorkflowAssignedNodesList(
+fn WorkflowAvailableNodesList(
     nodes: Vec<FormAttachmentLink>,
-    fallback_label: String,
     workflow_name: String,
     workflow_href: String,
-    sheet: RwSignal<Option<WorkflowAssignedNodesSheetData>>,
+    sheet: RwSignal<Option<WorkflowAvailableNodesSheetData>>,
 ) -> impl IntoView {
     let total_nodes = nodes.len();
-    let visible_nodes = if total_nodes > 5 {
-        nodes[total_nodes - 4..].to_vec()
-    } else {
-        nodes.clone()
-    };
     let nodes_for_sheet = nodes.clone();
     let workflow_name_for_sheet = workflow_name.clone();
     let workflow_href_for_sheet = workflow_href.clone();
 
     view! {
         <div class="forms-attached-list">
-            {if visible_nodes.is_empty() {
-                view! { <p>{fallback_label}</p> }.into_any()
+            {if total_nodes == 0 {
+                view! { <p>"Not available"</p> }.into_any()
             } else {
-                visible_nodes
-                    .into_iter()
-                    .map(|node| {
-                        view! {
-                            <p>
-                                <a href=node.href title=node.title>{node.label}</a>
-                            </p>
-                        }
-                    })
-                    .collect_view()
-                    .into_any()
-            }}
-            {if total_nodes > 5 {
                 view! {
                     <button
                         class="forms-attached-list__more"
                         type="button"
                         on:click=move |_| {
-                            sheet.set(Some(WorkflowAssignedNodesSheetData {
+                            sheet.set(Some(WorkflowAvailableNodesSheetData {
                                 workflow_name: workflow_name_for_sheet.clone(),
                                 workflow_href: workflow_href_for_sheet.clone(),
                                 nodes: nodes_for_sheet.clone(),
                             }));
                         }
                     >
-                        "More..."
+                        {node_count_label(total_nodes)}
                     </button>
                 }
                 .into_any()
-            } else {
-                view! {}.into_any()
             }}
         </div>
     }
 }
 
 #[component]
-fn WorkflowAssignedNodesSheet(
-    detail: RwSignal<Option<WorkflowAssignedNodesSheetData>>,
+fn WorkflowAvailableNodesSheet(
+    detail: RwSignal<Option<WorkflowAvailableNodesSheetData>>,
 ) -> impl IntoView {
     let search = RwSignal::new(String::new());
     let close = move |_| {
@@ -9750,9 +9806,9 @@ fn WorkflowAssignedNodesSheet(
     view! {
         <Portal>
             <Show when=move || detail.get().is_some()>
-                <section class="sheet-overlay forms-attached-overlay" aria-label="Assigned organization nodes">
-                    <button class="sheet-overlay__scrim" type="button" aria-label="Close assigned nodes" on:click=close></button>
-                    <aside class="sheet-panel blurred-surface forms-attached-sheet" role="dialog" aria-modal="true" aria-label="Assigned organization nodes">
+                <section class="sheet-overlay forms-attached-overlay" aria-label="Available organization nodes">
+                    <button class="sheet-overlay__scrim" type="button" aria-label="Close available nodes" on:click=close></button>
+                    <aside class="sheet-panel blurred-surface forms-attached-sheet" role="dialog" aria-modal="true" aria-label="Available organization nodes">
                         <div class="sheet-panel__actions">
                             {move || {
                                 detail
@@ -9767,7 +9823,7 @@ fn WorkflowAssignedNodesSheet(
                                     })
                                     .unwrap_or_else(|| view! {}.into_any())
                             }}
-                            <button class="icon-button sheet-panel__close" type="button" aria-label="Close assigned nodes" title="Close assigned nodes" on:click=close>
+                            <button class="icon-button sheet-panel__close" type="button" aria-label="Close available nodes" title="Close available nodes" on:click=close>
                                 <X class="icon-button__icon"/>
                             </button>
                         </div>
@@ -9778,17 +9834,17 @@ fn WorkflowAssignedNodesSheet(
                                     let total = data.nodes.len();
                                     view! {
                                         <header class="sheet-panel__header">
-                                            <p>"Assigned Nodes"</p>
+                                            <p>"Available Nodes"</p>
                                             <h2>{data.workflow_name}</h2>
                                             <span class="forms-attached-sheet__count">{format!("{total} nodes")}</span>
                                         </header>
                                         <section class="sheet-panel__section">
                                             <label class="searchable-data-table__search searchable-data-table__control forms-attached-sheet__search">
                                                 <Search class="searchable-data-table__control-icon"/>
-                                                <span class="sr-only">"Search assigned nodes"</span>
+                                                <span class="sr-only">"Search available nodes"</span>
                                                 <input
                                                     type="search"
-                                                    placeholder="Search assigned nodes"
+                                                    placeholder="Search available nodes"
                                                     prop:value=move || search.get()
                                                     on:input=move |event| search.set(event_target_value(&event))
                                                 />
@@ -9797,7 +9853,7 @@ fn WorkflowAssignedNodesSheet(
                                                 {move || {
                                                     let nodes = filtered_nodes();
                                                     if nodes.is_empty() {
-                                                        view! { <p class="forms-attached-sheet__empty">"No Assigned Nodes to Display"</p> }.into_any()
+                                                        view! { <p class="forms-attached-sheet__empty">"No Available Nodes to Display"</p> }.into_any()
                                                     } else {
                                                         nodes
                                                             .into_iter()
@@ -9807,6 +9863,151 @@ fn WorkflowAssignedNodesSheet(
                                                                     <a class="forms-attached-sheet__item" href=node.href title=node_title>
                                                                         <span>{node.label}</span>
                                                                         <small>{node.title}</small>
+                                                                    </a>
+                                                                }
+                                                            })
+                                                            .collect_view()
+                                                            .into_any()
+                                                    }
+                                                }}
+                                            </div>
+                                        </section>
+                                    }
+                                    .into_any()
+                                })
+                                .unwrap_or_else(|| view! {}.into_any())
+                        }}
+                    </aside>
+                </section>
+            </Show>
+        </Portal>
+    }
+}
+
+#[component]
+fn WorkflowAssignedUsersList(
+    users: Vec<FormAttachmentLink>,
+    workflow_name: String,
+    workflow_href: String,
+    sheet: RwSignal<Option<WorkflowAssignedUsersSheetData>>,
+) -> impl IntoView {
+    let total_users = users.len();
+    let users_for_sheet = users.clone();
+    let workflow_name_for_sheet = workflow_name.clone();
+    let workflow_href_for_sheet = workflow_href.clone();
+
+    view! {
+        <div class="forms-attached-list">
+            {if total_users == 0 {
+                view! { <p>"No active assignments"</p> }.into_any()
+            } else {
+                view! {
+                    <button
+                        class="forms-attached-list__more"
+                        type="button"
+                        on:click=move |_| {
+                            sheet.set(Some(WorkflowAssignedUsersSheetData {
+                                workflow_name: workflow_name_for_sheet.clone(),
+                                workflow_href: workflow_href_for_sheet.clone(),
+                                users: users_for_sheet.clone(),
+                            }));
+                        }
+                    >
+                        {user_count_label(total_users)}
+                    </button>
+                }
+                .into_any()
+            }}
+        </div>
+    }
+}
+
+#[component]
+fn WorkflowAssignedUsersSheet(
+    detail: RwSignal<Option<WorkflowAssignedUsersSheetData>>,
+) -> impl IntoView {
+    let search = RwSignal::new(String::new());
+    let close = move |_| {
+        detail.set(None);
+        search.set(String::new());
+    };
+    let filtered_nodes = move || {
+        let query = search.get().trim().to_lowercase();
+        detail
+            .get()
+            .map(|data| {
+                data.users
+                    .into_iter()
+                    .filter(|user| {
+                        query.is_empty()
+                            || user.label.to_lowercase().contains(&query)
+                            || user.title.to_lowercase().contains(&query)
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default()
+    };
+
+    view! {
+        <Portal>
+            <Show when=move || detail.get().is_some()>
+                <section class="sheet-overlay forms-attached-overlay" aria-label="Assigned users">
+                    <button class="sheet-overlay__scrim" type="button" aria-label="Close assigned users" on:click=close></button>
+                    <aside class="sheet-panel blurred-surface forms-attached-sheet" role="dialog" aria-modal="true" aria-label="Assigned users">
+                        <div class="sheet-panel__actions">
+                            {move || {
+                                detail
+                                    .get()
+                                    .map(|data| {
+                                        view! {
+                                            <a class="icon-button sheet-panel__open" href=data.workflow_href aria-label="Open workflow detail" title="Open workflow detail">
+                                                <ExternalLink class="icon-button__icon"/>
+                                            </a>
+                                        }
+                                        .into_any()
+                                    })
+                                    .unwrap_or_else(|| view! {}.into_any())
+                            }}
+                            <button class="icon-button sheet-panel__close" type="button" aria-label="Close assigned users" title="Close assigned users" on:click=close>
+                                <X class="icon-button__icon"/>
+                            </button>
+                        </div>
+                        {move || {
+                            detail
+                                .get()
+                                .map(|data| {
+                                    let total = data.users.len();
+                                    view! {
+                                        <header class="sheet-panel__header">
+                                            <p>"Assigned Users"</p>
+                                            <h2>{data.workflow_name}</h2>
+                                            <span class="forms-attached-sheet__count">{user_count_label(total)}</span>
+                                        </header>
+                                        <section class="sheet-panel__section">
+                                            <label class="searchable-data-table__search searchable-data-table__control forms-attached-sheet__search">
+                                                <Search class="searchable-data-table__control-icon"/>
+                                                <span class="sr-only">"Search assigned users"</span>
+                                                <input
+                                                    type="search"
+                                                    placeholder="Search assigned users"
+                                                    prop:value=move || search.get()
+                                                    on:input=move |event| search.set(event_target_value(&event))
+                                                />
+                                            </label>
+                                            <div class="forms-attached-sheet__list">
+                                                {move || {
+                                                    let users = filtered_nodes();
+                                                    if users.is_empty() {
+                                                        view! { <p class="forms-attached-sheet__empty">"No Assigned Users to Display"</p> }.into_any()
+                                                    } else {
+                                                        users
+                                                            .into_iter()
+                                                            .map(|user| {
+                                                                let user_title = user.title.clone();
+                                                                view! {
+                                                                    <a class="forms-attached-sheet__item" href=user.href title=user_title>
+                                                                        <span>{user.label}</span>
+                                                                        <small>{user.title}</small>
                                                                     </a>
                                                                 }
                                                             })
@@ -11670,9 +11871,9 @@ pub fn WorkflowsPage() -> impl IntoView {
             .filter(|workflow| {
                 let version_label = workflow_version_label(workflow);
                 let status_label = workflow_status_label(workflow);
-                let assigned_to = workflow_assigned_to_label(workflow);
+                let assigned_to = workflow_assigned_users_label(workflow);
                 let description = workflow_description_label(workflow);
-                let scope = workflow_scope_label(workflow.workflow_node_type_name.as_str());
+                let available_at = workflow_available_nodes_label(&workflow.available_nodes);
                 text_matches(
                     &query,
                     &[
@@ -11682,7 +11883,7 @@ pub fn WorkflowsPage() -> impl IntoView {
                         version_label.as_str(),
                         status_label.as_str(),
                         assigned_to.as_str(),
-                        scope.as_str(),
+                        available_at.as_str(),
                     ],
                 ) && (selected_status == "all" || selected_status == status_label)
             })
@@ -11742,13 +11943,103 @@ pub fn WorkflowsPage() -> impl IntoView {
 }
 
 #[component]
+fn WorkflowAvailableNodesPicker(
+    nodes: Vec<OrganizationNode>,
+    selected_node_ids: RwSignal<HashSet<String>>,
+) -> impl IntoView {
+    let search = RwSignal::new(String::new());
+    let filtered_nodes = move || {
+        let query = search.get();
+        nodes
+            .clone()
+            .into_iter()
+            .filter(|node| {
+                text_matches(
+                    &query,
+                    &[
+                        node.name.as_str(),
+                        node.node_type_singular_label.as_str(),
+                        node.parent_node_name.as_deref().unwrap_or(""),
+                    ],
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+
+    view! {
+        <div class="permission-picker workflow-available-node-picker">
+            <label class="searchable-data-table__search searchable-data-table__control">
+                <Search class="searchable-data-table__control-icon"/>
+                <span class="sr-only">"Search available nodes"</span>
+                <input
+                    type="search"
+                    placeholder="Search available nodes"
+                    prop:value=move || search.get()
+                    on:input=move |event| search.set(event_target_value(&event))
+                />
+            </label>
+            <div class="checkbox-list permission-picker__list permission-picker__list--compact">
+                {move || {
+                    let nodes = filtered_nodes();
+                    if nodes.is_empty() {
+                        return view! {
+                            <section class="organization-state">
+                                <h3>"No nodes found"</h3>
+                                <p>"Adjust the search to choose where this workflow is available."</p>
+                            </section>
+                        }
+                        .into_any();
+                    }
+
+                    nodes
+                        .into_iter()
+                        .map(|node| {
+                            let node_id = node.id.clone();
+                            let node_id_for_checked = node_id.clone();
+                            let node_id_for_change = node_id.clone();
+                            let node_name = node.name.clone();
+                            let node_type = node.node_type_singular_label.clone();
+                            let node_path = node_display_path(&node);
+                            view! {
+                                <label class="checkbox-list__item permission-picker__item">
+                                    <input
+                                        type="checkbox"
+                                        prop:checked=move || selected_node_ids.get().contains(&node_id_for_checked)
+                                        on:change=move |event| {
+                                            let checked = event_target_checked(&event);
+                                            selected_node_ids.update(|ids| {
+                                                if checked {
+                                                    ids.insert(node_id_for_change.clone());
+                                                } else {
+                                                    ids.remove(&node_id_for_change);
+                                                }
+                                            });
+                                        }
+                                    />
+                                    <span>
+                                        <strong>{node_name}</strong>
+                                        <small>{format!("{node_type} - {node_path}")}</small>
+                                    </span>
+                                </label>
+                            }
+                        })
+                        .collect_view()
+                        .into_any()
+                }}
+            </div>
+        </div>
+    }
+}
+
+#[component]
 pub fn WorkflowsNewPage() -> impl IntoView {
     let node_types = RwSignal::new(Vec::<NodeTypeCatalogEntry>::new());
+    let organization_nodes = RwSignal::new(Vec::<OrganizationNode>::new());
     let forms = RwSignal::new(Vec::<FormSummary>::new());
     let existing_workflows = RwSignal::new(Vec::<WorkflowSummary>::new());
     let seeded_from_form = RwSignal::new(false);
     let name = RwSignal::new(String::new());
-    let workflow_node_type_id = RwSignal::new(String::new());
+    let available_node_ids = RwSignal::new(HashSet::<String>::new());
     let steps = RwSignal::new(Vec::<WorkflowStepDraft>::new());
     let next_step_id = RwSignal::new(1_usize);
     let description = RwSignal::new(String::new());
@@ -11757,7 +12048,14 @@ pub fn WorkflowsNewPage() -> impl IntoView {
     let message = RwSignal::new(None::<String>);
 
     Effect::new(move |_| {
-        load_workflow_create_options(node_types, forms, existing_workflows, is_loading, message);
+        load_workflow_create_options(
+            node_types,
+            organization_nodes,
+            forms,
+            existing_workflows,
+            is_loading,
+            message,
+        );
     });
 
     Effect::new(move |_| {
@@ -11785,10 +12083,6 @@ pub fn WorkflowsNewPage() -> impl IntoView {
             seeded_from_form.set(true);
             return;
         };
-        let Some(scope_node_type_id) = form.scope_node_type_id.clone() else {
-            seeded_from_form.set(true);
-            return;
-        };
         let Some(version) = form
             .versions
             .iter()
@@ -11799,7 +12093,6 @@ pub fn WorkflowsNewPage() -> impl IntoView {
         };
 
         name.set(format!("{} Workflow", form.name));
-        workflow_node_type_id.set(scope_node_type_id);
         description.set(format!("Workflow for {}.", form.name));
         steps.set(vec![WorkflowStepDraft {
             id: 1,
@@ -11814,9 +12107,7 @@ pub fn WorkflowsNewPage() -> impl IntoView {
         if is_loading.get() {
             return;
         }
-        let scope_id = workflow_node_type_id.get();
-        let available_options =
-            workflow_form_version_options(&forms.get(), &node_types.get(), &scope_id);
+        let available_options = workflow_form_version_options(&forms.get(), &node_types.get(), "");
         steps.update(|steps| {
             steps.retain(|step| {
                 step.form_version_id.is_empty()
@@ -11842,7 +12133,7 @@ pub fn WorkflowsNewPage() -> impl IntoView {
     let can_submit = move || {
         !is_saving.get()
             && !name.get().trim().is_empty()
-            && !workflow_node_type_id.get().trim().is_empty()
+            && !available_node_ids.get().is_empty()
             && {
                 let current_steps = steps.get();
                 !current_steps.is_empty()
@@ -11885,7 +12176,7 @@ pub fn WorkflowsNewPage() -> impl IntoView {
                                         event.prevent_default();
                                         submit_create_workflow(
                                             name,
-                                            workflow_node_type_id,
+                                            available_node_ids,
                                             steps,
                                             description,
                                             existing_workflows,
@@ -11906,22 +12197,6 @@ pub fn WorkflowsNewPage() -> impl IntoView {
                                             />
                                         </label>
                                         <label class="form-field">
-                                            <span>"Workflow Node Type"</span>
-                                            <select
-                                                prop:value=move || workflow_node_type_id.get()
-                                                on:change=move |event| {
-                                                    workflow_node_type_id.set(event_target_value(&event));
-                                                }
-                                            >
-                                                <option value="">"Select node type"</option>
-                                                {move || node_types.get().into_iter().map(|node_type| {
-                                                    view! {
-                                                        <option value=node_type.id>{node_type.singular_label}</option>
-                                                    }
-                                                }).collect_view()}
-                                            </select>
-                                        </label>
-                                        <label class="form-field form-field--wide">
                                             <span>"Description"</span>
                                             <textarea
                                                 prop:value=move || description.get()
@@ -11933,6 +12208,14 @@ pub fn WorkflowsNewPage() -> impl IntoView {
                                     </div>
 
                                     <section class="form-section">
+                                        <h3>"Available At"</h3>
+                                        <WorkflowAvailableNodesPicker
+                                            nodes=organization_nodes.get()
+                                            selected_node_ids=available_node_ids
+                                        />
+                                    </section>
+
+                                    <section class="form-section">
                                         <div class="form-builder-section-card__header">
                                             <h3>"Workflow Steps"</h3>
                                             <button
@@ -11942,7 +12225,7 @@ pub fn WorkflowsNewPage() -> impl IntoView {
                                                     workflow_form_version_options(
                                                         &forms.get(),
                                                         &node_types.get(),
-                                                        &workflow_node_type_id.get(),
+                                                        "",
                                                     ).is_empty()
                                                 }
                                                 on:click=move |_| add_step()
@@ -11951,20 +12234,10 @@ pub fn WorkflowsNewPage() -> impl IntoView {
                                             </button>
                                         </div>
                                         {move || {
-                                            let scope_id = workflow_node_type_id.get();
-                                            if scope_id.trim().is_empty() {
-                                                return view! {
-                                                    <section class="organization-state">
-                                                        <h3>"Select a workflow node type"</h3>
-                                                        <p>"Workflow steps are filtered by the selected node type."</p>
-                                                    </section>
-                                                }
-                                                .into_any();
-                                            }
                                             let options = workflow_form_version_options(
                                                 &forms.get(),
                                                 &node_types.get(),
-                                                &scope_id,
+                                                "",
                                             );
                                             if options.is_empty() {
                                                 return view! {
@@ -12096,7 +12369,7 @@ pub fn WorkflowsNewPage() -> impl IntoView {
                                                                                 {workflow_form_version_options(
                                                                                     &forms.get(),
                                                                                     &node_types.get(),
-                                                                                    &workflow_node_type_id.get(),
+                                                                                    "",
                                                                                 )
                                                                                     .into_iter()
                                                                                     .map(|(id, label, _)| {
@@ -13139,7 +13412,7 @@ fn WorkflowDetailContent(workflow: WorkflowDefinition) -> impl IntoView {
     let workflow_name = workflow.name.clone();
     let workflow_slug = workflow.slug.clone();
     let workflow_description = nonempty_text(Some(workflow.description.as_str()), "No description");
-    let workflow_scope = workflow_scope_label(workflow.workflow_node_type_name.as_str());
+    let workflow_available_at = workflow_available_nodes_label(&workflow.available_nodes);
     let workflow_source = workflow_source_label(&workflow.source)
         .unwrap_or("Authored")
         .to_string();
@@ -13172,8 +13445,8 @@ fn WorkflowDetailContent(workflow: WorkflowDefinition) -> impl IntoView {
                             <td>{workflow_description}</td>
                         </tr>
                         <tr>
-                            <th scope="row">"Workflow Node Type"</th>
-                            <td>{workflow_scope}</td>
+                            <th scope="row">"Available At"</th>
+                            <td>{workflow_available_at}</td>
                         </tr>
                         <tr>
                             <th scope="row">"Source"</th>
@@ -13522,11 +13795,12 @@ pub fn WorkflowsEditPage() -> impl IntoView {
     let workflow_id = params.workflow_id;
     let detail = RwSignal::new(None::<WorkflowDefinition>);
     let node_types = RwSignal::new(Vec::<NodeTypeCatalogEntry>::new());
+    let organization_nodes = RwSignal::new(Vec::<OrganizationNode>::new());
     let forms = RwSignal::new(Vec::<FormSummary>::new());
     let existing_workflows = RwSignal::new(Vec::<WorkflowSummary>::new());
     let name = RwSignal::new(String::new());
     let slug = RwSignal::new(String::new());
-    let workflow_node_type_id = RwSignal::new(String::new());
+    let available_node_ids = RwSignal::new(HashSet::<String>::new());
     let description = RwSignal::new(String::new());
     let steps = RwSignal::new(Vec::<WorkflowStepDraft>::new());
     let original_steps = RwSignal::new(Vec::<WorkflowStepDraft>::new());
@@ -13553,6 +13827,7 @@ pub fn WorkflowsEditPage() -> impl IntoView {
     Effect::new(move |_| {
         load_workflow_create_options(
             node_types,
+            organization_nodes,
             forms,
             existing_workflows,
             options_loading,
@@ -13570,7 +13845,13 @@ pub fn WorkflowsEditPage() -> impl IntoView {
 
         name.set(workflow.name.clone());
         slug.set(workflow.slug.clone());
-        workflow_node_type_id.set(workflow.workflow_node_type_id.clone());
+        available_node_ids.set(
+            workflow
+                .available_nodes
+                .iter()
+                .map(|node| node.id.clone())
+                .collect(),
+        );
         description.set(workflow.description.clone());
 
         let requested_version_id = {
@@ -13644,9 +13925,7 @@ pub fn WorkflowsEditPage() -> impl IntoView {
         if options_loading.get() {
             return;
         }
-        let scope_id = workflow_node_type_id.get();
-        let available_options =
-            workflow_form_version_options(&forms.get(), &node_types.get(), &scope_id);
+        let available_options = workflow_form_version_options(&forms.get(), &node_types.get(), "");
         steps.update(|steps| {
             steps.retain(|step| {
                 step.form_version_id.is_empty()
@@ -13673,7 +13952,7 @@ pub fn WorkflowsEditPage() -> impl IntoView {
         if is_saving.get() || name.get().trim().is_empty() {
             return false;
         }
-        if workflow_node_type_id.get().trim().is_empty() {
+        if available_node_ids.get().is_empty() {
             return false;
         }
         let current_steps = steps.get();
@@ -13743,7 +14022,7 @@ pub fn WorkflowsEditPage() -> impl IntoView {
                                             version_is_draft.get_untracked(),
                                             name,
                                             slug,
-                                            workflow_node_type_id,
+                                            available_node_ids,
                                             steps,
                                             original_steps,
                                             description,
@@ -13766,22 +14045,6 @@ pub fn WorkflowsEditPage() -> impl IntoView {
                                             />
                                         </label>
                                         <label class="form-field">
-                                            <span>"Workflow Node Type"</span>
-                                            <select
-                                                prop:value=move || workflow_node_type_id.get()
-                                                on:change=move |event| {
-                                                    workflow_node_type_id.set(event_target_value(&event));
-                                                }
-                                            >
-                                                <option value="">"Select node type"</option>
-                                                {move || node_types.get().into_iter().map(|node_type| {
-                                                    view! {
-                                                        <option value=node_type.id>{node_type.singular_label}</option>
-                                                    }
-                                                }).collect_view()}
-                                            </select>
-                                        </label>
-                                        <label class="form-field form-field--wide">
                                             <span>"Description"</span>
                                             <textarea
                                                 prop:value=move || description.get()
@@ -13791,6 +14054,14 @@ pub fn WorkflowsEditPage() -> impl IntoView {
                                             ></textarea>
                                         </label>
                                     </div>
+
+                                    <section class="form-section">
+                                        <h3>"Available At"</h3>
+                                        <WorkflowAvailableNodesPicker
+                                            nodes=organization_nodes.get()
+                                            selected_node_ids=available_node_ids
+                                        />
+                                    </section>
 
                                     <section class="form-section">
                                         <h3>"Active Revision"</h3>
@@ -13822,7 +14093,7 @@ pub fn WorkflowsEditPage() -> impl IntoView {
                                                     workflow_form_version_options(
                                                         &forms.get(),
                                                         &node_types.get(),
-                                                        &workflow_node_type_id.get(),
+                                                        "",
                                                     )
                                                     .is_empty()
                                                 }
@@ -13833,20 +14104,10 @@ pub fn WorkflowsEditPage() -> impl IntoView {
                                         </div>
 
                                         {move || {
-                                            let scope_id = workflow_node_type_id.get();
-                                            if scope_id.trim().is_empty() {
-                                                return view! {
-                                                    <section class="organization-state">
-                                                        <h3>"Select a workflow node type"</h3>
-                                                        <p>"Workflow steps are filtered by the selected node type."</p>
-                                                    </section>
-                                                }
-                                                .into_any();
-                                            }
                                             if workflow_form_version_options(
                                                 &forms.get(),
                                                 &node_types.get(),
-                                                &scope_id,
+                                                "",
                                             ).is_empty() {
                                                 return view! {
                                                     <section class="organization-state">
@@ -13990,7 +14251,7 @@ pub fn WorkflowsEditPage() -> impl IntoView {
                                                                                 {workflow_form_version_options(
                                                                                     &forms.get(),
                                                                                     &node_types.get(),
-                                                                                    &workflow_node_type_id.get(),
+                                                                                    "",
                                                                                 )
                                                                                     .into_iter()
                                                                                     .map(|(id, label, _)| {
@@ -14054,7 +14315,7 @@ pub fn WorkflowsEditPage() -> impl IntoView {
                                                     version_is_draft.get_untracked(),
                                                     name,
                                                     slug,
-                                                    workflow_node_type_id,
+                                                    available_node_ids,
                                                     steps,
                                                     original_steps,
                                                     description,

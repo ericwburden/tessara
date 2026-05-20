@@ -1836,6 +1836,24 @@ async fn ensure_program_checkpoint_workflow(
     .fetch_one(pool)
     .await?;
 
+    sqlx::query("DELETE FROM workflow_available_nodes WHERE workflow_id = $1")
+        .bind(workflow_id)
+        .execute(pool)
+        .await?;
+    sqlx::query(
+        r#"
+        INSERT INTO workflow_available_nodes (workflow_id, node_id)
+        SELECT $1, nodes.id
+        FROM nodes
+        WHERE nodes.node_type_id = $2
+        ON CONFLICT DO NOTHING
+        "#,
+    )
+    .bind(workflow_id)
+    .bind(workflow_node_type_id)
+    .execute(pool)
+    .await?;
+
     steps
         .first()
         .ok_or_else(|| ApiError::BadRequest("demo workflow requires a step".into()))?;
