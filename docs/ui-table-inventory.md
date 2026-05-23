@@ -1,0 +1,84 @@
+# UI Table Inventory
+
+This inventory supports the post-Sprint 2E Rust/UI table polish pass. It records the current table-like surfaces and highlights where each one may intentionally diverge from the standard table format we choose.
+
+## Review Rubric
+
+Use this rubric when reviewing each table:
+
+- **Surface role:** directory, queue, contextual list, detail/audit table, picker, or metadata readout.
+- **Expected controls:** search, filters, sort, row count, page size, pagination, actions.
+- **Mobile pattern:** responsive table, mobile cards, sheet/list, or no special mobile treatment.
+- **Standardization question:** should this adopt the full directory table pattern, stay a lightweight `DataTable`, or become a non-table list/card pattern?
+
+## Current Table Primitives
+
+| Primitive | Current role | Notes |
+| --- | --- | --- |
+| `DataTable` | Shared table wrapper with horizontal scroll and base table styling. | Good base for contextual/detail tables. It does not provide standard toolbar, sorting, row summaries, page size, or pagination. |
+| `SearchableDataTable` | `DataTable` plus a single search input. | Used by some related-work tables. Most larger directory tables currently hand-roll the same structure instead of using this primitive directly. |
+| `FilterHeader` / `StatusFilterHeader` | Header-level dropdown filter controls. | Useful, but table filters currently live in column headers rather than a consistent toolbar/filter-chip model. |
+| `InfoListTable` / `info-list-table` | Label/value metadata tables. | These are not directory tables and should probably remain a separate detail-readout pattern. |
+
+## Primary Directory And Queue Tables
+
+| Surface | Route | Source | Description | Current controls | Current mobile pattern | Possible variance from standard | Review results |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Home assigned work preview | `/app` | `crates/tessara-web/src/features/native/core.rs:64` | Queue preview of pending workflow work, sorted newest assigned first and limited to eight rows. | No search/filter/sort controls; implicit sort by assigned date; direct `Start` button. | Plain table only. | Should likely stay a preview, not a full directory. Need decide whether to add row-count text such as "Showing 8 most recent" and a link to the full work queue. Direct row button may differ from menu-based actions by design. | Pending review. |
+| Forms directory | `/app/forms` | `crates/tessara-web/src/features/native.rs:9233` | Main form list with form name, scope, attached nodes, active version, status, and field count. | Search, node lineage filter, scope filter, status filter. No sort, row count, page size, or pagination. | Mobile cards. | Not part of immediate workflow/response detour, but it already has richer filters than the primitive. Attached-node count opens a sheet instead of showing full values inline. Scope is legacy/transitional and may disappear later. | Pending review. |
+| Workflows directory | `/app/workflows` | `crates/tessara-web/src/features/native.rs:9574` | Main workflow list with availability, active revision, status, and active assignments. | Search and status filter. No sort, row count, page size, or pagination. | Mobile cards. | Strong candidate for full directory table. Availability and assigned-users columns collapse values into sheet-opening count buttons, which may remain a justified divergence. Generated-form workflow source marker needs consistent tag/chip treatment. | Approved. Implemented pagination with row summary, page-size control in the pagination footer, default first-column sort, distinctive sheet-trigger buttons for availability/assignment counts, a `FileText` single-form marker, and inline mobile marker placement. |
+| Workflow assignments directory | `/app/workflows/assignments` | `crates/tessara-web/src/features/native.rs:13014` | Operational assignment list with workflow, assignee, work state, status, assigned date, and actions. | Search, work-state filter, status filter. No assignee filter, sort, row count, page size, or pagination. | Mobile cards. | Strong candidate for full directory table. Likely needs assignee and/or workflow filter, assigned-date sort, row count, and pagination. Actions use dropdown menu; mobile uses visible buttons. | Approved. Implemented standard pagination footer with row summary and page-size control, default first-column sort, searchable Assignee filter, and normalized mobile cards to match `/workflows` cards with status/work state as fields. Mobile cards now use the same pagination slice as desktop rows. Actions unchanged. |
+| Responses directory | `/app/responses` | `crates/tessara-web/src/features/native.rs:14464` | Response/submission list with response, workflow context, node, assignee, status, last updated, and actions. | Search, assignee filter, status filter. No sort, row count, page size, or pagination. | Mobile cards. | Strong candidate for full directory table. Queue semantics prefer default sort by last updated descending instead of first-column sort. Workflow cell has stacked metadata and needs standard secondary-text treatment. | Approved. Implemented standard pagination footer; default sort by Last Updated descending; forced searchable Assignee filter; normalized mobile cards with status as a field; kept mobile and desktop pagination in sync; tightened stacked workflow metadata; added smaller, right-aligned mobile card actions. |
+| Administration users directory | `/app/administration/users` | `crates/tessara-web/src/features/native/administration.rs:164` | Admin user list with user, role, status, role count, and actions. | Search, role filter, status filter. No sort, row count, page size, or pagination. | Mobile cards. | Should probably be reviewed during RBAC overhaul, not before. Likely full directory pattern once user/RBAC storage changes land. | Pending review. |
+| Administration roles directory | `/app/administration/roles` | `crates/tessara-web/src/features/native/administration.rs:2752` | Admin role list with capability count, assigned user count, and actions. | Search only. No sort, row count, page size, or pagination. | Mobile cards. | This will change during RBAC overhaul. It may become a split list/detail pattern rather than a heavy directory table. | Pending review. |
+
+## Contextual And Detail Tables
+
+| Surface | Route | Source | Description | Current controls | Current mobile pattern | Possible variance from standard | Review results |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Route migration overview | `/app/core` | `crates/tessara-web/src/features/native/core.rs:140` | Internal route status/RBAC status table. | None. | Separate card layout. | Internal/status reference table. Should not receive directory controls unless it grows beyond a compact checklist. | Pending review. |
+| Organization related forms | `/app/organization/:node_id` | `crates/tessara-web/src/features/native.rs:1842` | Related forms for selected organization node. | Search through `SearchableDataTable`. No sort/pagination. | Related-work mobile cards. | Contextual list. Probably should remain lightweight; may need consistent related-work empty-state wording. | Pending review. |
+| Organization related responses | `/app/organization/:node_id` | `crates/tessara-web/src/features/native.rs:1960` | Related responses for selected organization node. | Search and status filter. No sort/pagination. | Related-work mobile cards. | Contextual list but currently more complex than related forms/dashboards. Could keep status filter because response status changes the user's next action. | Pending review. |
+| Organization related dashboards | `/app/organization/:node_id` | `crates/tessara-web/src/features/native.rs:2367` | Related dashboards for selected organization node. | Search through `SearchableDataTable`. No sort/pagination. | Related-work mobile cards. | Contextual list. Likely lightweight. | Pending review. |
+| Form versions | `/app/forms/:form_id` | `crates/tessara-web/src/features/native.rs:11266` | Form detail revision/version history. | None. | Mobile cards. | Detail history table. Should probably sort by version/recent publish internally but not expose directory controls. | Pending review. |
+| Rendered form section fields | `/app/forms/:form_id` | `crates/tessara-web/src/features/native.rs:11386` | Field list inside each rendered form section, including layout coordinates. | None. | No separate mobile cards. | Inspection/debug-style detail table. Layout column is domain-specific and may diverge from standard directory density. | Pending review. |
+| Workflow detail steps | `/app/workflows/:workflow_id` | `crates/tessara-web/src/features/native.rs:13512` | Ordered steps for a workflow revision. | None. | Plain table only. | Ordered sequence, not a sortable list. Should not expose user sorting; may need visual sequence treatment instead of table controls. | Pending review. |
+| Workflow revisions | `/app/workflows/:workflow_id` | `crates/tessara-web/src/features/native.rs:13553` | Workflow revision history with status, published date, step count, and edit action. | None. | Plain table only. | Detail history table. Edit action uses icon-only link, while many directories use dropdown menus. Need decide whether that is acceptable for compact revision actions. | Pending review. |
+| Workflow detail assignments | `/app/workflows/:workflow_id` | `crates/tessara-web/src/features/native.rs:13612` | Assignments scoped to one workflow detail page. | None. Actions allow view details and activate/deactivate. | Plain table only. | Contextual operational table. It duplicates behavior from the assignments directory without search/filter. Could remain lightweight for short lists, or adopt local search if assignments grow. | Pending review. |
+| Response values | `/app/responses/:submission_id` | `crates/tessara-web/src/features/native.rs:15237` | Submitted field values for one response. | None. | Plain table only. | Detail readout. Should not become a directory table. Long values may require wrapping/truncation rules. | Pending review. |
+| Response audit events | `/app/responses/:submission_id` | `crates/tessara-web/src/features/native.rs:15277` | Audit trail for one response. | None. | Plain table only. | Audit log. May eventually need chronological sort and row-count text, but not normal directory controls. | Pending review. |
+| Admin user scope nodes | `/app/administration/users/:account_id/access` | `crates/tessara-web/src/features/native/administration.rs:885` | Scope nodes assigned to a user. | None. | Plain table only. | Detail table for RBAC. May become a standard related-list after RBAC overhaul. | Pending review. |
+| Admin user delegations | `/app/administration/users/:account_id/access` | `crates/tessara-web/src/features/native/administration.rs:999` | Accounts delegated to/by a user. | None. | Plain table only. | Detail table for user access. Should be reviewed with RBAC, not this detour. | Pending review. |
+| Node type metadata fields | `/app/administration/node-types` | `crates/tessara-web/src/features/native/administration.rs:1808` | Metadata field list for a selected node type. | Search and add-field action. No sort/pagination. | Mobile cards. | Configuration table with inline create/edit/delete via sheet/dropdown. Could remain a compact configuration list; if standardized, toolbar action placement matters. | Pending review. |
+| Node type scoped forms | `/app/administration/node-types` | `crates/tessara-web/src/features/native/administration.rs:2308` | Forms scoped to a node type. | Search, but rendered as `capability-list` not `DataTable`. | List only. | This is intentionally not table-shaped. It may disappear or change when form scope semantics are removed. | Pending review. |
+
+## Picker And Sheet Lists That Look Table-Adjacent
+
+| Surface | Route | Source | Description | Current controls | Possible variance from standard | Review results |
+| --- | --- | --- | --- | --- | --- | --- |
+| Workflow available nodes sheet | `/app/workflows` and `/app/workflows/:workflow_id` | `crates/tessara-web/src/features/native.rs:9743` | Sheet list opened from workflow availability count. | Search inside sheet. | This is a sheet/list pattern, not a table. It supports dense many-to-many inspection without widening the directory row. | Pending review. |
+| Workflow assigned users sheet | `/app/workflows` and `/app/workflows/:workflow_id` | `crates/tessara-web/src/features/native.rs:9888` | Sheet list opened from assigned-users count. | Search inside sheet. | Same sheet/list exception as available nodes. | Pending review. |
+| Forms attached nodes sheet/list | `/app/forms` | `crates/tessara-web/src/features/native.rs:9411` | Sheet/list opened from the forms directory attached-node count. | Search inside sheet. | Same sheet/list exception. Should align naming and count-button treatment with workflow availability sheets. | Pending review. |
+| Workflow assignment candidate picker | `/app/workflows/assignments/new` | `crates/tessara-web/src/features/native.rs:12430` | Three-column picker for workflow, node, and assignee selection during assignment creation. | Separate search fields per column; option-list interactions. | This is not a directory table. It should likely keep a picker/list pattern, but selected assignee display should align with chip conventions. | Pending review. |
+| Admin scope node checklist | `/app/administration/users/:account_id/access` and `/app/administration/users/:account_id/edit` | `crates/tessara-web/src/features/native/administration.rs:922` | Searchable checklist for assigning scope nodes. | Search. | Picker/checklist, not a table. RBAC overhaul may replace or reshape it. | Pending review. |
+| Admin delegation checklist | `/app/administration/users/:account_id/access` and `/app/administration/users/:account_id/edit` | `crates/tessara-web/src/features/native/administration.rs:1038` | Searchable checklist for account delegation selection. | Search. | Picker/checklist, not a table. RBAC-adjacent. | Pending review. |
+
+## Metadata Readouts
+
+| Surface | Route | Source | Description | Possible variance from standard | Review results |
+| --- | --- | --- | --- | --- | --- |
+| Dynamic organization metadata | `/app/organization/:node_id` | `crates/tessara-web/src/features/native.rs:1780` | Generic label/value table for selected organization node metadata. | Keep separate from directory table standards. It is a detail readout. | Pending review. |
+| Role detail metrics | `/app/administration/roles` | `crates/tessara-web/src/features/native/administration.rs:2903` | Label/value counts for selected role. | RBAC-overhaul surface; likely remains `InfoListTable` style. | Pending review. |
+| Workflow assignment detail metadata | `/app/workflows/assignments` | `crates/tessara-web/src/features/native.rs:13247` and `crates/tessara-web/src/features/native.rs:13274` | Label/value sections inside assignment detail sheets. | Detail readout inside modal/sheet; not a table-standard candidate. | Pending review. |
+| Workflow detail assignment sheet metadata | `/app/workflows/:workflow_id` | `crates/tessara-web/src/features/native.rs:13728` and `crates/tessara-web/src/features/native.rs:13755` | Same assignment metadata pattern from workflow detail. | Should share the same info-list treatment as the assignment directory detail sheet. | Pending review. |
+| Workflow runtime status metadata | `/app/responses/:submission_id` and workflow runtime sections | `crates/tessara-web/src/features/native.rs:14068` | Runtime/status label-value display. | Runtime detail readout; likely belongs to Sprint 2F rather than table polish. | Pending review. |
+
+## Initial Review Order
+
+1. Workflows directory
+2. Workflow assignments directory
+3. Responses directory
+4. Home assigned work preview
+5. Forms directory, only to capture reusable table decisions that already exist there
+6. Contextual/detail tables, reviewed only for obvious consistency issues
+7. Administration users and roles, deferred to the RBAC overhaul unless a table primitive change makes them cheap to align now

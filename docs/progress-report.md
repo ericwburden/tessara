@@ -1,5 +1,19 @@
 # Progress Report
 
+## 2026-05-20 - Pre-RBAC Follow-Up Reconciliation
+
+- Completed:
+  - checked local `main` against `origin/main`; local history is clean and ahead with the native UI refresh follow-up commits
+  - confirmed generated form assignment now flows through generated single-form workflows and normal workflow assignment mechanics
+  - confirmed workflow assignments are the response-start and submission-access source of truth
+  - confirmed stale auth/submission fields, legacy form-assignment paths, workflow availability summaries, workflow-mediated shortcut coverage, and standard validation wrappers have landed
+  - updated roadmap and UI reset notes so remaining pre-RBAC work no longer repeats landed workflow/form assignment cleanup
+- Remaining before user/RBAC overhaul:
+  - finish residual Rust/UI table, chip, icon-action, and form-action spacing polish
+  - decide and document the stylesheet path: keep `style/main.css` as the explicit delivery entrypoint or introduce the documented SCSS partial structure
+  - add lightweight deployed-CSS selector verification to the validation story
+  - keep migration consolidation as a separate cleanup decision rather than blocking the RBAC design unless the team chooses to reset the database baseline first
+
 ## 2026-05-06 - Sprint 2E Closeout
 
 - Completed:

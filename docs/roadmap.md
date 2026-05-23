@@ -468,25 +468,34 @@ This section records the completed foundation sequence that led to the current n
 
 ### Post-Sprint 2E Design Detour: Rust/UI Styling And Component Alignment (Next)
 
-**Outcome:** the workflow and response UX feedback gathered during Sprint 2E is consolidated into a coherent component and stylesheet direction before additional feature work compounds the current styling debt.
+**Outcome:** the remaining workflow, assignment, response, and home UX feedback gathered during Sprint 2E is consolidated into a coherent component and stylesheet direction before the user/RBAC overhaul compounds the current styling debt.
+
+**Already landed after the refresh:**
+
+- form-first assignment now routes through generated single-form workflows and normal workflow assignment mechanics
+- workflow assignments are the single source of truth for response starts and submission access
+- generated workflow availability and assignment summaries have been refined for operator-facing selection
+- stale workflow/form assignment DTO fields and direct submission assignment fields have been removed
+- native shared UI primitives now cover buttons, icon buttons, status badges, data tables, searchable tables, filters, and common form action containers
+- Playwright and standard validation wrappers are available through `scripts/validate-e2e.ps1` and `scripts/validate.ps1`
 
 **Build:**
 
-- pivot touched workflow, assignment, response, and home surfaces toward Rust/UI component patterns for tables, inputs, badges, icon buttons, tags, confirmation dialogs, and form actions
-- replace ad hoc table controls with a Rust/UI-style data-table component pattern that supports search, sort, filtering, pagination, and accessible action controls
-- standardize icon usage through the Rust/UI icon set or an equivalent local wrapper so contextual actions read consistently across the app
-- define reusable form action/footer classes with the expected spacing, including the 16px top margin required for bottom-of-form button containers
-- consolidate stylesheet organization around a documented SCSS entrypoint, named global/component/feature partials, and a clear decision for the parallel `crates/tessara-web/assets/base.css` path
+- finish the remaining Rust/UI table polish by deciding which lists need sort, page-size, pagination, and row-count summaries beyond the search/filter patterns already present
+- promote remaining route-local assignee, status, and action treatments into a consistent chip/badge/icon-button vocabulary
+- finish reusable form action/footer spacing, including the 16px top margin required for bottom-of-form button containers
+- consolidate stylesheet organization around the current `style/main.css` delivery path or introduce the documented SCSS entrypoint and named global/component/feature partials
 - add lightweight deployed-CSS verification so future UI edits prove that the stylesheet selectors being changed are the selectors being served
-- carry forward deferred Sprint 2E UX comments without changing the accepted Sprint 2E functional behavior
+- carry forward only the residual Sprint 2E UX comments without changing the accepted Sprint 2E functional behavior
 
 **Application UI delivered this detour:**
 
-- workflow directory and assignment directory tables aligned to the selected Rust/UI data-table language
+- workflow directory, assignment directory, response, and home tables aligned to the selected Rust/UI table language where the current UI still uses page-local table controls
 - workflow step editing controls, assignment assignee chips, status badges, and icon buttons using a consistent component vocabulary
 - response and home work queues visually prepared for later delegated-work redesign without changing assignment/runtime rules
+- stylesheet delivery and deployed-selector verification documented enough that UI edits can be validated without manual asset-path guessing
 
-**User-testable exit condition:** a tester can browse the touched workflow, assignment, response, and home routes and see consistent Rust/UI-style tables, tags, icon actions, and form button spacing while all Sprint 2E workflow behavior remains intact.
+**User-testable exit condition:** a tester can browse the touched workflow, assignment, response, and home routes and see consistent Rust/UI-style tables, tags, icon actions, and form button spacing while all Sprint 2E workflow behavior and the generated single-form workflow shortcut remain intact.
 
 ### Sprint 2F: Runtime Status And Materialization Slice
 
