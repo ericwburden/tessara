@@ -781,6 +781,30 @@ input {
   flex: 0 0 auto;
 }
 
+.data-table-filter .forms-node-filter__trigger {
+  min-width: 0;
+  width: 2rem;
+  min-height: 2rem;
+  height: 2rem;
+  justify-content: center;
+  gap: 0;
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.data-table-filter .forms-node-filter__trigger span,
+.data-table-filter .forms-node-filter__trigger svg:last-child {
+  display: none;
+}
+
+.data-table-filter .forms-node-filter__trigger:hover,
+.data-table-filter .forms-node-filter.is-open .forms-node-filter__trigger,
+.data-table-filter .forms-node-filter__trigger.is-filtered {
+  background: var(--semantic-primary-soft);
+  color: var(--semantic-primary);
+}
+
 .forms-node-filter__scrim {
   display: none;
   position: fixed;

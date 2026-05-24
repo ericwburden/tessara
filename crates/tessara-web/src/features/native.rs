@@ -2619,10 +2619,6 @@ fn form_field_count_label(version: Option<&FormVersionSummary>) -> String {
         .unwrap_or_else(|| "-".to_string())
 }
 
-fn form_scope_label(form: &FormSummary) -> String {
-    nonempty_text(form.scope_node_type_name.as_deref(), "All node types")
-}
-
 fn form_definition_scope_label(form: &FormDefinition) -> String {
     nonempty_text(form.scope_node_type_name.as_deref(), "All node types")
 }
@@ -8960,7 +8956,6 @@ pub fn OrganizationEditPage() -> impl IntoView {
 pub fn FormsPage() -> impl IntoView {
     let forms = RwSignal::new(Vec::<FormSummary>::new());
     let search = RwSignal::new(String::new());
-    let scope_filter = RwSignal::new("all".to_string());
     let status_filter = RwSignal::new("all".to_string());
     let node_filter_query = RwSignal::new(String::new());
     let selected_node_id = RwSignal::new(None::<String>);
@@ -8973,7 +8968,6 @@ pub fn FormsPage() -> impl IntoView {
 
     let filtered_forms = move || {
         let query = search.get();
-        let selected_scope = scope_filter.get();
         let selected_status = status_filter.get();
         let selected_node = selected_node_id.get();
         let loaded_forms = forms.get();
@@ -8983,14 +8977,12 @@ pub fn FormsPage() -> impl IntoView {
             .into_iter()
             .filter(|form| {
                 let active_version = active_form_version(form);
-                let scope = form_scope_label(form);
                 let attached_to = form_attached_to_label(active_version);
                 let status = form_status_label(active_version);
-                let matches_scope = selected_scope == "all" || scope == selected_scope;
                 let matches_status = selected_status == "all" || status == selected_status;
                 let matches_node_filter =
                     form_matches_node_filter(form, selected_node.as_deref(), &node_options);
-                if !matches_scope || !matches_status || !matches_node_filter {
+                if !matches_status || !matches_node_filter {
                     return false;
                 }
                 text_matches(
@@ -8998,7 +8990,6 @@ pub fn FormsPage() -> impl IntoView {
                     &[
                         &form.name,
                         &form.slug,
-                        &scope,
                         &attached_to,
                         &form_version_label(active_version),
                         &status,
@@ -9008,8 +8999,6 @@ pub fn FormsPage() -> impl IntoView {
             .collect::<Vec<_>>()
     };
 
-    let scope_options =
-        move || unique_filter_options(forms.get().iter().map(form_scope_label).collect::<Vec<_>>());
     let status_options = move || {
         unique_filter_options(
             forms
@@ -9050,11 +9039,9 @@ pub fn FormsPage() -> impl IntoView {
                             <FormsList
                                 forms=filtered_forms()
                                 search
-                                scope_filter
                                 status_filter
                                 node_filter_query
                                 selected_node_id
-                                scope_options=scope_options()
                                 status_options=status_options()
                                 node_filter_options=node_filter_options()
                             />
@@ -9246,16 +9233,51 @@ fn FormsNodeLineageFilter(
 fn FormsList(
     forms: Vec<FormSummary>,
     search: RwSignal<String>,
-    scope_filter: RwSignal<String>,
     status_filter: RwSignal<String>,
     node_filter_query: RwSignal<String>,
     selected_node_id: RwSignal<Option<String>>,
-    scope_options: Vec<String>,
     status_options: Vec<String>,
     node_filter_options: Vec<FormNodeFilterOption>,
 ) -> impl IntoView {
-    let table_forms = forms.clone();
-    let card_forms = forms;
+    let mut table_forms = forms.clone();
+    table_forms.sort_by(|left, right| {
+        left.name
+            .to_lowercase()
+            .cmp(&right.name.to_lowercase())
+            .then(left.id.cmp(&right.id))
+    });
+    let card_forms = table_forms.clone();
+    let page_size = RwSignal::new(10usize);
+    let page_index = RwSignal::new(0usize);
+    let total_count = table_forms.len();
+    let page_count = move || {
+        if total_count == 0 {
+            1
+        } else {
+            ((total_count + page_size.get() - 1) / page_size.get()).max(1)
+        }
+    };
+    let current_page = move || page_index.get().min(page_count() - 1);
+    let page_start = move || {
+        if total_count == 0 {
+            0
+        } else {
+            current_page() * page_size.get()
+        }
+    };
+    let page_end = move || (page_start() + page_size.get()).min(total_count);
+    let page_summary = move || {
+        if total_count == 0 {
+            "No forms to display".to_string()
+        } else {
+            format!(
+                "Showing {}-{} of {} forms",
+                page_start() + 1,
+                page_end(),
+                total_count
+            )
+        }
+    };
     let attached_nodes_sheet = RwSignal::new(None::<FormsAttachedNodesSheetData>);
 
     view! {
@@ -9272,25 +9294,21 @@ fn FormsList(
                             on:input=move |event| search.set(event_target_value(&event))
                         />
                     </label>
-                    <FormsNodeLineageFilter
-                        options=node_filter_options
-                        selected_node_id
-                        query=node_filter_query
-                    />
                 </div>
                 <DataTable>
                 <thead>
                     <tr>
                         <th scope="col">"Form name"</th>
                         <th scope="col">
-                            <FilterHeader
-                                label="Scope"
-                                all_label="All scopes"
-                                filter=scope_filter
-                                options=scope_options
-                            />
+                            <div class="data-table-filter">
+                                <span>"Attached To"</span>
+                                <FormsNodeLineageFilter
+                                    options=node_filter_options
+                                    selected_node_id
+                                    query=node_filter_query
+                                />
+                            </div>
                         </th>
-                        <th scope="col">"Attached To"</th>
                         <th class="data-table__cell--center" scope="col">"Active version"</th>
                         <th class="data-table__cell--center" scope="col">
                             <FilterHeader
@@ -9304,16 +9322,19 @@ fn FormsList(
                     </tr>
                 </thead>
                 <tbody>
-                    {if table_forms.is_empty() {
+                    {move || if table_forms.is_empty() {
                         view! {
                             <tr>
-                                <td class="data-table__empty" colspan="6">"No Forms to Display"</td>
+                                <td class="data-table__empty" colspan="5">"No Forms to Display"</td>
                             </tr>
                         }
                         .into_any()
                     } else {
                         table_forms
-                            .into_iter()
+                            .iter()
+                            .skip(page_start())
+                            .take(page_size.get())
+                            .cloned()
                             .map(|form| {
                                 let href = format!("/forms/{}", form.id);
                                 let active_version = active_form_version(&form);
@@ -9321,7 +9342,6 @@ fn FormsList(
                                     .map(|version| version.status.as_str())
                                     .unwrap_or("none");
                                 let name = form.name.clone();
-                                let scope = form_scope_label(&form);
                                 let attached_nodes = form_attached_nodes(active_version);
                                 let attached_nodes_form_name = name.clone();
                                 let version_label = form_version_label(active_version);
@@ -9332,7 +9352,6 @@ fn FormsList(
                                         <th scope="row">
                                             <a class="data-table__primary-link" href=href.clone()>{name}</a>
                                         </th>
-                                        <td>{scope}</td>
                                         <td>
                                             <FormsAttachedNodesList
                                                 nodes=attached_nodes
@@ -9352,13 +9371,59 @@ fn FormsList(
                     }}
                 </tbody>
                 </DataTable>
+                <div class="directory-table-pagination" aria-label="Forms table pagination">
+                    <p>{move || page_summary()}</p>
+                    <div class="directory-table-pagination__actions">
+                        <label class="directory-table-pagination__page-size searchable-data-table__filter searchable-data-table__control">
+                            <span>"Rows"</span>
+                            <select
+                                prop:value=move || page_size.get().to_string()
+                                on:change=move |event| {
+                                    if let Ok(size) = event_target_value(&event).parse::<usize>() {
+                                        page_size.set(size);
+                                        page_index.set(0);
+                                    }
+                                }
+                            >
+                                <option value="10">"10"</option>
+                                <option value="25">"25"</option>
+                                <option value="50">"50"</option>
+                            </select>
+                        </label>
+                        <button
+                            class="button button--compact button--secondary"
+                            type="button"
+                            disabled=move || current_page() == 0
+                            on:click=move |_| {
+                                page_index.update(|page| *page = page.saturating_sub(1));
+                            }
+                        >
+                            "Previous"
+                        </button>
+                        <span>{move || format!("Page {} of {}", current_page() + 1, page_count())}</span>
+                        <button
+                            class="button button--compact button--secondary"
+                            type="button"
+                            disabled=move || { current_page() + 1 >= page_count() }
+                            on:click=move |_| {
+                                let last_page = page_count().saturating_sub(1);
+                                page_index.update(|page| *page = (*page + 1).min(last_page));
+                            }
+                        >
+                            "Next"
+                        </button>
+                    </div>
+                </div>
             </div>
             <div class="forms-list-mobile-cards">
-                {if card_forms.is_empty() {
+                {move || if card_forms.is_empty() {
                     view! { <p class="forms-list-mobile-empty">"No Forms to Display"</p> }.into_any()
                 } else {
                     card_forms
-                        .into_iter()
+                        .iter()
+                        .skip(page_start())
+                        .take(page_size.get())
+                        .cloned()
                         .map(|form| {
                             let href = format!("/forms/{}", form.id);
                             let active_version = active_form_version(&form);
@@ -9366,7 +9431,6 @@ fn FormsList(
                                 .map(|version| version.status.as_str())
                                 .unwrap_or("none");
                             let name = form.name.clone();
-                            let scope = form_scope_label(&form);
                             let attached_nodes = form_attached_nodes(active_version);
                             let attached_nodes_form_name = name.clone();
                             let version_label = form_version_label(active_version);
@@ -9380,10 +9444,6 @@ fn FormsList(
                                         </div>
                                     </div>
                                     <dl>
-                                        <div>
-                                            <dt>"Scope"</dt>
-                                            <dd>{scope}</dd>
-                                        </div>
                                         <div>
                                             <dt>"Attached To"</dt>
                                             <dd>
@@ -9428,37 +9488,21 @@ fn FormsAttachedNodesList(
     sheet: RwSignal<Option<FormsAttachedNodesSheetData>>,
 ) -> impl IntoView {
     let total_nodes = nodes.len();
-    let visible_nodes = if total_nodes > 5 {
-        nodes[total_nodes - 4..].to_vec()
-    } else {
-        nodes.clone()
-    };
     let nodes_for_sheet = nodes.clone();
     let form_name_for_sheet = form_name.clone();
     let form_href_for_sheet = form_href.clone();
 
     view! {
         <div class="forms-attached-list">
-            {if visible_nodes.is_empty() {
+            {if total_nodes == 0 {
                 view! { <p>"Not attached"</p> }.into_any()
-            } else {
-                visible_nodes
-                    .into_iter()
-                    .map(|node| {
-                        view! {
-                            <p>
-                                <a href=node.href title=node.title>{node.label}</a>
-                            </p>
-                        }
-                    })
-                    .collect_view()
-                    .into_any()
-            }}
-            {if total_nodes > 5 {
+            } else if total_nodes > 0 {
                 view! {
                     <button
                         class="forms-attached-list__more"
                         type="button"
+                        aria-label=format!("View attached organization nodes for {form_name_for_sheet}")
+                        title="Opens detail panel"
                         on:click=move |_| {
                             sheet.set(Some(FormsAttachedNodesSheetData {
                                 form_name: form_name_for_sheet.clone(),
@@ -9467,7 +9511,8 @@ fn FormsAttachedNodesList(
                             }));
                         }
                     >
-                        "More Nodes..."
+                        <span>{node_count_label(total_nodes)}</span>
+                        <PanelRight class="forms-attached-list__icon"/>
                     </button>
                 }
                 .into_any()
