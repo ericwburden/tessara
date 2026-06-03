@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 pub const OUTPUT_NAME: &str = "tessara-web";
 pub const APP_ROOT_ID: &str = "app-root";
-const ASSET_VERSION: &str = "20260603-workflow-detail-collapse";
+const ASSET_VERSION: &str = "20260603-response-detail-collapse";
 
 pub fn site_root() -> PathBuf {
     std::env::var("LEPTOS_SITE_ROOT")

@@ -16266,6 +16266,8 @@ pub fn ResponsesEditPage() -> impl IntoView {
 
 #[component]
 fn ResponseDetailContent(detail: SubmissionDetail) -> impl IntoView {
+    let values_expanded = RwSignal::new(false);
+    let audit_expanded = RwSignal::new(false);
     let status_key = detail.status.trim().to_lowercase();
     let status_label = metadata_label(&detail.status);
     let edit_href = format!("/responses/{}/edit", detail.id);
@@ -16275,6 +16277,8 @@ fn ResponseDetailContent(detail: SubmissionDetail) -> impl IntoView {
     let runtime = detail.runtime.clone();
     let values = detail.values.clone();
     let audit_events = detail.audit_events.clone();
+    let values_count = values.len().to_string();
+    let audit_count = audit_events.len().to_string();
     let is_draft = status_key == "draft";
 
     view! {
@@ -16331,14 +16335,58 @@ fn ResponseDetailContent(detail: SubmissionDetail) -> impl IntoView {
                     .map(|runtime| view! { <ResponseRuntimeCard runtime/> }.into_any())
                     .unwrap_or_else(|| view! {}.into_any())}
 
-                <section class="organization-detail-card organization-detail-card--wide">
-                    <h3>"Response Values"</h3>
-                    <ResponseValuesTable values/>
+                <section class="organization-detail-card organization-detail-card--wide form-detail-fields-card">
+                    <header class="form-detail-disclosure-header">
+                        <h3>"Response Values"</h3>
+                        <button
+                            class="link-button form-detail-disclosure-toggle"
+                            type="button"
+                            aria-expanded=move || values_expanded.get().to_string()
+                            on:click=move |_| values_expanded.update(|expanded| *expanded = !*expanded)
+                        >
+                            {move || {
+                                if values_expanded.get() {
+                                    "Hide Values".to_string()
+                                } else {
+                                    format!("Show {values_count} Values")
+                                }
+                            }}
+                        </button>
+                    </header>
+                    {move || {
+                        if values_expanded.get() {
+                            view! { <ResponseValuesTable values=values.clone()/> }.into_any()
+                        } else {
+                            view! {}.into_any()
+                        }
+                    }}
                 </section>
 
-                <section class="organization-detail-card organization-detail-card--wide">
-                    <h3>"Audit Trail"</h3>
-                    <ResponseAuditTable events=audit_events/>
+                <section class="organization-detail-card organization-detail-card--wide form-detail-fields-card">
+                    <header class="form-detail-disclosure-header">
+                        <h3>"Audit Trail"</h3>
+                        <button
+                            class="link-button form-detail-disclosure-toggle"
+                            type="button"
+                            aria-expanded=move || audit_expanded.get().to_string()
+                            on:click=move |_| audit_expanded.update(|expanded| *expanded = !*expanded)
+                        >
+                            {move || {
+                                if audit_expanded.get() {
+                                    "Hide Audit Trail".to_string()
+                                } else {
+                                    format!("Show {audit_count} Audit Events")
+                                }
+                            }}
+                        </button>
+                    </header>
+                    {move || {
+                        if audit_expanded.get() {
+                            view! { <ResponseAuditTable events=audit_events.clone()/> }.into_any()
+                        } else {
+                            view! {}.into_any()
+                        }
+                    }}
                 </section>
             </div>
         </div>
