@@ -2307,9 +2307,11 @@ fn save_node_type_metadata_field(
 #[component]
 fn NodeTypeScopedFormsList(forms: Vec<NodeTypeFormLink>) -> impl IntoView {
     let search = RwSignal::new(String::new());
+    let page_size = RwSignal::new(10usize);
+    let page_index = RwSignal::new(0usize);
     let has_forms = !forms.is_empty();
-    let searchable_forms = forms.clone();
-    let filtered_forms = move || {
+    let searchable_forms = forms;
+    let filtered_forms = Memo::new(move |_| {
         let query = search.get().trim().to_lowercase();
         searchable_forms
             .iter()
@@ -2320,7 +2322,8 @@ fn NodeTypeScopedFormsList(forms: Vec<NodeTypeFormLink>) -> impl IntoView {
             })
             .cloned()
             .collect::<Vec<_>>()
-    };
+    });
+    let total_count = Memo::new(move |_| filtered_forms.get().len());
     view! {
         <section class="organization-detail-card node-type-detail-list node-type-detail-list--wide">
             <div class="node-type-detail-list__header">
@@ -2332,7 +2335,10 @@ fn NodeTypeScopedFormsList(forms: Vec<NodeTypeFormLink>) -> impl IntoView {
                         type="search"
                         placeholder="Search forms"
                         prop:value=move || search.get()
-                        on:input=move |event| search.set(event_target_value(&event))
+                        on:input=move |event| {
+                            search.set(event_target_value(&event));
+                            page_index.set(0);
+                        }
                     />
                 </label>
             </div>
@@ -2342,12 +2348,17 @@ fn NodeTypeScopedFormsList(forms: Vec<NodeTypeFormLink>) -> impl IntoView {
                 view! {
                     <div class="capability-list node-type-scoped-forms-list">
                         {move || {
-                            let visible_forms = filtered_forms();
+                            let visible_forms = filtered_forms.get();
                             if visible_forms.is_empty() {
                                 view! { <div class="capability-list__item">"No scoped forms match this search."</div> }.into_any()
                             } else {
+                                let total_count = visible_forms.len();
+                                let start = pagination_page_start(total_count, page_size.get(), page_index.get());
                                 visible_forms
-                                    .into_iter()
+                                    .iter()
+                                    .skip(start)
+                                    .take(page_size.get())
+                                    .cloned()
                                     .map(|form| view! {
                                         <div class="capability-list__item">
                                             <strong>{form.form_name}</strong>
@@ -2359,6 +2370,13 @@ fn NodeTypeScopedFormsList(forms: Vec<NodeTypeFormLink>) -> impl IntoView {
                             }
                         }}
                     </div>
+                    <RelatedWorkPaginationFooter
+                        aria_label="Scoped forms list pagination"
+                        label="scoped forms"
+                        total_count=total_count
+                        page_size=page_size
+                        page_index=page_index
+                    />
                 }
                 .into_any()
             }}
