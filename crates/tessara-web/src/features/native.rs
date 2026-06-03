@@ -14382,6 +14382,9 @@ pub fn WorkflowsDetailPage() -> impl IntoView {
 
 #[component]
 fn WorkflowDetailContent(workflow: WorkflowDefinition) -> impl IntoView {
+    let steps_expanded = RwSignal::new(false);
+    let revisions_expanded = RwSignal::new(false);
+    let assignments_expanded = RwSignal::new(false);
     let active_version = active_workflow_definition_version(&workflow).cloned();
     let active_status = active_version
         .as_ref()
@@ -14393,9 +14396,11 @@ fn WorkflowDetailContent(workflow: WorkflowDefinition) -> impl IntoView {
         .as_ref()
         .map(|version| version.step_count.to_string())
         .unwrap_or_else(|| "-".to_string());
+    let steps_toggle_count = active_step_count.clone();
     let published_at = active_version
         .as_ref()
         .and_then(|version| version.published_at.clone());
+    let workflow_id = workflow.id.clone();
     let workflow_name = workflow.name.clone();
     let workflow_slug = workflow.slug.clone();
     let workflow_description = nonempty_text(Some(workflow.description.as_str()), "No description");
@@ -14405,6 +14410,8 @@ fn WorkflowDetailContent(workflow: WorkflowDefinition) -> impl IntoView {
         .to_string();
     let revision_count = workflow.versions.len().to_string();
     let assignment_count = workflow.assignments.len().to_string();
+    let revisions_toggle_count = revision_count.clone();
+    let assignments_toggle_count = assignment_count.clone();
     let steps = active_version
         .as_ref()
         .map(|version| version.steps.clone())
@@ -14476,19 +14483,85 @@ fn WorkflowDetailContent(workflow: WorkflowDefinition) -> impl IntoView {
                     </InfoListTable>
                 </section>
 
-                <section class="organization-detail-card organization-detail-card--wide">
-                    <h3>"Steps"</h3>
-                    <WorkflowStepsTable steps/>
+                <section class="organization-detail-card organization-detail-card--wide form-detail-fields-card">
+                    <header class="form-detail-disclosure-header">
+                        <h3>"Steps"</h3>
+                        <button
+                            class="link-button form-detail-disclosure-toggle"
+                            type="button"
+                            aria-expanded=move || steps_expanded.get().to_string()
+                            on:click=move |_| steps_expanded.update(|expanded| *expanded = !*expanded)
+                        >
+                            {move || {
+                                if steps_expanded.get() {
+                                    "Hide Steps".to_string()
+                                } else {
+                                    format!("Show {steps_toggle_count} Steps")
+                                }
+                            }}
+                        </button>
+                    </header>
+                    {move || {
+                        if steps_expanded.get() {
+                            view! { <WorkflowStepsTable steps=steps.clone()/> }.into_any()
+                        } else {
+                            view! {}.into_any()
+                        }
+                    }}
                 </section>
 
-                <section class="organization-detail-card organization-detail-card--wide">
-                    <h3>"Revisions"</h3>
-                    <WorkflowVersionsTable workflow_id=workflow.id.clone() versions/>
+                <section class="organization-detail-card organization-detail-card--wide form-detail-fields-card">
+                    <header class="form-detail-disclosure-header">
+                        <h3>"Revisions"</h3>
+                        <button
+                            class="link-button form-detail-disclosure-toggle"
+                            type="button"
+                            aria-expanded=move || revisions_expanded.get().to_string()
+                            on:click=move |_| revisions_expanded.update(|expanded| *expanded = !*expanded)
+                        >
+                            {move || {
+                                if revisions_expanded.get() {
+                                    "Hide Revisions".to_string()
+                                } else {
+                                    format!("Show {revisions_toggle_count} Revisions")
+                                }
+                            }}
+                        </button>
+                    </header>
+                    {move || {
+                        if revisions_expanded.get() {
+                            view! { <WorkflowVersionsTable workflow_id=workflow_id.clone() versions=versions.clone()/> }.into_any()
+                        } else {
+                            view! {}.into_any()
+                        }
+                    }}
                 </section>
 
-                <section class="organization-detail-card organization-detail-card--wide workflow-detail-assignments-card">
-                    <h3>"Assignments"</h3>
-                    <WorkflowDetailAssignmentsTable assignments/>
+                <section class="organization-detail-card organization-detail-card--wide form-detail-fields-card workflow-detail-assignments-card">
+                    <header class="form-detail-disclosure-header">
+                        <h3>"Assignments"</h3>
+                        <button
+                            class="link-button form-detail-disclosure-toggle"
+                            type="button"
+                            aria-expanded=move || assignments_expanded.get().to_string()
+                            on:click=move |_| assignments_expanded.update(|expanded| *expanded = !*expanded)
+                        >
+                            {move || {
+                                if assignments_expanded.get() {
+                                    "Hide Assignments".to_string()
+                                } else {
+                                    format!("Show {assignments_toggle_count} Assignments")
+                                }
+                            }}
+                        </button>
+                    </header>
+                    {move || {
+                        if assignments_expanded.get() {
+                            view! { <WorkflowDetailAssignmentsTable assignments=assignments.clone()/> }.into_any()
+                        } else {
+                            view! {}.into_any()
+                        }
+                    }}
                 </section>
             </div>
         </div>
