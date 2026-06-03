@@ -1841,11 +1841,12 @@ fn RelatedWorkSummary(
 #[component]
 fn RelatedFormsTable(forms: Vec<NodeFormLink>) -> impl IntoView {
     let search = RwSignal::new(String::new());
-    let forms_for_table = forms.clone();
-    let forms_for_cards = forms;
-    let filtered_forms = move || {
+    let page_size = RwSignal::new(10usize);
+    let page_index = RwSignal::new(0usize);
+    let forms_for_filter = forms;
+    let filtered_forms = Memo::new(move |_| {
         let query = search.get();
-        forms_for_table
+        forms_for_filter
             .iter()
             .filter(|form| {
                 text_matches(
@@ -1859,24 +1860,7 @@ fn RelatedFormsTable(forms: Vec<NodeFormLink>) -> impl IntoView {
             })
             .cloned()
             .collect::<Vec<_>>()
-    };
-    let filtered_form_cards = move || {
-        let query = search.get();
-        forms_for_cards
-            .iter()
-            .filter(|form| {
-                text_matches(
-                    &query,
-                    &[
-                        &form.form_name,
-                        &form.form_slug,
-                        form.active_version_label.as_deref().unwrap_or(""),
-                    ],
-                )
-            })
-            .cloned()
-            .collect::<Vec<_>>()
-    };
+    });
 
     view! {
         <div class="related-work-responsive-table">
@@ -1890,7 +1874,7 @@ fn RelatedFormsTable(forms: Vec<NodeFormLink>) -> impl IntoView {
                 </thead>
                 <tbody>
                     {move || {
-                        let rows = filtered_forms();
+                        let rows = filtered_forms.get();
                         if rows.is_empty() {
                             view! {
                                 <tr>
@@ -1899,8 +1883,13 @@ fn RelatedFormsTable(forms: Vec<NodeFormLink>) -> impl IntoView {
                             }
                             .into_any()
                         } else {
+                            let total_count = rows.len();
+                            let start = pagination_page_start(total_count, page_size.get(), page_index.get());
                             rows
-                                .into_iter()
+                                .iter()
+                                .skip(start)
+                                .take(page_size.get())
+                                .cloned()
                                 .map(|form| {
                                     let href = format!("/forms/{}", form.form_id);
                                     view! {
@@ -1919,14 +1908,73 @@ fn RelatedFormsTable(forms: Vec<NodeFormLink>) -> impl IntoView {
                     }}
                 </tbody>
             </SearchableDataTable>
+            <div class="directory-table-pagination" aria-label="Related forms table pagination">
+                <p>{move || related_work_page_summary(filtered_forms.get().len(), page_size.get(), page_index.get(), "related forms")}</p>
+                <div class="directory-table-pagination__actions">
+                    <label class="directory-table-pagination__page-size searchable-data-table__filter searchable-data-table__control">
+                        <span>"Rows"</span>
+                        <select
+                            prop:value=move || page_size.get().to_string()
+                            on:change=move |event| {
+                                if let Ok(size) = event_target_value(&event).parse::<usize>() {
+                                    page_size.set(size);
+                                    page_index.set(0);
+                                }
+                            }
+                        >
+                            <option value="10">"10"</option>
+                            <option value="25">"25"</option>
+                            <option value="50">"50"</option>
+                        </select>
+                    </label>
+                    <button
+                        class="button button--compact button--secondary"
+                        type="button"
+                        disabled=move || pagination_current_page(filtered_forms.get().len(), page_size.get(), page_index.get()) == 0
+                        on:click=move |_| {
+                            page_index.update(|page| *page = page.saturating_sub(1));
+                        }
+                    >
+                        "Previous"
+                    </button>
+                    <span>{move || {
+                        let total_count = filtered_forms.get().len();
+                        format!(
+                            "Page {} of {}",
+                            pagination_current_page(total_count, page_size.get(), page_index.get()) + 1,
+                            pagination_page_count(total_count, page_size.get())
+                        )
+                    }}</span>
+                    <button
+                        class="button button--compact button--secondary"
+                        type="button"
+                        disabled=move || {
+                            let total_count = filtered_forms.get().len();
+                            pagination_current_page(total_count, page_size.get(), page_index.get()) + 1
+                                >= pagination_page_count(total_count, page_size.get())
+                        }
+                        on:click=move |_| {
+                            let last_page = pagination_page_count(filtered_forms.get().len(), page_size.get()).saturating_sub(1);
+                            page_index.update(|page| *page = (*page + 1).min(last_page));
+                        }
+                    >
+                        "Next"
+                    </button>
+                </div>
+            </div>
             <div class="related-work-mobile-cards">
                 {move || {
-                    let rows = filtered_form_cards();
+                    let rows = filtered_forms.get();
                     if rows.is_empty() {
                         view! { <p class="related-work-mobile-empty">"No Related Forms to Display"</p> }.into_any()
                     } else {
+                        let total_count = rows.len();
+                        let start = pagination_page_start(total_count, page_size.get(), page_index.get());
                         rows
-                            .into_iter()
+                            .iter()
+                            .skip(start)
+                            .take(page_size.get())
+                            .cloned()
                             .map(|form| {
                                 let href = format!("/forms/{}", form.form_id);
                                 view! {
@@ -1960,12 +2008,13 @@ fn RelatedFormsTable(forms: Vec<NodeFormLink>) -> impl IntoView {
 fn RelatedResponsesTable(responses: Vec<NodeSubmissionLink>) -> impl IntoView {
     let search = RwSignal::new(String::new());
     let status_filter = RwSignal::new("all".to_string());
-    let responses_for_table = responses.clone();
-    let responses_for_cards = responses;
-    let filtered_responses = move || {
+    let page_size = RwSignal::new(10usize);
+    let page_index = RwSignal::new(0usize);
+    let responses_for_filter = responses;
+    let filtered_responses = Memo::new(move |_| {
         let query = search.get();
         let status = status_filter.get();
-        responses_for_table
+        responses_for_filter
             .iter()
             .filter(|response| status == "all" || response.status == status)
             .filter(|response| {
@@ -1981,27 +2030,7 @@ fn RelatedResponsesTable(responses: Vec<NodeSubmissionLink>) -> impl IntoView {
             })
             .cloned()
             .collect::<Vec<_>>()
-    };
-    let filtered_response_cards = move || {
-        let query = search.get();
-        let status = status_filter.get();
-        responses_for_cards
-            .iter()
-            .filter(|response| status == "all" || response.status == status)
-            .filter(|response| {
-                text_matches(
-                    &query,
-                    &[
-                        &response.form_name,
-                        &response.version_label,
-                        &response.status,
-                        response.submitted_by.as_deref().unwrap_or("Unknown"),
-                    ],
-                )
-            })
-            .cloned()
-            .collect::<Vec<_>>()
-    };
+    });
 
     view! {
         <div class="searchable-data-table related-work-responsive-table">
@@ -2034,7 +2063,7 @@ fn RelatedResponsesTable(responses: Vec<NodeSubmissionLink>) -> impl IntoView {
                 </thead>
                 <tbody>
                     {move || {
-                        let rows = filtered_responses();
+                        let rows = filtered_responses.get();
                         if rows.is_empty() {
                             view! {
                                 <tr>
@@ -2043,8 +2072,13 @@ fn RelatedResponsesTable(responses: Vec<NodeSubmissionLink>) -> impl IntoView {
                             }
                             .into_any()
                         } else {
+                            let total_count = rows.len();
+                            let start = pagination_page_start(total_count, page_size.get(), page_index.get());
                             rows
-                                .into_iter()
+                                .iter()
+                                .skip(start)
+                                .take(page_size.get())
+                                .cloned()
                                 .map(|response| {
                                     let href = format!("/responses/{}", response.submission_id);
                                     let submitted_date = response
@@ -2069,14 +2103,73 @@ fn RelatedResponsesTable(responses: Vec<NodeSubmissionLink>) -> impl IntoView {
                     }}
                 </tbody>
             </DataTable>
+            <div class="directory-table-pagination" aria-label="Related responses table pagination">
+                <p>{move || related_work_page_summary(filtered_responses.get().len(), page_size.get(), page_index.get(), "related responses")}</p>
+                <div class="directory-table-pagination__actions">
+                    <label class="directory-table-pagination__page-size searchable-data-table__filter searchable-data-table__control">
+                        <span>"Rows"</span>
+                        <select
+                            prop:value=move || page_size.get().to_string()
+                            on:change=move |event| {
+                                if let Ok(size) = event_target_value(&event).parse::<usize>() {
+                                    page_size.set(size);
+                                    page_index.set(0);
+                                }
+                            }
+                        >
+                            <option value="10">"10"</option>
+                            <option value="25">"25"</option>
+                            <option value="50">"50"</option>
+                        </select>
+                    </label>
+                    <button
+                        class="button button--compact button--secondary"
+                        type="button"
+                        disabled=move || pagination_current_page(filtered_responses.get().len(), page_size.get(), page_index.get()) == 0
+                        on:click=move |_| {
+                            page_index.update(|page| *page = page.saturating_sub(1));
+                        }
+                    >
+                        "Previous"
+                    </button>
+                    <span>{move || {
+                        let total_count = filtered_responses.get().len();
+                        format!(
+                            "Page {} of {}",
+                            pagination_current_page(total_count, page_size.get(), page_index.get()) + 1,
+                            pagination_page_count(total_count, page_size.get())
+                        )
+                    }}</span>
+                    <button
+                        class="button button--compact button--secondary"
+                        type="button"
+                        disabled=move || {
+                            let total_count = filtered_responses.get().len();
+                            pagination_current_page(total_count, page_size.get(), page_index.get()) + 1
+                                >= pagination_page_count(total_count, page_size.get())
+                        }
+                        on:click=move |_| {
+                            let last_page = pagination_page_count(filtered_responses.get().len(), page_size.get()).saturating_sub(1);
+                            page_index.update(|page| *page = (*page + 1).min(last_page));
+                        }
+                    >
+                        "Next"
+                    </button>
+                </div>
+            </div>
             <div class="related-work-mobile-cards">
                 {move || {
-                    let rows = filtered_response_cards();
+                    let rows = filtered_responses.get();
                     if rows.is_empty() {
                         view! { <p class="related-work-mobile-empty">"No Related Responses to Display"</p> }.into_any()
                     } else {
+                        let total_count = rows.len();
+                        let start = pagination_page_start(total_count, page_size.get(), page_index.get());
                         rows
-                            .into_iter()
+                            .iter()
+                            .skip(start)
+                            .take(page_size.get())
+                            .cloned()
                             .map(|response| {
                                 let href = format!("/responses/{}", response.submission_id);
                                 let submitted_date = response
@@ -2224,6 +2317,112 @@ fn filter_option_class(current: &str, value: &str) -> &'static str {
 }
 
 #[component]
+fn RelatedWorkPaginationFooter(
+    aria_label: &'static str,
+    label: &'static str,
+    total_count: Memo<usize>,
+    page_size: RwSignal<usize>,
+    page_index: RwSignal<usize>,
+) -> impl IntoView {
+    view! {
+        <div class="directory-table-pagination" aria-label=aria_label>
+            <p>{move || related_work_page_summary(total_count.get(), page_size.get(), page_index.get(), label)}</p>
+            <div class="directory-table-pagination__actions">
+                <label class="directory-table-pagination__page-size searchable-data-table__filter searchable-data-table__control">
+                    <span>"Rows"</span>
+                    <select
+                        prop:value=move || page_size.get().to_string()
+                        on:change=move |event| {
+                            if let Ok(size) = event_target_value(&event).parse::<usize>() {
+                                page_size.set(size);
+                                page_index.set(0);
+                            }
+                        }
+                    >
+                        <option value="10">"10"</option>
+                        <option value="25">"25"</option>
+                        <option value="50">"50"</option>
+                    </select>
+                </label>
+                <button
+                    class="button button--compact button--secondary"
+                    type="button"
+                    disabled=move || pagination_current_page(total_count.get(), page_size.get(), page_index.get()) == 0
+                    on:click=move |_| {
+                        page_index.update(|page| *page = page.saturating_sub(1));
+                    }
+                >
+                    "Previous"
+                </button>
+                <span>{move || {
+                    format!(
+                        "Page {} of {}",
+                        pagination_current_page(total_count.get(), page_size.get(), page_index.get()) + 1,
+                        pagination_page_count(total_count.get(), page_size.get())
+                    )
+                }}</span>
+                <button
+                    class="button button--compact button--secondary"
+                    type="button"
+                    disabled=move || {
+                        pagination_current_page(total_count.get(), page_size.get(), page_index.get()) + 1
+                            >= pagination_page_count(total_count.get(), page_size.get())
+                    }
+                    on:click=move |_| {
+                        let last_page = pagination_page_count(total_count.get(), page_size.get()).saturating_sub(1);
+                        page_index.update(|page| *page = (*page + 1).min(last_page));
+                    }
+                >
+                    "Next"
+                </button>
+            </div>
+        </div>
+    }
+}
+
+fn pagination_page_count(total_count: usize, page_size: usize) -> usize {
+    if total_count == 0 {
+        1
+    } else {
+        ((total_count + page_size - 1) / page_size).max(1)
+    }
+}
+
+fn pagination_current_page(total_count: usize, page_size: usize, page_index: usize) -> usize {
+    page_index.min(pagination_page_count(total_count, page_size) - 1)
+}
+
+fn pagination_page_start(total_count: usize, page_size: usize, page_index: usize) -> usize {
+    if total_count == 0 {
+        0
+    } else {
+        pagination_current_page(total_count, page_size, page_index) * page_size
+    }
+}
+
+fn pagination_page_end(total_count: usize, page_size: usize, page_index: usize) -> usize {
+    (pagination_page_start(total_count, page_size, page_index) + page_size).min(total_count)
+}
+
+fn related_work_page_summary(
+    total_count: usize,
+    page_size: usize,
+    page_index: usize,
+    label: &'static str,
+) -> String {
+    if total_count == 0 {
+        format!("No {label} to display")
+    } else {
+        format!(
+            "Showing {}-{} of {} {label}",
+            pagination_page_start(total_count, page_size, page_index) + 1,
+            pagination_page_end(total_count, page_size, page_index),
+            total_count
+        )
+    }
+}
+
+#[component]
 fn FilterHeader(
     label: &'static str,
     all_label: &'static str,
@@ -2367,11 +2566,12 @@ fn FilterHeader(
 #[component]
 fn RelatedDashboardsTable(dashboards: Vec<NodeDashboardLink>) -> impl IntoView {
     let search = RwSignal::new(String::new());
-    let dashboards_for_table = dashboards.clone();
-    let dashboards_for_cards = dashboards;
-    let filtered_dashboards = move || {
+    let page_size = RwSignal::new(10usize);
+    let page_index = RwSignal::new(0usize);
+    let dashboards_for_filter = dashboards;
+    let filtered_dashboards = Memo::new(move |_| {
         let query = search.get();
-        dashboards_for_table
+        dashboards_for_filter
             .iter()
             .filter(|dashboard| {
                 text_matches(
@@ -2385,24 +2585,7 @@ fn RelatedDashboardsTable(dashboards: Vec<NodeDashboardLink>) -> impl IntoView {
             })
             .cloned()
             .collect::<Vec<_>>()
-    };
-    let filtered_dashboard_cards = move || {
-        let query = search.get();
-        dashboards_for_cards
-            .iter()
-            .filter(|dashboard| {
-                text_matches(
-                    &query,
-                    &[
-                        &dashboard.dashboard_name,
-                        &dashboard.component_count.to_string(),
-                        dashboard.description.as_deref().unwrap_or("No description"),
-                    ],
-                )
-            })
-            .cloned()
-            .collect::<Vec<_>>()
-    };
+    });
 
     view! {
         <div class="related-work-responsive-table">
@@ -2416,7 +2599,7 @@ fn RelatedDashboardsTable(dashboards: Vec<NodeDashboardLink>) -> impl IntoView {
                 </thead>
                 <tbody>
                     {move || {
-                        let rows = filtered_dashboards();
+                        let rows = filtered_dashboards.get();
                         if rows.is_empty() {
                             view! {
                                 <tr>
@@ -2425,8 +2608,13 @@ fn RelatedDashboardsTable(dashboards: Vec<NodeDashboardLink>) -> impl IntoView {
                             }
                             .into_any()
                         } else {
+                            let total_count = rows.len();
+                            let start = pagination_page_start(total_count, page_size.get(), page_index.get());
                             rows
-                                .into_iter()
+                                .iter()
+                                .skip(start)
+                                .take(page_size.get())
+                                .cloned()
                                 .map(|dashboard| {
                                     let href = format!("/dashboards/{}", dashboard.dashboard_id);
                                     view! {
@@ -2445,14 +2633,73 @@ fn RelatedDashboardsTable(dashboards: Vec<NodeDashboardLink>) -> impl IntoView {
                     }}
                 </tbody>
             </SearchableDataTable>
+            <div class="directory-table-pagination" aria-label="Related dashboards table pagination">
+                <p>{move || related_work_page_summary(filtered_dashboards.get().len(), page_size.get(), page_index.get(), "related dashboards")}</p>
+                <div class="directory-table-pagination__actions">
+                    <label class="directory-table-pagination__page-size searchable-data-table__filter searchable-data-table__control">
+                        <span>"Rows"</span>
+                        <select
+                            prop:value=move || page_size.get().to_string()
+                            on:change=move |event| {
+                                if let Ok(size) = event_target_value(&event).parse::<usize>() {
+                                    page_size.set(size);
+                                    page_index.set(0);
+                                }
+                            }
+                        >
+                            <option value="10">"10"</option>
+                            <option value="25">"25"</option>
+                            <option value="50">"50"</option>
+                        </select>
+                    </label>
+                    <button
+                        class="button button--compact button--secondary"
+                        type="button"
+                        disabled=move || pagination_current_page(filtered_dashboards.get().len(), page_size.get(), page_index.get()) == 0
+                        on:click=move |_| {
+                            page_index.update(|page| *page = page.saturating_sub(1));
+                        }
+                    >
+                        "Previous"
+                    </button>
+                    <span>{move || {
+                        let total_count = filtered_dashboards.get().len();
+                        format!(
+                            "Page {} of {}",
+                            pagination_current_page(total_count, page_size.get(), page_index.get()) + 1,
+                            pagination_page_count(total_count, page_size.get())
+                        )
+                    }}</span>
+                    <button
+                        class="button button--compact button--secondary"
+                        type="button"
+                        disabled=move || {
+                            let total_count = filtered_dashboards.get().len();
+                            pagination_current_page(total_count, page_size.get(), page_index.get()) + 1
+                                >= pagination_page_count(total_count, page_size.get())
+                        }
+                        on:click=move |_| {
+                            let last_page = pagination_page_count(filtered_dashboards.get().len(), page_size.get()).saturating_sub(1);
+                            page_index.update(|page| *page = (*page + 1).min(last_page));
+                        }
+                    >
+                        "Next"
+                    </button>
+                </div>
+            </div>
             <div class="related-work-mobile-cards">
                 {move || {
-                    let rows = filtered_dashboard_cards();
+                    let rows = filtered_dashboards.get();
                     if rows.is_empty() {
                         view! { <p class="related-work-mobile-empty">"No Related Dashboards to Display"</p> }.into_any()
                     } else {
+                        let total_count = rows.len();
+                        let start = pagination_page_start(total_count, page_size.get(), page_index.get());
                         rows
-                            .into_iter()
+                            .iter()
+                            .skip(start)
+                            .take(page_size.get())
+                            .cloned()
                             .map(|dashboard| {
                                 let href = format!("/dashboards/{}", dashboard.dashboard_id);
                                 view! {
@@ -2605,6 +2852,15 @@ fn form_version_sort_label(version: &FormVersionSummary) -> String {
             _ => "-".to_string(),
         }
     })
+}
+
+fn form_version_desc_sort_key(version: &FormVersionSummary) -> (i32, i32, i32, String) {
+    (
+        version.version_major.unwrap_or(-1),
+        version.version_minor.unwrap_or(-1),
+        version.version_patch.unwrap_or(-1),
+        version.published_at.clone().unwrap_or_default(),
+    )
 }
 
 fn form_status_label(version: Option<&FormVersionSummary>) -> String {
@@ -11370,13 +11626,9 @@ fn FormDetailContent(form: FormDefinition, rendered_form: Option<RenderedForm>) 
                 </section>
 
                 <section class="organization-detail-card organization-detail-card--wide">
-                    <h3>"Attached To"</h3>
-                    <FormAttachedNodesDetail nodes=attached_nodes/>
-                </section>
-
-                <section class="organization-detail-card organization-detail-card--wide">
                     <h3>"Related Work"</h3>
                     <FormRelatedLinks
+                        attached_nodes=attached_nodes
                         workflows=workflows
                         reports=reports
                         dataset_sources=dataset_sources
@@ -11388,34 +11640,122 @@ fn FormDetailContent(form: FormDefinition, rendered_form: Option<RenderedForm>) 
 }
 
 #[component]
-fn FormAttachedNodesDetail(nodes: Vec<FormAttachmentLink>) -> impl IntoView {
+fn FormAttachedNodesRelatedTable(nodes: Vec<FormAttachmentLink>) -> impl IntoView {
+    let search = RwSignal::new(String::new());
+    let page_size = RwSignal::new(10usize);
+    let page_index = RwSignal::new(0usize);
+    let nodes_for_filter = nodes;
+    let filtered_nodes = Memo::new(move |_| {
+        let query = search.get();
+        nodes_for_filter
+            .iter()
+            .filter(|node| text_matches(&query, &[&node.label, &node.title]))
+            .cloned()
+            .collect::<Vec<_>>()
+    });
+    let total_count = Memo::new(move |_| filtered_nodes.get().len());
+
     view! {
-        <div class="form-detail-attached-list">
-            {if nodes.is_empty() {
-                view! { <p class="related-work-mobile-empty">"No Attached Nodes to Display"</p> }.into_any()
-            } else {
-                nodes
-                    .into_iter()
-                    .map(|node| {
-                        let title = node.title.clone();
-                        view! {
-                            <a class="forms-attached-sheet__item" href=node.href title=title>
-                                <span>{node.label}</span>
-                                <small>{node.title}</small>
-                            </a>
+        <div class="related-work-responsive-table">
+            <SearchableDataTable search_label="Search attached nodes" placeholder="Search attached nodes" search>
+                <thead>
+                    <tr>
+                        <th scope="col">"Node"</th>
+                        <th scope="col">"Context"</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {move || {
+                        let rows = filtered_nodes.get();
+                        if rows.is_empty() {
+                            view! {
+                                <tr>
+                                    <td class="data-table__empty" colspan="2">"No Attached Nodes to Display"</td>
+                                </tr>
+                            }
+                            .into_any()
+                        } else {
+                            let total_count = rows.len();
+                            let start = pagination_page_start(total_count, page_size.get(), page_index.get());
+                            rows
+                                .iter()
+                                .skip(start)
+                                .take(page_size.get())
+                                .cloned()
+                                .map(|node| {
+                                    let title = node.title.clone();
+                                    view! {
+                                        <tr>
+                                            <th scope="row">
+                                                <a class="data-table__primary-link" href=node.href title=title>{node.label}</a>
+                                            </th>
+                                            <td>{node.title}</td>
+                                        </tr>
+                                    }
+                                })
+                                .collect_view()
+                                .into_any()
                         }
-                    })
-                    .collect_view()
-                    .into_any()
-            }}
+                    }}
+                </tbody>
+            </SearchableDataTable>
+            <RelatedWorkPaginationFooter
+                aria_label="Attached nodes table pagination"
+                label="attached nodes"
+                total_count=total_count
+                page_size=page_size
+                page_index=page_index
+            />
+            <div class="related-work-mobile-cards">
+                {move || {
+                    let rows = filtered_nodes.get();
+                    if rows.is_empty() {
+                        view! { <p class="related-work-mobile-empty">"No Attached Nodes to Display"</p> }.into_any()
+                    } else {
+                        let total_count = rows.len();
+                        let start = pagination_page_start(total_count, page_size.get(), page_index.get());
+                        rows
+                            .iter()
+                            .skip(start)
+                            .take(page_size.get())
+                            .cloned()
+                            .map(|node| {
+                                let title = node.title.clone();
+                                view! {
+                                    <article class="related-work-mobile-card">
+                                        <div class="related-work-mobile-card__header">
+                                            <h4><a href=node.href title=title>{node.label}</a></h4>
+                                        </div>
+                                        <dl>
+                                            <div>
+                                                <dt>"Context"</dt>
+                                                <dd>{node.title}</dd>
+                                            </div>
+                                        </dl>
+                                    </article>
+                                }
+                            })
+                            .collect_view()
+                            .into_any()
+                    }
+                }}
+            </div>
         </div>
     }
 }
 
 #[component]
 fn FormVersionsTable(versions: Vec<FormVersionSummary>) -> impl IntoView {
-    let table_versions = versions.clone();
-    let card_versions = versions;
+    const DEFAULT_VISIBLE_FORM_VERSIONS: usize = 5;
+
+    let visible_count = RwSignal::new(DEFAULT_VISIBLE_FORM_VERSIONS);
+    let mut sorted_versions = versions;
+    sorted_versions.sort_by(|left, right| {
+        form_version_desc_sort_key(right).cmp(&form_version_desc_sort_key(left))
+    });
+    let table_versions = sorted_versions.clone();
+    let card_versions = sorted_versions.clone();
+    let version_count = sorted_versions.len();
 
     view! {
         <div class="forms-list-responsive-table">
@@ -11439,7 +11779,9 @@ fn FormVersionsTable(versions: Vec<FormVersionSummary>) -> impl IntoView {
                         .into_any()
                     } else {
                         table_versions
-                            .into_iter()
+                            .iter()
+                            .take(visible_count.get())
+                            .cloned()
                             .map(|version| {
                                 let status = version.status.clone();
                                 let published_at = version.published_at.clone();
@@ -11467,7 +11809,9 @@ fn FormVersionsTable(versions: Vec<FormVersionSummary>) -> impl IntoView {
                     view! { <p class="forms-list-mobile-empty">"No Versions to Display"</p> }.into_any()
                 } else {
                     card_versions
-                        .into_iter()
+                        .iter()
+                        .take(visible_count.get())
+                        .cloned()
                         .map(|version| {
                             let status = version.status.clone();
                             let published_at = version.published_at.clone();
@@ -11505,6 +11849,27 @@ fn FormVersionsTable(versions: Vec<FormVersionSummary>) -> impl IntoView {
                         .into_any()
                 }}
             </div>
+            {move || {
+                if version_count > visible_count.get() {
+                    let remaining = version_count.saturating_sub(visible_count.get());
+                    view! {
+                        <button
+                            class="button button--compact button--secondary form-versions-load-more"
+                            type="button"
+                            on:click=move |_| {
+                                visible_count.update(|count| {
+                                    *count = (*count + DEFAULT_VISIBLE_FORM_VERSIONS).min(version_count);
+                                });
+                            }
+                        >
+                            {format!("Load More ({remaining} older)")}
+                        </button>
+                    }
+                    .into_any()
+                } else {
+                    view! {}.into_any()
+                }
+            }}
         </div>
     }
 }
@@ -11592,83 +11957,403 @@ fn RenderedFormSections(rendered_form: Option<RenderedForm>) -> impl IntoView {
 
 #[component]
 fn FormRelatedLinks(
+    attached_nodes: Vec<FormAttachmentLink>,
     workflows: Vec<FormWorkflowLink>,
     reports: Vec<FormReportLink>,
     dataset_sources: Vec<FormDatasetSourceLink>,
 ) -> impl IntoView {
+    let active_tab = RwSignal::new("attached".to_string());
+    let attached_count = attached_nodes.len();
+    let workflows_count = workflows.len();
+    let reports_count = reports.len();
+    let dataset_sources_count = dataset_sources.len();
+
     view! {
-        <div class="related-work-summary related-work-summary--cards-only form-detail-related">
-            <section class="related-work-summary__group">
-                <h4>{format!("Workflows ({})", workflows.len())}</h4>
-                {if workflows.is_empty() {
-                    view! { <p class="related-work-mobile-empty">"No Related Workflows to Display"</p> }.into_any()
-                } else {
-                    workflows
-                        .into_iter()
-                        .map(|workflow| {
-                            let href = format!("/workflows/{}", workflow.id);
-                            let status = workflow.current_status.clone().unwrap_or_else(|| "none".to_string());
-                            let workflow_source = workflow.source.clone();
+        <div class="related-work-summary form-detail-related">
+            <Tabs active=active_tab>
+                <TabsList>
+                    <TabsTrigger active=active_tab value="attached">
+                        {format!("Attached To ({attached_count})")}
+                    </TabsTrigger>
+                    <TabsTrigger active=active_tab value="workflows">
+                        {format!("Workflows ({workflows_count})")}
+                    </TabsTrigger>
+                    <TabsTrigger active=active_tab value="reports">
+                        {format!("Reports ({reports_count})")}
+                    </TabsTrigger>
+                    <TabsTrigger active=active_tab value="dataset-sources">
+                        {format!("Dataset Sources ({dataset_sources_count})")}
+                    </TabsTrigger>
+                </TabsList>
+                <TabsContent active=active_tab value="attached">
+                    <FormAttachedNodesRelatedTable nodes=attached_nodes/>
+                </TabsContent>
+                <TabsContent active=active_tab value="workflows">
+                    <FormRelatedWorkflowsTable workflows=workflows/>
+                </TabsContent>
+                <TabsContent active=active_tab value="reports">
+                    <FormRelatedReportsTable reports=reports/>
+                </TabsContent>
+                <TabsContent active=active_tab value="dataset-sources">
+                    <FormRelatedDatasetSourcesTable dataset_sources=dataset_sources/>
+                </TabsContent>
+            </Tabs>
+        </div>
+    }
+}
+
+#[component]
+fn FormRelatedWorkflowsTable(workflows: Vec<FormWorkflowLink>) -> impl IntoView {
+    let search = RwSignal::new(String::new());
+    let page_size = RwSignal::new(10usize);
+    let page_index = RwSignal::new(0usize);
+    let workflows_for_filter = workflows;
+    let filtered_workflows = Memo::new(move |_| {
+        let query = search.get();
+        workflows_for_filter
+            .iter()
+            .filter(|workflow| {
+                text_matches(
+                    &query,
+                    &[
+                        &workflow.name,
+                        &workflow.slug,
+                        workflow
+                            .current_version_label
+                            .as_deref()
+                            .unwrap_or_default(),
+                        workflow.current_status.as_deref().unwrap_or_default(),
+                    ],
+                )
+            })
+            .cloned()
+            .collect::<Vec<_>>()
+    });
+    let total_count = Memo::new(move |_| filtered_workflows.get().len());
+
+    view! {
+        <div class="related-work-responsive-table">
+            <SearchableDataTable search_label="Search workflows" placeholder="Search related workflows" search>
+                <thead>
+                    <tr>
+                        <th scope="col">"Workflow"</th>
+                        <th scope="col">"Revision"</th>
+                        <th scope="col">"Status"</th>
+                        <th class="data-table__cell--center" scope="col">"Assignments"</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {move || {
+                        let rows = filtered_workflows.get();
+                        if rows.is_empty() {
                             view! {
-                                <a class="related-work-card" href=href>
-                                    <span>
-                                        <strong>
-                                            {workflow.name}
-                                            <WorkflowSourceMarker source=workflow_source/>
-                                        </strong>
-                                        <small>{workflow.slug}</small>
-                                    </span>
-                                    <span class="related-work-card__meta">{workflow_revision_label_from_option(workflow.current_version_label)}</span>
-                                    <span class=status_badge_class(&status)>{sentence_label(&status)}</span>
-                                </a>
+                                <tr>
+                                    <td class="data-table__empty" colspan="4">"No Related Workflows to Display"</td>
+                                </tr>
                             }
-                        })
-                        .collect_view()
-                        .into_any()
+                            .into_any()
+                        } else {
+                            let total_count = rows.len();
+                            let start = pagination_page_start(total_count, page_size.get(), page_index.get());
+                            rows
+                                .iter()
+                                .skip(start)
+                                .take(page_size.get())
+                                .cloned()
+                                .map(|workflow| {
+                                    let href = format!("/workflows/{}", workflow.id);
+                                    let status = workflow.current_status.clone().unwrap_or_else(|| "none".to_string());
+                                    let workflow_source = workflow.source.clone();
+                                    view! {
+                                        <tr>
+                                            <th scope="row">
+                                                <a class="data-table__primary-link" href=href>{workflow.name}</a>
+                                                <WorkflowSourceMarker source=workflow_source/>
+                                                <small class="workflow-assignment-step-meta">{workflow.slug}</small>
+                                            </th>
+                                            <td>{workflow_revision_label_from_option(workflow.current_version_label)}</td>
+                                            <td><span class=status_badge_class(&status)>{sentence_label(&status)}</span></td>
+                                            <td class="data-table__cell--center">{workflow.assignment_count.to_string()}</td>
+                                        </tr>
+                                    }
+                                })
+                                .collect_view()
+                                .into_any()
+                        }
+                    }}
+                </tbody>
+            </SearchableDataTable>
+            <RelatedWorkPaginationFooter
+                aria_label="Related workflows table pagination"
+                label="related workflows"
+                total_count=total_count
+                page_size=page_size
+                page_index=page_index
+            />
+            <div class="related-work-mobile-cards">
+                {move || {
+                    let rows = filtered_workflows.get();
+                    if rows.is_empty() {
+                        view! { <p class="related-work-mobile-empty">"No Related Workflows to Display"</p> }.into_any()
+                    } else {
+                        let total_count = rows.len();
+                        let start = pagination_page_start(total_count, page_size.get(), page_index.get());
+                        rows
+                            .iter()
+                            .skip(start)
+                            .take(page_size.get())
+                            .cloned()
+                            .map(|workflow| {
+                                let href = format!("/workflows/{}", workflow.id);
+                                let status = workflow.current_status.clone().unwrap_or_else(|| "none".to_string());
+                                let workflow_source = workflow.source.clone();
+                                view! {
+                                    <article class="related-work-mobile-card">
+                                        <div class="related-work-mobile-card__header">
+                                            <h4>
+                                                <a href=href>{workflow.name}</a>
+                                                <WorkflowSourceMarker source=workflow_source/>
+                                            </h4>
+                                        </div>
+                                        <dl>
+                                            <div>
+                                                <dt>"Slug"</dt>
+                                                <dd>{workflow.slug}</dd>
+                                            </div>
+                                            <div>
+                                                <dt>"Revision"</dt>
+                                                <dd>{workflow_revision_label_from_option(workflow.current_version_label)}</dd>
+                                            </div>
+                                            <div>
+                                                <dt>"Status"</dt>
+                                                <dd><span class=status_badge_class(&status)>{sentence_label(&status)}</span></dd>
+                                            </div>
+                                            <div>
+                                                <dt>"Assignments"</dt>
+                                                <dd>{workflow.assignment_count.to_string()}</dd>
+                                            </div>
+                                        </dl>
+                                    </article>
+                                }
+                            })
+                            .collect_view()
+                            .into_any()
+                    }
                 }}
-            </section>
-            <section class="related-work-summary__group">
-                <h4>{format!("Reports ({})", reports.len())}</h4>
-                {if reports.is_empty() {
-                    view! { <p class="related-work-mobile-empty">"No Related Reports to Display"</p> }.into_any()
-                } else {
-                    reports
-                        .into_iter()
-                        .map(|report| {
+            </div>
+        </div>
+    }
+}
+
+#[component]
+fn FormRelatedReportsTable(reports: Vec<FormReportLink>) -> impl IntoView {
+    let search = RwSignal::new(String::new());
+    let page_size = RwSignal::new(10usize);
+    let page_index = RwSignal::new(0usize);
+    let reports_for_filter = reports;
+    let filtered_reports = Memo::new(move |_| {
+        let query = search.get();
+        reports_for_filter
+            .iter()
+            .filter(|report| text_matches(&query, &[&report.name]))
+            .cloned()
+            .collect::<Vec<_>>()
+    });
+    let total_count = Memo::new(move |_| filtered_reports.get().len());
+
+    view! {
+        <div class="related-work-responsive-table">
+            <SearchableDataTable search_label="Search reports" placeholder="Search related reports" search>
+                <thead>
+                    <tr>
+                        <th scope="col">"Report"</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {move || {
+                        let rows = filtered_reports.get();
+                        if rows.is_empty() {
                             view! {
-                                <a class="related-work-card" href=format!("/reports/{}", report.id)>
-                                    <span>
-                                        <strong>{report.name}</strong>
-                                    </span>
-                                </a>
+                                <tr>
+                                    <td class="data-table__empty">"No Related Reports to Display"</td>
+                                </tr>
                             }
-                        })
-                        .collect_view()
-                        .into_any()
+                            .into_any()
+                        } else {
+                            let total_count = rows.len();
+                            let start = pagination_page_start(total_count, page_size.get(), page_index.get());
+                            rows
+                                .iter()
+                                .skip(start)
+                                .take(page_size.get())
+                                .cloned()
+                                .map(|report| {
+                                    view! {
+                                        <tr>
+                                            <th scope="row">
+                                                <a class="data-table__primary-link" href=format!("/reports/{}", report.id)>{report.name}</a>
+                                            </th>
+                                        </tr>
+                                    }
+                                })
+                                .collect_view()
+                                .into_any()
+                        }
+                    }}
+                </tbody>
+            </SearchableDataTable>
+            <RelatedWorkPaginationFooter
+                aria_label="Related reports table pagination"
+                label="related reports"
+                total_count=total_count
+                page_size=page_size
+                page_index=page_index
+            />
+            <div class="related-work-mobile-cards">
+                {move || {
+                    let rows = filtered_reports.get();
+                    if rows.is_empty() {
+                        view! { <p class="related-work-mobile-empty">"No Related Reports to Display"</p> }.into_any()
+                    } else {
+                        let total_count = rows.len();
+                        let start = pagination_page_start(total_count, page_size.get(), page_index.get());
+                        rows
+                            .iter()
+                            .skip(start)
+                            .take(page_size.get())
+                            .cloned()
+                            .map(|report| {
+                                view! {
+                                    <article class="related-work-mobile-card">
+                                        <div class="related-work-mobile-card__header">
+                                            <h4><a href=format!("/reports/{}", report.id)>{report.name}</a></h4>
+                                        </div>
+                                    </article>
+                                }
+                            })
+                            .collect_view()
+                            .into_any()
+                    }
                 }}
-            </section>
-            <section class="related-work-summary__group">
-                <h4>{format!("Dataset Sources ({})", dataset_sources.len())}</h4>
-                {if dataset_sources.is_empty() {
-                    view! { <p class="related-work-mobile-empty">"No Related Dataset Sources to Display"</p> }.into_any()
-                } else {
-                    dataset_sources
-                        .into_iter()
-                        .map(|source| {
+            </div>
+        </div>
+    }
+}
+
+#[component]
+fn FormRelatedDatasetSourcesTable(dataset_sources: Vec<FormDatasetSourceLink>) -> impl IntoView {
+    let search = RwSignal::new(String::new());
+    let page_size = RwSignal::new(10usize);
+    let page_index = RwSignal::new(0usize);
+    let sources_for_filter = dataset_sources;
+    let filtered_sources = Memo::new(move |_| {
+        let query = search.get();
+        sources_for_filter
+            .iter()
+            .filter(|source| {
+                text_matches(
+                    &query,
+                    &[
+                        &source.dataset_name,
+                        &source.source_alias,
+                        &source.selection_rule,
+                    ],
+                )
+            })
+            .cloned()
+            .collect::<Vec<_>>()
+    });
+    let total_count = Memo::new(move |_| filtered_sources.get().len());
+
+    view! {
+        <div class="related-work-responsive-table">
+            <SearchableDataTable search_label="Search dataset sources" placeholder="Search related dataset sources" search>
+                <thead>
+                    <tr>
+                        <th scope="col">"Dataset"</th>
+                        <th scope="col">"Alias"</th>
+                        <th scope="col">"Selection rule"</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {move || {
+                        let rows = filtered_sources.get();
+                        if rows.is_empty() {
                             view! {
-                                <a class="related-work-card" href=format!("/datasets/{}", source.dataset_id)>
-                                    <span>
-                                        <strong>{source.dataset_name}</strong>
-                                        <small>{source.source_alias}</small>
-                                    </span>
-                                    <span class="related-work-card__meta">{sentence_label(&source.selection_rule)}</span>
-                                </a>
+                                <tr>
+                                    <td class="data-table__empty" colspan="3">"No Related Dataset Sources to Display"</td>
+                                </tr>
                             }
-                        })
-                        .collect_view()
-                        .into_any()
+                            .into_any()
+                        } else {
+                            let total_count = rows.len();
+                            let start = pagination_page_start(total_count, page_size.get(), page_index.get());
+                            rows
+                                .iter()
+                                .skip(start)
+                                .take(page_size.get())
+                                .cloned()
+                                .map(|source| {
+                                    view! {
+                                        <tr>
+                                            <th scope="row">
+                                                <a class="data-table__primary-link" href=format!("/datasets/{}", source.dataset_id)>{source.dataset_name}</a>
+                                            </th>
+                                            <td>{source.source_alias}</td>
+                                            <td>{sentence_label(&source.selection_rule)}</td>
+                                        </tr>
+                                    }
+                                })
+                                .collect_view()
+                                .into_any()
+                        }
+                    }}
+                </tbody>
+            </SearchableDataTable>
+            <RelatedWorkPaginationFooter
+                aria_label="Related dataset sources table pagination"
+                label="related dataset sources"
+                total_count=total_count
+                page_size=page_size
+                page_index=page_index
+            />
+            <div class="related-work-mobile-cards">
+                {move || {
+                    let rows = filtered_sources.get();
+                    if rows.is_empty() {
+                        view! { <p class="related-work-mobile-empty">"No Related Dataset Sources to Display"</p> }.into_any()
+                    } else {
+                        let total_count = rows.len();
+                        let start = pagination_page_start(total_count, page_size.get(), page_index.get());
+                        rows
+                            .iter()
+                            .skip(start)
+                            .take(page_size.get())
+                            .cloned()
+                            .map(|source| {
+                                view! {
+                                    <article class="related-work-mobile-card">
+                                        <div class="related-work-mobile-card__header">
+                                            <h4><a href=format!("/datasets/{}", source.dataset_id)>{source.dataset_name}</a></h4>
+                                        </div>
+                                        <dl>
+                                            <div>
+                                                <dt>"Alias"</dt>
+                                                <dd>{source.source_alias}</dd>
+                                            </div>
+                                            <div>
+                                                <dt>"Selection rule"</dt>
+                                                <dd>{sentence_label(&source.selection_rule)}</dd>
+                                            </div>
+                                        </dl>
+                                    </article>
+                                }
+                            })
+                            .collect_view()
+                            .into_any()
+                    }
                 }}
-            </section>
+            </div>
         </div>
     }
 }

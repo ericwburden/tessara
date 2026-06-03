@@ -1048,6 +1048,11 @@ input {
   text-align: center;
 }
 
+.form-versions-load-more {
+  justify-self: start;
+  margin-top: 0.85rem;
+}
+
 .forms-attached-list {
   display: grid;
   gap: 0.3rem;
