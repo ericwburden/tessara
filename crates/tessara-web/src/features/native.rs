@@ -3368,6 +3368,13 @@ fn rendered_field_type_label(field_type: &str) -> String {
     }
 }
 
+fn rendered_field_layout_label(field: &RenderedField) -> String {
+    format!(
+        "Row {}, Column {} · {} wide × {} tall",
+        field.grid_row, field.grid_column, field.grid_width, field.grid_height
+    )
+}
+
 fn form_node_filter_options(forms: &[FormSummary]) -> Vec<FormNodeFilterOption> {
     let mut options_by_id = BTreeMap::<String, FormNodeFilterOption>::new();
 
@@ -11542,6 +11549,7 @@ pub fn FormsDetailPage() -> impl IntoView {
 
 #[component]
 fn FormDetailContent(form: FormDefinition, rendered_form: Option<RenderedForm>) -> impl IntoView {
+    let fields_expanded = RwSignal::new(false);
     let active_version = active_form_definition_version(&form).cloned();
     let attached_nodes = form_attached_nodes(active_version.as_ref());
     let active_status = active_version
@@ -11551,6 +11559,7 @@ fn FormDetailContent(form: FormDefinition, rendered_form: Option<RenderedForm>) 
     let active_version_label = form_version_label(active_version.as_ref());
     let active_status_label = form_status_label(active_version.as_ref());
     let active_field_count = form_field_count_label(active_version.as_ref());
+    let fields_toggle_count = active_field_count.clone();
     let published_at = active_version
         .as_ref()
         .and_then(|version| version.published_at.clone());
@@ -11615,9 +11624,31 @@ fn FormDetailContent(form: FormDefinition, rendered_form: Option<RenderedForm>) 
                     </InfoListTable>
                 </section>
 
-                <section class="organization-detail-card organization-detail-card--wide">
-                    <h3>"Fields"</h3>
-                    <RenderedFormSections rendered_form/>
+                <section class="organization-detail-card organization-detail-card--wide form-detail-fields-card">
+                    <header class="form-detail-disclosure-header">
+                        <h3>"Fields"</h3>
+                        <button
+                            class="link-button form-detail-disclosure-toggle"
+                            type="button"
+                            aria-expanded=move || fields_expanded.get().to_string()
+                            on:click=move |_| fields_expanded.update(|expanded| *expanded = !*expanded)
+                        >
+                            {move || {
+                                if fields_expanded.get() {
+                                    "Hide Fields".to_string()
+                                } else {
+                                    format!("Show {fields_toggle_count} Fields")
+                                }
+                            }}
+                        </button>
+                    </header>
+                    {move || {
+                        if fields_expanded.get() {
+                            view! { <RenderedFormSections rendered_form=rendered_form.clone()/> }.into_any()
+                        } else {
+                            view! {}.into_any()
+                        }
+                    }}
                 </section>
 
                 <section class="organization-detail-card organization-detail-card--wide">
@@ -11921,19 +11952,14 @@ fn RenderedFormSections(rendered_form: Option<RenderedForm>) -> impl IntoView {
                                                     .fields
                                                     .into_iter()
                                                     .map(|field| {
+                                                        let layout_label = rendered_field_layout_label(&field);
                                                         view! {
                                                             <tr>
                                                                 <th scope="row">{field.label}</th>
                                                                 <td>{field.key}</td>
                                                                 <td>{rendered_field_type_label(&field.field_type)}</td>
                                                                 <td>{if field.required { "Yes" } else { "No" }}</td>
-                                                                <td>{format!(
-                                                                    "R{} C{} · W{} H{}",
-                                                                    field.grid_row,
-                                                                    field.grid_column,
-                                                                    field.grid_width,
-                                                                    field.grid_height,
-                                                                )}</td>
+                                                                <td>{layout_label}</td>
                                                             </tr>
                                                         }
                                                     })
