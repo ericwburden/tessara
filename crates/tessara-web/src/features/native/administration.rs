@@ -2823,7 +2823,7 @@ pub fn AdministrationRolesPage() -> impl IntoView {
                         .into_any()
                     } else {
                         view! {
-                            <div class="administration-roles-layout">
+                            <div class="administration-roles-stack">
                                 <AdministrationRolesList
                                     roles=filtered_roles()
                                     search
@@ -2864,7 +2864,38 @@ fn AdministrationRolesList(
     selected_role_id: RwSignal<Option<String>>,
 ) -> impl IntoView {
     let table_roles = roles.clone();
-    let card_roles = roles;
+    let card_roles = roles.clone();
+    let page_size = RwSignal::new(10usize);
+    let page_index = RwSignal::new(0usize);
+    let total_count = roles.len();
+    let page_count = move || {
+        if total_count == 0 {
+            1
+        } else {
+            ((total_count + page_size.get() - 1) / page_size.get()).max(1)
+        }
+    };
+    let current_page = move || page_index.get().min(page_count() - 1);
+    let page_start = move || {
+        if total_count == 0 {
+            0
+        } else {
+            current_page() * page_size.get()
+        }
+    };
+    let page_end = move || (page_start() + page_size.get()).min(total_count);
+    let page_summary = move || {
+        if total_count == 0 {
+            "No roles to display".to_string()
+        } else {
+            format!(
+                "Showing {}-{} of {} roles",
+                page_start() + 1,
+                page_end(),
+                total_count
+            )
+        }
+    };
 
     view! {
         <div class="forms-list forms-list-responsive-table administration-roles-list">
@@ -2877,7 +2908,10 @@ fn AdministrationRolesList(
                             type="search"
                             placeholder="Search roles"
                             prop:value=move || search.get()
-                            on:input=move |event| search.set(event_target_value(&event))
+                            on:input=move |event| {
+                                search.set(event_target_value(&event));
+                                page_index.set(0);
+                            }
                         />
                     </label>
                 </div>
@@ -2891,93 +2925,146 @@ fn AdministrationRolesList(
                         </tr>
                     </thead>
                     <tbody>
-                        {if table_roles.is_empty() {
-                            view! {
-                                <tr>
-                                    <td class="data-table__empty" colspan="4">"No Roles to Display"</td>
-                                </tr>
-                            }
-                            .into_any()
-                        } else {
-                            table_roles
-                                .into_iter()
-                                .map(|role| {
-                                    let role_id = role.id.clone();
-                                    let role_name = role.name.clone();
-                                    view! {
-                                        <tr>
-                                            <th scope="row">
-                                                <button
-                                                    class="link-button data-table__primary-link"
-                                                    type="button"
-                                                    on:click=move |_| selected_role_id.set(Some(role_id.clone()))
-                                                >
-                                                    {role.name}
-                                                </button>
-                                            </th>
-                                            <td class="data-table__cell--center">{role.capability_count}</td>
-                                            <td class="data-table__cell--center">{role.account_count}</td>
-                                            <td class="data-table__cell--center">
-                                                <DropdownMenu label=format!("Open actions for {role_name}")>
-                                                    <button
-                                                        class="dropdown-menu__item"
-                                                        type="button"
-                                                        role="menuitem"
-                                                        on:click=move |_| selected_role_id.set(Some(role.id.clone()))
-                                                    >
-                                                        <PanelRight class="dropdown-menu__item-icon"/>
-                                                        <span>"View Details"</span>
-                                                    </button>
-                                                </DropdownMenu>
-                                            </td>
-                                        </tr>
-                                    }
-                                })
-                                .collect_view()
+                        {move || {
+                            if table_roles.is_empty() {
+                                view! {
+                                    <tr>
+                                        <td class="data-table__empty" colspan="4">"No Roles to Display"</td>
+                                    </tr>
+                                }
                                 .into_any()
+                            } else {
+                                table_roles
+                                    .iter()
+                                    .skip(page_start())
+                                    .take(page_size.get())
+                                    .cloned()
+                                    .map(|role| {
+                                        let role_id = role.id.clone();
+                                        let role_name = role.name.clone();
+                                        view! {
+                                            <tr>
+                                                <th scope="row">
+                                                    <button
+                                                        class="link-button data-table__primary-link"
+                                                        type="button"
+                                                        on:click=move |_| selected_role_id.set(Some(role_id.clone()))
+                                                    >
+                                                        {role.name}
+                                                    </button>
+                                                </th>
+                                                <td class="data-table__cell--center">{role.capability_count}</td>
+                                                <td class="data-table__cell--center">{role.account_count}</td>
+                                                <td class="data-table__cell--center">
+                                                    <DropdownMenu label=format!("Open actions for {role_name}")>
+                                                        <button
+                                                            class="dropdown-menu__item"
+                                                            type="button"
+                                                            role="menuitem"
+                                                            on:click=move |_| selected_role_id.set(Some(role.id.clone()))
+                                                        >
+                                                            <PanelRight class="dropdown-menu__item-icon"/>
+                                                            <span>"View Details"</span>
+                                                        </button>
+                                                    </DropdownMenu>
+                                                </td>
+                                            </tr>
+                                        }
+                                    })
+                                    .collect_view()
+                                    .into_any()
+                            }
                         }}
                     </tbody>
                 </DataTable>
+                <div class="directory-table-pagination" aria-label="Administration roles table pagination">
+                    <p>{move || page_summary()}</p>
+                    <div class="directory-table-pagination__actions">
+                        <label class="directory-table-pagination__page-size searchable-data-table__filter searchable-data-table__control">
+                            <span>"Rows"</span>
+                            <select
+                                prop:value=move || page_size.get().to_string()
+                                on:change=move |event| {
+                                    if let Ok(size) = event_target_value(&event).parse::<usize>() {
+                                        page_size.set(size);
+                                        page_index.set(0);
+                                    }
+                                }
+                            >
+                                <option value="10">"10"</option>
+                                <option value="25">"25"</option>
+                                <option value="50">"50"</option>
+                            </select>
+                        </label>
+                        <button
+                            class="button button--compact button--secondary"
+                            type="button"
+                            disabled=move || current_page() == 0
+                            on:click=move |_| {
+                                page_index.update(|page| *page = page.saturating_sub(1));
+                            }
+                        >
+                            "Previous"
+                        </button>
+                        <span>{move || format!("Page {} of {}", current_page() + 1, page_count())}</span>
+                        <button
+                            class="button button--compact button--secondary"
+                            type="button"
+                            disabled=move || { current_page() + 1 >= page_count() }
+                            on:click=move |_| {
+                                let last_page = page_count().saturating_sub(1);
+                                page_index.update(|page| *page = (*page + 1).min(last_page));
+                            }
+                        >
+                            "Next"
+                        </button>
+                    </div>
+                </div>
             </div>
             <div class="forms-list-mobile-cards administration-roles-mobile-cards">
-                {if card_roles.is_empty() {
-                    view! { <p class="forms-list-mobile-empty">"No Roles to Display"</p> }.into_any()
-                } else {
-                    card_roles
-                        .into_iter()
-                        .map(|role| {
-                            let role_id = role.id.clone();
-                            view! {
-                                <article class="forms-list-mobile-card administration-role-mobile-card">
-                                    <div class="forms-list-mobile-card__header">
-                                        <div>
-                                            <h3>{role.name}</h3>
+                {move || {
+                    if card_roles.is_empty() {
+                        view! { <p class="forms-list-mobile-empty">"No Roles to Display"</p> }.into_any()
+                    } else {
+                        card_roles
+                            .iter()
+                            .skip(page_start())
+                            .take(page_size.get())
+                            .cloned()
+                            .map(|role| {
+                                let role_id = role.id.clone();
+                                view! {
+                                    <article class="forms-list-mobile-card administration-role-mobile-card">
+                                        <div class="forms-list-mobile-card__header">
+                                            <div>
+                                                <h3>{role.name}</h3>
+                                            </div>
                                         </div>
-                                    </div>
-                                    <dl>
-                                        <div>
-                                            <dt>"Capabilities"</dt>
-                                            <dd>{role.capability_count}</dd>
+                                        <dl>
+                                            <div>
+                                                <dt>"Capabilities"</dt>
+                                                <dd>{role.capability_count}</dd>
+                                            </div>
+                                            <div>
+                                                <dt>"Users"</dt>
+                                                <dd>{role.account_count}</dd>
+                                            </div>
+                                        </dl>
+                                        <div class="workflow-assignment-mobile-card__actions">
+                                            <button
+                                                class="button button--compact"
+                                                type="button"
+                                                on:click=move |_| selected_role_id.set(Some(role_id.clone()))
+                                            >
+                                                "View Details"
+                                            </button>
                                         </div>
-                                        <div>
-                                            <dt>"Users"</dt>
-                                            <dd>{role.account_count}</dd>
-                                        </div>
-                                    </dl>
-                                    <div class="workflow-assignment-mobile-card__actions">
-                                        <button
-                                            class="button button--compact"
-                                            type="button"
-                                            on:click=move |_| selected_role_id.set(Some(role_id.clone()))
-                                        >
-                                            "View Details"
-                                        </button>
-                                    </div>
-                                </article>
-                            }
-                        })
-                        .collect_view()
-                        .into_any()
+                                    </article>
+                                }
+                            })
+                            .collect_view()
+                            .into_any()
+                    }
                 }}
             </div>
         </div>
@@ -3002,7 +3089,10 @@ fn AdministrationRoleDetailPanel(
         let capabilities = detail.capabilities.clone();
         let accounts = detail.assigned_accounts.clone();
         view! {
-            <section class="organization-detail-card organization-detail-card--wide administration-role-detail-card">
+            <section
+                class="organization-detail-card organization-detail-card--wide administration-role-detail-card"
+                style="margin-top: 1rem;"
+            >
                 <div class="organization-detail-card__header">
                     <h2>{detail.name}</h2>
                     <button class="button button--secondary" type="button" on:click=on_edit>
@@ -3051,17 +3141,19 @@ fn AdminRoleCapabilityList(capabilities: Vec<AdminCapabilitySummary>) -> impl In
         view! { <p class="muted">"No capabilities assigned."</p> }.into_any()
     } else {
         view! {
-            <div class="capability-list">
+            <table class="info-list-table">
+                <tbody>
                 {capabilities
                     .into_iter()
                     .map(|capability| view! {
-                        <div class="capability-list__item">
-                            <strong>{capability.key}</strong>
-                            <small>{capability.description}</small>
-                        </div>
+                        <tr>
+                            <th scope="row">{capability.key}</th>
+                            <td>{capability.description}</td>
+                        </tr>
                     })
                     .collect_view()}
-            </div>
+                </tbody>
+            </table>
         }
         .into_any()
     }
@@ -3073,17 +3165,19 @@ fn AdminRoleAssignedAccounts(accounts: Vec<AdminAccountAssignmentSummary>) -> im
         view! { <p class="muted">"No users assigned."</p> }.into_any()
     } else {
         view! {
-            <div class="capability-list">
+            <table class="info-list-table">
+                <tbody>
                 {accounts
                     .into_iter()
                     .map(|account| view! {
-                        <div class="capability-list__item">
-                            <strong>{account.display_name}</strong>
-                            <small>{account.email}</small>
-                        </div>
+                        <tr>
+                            <th scope="row">{account.display_name}</th>
+                            <td>{account.email}</td>
+                        </tr>
                     })
                     .collect_view()}
-            </div>
+                </tbody>
+            </table>
         }
         .into_any()
     }
