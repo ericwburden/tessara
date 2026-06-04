@@ -268,11 +268,9 @@ fn AdministrationUsersList(
                                         let role_names = admin_user_role_names(&user);
                                         let detail_href = format!("/administration/users/{}", user.id);
                                         let edit_href = format!("/administration/users/{}/edit", user.id);
-                                        let access_href = format!("/administration/users/{}/access", user.id);
                                         let display_name = user.display_name.clone();
                                         let detail_href_for_click = detail_href.clone();
                                         let edit_href_for_click = edit_href.clone();
-                                        let access_href_for_click = access_href.clone();
                                         view! {
                                             <tr>
                                                 <th scope="row">
@@ -313,20 +311,6 @@ fn AdministrationUsersList(
                                                         >
                                                             <Pencil class="dropdown-menu__item-icon"/>
                                                             <span>"Edit Account"</span>
-                                                        </button>
-                                                        <button
-                                                            class="dropdown-menu__item"
-                                                            type="button"
-                                                            role="menuitem"
-                                                            on:click=move |_| {
-                                                                #[cfg(feature = "hydrate")]
-                                                                navigate_to_href(&access_href_for_click);
-                                                                #[cfg(not(feature = "hydrate"))]
-                                                                let _ = &access_href_for_click;
-                                                            }
-                                                        >
-                                                            <LockKeyhole class="dropdown-menu__item-icon"/>
-                                                            <span>"Manage Permissions"</span>
                                                         </button>
                                                     </DropdownMenu>
                                                 </td>
@@ -402,7 +386,6 @@ fn AdministrationUsersList(
                                 let role_names = admin_user_role_names(&user);
                                 let detail_href = format!("/administration/users/{}", user.id);
                                 let edit_href = format!("/administration/users/{}/edit", user.id);
-                                let access_href = format!("/administration/users/{}/access", user.id);
                                 view! {
                                     <article class="forms-list-mobile-card administration-user-mobile-card">
                                         <div class="forms-list-mobile-card__header">
@@ -425,7 +408,6 @@ fn AdministrationUsersList(
                                         <div class="workflow-assignment-mobile-card__actions">
                                             <a class="button button--compact" href=detail_href>"View Details"</a>
                                             <a class="button button--compact button--secondary" href=edit_href>"Edit Account"</a>
-                                            <a class="button button--compact button--secondary" href=access_href>"Manage Permissions"</a>
                                         </div>
                                     </article>
                                 }
@@ -475,15 +457,30 @@ fn toggle_string_selection(selection: RwSignal<Vec<String>>, value: String, sele
 pub fn AdministrationUserDetailPage() -> impl IntoView {
     let params = require_route_params::<AccountRouteParams>();
     let account_id = params.account_id;
-    let detail = RwSignal::new(None::<AdminUserDetail>);
+    let detail = RwSignal::new(None::<AdminUserAccessDetail>);
+    let capability_catalog = RwSignal::new(Vec::<AdminCapabilitySummary>::new());
+    let selected_scope_node_ids = RwSignal::new(Vec::<String>::new());
+    let selected_delegate_account_ids = RwSignal::new(Vec::<String>::new());
     let is_loading = RwSignal::new(true);
+    let is_saving = RwSignal::new(false);
     let load_error = RwSignal::new(None::<String>);
+    let message = RwSignal::new(None::<String>);
 
     Effect::new({
         let account_id = account_id.clone();
         move |_| {
-            load_admin_user_detail(account_id.clone(), detail, is_loading, load_error);
+            load_admin_user_access(
+                account_id.clone(),
+                detail,
+                selected_scope_node_ids,
+                selected_delegate_account_ids,
+                is_loading,
+                load_error,
+            );
         }
+    });
+    Effect::new(move |_| {
+        load_admin_capability_catalog(capability_catalog);
     });
 
     view! {
@@ -508,7 +505,7 @@ pub fn AdministrationUserDetailPage() -> impl IntoView {
                         view! {
                             <section class="organization-state" aria-live="polite">
                                 <h3>"Loading user"</h3>
-                                <p>"Fetching user profile and effective access."</p>
+                                <p>"Fetching account permissions, scope nodes, and delegations."</p>
                             </section>
                         }
                         .into_any()
@@ -520,63 +517,111 @@ pub fn AdministrationUserDetailPage() -> impl IntoView {
                             </section>
                         }
                         .into_any()
-                    } else if let Some(user) = detail.get() {
-                        let access_href = format!("/administration/users/{}/access", user.id);
-                        let edit_href = format!("/administration/users/{}/edit", user.id);
-                        let status_key = admin_user_status_key_from_bool(user.is_active);
-                        let status_label = admin_user_status_label_from_bool(user.is_active);
-                        let access_profile_label = admin_access_profile_label(&user.ui_access_profile);
-                        let role_names = admin_role_names(&user.roles);
-                        let capability_count = user.capabilities.len().to_string();
+                    } else if let Some(access) = detail.get() {
+                        let edit_href = format!("/administration/users/{}/edit", access.account_id);
+                        let access_profile_label = admin_access_profile_label(&access.ui_access_profile);
+                        let capability_count = access.capabilities.len().to_string();
+                        let scope_editing = admin_editable_label(access.scope_assignments_editable);
+                        let delegation_editing =
+                            admin_editable_label(access.delegation_assignments_editable);
                         view! {
                             <header class="page-header">
                                 <div>
-                                    <h2>{user.display_name.clone()}</h2>
-                                    <p>{user.email.clone()}</p>
-                                </div>
-                                <div class="page-header__actions">
-                                    <span class=status_badge_class(status_key)>{status_label}</span>
+                                    <h2>{access.display_name.clone()}</h2>
+                                    <p>{access.email.clone()}</p>
                                 </div>
                             </header>
 
+                            <form
+                                class="native-form administration-user-access-form"
+                                on:submit={
+                                    let account_id = account_id.clone();
+                                    move |event| {
+                                        event.prevent_default();
+                                        submit_update_admin_user_access(
+                                            account_id.clone(),
+                                            selected_scope_node_ids,
+                                            selected_delegate_account_ids,
+                                            is_saving,
+                                            message,
+                                        );
+                                    }
+                                }
+                            >
                             <div class="organization-detail-content">
                                 <section class="organization-detail-card organization-detail-card--wide">
-                                    <h3>"Account"</h3>
+                                    <h3>"Effective Access"</h3>
                                     <InfoListTable>
-                                        <tr>
-                                            <th scope="row">"Email"</th>
-                                            <td>{user.email.clone()}</td>
-                                        </tr>
                                         <tr>
                                             <th scope="row">"Access Profile"</th>
                                             <td>{access_profile_label}</td>
                                         </tr>
                                         <tr>
-                                            <th scope="row">"Roles"</th>
-                                            <td>{role_names}</td>
-                                        </tr>
-                                        <tr>
                                             <th scope="row">"Capabilities"</th>
                                             <td>{capability_count}</td>
                                         </tr>
+                                        <tr>
+                                            <th scope="row">"Scope Editing"</th>
+                                            <td>{scope_editing}</td>
+                                        </tr>
+                                        <tr>
+                                            <th scope="row">"Delegation Editing"</th>
+                                            <td>{delegation_editing}</td>
+                                        </tr>
                                     </InfoListTable>
-                                    <div class="form-actions">
-                                        <a class="button" href=edit_href>"Edit Account"</a>
-                                        <a class="button" href=access_href>"Manage Permissions"</a>
-                                        <a class="button button--secondary" href="/administration/users">"Back to Users"</a>
-                                    </div>
                                 </section>
 
                                 <section class="organization-detail-card">
                                     <h3>"Scope Nodes"</h3>
-                                    <AdminScopeNodeList nodes=user.scope_nodes/>
+                                    {if access.scope_assignments_editable {
+                                        view! {
+                                            <AdminScopeNodeChecklist
+                                                nodes=access.available_scope_nodes
+                                                selected_node_ids=selected_scope_node_ids
+                                            />
+                                        }
+                                        .into_any()
+                                    } else {
+                                        view! { <AdminScopeNodeList nodes=access.scope_nodes/> }.into_any()
+                                    }}
                                 </section>
 
                                 <section class="organization-detail-card">
                                     <h3>"Delegations"</h3>
-                                    <AdminDelegationList delegations=user.delegations empty_label="No delegations assigned."/>
+                                    {if access.delegation_assignments_editable {
+                                        view! {
+                                            <AdminDelegationChecklist
+                                                delegations=access.available_delegate_accounts
+                                                selected_delegate_account_ids=selected_delegate_account_ids
+                                            />
+                                        }
+                                        .into_any()
+                                    } else {
+                                        view! { <AdminDelegationList delegations=access.delegations empty_label="No delegated accounts."/> }.into_any()
+                                    }}
+                                </section>
+
+                                <section class="organization-detail-card organization-detail-card--wide">
+                                    <h3>"Capabilities"</h3>
+                                    <AdminCapabilityList
+                                        capabilities=access.capabilities
+                                        capability_catalog=capability_catalog.get()
+                                    />
+                                    <div class="form-actions">
+                                        <a class="button button--secondary" href=edit_href>"Edit Account Roles"</a>
+                                    </div>
                                 </section>
                             </div>
+                            {move || message
+                                .get()
+                                .map(|text| view! { <p class="form-message" role="status">{text}</p> })}
+                            <div class="form-actions">
+                                <a class="button button--secondary" href="/administration/users">"Back to Users"</a>
+                                <button class="button" type="submit" disabled=move || is_saving.get()>
+                                    {move || if is_saving.get() { "Saving..." } else { "Save Permissions" }}
+                                </button>
+                            </div>
+                            </form>
                         }
                         .into_any()
                     } else {
@@ -792,184 +837,7 @@ pub fn AdministrationUserEditPage() -> impl IntoView {
 
 #[component]
 pub fn AdministrationUserAccessPage() -> impl IntoView {
-    let params = require_route_params::<AccountRouteParams>();
-    let account_id = params.account_id;
-    let detail = RwSignal::new(None::<AdminUserAccessDetail>);
-    let selected_scope_node_ids = RwSignal::new(Vec::<String>::new());
-    let selected_delegate_account_ids = RwSignal::new(Vec::<String>::new());
-    let is_loading = RwSignal::new(true);
-    let is_saving = RwSignal::new(false);
-    let load_error = RwSignal::new(None::<String>);
-    let message = RwSignal::new(None::<String>);
-
-    Effect::new({
-        let account_id = account_id.clone();
-        move |_| {
-            load_admin_user_access(
-                account_id.clone(),
-                detail,
-                selected_scope_node_ids,
-                selected_delegate_account_ids,
-                is_loading,
-                load_error,
-            );
-        }
-    });
-
-    view! {
-        <AppShell active_route="administration" title="User Permissions">
-            <section class="route-panel administration-user-access-page">
-                <Breadcrumb>
-                    <BreadcrumbItem>
-                        <BreadcrumbLink href="/administration">"Administration"</BreadcrumbLink>
-                    </BreadcrumbItem>
-                    <BreadcrumbSeparator/>
-                    <BreadcrumbItem>
-                        <BreadcrumbLink href="/administration/users">"Users"</BreadcrumbLink>
-                    </BreadcrumbItem>
-                    <BreadcrumbSeparator/>
-                    <BreadcrumbItem>
-                        <BreadcrumbPage>"Permissions"</BreadcrumbPage>
-                    </BreadcrumbItem>
-                </Breadcrumb>
-
-                {move || {
-                    if is_loading.get() {
-                        view! {
-                            <section class="organization-state" aria-live="polite">
-                                <h3>"Loading permissions"</h3>
-                                <p>"Fetching effective capabilities, scope nodes, and delegations."</p>
-                            </section>
-                        }
-                        .into_any()
-                    } else if let Some(message) = load_error.get() {
-                        view! {
-                            <section class="organization-state is-error" role="alert">
-                                <h3>"Permissions unavailable"</h3>
-                                <p>{message}</p>
-                            </section>
-                        }
-                        .into_any()
-                    } else if let Some(access) = detail.get() {
-                        let detail_href = format!("/administration/users/{}", access.account_id);
-                        let edit_href = format!("/administration/users/{}/edit", access.account_id);
-                        let page_title = format!("{} Permissions", access.display_name);
-                        let access_profile_label = admin_access_profile_label(&access.ui_access_profile);
-                        let capability_count = access.capabilities.len().to_string();
-                        let scope_editing = admin_editable_label(access.scope_assignments_editable);
-                        let delegation_editing =
-                            admin_editable_label(access.delegation_assignments_editable);
-                        view! {
-                            <header class="page-header">
-                                <div>
-                                    <h2>{page_title}</h2>
-                                    <p>{access.email.clone()}</p>
-                                </div>
-                            </header>
-
-                            <form
-                                class="native-form administration-user-access-form"
-                                on:submit={
-                                    let account_id = account_id.clone();
-                                    move |event| {
-                                        event.prevent_default();
-                                        submit_update_admin_user_access(
-                                            account_id.clone(),
-                                            selected_scope_node_ids,
-                                            selected_delegate_account_ids,
-                                            is_saving,
-                                            message,
-                                        );
-                                    }
-                                }
-                            >
-                            <div class="organization-detail-content">
-                                <section class="organization-detail-card organization-detail-card--wide">
-                                    <h3>"Effective Access"</h3>
-                                    <InfoListTable>
-                                        <tr>
-                                            <th scope="row">"Access Profile"</th>
-                                            <td>{access_profile_label}</td>
-                                        </tr>
-                                        <tr>
-                                            <th scope="row">"Capabilities"</th>
-                                            <td>{capability_count}</td>
-                                        </tr>
-                                        <tr>
-                                            <th scope="row">"Scope Editing"</th>
-                                            <td>{scope_editing}</td>
-                                        </tr>
-                                        <tr>
-                                            <th scope="row">"Delegation Editing"</th>
-                                            <td>{delegation_editing}</td>
-                                        </tr>
-                                    </InfoListTable>
-                                </section>
-
-                                <section class="organization-detail-card">
-                                    <h3>"Scope Nodes"</h3>
-                                    {if access.scope_assignments_editable {
-                                        view! {
-                                            <AdminScopeNodeChecklist
-                                                nodes=access.available_scope_nodes
-                                                selected_node_ids=selected_scope_node_ids
-                                            />
-                                        }
-                                        .into_any()
-                                    } else {
-                                        view! { <AdminScopeNodeList nodes=access.scope_nodes/> }.into_any()
-                                    }}
-                                </section>
-
-                                <section class="organization-detail-card">
-                                    <h3>"Delegations"</h3>
-                                    {if access.delegation_assignments_editable {
-                                        view! {
-                                            <AdminDelegationChecklist
-                                                delegations=access.available_delegate_accounts
-                                                selected_delegate_account_ids=selected_delegate_account_ids
-                                            />
-                                        }
-                                        .into_any()
-                                    } else {
-                                        view! { <AdminDelegationList delegations=access.delegations empty_label="No delegated accounts."/> }.into_any()
-                                    }}
-                                </section>
-
-                                <section class="organization-detail-card organization-detail-card--wide">
-                                    <h3>"Capabilities"</h3>
-                                    <AdminCapabilityList capabilities=access.capabilities/>
-                                    <p class="helper-text">"Capabilities are inherited from assigned roles."</p>
-                                    <div class="form-actions">
-                                        <a class="button button--secondary" href=edit_href>"Edit Account Roles"</a>
-                                    </div>
-                                </section>
-                            </div>
-                            {move || message
-                                .get()
-                                .map(|text| view! { <p class="form-message" role="status">{text}</p> })}
-                            <div class="form-actions">
-                                <a class="button button--secondary" href=detail_href>"Back to User"</a>
-                                <button class="button" type="submit" disabled=move || is_saving.get()>
-                                    {move || if is_saving.get() { "Saving..." } else { "Save Permissions" }}
-                                </button>
-                            </div>
-                            </form>
-                        }
-                        .into_any()
-                    } else {
-                        view! {
-                            <section class="organization-state">
-                                <h3>"Permissions not found"</h3>
-                                <p>"No permissions record was returned for this account."</p>
-                            </section>
-                        }
-                        .into_any()
-                    }
-                }}
-            </section>
-        </AppShell>
-    }
+    AdministrationUserDetailPage()
 }
 
 #[component]
@@ -978,31 +846,26 @@ fn AdminScopeNodeList(nodes: Vec<AdminScopeNodeSummary>) -> impl IntoView {
         view! { <p>"No scope nodes assigned."</p> }.into_any()
     } else {
         view! {
-            <DataTable>
-                <thead>
-                    <tr>
-                        <th scope="col">"Node"</th>
-                        <th scope="col">"Type"</th>
-                        <th scope="col">"Parent"</th>
-                    </tr>
-                </thead>
+            <table class="info-list-table">
                 <tbody>
                     {nodes
                         .into_iter()
                         .map(|node| {
+                            let node_context = admin_scope_node_context(&node);
                             view! {
                                 <tr>
                                     <th scope="row">
-                                        <a class="data-table__primary-link" href=format!("/organization/{}", node.node_id)>{node.node_name}</a>
+                                        <a class="data-table__primary-link" href=format!("/organization/{}", node.node_id)>
+                                            {node.node_name}
+                                        </a>
                                     </th>
-                                    <td>{node.node_type_name}</td>
-                                    <td>{node.parent_node_name.unwrap_or_else(|| "-".to_string())}</td>
+                                    <td>{node_context}</td>
                                 </tr>
                             }
                         })
                         .collect_view()}
                 </tbody>
-            </DataTable>
+            </table>
         }
         .into_any()
     }
@@ -1030,7 +893,8 @@ fn AdminScopeNodeChecklist(
                         on:input=move |event| search.set(event_target_value(&event))
                     />
                 </label>
-                <div class="checkbox-list permission-picker__list">
+                <table class="info-list-table permission-picker__table">
+                    <tbody>
                     {move || {
                         let query = search.get();
                         nodes
@@ -1048,41 +912,50 @@ fn AdminScopeNodeChecklist(
                             .cloned()
                             .map(|node| {
                                 let node_id = node.node_id.clone();
+                                let node_context = admin_scope_node_context(&node);
                                 let selected = selected_node_ids
                                     .get()
                                     .iter()
                                     .any(|selected_id| selected_id == &node.node_id);
-                                let parent = node
-                                    .parent_node_name
-                                    .clone()
-                                    .unwrap_or_else(|| "No parent".to_string());
+                                let checkbox_label =
+                                    format!("Assign scope node {} ({node_context})", node.node_name);
                                 view! {
-                                    <label class="checkbox-list__item permission-picker__item">
-                                        <input
-                                            type="checkbox"
-                                            prop:checked=selected
-                                            on:change=move |event| {
-                                                toggle_string_selection(
-                                                    selected_node_ids,
-                                                    node_id.clone(),
-                                                    event_target_checked(&event),
-                                                );
-                                            }
-                                        />
-                                        <span>
-                                            <strong>{node.node_name}</strong>
-                                            <small>{node.node_type_name}</small>
-                                            <small>{parent}</small>
-                                        </span>
-                                    </label>
+                                    <tr>
+                                        <td class="data-table__cell--center">
+                                            <input
+                                                type="checkbox"
+                                                aria-label=checkbox_label
+                                                prop:checked=selected
+                                                on:change=move |event| {
+                                                    toggle_string_selection(
+                                                        selected_node_ids,
+                                                        node_id.clone(),
+                                                        event_target_checked(&event),
+                                                    );
+                                                }
+                                            />
+                                        </td>
+                                        <th scope="row">{node.node_name}</th>
+                                        <td>{node_context}</td>
+                                    </tr>
                                 }
                             })
                             .collect_view()
                     }}
-                </div>
+                    </tbody>
+                </table>
             </div>
         }
         .into_any()
+    }
+}
+
+fn admin_scope_node_context(node: &AdminScopeNodeSummary) -> String {
+    match node.parent_node_name.as_deref() {
+        Some(parent) if !parent.is_empty() => {
+            format!("{} - Parent: {parent}", node.node_type_name)
+        }
+        _ => format!("{} - No parent", node.node_type_name),
     }
 }
 
@@ -1095,13 +968,7 @@ fn AdminDelegationList(
         view! { <p>{empty_label}</p> }.into_any()
     } else {
         view! {
-            <DataTable>
-                <thead>
-                    <tr>
-                        <th scope="col">"Account"</th>
-                        <th scope="col">"Email"</th>
-                    </tr>
-                </thead>
+            <table class="info-list-table">
                 <tbody>
                     {delegations
                         .into_iter()
@@ -1109,7 +976,9 @@ fn AdminDelegationList(
                             view! {
                                 <tr>
                                     <th scope="row">
-                                        <a class="data-table__primary-link" href=format!("/administration/users/{}", delegation.account_id)>{delegation.display_name}</a>
+                                        <a class="data-table__primary-link" href=format!("/administration/users/{}", delegation.account_id)>
+                                            {delegation.display_name}
+                                        </a>
                                     </th>
                                     <td>{delegation.email}</td>
                                 </tr>
@@ -1117,7 +986,7 @@ fn AdminDelegationList(
                         })
                         .collect_view()}
                 </tbody>
-            </DataTable>
+            </table>
         }
         .into_any()
     }
@@ -1145,7 +1014,8 @@ fn AdminDelegationChecklist(
                         on:input=move |event| search.set(event_target_value(&event))
                     />
                 </label>
-                <div class="checkbox-list permission-picker__list permission-picker__list--compact">
+                <table class="info-list-table permission-picker__table">
+                    <tbody>
                     {move || {
                         let query = search.get();
                         delegations
@@ -1163,29 +1033,36 @@ fn AdminDelegationChecklist(
                                     .get()
                                     .iter()
                                     .any(|selected_id| selected_id == &delegation.account_id);
+                                let checkbox_label = format!(
+                                    "Delegate access to {} ({})",
+                                    delegation.display_name,
+                                    delegation.email
+                                );
                                 view! {
-                                    <label class="checkbox-list__item permission-picker__item">
-                                        <input
-                                            type="checkbox"
-                                            prop:checked=selected
-                                            on:change=move |event| {
-                                                toggle_string_selection(
-                                                    selected_delegate_account_ids,
-                                                    account_id.clone(),
-                                                    event_target_checked(&event),
-                                                );
-                                            }
-                                        />
-                                        <span>
-                                            <strong>{delegation.display_name}</strong>
-                                            <small>{delegation.email}</small>
-                                        </span>
-                                    </label>
+                                    <tr>
+                                        <td class="data-table__cell--center">
+                                            <input
+                                                type="checkbox"
+                                                aria-label=checkbox_label
+                                                prop:checked=selected
+                                                on:change=move |event| {
+                                                    toggle_string_selection(
+                                                        selected_delegate_account_ids,
+                                                        account_id.clone(),
+                                                        event_target_checked(&event),
+                                                    );
+                                                }
+                                            />
+                                        </td>
+                                        <th scope="row">{delegation.display_name}</th>
+                                        <td>{delegation.email}</td>
+                                    </tr>
                                 }
                             })
                             .collect_view()
                     }}
-                </div>
+                    </tbody>
+                </table>
             </div>
         }
         .into_any()
@@ -1193,39 +1070,63 @@ fn AdminDelegationChecklist(
 }
 
 #[component]
-fn AdminCapabilityList(capabilities: Vec<String>) -> impl IntoView {
+fn AdminCapabilityList(
+    capabilities: Vec<String>,
+    capability_catalog: Vec<AdminCapabilitySummary>,
+) -> impl IntoView {
     if capabilities.is_empty() {
         view! { <p>"No effective capabilities."</p> }.into_any()
     } else {
         view! {
-            <ul class="capability-list">
+            <table class="info-list-table">
+                <tbody>
                 {capabilities
                     .into_iter()
-                    .map(|capability| view! { <li class="capability-list__item">{capability}</li> })
+                    .map(|capability| {
+                        let description = capability_catalog
+                            .iter()
+                            .find(|summary| summary.key == capability)
+                            .map(|summary| summary.description.clone())
+                            .unwrap_or_else(|| "Granted".to_string());
+                        view! {
+                        <tr>
+                            <th scope="row">{capability}</th>
+                            <td>{description}</td>
+                        </tr>
+                        }
+                    })
                     .collect_view()}
-            </ul>
+                </tbody>
+            </table>
         }
         .into_any()
     }
 }
 
-fn admin_user_status_key_from_bool(is_active: bool) -> &'static str {
-    if is_active { "active" } else { "inactive" }
-}
+fn load_admin_capability_catalog(capabilities: RwSignal<Vec<AdminCapabilitySummary>>) {
+    #[cfg(feature = "hydrate")]
+    {
+        leptos::task::spawn_local(async move {
+            match gloo_net::http::Request::get("/api/admin/capabilities")
+                .send()
+                .await
+            {
+                Ok(response) if response.status() == 401 => {
+                    redirect_to_login();
+                }
+                Ok(response) if response.ok() => {
+                    if let Ok(items) = response.json::<Vec<AdminCapabilitySummary>>().await {
+                        capabilities.set(items);
+                    }
+                }
+                _ => {}
+            }
+        });
+    }
 
-fn admin_user_status_label_from_bool(is_active: bool) -> &'static str {
-    if is_active { "Active" } else { "Inactive" }
-}
-
-fn admin_role_names(roles: &[AdminRoleSummary]) -> String {
-    if roles.is_empty() {
-        "No roles".to_string()
-    } else {
-        roles
-            .iter()
-            .map(|role| role.name.as_str())
-            .collect::<Vec<_>>()
-            .join(", ")
+    #[cfg(not(feature = "hydrate"))]
+    {
+        let _ = capabilities;
     }
 }
 

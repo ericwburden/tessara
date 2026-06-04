@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 pub const OUTPUT_NAME: &str = "tessara-web";
 pub const APP_ROOT_ID: &str = "app-root";
-const ASSET_VERSION: &str = "20260604-admin-role-detail-tag-values";
+const ASSET_VERSION: &str = "20260604-permission-picker-balance";
 
 pub fn site_root() -> PathBuf {
     std::env::var("LEPTOS_SITE_ROOT")

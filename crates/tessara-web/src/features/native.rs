@@ -256,9 +256,9 @@ const ROUTE_MIGRATIONS: [RouteMigration; 35] = [
         rbac_status: "Pending",
     },
     RouteMigration {
-        name: "User Permissions",
+        name: "User Detail Legacy Access Alias",
         route: "/administration/users/:account_id/access",
-        href: "/administration/users/ffa86962-8fa3-4104-bb34-e9e8f68196af/access",
+        href: "/administration/users/ffa86962-8fa3-4104-bb34-e9e8f68196af",
         status: "Done",
         rbac_status: "Pending",
     },
@@ -4822,61 +4822,6 @@ fn load_admin_users(
     }
 }
 
-fn load_admin_user_detail(
-    account_id: String,
-    detail: RwSignal<Option<AdminUserDetail>>,
-    is_loading: RwSignal<bool>,
-    load_error: RwSignal<Option<String>>,
-) {
-    #[cfg(feature = "hydrate")]
-    {
-        leptos::task::spawn_local(async move {
-            is_loading.set(true);
-            load_error.set(None);
-
-            match gloo_net::http::Request::get(&format!("/api/admin/users/{account_id}"))
-                .send()
-                .await
-            {
-                Ok(response) if response.status() == 401 => {
-                    detail.set(None);
-                    is_loading.set(false);
-                    redirect_to_login();
-                }
-                Ok(response) if response.ok() => match response.json::<AdminUserDetail>().await {
-                    Ok(loaded_detail) => {
-                        detail.set(Some(loaded_detail));
-                        is_loading.set(false);
-                    }
-                    Err(error) => {
-                        detail.set(None);
-                        load_error.set(Some(format!("Unable to parse user: {error}")));
-                        is_loading.set(false);
-                    }
-                },
-                Ok(response) => {
-                    detail.set(None);
-                    load_error.set(Some(format!(
-                        "Unable to load user. Server returned {}.",
-                        response.status()
-                    )));
-                    is_loading.set(false);
-                }
-                Err(error) => {
-                    detail.set(None);
-                    load_error.set(Some(format!("Unable to load user: {error}")));
-                    is_loading.set(false);
-                }
-            }
-        });
-    }
-
-    #[cfg(not(feature = "hydrate"))]
-    {
-        let _ = (account_id, detail, is_loading, load_error);
-    }
-}
-
 fn load_admin_user_access(
     account_id: String,
     detail: RwSignal<Option<AdminUserAccessDetail>>,
@@ -5161,7 +5106,7 @@ fn submit_update_admin_user_access(
             )
             .await
             {
-                Ok(_) => navigate_to_href(&format!("/administration/users/{account_id}/access")),
+                Ok(_) => navigate_to_href(&format!("/administration/users/{account_id}")),
                 Err(error) => {
                     message.set(Some(error));
                     is_saving.set(false);

@@ -1752,6 +1752,19 @@ input {
   max-width: none;
 }
 
+.permission-picker__table {
+  table-layout: fixed;
+}
+
+.permission-picker__table td:first-child {
+  width: 2.5rem;
+}
+
+.permission-picker__table th,
+.permission-picker__table td:last-child {
+  width: calc((100% - 2.5rem) / 2);
+}
+
 .permission-picker__list {
   max-height: 22rem;
   overflow-y: auto;
