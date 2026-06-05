@@ -462,18 +462,60 @@ test.describe.serial("capability + scope + ownership permissions", () => {
   });
 
   test("non-admin shell hides Administration navigation", async ({ page }) => {
-    await page.request.post("/api/auth/login", {
+    const login = await page.request.post("/api/auth/login", {
       data: {
         email: `${RUN_ID}-scoped-manager@tessara.local`,
         password: PASSWORD,
       },
     });
+    expect(login.ok()).toBeTruthy();
 
     await page.goto("/");
-    await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Administration" })).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Forms" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Responses" })).toBeVisible();
+  });
+
+  test("scoped form UI shows visible forms and blocks out-of-scope detail", async ({ page }) => {
+    const login = await page.request.post("/api/auth/login", {
+      data: {
+        email: `${RUN_ID}-scoped-manager@tessara.local`,
+        password: PASSWORD,
+      },
+    });
+    expect(login.ok()).toBeTruthy();
+
+    await page.goto("/forms");
+    await expect(page.getByRole("heading", { level: 1, name: "Forms" })).toBeVisible();
+    await expect(page.getByRole("link", { name: fixtures.inScopeForm.name })).toBeVisible();
+    await expect(page.getByRole("link", { name: fixtures.outOfScopeForm.name })).toHaveCount(0);
+
+    await page.goto(`/forms/${fixtures.outOfScopeForm.id}`);
+    await expect(page.getByRole("heading", { name: "Form detail unavailable" })).toBeVisible();
+  });
+
+  test("admin can create a role through the current UI", async ({ page }) => {
+    const roleName = `${RUN_ID}-ui-role`;
+    const login = await page.request.post("/api/auth/login", {
+      data: {
+        email: "admin@tessara.local",
+        password: "tessara-dev-admin",
+      },
+    });
+    expect(login.ok()).toBeTruthy();
+
+    await page.goto("/administration/roles");
+    await expect(page.getByRole("heading", { level: 1, name: "Roles" })).toBeVisible();
+    await page.getByRole("button", { name: "New Role" }).click();
+    await expect(page.getByRole("heading", { name: "New Role" })).toBeVisible();
+    await page.getByPlaceholder("coordinator").fill(roleName);
+    await page.getByRole("button", { name: "Save Role" }).click();
+    await expect.poll(async () => {
+      const roles = await getJson<RoleSummary[]>(fixtures.admin, "/api/admin/roles");
+      return roles.some((role) => role.name === roleName);
+    }).toBe(true);
+    await page.getByPlaceholder("Search roles").fill(roleName);
+    await expect(page.getByRole("button", { exact: true, name: roleName })).toBeVisible();
   });
 
   test("admin has global access to in-scope and out-of-scope fixtures", async () => {

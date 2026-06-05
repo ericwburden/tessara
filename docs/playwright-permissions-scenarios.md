@@ -25,6 +25,8 @@ The suite creates Playwright-owned fixtures with a `pw-permissions-*` prefix thr
 | --- | --- | --- |
 | Capability absence | None; no-access user authenticates only. | No-access user receives forbidden responses from admin, forms, workflows, workflow assignment, submissions, datasets, components, and dashboards APIs. |
 | Shell navigation | Scoped manager can see allowed product nav such as Forms and Responses. | Scoped manager cannot see Administration navigation. |
+| Forms UI visibility | Scoped manager sees an in-scope form in `/forms`. | Scoped manager does not see an out-of-scope form in the list and direct detail navigation renders the unavailable state. |
+| Role UI creation | Admin creates a role through `/administration/roles`. | Non-admin administration access is covered by shell/API denial scenarios. |
 | Global capability | Admin reads in-scope and out-of-scope forms, datasets, components, dashboards, and workflow assignments. | Not applicable; `admin:all` is intentionally global. |
 | Scoped forms | Scoped manager lists and reads forms whose visibility nodes overlap the assigned subtree. | Out-of-scope form is absent from list and direct detail access is forbidden. |
 | Scoped datasets | Scoped manager lists and reads datasets whose visibility nodes overlap the assigned subtree. | Out-of-scope dataset is absent from list and direct detail access is forbidden. |
