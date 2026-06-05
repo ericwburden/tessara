@@ -45,10 +45,10 @@ pub fn AdministrationPage() -> impl IntoView {
                         </section>
 
                         <section class="organization-detail-card">
-                            <h3>"Migration"</h3>
-                            <p>"Validate, dry-run, and import representative legacy fixtures."</p>
+                            <h3>"Components"</h3>
+                            <p>"Review dataset-backed components and dashboard composition assets."</p>
                             <div class="form-actions">
-                                <a class="button button--secondary" href="/migration">"Open Migration"</a>
+                                <a class="button button--secondary" href="/components">"Open Components"</a>
                             </div>
                         </section>
                     </div>
@@ -519,7 +519,6 @@ pub fn AdministrationUserDetailPage() -> impl IntoView {
                         .into_any()
                     } else if let Some(access) = detail.get() {
                         let edit_href = format!("/administration/users/{}/edit", access.account_id);
-                        let access_profile_label = admin_access_profile_label(&access.ui_access_profile);
                         let capability_count = access.capabilities.len().to_string();
                         let scope_editing = admin_editable_label(access.scope_assignments_editable);
                         let delegation_editing =
@@ -552,10 +551,6 @@ pub fn AdministrationUserDetailPage() -> impl IntoView {
                                 <section class="organization-detail-card organization-detail-card--wide">
                                     <h3>"Effective Access"</h3>
                                     <InfoListTable>
-                                        <tr>
-                                            <th scope="row">"Access Profile"</th>
-                                            <td>{access_profile_label}</td>
-                                        </tr>
                                         <tr>
                                             <th scope="row">"Capabilities"</th>
                                             <td>{capability_count}</td>
@@ -1128,10 +1123,6 @@ fn load_admin_capability_catalog(capabilities: RwSignal<Vec<AdminCapabilitySumma
     {
         let _ = capabilities;
     }
-}
-
-fn admin_access_profile_label(profile: &str) -> String {
-    metadata_label(profile)
 }
 
 fn admin_editable_label(is_editable: bool) -> &'static str {

@@ -102,8 +102,7 @@ pub async fn create_workflow(
     )
     .await?;
     let workflow_node_type_id =
-        legacy_workflow_node_type_for_available_nodes(&state.pool, &payload.available_node_ids)
-            .await?;
+        workflow_node_type_for_available_nodes(&state.pool, &payload.available_node_ids).await?;
 
     let mut tx = state.pool.begin().await?;
     let id: Uuid = sqlx::query_scalar(
@@ -141,8 +140,7 @@ pub async fn update_workflow(
     )
     .await?;
     let workflow_node_type_id =
-        legacy_workflow_node_type_for_available_nodes(&state.pool, &payload.available_node_ids)
-            .await?;
+        workflow_node_type_for_available_nodes(&state.pool, &payload.available_node_ids).await?;
 
     let mut tx = state.pool.begin().await?;
     let updated = sqlx::query(
@@ -1796,10 +1794,12 @@ async fn list_assignment_candidates_inner(
     node_id: Option<Uuid>,
     search: Option<&str>,
 ) -> ApiResult<Vec<WorkflowAssignmentCandidate>> {
-    let scope_ids = if account.is_operator() {
-        Some(auth::effective_scope_node_ids(pool, account.account_id).await?)
-    } else {
-        None
+    let scope_ids = match auth::capability_boundary(pool, account, "workflows:write").await? {
+        auth::CapabilityBoundary::None => {
+            return Err(ApiError::Forbidden("workflows:write".into()));
+        }
+        auth::CapabilityBoundary::Global => None,
+        auth::CapabilityBoundary::Scoped(scope_ids) => Some(scope_ids),
     };
     let rows = sqlx::query(
         r#"
@@ -2173,7 +2173,7 @@ async fn require_workflow_payload(
     Ok(())
 }
 
-async fn legacy_workflow_node_type_for_available_nodes(
+async fn workflow_node_type_for_available_nodes(
     pool: &sqlx::PgPool,
     available_node_ids: &[Uuid],
 ) -> ApiResult<Uuid> {

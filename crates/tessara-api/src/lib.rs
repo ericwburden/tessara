@@ -8,6 +8,7 @@
 mod analytics;
 mod app_summary;
 mod auth;
+mod components;
 pub mod config;
 mod dashboards;
 mod datasets;
@@ -16,8 +17,6 @@ pub mod demo;
 pub mod error;
 mod forms;
 mod hierarchy;
-pub mod legacy_import;
-mod reporting;
 mod submissions;
 mod users;
 mod workflows;
@@ -391,16 +390,6 @@ pub fn router(state: AppState) -> Router {
                 )
             }),
         )
-        .route(
-            "/migration",
-            get(|| async {
-                native_app(
-                    "/migration",
-                    "Tessara Migration",
-                    "Run Tessara migration workflows.",
-                )
-            }),
-        )
         .route("/health", get(|| async { "ok" }))
         .route("/api/summary", get(app_summary::get_summary))
         .route("/api/auth/login", post(auth::login))
@@ -589,54 +578,16 @@ pub fn router(state: AppState) -> Router {
             "/api/datasets/{dataset_id}/table",
             get(datasets::run_dataset_table),
         )
+        .route("/api/admin/components", post(components::create_component))
         .route(
-            "/api/admin/legacy-fixtures/validate",
-            post(legacy_import::validate_legacy_fixture_endpoint),
+            "/api/admin/components/{component_id}/versions",
+            post(components::create_component_version),
         )
+        .route("/api/components", get(components::list_components))
         .route(
-            "/api/admin/legacy-fixtures/dry-run",
-            post(legacy_import::dry_run_legacy_fixture_endpoint),
+            "/api/components/{component_ref}",
+            get(components::get_component_by_ref),
         )
-        .route(
-            "/api/admin/legacy-fixtures/import",
-            post(legacy_import::import_legacy_fixture_endpoint),
-        )
-        .route(
-            "/api/admin/legacy-fixtures/examples",
-            get(legacy_import::list_legacy_fixture_examples),
-        )
-        .route("/api/admin/reports", post(reporting::create_report))
-        .route(
-            "/api/admin/reports/{report_id}",
-            put(reporting::update_report).delete(reporting::delete_report),
-        )
-        .route("/api/reports", get(reporting::list_reports))
-        .route("/api/reports/{report_id}", get(reporting::get_report))
-        .route("/api/reports/{report_id}/table", get(reporting::run_report))
-        .route(
-            "/api/admin/aggregations",
-            post(reporting::create_aggregation),
-        )
-        .route("/api/aggregations", get(reporting::list_aggregations))
-        .route(
-            "/api/admin/aggregations/{aggregation_id}",
-            put(reporting::update_aggregation).delete(reporting::delete_aggregation),
-        )
-        .route(
-            "/api/aggregations/{aggregation_id}",
-            get(reporting::get_aggregation),
-        )
-        .route(
-            "/api/aggregations/{aggregation_id}/table",
-            get(reporting::run_aggregation),
-        )
-        .route("/api/admin/charts", post(dashboards::create_chart))
-        .route(
-            "/api/admin/charts/{chart_id}",
-            put(dashboards::update_chart).delete(dashboards::delete_chart),
-        )
-        .route("/api/charts", get(dashboards::list_charts))
-        .route("/api/charts/{chart_id}", get(dashboards::get_chart))
         .route("/api/admin/dashboards", post(dashboards::create_dashboard))
         .route(
             "/api/admin/dashboards/{dashboard_id}",

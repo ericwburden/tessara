@@ -16,7 +16,7 @@ use crate::{
 };
 
 use super::{
-    dto::{AccountContext, SessionContext, SessionTransport, UiAccessProfile},
+    dto::{AccountContext, CapabilityBoundary, CapabilityScope, SessionContext, SessionTransport},
     repo,
 };
 
@@ -25,36 +25,6 @@ const DEFAULT_AUTH_COOKIE_NAME: &str = "tessara_session";
 
 pub fn password_scheme() -> &'static str {
     PASSWORD_SCHEME
-}
-
-pub fn derive_ui_access_profile(capabilities: &[String]) -> UiAccessProfile {
-    if capabilities
-        .iter()
-        .any(|capability| capability == "admin:all")
-    {
-        UiAccessProfile::Admin
-    } else if capabilities.iter().any(|capability| {
-        matches!(
-            capability.as_str(),
-            "hierarchy:read" | "forms:read" | "reports:read"
-        )
-    }) {
-        UiAccessProfile::Operator
-    } else {
-        UiAccessProfile::ResponseUser
-    }
-}
-
-pub fn scope_assignments_are_meaningful(profile: &UiAccessProfile) -> bool {
-    matches!(profile, UiAccessProfile::Operator)
-}
-
-pub async fn backfill_legacy_password_hashes(pool: &PgPool) -> ApiResult<()> {
-    for (account_id, legacy_password) in repo::list_legacy_credentials(pool).await? {
-        let hash = hash_password_for_storage(&legacy_password)?;
-        repo::upsert_password_hash(pool, account_id, &hash, PASSWORD_SCHEME).await?;
-    }
-    Ok(())
 }
 
 pub async fn store_password_hash(pool: &PgPool, account_id: Uuid, password: &str) -> ApiResult<()> {
@@ -138,16 +108,16 @@ async fn authenticate_request_with_cookie_name(
     let touched_at = Utc::now();
     repo::touch_session(pool, token, touched_at).await?;
 
-    let capabilities = repo::load_effective_capabilities(pool, session_row.account_id).await?;
-    let ui_access_profile = derive_ui_access_profile(&capabilities);
+    let capability_scopes = repo::load_capability_scopes(pool, session_row.account_id).await?;
+    let capabilities = capability_keys(&capability_scopes);
     let account = AccountContext {
         account_id: session_row.account_id,
         email: session_row.email,
         display_name: session_row.display_name,
         is_active: session_row.is_active,
-        ui_access_profile,
         roles: repo::load_role_names(pool, session_row.account_id).await?,
         capabilities,
+        capability_scopes,
         scope_nodes: repo::load_scope_nodes(pool, session_row.account_id).await?,
         delegations: repo::load_delegations(pool, session_row.account_id).await?,
     };
@@ -160,15 +130,57 @@ pub async fn logout(pool: &PgPool, session: &SessionContext) -> ApiResult<bool> 
 }
 
 pub fn ensure_capability(account: &AccountContext, required: &str) -> ApiResult<()> {
-    if account
-        .capabilities
-        .iter()
-        .any(|cap| cap == "admin:all" || cap == required)
-    {
+    if account.has_capability(required) {
         Ok(())
     } else {
         Err(ApiError::Forbidden(required.to_string()))
     }
+}
+
+pub async fn capability_boundary(
+    pool: &PgPool,
+    account: &AccountContext,
+    required: &str,
+) -> ApiResult<CapabilityBoundary> {
+    let Some(scope) = account.capability_scope(required) else {
+        return Ok(CapabilityBoundary::None);
+    };
+
+    if scope.global {
+        return Ok(CapabilityBoundary::Global);
+    }
+
+    let capability = if scope.capability == "admin:all" {
+        "admin:all"
+    } else {
+        required
+    };
+    Ok(CapabilityBoundary::Scoped(
+        repo::effective_scope_node_ids_for_capability(pool, account.account_id, capability).await?,
+    ))
+}
+
+pub async fn capability_allows_node(
+    pool: &PgPool,
+    account: &AccountContext,
+    required: &str,
+    node_id: Uuid,
+) -> ApiResult<bool> {
+    Ok(match capability_boundary(pool, account, required).await? {
+        CapabilityBoundary::None => false,
+        CapabilityBoundary::Global => true,
+        CapabilityBoundary::Scoped(scope_ids) => scope_ids.contains(&node_id),
+    })
+}
+
+fn capability_keys(scopes: &[CapabilityScope]) -> Vec<String> {
+    let mut capabilities = scopes
+        .iter()
+        .map(|scope| scope.capability.clone())
+        .collect::<Vec<_>>();
+    capabilities.sort();
+    capabilities.dedup();
+    capabilities
 }
 
 pub async fn resolve_accessible_delegate_account_id(

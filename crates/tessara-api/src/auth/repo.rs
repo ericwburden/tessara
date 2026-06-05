@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::error::ApiResult;
 
-use super::dto::{DelegationSummary, ScopeNodeSummary};
+use super::dto::{CapabilityScope, DelegationSummary, ScopeNodeSummary};
 
 #[derive(Clone)]
 pub struct AccountCredentialRow {
@@ -52,22 +52,6 @@ pub async fn find_account_credential_by_email(
     .transpose()
 }
 
-pub async fn list_legacy_credentials(pool: &PgPool) -> ApiResult<Vec<(Uuid, String)>> {
-    Ok(sqlx::query(
-        r#"
-        SELECT account_id, legacy_password
-        FROM account_credentials
-        WHERE password_hash IS NULL
-          AND legacy_password IS NOT NULL
-        "#,
-    )
-    .fetch_all(pool)
-    .await?
-    .into_iter()
-    .map(|row| Ok((row.try_get("account_id")?, row.try_get("legacy_password")?)))
-    .collect::<Result<Vec<_>, sqlx::Error>>()?)
-}
-
 pub async fn upsert_password_hash(
     pool: &PgPool,
     account_id: Uuid,
@@ -76,10 +60,9 @@ pub async fn upsert_password_hash(
 ) -> ApiResult<()> {
     sqlx::query(
         r#"
-        INSERT INTO account_credentials (account_id, legacy_password, password_hash, password_scheme, password_updated_at)
-        VALUES ($1, NULL, $2, $3, now())
+        INSERT INTO account_credentials (account_id, password_hash, password_scheme, password_updated_at)
+        VALUES ($1, $2, $3, now())
         ON CONFLICT (account_id) DO UPDATE SET
-            legacy_password = NULL,
             password_hash = EXCLUDED.password_hash,
             password_scheme = EXCLUDED.password_scheme,
             password_updated_at = now()
@@ -182,18 +165,94 @@ pub async fn load_effective_capabilities(
     Ok(sqlx::query_scalar::<_, String>(
         r#"
         SELECT DISTINCT capabilities.key
-        FROM account_role_assignments
-        JOIN role_capabilities ON role_capabilities.role_id = account_role_assignments.role_id
+        FROM role_assignments
+        JOIN role_capabilities ON role_capabilities.role_id = role_assignments.role_id
         JOIN capabilities ON capabilities.id = role_capabilities.capability_id
-        WHERE account_role_assignments.account_id = $1
-        UNION
-        SELECT capabilities.key
-        FROM permission_grants
-        JOIN capabilities ON capabilities.id = permission_grants.capability_id
-        WHERE permission_grants.account_id = $1 AND permission_grants.is_allowed = true
+        WHERE role_assignments.account_id = $1
         "#,
     )
     .bind(account_id)
+    .fetch_all(pool)
+    .await?)
+}
+
+pub async fn load_capability_scopes(
+    pool: &PgPool,
+    account_id: Uuid,
+) -> ApiResult<Vec<CapabilityScope>> {
+    let rows = sqlx::query(
+        r#"
+        SELECT capabilities.key, role_assignments.node_id
+        FROM role_assignments
+        JOIN role_capabilities ON role_capabilities.role_id = role_assignments.role_id
+        JOIN capabilities ON capabilities.id = role_capabilities.capability_id
+        WHERE role_assignments.account_id = $1
+        "#,
+    )
+    .bind(account_id)
+    .fetch_all(pool)
+    .await?;
+
+    let mut scopes = Vec::<CapabilityScope>::new();
+    for row in rows {
+        let capability: String = row.try_get("key")?;
+        let node_id: Option<Uuid> = row.try_get("node_id")?;
+
+        if let Some(existing) = scopes
+            .iter_mut()
+            .find(|scope| scope.capability == capability)
+        {
+            if let Some(node_id) = node_id {
+                if !existing.node_ids.contains(&node_id) {
+                    existing.node_ids.push(node_id);
+                }
+            } else {
+                existing.global = true;
+            }
+        } else {
+            scopes.push(CapabilityScope {
+                capability,
+                global: node_id.is_none(),
+                node_ids: node_id.into_iter().collect(),
+            });
+        }
+    }
+
+    scopes.sort_by(|left, right| left.capability.cmp(&right.capability));
+    for scope in &mut scopes {
+        scope.node_ids.sort();
+        scope.node_ids.dedup();
+    }
+
+    Ok(scopes)
+}
+
+pub async fn effective_scope_node_ids_for_capability(
+    pool: &PgPool,
+    account_id: Uuid,
+    capability: &str,
+) -> ApiResult<Vec<Uuid>> {
+    Ok(sqlx::query_scalar(
+        r#"
+        WITH RECURSIVE scoped(node_id) AS (
+            SELECT role_assignments.node_id
+            FROM role_assignments
+            JOIN role_capabilities ON role_capabilities.role_id = role_assignments.role_id
+            JOIN capabilities ON capabilities.id = role_capabilities.capability_id
+            WHERE role_assignments.account_id = $1
+              AND role_assignments.node_id IS NOT NULL
+              AND capabilities.key = $2
+            UNION
+            SELECT nodes.id
+            FROM nodes
+            JOIN scoped ON nodes.parent_node_id = scoped.node_id
+        )
+        SELECT DISTINCT node_id
+        FROM scoped
+        "#,
+    )
+    .bind(account_id)
+    .bind(capability)
     .fetch_all(pool)
     .await?)
 }
@@ -207,11 +266,15 @@ pub async fn load_scope_nodes(pool: &PgPool, account_id: Uuid) -> ApiResult<Vec<
             node_types.name AS node_type_name,
             nodes.parent_node_id,
             parent_nodes.name AS parent_node_name
-        FROM account_node_scope_assignments
-        JOIN nodes ON nodes.id = account_node_scope_assignments.node_id
+        FROM (
+            SELECT DISTINCT node_id
+            FROM role_assignments
+            WHERE account_id = $1
+              AND node_id IS NOT NULL
+        ) AS assigned_scope_nodes
+        JOIN nodes ON nodes.id = assigned_scope_nodes.node_id
         JOIN node_types ON node_types.id = nodes.node_type_id
         LEFT JOIN nodes AS parent_nodes ON parent_nodes.id = nodes.parent_node_id
-        WHERE account_node_scope_assignments.account_id = $1
         ORDER BY nodes.name, nodes.id
         "#,
     )
@@ -234,11 +297,11 @@ pub async fn load_scope_nodes(pool: &PgPool, account_id: Uuid) -> ApiResult<Vec<
 pub async fn load_role_names(pool: &PgPool, account_id: Uuid) -> ApiResult<Vec<String>> {
     Ok(sqlx::query_scalar(
         r#"
-        SELECT roles.name
-        FROM account_role_assignments
-        JOIN roles ON roles.id = account_role_assignments.role_id
-        WHERE account_role_assignments.account_id = $1
-        ORDER BY roles.name, roles.id
+        SELECT DISTINCT roles.name
+        FROM role_assignments
+        JOIN roles ON roles.id = role_assignments.role_id
+        WHERE role_assignments.account_id = $1
+        ORDER BY roles.name
         "#,
     )
     .bind(account_id)
@@ -274,25 +337,4 @@ pub async fn load_delegations(
         })
     })
     .collect::<Result<Vec<_>, sqlx::Error>>()?)
-}
-
-pub async fn effective_scope_node_ids(pool: &PgPool, account_id: Uuid) -> ApiResult<Vec<Uuid>> {
-    Ok(sqlx::query_scalar(
-        r#"
-        WITH RECURSIVE scoped(node_id) AS (
-            SELECT node_id
-            FROM account_node_scope_assignments
-            WHERE account_id = $1
-            UNION
-            SELECT nodes.id
-            FROM nodes
-            JOIN scoped ON nodes.parent_node_id = scoped.node_id
-        )
-        SELECT DISTINCT node_id
-        FROM scoped
-        "#,
-    )
-    .bind(account_id)
-    .fetch_all(pool)
-    .await?)
 }

@@ -2687,7 +2687,7 @@ Next UI steps:
 
 - Closed the access/admin sprint on `D:\Projects\dms-migration\tessara` with the first application-grade admin/auth vertical slice.
 - Backend changes:
-  - replaced hard-coded `role_family` responses with capability-derived `ui_access_profile`
+  - replaced hard-coded `role_family` responses with capability and scope metadata
   - extended `/api/me` and user detail responses to include roles, capabilities, scope nodes, and delegations
   - replaced subordinate-respondent storage and API usage with generic `account_delegations`
   - added `GET /api/admin/users/{account_id}/access`

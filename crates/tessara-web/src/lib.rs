@@ -52,7 +52,6 @@ mod tests {
         assert!(html.contains(r#"<div id="app-overlays"></div>"#));
         assert!(html.contains(r#"<div id="app-root">"#));
         assert!(html.contains("/organization"));
-        assert!(!html.contains("app-legacy"));
     }
 
     #[test]

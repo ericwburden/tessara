@@ -50,6 +50,7 @@ pub struct CreateDatasetFieldRequest {
 #[derive(Serialize)]
 pub struct DatasetSummary {
     id: Uuid,
+    current_revision_id: Option<Uuid>,
     name: String,
     slug: String,
     grain: String,
@@ -61,13 +62,13 @@ pub struct DatasetSummary {
 #[derive(Serialize)]
 pub struct DatasetDefinition {
     id: Uuid,
+    current_revision_id: Option<Uuid>,
     name: String,
     slug: String,
     grain: String,
     composition_mode: String,
     sources: Vec<DatasetSourceDefinition>,
     fields: Vec<DatasetFieldDefinition>,
-    reports: Vec<DatasetReportLink>,
 }
 
 #[derive(Serialize)]
@@ -90,12 +91,6 @@ pub struct DatasetFieldDefinition {
     source_field_key: String,
     field_type: String,
     position: i32,
-}
-
-#[derive(Serialize)]
-pub struct DatasetReportLink {
-    id: Uuid,
-    name: String,
 }
 
 #[derive(Serialize)]
@@ -167,6 +162,7 @@ pub async fn create_dataset(
 
     insert_dataset_sources(&mut tx, dataset_id, &sources).await?;
     insert_dataset_fields(&mut tx, dataset_id, &fields).await?;
+    insert_dataset_revision(&mut tx, dataset_id, "Initial published definition").await?;
     tx.commit().await?;
 
     Ok(Json(IdResponse { id: dataset_id }))
@@ -220,6 +216,7 @@ pub async fn update_dataset(
         .await?;
     insert_dataset_sources(&mut tx, dataset_id, &sources).await?;
     insert_dataset_fields(&mut tx, dataset_id, &fields).await?;
+    insert_dataset_revision(&mut tx, dataset_id, "Published definition update").await?;
     tx.commit().await?;
 
     Ok(Json(IdResponse { id: dataset_id }))
@@ -253,6 +250,7 @@ pub async fn list_datasets(
         r#"
         SELECT
             datasets.id,
+            current_revisions.id AS current_revision_id,
             datasets.name,
             datasets.slug,
             datasets.grain,
@@ -260,10 +258,14 @@ pub async fn list_datasets(
             COUNT(DISTINCT dataset_sources.id) AS source_count,
             COUNT(DISTINCT dataset_fields.id) AS field_count
         FROM datasets
+        LEFT JOIN dataset_revisions AS current_revisions
+            ON current_revisions.dataset_id = datasets.id
+           AND current_revisions.status = 'published'::dataset_revision_status
         LEFT JOIN dataset_sources ON dataset_sources.dataset_id = datasets.id
         LEFT JOIN dataset_fields ON dataset_fields.dataset_id = datasets.id
         GROUP BY
             datasets.id,
+            current_revisions.id,
             datasets.name,
             datasets.slug,
             datasets.grain,
@@ -280,6 +282,7 @@ pub async fn list_datasets(
         .map(|row| {
             Ok(DatasetSummary {
                 id: row.try_get("id")?,
+                current_revision_id: row.try_get("current_revision_id")?,
                 name: row.try_get("name")?,
                 slug: row.try_get("slug")?,
                 grain: row.try_get("grain")?,
@@ -301,12 +304,21 @@ pub async fn get_dataset(
 ) -> ApiResult<Json<DatasetDefinition>> {
     auth::require_capability(&state.pool, &headers, "datasets:read").await?;
 
-    let dataset =
-        sqlx::query("SELECT id, name, slug, grain, composition_mode FROM datasets WHERE id = $1")
-            .bind(dataset_id)
-            .fetch_optional(&state.pool)
-            .await?
-            .ok_or_else(|| ApiError::NotFound(format!("dataset {dataset_id}")))?;
+    let dataset = sqlx::query(
+        r#"
+        SELECT datasets.id, current_revisions.id AS current_revision_id,
+               datasets.name, datasets.slug, datasets.grain, datasets.composition_mode
+        FROM datasets
+        LEFT JOIN dataset_revisions AS current_revisions
+            ON current_revisions.dataset_id = datasets.id
+           AND current_revisions.status = 'published'::dataset_revision_status
+        WHERE datasets.id = $1
+        "#,
+    )
+    .bind(dataset_id)
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or_else(|| ApiError::NotFound(format!("dataset {dataset_id}")))?;
 
     let source_rows = sqlx::query(
         r#"
@@ -340,20 +352,9 @@ pub async fn get_dataset(
     .fetch_all(&state.pool)
     .await?;
 
-    let report_rows = sqlx::query(
-        r#"
-        SELECT id, name
-        FROM reports
-        WHERE dataset_id = $1
-        ORDER BY name, id
-        "#,
-    )
-    .bind(dataset_id)
-    .fetch_all(&state.pool)
-    .await?;
-
     Ok(Json(DatasetDefinition {
         id: dataset.try_get("id")?,
+        current_revision_id: dataset.try_get("current_revision_id")?,
         name: dataset.try_get("name")?,
         slug: dataset.try_get("slug")?,
         grain: dataset.try_get("grain")?,
@@ -383,15 +384,6 @@ pub async fn get_dataset(
                     source_field_key: row.try_get("source_field_key")?,
                     field_type: row.try_get("field_type")?,
                     position: row.try_get("position")?,
-                })
-            })
-            .collect::<Result<Vec<_>, sqlx::Error>>()?,
-        reports: report_rows
-            .into_iter()
-            .map(|row| {
-                Ok(DatasetReportLink {
-                    id: row.try_get("id")?,
-                    name: row.try_get("name")?,
                 })
             })
             .collect::<Result<Vec<_>, sqlx::Error>>()?,
@@ -545,6 +537,47 @@ async fn insert_dataset_fields(
     }
 
     Ok(())
+}
+
+async fn insert_dataset_revision(
+    tx: &mut Transaction<'_, Postgres>,
+    dataset_id: Uuid,
+    version_label: &str,
+) -> ApiResult<Uuid> {
+    let version_number: i32 = sqlx::query_scalar(
+        "SELECT COALESCE(MAX(version_number), 0) + 1 FROM dataset_revisions WHERE dataset_id = $1",
+    )
+    .bind(dataset_id)
+    .fetch_one(&mut **tx)
+    .await?;
+    let revision_id = sqlx::query_scalar(
+        r#"
+        INSERT INTO dataset_revisions
+            (dataset_id, version_number, version_label, status, published_at)
+        VALUES ($1, $2, $3, 'published'::dataset_revision_status, now())
+        RETURNING id
+        "#,
+    )
+    .bind(dataset_id)
+    .bind(version_number)
+    .bind(version_label)
+    .fetch_one(&mut **tx)
+    .await?;
+    sqlx::query(
+        r#"
+        UPDATE dataset_revisions
+        SET status = 'superseded'::dataset_revision_status
+        WHERE dataset_id = $1
+          AND id <> $2
+          AND status = 'published'::dataset_revision_status
+        "#,
+    )
+    .bind(dataset_id)
+    .bind(revision_id)
+    .execute(&mut **tx)
+    .await?;
+
+    Ok(revision_id)
 }
 
 async fn require_source_field_exists(

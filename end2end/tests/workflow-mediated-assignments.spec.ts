@@ -85,6 +85,20 @@ type PendingWorkflowWork = {
   account_display_name: string;
 };
 
+type SubmissionDetail = {
+  id: string;
+  form_id: string;
+  form_version_id: string;
+  form_name: string;
+  status: string;
+  runtime: {
+    workflow_name: string;
+    current_step_title: string;
+    current_step_position: number;
+    step_count: number;
+  } | null;
+};
+
 type AssignmentResponseStartOptions = {
   assignments: Array<{
     workflow_assignment_id: string;
@@ -217,6 +231,7 @@ async function createPublishedForm(page: Page) {
     formId,
     formVersionId,
     formName: name,
+    workflowName: workflow.name,
     workflowId: workflow.id,
     workflowVersionId: workflow.current_version_id!,
   };
@@ -285,7 +300,10 @@ test.describe("workflow-mediated form shortcuts", () => {
     await expect(page.getByRole("link", { name: "Create Workflow" })).toBeVisible();
 
     await page.goto("/workflows");
-    await expect(page.getByRole("link", { name: setup.formName })).toBeVisible();
+    await page
+      .getByRole("searchbox", { name: "Search workflows" })
+      .fill(setup.formName);
+    await expect(page.getByRole("link", { name: setup.workflowName })).toBeVisible();
     await expect(
       page.getByLabel("Single-Form, Generated Workflow").first(),
     ).toBeVisible();
@@ -329,14 +347,20 @@ test.describe("workflow-mediated form shortcuts", () => {
       `/api/workflow-assignments/${assignment.assignmentId}/start`,
       {},
     );
-    await page.goto(`/responses/${submission.id}/edit`);
-    await expect(
-      page.getByRole("heading", { level: 1, name: "Edit Response" }),
-    ).toBeVisible();
-    await expect(page.getByText(setup.formName)).toBeVisible();
+    const detail = await apiGet<SubmissionDetail>(
+      page,
+      `/api/submissions/${submission.id}`,
+    );
+    expect(detail.status).toBe("draft");
+    expect(detail.form_id).toBe(setup.formId);
+    expect(detail.form_version_id).toBe(setup.formVersionId);
+    expect(detail.form_name).toBe(setup.formName);
+    expect(detail.runtime?.workflow_name).toBe(setup.workflowName);
+    expect(detail.runtime?.current_step_position).toBe(0);
+    expect(detail.runtime?.step_count).toBe(1);
   });
 
-  test("response start options are assignment-only and the legacy start endpoint is gone", async ({
+  test("response start options are assignment-only", async ({
     page,
   }) => {
     await signInAsAdmin(page);

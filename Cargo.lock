@@ -4347,7 +4347,6 @@ dependencies = [
  "tessara-datasets",
  "tessara-forms",
  "tessara-hierarchy",
- "tessara-reporting",
  "tessara-submissions",
  "tessara-web",
  "thiserror 2.0.18",
@@ -4402,15 +4401,6 @@ dependencies = [
 [[package]]
 name = "tessara-jobs"
 version = "0.1.0"
-
-[[package]]
-name = "tessara-reporting"
-version = "0.1.0"
-dependencies = [
- "serde",
- "tessara-core",
- "thiserror 2.0.18",
-]
 
 [[package]]
 name = "tessara-submissions"

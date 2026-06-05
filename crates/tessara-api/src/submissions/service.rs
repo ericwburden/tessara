@@ -38,9 +38,10 @@ pub async fn list_response_start_options(
     account: &auth::AccountContext,
     query: ListSubmissionsQuery,
 ) -> ApiResult<AssignmentResponseStartOptions> {
-    let delegate_account_id = if account.is_admin() || account.is_operator() {
+    let delegate_account_id = if account.has_capability("workflows:write") {
         query.delegate_account_id.unwrap_or(account.account_id)
     } else {
+        auth::ensure_capability(account, "submissions:read_own")?;
         auth::resolve_accessible_delegate_account_id(pool, account, query.delegate_account_id)
             .await?
     };
@@ -86,16 +87,23 @@ pub async fn list_submissions(
         search,
     };
 
-    if account.is_admin() {
-        repo::list_admin_submission_summaries(pool, &filters).await
-    } else if account.is_operator() {
-        let scope_ids = auth::effective_scope_node_ids(pool, account.account_id).await?;
-        repo::list_operator_submission_summaries(pool, &scope_ids, &filters).await
-    } else {
-        let delegate_account_id =
-            auth::resolve_accessible_delegate_account_id(pool, account, query.delegate_account_id)
-                .await?;
-        repo::list_assignee_submission_summaries(pool, delegate_account_id, &filters).await
+    match auth::capability_boundary(pool, account, "submissions:write").await? {
+        auth::CapabilityBoundary::Global => {
+            repo::list_admin_submission_summaries(pool, &filters).await
+        }
+        auth::CapabilityBoundary::Scoped(scope_ids) => {
+            repo::list_operator_submission_summaries(pool, &scope_ids, &filters).await
+        }
+        auth::CapabilityBoundary::None => {
+            auth::ensure_capability(account, "submissions:read_own")?;
+            let delegate_account_id = auth::resolve_accessible_delegate_account_id(
+                pool,
+                account,
+                query.delegate_account_id,
+            )
+            .await?;
+            repo::list_assignee_submission_summaries(pool, delegate_account_id, &filters).await
+        }
     }
 }
 
@@ -206,19 +214,19 @@ pub async fn require_submission_access(
         .await?
         .ok_or_else(|| ApiError::NotFound(format!("submission {submission_id}")))?;
 
-    if !account.is_admin() {
-        if account.is_operator() {
-            let scope_ids = auth::effective_scope_node_ids(pool, account.account_id).await?;
-            if !scope_ids.contains(&row.node_id) {
-                return Err(ApiError::Forbidden("submissions:write".into()));
+    match auth::capability_boundary(pool, account, "submissions:write").await? {
+        auth::CapabilityBoundary::Global => {}
+        auth::CapabilityBoundary::Scoped(scope_ids) if scope_ids.contains(&row.node_id) => {}
+        _ => {
+            auth::ensure_capability(account, "submissions:respond")?;
+            if row.assignment_account_id != Some(account.account_id)
+                && !account
+                    .delegations
+                    .iter()
+                    .any(|delegate| Some(delegate.account_id) == row.assignment_account_id)
+            {
+                return Err(ApiError::Forbidden("submissions:respond".into()));
             }
-        } else if row.assignment_account_id != Some(account.account_id)
-            && !account
-                .delegations
-                .iter()
-                .any(|delegate| Some(delegate.account_id) == row.assignment_account_id)
-        {
-            return Err(ApiError::Forbidden("submissions:write".into()));
         }
     }
 

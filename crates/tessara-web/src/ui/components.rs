@@ -1,7 +1,7 @@
 use icons::{
     Bell, Blocks, ChevronRight, CircleHelp, ClipboardCheck, Database, Ellipsis, File, FileText,
     GitBranch, House, LayoutDashboard, LogOut, Menu, Monitor, Moon, Search, SlidersHorizontal, Sun,
-    Truck, Workflow,
+    Workflow,
 };
 use leptos::prelude::*;
 #[cfg(feature = "hydrate")]
@@ -23,7 +23,7 @@ struct NavItem {
     capabilities: &'static [&'static str],
 }
 
-const NAV_ITEMS: [NavItem; 10] = [
+const NAV_ITEMS: [NavItem; 9] = [
     NavItem {
         key: "home",
         href: "/",
@@ -64,14 +64,14 @@ const NAV_ITEMS: [NavItem; 10] = [
         href: "/components",
         label: "Components",
         section: "Main",
-        capabilities: &["reports:read", "reports:write"],
+        capabilities: &["components:read", "components:write"],
     },
     NavItem {
         key: "dashboards",
         href: "/dashboards",
         label: "Dashboards",
         section: "Main",
-        capabilities: &["reports:read", "reports:write"],
+        capabilities: &["dashboards:read", "dashboards:write"],
     },
     NavItem {
         key: "administration",
@@ -86,13 +86,6 @@ const NAV_ITEMS: [NavItem; 10] = [
         label: "Datasets",
         section: "Admin",
         capabilities: &["datasets:read", "datasets:write"],
-    },
-    NavItem {
-        key: "migration",
-        href: "/migration",
-        label: "Migration",
-        section: "Admin",
-        capabilities: &["admin:all"],
     },
 ];
 
@@ -404,7 +397,6 @@ fn NavIcon(route_key: &'static str) -> impl IntoView {
         "dashboards" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><LayoutDashboard class="sidebar-link__icon"/></span> }.into_any(),
         "datasets" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><Database class="sidebar-link__icon"/></span> }.into_any(),
         "administration" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><SlidersHorizontal class="sidebar-link__icon"/></span> }.into_any(),
-        "migration" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><Truck class="sidebar-link__icon"/></span> }.into_any(),
         _ => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><File class="sidebar-link__icon"/></span> }.into_any(),
     }
 }

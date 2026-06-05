@@ -258,9 +258,6 @@ try {
 
     $appShell = Invoke-Html -Uri "$baseUrl/" -CookieJarPath $adminBrowserSession
     Assert-ProtectedShell -Content $appShell -Needles @("Native UI Route Inventory", "/forms", "/administration/roles") -Context "application home shell"
-    if ($appShell -like "*/bridge/app-legacy.js*" -or $appShell -like "*/bridge/admin-legacy.js*") {
-        throw "Expected native home shell to exclude legacy bridge scripts"
-    }
 
     $loginShell = Invoke-Html -Uri "$baseUrl/login"
     if (
@@ -292,8 +289,6 @@ try {
     Assert-ProtectedShell -Content $dashboardsShell -Needles @("Dashboards") -Context "dashboards shell"
     $datasetsShell = Invoke-Html -Uri "$baseUrl/datasets" -CookieJarPath $adminBrowserSession
     Assert-ProtectedShell -Content $datasetsShell -Needles @("Datasets") -Context "datasets shell"
-    $migrationAppShell = Invoke-Html -Uri "$baseUrl/migration" -CookieJarPath $adminBrowserSession
-    Assert-ProtectedShell -Content $migrationAppShell -Needles @("Migration") -Context "migration shell"
 
     $login = Invoke-Json `
         -Method "Post" `
@@ -317,12 +312,12 @@ try {
         -Uri "$baseUrl/api/auth/login" `
         -Body @{ email = "delegator@tessara.local"; password = "tessara-dev-delegator" }
     $delegatorHeaders = @{ Authorization = "Bearer $($delegatorLogin.token)" }
-    if ($summary.published_form_versions -lt 1 -or $summary.submitted_submissions -lt 1 -or $summary.reports -lt 1 -or $summary.dashboards -lt 1) {
-        throw "Expected application summary to include seeded published forms, submissions, reports, and dashboards"
+    if ($summary.published_form_versions -lt 1 -or $summary.submitted_submissions -lt 1 -or $summary.datasets -lt 1 -or $summary.components -lt 1 -or $summary.dashboards -lt 1) {
+        throw "Expected application summary to include seeded published forms, submissions, datasets, components, and dashboards"
     }
     $nodes = Invoke-Json -Method "Get" -Uri "$baseUrl/api/nodes" -Headers $headers
     $dashboard = Invoke-Json -Method "Get" -Uri "$baseUrl/api/dashboards/$($seed.dashboard_id)" -Headers $headers
-    $report = Invoke-Json -Method "Get" -Uri "$baseUrl/api/reports/$($seed.report_id)/table" -Headers $headers
+    $dataset = Invoke-Json -Method "Get" -Uri "$baseUrl/api/datasets/$($seed.dataset_id)/table" -Headers $headers
     $operatorMe = Invoke-Json -Method "Get" -Uri "$baseUrl/api/me" -Headers $operatorHeaders
     $operatorNodes = Invoke-Json -Method "Get" -Uri "$baseUrl/api/nodes?q=Demo" -Headers $operatorHeaders
     $respondentOptions = Invoke-Json -Method "Get" -Uri "$baseUrl/api/responses/options" -Headers $respondentHeaders
@@ -360,11 +355,12 @@ try {
     if ($dashboard.components.Count -lt 1) {
         throw "Expected at least one dashboard component, got $($dashboard.components.Count)"
     }
-    if ($report.rows.Count -lt 1 -or -not ($report.rows | Where-Object { $_.logical_key -eq "participants" -and $_.field_value -eq "42" })) {
-        throw "Expected report value 42, got: $($report | ConvertTo-Json -Depth 20)"
+    if ($dataset.rows.Count -lt 1 -or -not ($dataset.rows | Where-Object { $_.values.participants -eq "42" })) {
+        throw "Expected dataset value 42, got: $($dataset | ConvertTo-Json -Depth 20)"
     }
-    if ($operatorMe.ui_access_profile -ne "operator" -or $operatorMe.scope_nodes.Count -lt 1) {
-        throw "Expected operator account context to include operator UI access profile and scoped nodes"
+    $operatorFormsScope = $operatorMe.capability_scopes | Where-Object { $_.capability -eq "forms:read" } | Select-Object -First 1
+    if ($null -eq $operatorFormsScope -or $operatorFormsScope.scope.scope_type -ne "scoped" -or $operatorMe.scope_nodes.Count -lt 1) {
+        throw "Expected operator account context to include scoped forms capability and scoped nodes"
     }
     if (-not ($operatorNodes | Where-Object { $_.name -eq "Demo Program Family Outreach" }) -or ($operatorNodes | Where-Object { $_.name -eq "Demo Partner Community Bridge" })) {
         throw "Expected operator node list to stay within assigned scope"

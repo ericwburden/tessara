@@ -9,22 +9,16 @@ use crate::{
 };
 
 /// High-level counters used by focused application screens.
-///
-/// This endpoint is intentionally read-only and compact. It gives the
-/// replacement-oriented frontend one stable place to discover whether the local
-/// deployment has enough configured data for submission, reporting, dashboard,
-/// and migration-review workflows without coupling those screens to multiple
-/// list endpoints.
 #[derive(Serialize)]
 pub struct ApplicationSummary {
     published_form_versions: i64,
     draft_submissions: i64,
     submitted_submissions: i64,
     datasets: i64,
-    reports: i64,
-    aggregations: i64,
+    dataset_revisions: i64,
+    components: i64,
+    component_versions: i64,
     dashboards: i64,
-    charts: i64,
 }
 
 /// Returns app-readiness counters for the current deployment.
@@ -34,7 +28,10 @@ pub async fn get_summary(
 ) -> ApiResult<Json<ApplicationSummary>> {
     let account = request.account;
 
-    if account.is_admin() {
+    if matches!(
+        auth::capability_boundary(&state.pool, &account, "admin:all").await?,
+        auth::CapabilityBoundary::Global
+    ) {
         let row = sqlx::query(
             r#"
             SELECT
@@ -42,29 +39,21 @@ pub async fn get_summary(
                 (SELECT COUNT(*) FROM submissions WHERE status = 'draft') AS draft_submissions,
                 (SELECT COUNT(*) FROM submissions WHERE status = 'submitted') AS submitted_submissions,
                 (SELECT COUNT(*) FROM datasets) AS datasets,
-                (SELECT COUNT(*) FROM reports) AS reports,
-                (SELECT COUNT(*) FROM aggregations) AS aggregations,
-                (SELECT COUNT(*) FROM dashboards) AS dashboards,
-                (SELECT COUNT(*) FROM charts) AS charts
+                (SELECT COUNT(*) FROM dataset_revisions) AS dataset_revisions,
+                (SELECT COUNT(*) FROM components) AS components,
+                (SELECT COUNT(*) FROM component_versions) AS component_versions,
+                (SELECT COUNT(*) FROM dashboards) AS dashboards
             "#,
         )
         .fetch_one(&state.pool)
         .await?;
 
-        return Ok(Json(ApplicationSummary {
-            published_form_versions: row.try_get("published_form_versions")?,
-            draft_submissions: row.try_get("draft_submissions")?,
-            submitted_submissions: row.try_get("submitted_submissions")?,
-            datasets: row.try_get("datasets")?,
-            reports: row.try_get("reports")?,
-            aggregations: row.try_get("aggregations")?,
-            dashboards: row.try_get("dashboards")?,
-            charts: row.try_get("charts")?,
-        }));
+        return summary_from_row(row);
     }
 
-    if account.is_operator() {
-        let scope_ids = auth::effective_scope_node_ids(&state.pool, account.account_id).await?;
+    if let auth::CapabilityBoundary::Scoped(scope_ids) =
+        auth::capability_boundary(&state.pool, &account, "forms:read").await?
+    {
         let row = sqlx::query(
             r#"
             SELECT
@@ -89,52 +78,17 @@ pub async fn get_summary(
                       AND submissions.node_id = ANY($1)
                 ) AS submitted_submissions,
                 0::bigint AS datasets,
-                (
-                    SELECT COUNT(DISTINCT reports.id)
-                    FROM reports
-                    JOIN forms ON forms.id = reports.form_id
-                    JOIN form_versions ON form_versions.form_id = forms.id
-                    JOIN workflow_steps ON workflow_steps.form_version_id = form_versions.id
-                    JOIN workflow_assignments ON workflow_assignments.workflow_step_id = workflow_steps.id
-                    WHERE workflow_assignments.node_id = ANY($1)
-                ) AS reports,
-                0::bigint AS aggregations,
-                (
-                    SELECT COUNT(DISTINCT dashboards.id)
-                    FROM dashboards
-                    JOIN dashboard_components ON dashboard_components.dashboard_id = dashboards.id
-                    JOIN charts ON charts.id = dashboard_components.chart_id
-                    LEFT JOIN reports ON reports.id = charts.report_id
-                    LEFT JOIN aggregations ON aggregations.id = charts.aggregation_id
-                    LEFT JOIN reports AS aggregation_reports ON aggregation_reports.id = aggregations.report_id
-                    LEFT JOIN forms AS direct_forms ON direct_forms.id = reports.form_id
-                    LEFT JOIN forms AS aggregation_forms ON aggregation_forms.id = aggregation_reports.form_id
-                    LEFT JOIN form_versions AS direct_form_versions ON direct_form_versions.form_id = direct_forms.id
-                    LEFT JOIN form_versions AS aggregation_form_versions ON aggregation_form_versions.form_id = aggregation_forms.id
-                    LEFT JOIN workflow_steps AS direct_steps ON direct_steps.form_version_id = direct_form_versions.id
-                    LEFT JOIN workflow_assignments AS direct_assignments ON direct_assignments.workflow_step_id = direct_steps.id
-                    LEFT JOIN workflow_steps AS aggregation_steps ON aggregation_steps.form_version_id = aggregation_form_versions.id
-                    LEFT JOIN workflow_assignments AS aggregation_assignments ON aggregation_assignments.workflow_step_id = aggregation_steps.id
-                    WHERE direct_assignments.node_id = ANY($1)
-                       OR aggregation_assignments.node_id = ANY($1)
-                ) AS dashboards,
-                0::bigint AS charts
+                0::bigint AS dataset_revisions,
+                0::bigint AS components,
+                0::bigint AS component_versions,
+                0::bigint AS dashboards
             "#,
         )
         .bind(scope_ids)
         .fetch_one(&state.pool)
         .await?;
 
-        return Ok(Json(ApplicationSummary {
-            published_form_versions: row.try_get("published_form_versions")?,
-            draft_submissions: row.try_get("draft_submissions")?,
-            submitted_submissions: row.try_get("submitted_submissions")?,
-            datasets: row.try_get("datasets")?,
-            reports: row.try_get("reports")?,
-            aggregations: row.try_get("aggregations")?,
-            dashboards: row.try_get("dashboards")?,
-            charts: row.try_get("charts")?,
-        }));
+        return summary_from_row(row);
     }
 
     let accessible_account_ids = {
@@ -166,24 +120,28 @@ pub async fn get_summary(
                   AND workflow_assignments.account_id = ANY($1)
             ) AS submitted_submissions,
             0::bigint AS datasets,
-            0::bigint AS reports,
-            0::bigint AS aggregations,
-            0::bigint AS dashboards,
-            0::bigint AS charts
+            0::bigint AS dataset_revisions,
+            0::bigint AS components,
+            0::bigint AS component_versions,
+            0::bigint AS dashboards
         "#,
     )
     .bind(accessible_account_ids)
     .fetch_one(&state.pool)
     .await?;
 
+    summary_from_row(row)
+}
+
+fn summary_from_row(row: sqlx::postgres::PgRow) -> ApiResult<Json<ApplicationSummary>> {
     Ok(Json(ApplicationSummary {
         published_form_versions: row.try_get("published_form_versions")?,
         draft_submissions: row.try_get("draft_submissions")?,
         submitted_submissions: row.try_get("submitted_submissions")?,
         datasets: row.try_get("datasets")?,
-        reports: row.try_get("reports")?,
-        aggregations: row.try_get("aggregations")?,
+        dataset_revisions: row.try_get("dataset_revisions")?,
+        components: row.try_get("components")?,
+        component_versions: row.try_get("component_versions")?,
         dashboards: row.try_get("dashboards")?,
-        charts: row.try_get("charts")?,
     }))
 }

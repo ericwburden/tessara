@@ -11,7 +11,7 @@ const PRIMARY_SSR_MODE: SsrMode = SsrMode::InOrder;
 #[cfg(feature = "hydrate")]
 #[wasm_bindgen]
 pub fn hydrate_app(root_id: &str) {
-    use leptos::mount::hydrate_from_async;
+    use leptos::mount::mount_to;
     use web_sys::window;
 
     let _ = any_spawner::Executor::init_wasm_bindgen();
@@ -26,10 +26,9 @@ pub fn hydrate_app(root_id: &str) {
         return;
     };
 
-    leptos::task::spawn_local(async move {
-        let handle = hydrate_from_async(root, App).await;
-        handle.forget();
-    });
+    root.set_inner_html("");
+    let handle = mount_to(root, App);
+    handle.forget();
 }
 
 #[component]
@@ -71,7 +70,6 @@ pub fn App() -> impl IntoView {
                 <Route path=path!("/administration/users") view=native::AdministrationUsersPage ssr=PRIMARY_SSR_MODE/>
                 <Route path=path!("/administration/node-types") view=native::AdministrationNodeTypesPage ssr=PRIMARY_SSR_MODE/>
                 <Route path=path!("/administration/roles") view=native::AdministrationRolesPage ssr=PRIMARY_SSR_MODE/>
-                <Route path=path!("/migration") view=native::MigrationPage ssr=PRIMARY_SSR_MODE/>
             </Routes>
         </Router>
     }

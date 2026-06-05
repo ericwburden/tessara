@@ -69,11 +69,6 @@ pub fn DatasetsDetailPage() -> impl IntoView {
 }
 
 #[component]
-pub fn MigrationPage() -> impl IntoView {
-    view! { <NativePlaceholderRoute active_route="migration" title="Migration" route="/migration" status="Queued" next_step="Restore migration import workflow."/> }
-}
-
-#[component]
 pub fn NotFoundPage() -> impl IntoView {
     view! {
         <AppShell active_route="home" title="Not Found">

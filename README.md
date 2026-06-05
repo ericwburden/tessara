@@ -3,9 +3,9 @@
 Tessara is a configurable data platform for structuring, collecting, and
 analyzing complex hierarchical data.
 
-This repository is intended to become the Rust + Leptos rewrite described in
-the migration blueprint. It should be developed as a domain-driven redesign,
-not as a direct port of the legacy Django application.
+This repository is the Rust + Leptos implementation of Tessara. It is developed
+as a domain-driven product rather than as a one-for-one port of an earlier
+system.
 
 Project direction, architecture, roadmap, and UI rules are authoritative in
 [`/docs`](./docs/README.md). This README focuses on
@@ -16,8 +16,8 @@ local development and operational workflow for the Rust workspace.
 - Rust backend with `axum`, `sqlx`, and PostgreSQL
 - Leptos SSR-first frontend
 - PostgreSQL OLTP schema for workflow correctness
-- Materialized analytics schema for reporting
-- DataFusion for report and chart query execution
+- Materialized analytics schema for component-backed analysis
+- Dataset revisions, components, and dashboards for analytical composition
 
 ## Planned Crate Naming
 
@@ -28,7 +28,6 @@ tessara-auth
 tessara-hierarchy
 tessara-forms
 tessara-submissions
-tessara-reporting
 tessara-analytics
 tessara-dashboards
 tessara-db
@@ -44,8 +43,7 @@ Pure domain rules should move out of `tessara-api` as soon as their contracts
 stabilize. Current extracted examples:
 
 - `tessara-core`: shared field type parsing and JSON value validation
-- `tessara-reporting`: missing-data policy parsing
-- `tessara-dashboards`: chart type parsing
+- `tessara-dashboards`: dashboard composition rules
 - `tessara-forms`: form version lifecycle and section/field compatibility rules
 - `tessara-submissions`: draft/edit/submit workflow rules and required value checks
 
@@ -179,7 +177,6 @@ Useful checks:
 cargo clippy --workspace --all-targets -- -D warnings
 .\scripts\smoke.ps1
 .\scripts\smoke.ps1 -ComposeApi
-.\scripts\rehearse-legacy-import.ps1
 ```
 
 `.\scripts\validate.ps1` is the standard pre-commit Rust validation path. It
@@ -189,9 +186,9 @@ same artifact locks. Use `-Fast` for the inner loop when SSR and wasm hydrate
 checks are not relevant to the change.
 
 Testing should focus on behavior that protects domain and workflow boundaries:
-validation rules, compatibility/missing-data behavior, projection/reporting
-contracts, and end-to-end slice regressions. Avoid placeholder tests that only
-assert generated boilerplate.
+validation rules, capability scope and ownership behavior, projection contracts,
+component/dashboard composition, and end-to-end slice regressions. Avoid
+placeholder tests that only assert generated boilerplate.
 
 The default smoke script uses Docker for Postgres and runs the API locally with
 `cargo run`. Use `.\scripts\smoke.ps1 -ComposeApi` to validate the fully
@@ -199,12 +196,6 @@ containerized Compose deployment path, including the API image.
 
 See [docs/development-workflow.md](./docs/development-workflow.md) for the
 recommended fast/medium/slow development loops.
-
-The legacy import rehearsal script validates and dry-runs
-`fixtures/legacy-rehearsal.json`, starts Docker Postgres, imports the fixture
-through the CLI importer, starts the API locally, verifies the imported
-report/dashboard path, and then tears down the test volume unless
-`-KeepServices` is provided.
 
 Seed the deterministic demo dataset into a running Compose deployment:
 
@@ -217,15 +208,6 @@ Or seed it directly through the CLI against a running database:
 ```powershell
 $env:DATABASE_URL='postgres://tessara:tessara@localhost:5432/tessara'
 cargo run -p tessara-api -- seed-demo
-```
-
-Run the first legacy migration rehearsal fixture:
-
-```powershell
-cargo run -p tessara-api -- validate-legacy-fixture .\fixtures\legacy-rehearsal.json
-cargo run -p tessara-api -- dry-run-legacy-fixture .\fixtures\legacy-rehearsal.json
-$env:DATABASE_URL='postgres://tessara:tessara@localhost:5432/tessara'
-cargo run -p tessara-api -- import-legacy-fixture .\fixtures\legacy-rehearsal.json
 ```
 
 The API serves the native Tessara interface at:
@@ -251,13 +233,16 @@ http://localhost:8080/administration/users
 http://localhost:8080/administration/node-types
 http://localhost:8080/administration/roles
 http://localhost:8080/datasets
-http://localhost:8080/migration
+http://localhost:8080/datasets
+http://localhost:8080/components
+http://localhost:8080/dashboards
 ```
 
 The former `/app` shell and JavaScript bridge assets have been retired. For user
 testing, start the Compose stack and open the root URL in a browser. The local
 launch helper now ensures a near-realistic Partner/Program/Activity/Session demo
-hierarchy, published forms, sample responses, and a compact reporting path.
+hierarchy, published forms, sample responses, datasets, components, and a
+compact dashboard path.
 Stop and reset the local test deployment with:
 
 ```powershell
@@ -276,17 +261,10 @@ Leptos SSR routes:
 - Route inventory at `/`, with direct navigation to product and administration
   surfaces.
 - Root-level organization, forms, workflows, responses, administration, dataset,
-  dashboard, component, and migration paths.
+  dashboard, and component paths.
 - Workflow revision, assignment, response, user administration, node type, role,
-  and metadata management surfaces rebuilt without the legacy bridge.
-- Placeholder routes for components, dashboards, datasets, and migration where
-  the route is mounted but deeper product functionality is intentionally deferred.
-
-## Migration Planning
-
-Slice 9 legacy mapping is tracked in
-[docs/legacy-mapping.md](docs/legacy-mapping.md). Treat that document as a
-behavior inventory and import-planning guide, not as a schema to reproduce.
+  and metadata management surfaces rebuilt as native Tessara routes.
+- Dataset, component, and dashboard routes for analytical assets.
 
 ## First Target Slice
 
@@ -298,7 +276,7 @@ The first implementation milestone should prove an end-to-end thread:
 4. Admin builds and publishes a versioned form.
 5. External user saves a draft and submits a valid response.
 6. Analytics refresh materializes the submission.
-7. A compatibility-aware table report returns the data through DataFusion.
+7. A dataset revision feeds a component version shown on a dashboard.
 
 ## Implemented Slice Status
 
@@ -308,27 +286,25 @@ The first implementation milestone should prove an end-to-end thread:
 - Slice 3: form, form version, section, field, publish, and render endpoints.
 - Slice 4: draft creation, draft value save, submit transition, audit events.
 - Slice 5: manual analytics projection refresh into `analytics.*` tables.
-- Slice 6: report definition and DataFusion-backed table execution.
-- Slice 7: dashboard/chart endpoints, report/dashboard discovery, and local
+- Slice 6: dataset definition and table execution.
+- Slice 7: component and dashboard endpoints, dashboard discovery, and local
   dashboard inspection.
-- Slice 8 start: builder lifecycle hardening, diagnostics, and admin auth tests.
-- Slice 9: legacy behavior inventory, fixture coverage inventory, and remaining
-  mapping-expansion risks.
-- Slice 10: fixture validation, CLI import, clean Docker-backed rehearsal,
-  imported report/dashboard inspection, and local validation workbench.
+- Slice 8: builder lifecycle hardening, diagnostics, and capability/scope auth
+  tests.
+- Slice 9: RBAC reset to capability + scope + ownership and single baseline
+  migration.
 - Next phase: browser shell screens for admin builder, external submission
-  workflow, report/dashboard builder workflows, and migration workbench.
+  workflow, dataset/component/dashboard builder workflows.
 - Next phase progress: Leptos shell foundation, selection-driven workflow
-  shortcuts, rendered form submission controls, report binding builder controls,
-  migration dry-run workbench endpoint, repeatable legacy import coverage, and
-  extracted form/submission domain rules.
+  shortcuts, rendered form submission controls, and extracted form/submission
+  domain rules.
 
 ## Next Phase
 
-The initial roadmap pass now proves the full migration thread from configurable
-hierarchy through import rehearsal and reporting. The next milestone should
-continue turning the API-first shell into a structured frontend and keep moving
-stable domain contracts out of `tessara-api` into the domain crates.
+The initial roadmap pass now proves the thread from configurable hierarchy
+through response collection and component-backed dashboards. The next milestone
+should continue turning the API-first shell into a structured frontend and keep
+moving stable domain contracts out of `tessara-api` into the domain crates.
 
 The Dockerfile uses BuildKit cache mounts for Cargo registry, git, and target
 caches so repeated `docker compose up -d --build` test deployments avoid

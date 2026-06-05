@@ -7,7 +7,7 @@ use sqlx::{PgPool, Postgres, Row, Transaction};
 use uuid::Uuid;
 
 use crate::{
-    auth::{self, AuthenticatedRequest, DelegationSummary, ScopeNodeSummary, UiAccessProfile},
+    auth::{self, AuthenticatedRequest, DelegationSummary, ScopeNodeSummary},
     db::AppState,
     error::{ApiError, ApiResult},
     hierarchy::require_text,
@@ -58,7 +58,6 @@ pub struct UserDetail {
     pub email: String,
     pub display_name: String,
     pub is_active: bool,
-    pub ui_access_profile: UiAccessProfile,
     pub capabilities: Vec<String>,
     pub roles: Vec<RoleSummary>,
     pub scope_nodes: Vec<ScopeNodeSummary>,
@@ -71,7 +70,6 @@ pub struct UserAccessDetail {
     pub account_id: Uuid,
     pub email: String,
     pub display_name: String,
-    pub ui_access_profile: UiAccessProfile,
     pub capabilities: Vec<String>,
     pub scope_nodes: Vec<ScopeNodeSummary>,
     pub available_scope_nodes: Vec<ScopeNodeSummary>,
@@ -142,10 +140,10 @@ pub async fn list_roles(
             roles.id,
             roles.name,
             COUNT(DISTINCT role_capabilities.capability_id) AS capability_count,
-            COUNT(DISTINCT account_role_assignments.account_id) AS account_count
+            COUNT(DISTINCT role_assignments.account_id) AS account_count
         FROM roles
         LEFT JOIN role_capabilities ON role_capabilities.role_id = roles.id
-        LEFT JOIN account_role_assignments ON account_role_assignments.role_id = roles.id
+        LEFT JOIN role_assignments ON role_assignments.role_id = roles.id
         GROUP BY roles.id, roles.name
         ORDER BY name, id
         "#,
@@ -336,8 +334,8 @@ pub async fn create_user(
     let password_hash = auth::hash_password_for_storage(payload.password.trim())?;
     sqlx::query(
         r#"
-        INSERT INTO account_credentials (account_id, legacy_password, password_hash, password_scheme, password_updated_at)
-        VALUES ($1, NULL, $2, $3, now())
+        INSERT INTO account_credentials (account_id, password_hash, password_scheme, password_updated_at)
+        VALUES ($1, $2, $3, now())
         "#,
     )
     .bind(account_id)
@@ -393,10 +391,9 @@ pub async fn update_user(
             let password_hash = auth::hash_password_for_storage(trimmed)?;
             sqlx::query(
                 r#"
-                INSERT INTO account_credentials (account_id, legacy_password, password_hash, password_scheme, password_updated_at)
-                VALUES ($1, NULL, $2, $3, now())
+                INSERT INTO account_credentials (account_id, password_hash, password_scheme, password_updated_at)
+                VALUES ($1, $2, $3, now())
                 ON CONFLICT (account_id) DO UPDATE SET
-                    legacy_password = NULL,
                     password_hash = EXCLUDED.password_hash,
                     password_scheme = EXCLUDED.password_scheme,
                     password_updated_at = now()
@@ -425,7 +422,6 @@ pub async fn get_user_access(
     require_account_exists(&state.pool, account_id).await?;
 
     let capabilities = auth::load_effective_capabilities(&state.pool, account_id).await?;
-    let ui_access_profile = auth::derive_ui_access_profile(&capabilities);
     let row = sqlx::query(
         r#"
         SELECT id, email, display_name
@@ -441,13 +437,12 @@ pub async fn get_user_access(
         account_id,
         email: row.try_get("email")?,
         display_name: row.try_get("display_name")?,
-        ui_access_profile: ui_access_profile.clone(),
         capabilities,
         scope_nodes: auth::load_scope_nodes(&state.pool, account_id).await?,
         available_scope_nodes: load_all_scope_nodes(&state.pool).await?,
         delegations: auth::load_delegations(&state.pool, account_id).await?,
         available_delegate_accounts: load_delegate_accounts(&state.pool, account_id).await?,
-        scope_assignments_editable: auth::scope_assignments_are_meaningful(&ui_access_profile),
+        scope_assignments_editable: true,
         delegation_assignments_editable: true,
     }))
 }
@@ -463,16 +458,6 @@ pub async fn update_user_access(
     ensure_node_ids_exist(&state.pool, &payload.scope_node_ids).await?;
     ensure_delegate_account_ids_exist(&state.pool, account_id, &payload.delegate_account_ids)
         .await?;
-
-    let capabilities = auth::load_effective_capabilities(&state.pool, account_id).await?;
-    let ui_access_profile = auth::derive_ui_access_profile(&capabilities);
-    if !auth::scope_assignments_are_meaningful(&ui_access_profile)
-        && !payload.scope_node_ids.is_empty()
-    {
-        return Err(ApiError::BadRequest(
-            "scope assignments are only meaningful for operator-style access".into(),
-        ));
-    }
 
     let mut tx = state.pool.begin().await?;
     replace_scope_assignments(&mut tx, account_id, &payload.scope_node_ids).await?;
@@ -495,14 +480,12 @@ async fn load_user_detail(pool: &PgPool, account_id: Uuid) -> ApiResult<UserDeta
     .await?
     .ok_or_else(|| ApiError::NotFound(format!("account {account_id}")))?;
     let capabilities = auth::load_effective_capabilities(pool, account_id).await?;
-    let ui_access_profile = auth::derive_ui_access_profile(&capabilities);
 
     Ok(UserDetail {
         id: row.try_get("id")?,
         email: row.try_get("email")?,
         display_name: row.try_get("display_name")?,
         is_active: row.try_get("is_active")?,
-        ui_access_profile,
         capabilities,
         roles: load_roles_for_account(pool, account_id).await?,
         scope_nodes: auth::load_scope_nodes(pool, account_id).await?,
@@ -519,11 +502,11 @@ async fn load_roles_for_account(pool: &PgPool, account_id: Uuid) -> ApiResult<Ve
             roles.name,
             COUNT(DISTINCT role_capabilities.capability_id) AS capability_count,
             COUNT(DISTINCT all_assignments.account_id) AS account_count
-        FROM account_role_assignments
-        JOIN roles ON roles.id = account_role_assignments.role_id
+        FROM role_assignments
+        JOIN roles ON roles.id = role_assignments.role_id
         LEFT JOIN role_capabilities ON role_capabilities.role_id = roles.id
-        LEFT JOIN account_role_assignments AS all_assignments ON all_assignments.role_id = roles.id
-        WHERE account_role_assignments.account_id = $1
+        LEFT JOIN role_assignments AS all_assignments ON all_assignments.role_id = roles.id
+        WHERE role_assignments.account_id = $1
         GROUP BY roles.id, roles.name
         ORDER BY roles.name, roles.id
         "#,
@@ -596,9 +579,10 @@ async fn load_role_detail(pool: &PgPool, role_id: Uuid) -> ApiResult<RoleDetail>
     let assigned_accounts = sqlx::query(
         r#"
         SELECT accounts.id AS account_id, accounts.email, accounts.display_name
-        FROM account_role_assignments
-        JOIN accounts ON accounts.id = account_role_assignments.account_id
-        WHERE account_role_assignments.role_id = $1
+        FROM role_assignments
+        JOIN accounts ON accounts.id = role_assignments.account_id
+        WHERE role_assignments.role_id = $1
+        GROUP BY accounts.id, accounts.email, accounts.display_name
         ORDER BY accounts.display_name, accounts.email
         "#,
     )
@@ -864,22 +848,15 @@ async fn replace_role_assignments(
     account_id: Uuid,
     role_ids: &[Uuid],
 ) -> ApiResult<()> {
-    sqlx::query("DELETE FROM account_role_assignments WHERE account_id = $1")
+    let scoped_node_ids = current_scope_node_ids(tx, account_id).await?;
+
+    sqlx::query("DELETE FROM role_assignments WHERE account_id = $1")
         .bind(account_id)
         .execute(&mut **tx)
         .await?;
 
     for role_id in role_ids {
-        sqlx::query(
-            r#"
-            INSERT INTO account_role_assignments (account_id, role_id)
-            VALUES ($1, $2)
-            "#,
-        )
-        .bind(account_id)
-        .bind(role_id)
-        .execute(&mut **tx)
-        .await?;
+        insert_role_assignment_rows(tx, account_id, *role_id, &scoped_node_ids).await?;
     }
 
     Ok(())
@@ -916,25 +893,109 @@ async fn replace_scope_assignments(
     account_id: Uuid,
     node_ids: &[Uuid],
 ) -> ApiResult<()> {
-    sqlx::query("DELETE FROM account_node_scope_assignments WHERE account_id = $1")
+    let role_ids = current_role_ids(tx, account_id).await?;
+
+    sqlx::query("DELETE FROM role_assignments WHERE account_id = $1")
         .bind(account_id)
         .execute(&mut **tx)
         .await?;
 
-    for node_id in node_ids {
+    for role_id in role_ids {
+        insert_role_assignment_rows(tx, account_id, role_id, node_ids).await?;
+    }
+
+    Ok(())
+}
+
+async fn current_role_ids(
+    tx: &mut Transaction<'_, Postgres>,
+    account_id: Uuid,
+) -> ApiResult<Vec<Uuid>> {
+    Ok(sqlx::query_scalar(
+        r#"
+        SELECT DISTINCT role_id
+        FROM role_assignments
+        WHERE account_id = $1
+        ORDER BY role_id
+        "#,
+    )
+    .bind(account_id)
+    .fetch_all(&mut **tx)
+    .await?)
+}
+
+async fn current_scope_node_ids(
+    tx: &mut Transaction<'_, Postgres>,
+    account_id: Uuid,
+) -> ApiResult<Vec<Uuid>> {
+    Ok(sqlx::query_scalar(
+        r#"
+        SELECT DISTINCT node_id
+        FROM role_assignments
+        WHERE account_id = $1
+          AND node_id IS NOT NULL
+        ORDER BY node_id
+        "#,
+    )
+    .bind(account_id)
+    .fetch_all(&mut **tx)
+    .await?)
+}
+
+async fn insert_role_assignment_rows(
+    tx: &mut Transaction<'_, Postgres>,
+    account_id: Uuid,
+    role_id: Uuid,
+    scoped_node_ids: &[Uuid],
+) -> ApiResult<()> {
+    if scoped_node_ids.is_empty() || role_grants_admin(tx, role_id).await? {
         sqlx::query(
             r#"
-            INSERT INTO account_node_scope_assignments (account_id, node_id)
-            VALUES ($1, $2)
+            INSERT INTO role_assignments (account_id, role_id, node_id)
+            VALUES ($1, $2, NULL)
+            ON CONFLICT DO NOTHING
             "#,
         )
         .bind(account_id)
+        .bind(role_id)
+        .execute(&mut **tx)
+        .await?;
+        return Ok(());
+    }
+
+    for node_id in scoped_node_ids {
+        sqlx::query(
+            r#"
+            INSERT INTO role_assignments (account_id, role_id, node_id)
+            VALUES ($1, $2, $3)
+            ON CONFLICT DO NOTHING
+            "#,
+        )
+        .bind(account_id)
+        .bind(role_id)
         .bind(node_id)
         .execute(&mut **tx)
         .await?;
     }
 
     Ok(())
+}
+
+async fn role_grants_admin(tx: &mut Transaction<'_, Postgres>, role_id: Uuid) -> ApiResult<bool> {
+    Ok(sqlx::query_scalar::<_, bool>(
+        r#"
+        SELECT EXISTS(
+            SELECT 1
+            FROM role_capabilities
+            JOIN capabilities ON capabilities.id = role_capabilities.capability_id
+            WHERE role_capabilities.role_id = $1
+              AND capabilities.key = 'admin:all'
+        )
+        "#,
+    )
+    .bind(role_id)
+    .fetch_one(&mut **tx)
+    .await?)
 }
 
 async fn replace_delegations(

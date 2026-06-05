@@ -5,16 +5,14 @@ mod repo;
 mod service;
 
 pub use dto::{
-    AccountContext, DelegationSummary, LoginRequest, LoginResponse, LogoutResponse,
-    ScopeNodeSummary, SessionContext, SessionStateResponse, UiAccessProfile,
+    AccountContext, CapabilityBoundary, DelegationSummary, LoginRequest, LoginResponse,
+    LogoutResponse, ScopeNodeSummary, SessionContext, SessionStateResponse,
 };
 pub use extractor::AuthenticatedRequest;
 pub use handlers::{login, logout, me, session};
-pub use repo::{
-    effective_scope_node_ids, load_delegations, load_effective_capabilities, load_scope_nodes,
-};
+pub use repo::{load_delegations, load_effective_capabilities, load_scope_nodes};
 pub use service::{
-    authenticate_request, backfill_legacy_password_hashes, derive_ui_access_profile,
+    authenticate_request, capability_allows_node, capability_boundary, ensure_capability,
     hash_password_for_storage, password_scheme, require_capability,
-    resolve_accessible_delegate_account_id, scope_assignments_are_meaningful, store_password_hash,
+    resolve_accessible_delegate_account_id, store_password_hash,
 };

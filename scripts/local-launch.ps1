@@ -131,7 +131,6 @@ try {
     Write-Host "Administration:   http://localhost:8080/administration"
     Write-Host "Node Types:       http://localhost:8080/administration/node-types"
     Write-Host "Roles:            http://localhost:8080/administration/roles"
-    Write-Host "Migration:        http://localhost:8080/migration"
     Write-Host ""
     Write-Host "Demo accounts:" -ForegroundColor Green
     Write-Host "  admin@tessara.local       / tessara-dev-admin"

@@ -26,23 +26,18 @@ pub(crate) async fn ensure_can_start_assignment(
         )));
     };
 
-    if account.is_admin() {
+    if account.has_capability("workflows:write")
+        && auth::capability_allows_node(pool, account, "workflows:write", access.node_id).await?
+    {
         return Ok(());
     }
 
-    if account.is_operator() {
-        let scope_ids = auth::effective_scope_node_ids(pool, account.account_id).await?;
-        if scope_ids.contains(&access.node_id) {
-            return Ok(());
-        }
-        return Err(ApiError::Forbidden("workflow_assignment:start".into()));
-    }
-
-    if account.account_id == access.assignee_account_id
-        || account
-            .delegations
-            .iter()
-            .any(|delegate| delegate.account_id == access.assignee_account_id)
+    if account.has_capability("submissions:respond")
+        && (account.account_id == access.assignee_account_id
+            || account
+                .delegations
+                .iter()
+                .any(|delegate| delegate.account_id == access.assignee_account_id))
     {
         return Ok(());
     }

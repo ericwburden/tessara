@@ -10,7 +10,6 @@ members = [
     "crates/tessara-forms",
     "crates/tessara-hierarchy",
     "crates/tessara-jobs",
-    "crates/tessara-reporting",
     "crates/tessara-submissions",
     "crates/tessara-web",
 ]

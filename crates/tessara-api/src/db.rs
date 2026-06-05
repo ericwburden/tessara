@@ -29,7 +29,6 @@ pub async fn connect_and_prepare(config: &Config) -> anyhow::Result<PgPool> {
 
     sqlx::migrate!("./migrations").run(&pool).await?;
     seed_dev_admin(&pool, config).await?;
-    auth::backfill_legacy_password_hashes(&pool).await?;
 
     Ok(pool)
 }
@@ -64,14 +63,22 @@ async fn seed_dev_admin(pool: &PgPool, config: &Config) -> anyhow::Result<()> {
             "workflows:write",
             "Manage workflow definitions and assignments",
         ),
+        (
+            "submissions:read_own",
+            "Read own and delegated response work",
+        ),
+        (
+            "submissions:respond",
+            "Start and complete assigned response work",
+        ),
         ("submissions:write", "Create and update submissions"),
         ("analytics:refresh", "Refresh analytics projections"),
         ("datasets:write", "Manage dataset definitions"),
         ("datasets:read", "Inspect dataset definitions"),
-        ("reports:write", "Manage report definitions"),
-        ("reports:read", "Run report definitions"),
-        ("aggregations:write", "Manage aggregation definitions"),
-        ("aggregations:read", "Run aggregation definitions"),
+        ("components:write", "Manage component definitions"),
+        ("components:read", "Inspect component definitions"),
+        ("dashboards:write", "Manage dashboard definitions"),
+        ("dashboards:read", "Inspect dashboard definitions"),
     ];
 
     for (key, description) in capabilities {
@@ -96,8 +103,10 @@ async fn seed_dev_admin(pool: &PgPool, config: &Config) -> anyhow::Result<()> {
         "forms:read",
         "workflows:read",
         "workflows:write",
+        "submissions:respond",
         "submissions:write",
-        "reports:read",
+        "components:read",
+        "dashboards:read",
     ] {
         let capability_id: uuid::Uuid =
             sqlx::query_scalar("SELECT id FROM capabilities WHERE key = $1")
@@ -107,11 +116,14 @@ async fn seed_dev_admin(pool: &PgPool, config: &Config) -> anyhow::Result<()> {
         ensure_role_capability(pool, "operator", capability_id).await?;
     }
 
-    let respondent_capability_id: uuid::Uuid =
-        sqlx::query_scalar("SELECT id FROM capabilities WHERE key = 'submissions:write'")
-            .fetch_one(pool)
-            .await?;
-    ensure_role_capability(pool, "respondent", respondent_capability_id).await?;
+    for capability_key in ["submissions:read_own", "submissions:respond"] {
+        let capability_id: uuid::Uuid =
+            sqlx::query_scalar("SELECT id FROM capabilities WHERE key = $1")
+                .bind(capability_key)
+                .fetch_one(pool)
+                .await?;
+        ensure_role_capability(pool, "respondent", capability_id).await?;
+    }
 
     let admin_role_id: uuid::Uuid = sqlx::query_scalar("SELECT id FROM roles WHERE name = 'admin'")
         .fetch_one(pool)
@@ -119,8 +131,8 @@ async fn seed_dev_admin(pool: &PgPool, config: &Config) -> anyhow::Result<()> {
 
     sqlx::query(
         r#"
-        INSERT INTO account_role_assignments (account_id, role_id)
-        VALUES ($1, $2)
+        INSERT INTO role_assignments (account_id, role_id, node_id)
+        VALUES ($1, $2, NULL)
         ON CONFLICT DO NOTHING
         "#,
     )

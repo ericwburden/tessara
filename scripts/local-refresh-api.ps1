@@ -99,7 +99,6 @@ try {
     Write-Host "Administration:   http://localhost:8080/administration"
     Write-Host "Node Types:       http://localhost:8080/administration/node-types"
     Write-Host "Roles:            http://localhost:8080/administration/roles"
-    Write-Host "Migration:        http://localhost:8080/migration"
     if ($SkipBuild) {
         Write-Host "API image rebuild was skipped because -SkipBuild was supplied." -ForegroundColor Yellow
     }

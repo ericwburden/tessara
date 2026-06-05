@@ -776,10 +776,10 @@ pub async fn list_nodes(
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty());
-    let rows = if account.is_operator() {
-        let scope_ids = auth::effective_scope_node_ids(&state.pool, account.account_id).await?;
-        sqlx::query(
-            r#"
+    let rows = match auth::capability_boundary(&state.pool, account, "hierarchy:read").await? {
+        auth::CapabilityBoundary::Scoped(scope_ids) => {
+            sqlx::query(
+                r#"
             SELECT
                 nodes.id,
                 nodes.node_type_id,
@@ -820,14 +820,15 @@ pub async fn list_nodes(
                 nodes.created_at
             ORDER BY nodes.created_at, nodes.name
             "#,
-        )
-        .bind(scope_ids)
-        .bind(search)
-        .fetch_all(&state.pool)
-        .await?
-    } else {
-        sqlx::query(
-            r#"
+            )
+            .bind(scope_ids)
+            .bind(search)
+            .fetch_all(&state.pool)
+            .await?
+        }
+        auth::CapabilityBoundary::Global => {
+            sqlx::query(
+                r#"
             SELECT
                 nodes.id,
                 nodes.node_type_id,
@@ -867,10 +868,12 @@ pub async fn list_nodes(
                 nodes.created_at
             ORDER BY nodes.created_at, nodes.name
             "#,
-        )
-        .bind(search)
-        .fetch_all(&state.pool)
-        .await?
+            )
+            .bind(search)
+            .fetch_all(&state.pool)
+            .await?
+        }
+        auth::CapabilityBoundary::None => return Err(ApiError::Forbidden("hierarchy:read".into())),
     };
 
     let nodes = rows
@@ -905,11 +908,8 @@ pub async fn get_node(
     Path(node_id): Path<Uuid>,
 ) -> ApiResult<Json<NodeDetail>> {
     let account = request.require_capability("hierarchy:read")?;
-    if account.is_operator() {
-        let scope_ids = auth::effective_scope_node_ids(&state.pool, account.account_id).await?;
-        if !scope_ids.contains(&node_id) {
-            return Err(ApiError::Forbidden("hierarchy:read".into()));
-        }
+    if !auth::capability_allows_node(&state.pool, account, "hierarchy:read", node_id).await? {
+        return Err(ApiError::Forbidden("hierarchy:read".into()));
     }
 
     let node = sqlx::query(
@@ -1064,33 +1064,25 @@ pub async fn get_node(
         WHERE EXISTS (
             SELECT 1
             FROM dashboard_components
-            JOIN charts ON charts.id = dashboard_components.chart_id
-            LEFT JOIN reports ON reports.id = charts.report_id
-            LEFT JOIN aggregations ON aggregations.id = charts.aggregation_id
-            LEFT JOIN reports AS aggregation_reports
-                ON aggregation_reports.id = aggregations.report_id
-            LEFT JOIN forms AS direct_forms ON direct_forms.id = reports.form_id
-            LEFT JOIN form_versions AS direct_form_versions
-                ON direct_form_versions.form_id = direct_forms.id
-               AND direct_form_versions.status = 'published'::form_version_status
-            LEFT JOIN forms AS aggregation_forms
-                ON aggregation_forms.id = aggregation_reports.form_id
-            LEFT JOIN form_versions AS aggregation_form_versions
-                ON aggregation_form_versions.form_id = aggregation_forms.id
-               AND aggregation_form_versions.status = 'published'::form_version_status
-            LEFT JOIN workflow_steps AS direct_steps
-                ON direct_steps.form_version_id = direct_form_versions.id
-            LEFT JOIN workflow_assignments AS direct_assignments
-                ON direct_assignments.workflow_step_id = direct_steps.id
-            LEFT JOIN workflow_steps AS aggregation_steps
-                ON aggregation_steps.form_version_id = aggregation_form_versions.id
-            LEFT JOIN workflow_assignments AS aggregation_assignments
-                ON aggregation_assignments.workflow_step_id = aggregation_steps.id
+            JOIN component_versions
+                ON component_versions.id = dashboard_components.component_version_id
+            JOIN dataset_revisions
+                ON dataset_revisions.id = component_versions.dataset_revision_id
+            JOIN dataset_sources
+                ON dataset_sources.dataset_id = dataset_revisions.dataset_id
+            JOIN form_versions
+                ON form_versions.form_id = dataset_sources.form_id
+               AND form_versions.status = 'published'::form_version_status
+               AND (
+                    dataset_sources.form_version_major IS NULL
+                    OR form_versions.version_major = dataset_sources.form_version_major
+               )
+            JOIN workflow_steps
+                ON workflow_steps.form_version_id = form_versions.id
+            JOIN workflow_assignments
+                ON workflow_assignments.workflow_step_id = workflow_steps.id
             WHERE dashboard_components.dashboard_id = dashboards.id
-              AND (
-                  direct_assignments.node_id = $1
-                  OR aggregation_assignments.node_id = $1
-              )
+              AND workflow_assignments.node_id = $1
         )
         GROUP BY dashboards.id, dashboards.name, dashboards.description
         ORDER BY dashboards.name, dashboards.id

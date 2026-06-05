@@ -27,14 +27,6 @@ pub struct SessionStateResponse {
 
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum UiAccessProfile {
-    Admin,
-    Operator,
-    ResponseUser,
-}
-
-#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
 pub enum SessionTransport {
     Bearer,
     Cookie,
@@ -61,25 +53,42 @@ pub struct DelegationSummary {
     pub display_name: String,
 }
 
+#[derive(Clone, Debug)]
+pub struct CapabilityScope {
+    pub capability: String,
+    pub global: bool,
+    pub node_ids: Vec<Uuid>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CapabilityBoundary {
+    None,
+    Global,
+    Scoped(Vec<Uuid>),
+}
+
 #[derive(Clone, Serialize)]
 pub struct AccountContext {
     pub account_id: Uuid,
     pub email: String,
     pub display_name: String,
     pub is_active: bool,
-    pub ui_access_profile: UiAccessProfile,
     pub roles: Vec<String>,
     pub capabilities: Vec<String>,
+    #[serde(skip)]
+    pub capability_scopes: Vec<CapabilityScope>,
     pub scope_nodes: Vec<ScopeNodeSummary>,
     pub delegations: Vec<DelegationSummary>,
 }
 
 impl AccountContext {
-    pub fn is_admin(&self) -> bool {
-        self.ui_access_profile == UiAccessProfile::Admin
+    pub fn has_capability(&self, required: &str) -> bool {
+        self.capability_scope(required).is_some()
     }
 
-    pub fn is_operator(&self) -> bool {
-        self.ui_access_profile == UiAccessProfile::Operator
+    pub fn capability_scope(&self, required: &str) -> Option<&CapabilityScope> {
+        self.capability_scopes
+            .iter()
+            .find(|scope| scope.capability == "admin:all" || scope.capability == required)
     }
 }

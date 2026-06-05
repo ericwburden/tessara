@@ -42,7 +42,7 @@ Every future sprint is a full vertical slice.
 The codebase already includes a substantial vertical foundation:
 
 - local Docker-based development, runnable Rust service, seeded demo workflows, and smoke helpers
-- explicit login flow, session handling, capability-derived UI access profiles, role-aware navigation, and route guards
+- explicit login flow, session handling, capability/scope metadata, role-aware navigation, and route guards
 - application-grade administration screens for users, roles, scoped access, and delegations
 - admin-managed role creation and assignment with capability bundles
 - configurable organization hierarchy and metadata-backed nodes

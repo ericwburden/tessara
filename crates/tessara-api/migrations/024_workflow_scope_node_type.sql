@@ -1,1 +1,0 @@
--- Workflow node type is part of the workflow runtime schema.

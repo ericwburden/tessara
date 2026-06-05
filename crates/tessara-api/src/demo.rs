@@ -34,14 +34,18 @@ pub struct DemoSeedSummary {
     pub form_count: i64,
     pub draft_submission_count: i64,
     pub submitted_submission_count: i64,
-    pub report_count: i64,
+    pub dataset_count: i64,
+    pub dataset_revision_count: i64,
+    pub component_count: i64,
     pub dashboard_count: i64,
     pub organization_node_id: Uuid,
     pub form_id: Uuid,
     pub form_version_id: Uuid,
     pub submission_id: Uuid,
-    pub report_id: Uuid,
-    pub chart_id: Uuid,
+    pub dataset_id: Uuid,
+    pub dataset_revision_id: Uuid,
+    pub component_id: Uuid,
+    pub component_version_id: Uuid,
     pub dashboard_id: Uuid,
     pub partner_node_id: Uuid,
     pub program_node_id: Uuid,
@@ -95,9 +99,11 @@ struct DemoFormSpec<'a> {
     fields: Vec<FormFieldDef<'a>>,
 }
 
-struct ReportBinding<'a> {
+struct DatasetFieldBinding<'a> {
     logical_key: &'a str,
+    label: &'a str,
     source_field_key: &'a str,
+    field_type: &'a str,
 }
 
 struct SeedSubmissionSpec<'a> {
@@ -175,8 +181,8 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         partner_type_id,
         &[
             MetadataFieldDef {
-                key: "legacy_id",
-                label: "Legacy ID",
+                key: "source_code",
+                label: "Source Code",
                 field_type: "text",
                 required: true,
             },
@@ -212,8 +218,8 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         program_type_id,
         &[
             MetadataFieldDef {
-                key: "legacy_id",
-                label: "Legacy ID",
+                key: "source_code",
+                label: "Source Code",
                 field_type: "text",
                 required: true,
             },
@@ -249,8 +255,8 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         activity_type_id,
         &[
             MetadataFieldDef {
-                key: "legacy_id",
-                label: "Legacy ID",
+                key: "source_code",
+                label: "Source Code",
                 field_type: "text",
                 required: true,
             },
@@ -286,8 +292,8 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         session_type_id,
         &[
             MetadataFieldDef {
-                key: "legacy_id",
-                label: "Legacy ID",
+                key: "source_code",
+                label: "Source Code",
                 field_type: "text",
                 required: true,
             },
@@ -333,7 +339,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         DemoNodeSpec {
             name: "Demo Partner North Star Services",
             metadata: vec![
-                ("legacy_id", json!("partner-1001")),
+                ("source_code", json!("partner-1001")),
                 ("region", json!("north")),
                 ("active_contract", json!(true)),
                 ("partner_since", json!("2022-01-15")),
@@ -350,7 +356,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         DemoNodeSpec {
             name: "Demo Partner Community Bridge",
             metadata: vec![
-                ("legacy_id", json!("partner-1002")),
+                ("source_code", json!("partner-1002")),
                 ("region", json!("south")),
                 ("active_contract", json!(false)),
                 ("partner_since", Value::Null),
@@ -368,7 +374,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         DemoNodeSpec {
             name: "Demo Program Family Outreach",
             metadata: vec![
-                ("legacy_id", json!("program-2001")),
+                ("source_code", json!("program-2001")),
                 ("program_code", json!("FO-01")),
                 ("annual_target", json!(120)),
                 ("funded", json!(true)),
@@ -385,7 +391,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         DemoNodeSpec {
             name: "Demo Program Youth Mentoring",
             metadata: vec![
-                ("legacy_id", json!("program-2002")),
+                ("source_code", json!("program-2002")),
                 ("program_code", json!("YM-02")),
                 ("annual_target", json!(80)),
                 ("funded", json!(true)),
@@ -402,7 +408,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         DemoNodeSpec {
             name: "Demo Program Workforce Readiness",
             metadata: vec![
-                ("legacy_id", json!("program-2003")),
+                ("source_code", json!("program-2003")),
                 ("program_code", json!("WR-03")),
                 ("annual_target", json!(150)),
                 ("funded", json!(true)),
@@ -419,7 +425,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         DemoNodeSpec {
             name: "Demo Program Health Navigation",
             metadata: vec![
-                ("legacy_id", json!("program-2004")),
+                ("source_code", json!("program-2004")),
                 ("program_code", json!("HN-04")),
                 ("annual_target", Value::Null),
                 ("funded", json!(false)),
@@ -437,7 +443,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         DemoNodeSpec {
             name: "Demo Activity Intake and Orientation",
             metadata: vec![
-                ("legacy_id", json!("activity-3001")),
+                ("source_code", json!("activity-3001")),
                 ("delivery_mode", json!("in_person")),
                 ("planned_participants", json!(25)),
                 ("focus_tags", json!(["orientation", "enrollment"])),
@@ -454,7 +460,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         DemoNodeSpec {
             name: "Demo Activity Family Workshops",
             metadata: vec![
-                ("legacy_id", json!("activity-3002")),
+                ("source_code", json!("activity-3002")),
                 ("delivery_mode", json!("hybrid")),
                 ("planned_participants", json!(18)),
                 ("focus_tags", json!(["family_support", "wellness"])),
@@ -471,7 +477,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         DemoNodeSpec {
             name: "Demo Activity Mentor Match",
             metadata: vec![
-                ("legacy_id", json!("activity-3003")),
+                ("source_code", json!("activity-3003")),
                 ("delivery_mode", json!("remote")),
                 ("planned_participants", json!(30)),
                 ("focus_tags", json!(["mentoring", "youth_services"])),
@@ -488,7 +494,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         DemoNodeSpec {
             name: "Demo Activity After School Check-ins",
             metadata: vec![
-                ("legacy_id", json!("activity-3004")),
+                ("source_code", json!("activity-3004")),
                 ("delivery_mode", json!("in_person")),
                 ("planned_participants", json!(22)),
                 ("focus_tags", json!(["after_school"])),
@@ -505,7 +511,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         DemoNodeSpec {
             name: "Demo Activity Job Coaching",
             metadata: vec![
-                ("legacy_id", json!("activity-3005")),
+                ("source_code", json!("activity-3005")),
                 ("delivery_mode", json!("hybrid")),
                 ("planned_participants", json!(16)),
                 ("focus_tags", Value::Null),
@@ -522,7 +528,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         DemoNodeSpec {
             name: "Demo Activity Enrollment Navigation",
             metadata: vec![
-                ("legacy_id", json!("activity-3006")),
+                ("source_code", json!("activity-3006")),
                 ("delivery_mode", json!("remote")),
                 ("planned_participants", json!(12)),
                 ("focus_tags", json!(["benefits", "intake"])),
@@ -540,7 +546,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         DemoNodeSpec {
             name: "Demo Session April Orientation",
             metadata: vec![
-                ("legacy_id", json!("session-4001")),
+                ("source_code", json!("session-4001")),
                 ("session_date", json!("2026-04-08")),
                 ("capacity", json!(25)),
                 ("cancelled", json!(false)),
@@ -558,7 +564,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         DemoNodeSpec {
             name: "Demo Session May Orientation",
             metadata: vec![
-                ("legacy_id", json!("session-4002")),
+                ("source_code", json!("session-4002")),
                 ("session_date", json!("2026-05-06")),
                 ("capacity", json!(20)),
                 ("cancelled", json!(false)),
@@ -576,7 +582,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         DemoNodeSpec {
             name: "Demo Session Spring Family Workshop",
             metadata: vec![
-                ("legacy_id", json!("session-4003")),
+                ("source_code", json!("session-4003")),
                 ("session_date", json!("2026-04-20")),
                 ("capacity", json!(18)),
                 ("cancelled", json!(false)),
@@ -594,7 +600,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         DemoNodeSpec {
             name: "Demo Session Summer Family Workshop",
             metadata: vec![
-                ("legacy_id", json!("session-4004")),
+                ("source_code", json!("session-4004")),
                 ("session_date", json!("2026-06-18")),
                 ("capacity", json!(16)),
                 ("cancelled", json!(false)),
@@ -612,7 +618,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         DemoNodeSpec {
             name: "Demo Session Mentor Kickoff",
             metadata: vec![
-                ("legacy_id", json!("session-4005")),
+                ("source_code", json!("session-4005")),
                 ("session_date", json!("2026-05-12")),
                 ("capacity", json!(30)),
                 ("cancelled", json!(false)),
@@ -630,7 +636,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         DemoNodeSpec {
             name: "Demo Session Mentor Follow-up",
             metadata: vec![
-                ("legacy_id", json!("session-4006")),
+                ("source_code", json!("session-4006")),
                 ("session_date", json!("2026-05-26")),
                 ("capacity", json!(14)),
                 ("cancelled", json!(false)),
@@ -648,7 +654,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         DemoNodeSpec {
             name: "Demo Session Resume Lab",
             metadata: vec![
-                ("legacy_id", json!("session-4007")),
+                ("source_code", json!("session-4007")),
                 ("session_date", json!("2026-06-10")),
                 ("capacity", json!(15)),
                 ("cancelled", json!(false)),
@@ -666,7 +672,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         DemoNodeSpec {
             name: "Demo Session Benefits Intake",
             metadata: vec![
-                ("legacy_id", json!("session-4008")),
+                ("source_code", json!("session-4008")),
                 ("session_date", json!("2026-06-22")),
                 ("capacity", json!(10)),
                 ("cancelled", json!(false)),
@@ -1229,70 +1235,91 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
 
     let analytics_status = analytics::refresh_projection(pool).await?;
 
-    let partner_report_id = ensure_report(
+    let (_partner_dataset_id, partner_dataset_revision_id) = ensure_dataset(
         pool,
         partner_form.form_id,
-        "Demo Partner Profile Report",
-        &[ReportBinding {
+        "Demo Partner Profile Dataset",
+        "demo-partner-profile",
+        "partner",
+        &[DatasetFieldBinding {
             logical_key: "contact_name",
+            label: "Contact Name",
             source_field_key: "contact_name",
+            field_type: "text",
         }],
     )
     .await?;
-    let program_report_id = ensure_report(
+    let (_program_dataset_id, program_dataset_revision_id) = ensure_dataset(
         pool,
         program_form.form_id,
-        "Demo Program Snapshot Report",
-        &[ReportBinding {
+        "Demo Program Snapshot Dataset",
+        "demo-program-snapshot",
+        "program",
+        &[DatasetFieldBinding {
             logical_key: "participant_target",
+            label: "Participant Target",
             source_field_key: "participant_target",
+            field_type: "number",
         }],
     )
     .await?;
-    let activity_report_id = ensure_report(
+    let (_activity_dataset_id, activity_dataset_revision_id) = ensure_dataset(
         pool,
         activity_form.form_id,
-        "Demo Activity Plan Report",
-        &[ReportBinding {
+        "Demo Activity Plan Dataset",
+        "demo-activity-plan",
+        "activity",
+        &[DatasetFieldBinding {
             logical_key: "expected_attendees",
+            label: "Expected Attendees",
             source_field_key: "expected_attendees",
+            field_type: "number",
         }],
     )
     .await?;
-    let session_report_id = ensure_report(
+    let (session_dataset_id, session_dataset_revision_id) = ensure_dataset(
         pool,
         session_form.form_id,
-        "Participants Report",
-        &[ReportBinding {
+        "Participants Dataset",
+        "demo-session-participants",
+        "session",
+        &[DatasetFieldBinding {
             logical_key: "participants",
+            label: "Participants",
             source_field_key: "participants",
+            field_type: "number",
         }],
     )
     .await?;
 
-    let partner_chart_id = ensure_chart(
+    let (_partner_component_id, partner_component_version_id) = ensure_component(
         pool,
         "Demo Partner Profile Table",
-        Some(partner_report_id),
-        "table",
+        "demo-partner-profile-table",
+        partner_dataset_revision_id,
     )
     .await?;
-    let program_chart_id = ensure_chart(
+    let (_program_component_id, program_component_version_id) = ensure_component(
         pool,
         "Demo Program Snapshot Table",
-        Some(program_report_id),
-        "table",
+        "demo-program-snapshot-table",
+        program_dataset_revision_id,
     )
     .await?;
-    let activity_chart_id = ensure_chart(
+    let (_activity_component_id, activity_component_version_id) = ensure_component(
         pool,
         "Demo Activity Plan Table",
-        Some(activity_report_id),
-        "table",
+        "demo-activity-plan-table",
+        activity_dataset_revision_id,
     )
     .await?;
-    let session_chart_id =
-        ensure_chart(pool, "Participants Table", Some(session_report_id), "table").await?;
+    let (session_component_id, session_component_version_id) = ensure_component(
+        pool,
+        "Participants Table",
+        "demo-session-participants-table",
+        session_dataset_revision_id,
+    )
+    .await?;
 
     let dashboard_id = ensure_dashboard(
         pool,
@@ -1304,11 +1331,23 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         pool,
         dashboard_id,
         &[
-            (partner_chart_id, 0, json!({"title": "Partner Profile"})),
-            (program_chart_id, 1, json!({"title": "Program Snapshot"})),
-            (activity_chart_id, 2, json!({"title": "Activity Plan"})),
             (
-                session_chart_id,
+                partner_component_version_id,
+                0,
+                json!({"title": "Partner Profile"}),
+            ),
+            (
+                program_component_version_id,
+                1,
+                json!({"title": "Program Snapshot"}),
+            ),
+            (
+                activity_component_version_id,
+                2,
+                json!({"title": "Activity Plan"}),
+            ),
+            (
+                session_component_version_id,
                 3,
                 json!({"title": "Session Participation"}),
             ),
@@ -1327,14 +1366,18 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         form_count: 6,
         draft_submission_count: 4,
         submitted_submission_count: 8,
-        report_count: 4,
+        dataset_count: 4,
+        dataset_revision_count: 4,
+        component_count: 4,
         dashboard_count: 1,
         organization_node_id: session_a,
         form_id: session_form.form_id,
         form_version_id: session_form.form_version_id,
         submission_id: session_submitted_a,
-        report_id: session_report_id,
-        chart_id: session_chart_id,
+        dataset_id: session_dataset_id,
+        dataset_revision_id: session_dataset_revision_id,
+        component_id: session_component_id,
+        component_version_id: session_component_version_id,
         dashboard_id,
         partner_node_id: partner_a,
         program_node_id: program_a,
@@ -1390,8 +1433,8 @@ async fn ensure_demo_account(
 
     sqlx::query(
         r#"
-        INSERT INTO account_role_assignments (account_id, role_id)
-        VALUES ($1, $2)
+        INSERT INTO role_assignments (account_id, role_id, node_id)
+        VALUES ($1, $2, NULL)
         ON CONFLICT DO NOTHING
         "#,
     )
@@ -1408,17 +1451,58 @@ async fn ensure_account_scope_assignment(
     account_id: Uuid,
     node_id: Uuid,
 ) -> ApiResult<()> {
-    sqlx::query(
+    let role_ids = sqlx::query_scalar::<_, Uuid>(
         r#"
-        INSERT INTO account_node_scope_assignments (account_id, node_id)
-        VALUES ($1, $2)
-        ON CONFLICT DO NOTHING
+        SELECT role_id
+        FROM role_assignments
+        WHERE account_id = $1
+        GROUP BY role_id
         "#,
     )
     .bind(account_id)
-    .bind(node_id)
+    .fetch_all(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
+        DELETE FROM role_assignments
+        WHERE account_id = $1
+          AND node_id IS NULL
+          AND NOT EXISTS (
+              SELECT 1
+              FROM role_capabilities
+              JOIN capabilities ON capabilities.id = role_capabilities.capability_id
+              WHERE role_capabilities.role_id = role_assignments.role_id
+                AND capabilities.key = 'admin:all'
+          )
+        "#,
+    )
+    .bind(account_id)
     .execute(pool)
     .await?;
+
+    for role_id in role_ids {
+        sqlx::query(
+            r#"
+            INSERT INTO role_assignments (account_id, role_id, node_id)
+            SELECT $1, $2, $3
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM role_capabilities
+                JOIN capabilities ON capabilities.id = role_capabilities.capability_id
+                WHERE role_capabilities.role_id = $2
+                  AND capabilities.key = 'admin:all'
+            )
+            ON CONFLICT DO NOTHING
+            "#,
+        )
+        .bind(account_id)
+        .bind(role_id)
+        .bind(node_id)
+        .execute(pool)
+        .await?;
+    }
+
     Ok(())
 }
 
@@ -2182,66 +2266,121 @@ async fn upsert_submission_value(
     Ok(())
 }
 
-async fn ensure_report(
+async fn ensure_dataset(
     pool: &PgPool,
     form_id: Uuid,
     name: &str,
-    bindings: &[ReportBinding<'_>],
-) -> ApiResult<Uuid> {
+    slug: &str,
+    source_alias: &str,
+    bindings: &[DatasetFieldBinding<'_>],
+) -> ApiResult<(Uuid, Uuid)> {
     let form_version_major = current_form_major(pool, form_id).await?;
-    let report_id = if let Some(id) =
-        sqlx::query_scalar("SELECT id FROM reports WHERE form_id = $1 AND name = $2")
-            .bind(form_id)
-            .bind(name)
-            .fetch_optional(pool)
-            .await?
+    let dataset_id = if let Some(id) = sqlx::query_scalar("SELECT id FROM datasets WHERE slug = $1")
+        .bind(slug)
+        .fetch_optional(pool)
+        .await?
     {
-        sqlx::query("UPDATE reports SET form_version_major = $1 WHERE id = $2")
-            .bind(form_version_major)
+        sqlx::query(
+            "UPDATE datasets SET name = $1, grain = 'submission', composition_mode = 'union' WHERE id = $2",
+        )
+            .bind(name)
             .bind(id)
             .execute(pool)
             .await?;
         id
     } else {
         sqlx::query_scalar(
-            "INSERT INTO reports (name, form_id, form_version_major) VALUES ($1, $2, $3) RETURNING id",
+            "INSERT INTO datasets (name, slug, grain, composition_mode) VALUES ($1, $2, 'submission', 'union') RETURNING id",
         )
             .bind(name)
-            .bind(form_id)
-            .bind(form_version_major)
+            .bind(slug)
             .fetch_one(pool)
             .await?
     };
 
-    sqlx::query("DELETE FROM report_field_bindings WHERE report_id = $1")
-        .bind(report_id)
+    sqlx::query("DELETE FROM dataset_sources WHERE dataset_id = $1")
+        .bind(dataset_id)
         .execute(pool)
         .await?;
+    sqlx::query("DELETE FROM dataset_fields WHERE dataset_id = $1")
+        .bind(dataset_id)
+        .execute(pool)
+        .await?;
+
+    sqlx::query(
+        r#"
+        INSERT INTO dataset_sources
+            (dataset_id, source_alias, form_id, form_version_major, selection_rule, position)
+        VALUES ($1, $2, $3, $4, 'latest', 0)
+        "#,
+    )
+    .bind(dataset_id)
+    .bind(source_alias)
+    .bind(form_id)
+    .bind(form_version_major)
+    .execute(pool)
+    .await?;
 
     for (position, binding) in bindings.iter().enumerate() {
         sqlx::query(
             r#"
-            INSERT INTO report_field_bindings
-                (report_id, logical_key, source_field_key, missing_policy, position)
-            VALUES ($1, $2, $3, 'null'::missing_data_policy, $4)
+            INSERT INTO dataset_fields
+                (dataset_id, key, label, source_alias, source_field_key, field_type, position)
+            VALUES ($1, $2, $3, $4, $5, $6::field_type, $7)
             "#,
         )
-        .bind(report_id)
+        .bind(dataset_id)
         .bind(binding.logical_key)
+        .bind(binding.label)
+        .bind(source_alias)
         .bind(binding.source_field_key)
+        .bind(binding.field_type)
         .bind(position as i32)
         .execute(pool)
         .await?;
     }
 
-    Ok(report_id)
+    let version_number: i32 = sqlx::query_scalar(
+        "SELECT COALESCE(MAX(version_number), 0) + 1 FROM dataset_revisions WHERE dataset_id = $1",
+    )
+    .bind(dataset_id)
+    .fetch_one(pool)
+    .await?;
+    let revision_id = sqlx::query_scalar(
+        r#"
+        INSERT INTO dataset_revisions
+            (dataset_id, version_number, version_label, status, published_at)
+        VALUES ($1, $2, $3, 'published'::dataset_revision_status, now())
+        RETURNING id
+        "#,
+    )
+    .bind(dataset_id)
+    .bind(version_number)
+    .bind(version_number.to_string())
+    .fetch_one(pool)
+    .await?;
+    sqlx::query(
+        r#"
+        UPDATE dataset_revisions
+        SET status = 'superseded'::dataset_revision_status
+        WHERE dataset_id = $1
+          AND id <> $2
+          AND status = 'published'::dataset_revision_status
+        "#,
+    )
+    .bind(dataset_id)
+    .bind(revision_id)
+    .execute(pool)
+    .await?;
+
+    Ok((dataset_id, revision_id))
 }
 
 fn parse_semantic_version_label(version_label: &str) -> ApiResult<(i32, i32, i32)> {
     if let Some((major, minor, patch)) = parse_strict_semantic_version(version_label) {
         return Ok((major, minor, patch));
     }
-    if let Some(major) = parse_legacy_major_version(version_label) {
+    if let Some(major) = parse_major_version_suffix(version_label) {
         return Ok((major, 0, 0));
     }
     Err(ApiError::BadRequest(format!(
@@ -2260,7 +2399,7 @@ fn parse_strict_semantic_version(version_label: &str) -> Option<(i32, i32, i32)>
     Some((major, minor, patch))
 }
 
-fn parse_legacy_major_version(version_label: &str) -> Option<i32> {
+fn parse_major_version_suffix(version_label: &str) -> Option<i32> {
     let digits = version_label
         .trim()
         .rsplit(|character: char| !character.is_ascii_digit())
@@ -2294,35 +2433,71 @@ async fn current_form_major(pool: &PgPool, form_id: Uuid) -> ApiResult<Option<i3
     .map_err(Into::into)
 }
 
-async fn ensure_chart(
+async fn ensure_component(
     pool: &PgPool,
     name: &str,
-    report_id: Option<Uuid>,
-    chart_type: &str,
-) -> ApiResult<Uuid> {
-    if let Some(id) = sqlx::query_scalar("SELECT id FROM charts WHERE name = $1")
-        .bind(name)
-        .fetch_optional(pool)
-        .await?
+    slug: &str,
+    dataset_revision_id: Uuid,
+) -> ApiResult<(Uuid, Uuid)> {
+    let component_id = if let Some(id) =
+        sqlx::query_scalar("SELECT id FROM components WHERE slug = $1")
+            .bind(slug)
+            .fetch_optional(pool)
+            .await?
     {
-        sqlx::query("UPDATE charts SET report_id = $1, chart_type = $2 WHERE id = $3")
-            .bind(report_id)
-            .bind(chart_type)
+        sqlx::query("UPDATE components SET name = $1 WHERE id = $2")
+            .bind(name)
             .bind(id)
             .execute(pool)
             .await?;
-        return Ok(id);
-    }
+        id
+    } else {
+        sqlx::query_scalar(
+            "INSERT INTO components (name, slug, description) VALUES ($1, $2, $3) RETURNING id",
+        )
+        .bind(name)
+        .bind(slug)
+        .bind("Seeded demo component")
+        .fetch_one(pool)
+        .await?
+    };
 
-    sqlx::query_scalar(
-        "INSERT INTO charts (name, report_id, chart_type) VALUES ($1, $2, $3) RETURNING id",
+    let version_number: i32 = sqlx::query_scalar(
+        "SELECT COALESCE(MAX(version_number), 0) + 1 FROM component_versions WHERE component_id = $1",
     )
-    .bind(name)
-    .bind(report_id)
-    .bind(chart_type)
+    .bind(component_id)
     .fetch_one(pool)
-    .await
-    .map_err(Into::into)
+    .await?;
+    let component_version_id = sqlx::query_scalar(
+        r#"
+        INSERT INTO component_versions
+            (component_id, dataset_revision_id, component_type, version_number, version_label, status, config, published_at)
+        VALUES ($1, $2, 'detail_table'::component_type, $3, $4, 'published'::component_version_status, $5, now())
+        RETURNING id
+        "#,
+    )
+    .bind(component_id)
+    .bind(dataset_revision_id)
+    .bind(version_number)
+    .bind(version_number.to_string())
+    .bind(json!({"columns": "all"}))
+    .fetch_one(pool)
+    .await?;
+    sqlx::query(
+        r#"
+        UPDATE component_versions
+        SET status = 'superseded'::component_version_status
+        WHERE component_id = $1
+          AND id <> $2
+          AND status = 'published'::component_version_status
+        "#,
+    )
+    .bind(component_id)
+    .bind(component_version_id)
+    .execute(pool)
+    .await?;
+
+    Ok((component_id, component_version_id))
 }
 
 async fn ensure_dashboard(pool: &PgPool, name: &str, description: Option<&str>) -> ApiResult<Uuid> {
@@ -2357,15 +2532,15 @@ async fn replace_dashboard_components(
         .execute(pool)
         .await?;
 
-    for (chart_id, position, config) in components {
+    for (component_version_id, position, config) in components {
         sqlx::query(
             r#"
-            INSERT INTO dashboard_components (dashboard_id, chart_id, position, config)
+            INSERT INTO dashboard_components (dashboard_id, component_version_id, position, config)
             VALUES ($1, $2, $3, $4)
             "#,
         )
         .bind(dashboard_id)
-        .bind(chart_id)
+        .bind(component_version_id)
         .bind(position)
         .bind(config)
         .execute(pool)

@@ -162,7 +162,6 @@ pub struct FormDefinition {
     scope_node_type_name: Option<String>,
     versions: Vec<FormVersionSummary>,
     workflows: Vec<FormWorkflowLink>,
-    reports: Vec<FormReportLink>,
     dataset_sources: Vec<FormDatasetSourceLink>,
 }
 
@@ -218,12 +217,6 @@ pub struct PublishFormVersionResponse {
     published_at: chrono::DateTime<chrono::Utc>,
     dependency_warnings: Vec<String>,
     starts_new_major_line: bool,
-}
-
-#[derive(Serialize)]
-pub struct FormReportLink {
-    id: Uuid,
-    name: String,
 }
 
 #[derive(Serialize)]
@@ -528,10 +521,10 @@ pub async fn list_published_form_versions(
         })
         .collect::<Result<Vec<_>, sqlx::Error>>()?;
 
-    if account.is_operator() {
-        let scope_ids = auth::effective_scope_node_ids(&state.pool, account.account_id).await?;
-        let allowed_form_version_ids = sqlx::query_scalar::<_, Uuid>(
-            r#"
+    match auth::capability_boundary(&state.pool, &account, "forms:read").await? {
+        auth::CapabilityBoundary::Scoped(scope_ids) => {
+            let allowed_form_version_ids = sqlx::query_scalar::<_, Uuid>(
+                r#"
             SELECT DISTINCT form_versions.id
             FROM form_versions
             JOIN workflow_steps ON workflow_steps.form_version_id = form_versions.id
@@ -539,19 +532,20 @@ pub async fn list_published_form_versions(
             WHERE form_versions.status = 'published'::form_version_status
               AND workflow_assignments.node_id = ANY($1)
             "#,
-        )
-        .bind(scope_ids)
-        .fetch_all(&state.pool)
-        .await?;
+            )
+            .bind(scope_ids)
+            .fetch_all(&state.pool)
+            .await?;
 
-        Ok(Json(
-            forms
-                .into_iter()
-                .filter(|form| allowed_form_version_ids.contains(&form.form_version_id))
-                .collect(),
-        ))
-    } else {
-        Ok(Json(forms))
+            Ok(Json(
+                forms
+                    .into_iter()
+                    .filter(|form| allowed_form_version_ids.contains(&form.form_version_id))
+                    .collect(),
+            ))
+        }
+        auth::CapabilityBoundary::Global => Ok(Json(forms)),
+        auth::CapabilityBoundary::None => Err(ApiError::Forbidden("forms:read".into())),
     }
 }
 
@@ -560,9 +554,8 @@ pub async fn list_readable_forms(
     request: AuthenticatedRequest,
 ) -> ApiResult<Json<Vec<FormSummary>>> {
     let account = request.require_capability("forms:read")?;
-    let form_rows = if account.is_operator() {
-        let scope_ids = auth::effective_scope_node_ids(&state.pool, account.account_id).await?;
-        sqlx::query(
+    let form_rows = match auth::capability_boundary(&state.pool, account, "forms:read").await? {
+        auth::CapabilityBoundary::Scoped(scope_ids) => sqlx::query(
             r#"
             SELECT DISTINCT
                 forms.id,
@@ -581,9 +574,8 @@ pub async fn list_readable_forms(
         )
         .bind(scope_ids)
         .fetch_all(&state.pool)
-        .await?
-    } else {
-        sqlx::query(
+        .await?,
+        auth::CapabilityBoundary::Global => sqlx::query(
             r#"
             SELECT forms.id, forms.name, forms.slug, forms.scope_node_type_id, node_types.name AS scope_node_type_name
             FROM forms
@@ -592,7 +584,8 @@ pub async fn list_readable_forms(
             "#,
         )
         .fetch_all(&state.pool)
-        .await?
+        .await?,
+        auth::CapabilityBoundary::None => return Err(ApiError::Forbidden("forms:read".into())),
     };
 
     let form_ids = form_rows
@@ -700,8 +693,9 @@ pub async fn get_readable_form(
     Path(form_id): Path<Uuid>,
 ) -> ApiResult<Json<FormDefinition>> {
     let account = request.require_capability("forms:read")?;
-    if account.is_operator() {
-        let scope_ids = auth::effective_scope_node_ids(&state.pool, account.account_id).await?;
+    if let auth::CapabilityBoundary::Scoped(scope_ids) =
+        auth::capability_boundary(&state.pool, account, "forms:read").await?
+    {
         let visible: bool = sqlx::query_scalar(
             r#"
             SELECT EXISTS (
@@ -823,19 +817,6 @@ async fn get_form_definition(pool: &sqlx::PgPool, form_id: Uuid) -> ApiResult<Fo
         }
     }
 
-    let reports = sqlx::query("SELECT id, name FROM reports WHERE form_id = $1 ORDER BY name, id")
-        .bind(form_id)
-        .fetch_all(pool)
-        .await?
-        .into_iter()
-        .map(|row| {
-            Ok(FormReportLink {
-                id: row.try_get("id")?,
-                name: row.try_get("name")?,
-            })
-        })
-        .collect::<Result<Vec<_>, sqlx::Error>>()?;
-
     let workflows = sqlx::query(
         r#"
         SELECT
@@ -938,7 +919,6 @@ async fn get_form_definition(pool: &sqlx::PgPool, form_id: Uuid) -> ApiResult<Fo
         scope_node_type_name: form.try_get("scope_node_type_name")?,
         versions,
         workflows,
-        reports,
         dataset_sources,
     })
 }
@@ -2001,14 +1981,7 @@ async fn load_direct_dependency_warnings(
     .bind(form_id)
     .fetch_all(pool)
     .await?;
-    let report_rows = sqlx::query(
-        "SELECT name FROM reports WHERE form_id = $1 AND form_version_major IS NULL ORDER BY name, id",
-    )
-        .bind(form_id)
-        .fetch_all(pool)
-        .await?;
-
-    let mut warnings = dataset_rows
+    let warnings = dataset_rows
         .into_iter()
         .map(|row| {
             Ok(format!(
@@ -2018,16 +1991,5 @@ async fn load_direct_dependency_warnings(
             ))
         })
         .collect::<Result<Vec<_>, sqlx::Error>>()?;
-    warnings.extend(
-        report_rows
-            .into_iter()
-            .map(|row| {
-                Ok(format!(
-                    "Report '{}' is bound directly to this form and should be reviewed.",
-                    row.try_get::<String, _>("name")?
-                ))
-            })
-            .collect::<Result<Vec<_>, sqlx::Error>>()?,
-    );
     Ok(warnings)
 }

@@ -21,16 +21,16 @@ $skillNames = @(
     "tessara-sprint-closeout"
 )
 
-$legacySkillNames = @(
+$retiredSkillNames = @(
     "sprint-closeout"
 )
 
 New-Item -ItemType Directory -Path $globalRoot -Force | Out-Null
 
-foreach ($legacyName in $legacySkillNames) {
-    $legacyPath = Join-Path $globalRoot $legacyName
-    if (Test-Path -LiteralPath $legacyPath) {
-        Remove-Item -LiteralPath $legacyPath -Recurse -Force
+foreach ($retiredName in $retiredSkillNames) {
+    $retiredPath = Join-Path $globalRoot $retiredName
+    if (Test-Path -LiteralPath $retiredPath) {
+        Remove-Item -LiteralPath $retiredPath -Recurse -Force
     }
 }
 

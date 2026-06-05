@@ -37,7 +37,7 @@ struct RouteMigration {
     rbac_status: &'static str,
 }
 
-const ROUTE_MIGRATIONS: [RouteMigration; 35] = [
+const ROUTE_MIGRATIONS: [RouteMigration; 34] = [
     RouteMigration {
         name: "Home",
         route: "/",
@@ -274,13 +274,6 @@ const ROUTE_MIGRATIONS: [RouteMigration; 35] = [
         route: "/administration/roles",
         href: "/administration/roles",
         status: "Done",
-        rbac_status: "Pending",
-    },
-    RouteMigration {
-        name: "Migration",
-        route: "/migration",
-        href: "/migration",
-        status: "Pending",
         rbac_status: "Pending",
     },
 ];
@@ -606,7 +599,6 @@ struct AdminUserDetail {
     email: String,
     display_name: String,
     is_active: bool,
-    ui_access_profile: String,
     #[serde(default)]
     capabilities: Vec<String>,
     #[serde(default)]
@@ -624,7 +616,6 @@ struct AdminUserAccessDetail {
     account_id: String,
     email: String,
     display_name: String,
-    ui_access_profile: String,
     #[serde(default)]
     capabilities: Vec<String>,
     #[serde(default)]
@@ -1358,8 +1349,6 @@ struct FormDefinition {
     #[serde(default)]
     workflows: Vec<FormWorkflowLink>,
     #[serde(default)]
-    reports: Vec<FormReportLink>,
-    #[serde(default)]
     dataset_sources: Vec<FormDatasetSourceLink>,
 }
 
@@ -1373,12 +1362,6 @@ struct FormWorkflowLink {
     current_version_label: Option<String>,
     current_status: Option<String>,
     assignment_count: i64,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-struct FormReportLink {
-    id: String,
-    name: String,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -11514,7 +11497,6 @@ fn FormDetailContent(form: FormDefinition, rendered_form: Option<RenderedForm>) 
     let version_count = form.versions.len().to_string();
     let versions = form.versions.clone();
     let workflows = form.workflows.clone();
-    let reports = form.reports.clone();
     let dataset_sources = form.dataset_sources.clone();
 
     view! {
@@ -11606,7 +11588,6 @@ fn FormDetailContent(form: FormDefinition, rendered_form: Option<RenderedForm>) 
                     <FormRelatedLinks
                         attached_nodes=attached_nodes
                         workflows=workflows
-                        reports=reports
                         dataset_sources=dataset_sources
                     />
                 </section>
@@ -11930,13 +11911,11 @@ fn RenderedFormSections(rendered_form: Option<RenderedForm>) -> impl IntoView {
 fn FormRelatedLinks(
     attached_nodes: Vec<FormAttachmentLink>,
     workflows: Vec<FormWorkflowLink>,
-    reports: Vec<FormReportLink>,
     dataset_sources: Vec<FormDatasetSourceLink>,
 ) -> impl IntoView {
     let active_tab = RwSignal::new("attached".to_string());
     let attached_count = attached_nodes.len();
     let workflows_count = workflows.len();
-    let reports_count = reports.len();
     let dataset_sources_count = dataset_sources.len();
 
     view! {
@@ -11949,9 +11928,6 @@ fn FormRelatedLinks(
                     <TabsTrigger active=active_tab value="workflows">
                         {format!("Workflows ({workflows_count})")}
                     </TabsTrigger>
-                    <TabsTrigger active=active_tab value="reports">
-                        {format!("Reports ({reports_count})")}
-                    </TabsTrigger>
                     <TabsTrigger active=active_tab value="dataset-sources">
                         {format!("Dataset Sources ({dataset_sources_count})")}
                     </TabsTrigger>
@@ -11961,9 +11937,6 @@ fn FormRelatedLinks(
                 </TabsContent>
                 <TabsContent active=active_tab value="workflows">
                     <FormRelatedWorkflowsTable workflows=workflows/>
-                </TabsContent>
-                <TabsContent active=active_tab value="reports">
-                    <FormRelatedReportsTable reports=reports/>
                 </TabsContent>
                 <TabsContent active=active_tab value="dataset-sources">
                     <FormRelatedDatasetSourcesTable dataset_sources=dataset_sources/>
@@ -12104,101 +12077,6 @@ fn FormRelatedWorkflowsTable(workflows: Vec<FormWorkflowLink>) -> impl IntoView 
                                                 <dd>{workflow.assignment_count.to_string()}</dd>
                                             </div>
                                         </dl>
-                                    </article>
-                                }
-                            })
-                            .collect_view()
-                            .into_any()
-                    }
-                }}
-            </div>
-        </div>
-    }
-}
-
-#[component]
-fn FormRelatedReportsTable(reports: Vec<FormReportLink>) -> impl IntoView {
-    let search = RwSignal::new(String::new());
-    let page_size = RwSignal::new(10usize);
-    let page_index = RwSignal::new(0usize);
-    let reports_for_filter = reports;
-    let filtered_reports = Memo::new(move |_| {
-        let query = search.get();
-        reports_for_filter
-            .iter()
-            .filter(|report| text_matches(&query, &[&report.name]))
-            .cloned()
-            .collect::<Vec<_>>()
-    });
-    let total_count = Memo::new(move |_| filtered_reports.get().len());
-
-    view! {
-        <div class="related-work-responsive-table">
-            <SearchableDataTable search_label="Search reports" placeholder="Search related reports" search>
-                <thead>
-                    <tr>
-                        <th scope="col">"Report"</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {move || {
-                        let rows = filtered_reports.get();
-                        if rows.is_empty() {
-                            view! {
-                                <tr>
-                                    <td class="data-table__empty">"No Related Reports to Display"</td>
-                                </tr>
-                            }
-                            .into_any()
-                        } else {
-                            let total_count = rows.len();
-                            let start = pagination_page_start(total_count, page_size.get(), page_index.get());
-                            rows
-                                .iter()
-                                .skip(start)
-                                .take(page_size.get())
-                                .cloned()
-                                .map(|report| {
-                                    view! {
-                                        <tr>
-                                            <th scope="row">
-                                                <a class="data-table__primary-link" href=format!("/reports/{}", report.id)>{report.name}</a>
-                                            </th>
-                                        </tr>
-                                    }
-                                })
-                                .collect_view()
-                                .into_any()
-                        }
-                    }}
-                </tbody>
-            </SearchableDataTable>
-            <RelatedWorkPaginationFooter
-                aria_label="Related reports table pagination"
-                label="related reports"
-                total_count=total_count
-                page_size=page_size
-                page_index=page_index
-            />
-            <div class="related-work-mobile-cards">
-                {move || {
-                    let rows = filtered_reports.get();
-                    if rows.is_empty() {
-                        view! { <p class="related-work-mobile-empty">"No Related Reports to Display"</p> }.into_any()
-                    } else {
-                        let total_count = rows.len();
-                        let start = pagination_page_start(total_count, page_size.get(), page_index.get());
-                        rows
-                            .iter()
-                            .skip(start)
-                            .take(page_size.get())
-                            .cloned()
-                            .map(|report| {
-                                view! {
-                                    <article class="related-work-mobile-card">
-                                        <div class="related-work-mobile-card__header">
-                                            <h4><a href=format!("/reports/{}", report.id)>{report.name}</a></h4>
-                                        </div>
                                     </article>
                                 }
                             })
@@ -16697,8 +16575,7 @@ fn ResponseFieldInput(
 mod placeholders;
 pub use placeholders::{
     ComponentsDetailPage, ComponentsPage, DashboardsDetailPage, DashboardsEditPage,
-    DashboardsNewPage, DashboardsPage, DatasetsDetailPage, DatasetsPage, MigrationPage,
-    NotFoundPage,
+    DashboardsNewPage, DashboardsPage, DatasetsDetailPage, DatasetsPage, NotFoundPage,
 };
 
 #[path = "native/administration.rs"]

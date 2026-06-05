@@ -1,7 +1,7 @@
-//! Dataset domain rules for Tessara reporting.
+//! Dataset domain rules for Tessara analytical components.
 //!
-//! Datasets define the semantic row model that reports query. This crate keeps
-//! pure dataset validation separate from API/database orchestration.
+//! Datasets define the semantic row model that component versions query. This
+//! crate keeps pure dataset validation separate from API/database orchestration.
 
 use std::collections::HashSet;
 
