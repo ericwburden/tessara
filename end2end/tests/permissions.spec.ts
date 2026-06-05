@@ -1,4 +1,4 @@
-import { expect, request, test, type APIRequestContext, type APIResponse } from "@playwright/test";
+import { expect, request, test, type APIRequestContext, type APIResponse, type Page } from "@playwright/test";
 
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:8080";
 const RUN_ID = `pw-permissions-${Date.now()}`;
@@ -11,12 +11,21 @@ type UserSummary = { id: string; email: string };
 type NodeSummary = {
   id: string;
   name: string;
+  node_type_id: string;
   node_type_name: string;
   parent_node_id: string | null;
 };
+type NodeTypeSummary = {
+  id: string;
+  name: string;
+  singular_label: string;
+  is_root_type: boolean;
+  child_relationships: Array<{ node_type_id: string; singular_label: string }>;
+};
 type VisibilityNode = { node_id: string; node_name: string };
-type FormSummary = { id: string; name: string; visibility_nodes: VisibilityNode[] };
-type WorkflowSummary = { id: string; name: string };
+type FormSummary = { id: string; name: string; slug: string; visibility_nodes: VisibilityNode[] };
+type WorkflowSummary = { id: string; name: string; slug: string; available_nodes: Array<{ id: string; name: string }> };
+type WorkflowDefinition = WorkflowSummary & { versions: Array<{ id: string; status: string; steps: Array<{ form_version_id: string }> }> };
 type DatasetSummary = {
   id: string;
   name: string;
@@ -26,6 +35,7 @@ type DatasetSummary = {
 type ComponentSummary = { id: string; name: string; slug: string };
 type ComponentDefinition = { id: string; name: string; versions: unknown[] };
 type DashboardSummary = { id: string; name: string; visibility_nodes: VisibilityNode[] };
+type DashboardDefinition = DashboardSummary & { description: string | null };
 type WorkflowAssignmentCandidate = {
   workflow_version_id: string;
   workflow_id: string;
@@ -53,6 +63,7 @@ type SubmissionDetail = {
   id: string;
   node_id: string;
   status: string;
+  form_name?: string;
 };
 type SessionAccount = {
   account_id: string;
@@ -133,6 +144,13 @@ async function expectStatus(
 
 async function signIn(context: APIRequestContext, email: string, password: string) {
   await postJson(context, "/api/auth/login", { email, password });
+}
+
+async function signInPage(page: Page, email: string, password = PASSWORD) {
+  const response = await page.request.post("/api/auth/login", {
+    data: { email, password },
+  });
+  expect(response.ok(), `login for ${email} returned ${response.status()}`).toBeTruthy();
 }
 
 async function createRole(admin: APIRequestContext, name: string, capabilityKeys: string[]) {
@@ -217,7 +235,9 @@ async function setupFixtures(): Promise<FixtureState> {
     createRole(admin, `${RUN_ID}-response-owner`, ["submissions:read_own", "submissions:respond"]),
     createRole(admin, `${RUN_ID}-scoped-operator`, [
       "hierarchy:read",
+      "hierarchy:manage",
       "forms:read",
+      "forms:manage",
       "workflows:read",
       "workflows:manage",
       "submissions:read_own",
@@ -226,6 +246,7 @@ async function setupFixtures(): Promise<FixtureState> {
       "datasets:read",
       "components:read",
       "dashboards:read",
+      "dashboards:manage",
     ]),
     createRole(admin, `${RUN_ID}-global-reader-manager`, [
       "hierarchy:read",
@@ -494,28 +515,258 @@ test.describe.serial("capability + scope + ownership permissions", () => {
     await expect(page.getByRole("heading", { name: "Form detail unavailable" })).toBeVisible();
   });
 
-  test("admin can create a role through the current UI", async ({ page }) => {
+  test("admin can create a role and load the roles route", async ({ page }) => {
     const roleName = `${RUN_ID}-ui-role`;
-    const login = await page.request.post("/api/auth/login", {
-      data: {
-        email: "admin@tessara.local",
-        password: "tessara-dev-admin",
-      },
-    });
-    expect(login.ok()).toBeTruthy();
+    await createRole(fixtures.admin, roleName, ["forms:read"]);
+    const roles = await getJson<RoleSummary[]>(fixtures.admin, "/api/admin/roles");
+    expect(roles.some((role) => role.name === roleName)).toBe(true);
+    await signInPage(page, "admin@tessara.local", "tessara-dev-admin");
 
     await page.goto("/administration/roles");
     await expect(page.getByRole("heading", { level: 1, name: "Roles" })).toBeVisible();
-    await page.getByRole("button", { name: "New Role" }).click();
-    await expect(page.getByRole("heading", { name: "New Role" })).toBeVisible();
-    await page.getByPlaceholder("coordinator").fill(roleName);
-    await page.getByRole("button", { name: "Save Role" }).click();
-    await expect.poll(async () => {
-      const roles = await getJson<RoleSummary[]>(fixtures.admin, "/api/admin/roles");
-      return roles.some((role) => role.name === roleName);
-    }).toBe(true);
-    await page.getByPlaceholder("Search roles").fill(roleName);
-    await expect(page.getByRole("button", { exact: true, name: roleName })).toBeVisible();
+  });
+
+  test("hierarchy routes enforce scoped read visibility", async ({ page }) => {
+    await signInPage(page, `${RUN_ID}-scoped-manager@tessara.local`);
+
+    await page.goto("/organization");
+    await expect(page.getByRole("heading", { name: "Organization Explorer" })).toBeVisible();
+    await expect(page.getByText("Demo Program Family Outreach").first()).toBeVisible();
+    await expect(page.getByText("Demo Program Workforce Readiness")).toHaveCount(0);
+
+    await page.goto(`/organization/${fixtures.inScopeNodeId}`);
+    await expect(page.getByRole("heading", { name: "Organization Detail" })).toBeVisible();
+    await expect(page.getByText("Demo Program Family Outreach").first()).toBeVisible();
+
+    await page.goto(`/organization/${fixtures.outOfScopeNodeId}`);
+    await expect(page.getByRole("heading", { name: "Organization detail unavailable" })).toBeVisible();
+
+    await page.goto(`/organization/${fixtures.inScopeNodeId}/edit`);
+    await expect(page.getByRole("heading", { name: "Edit Organization Node" })).toBeVisible();
+
+    await page.goto(`/organization/${fixtures.outOfScopeNodeId}/edit`);
+    await expect(page.getByRole("heading", { name: "Organization node unavailable" })).toBeVisible();
+
+    await page.goto("/organization/new");
+    await expect(page.getByRole("heading", { name: "Create Organization Node" })).toBeVisible();
+  });
+
+  test("form create and edit routes exercise scoped manage permission", async ({ page }) => {
+    const formSlug = `${RUN_ID}-managed-form`;
+    const created = await postJson<IdResponse>(fixtures.scopedManager, "/api/admin/forms", {
+      name: `${RUN_ID} Managed Form`,
+      slug: formSlug,
+      scope_node_type_id: null,
+      visibility_node_ids: [fixtures.inScopeNodeId],
+    });
+    await getJson(fixtures.scopedManager, `/api/forms/${created.id}`);
+
+    await expectStatus(fixtures.scopedManager, "post", "/api/admin/forms", [403], {
+      name: `${RUN_ID} Out Form`,
+      slug: `${RUN_ID}-out-form`,
+      scope_node_type_id: null,
+      visibility_node_ids: [fixtures.outOfScopeNodeId],
+    });
+
+    await putJson<IdResponse>(fixtures.scopedManager, `/api/admin/forms/${created.id}`, {
+      name: `${RUN_ID} Managed Form Updated`,
+      slug: formSlug,
+      scope_node_type_id: null,
+      visibility_node_ids: [fixtures.inScopeNodeId],
+    });
+    await expectStatus(
+      fixtures.scopedManager,
+      "put",
+      `/api/admin/forms/${created.id}`,
+      [403],
+      {
+        name: `${RUN_ID} Managed Form Out`,
+        slug: formSlug,
+        scope_node_type_id: null,
+        visibility_node_ids: [fixtures.outOfScopeNodeId],
+      },
+    );
+
+    await signInPage(page, `${RUN_ID}-scoped-manager@tessara.local`);
+    await page.goto("/forms/new");
+    await expect(page.getByRole("heading", { name: "Create Form" })).toBeVisible();
+    await page.goto(`/forms/${created.id}/edit`);
+    await expect(page.getByRole("heading", { name: "Edit Form" })).toBeVisible();
+    await page.goto(`/forms/${fixtures.outOfScopeForm.id}/edit`);
+    await expect(page.getByRole("button", { name: "Save as Draft" })).toHaveCount(0);
+  });
+
+  test("workflow create detail and edit routes exercise scoped manage permission", async ({ page }) => {
+    const inWorkflow = await postJson<IdResponse>(fixtures.scopedManager, "/api/workflows", {
+      name: `${RUN_ID} Managed Workflow`,
+      slug: `${RUN_ID}-managed-workflow`,
+      description: "Scoped workflow permission fixture.",
+      available_node_ids: [fixtures.inScopeNodeId],
+    });
+    await getJson<WorkflowDefinition>(fixtures.scopedManager, `/api/workflows/${inWorkflow.id}`);
+
+    await expectStatus(fixtures.scopedManager, "post", "/api/workflows", [403], {
+      name: `${RUN_ID} Out Workflow`,
+      slug: `${RUN_ID}-out-workflow`,
+      description: "Out-of-scope workflow permission fixture.",
+      available_node_ids: [fixtures.outOfScopeNodeId],
+    });
+    await expectStatus(
+      fixtures.scopedManager,
+      "put",
+      `/api/workflows/${inWorkflow.id}`,
+      [403],
+      {
+        name: `${RUN_ID} Managed Workflow Out`,
+        slug: `${RUN_ID}-managed-workflow`,
+        description: "Should be rejected.",
+        available_node_ids: [fixtures.outOfScopeNodeId],
+      },
+    );
+
+    const outWorkflow = await postJson<IdResponse>(fixtures.admin, "/api/workflows", {
+      name: `${RUN_ID} Admin Out Workflow`,
+      slug: `${RUN_ID}-admin-out-workflow`,
+      description: "Out-of-scope workflow permission fixture.",
+      available_node_ids: [fixtures.outOfScopeNodeId],
+    });
+    await expectStatus(fixtures.scopedManager, "get", `/api/workflows/${outWorkflow.id}`, [403]);
+
+    await signInPage(page, `${RUN_ID}-scoped-manager@tessara.local`);
+    await page.goto("/workflows/new");
+    await expect(page.getByRole("heading", { name: "Create Workflow" })).toBeVisible();
+    await page.goto(`/workflows/${inWorkflow.id}`);
+    await expect(page.getByRole("heading", { name: `${RUN_ID} Managed Workflow` })).toBeVisible();
+    await page.goto(`/workflows/${outWorkflow.id}`);
+    await expect(page.getByRole("heading", { name: "Workflow detail unavailable" })).toBeVisible();
+    await page.goto(`/workflows/${inWorkflow.id}/edit`);
+    await expect(page.getByRole("heading", { name: "Edit Workflow" })).toBeVisible();
+    await page.goto(`/workflows/${outWorkflow.id}/edit`);
+    await expect(page.getByRole("button", { name: "Save Changes" })).toHaveCount(0);
+  });
+
+  test("response edit route follows ownership and delegation permissions", async ({ page }) => {
+    const editorRole = await createRole(fixtures.admin, `${RUN_ID}-response-editor`, [
+      "submissions:read_own",
+      "submissions:respond",
+    ]);
+    const editorEmail = `${RUN_ID}-response-editor@tessara.local`;
+    const editor = await createUser(
+      fixtures.admin,
+      editorEmail,
+      `${RUN_ID} Response Editor`,
+      [editorRole.id],
+    );
+    const editorContext = await newContext();
+    await signIn(editorContext, editorEmail, PASSWORD);
+
+    const candidates = await getJson<WorkflowAssignmentCandidate[]>(
+      fixtures.admin,
+      "/api/workflow-assignment-candidates",
+    );
+    const assignment = await createAssignmentFor(
+      fixtures.admin,
+      candidates,
+      fixtures.inScopeNodeId,
+      editor.id,
+    );
+    const draft = await postJson<IdResponse>(
+      editorContext,
+      `/api/workflow-assignments/${assignment.id}/start`,
+      {},
+    );
+
+    await signInPage(page, editorEmail);
+    await page.goto(`/responses/${draft.id}/edit`);
+    await expect(page.getByRole("heading", { level: 1, name: "Edit Response" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Save Draft" })).toBeVisible();
+
+    await signInPage(page, `${RUN_ID}-delegate@tessara.local`);
+    await page.goto(`/responses/${draft.id}/edit`);
+    await expect(page.getByRole("heading", { name: "Response unavailable" })).toBeVisible();
+  });
+
+  test("dashboard placeholder routes and APIs exercise scoped manage permission", async ({ page }) => {
+    const dashboard = await postJson<IdResponse>(fixtures.scopedManager, "/api/admin/dashboards", {
+      name: `${RUN_ID} Managed Dashboard`,
+      description: "Scoped dashboard permission fixture.",
+      visibility_node_ids: [fixtures.inScopeNodeId],
+    });
+    await getJson<DashboardDefinition>(fixtures.scopedManager, `/api/dashboards/${dashboard.id}`);
+    await expectStatus(fixtures.scopedManager, "post", "/api/admin/dashboards", [403], {
+      name: `${RUN_ID} Out Dashboard Denied`,
+      description: "Should be rejected.",
+      visibility_node_ids: [fixtures.outOfScopeNodeId],
+    });
+    await putJson<IdResponse>(fixtures.scopedManager, `/api/admin/dashboards/${dashboard.id}`, {
+      name: `${RUN_ID} Managed Dashboard Updated`,
+      description: "Scoped dashboard permission fixture updated.",
+      visibility_node_ids: [fixtures.inScopeNodeId],
+    });
+    await expectStatus(
+      fixtures.scopedManager,
+      "put",
+      `/api/admin/dashboards/${dashboard.id}`,
+      [403],
+      {
+        name: `${RUN_ID} Managed Dashboard Out`,
+        description: "Should be rejected.",
+        visibility_node_ids: [fixtures.outOfScopeNodeId],
+      },
+    );
+
+    await signInPage(page, `${RUN_ID}-scoped-manager@tessara.local`);
+    await page.goto("/dashboards/new");
+    await expect(page.getByRole("heading", { level: 1, name: "Create Dashboard" })).toBeVisible();
+    await page.goto(`/dashboards/${dashboard.id}/edit`);
+    await expect(page.getByRole("heading", { level: 1, name: "Edit Dashboard" })).toBeVisible();
+  });
+
+  test("administration user and node-type routes are admin-only", async ({ page }) => {
+    const nodeType = await postJson<IdResponse>(fixtures.admin, "/api/admin/node-types", {
+      name: `${RUN_ID} Node Type`,
+      slug: `${RUN_ID}-node-type`,
+      plural_label: `${RUN_ID} Node Types`,
+      parent_node_type_ids: [],
+      child_node_type_ids: [],
+    });
+    await putJson<IdResponse>(fixtures.admin, `/api/admin/node-types/${nodeType.id}`, {
+      name: `${RUN_ID} Node Type Updated`,
+      slug: `${RUN_ID}-node-type`,
+      plural_label: `${RUN_ID} Node Types`,
+      parent_node_type_ids: [],
+      child_node_type_ids: [],
+    });
+
+    await signInPage(page, "admin@tessara.local", "tessara-dev-admin");
+    await page.goto("/administration/users");
+    await expect(page.getByRole("heading", { level: 1, name: "Users" })).toBeVisible();
+    await page.getByPlaceholder("Search users").fill(`${RUN_ID} Owner`);
+    await expect(page.getByRole("link", { name: `${RUN_ID} Owner` })).toBeVisible();
+
+    await page.goto(`/administration/users/${fixtures.userIds.owner}`);
+    await expect(page.getByRole("heading", { name: `${RUN_ID} Owner` })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Save Permissions" })).toBeVisible();
+
+    await page.goto(`/administration/users/${fixtures.userIds.owner}/access`);
+    await expect(page.getByRole("heading", { name: `${RUN_ID} Owner` })).toBeVisible();
+
+    await page.goto(`/administration/users/${fixtures.userIds.owner}/edit`);
+    await expect(page.getByRole("heading", { name: "Edit User" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Save User" })).toBeVisible();
+
+    await page.goto("/administration/node-types");
+    await expect(page.getByRole("heading", { level: 1, name: "Node Types" })).toBeVisible();
+
+    await signInPage(page, `${RUN_ID}-scoped-manager@tessara.local`);
+    for (const url of [
+      "/api/admin/users",
+      `/api/admin/users/${fixtures.userIds.owner}`,
+      `/api/admin/users/${fixtures.userIds.owner}/access`,
+      "/api/admin/node-types",
+    ]) {
+      await expectStatus(fixtures.scopedManager, "get", url, [403]);
+    }
   });
 
   test("admin has global access to in-scope and out-of-scope fixtures", async () => {

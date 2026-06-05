@@ -15,12 +15,6 @@ pub fn HomePage() -> impl IntoView {
     view! {
         <AppShell active_route="home" title="Home">
             <section class="route-panel home-page">
-                <details class="organization-detail-card home-route-inventory">
-                    <summary>"Native UI Route Inventory"</summary>
-                    <p>"Native Tessara routes are tracked here while each product area settles into its long-term implementation."</p>
-                    <RouteMigrationOverview/>
-                </details>
-
                 <section class="organization-detail-card organization-detail-card--wide">
                     <PageHeader title="Assigned to Me">
                         <a class="button button--secondary" href="/responses/new">"Start Response"</a>
@@ -229,68 +223,6 @@ fn HomePendingWork(
                         "Next"
                     </button>
                 </div>
-            </div>
-        </div>
-    }
-}
-
-#[component]
-fn RouteMigrationOverview() -> impl IntoView {
-    let route_rows = ROUTE_MIGRATIONS
-        .iter()
-        .map(|route| {
-            view! {
-                <tr>
-                    <th scope="row">{route.name}</th>
-                    <td><a href=route.href>{route.route}</a></td>
-                    <td><StatusBadge label=route.status/></td>
-                    <td><StatusBadge label=route.rbac_status/></td>
-                </tr>
-            }
-        })
-        .collect_view();
-
-    let route_cards = ROUTE_MIGRATIONS
-        .iter()
-        .map(|route| {
-            view! {
-                <article class="route-migration-card">
-                    <div class="route-migration-card__header">
-                        <h3>{route.name}</h3>
-                        <a href=route.href>{route.route}</a>
-                    </div>
-                    <dl class="route-migration-card__meta">
-                        <div>
-                            <dt>"Status"</dt>
-                            <dd><StatusBadge label=route.status/></dd>
-                        </div>
-                        <div>
-                            <dt>"RBAC"</dt>
-                            <dd><StatusBadge label=route.rbac_status/></dd>
-                        </div>
-                    </dl>
-                </article>
-            }
-        })
-        .collect_view();
-
-    view! {
-        <div class="route-migration-overview">
-            <div class="route-migration-overview__table">
-                <DataTable>
-                    <thead>
-                        <tr>
-                            <th scope="col">"Name"</th>
-                            <th scope="col">"Route"</th>
-                            <th scope="col">"Status"</th>
-                            <th scope="col">"RBAC"</th>
-                        </tr>
-                    </thead>
-                    <tbody>{route_rows}</tbody>
-                </DataTable>
-            </div>
-            <div class="route-migration-overview__cards" aria-label="Route migration status">
-                {route_cards}
             </div>
         </div>
     }

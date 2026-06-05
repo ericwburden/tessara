@@ -8,9 +8,9 @@ The target access model for browser behavior is capability + scope + ownership: 
 
 | Spec | Current tests | Permission behavior exercised |
 | --- | --- | --- |
-| `end2end/tests/app.spec.ts` | Root route inventory, bare login route, unauthenticated route redirect, authenticated primary route rendering, old `/app` route removal | Session cookie login, login shell isolation, protected-route redirect, admin-visible navigation and primary admin routes |
+| `end2end/tests/app.spec.ts` | Root assigned-work route, bare login route, unauthenticated route redirect, authenticated primary route rendering, old `/app` route removal | Session cookie login, login shell isolation, protected-route redirect, admin-visible navigation and primary admin routes |
 | `end2end/tests/workflow-mediated-assignments.spec.ts` | Generated single-form workflow after form publish, assignment creation, delegate pending work, assignment-backed response start, removed manual response start, generated workflow promotion/regeneration | Admin form/workflow management, generated workflow visibility, workflow assignment APIs, delegate-owned pending work, submission start/read through workflow assignment ownership |
-| `end2end/tests/permissions.spec.ts` | Playwright-owned roles/users, scoped role assignments, admin/global access, no-capability denials, scoped form/workflow/submission/dataset/component/dashboard checks, ownership/delegation checks, session metadata, and limited stable UI assertions | Primary capability + scope + ownership regression suite. Verifies positive and negative access for global admin, scoped manager, response owner, delegate, delegator, and no-access accounts. |
+| `end2end/tests/permissions.spec.ts` | Playwright-owned roles/users, scoped role assignments, admin/global access, no-capability denials, scoped form/workflow/submission/dataset/component/dashboard checks, ownership/delegation checks, session metadata, route-level UI checks, and admin-only user/node-type route checks | Primary capability + scope + ownership regression suite. Verifies positive and negative access for global admin, scoped manager, response owner, delegate, delegator, no-access accounts, and current native route permission behavior. |
 
 ## Accounts Used By Playwright
 
@@ -30,13 +30,13 @@ The target access model for browser behavior is capability + scope + ownership: 
 | Capability family | Current Playwright status | Needed future coverage |
 | --- | --- | --- |
 | Login/session | Covered | Keep session metadata assertions current when capability, scope, or delegation payloads change. |
-| Administration | Partially covered | Admin role creation UI is covered; future New User Screen flow and broader admin route UI checks remain. |
-| Forms | Covered for scoped list/detail visibility and direct out-of-scope denial | Future scoped create/edit containment once the UI supports it. |
-| Workflows | Covered for scoped candidates, assignees, assignment creation denial, assignment list filtering, and start denial/allowance | Broader workflow UI-level scoped checks as assignment/authoring screens mature. |
-| Submissions | Covered for scoped management, own response ownership, delegated work, and unrelated out-of-scope denial | Deeper response edit/submit UI paths when stable enough for browser assertions. |
+| Administration | Covered for current users, roles, user detail/edit/access alias, and node-type route/API checks | Future New User Screen flow remains pending because the screen does not exist yet. |
+| Forms | Covered for scoped list/detail visibility, direct out-of-scope denial, create/edit route checks, and scoped manage API containment | Deeper drag/drop form-builder authoring interactions can be added as UI-specific coverage. |
+| Workflows | Covered for scoped candidates, assignees, assignment creation denial, assignment list filtering, start denial/allowance, create/detail/edit route checks, and scoped manage API containment | More detailed revision authoring UI interactions can be added as the workflow editor matures. |
+| Submissions | Covered for scoped management, own response ownership, delegated work, unrelated out-of-scope denial, and response edit route ownership denial/allowance | Deeper response save/submit UI paths can be added with a purpose-built form fixture. |
 | Datasets | Covered for visibility-scope list/detail | Dataset table row filtering once the table UI and API behavior are settled. |
 | Components | Covered for dataset-revision-inherited list/detail visibility | UI-level component rendering/inspection checks as component screens mature. |
-| Dashboards | Covered for visibility-scope list/detail | UI-level dashboard component compatibility checks as dashboard authoring/viewing matures. |
+| Dashboards | Covered for visibility-scope list/detail, create/edit placeholder routes, and scoped manage API containment | UI-level dashboard component compatibility checks as dashboard authoring/viewing matures. |
 
 ## Future Comment-Only Scaffold Targets
 

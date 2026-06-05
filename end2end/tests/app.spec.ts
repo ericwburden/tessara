@@ -53,7 +53,7 @@ async function signInAsAdmin(page: Page) {
 // - Add admin-only administration route checks for users, roles, capabilities,
 //   node types, and the future /administration/users/new screen.
 
-test("root route is the native route inventory", async ({ page }) => {
+test("root route renders assigned work in the native shell", async ({ page }) => {
   const assertNoConsoleErrors = attachConsoleGuard(page);
   await signInAsAdmin(page);
 
@@ -63,7 +63,7 @@ test("root route is the native route inventory", async ({ page }) => {
     page.getByRole("heading", { level: 1, name: "Home" }),
   ).toBeVisible();
   await expect(
-    page.getByText("Native UI Route Inventory"),
+    page.getByRole("heading", { name: "Assigned to Me" }),
   ).toBeVisible();
   await expect(
     page.getByRole("link", { name: "Administration" }),

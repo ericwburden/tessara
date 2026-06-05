@@ -31,21 +31,26 @@ When local fixture volume gets noisy, reset the development database with `.\scr
 | --- | --- | --- |
 | Capability absence | None; no-access user authenticates only. | No-access user receives forbidden responses from admin, forms, workflows, workflow assignment, submissions, datasets, components, and dashboards APIs. |
 | Shell navigation | Scoped manager can see allowed product nav such as Forms and Responses. | Scoped manager cannot see Administration navigation. |
+| Hierarchy routes | Scoped manager can load organization list/detail/edit/create routes for visible hierarchy records. | Scoped manager does not see out-of-scope nodes in the organization list and direct out-of-scope detail/edit routes do not expose editable content. |
 | Forms UI visibility | Scoped manager sees an in-scope form in `/forms`. | Scoped manager does not see an out-of-scope form in the list and direct detail navigation renders the unavailable state. |
-| Role UI creation | Admin creates a role through `/administration/roles`. | Non-admin administration access is covered by shell/API denial scenarios. |
+| Forms manage routes | Scoped manager can create and update a form with in-scope visibility and load create/edit routes. | Scoped manager cannot create or update a form with out-of-scope visibility and out-of-scope edit routes do not expose edit actions. |
+| Role route and creation | Admin creates a role through the admin API and loads `/administration/roles`. | Non-admin administration access is covered by shell/API denial scenarios. |
+| Administration routes | Admin loads users, user detail, user edit, user access alias, and node-type routes; admin creates/updates a node type through APIs. | Scoped non-admin receives forbidden responses for users, user detail/access, and node-type admin APIs. |
 | Global capability | Admin reads in-scope and out-of-scope forms, datasets, components, dashboards, and workflow assignments. | Not applicable; `admin:all` is intentionally global. |
 | Scoped forms | Scoped manager lists and reads forms whose visibility nodes overlap the assigned subtree. | Out-of-scope form is absent from list and direct detail access is forbidden. |
 | Scoped datasets | Scoped manager lists and reads datasets whose visibility nodes overlap the assigned subtree. | Out-of-scope dataset is absent from list and direct detail access is forbidden. |
 | Scoped components | Scoped manager lists and reads components backed by visible dataset revisions. | Out-of-scope component is absent from list and direct detail access is expected to be forbidden. |
 | Scoped dashboards | Scoped manager lists and reads dashboards whose visibility overlaps the assigned subtree. | Out-of-scope dashboard is absent from list and direct detail access is forbidden. |
 | Workflow candidates and assignments | Scoped manager sees only in-scope assignment candidates, can inspect assignees for an in-scope candidate, and can start an in-scope assignment through `workflows:manage`. | Scoped manager cannot create/start out-of-scope assignment work and should not see out-of-scope workflow assignments in the assignment list. |
+| Workflow manage routes | Scoped manager creates and reads an in-scope workflow and loads create/detail/edit routes. | Scoped manager cannot create/update/read out-of-scope workflows; out-of-scope routes do not expose edit actions. |
 | Submissions scope plus ownership | Scoped manager can read/start an out-of-scope assignment assigned to them through ownership and can manage in-scope submissions through scope. | Scoped manager cannot read an unrelated out-of-scope submission. |
-| Response ownership | Owner sees and starts their own pending assignment and reads the resulting submission. | Owner cannot start another user's non-delegated assignment. |
+| Response ownership | Owner sees and starts their own pending assignment, reads the resulting submission, and an isolated response-editor account can load the edit route for its own draft. | Owner cannot start another user's non-delegated assignment; a different user cannot load the draft edit route. |
 | Delegation | Delegator can query delegate pending work through `delegate_account_id`, start it, and read the resulting submission. | Non-delegated owner cannot access that delegated assignment. |
+| Dashboard manage routes | Scoped manager can create/update an in-scope dashboard and load create/edit placeholder routes. | Scoped manager cannot create/update dashboards with out-of-scope visibility. |
 | Session metadata | Session endpoint exposes capabilities, assigned scope roots, and delegations. | No legacy access switch is asserted or required. |
 
 ## Known Remaining Gaps
 
-- UI-level create/edit permission checks are still limited because many detailed authorization paths are most stable through API requests today.
+- UI-level create/edit permission checks combine route assertions with API-level action checks where the current route is a placeholder or where form/editor interactions would require a larger purpose-built fixture.
 - There is no New User Screen yet, so user creation is verified through admin APIs rather than a browser form.
 - The report should be updated whenever new executable Playwright scenarios are added, especially for future form builder, dataset table, component, and dashboard UI flows.

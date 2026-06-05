@@ -1593,6 +1593,11 @@ Contract:
 - page-level actions belong in the header area, not repeated in later panels
 - route-local eyebrow labels are not default heading structure
 
+Future consistency work:
+
+- Audit `PageHeader` usage so route-level headings expose consistent accessible
+  heading levels across every native route.
+
 ### Button and icon button
 
 Use `Button` for text commands and `IconButton` for compact chrome or icon-only actions.
