@@ -1,3 +1,9 @@
+//! Dataset definition, visibility, and table execution endpoints.
+//!
+//! Datasets are row-level analytical assets. This module owns validation,
+//! visibility enforcement, and table execution; public request/response shapes
+//! live in `dto`.
+
 use std::collections::{BTreeMap, HashMap};
 
 use axum::{
@@ -5,12 +11,19 @@ use axum::{
     extract::{Path, State},
     http::HeaderMap,
 };
-use serde::{Deserialize, Serialize};
 use sqlx::{Postgres, Row, Transaction};
 use tessara_datasets::{
     DatasetCompositionMode, DatasetGrain, DatasetSelectionRule, validate_dataset_shape,
 };
 use uuid::Uuid;
+
+mod dto;
+
+pub use dto::{
+    CreateDatasetFieldRequest, CreateDatasetRequest, CreateDatasetSourceRequest, DatasetDefinition,
+    DatasetFieldDefinition, DatasetSourceDefinition, DatasetSummary, DatasetTable, DatasetTableRow,
+    DatasetVisibilityNodeSummary,
+};
 
 use crate::{
     auth,
@@ -18,107 +31,6 @@ use crate::{
     error::{ApiError, ApiResult},
     hierarchy::{IdResponse, require_text},
 };
-
-#[derive(Deserialize)]
-pub struct CreateDatasetRequest {
-    name: String,
-    slug: String,
-    grain: String,
-    #[serde(default = "default_dataset_composition_mode")]
-    composition_mode: String,
-    #[serde(default)]
-    visibility_node_ids: Vec<Uuid>,
-    sources: Vec<CreateDatasetSourceRequest>,
-    fields: Vec<CreateDatasetFieldRequest>,
-}
-
-#[derive(Deserialize)]
-pub struct CreateDatasetSourceRequest {
-    source_alias: String,
-    form_id: Option<Uuid>,
-    form_version_major: Option<i32>,
-    selection_rule: String,
-}
-
-#[derive(Deserialize)]
-pub struct CreateDatasetFieldRequest {
-    key: String,
-    label: String,
-    source_alias: String,
-    source_field_key: String,
-    position: i32,
-}
-
-#[derive(Serialize)]
-pub struct DatasetSummary {
-    id: Uuid,
-    current_revision_id: Option<Uuid>,
-    name: String,
-    slug: String,
-    grain: String,
-    composition_mode: String,
-    visibility_nodes: Vec<DatasetVisibilityNodeSummary>,
-    source_count: i64,
-    field_count: i64,
-}
-
-#[derive(Serialize)]
-pub struct DatasetDefinition {
-    id: Uuid,
-    current_revision_id: Option<Uuid>,
-    name: String,
-    slug: String,
-    grain: String,
-    composition_mode: String,
-    visibility_nodes: Vec<DatasetVisibilityNodeSummary>,
-    sources: Vec<DatasetSourceDefinition>,
-    fields: Vec<DatasetFieldDefinition>,
-}
-
-#[derive(Clone, Serialize)]
-pub struct DatasetVisibilityNodeSummary {
-    node_id: Uuid,
-    node_name: String,
-    node_type_name: String,
-    parent_node_id: Option<Uuid>,
-    node_path: String,
-}
-
-#[derive(Serialize)]
-pub struct DatasetSourceDefinition {
-    id: Uuid,
-    source_alias: String,
-    form_id: Option<Uuid>,
-    form_name: Option<String>,
-    form_version_major: Option<i32>,
-    selection_rule: String,
-    position: i32,
-}
-
-#[derive(Serialize)]
-pub struct DatasetFieldDefinition {
-    id: Uuid,
-    key: String,
-    label: String,
-    source_alias: String,
-    source_field_key: String,
-    field_type: String,
-    position: i32,
-}
-
-#[derive(Serialize)]
-pub struct DatasetTable {
-    dataset_id: Uuid,
-    rows: Vec<DatasetTableRow>,
-}
-
-#[derive(Serialize)]
-pub struct DatasetTableRow {
-    pub(crate) submission_id: String,
-    pub(crate) node_name: String,
-    pub(crate) source_alias: String,
-    pub(crate) values: BTreeMap<String, Option<String>>,
-}
 
 struct ValidatedDatasetSource {
     source_alias: String,
@@ -137,7 +49,7 @@ struct ValidatedDatasetField {
     position: i32,
 }
 
-/// Creates a semantic dataset definition for report row modeling.
+/// Creates a semantic dataset definition and its first immutable revision.
 pub async fn create_dataset(
     State(state): State<AppState>,
     headers: HeaderMap,

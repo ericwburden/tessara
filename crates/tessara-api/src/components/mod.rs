@@ -1,12 +1,23 @@
+//! Component authoring and read endpoints.
+//!
+//! Components are presentation assets over dataset revisions. This module keeps
+//! route behavior and scope checks together while the public wire types live in
+//! `dto`.
+
 use axum::{
     Json,
     extract::{Path, State},
     http::HeaderMap,
 };
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use sqlx::Row;
 use uuid::Uuid;
+
+mod dto;
+
+pub use dto::{
+    ComponentDefinition, ComponentSummary, ComponentVersionSummary, CreateComponentRequest,
+    CreateComponentVersionRequest,
+};
 
 use crate::{
     auth, datasets,
@@ -15,51 +26,7 @@ use crate::{
     hierarchy::{IdResponse, require_text},
 };
 
-#[derive(Deserialize)]
-pub struct CreateComponentRequest {
-    name: String,
-    slug: String,
-    description: Option<String>,
-}
-
-#[derive(Deserialize)]
-pub struct CreateComponentVersionRequest {
-    dataset_revision_id: Uuid,
-    component_type: String,
-    config: Value,
-    publish: Option<bool>,
-}
-
-#[derive(Serialize)]
-pub struct ComponentSummary {
-    id: Uuid,
-    name: String,
-    slug: String,
-    description: Option<String>,
-    current_version_id: Option<Uuid>,
-    current_component_type: Option<String>,
-}
-
-#[derive(Serialize)]
-pub struct ComponentDefinition {
-    id: Uuid,
-    name: String,
-    slug: String,
-    description: Option<String>,
-    versions: Vec<ComponentVersionSummary>,
-}
-
-#[derive(Serialize)]
-pub struct ComponentVersionSummary {
-    id: Uuid,
-    component_id: Uuid,
-    dataset_revision_id: Uuid,
-    component_type: String,
-    status: String,
-    version_label: String,
-    config: Value,
-}
-
+/// Creates a component shell before versions are attached.
 pub async fn create_component(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -85,6 +52,7 @@ pub async fn create_component(
     Ok(Json(IdResponse { id }))
 }
 
+/// Creates a draft or published component version over a dataset revision.
 pub async fn create_component_version(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -152,6 +120,7 @@ pub async fn create_component_version(
     Ok(Json(IdResponse { id }))
 }
 
+/// Lists components visible to the caller's component-read capability scope.
 pub async fn list_components(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -225,6 +194,7 @@ pub async fn list_components(
     ))
 }
 
+/// Loads a component by UUID or slug when its dataset revision is readable.
 pub async fn get_component_by_ref(
     State(state): State<AppState>,
     headers: HeaderMap,

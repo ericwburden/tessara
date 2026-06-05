@@ -1,3 +1,9 @@
+//! Configurable organization hierarchy endpoints.
+//!
+//! Hierarchy owns node-type configuration, node metadata definitions, and
+//! scoped node browse/detail projections used by forms, workflows, and access
+//! management.
+
 use std::{collections::HashMap, str::FromStr};
 
 use axum::{
@@ -224,6 +230,7 @@ pub struct NodeTypeFormLink {
     form_slug: String,
 }
 
+/// Creates a node type and its configured parent/child relationships.
 pub async fn create_node_type(
     State(state): State<AppState>,
     request: AuthenticatedRequest,
@@ -339,6 +346,7 @@ pub async fn list_node_types(
     Ok(Json(node_types))
 }
 
+/// Lists node types available through the caller's hierarchy-read scope.
 pub async fn list_readable_node_types(
     State(state): State<AppState>,
     request: AuthenticatedRequest,
@@ -465,6 +473,7 @@ pub async fn list_node_type_relationships(
     Ok(Json(relationships))
 }
 
+/// Adds one allowed parent/child relationship between node types.
 pub async fn create_node_type_relationship(
     State(state): State<AppState>,
     request: AuthenticatedRequest,
@@ -567,6 +576,7 @@ pub async fn list_node_metadata_fields(
     Ok(Json(fields))
 }
 
+/// Adds a metadata field definition to a node type.
 pub async fn create_node_metadata_field(
     State(state): State<AppState>,
     request: AuthenticatedRequest,
@@ -698,6 +708,7 @@ pub async fn delete_node_metadata_field(
     Ok(Json(IdResponse { id: field_id }))
 }
 
+/// Creates an organization node with validated parentage and metadata values.
 pub async fn create_node(
     State(state): State<AppState>,
     request: AuthenticatedRequest,
@@ -765,6 +776,7 @@ pub async fn update_node(
     Ok(Json(IdResponse { id: node_id }))
 }
 
+/// Lists hierarchy nodes visible through the caller's hierarchy-read scope.
 pub async fn list_nodes(
     State(state): State<AppState>,
     request: AuthenticatedRequest,
@@ -902,6 +914,7 @@ pub async fn list_nodes(
     Ok(Json(nodes))
 }
 
+/// Loads one hierarchy node detail when it is visible to the caller.
 pub async fn get_node(
     State(state): State<AppState>,
     request: AuthenticatedRequest,

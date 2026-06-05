@@ -1,12 +1,23 @@
+//! Dashboard composition and visibility endpoints.
+//!
+//! Dashboards compose published component versions and carry their own visibility
+//! scope. Handlers here enforce dashboard capability scope and component
+//! compatibility; DTOs live in `dto`.
+
 use axum::{
     Json,
     extract::{Path, State},
     http::HeaderMap,
 };
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use sqlx::{Postgres, Row, Transaction};
 use uuid::Uuid;
+
+mod dto;
+
+pub use dto::{
+    AddDashboardComponentRequest, CreateDashboardRequest, DashboardComponentResponse,
+    DashboardResponse, DashboardSummary, DashboardVisibilityNodeSummary,
+};
 
 use crate::{
     auth,
@@ -15,62 +26,7 @@ use crate::{
     hierarchy::{IdResponse, require_text},
 };
 
-#[derive(Deserialize)]
-pub struct CreateDashboardRequest {
-    name: String,
-    description: Option<String>,
-    #[serde(default)]
-    visibility_node_ids: Vec<Uuid>,
-}
-
-#[derive(Deserialize)]
-pub struct AddDashboardComponentRequest {
-    component_version_id: Uuid,
-    position: i32,
-    #[serde(default)]
-    config: Value,
-}
-
-#[derive(Serialize)]
-pub struct DashboardSummary {
-    id: Uuid,
-    name: String,
-    description: Option<String>,
-    visibility_nodes: Vec<DashboardVisibilityNodeSummary>,
-    component_count: i64,
-}
-
-#[derive(Serialize)]
-pub struct DashboardResponse {
-    id: Uuid,
-    name: String,
-    description: Option<String>,
-    visibility_nodes: Vec<DashboardVisibilityNodeSummary>,
-    components: Vec<DashboardComponentResponse>,
-}
-
-#[derive(Clone, Serialize)]
-pub struct DashboardVisibilityNodeSummary {
-    node_id: Uuid,
-    node_name: String,
-    node_type_name: String,
-    parent_node_id: Option<Uuid>,
-    node_path: String,
-}
-
-#[derive(Serialize)]
-pub struct DashboardComponentResponse {
-    id: Uuid,
-    position: i32,
-    config: Value,
-    component_version_id: Uuid,
-    component_id: Uuid,
-    component_name: String,
-    component_slug: String,
-    component_type: String,
-    dataset_revision_id: Uuid,
-}
-
+/// Creates a dashboard with explicit visibility nodes.
 pub async fn create_dashboard(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -99,6 +55,7 @@ pub async fn create_dashboard(
     Ok(Json(IdResponse { id }))
 }
 
+/// Updates dashboard metadata and replaces its visibility scope.
 pub async fn update_dashboard(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -135,6 +92,7 @@ pub async fn update_dashboard(
     Ok(Json(IdResponse { id: dashboard_id }))
 }
 
+/// Deletes a dashboard and its component placements.
 pub async fn delete_dashboard(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -156,6 +114,7 @@ pub async fn delete_dashboard(
     Ok(Json(IdResponse { id: dashboard_id }))
 }
 
+/// Adds a component version to a dashboard after scope compatibility checks.
 pub async fn add_dashboard_component(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -195,6 +154,7 @@ pub async fn add_dashboard_component(
     Ok(Json(IdResponse { id }))
 }
 
+/// Updates dashboard component placement and per-dashboard config.
 pub async fn update_dashboard_component(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -234,6 +194,7 @@ pub async fn update_dashboard_component(
     Ok(Json(IdResponse { id: component_id }))
 }
 
+/// Removes one component placement from a dashboard.
 pub async fn delete_dashboard_component(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -255,6 +216,7 @@ pub async fn delete_dashboard_component(
     Ok(Json(IdResponse { id: component_id }))
 }
 
+/// Lists dashboards visible to the caller's dashboard-read capability scope.
 pub async fn list_dashboards(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -323,6 +285,7 @@ pub async fn list_dashboards(
     ))
 }
 
+/// Loads one dashboard with component placements when visible to the caller.
 pub async fn get_dashboard(
     State(state): State<AppState>,
     headers: HeaderMap,

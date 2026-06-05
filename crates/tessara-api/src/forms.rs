@@ -1,3 +1,9 @@
+//! Form definition, versioning, visibility, publishing, and render endpoints.
+//!
+//! This module is still intentionally broad because form authoring touches many
+//! tables in one transaction boundary. Future decomposition should separate DTOs,
+//! version-editing commands, visibility reads, and render projection helpers.
+
 use axum::{
     Json,
     extract::{Path, State},
@@ -312,6 +318,7 @@ async fn load_form_version_assignment_nodes(
     Ok(assignment_nodes)
 }
 
+/// Creates a form definition with explicit visibility nodes.
 pub async fn create_form(
     State(state): State<AppState>,
     request: AuthenticatedRequest,
@@ -612,6 +619,7 @@ pub async fn list_published_form_versions(
     Ok(Json(forms))
 }
 
+/// Lists forms visible through the caller's `forms:read` capability scope.
 pub async fn list_readable_forms(
     State(state): State<AppState>,
     request: AuthenticatedRequest,
@@ -726,6 +734,7 @@ pub async fn list_readable_forms(
     Ok(Json(forms))
 }
 
+/// Loads one form definition when it is visible to the caller.
 pub async fn get_readable_form(
     State(state): State<AppState>,
     request: AuthenticatedRequest,
@@ -959,6 +968,7 @@ async fn get_form_definition_with_visibility_filter(
     })
 }
 
+/// Creates a new editable draft version from a form's latest structure.
 pub async fn create_form_version(
     State(state): State<AppState>,
     request: AuthenticatedRequest,
@@ -1300,6 +1310,7 @@ async fn require_form_slug_available_for_form(
     }
 }
 
+/// Adds a section to an editable draft form version.
 pub async fn create_form_section(
     State(state): State<AppState>,
     request: AuthenticatedRequest,
@@ -1328,6 +1339,7 @@ pub async fn create_form_section(
     Ok(Json(IdResponse { id }))
 }
 
+/// Adds a field placement to an editable draft form version.
 pub async fn create_form_field(
     State(state): State<AppState>,
     request: AuthenticatedRequest,
@@ -1501,6 +1513,7 @@ pub async fn delete_form_field(
     Ok(Json(IdResponse { id: field_id }))
 }
 
+/// Publishes a draft form version after structural and workflow checks pass.
 pub async fn publish_form_version(
     State(state): State<AppState>,
     request: AuthenticatedRequest,
@@ -1582,6 +1595,7 @@ pub async fn publish_form_version(
     }))
 }
 
+/// Renders a published form version for response entry.
 pub async fn render_form_version(
     State(state): State<AppState>,
     Path(form_version_id): Path<Uuid>,
