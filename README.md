@@ -174,6 +174,7 @@ Useful checks:
 ```powershell
 .\scripts\validate.ps1
 .\scripts\validate.ps1 -Fast
+.\scripts\validate-e2e.ps1 -BaseUrl "http://127.0.0.1:8080"
 cargo clippy --workspace --all-targets -- -D warnings
 .\scripts\smoke.ps1
 .\scripts\smoke.ps1 -ComposeApi
@@ -189,6 +190,11 @@ Testing should focus on behavior that protects domain and workflow boundaries:
 validation rules, capability scope and ownership behavior, projection contracts,
 component/dashboard composition, and end-to-end slice regressions. Avoid
 placeholder tests that only assert generated boilerplate.
+
+Permission-controlled surfaces and actions must be covered through Playwright
+when executable. The standard `validate-e2e.ps1` / `npx playwright test` path
+includes `end2end/tests/permissions.spec.ts`; update
+`docs/playwright-permissions-scenarios.md` alongside new permission scenarios.
 
 The default smoke script uses Docker for Postgres and runs the API locally with
 `cargo run`. Use `.\scripts\smoke.ps1 -ComposeApi` to validate the fully

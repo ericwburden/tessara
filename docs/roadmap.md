@@ -20,7 +20,10 @@ Every future sprint is a full vertical slice.
   - `.\scripts\local-launch.ps1` for standard updates, or `.\scripts\local-launch.ps1 -FreshData` when the local UAT dataset should be reseeded from scratch.
 - Print and run the sprint UAT script:
   - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`
+- Run Playwright browser validation, including the permissions scenario suite:
+  - `.\scripts\validate-e2e.ps1 -BaseUrl "http://127.0.0.1:8080"`
 - Confirm the UAT script output includes current route ownership and role-gated behavior before closing the sprint.
+- Confirm any sprint that adds or changes permission-controlled behavior updates `docs/playwright-permissions-scenarios.md` and includes positive and negative Playwright coverage where currently executable.
 - Confirm every route surface touched in the sprint remains under native SSR ownership before closing the sprint.
 - Confirm route ownership, hydration, and browser-console cleanliness for every touched route before closing the sprint.
 - If a detour sprint lands outside the numbered roadmap, reconcile this file with the codebase before selecting the next roadmap sprint.

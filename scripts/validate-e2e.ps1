@@ -64,7 +64,7 @@ try {
     }
 
     $env:PLAYWRIGHT_BASE_URL = $BaseUrl.TrimEnd("/")
-    Invoke-CheckedStep -Label "Running Playwright e2e tests" -Command {
+    Invoke-CheckedStep -Label "Running Playwright e2e tests, including permission scenarios" -Command {
         if ([string]::IsNullOrWhiteSpace($Spec)) {
             npm --prefix $endToEndDir test -- @PlaywrightArgs
         } else {
