@@ -1,15 +1,15 @@
 //! Form definition, versioning, visibility, publishing, and render endpoints.
 //!
 //! This module is still intentionally broad because form authoring touches many
-//! tables in one transaction boundary. Future decomposition should separate DTOs,
-//! version-editing commands, visibility reads, and render projection helpers.
+//! tables in one transaction boundary. DTOs live separately so the handler and
+//! projection logic can be decomposed further without moving public API shapes.
 
 use axum::{
-    Json,
+    Json, Router,
     extract::{Path, State},
     http::HeaderMap,
+    routing::{get, post},
 };
-use serde::{Deserialize, Serialize};
 use sqlx::{Postgres, Row, Transaction};
 use std::collections::BTreeMap;
 use tessara_forms::{
@@ -26,249 +26,51 @@ use crate::{
     workflows,
 };
 
-#[derive(Deserialize)]
-pub struct CreateFormRequest {
-    name: String,
-    slug: String,
-    scope_node_type_id: Option<Uuid>,
-    #[serde(default)]
-    visibility_node_ids: Vec<Uuid>,
-}
+mod dto;
+use dto::{
+    CreateFormFieldRequest, CreateFormRequest, CreateFormSectionRequest, CreateFormVersionRequest,
+    FormDatasetSourceLink, FormDefinition, FormPublishPreview, FormSummary,
+    FormVersionAssignmentNodeSummary, FormVersionSummary, FormVisibilityNodeSummary,
+    FormWorkflowLink, PublishFormVersionResponse, PublishedFormVersionSummary, RenderedField,
+    RenderedForm, RenderedSection, UpdateFormFieldRequest, UpdateFormRequest,
+    UpdateFormSectionRequest,
+};
 
-#[derive(Deserialize)]
-pub struct UpdateFormRequest {
-    name: String,
-    slug: String,
-    scope_node_type_id: Option<Uuid>,
-    #[serde(default)]
-    visibility_node_ids: Vec<Uuid>,
-}
-
-#[derive(Deserialize, Default)]
-#[serde(default, deny_unknown_fields)]
-pub struct CreateFormVersionRequest {}
-
-#[derive(Deserialize)]
-pub struct CreateFormSectionRequest {
-    title: String,
-    position: i32,
-    #[serde(default = "default_form_section_description")]
-    description: String,
-}
-
-#[derive(Deserialize)]
-pub struct CreateFormFieldRequest {
-    section_id: Uuid,
-    key: String,
-    label: String,
-    field_type: String,
-    required: bool,
-    position: i32,
-    #[serde(default = "default_form_field_grid_row")]
-    grid_row: i32,
-    #[serde(default = "default_form_field_grid_column")]
-    grid_column: i32,
-    #[serde(default = "default_form_field_grid_width")]
-    grid_width: i32,
-    #[serde(default = "default_form_field_grid_height")]
-    grid_height: i32,
-}
-
-#[derive(Deserialize)]
-pub struct UpdateFormSectionRequest {
-    title: String,
-    position: i32,
-    #[serde(default = "default_form_section_description")]
-    description: String,
-}
-
-#[derive(Deserialize)]
-pub struct UpdateFormFieldRequest {
-    section_id: Uuid,
-    key: String,
-    label: String,
-    field_type: String,
-    required: bool,
-    position: i32,
-    #[serde(default = "default_form_field_grid_row")]
-    grid_row: i32,
-    #[serde(default = "default_form_field_grid_column")]
-    grid_column: i32,
-    #[serde(default = "default_form_field_grid_width")]
-    grid_width: i32,
-    #[serde(default = "default_form_field_grid_height")]
-    grid_height: i32,
-}
-
-#[derive(Serialize)]
-pub struct RenderedForm {
-    form_version_id: Uuid,
-    form_id: Uuid,
-    form_name: String,
-    version_label: Option<String>,
-    status: String,
-    sections: Vec<RenderedSection>,
-}
-
-#[derive(Serialize)]
-pub struct RenderedSection {
-    id: Uuid,
-    title: String,
-    description: String,
-    position: i32,
-    fields: Vec<RenderedField>,
-}
-
-fn default_form_section_description() -> String {
-    String::new()
-}
-
-fn default_form_field_grid_row() -> i32 {
-    1
-}
-
-fn default_form_field_grid_column() -> i32 {
-    1
-}
-
-fn default_form_field_grid_width() -> i32 {
-    1
-}
-
-fn default_form_field_grid_height() -> i32 {
-    1
-}
-
-#[derive(Serialize)]
-pub struct RenderedField {
-    id: Uuid,
-    key: String,
-    label: String,
-    field_type: String,
-    required: bool,
-    position: i32,
-    grid_row: i32,
-    grid_column: i32,
-    grid_width: i32,
-    grid_height: i32,
-}
-
-#[derive(Serialize)]
-pub struct FormSummary {
-    id: Uuid,
-    name: String,
-    slug: String,
-    scope_node_type_id: Option<Uuid>,
-    scope_node_type_name: Option<String>,
-    visibility_nodes: Vec<FormVisibilityNodeSummary>,
-    versions: Vec<FormVersionSummary>,
-}
-
-#[derive(Serialize)]
-pub struct FormDefinition {
-    id: Uuid,
-    name: String,
-    slug: String,
-    scope_node_type_id: Option<Uuid>,
-    scope_node_type_name: Option<String>,
-    visibility_nodes: Vec<FormVisibilityNodeSummary>,
-    versions: Vec<FormVersionSummary>,
-    workflows: Vec<FormWorkflowLink>,
-    dataset_sources: Vec<FormDatasetSourceLink>,
-}
-
-#[derive(Serialize)]
-pub struct FormVersionSummary {
-    id: Uuid,
-    version_label: Option<String>,
-    status: String,
-    version_major: Option<i32>,
-    version_minor: Option<i32>,
-    version_patch: Option<i32>,
-    compatibility_group_id: Option<Uuid>,
-    compatibility_group_name: Option<String>,
-    published_at: Option<chrono::DateTime<chrono::Utc>>,
-    field_count: i64,
-    semantic_bump: Option<String>,
-    started_new_major_line: Option<bool>,
-    publish_preview: Option<FormPublishPreview>,
-    assignment_nodes: Vec<FormVersionAssignmentNodeSummary>,
-}
-
-#[derive(Clone, Serialize)]
-pub struct FormVersionAssignmentNodeSummary {
-    node_id: Uuid,
-    node_name: String,
-    node_type_name: String,
-    parent_node_id: Option<Uuid>,
-    node_path: String,
-}
-
-#[derive(Clone, Serialize)]
-pub struct FormVisibilityNodeSummary {
-    node_id: Uuid,
-    node_name: String,
-    node_type_name: String,
-    parent_node_id: Option<Uuid>,
-    node_path: String,
-}
-
-#[derive(Serialize)]
-pub struct FormPublishPreview {
-    version_label: String,
-    version_major: i32,
-    version_minor: i32,
-    version_patch: i32,
-    semantic_bump: String,
-    compatibility_label: String,
-    starts_new_major_line: bool,
-    dependency_warnings: Vec<String>,
-}
-
-#[derive(Serialize)]
-pub struct PublishFormVersionResponse {
-    id: Uuid,
-    version_label: String,
-    version_major: i32,
-    version_minor: i32,
-    version_patch: i32,
-    semantic_bump: String,
-    compatibility_label: String,
-    status: String,
-    published_at: chrono::DateTime<chrono::Utc>,
-    dependency_warnings: Vec<String>,
-    starts_new_major_line: bool,
-}
-
-#[derive(Serialize)]
-pub struct FormDatasetSourceLink {
-    dataset_id: Uuid,
-    dataset_name: String,
-    source_alias: String,
-    selection_rule: String,
-}
-
-#[derive(Serialize)]
-pub struct FormWorkflowLink {
-    id: Uuid,
-    name: String,
-    slug: String,
-    source: String,
-    current_version_id: Option<Uuid>,
-    current_version_label: Option<String>,
-    current_status: Option<String>,
-    assignment_count: i64,
-}
-
-#[derive(Serialize)]
-pub struct PublishedFormVersionSummary {
-    pub form_id: Uuid,
-    pub form_name: String,
-    pub form_slug: String,
-    pub form_version_id: Uuid,
-    pub version_label: String,
-    pub published_at: Option<chrono::DateTime<chrono::Utc>>,
-    pub field_count: i64,
+pub(crate) fn routes() -> Router<AppState> {
+    Router::new()
+        .route("/api/admin/forms", get(list_forms).post(create_form))
+        .route("/api/forms", get(list_readable_forms))
+        .route("/api/forms/{form_id}", get(get_readable_form))
+        .route("/api/admin/forms/{form_id}", get(get_form).put(update_form))
+        .route(
+            "/api/admin/forms/{form_id}/versions",
+            post(create_form_version),
+        )
+        .route(
+            "/api/admin/form-versions/{form_version_id}/sections",
+            post(create_form_section),
+        )
+        .route(
+            "/api/admin/form-versions/{form_version_id}/fields",
+            post(create_form_field),
+        )
+        .route(
+            "/api/admin/form-sections/{section_id}",
+            axum::routing::put(update_form_section).delete(delete_form_section),
+        )
+        .route(
+            "/api/admin/form-fields/{field_id}",
+            axum::routing::put(update_form_field).delete(delete_form_field),
+        )
+        .route(
+            "/api/admin/form-versions/{form_version_id}/publish",
+            post(publish_form_version),
+        )
+        .route(
+            "/api/form-versions/{form_version_id}/render",
+            get(render_form_version),
+        )
+        .route("/api/forms/published", get(list_published_form_versions))
 }
 
 async fn load_form_version_assignment_nodes(

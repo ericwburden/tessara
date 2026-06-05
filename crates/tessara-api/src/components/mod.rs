@@ -5,9 +5,10 @@
 //! `dto`.
 
 use axum::{
-    Json,
+    Json, Router,
     extract::{Path, State},
     http::HeaderMap,
+    routing::{get, post},
 };
 use sqlx::Row;
 use uuid::Uuid;
@@ -25,6 +26,17 @@ use crate::{
     error::{ApiError, ApiResult},
     hierarchy::{IdResponse, require_text},
 };
+
+pub(crate) fn routes() -> Router<AppState> {
+    Router::new()
+        .route("/api/admin/components", post(create_component))
+        .route(
+            "/api/admin/components/{component_id}/versions",
+            post(create_component_version),
+        )
+        .route("/api/components", get(list_components))
+        .route("/api/components/{component_ref}", get(get_component_by_ref))
+}
 
 /// Creates a component shell before versions are attached.
 pub async fn create_component(

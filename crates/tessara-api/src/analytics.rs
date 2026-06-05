@@ -1,4 +1,9 @@
-use axum::{Json, extract::State, http::HeaderMap};
+use axum::{
+    Json, Router,
+    extract::State,
+    http::HeaderMap,
+    routing::{get, post},
+};
 use serde::Serialize;
 
 use crate::{auth, db::AppState, error::ApiResult};
@@ -8,6 +13,12 @@ pub struct AnalyticsStatus {
     pub node_count: i64,
     pub submitted_count: i64,
     pub value_count: i64,
+}
+
+pub(crate) fn routes() -> Router<AppState> {
+    Router::new()
+        .route("/api/admin/analytics/refresh", post(refresh_analytics))
+        .route("/api/admin/analytics/status", get(analytics_status))
 }
 
 pub async fn refresh_analytics(

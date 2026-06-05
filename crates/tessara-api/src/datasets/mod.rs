@@ -7,9 +7,10 @@
 use std::collections::{BTreeMap, HashMap};
 
 use axum::{
-    Json,
+    Json, Router,
     extract::{Path, State},
     http::HeaderMap,
+    routing::{get, post},
 };
 use sqlx::{Postgres, Row, Transaction};
 use tessara_datasets::{
@@ -31,6 +32,18 @@ use crate::{
     error::{ApiError, ApiResult},
     hierarchy::{IdResponse, require_text},
 };
+
+pub(crate) fn routes() -> Router<AppState> {
+    Router::new()
+        .route("/api/admin/datasets", post(create_dataset))
+        .route(
+            "/api/admin/datasets/{dataset_id}",
+            axum::routing::put(update_dataset).delete(delete_dataset),
+        )
+        .route("/api/datasets", get(list_datasets))
+        .route("/api/datasets/{dataset_id}", get(get_dataset))
+        .route("/api/datasets/{dataset_id}/table", get(run_dataset_table))
+}
 
 struct ValidatedDatasetSource {
     source_alias: String,

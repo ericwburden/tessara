@@ -29,7 +29,7 @@ use axum::{
     http::{Method, StatusCode},
     middleware::{self, Next},
     response::{Html, IntoResponse, Redirect, Response},
-    routing::{delete, get, post, put},
+    routing::get,
 };
 use db::AppState;
 use error::ApiError;
@@ -390,224 +390,7 @@ pub fn router(state: AppState) -> Router {
                 )
             }),
         )
-        .route("/health", get(|| async { "ok" }))
-        .route("/api/summary", get(app_summary::get_summary))
-        .route("/api/auth/login", post(auth::login))
-        .route("/api/auth/session", get(auth::session))
-        .route("/api/auth/logout", delete(auth::logout))
-        .route("/api/me", get(auth::me))
-        .route("/api/admin/capabilities", get(users::list_capabilities))
-        .route(
-            "/api/admin/roles",
-            get(users::list_roles).post(users::create_role),
-        )
-        .route(
-            "/api/admin/roles/{role_id}",
-            get(users::get_role).put(users::update_role),
-        )
-        .route(
-            "/api/admin/users",
-            get(users::list_users).post(users::create_user),
-        )
-        .route(
-            "/api/admin/users/{account_id}",
-            get(users::get_user).put(users::update_user),
-        )
-        .route(
-            "/api/admin/users/{account_id}/access",
-            get(users::get_user_access).put(users::update_user_access),
-        )
-        .route(
-            "/api/admin/node-types",
-            get(hierarchy::list_node_types).post(hierarchy::create_node_type),
-        )
-        .route(
-            "/api/admin/node-types/{node_type_id}",
-            get(hierarchy::get_node_type).put(hierarchy::update_node_type),
-        )
-        .route("/api/node-types", get(hierarchy::list_readable_node_types))
-        .route(
-            "/api/admin/node-type-relationships",
-            get(hierarchy::list_node_type_relationships)
-                .post(hierarchy::create_node_type_relationship),
-        )
-        .route(
-            "/api/admin/node-type-relationships/{parent_node_type_id}/{child_node_type_id}",
-            delete(hierarchy::delete_node_type_relationship),
-        )
-        .route(
-            "/api/admin/node-metadata-fields",
-            get(hierarchy::list_node_metadata_fields).post(hierarchy::create_node_metadata_field),
-        )
-        .route(
-            "/api/admin/node-metadata-fields/{field_id}",
-            put(hierarchy::update_node_metadata_field)
-                .delete(hierarchy::delete_node_metadata_field),
-        )
-        .route("/api/admin/nodes", post(hierarchy::create_node))
-        .route("/api/admin/nodes/{node_id}", put(hierarchy::update_node))
-        .route("/api/nodes", get(hierarchy::list_nodes))
-        .route("/api/nodes/{node_id}", get(hierarchy::get_node))
-        .route(
-            "/api/admin/forms",
-            get(forms::list_forms).post(forms::create_form),
-        )
-        .route("/api/forms", get(forms::list_readable_forms))
-        .route("/api/forms/{form_id}", get(forms::get_readable_form))
-        .route(
-            "/api/admin/forms/{form_id}",
-            get(forms::get_form).put(forms::update_form),
-        )
-        .route(
-            "/api/admin/forms/{form_id}/versions",
-            post(forms::create_form_version),
-        )
-        .route(
-            "/api/admin/form-versions/{form_version_id}/sections",
-            post(forms::create_form_section),
-        )
-        .route(
-            "/api/admin/form-versions/{form_version_id}/fields",
-            post(forms::create_form_field),
-        )
-        .route(
-            "/api/admin/form-sections/{section_id}",
-            put(forms::update_form_section).delete(forms::delete_form_section),
-        )
-        .route(
-            "/api/admin/form-fields/{field_id}",
-            put(forms::update_form_field).delete(forms::delete_form_field),
-        )
-        .route(
-            "/api/admin/form-versions/{form_version_id}/publish",
-            post(forms::publish_form_version),
-        )
-        .route(
-            "/api/form-versions/{form_version_id}/render",
-            get(forms::render_form_version),
-        )
-        .route(
-            "/api/forms/published",
-            get(forms::list_published_form_versions),
-        )
-        .route(
-            "/api/workflows",
-            get(workflows::list_workflows).post(workflows::create_workflow),
-        )
-        .route(
-            "/api/workflows/{workflow_id}",
-            get(workflows::get_workflow).put(workflows::update_workflow),
-        )
-        .route(
-            "/api/workflows/{workflow_id}/versions",
-            post(workflows::create_workflow_version),
-        )
-        .route(
-            "/api/workflow-versions/{workflow_version_id}/publish",
-            post(workflows::publish_workflow_version),
-        )
-        .route(
-            "/api/workflow-versions/{workflow_version_id}/steps",
-            put(workflows::replace_workflow_version_steps),
-        )
-        .route(
-            "/api/workflow-versions/{workflow_version_id}",
-            delete(workflows::delete_workflow_version),
-        )
-        .route(
-            "/api/workflow-assignment-candidates",
-            get(workflows::list_assignment_candidates),
-        )
-        .route(
-            "/api/workflow-assignment-candidates/assignees",
-            get(workflows::list_assignment_candidate_assignees),
-        )
-        .route(
-            "/api/workflow-assignments",
-            get(workflows::list_workflow_assignments).post(workflows::create_workflow_assignment),
-        )
-        .route(
-            "/api/workflow-assignments/bulk",
-            post(workflows::bulk_create_workflow_assignments),
-        )
-        .route(
-            "/api/workflow-assignments/pending",
-            get(workflows::list_pending_work),
-        )
-        .route(
-            "/api/workflow-assignments/{workflow_assignment_id}",
-            put(workflows::update_workflow_assignment),
-        )
-        .route(
-            "/api/workflow-assignments/{workflow_assignment_id}/start",
-            post(workflows::start_assignment),
-        )
-        .route(
-            "/api/responses/options",
-            get(submissions::list_response_start_options),
-        )
-        .route("/api/submissions", get(submissions::list_submissions))
-        .route(
-            "/api/submissions/{submission_id}",
-            get(submissions::get_submission).delete(submissions::delete_draft_submission),
-        )
-        .route(
-            "/api/submissions/{submission_id}/values",
-            put(submissions::save_submission_values),
-        )
-        .route(
-            "/api/submissions/{submission_id}/submit",
-            post(submissions::submit_submission),
-        )
-        .route(
-            "/api/admin/analytics/refresh",
-            post(analytics::refresh_analytics),
-        )
-        .route(
-            "/api/admin/analytics/status",
-            get(analytics::analytics_status),
-        )
-        .route("/api/admin/datasets", post(datasets::create_dataset))
-        .route(
-            "/api/admin/datasets/{dataset_id}",
-            put(datasets::update_dataset).delete(datasets::delete_dataset),
-        )
-        .route("/api/datasets", get(datasets::list_datasets))
-        .route("/api/datasets/{dataset_id}", get(datasets::get_dataset))
-        .route(
-            "/api/datasets/{dataset_id}/table",
-            get(datasets::run_dataset_table),
-        )
-        .route("/api/admin/components", post(components::create_component))
-        .route(
-            "/api/admin/components/{component_id}/versions",
-            post(components::create_component_version),
-        )
-        .route("/api/components", get(components::list_components))
-        .route(
-            "/api/components/{component_ref}",
-            get(components::get_component_by_ref),
-        )
-        .route("/api/admin/dashboards", post(dashboards::create_dashboard))
-        .route(
-            "/api/admin/dashboards/{dashboard_id}",
-            put(dashboards::update_dashboard).delete(dashboards::delete_dashboard),
-        )
-        .route(
-            "/api/admin/dashboards/{dashboard_id}/components",
-            post(dashboards::add_dashboard_component),
-        )
-        .route(
-            "/api/admin/dashboard-components/{component_id}",
-            put(dashboards::update_dashboard_component)
-                .delete(dashboards::delete_dashboard_component),
-        )
-        .route(
-            "/api/dashboards/{dashboard_id}",
-            get(dashboards::get_dashboard),
-        )
-        .route("/api/dashboards", get(dashboards::list_dashboards))
-        .route("/api/demo/seed", post(demo::seed_demo_endpoint))
+        .merge(api_routes())
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
         .layer(middleware::from_fn_with_state(
@@ -615,6 +398,23 @@ pub fn router(state: AppState) -> Router {
             require_authenticated_ui_route,
         ))
         .with_state(state)
+}
+
+fn api_routes() -> Router<AppState> {
+    Router::new()
+        .route("/health", get(|| async { "ok" }))
+        .route("/api/summary", get(app_summary::get_summary))
+        .merge(auth::routes())
+        .merge(users::routes())
+        .merge(hierarchy::routes())
+        .merge(forms::routes())
+        .merge(workflows::routes())
+        .merge(submissions::routes())
+        .merge(analytics::routes())
+        .merge(datasets::routes())
+        .merge(components::routes())
+        .merge(dashboards::routes())
+        .merge(demo::routes())
 }
 
 async fn require_authenticated_ui_route(

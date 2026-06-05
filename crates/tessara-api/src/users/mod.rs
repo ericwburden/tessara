@@ -5,8 +5,9 @@
 //! and coordinate validation, persistence, and effective-access projections.
 
 use axum::{
-    Json,
+    Json, Router,
     extract::{Path, State},
+    routing::get,
 };
 use sqlx::{PgPool, Postgres, Row, Transaction};
 use uuid::Uuid;
@@ -25,6 +26,22 @@ use crate::{
     error::{ApiError, ApiResult},
     hierarchy::require_text,
 };
+
+pub(crate) fn routes() -> Router<AppState> {
+    Router::new()
+        .route("/api/admin/capabilities", get(list_capabilities))
+        .route("/api/admin/roles", get(list_roles).post(create_role))
+        .route("/api/admin/roles/{role_id}", get(get_role).put(update_role))
+        .route("/api/admin/users", get(list_users).post(create_user))
+        .route(
+            "/api/admin/users/{account_id}",
+            get(get_user).put(update_user),
+        )
+        .route(
+            "/api/admin/users/{account_id}/access",
+            get(get_user_access).put(update_user_access),
+        )
+}
 
 /// Lists the capability catalog admins use to compose role bundles.
 pub async fn list_capabilities(

@@ -5,9 +5,10 @@
 //! compatibility; DTOs live in `dto`.
 
 use axum::{
-    Json,
+    Json, Router,
     extract::{Path, State},
     http::HeaderMap,
+    routing::{get, post},
 };
 use sqlx::{Postgres, Row, Transaction};
 use uuid::Uuid;
@@ -25,6 +26,25 @@ use crate::{
     error::{ApiError, ApiResult},
     hierarchy::{IdResponse, require_text},
 };
+
+pub(crate) fn routes() -> Router<AppState> {
+    Router::new()
+        .route("/api/admin/dashboards", post(create_dashboard))
+        .route(
+            "/api/admin/dashboards/{dashboard_id}",
+            axum::routing::put(update_dashboard).delete(delete_dashboard),
+        )
+        .route(
+            "/api/admin/dashboards/{dashboard_id}/components",
+            post(add_dashboard_component),
+        )
+        .route(
+            "/api/admin/dashboard-components/{component_id}",
+            axum::routing::put(update_dashboard_component).delete(delete_dashboard_component),
+        )
+        .route("/api/dashboards/{dashboard_id}", get(get_dashboard))
+        .route("/api/dashboards", get(list_dashboards))
+}
 
 /// Creates a dashboard with explicit visibility nodes.
 pub async fn create_dashboard(

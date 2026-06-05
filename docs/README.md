@@ -9,6 +9,7 @@ This `/docs` folder is the authoritative source for Tessara's active roadmap, re
 | [roadmap.md](./roadmap.md) | Current implementation baseline and forward-looking delivery plan |
 | [requirements.md](./requirements.md) | Product and system requirements |
 | [architecture.md](./architecture.md) | Target architecture, transition model, and technical design direction |
+| [api-wire-types.md](./api-wire-types.md) | Direction for shared API DTO contracts and frontend transport helpers |
 | [development-workflow.md](./development-workflow.md) | Local development loops for fast host-run iteration, API-only refresh, and full-stack relaunch |
 | [ui-guidance.md](./ui-guidance.md) | Canonical UI guidance for naming, brand expression, shell behavior, rendering, layout, components, states, shared primitive contracts, and transitional UI rules |
 | [ui-guidance-spec.md](./ui-guidance-spec.md) | Allium behavioral specification companion to the canonical UI guidance |
@@ -36,8 +37,9 @@ Start here if you are orienting:
 1. Read [roadmap.md](./roadmap.md) for current status and next sprints.
 2. Read [requirements.md](./requirements.md) for scope and system expectations.
 3. Read [architecture.md](./architecture.md) for the target model and transition rules.
-4. Read [ui-guidance.md](./ui-guidance.md) for the canonical UI specification.
-5. Read [ui-guidance-spec.md](./ui-guidance-spec.md) when you need the formal Allium behavior contract for the UI guidance.
+4. Read [api-wire-types.md](./api-wire-types.md) before adding stable API/frontend JSON contracts.
+5. Read [ui-guidance.md](./ui-guidance.md) for the canonical UI specification.
+6. Read [ui-guidance-spec.md](./ui-guidance-spec.md) when you need the formal Allium behavior contract for the UI guidance.
 
 ## Reference Inputs
 

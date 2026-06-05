@@ -7,10 +7,10 @@
 use std::{collections::HashMap, str::FromStr};
 
 use axum::{
-    Json,
+    Json, Router,
     extract::{Path, Query, State},
+    routing::{get, post},
 };
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::Row;
 use tessara_core::{FieldType, FieldTypeError, validate_required_text};
@@ -23,211 +23,49 @@ use crate::{
     error::{ApiError, ApiResult},
 };
 
-#[derive(Deserialize)]
-pub struct CreateNodeTypeRequest {
-    name: String,
-    slug: String,
-    plural_label: Option<String>,
-    #[serde(default)]
-    parent_node_type_ids: Option<Vec<Uuid>>,
-    #[serde(default)]
-    child_node_type_ids: Option<Vec<Uuid>>,
-}
+mod dto;
+pub(crate) use dto::{
+    CreateNodeMetadataFieldRequest, CreateNodeRequest, CreateNodeTypeRelationshipRequest,
+    CreateNodeTypeRequest, IdResponse, ListNodesQuery, NodeDashboardLink, NodeDetail, NodeFormLink,
+    NodeMetadataFieldSummary, NodeResponse, NodeSubmissionLink, NodeTypeCatalogEntry,
+    NodeTypeDefinition, NodeTypeFormLink, NodeTypePeerLink, NodeTypeRelationshipSummary,
+    NodeTypeSummary, UpdateNodeMetadataFieldRequest, UpdateNodeRequest, UpdateNodeTypeRequest,
+};
 
-#[derive(Deserialize)]
-pub struct UpdateNodeTypeRequest {
-    name: String,
-    slug: String,
-    plural_label: Option<String>,
-    #[serde(default)]
-    parent_node_type_ids: Option<Vec<Uuid>>,
-    #[serde(default)]
-    child_node_type_ids: Option<Vec<Uuid>>,
-}
-
-#[derive(Deserialize)]
-pub struct CreateNodeTypeRelationshipRequest {
-    parent_node_type_id: Uuid,
-    child_node_type_id: Uuid,
-}
-
-#[derive(Deserialize)]
-pub struct CreateNodeMetadataFieldRequest {
-    node_type_id: Uuid,
-    key: String,
-    label: String,
-    field_type: String,
-    required: bool,
-}
-
-#[derive(Deserialize)]
-pub struct UpdateNodeMetadataFieldRequest {
-    key: String,
-    label: String,
-    field_type: String,
-    required: bool,
-}
-
-#[derive(Deserialize)]
-pub struct CreateNodeRequest {
-    node_type_id: Uuid,
-    parent_node_id: Option<Uuid>,
-    name: String,
-    #[serde(default)]
-    metadata: HashMap<String, Value>,
-}
-
-#[derive(Deserialize)]
-pub struct UpdateNodeRequest {
-    parent_node_id: Option<Uuid>,
-    name: String,
-    #[serde(default)]
-    metadata: HashMap<String, Value>,
-}
-
-#[derive(Deserialize)]
-pub struct ListNodesQuery {
-    q: Option<String>,
-}
-
-#[derive(Serialize)]
-pub struct IdResponse {
-    pub id: Uuid,
-}
-
-#[derive(Serialize)]
-pub struct NodeResponse {
-    id: Uuid,
-    node_type_id: Uuid,
-    node_type_name: String,
-    node_type_slug: String,
-    node_type_singular_label: String,
-    node_type_plural_label: String,
-    parent_node_id: Option<Uuid>,
-    parent_node_name: Option<String>,
-    name: String,
-    metadata: Value,
-}
-
-#[derive(Serialize)]
-pub struct NodeDetail {
-    id: Uuid,
-    node_type_id: Uuid,
-    node_type_name: String,
-    node_type_slug: String,
-    node_type_singular_label: String,
-    node_type_plural_label: String,
-    parent_node_id: Option<Uuid>,
-    parent_node_name: Option<String>,
-    name: String,
-    metadata: Value,
-    related_forms: Vec<NodeFormLink>,
-    related_responses: Vec<NodeSubmissionLink>,
-    related_dashboards: Vec<NodeDashboardLink>,
-}
-
-#[derive(Serialize)]
-pub struct NodeFormLink {
-    form_id: Uuid,
-    form_name: String,
-    form_slug: String,
-    published_version_count: i64,
-    active_version_label: Option<String>,
-}
-
-#[derive(Serialize)]
-pub struct NodeSubmissionLink {
-    submission_id: Uuid,
-    form_id: Uuid,
-    form_name: String,
-    form_version_id: Uuid,
-    version_label: String,
-    status: String,
-    created_at: chrono::DateTime<chrono::Utc>,
-    submitted_at: Option<chrono::DateTime<chrono::Utc>>,
-    submitted_by: Option<String>,
-}
-
-#[derive(Serialize)]
-pub struct NodeDashboardLink {
-    dashboard_id: Uuid,
-    dashboard_name: String,
-    component_count: i64,
-    description: Option<String>,
-}
-
-#[derive(Serialize)]
-pub struct NodeTypeSummary {
-    id: Uuid,
-    name: String,
-    slug: String,
-    singular_label: String,
-    plural_label: String,
-    is_root_type: bool,
-    node_count: i64,
-}
-
-#[derive(Serialize, Clone)]
-pub struct NodeTypePeerLink {
-    node_type_id: Uuid,
-    node_type_name: String,
-    node_type_slug: String,
-    singular_label: String,
-    plural_label: String,
-}
-
-#[derive(Serialize)]
-pub struct NodeTypeCatalogEntry {
-    id: Uuid,
-    name: String,
-    slug: String,
-    singular_label: String,
-    plural_label: String,
-    is_root_type: bool,
-    node_count: i64,
-    parent_relationships: Vec<NodeTypePeerLink>,
-    child_relationships: Vec<NodeTypePeerLink>,
-}
-
-#[derive(Serialize)]
-pub struct NodeTypeDefinition {
-    id: Uuid,
-    name: String,
-    slug: String,
-    singular_label: String,
-    plural_label: String,
-    is_root_type: bool,
-    node_count: i64,
-    parent_relationships: Vec<NodeTypePeerLink>,
-    child_relationships: Vec<NodeTypePeerLink>,
-    metadata_fields: Vec<NodeMetadataFieldSummary>,
-    scoped_forms: Vec<NodeTypeFormLink>,
-}
-
-#[derive(Serialize)]
-pub struct NodeTypeRelationshipSummary {
-    parent_node_type_id: Uuid,
-    parent_name: String,
-    child_node_type_id: Uuid,
-    child_name: String,
-}
-
-#[derive(Serialize)]
-pub struct NodeMetadataFieldSummary {
-    id: Uuid,
-    node_type_id: Uuid,
-    node_type_name: String,
-    key: String,
-    label: String,
-    field_type: String,
-    required: bool,
-}
-
-#[derive(Serialize)]
-pub struct NodeTypeFormLink {
-    form_id: Uuid,
-    form_name: String,
-    form_slug: String,
+pub(crate) fn routes() -> Router<AppState> {
+    Router::new()
+        .route(
+            "/api/admin/node-types",
+            get(list_node_types).post(create_node_type),
+        )
+        .route(
+            "/api/admin/node-types/{node_type_id}",
+            get(get_node_type).put(update_node_type),
+        )
+        .route("/api/node-types", get(list_readable_node_types))
+        .route(
+            "/api/admin/node-type-relationships",
+            get(list_node_type_relationships).post(create_node_type_relationship),
+        )
+        .route(
+            "/api/admin/node-type-relationships/{parent_node_type_id}/{child_node_type_id}",
+            axum::routing::delete(delete_node_type_relationship),
+        )
+        .route(
+            "/api/admin/node-metadata-fields",
+            get(list_node_metadata_fields).post(create_node_metadata_field),
+        )
+        .route(
+            "/api/admin/node-metadata-fields/{field_id}",
+            axum::routing::put(update_node_metadata_field).delete(delete_node_metadata_field),
+        )
+        .route("/api/admin/nodes", post(create_node))
+        .route(
+            "/api/admin/nodes/{node_id}",
+            axum::routing::put(update_node),
+        )
+        .route("/api/nodes", get(list_nodes))
+        .route("/api/nodes/{node_id}", get(get_node))
 }
 
 /// Creates a node type and its configured parent/child relationships.

@@ -18,6 +18,8 @@ use wasm_bindgen::JsCast;
 #[cfg(feature = "hydrate")]
 use wasm_bindgen::closure::Closure;
 
+#[cfg(feature = "hydrate")]
+use crate::infra::http::{redirect_to_login, send_json_request};
 use crate::infra::routing::{
     AccountRouteParams, FormRouteParams, NodeRouteParams, SubmissionRouteParams,
     WorkflowRouteParams, require_route_params,
@@ -513,13 +515,6 @@ struct UpdateNodeMetadataFieldRequest {
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
 struct IdResponse {
     id: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
-struct ApiErrorResponse {
-    message: Option<String>,
-    error: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -5817,38 +5812,7 @@ async fn send_json_id_request(
     body: Option<String>,
     action: &str,
 ) -> Result<IdResponse, String> {
-    let response = if let Some(body) = body {
-        builder
-            .header("Content-Type", "application/json")
-            .body(body)
-            .map_err(|_| format!("{action} request could not be prepared."))?
-            .send()
-            .await
-    } else {
-        builder.send().await
-    };
-
-    match response {
-        Ok(response) if response.status() == 401 => {
-            redirect_to_login();
-            Err("Authentication is required.".into())
-        }
-        Ok(response) if response.ok() => response
-            .json::<IdResponse>()
-            .await
-            .map_err(|_| format!("{action} response could not be read.")),
-        Ok(response) => {
-            let status = response.status();
-            if let Ok(body) = response.json::<ApiErrorResponse>().await {
-                let message = body.message.or(body.error).unwrap_or_default();
-                if !message.trim().is_empty() {
-                    return Err(message);
-                }
-            }
-            Err(format!("{action} failed with status {status}."))
-        }
-        Err(_) => Err(format!("Could not reach the {action} API.")),
-    }
+    send_json_request(builder, body, action).await
 }
 
 fn load_form_create_options(
@@ -6383,13 +6347,6 @@ fn load_organization_detail(
     #[cfg(not(feature = "hydrate"))]
     {
         let _ = (node_id, detail, is_loading, error);
-    }
-}
-
-#[cfg(feature = "hydrate")]
-fn redirect_to_login() {
-    if let Some(window) = web_sys::window() {
-        let _ = window.location().set_href("/login");
     }
 }
 
@@ -15230,7 +15187,7 @@ pub fn WorkflowsEditPage() -> impl IntoView {
 }
 
 #[component]
-pub fn ResponsesPage() -> impl IntoView {
+pub(super) fn ResponsesPageContent() -> impl IntoView {
     let submissions = RwSignal::new(Vec::<SubmissionSummary>::new());
     let is_loading = RwSignal::new(true);
     let load_error = RwSignal::new(None::<String>);
@@ -15672,7 +15629,7 @@ fn ResponsesList(
 }
 
 #[component]
-pub fn ResponsesNewPage() -> impl IntoView {
+pub(super) fn ResponsesNewPageContent() -> impl IntoView {
     let options = RwSignal::new(None::<AssignmentResponseStartOptions>);
     let is_loading = RwSignal::new(true);
     let is_saving = RwSignal::new(false);
@@ -15921,7 +15878,7 @@ fn ResponseAssignmentStartFields(
 }
 
 #[component]
-pub fn ResponsesDetailPage() -> impl IntoView {
+pub(super) fn ResponsesDetailPageContent() -> impl IntoView {
     let params = require_route_params::<SubmissionRouteParams>();
     let submission_id = params.submission_id;
     let detail = RwSignal::new(None::<SubmissionDetail>);
@@ -15983,7 +15940,7 @@ pub fn ResponsesDetailPage() -> impl IntoView {
 }
 
 #[component]
-pub fn ResponsesEditPage() -> impl IntoView {
+pub(super) fn ResponsesEditPageContent() -> impl IntoView {
     let params = require_route_params::<SubmissionRouteParams>();
     let submission_id = params.submission_id;
     let detail = RwSignal::new(None::<SubmissionDetail>);
@@ -16577,6 +16534,10 @@ pub use placeholders::{
     ComponentsDetailPage, ComponentsPage, DashboardsDetailPage, DashboardsEditPage,
     DashboardsNewPage, DashboardsPage, DatasetsDetailPage, DatasetsPage, NotFoundPage,
 };
+
+#[path = "native/responses.rs"]
+mod responses;
+pub use responses::{ResponsesDetailPage, ResponsesEditPage, ResponsesNewPage, ResponsesPage};
 
 #[path = "native/administration.rs"]
 mod administration;
