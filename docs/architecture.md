@@ -187,12 +187,22 @@ This behavior applies most directly to:
 Core table families:
 
 - access and organization:
-  - `users`
+  - `accounts`
   - `roles`
-  - `permissions`
-  - `role_permissions`
+  - `capabilities`
+  - `role_capabilities`
   - `role_assignments`
-  - `organization_nodes`
+  - `account_delegations`
+  - `nodes`
+
+Access is evaluated from capability + scope + ownership:
+
+- role capabilities determine whether an action or surface exists
+- global role assignments evaluate those capabilities without node restriction
+- scoped role assignments restrict those capabilities to the assigned node subtree
+- response ownership and account delegation grant access to assigned response work
+- profile/persona metadata is display-only and must not control behavior
+
 - fielding and lookup support:
   - `option_sets`
   - `select_options`

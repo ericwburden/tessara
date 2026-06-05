@@ -27,6 +27,17 @@ The application should use one coherent shared shell and one shared user space, 
 - Navigation, route access, and mutation capabilities must reflect the user's effective scope and permissions.
 - The roadmap must treat user management and RBAC as first-class delivery scope, not hidden setup details.
 
+### Access model
+
+The application access model is capability + scope + ownership:
+
+- Capabilities decide whether an action, API family, route, or navigation surface exists for the user.
+- Global role assignments grant unrestricted capability scope.
+- Scoped role assignments grant the same capabilities only inside the assigned organization subtree.
+- Response ownership and delegation grant access to assigned response work independently from operator scope.
+- Roles are administrator-managed bundles of capabilities; seeded roles are initial data, not hardcoded behavior branches.
+- Profiles, personas, or display labels must not act as behavior switches.
+
 ## Organization Requirements
 
 - The organization model must be configurable rather than hardcoded to one legacy hierarchy.
