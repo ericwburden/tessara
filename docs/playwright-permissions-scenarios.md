@@ -10,6 +10,12 @@ Project directive: every new permission-controlled surface, action, or data-acce
 
 The suite creates Playwright-owned fixtures with a `pw-permissions-*` prefix through admin APIs after seeding the demo dataset.
 
+## Fixture Lifecycle
+
+Permission fixtures are intentionally durable local records. The suite creates them through supported admin APIs and does not perform direct database cleanup because users, roles, assignments, drafts, submissions, and delegations are linked across the authorization model. Reusing supported APIs keeps the test setup representative of production behavior and avoids a hidden cleanup path that can drift from the app.
+
+When local fixture volume gets noisy, reset the development database with `.\scripts\local-launch.ps1 -FreshData` before rerunning Playwright. Future cleanup work should prefer supported admin lifecycle APIs if user or role deletion/deactivation becomes a product feature; until then, keep fixture names prefixed with `pw-permissions-*` so they remain easy to identify.
+
 | Fixture | Role capabilities | Scope/delegation purpose |
 | --- | --- | --- |
 | No-access user | empty role | Verifies protected capability surfaces reject accounts with no capabilities. |
