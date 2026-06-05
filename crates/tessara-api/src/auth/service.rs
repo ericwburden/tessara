@@ -142,7 +142,7 @@ pub async fn capability_boundary(
     account: &AccountContext,
     required: &str,
 ) -> ApiResult<CapabilityBoundary> {
-    let Some(scope) = account.capability_scope(required) else {
+    let Some((scope, granted_capability)) = account.matching_capability_scope(required) else {
         return Ok(CapabilityBoundary::None);
     };
 
@@ -153,7 +153,7 @@ pub async fn capability_boundary(
     let capability = if scope.capability == "admin:all" {
         "admin:all"
     } else {
-        required
+        granted_capability.as_str()
     };
     Ok(CapabilityBoundary::Scoped(
         repo::effective_scope_node_ids_for_capability(pool, account.account_id, capability).await?,
@@ -173,11 +173,44 @@ pub async fn capability_allows_node(
     })
 }
 
+pub async fn require_capability_contains_nodes(
+    pool: &PgPool,
+    account: &AccountContext,
+    required: &str,
+    node_ids: &[Uuid],
+) -> ApiResult<()> {
+    if node_ids.is_empty() {
+        return Err(ApiError::BadRequest(
+            "at least one visibility node is required".into(),
+        ));
+    }
+    match capability_boundary(pool, account, required).await? {
+        CapabilityBoundary::Global => Ok(()),
+        CapabilityBoundary::Scoped(scope_ids)
+            if node_ids.iter().all(|node_id| scope_ids.contains(node_id)) =>
+        {
+            Ok(())
+        }
+        CapabilityBoundary::Scoped(_) | CapabilityBoundary::None => {
+            Err(ApiError::Forbidden(required.to_string()))
+        }
+    }
+}
+
 fn capability_keys(scopes: &[CapabilityScope]) -> Vec<String> {
     let mut capabilities = scopes
         .iter()
         .map(|scope| scope.capability.clone())
         .collect::<Vec<_>>();
+    let implied_reads = capabilities
+        .iter()
+        .filter_map(|capability| {
+            capability
+                .strip_suffix(":manage")
+                .map(|domain| format!("{domain}:read"))
+        })
+        .collect::<Vec<_>>();
+    capabilities.extend(implied_reads);
     capabilities.sort();
     capabilities.dedup();
     capabilities

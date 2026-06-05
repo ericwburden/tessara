@@ -38,7 +38,7 @@ pub async fn list_response_start_options(
     account: &auth::AccountContext,
     query: ListSubmissionsQuery,
 ) -> ApiResult<AssignmentResponseStartOptions> {
-    let delegate_account_id = if account.has_capability("workflows:write") {
+    let delegate_account_id = if account.has_capability("workflows:manage") {
         query.delegate_account_id.unwrap_or(account.account_id)
     } else {
         auth::ensure_capability(account, "submissions:read_own")?;
@@ -87,7 +87,7 @@ pub async fn list_submissions(
         search,
     };
 
-    match auth::capability_boundary(pool, account, "submissions:write").await? {
+    match auth::capability_boundary(pool, account, "submissions:manage").await? {
         auth::CapabilityBoundary::Global => {
             repo::list_admin_submission_summaries(pool, &filters).await
         }
@@ -214,7 +214,7 @@ pub async fn require_submission_access(
         .await?
         .ok_or_else(|| ApiError::NotFound(format!("submission {submission_id}")))?;
 
-    match auth::capability_boundary(pool, account, "submissions:write").await? {
+    match auth::capability_boundary(pool, account, "submissions:manage").await? {
         auth::CapabilityBoundary::Global => {}
         auth::CapabilityBoundary::Scoped(scope_ids) if scope_ids.contains(&row.node_id) => {}
         _ => {

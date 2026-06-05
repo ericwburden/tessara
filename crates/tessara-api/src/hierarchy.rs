@@ -703,7 +703,7 @@ pub async fn create_node(
     request: AuthenticatedRequest,
     Json(payload): Json<CreateNodeRequest>,
 ) -> ApiResult<Json<IdResponse>> {
-    request.require_capability("hierarchy:write")?;
+    request.require_capability("hierarchy:manage")?;
     require_node_type_exists(&state.pool, payload.node_type_id).await?;
     require_text("node name", &payload.name)?;
 
@@ -739,7 +739,7 @@ pub async fn update_node(
     Path(node_id): Path<Uuid>,
     Json(payload): Json<UpdateNodeRequest>,
 ) -> ApiResult<Json<IdResponse>> {
-    request.require_capability("hierarchy:write")?;
+    request.require_capability("hierarchy:manage")?;
     require_text("node name", &payload.name)?;
     let node_type_id = require_node_type_for_node(&state.pool, node_id).await?;
     assert_parent_allowed(

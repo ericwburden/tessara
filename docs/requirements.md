@@ -99,6 +99,7 @@ Dataset -> Component -> Dashboard
 - Legacy import, rehearsal, and verification must remain supported during the transition.
 - Migration/operator flows must move toward the new dataset/component/dashboard model.
 - Verification should land in real application detail and viewer surfaces wherever possible, not only in isolated workbenches.
+- Every new permission-controlled surface, action, or data-access path must add or update Playwright coverage for capability + scope + ownership behavior, including at least one positive and one negative scenario when the behavior is currently executable.
 
 ## Application UI Requirements
 
@@ -111,6 +112,7 @@ Dataset -> Component -> Dashboard
 
 - The system must remain runnable locally with a deterministic seeded demo path.
 - Development and smoke workflows must continue to support local user testing.
+- Playwright permission scenarios must remain part of the browser regression suite, and the implemented scenario report must be updated when new permission cases are added.
 - Core routes must SSR correctly through the shared application shell.
 - Read-heavy flows should remain useful even when WASM hydration is unavailable or fails.
 - Heavy operator and analytics surfaces may use route/widget splitting, but the shared shell and ordinary browse/detail flows should stay eagerly available.

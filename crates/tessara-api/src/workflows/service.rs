@@ -26,8 +26,8 @@ pub(crate) async fn ensure_can_start_assignment(
         )));
     };
 
-    if account.has_capability("workflows:write")
-        && auth::capability_allows_node(pool, account, "workflows:write", access.node_id).await?
+    if account.has_capability("workflows:manage")
+        && auth::capability_allows_node(pool, account, "workflows:manage", access.node_id).await?
     {
         return Ok(());
     }

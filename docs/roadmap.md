@@ -127,6 +127,7 @@ Sprint 1C mandatory acceptance points (must be present to close Sprint 1C):
 
 - Scope-aware naming: when the highest assigned scope is `Partner`, the primary organization list shows `Partner List` instead of `Organization List`.
 - Hierarchy navigation: replace the flat organization card layout with a fuller-width tree navigator so scoped users can browse the tree structure directly.
+- New User Screen: add an in-app `/administration/users/new` flow so admins can create users without direct API calls, including email, display name, password, active status, initial roles, and a clear follow-up path to scope/delegation access assignment.
 
 ## Frontend Platform Foundation
 

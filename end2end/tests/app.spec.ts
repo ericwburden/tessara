@@ -44,6 +44,15 @@ async function signInAsAdmin(page: Page) {
   expect(response.ok()).toBeTruthy();
 }
 
+// PERMISSIONS TODO:
+// - Add nav/route visibility checks for operator@tessara.local once scoped
+//   browser coverage is introduced: no Administration nav, only capability
+//   surfaces allowed by capability + scope.
+// - Add respondent/delegate/delegator route checks: Responses should be visible
+//   for own/delegated work, while admin-only routes should redirect or forbid.
+// - Add admin-only administration route checks for users, roles, capabilities,
+//   node types, and the future /administration/users/new screen.
+
 test("root route is the native route inventory", async ({ page }) => {
   const assertNoConsoleErrors = attachConsoleGuard(page);
   await signInAsAdmin(page);

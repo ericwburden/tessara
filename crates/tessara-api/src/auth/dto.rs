@@ -87,8 +87,29 @@ impl AccountContext {
     }
 
     pub fn capability_scope(&self, required: &str) -> Option<&CapabilityScope> {
-        self.capability_scopes
+        self.matching_capability_scope(required)
+            .map(|(scope, _)| scope)
+    }
+
+    pub fn matching_capability_scope(&self, required: &str) -> Option<(&CapabilityScope, String)> {
+        if let Some(scope) = self
+            .capability_scopes
             .iter()
             .find(|scope| scope.capability == "admin:all" || scope.capability == required)
+        {
+            return Some((scope, scope.capability.clone()));
+        }
+
+        let implied = implied_manage_capability(required)?;
+        self.capability_scopes
+            .iter()
+            .find(|scope| scope.capability == implied)
+            .map(|scope| (scope, implied))
     }
+}
+
+pub fn implied_manage_capability(required: &str) -> Option<String> {
+    required
+        .strip_suffix(":read")
+        .map(|domain| format!("{domain}:manage"))
 }

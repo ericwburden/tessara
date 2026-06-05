@@ -26,6 +26,8 @@ pub struct CreateDatasetRequest {
     grain: String,
     #[serde(default = "default_dataset_composition_mode")]
     composition_mode: String,
+    #[serde(default)]
+    visibility_node_ids: Vec<Uuid>,
     sources: Vec<CreateDatasetSourceRequest>,
     fields: Vec<CreateDatasetFieldRequest>,
 }
@@ -55,6 +57,7 @@ pub struct DatasetSummary {
     slug: String,
     grain: String,
     composition_mode: String,
+    visibility_nodes: Vec<DatasetVisibilityNodeSummary>,
     source_count: i64,
     field_count: i64,
 }
@@ -67,8 +70,18 @@ pub struct DatasetDefinition {
     slug: String,
     grain: String,
     composition_mode: String,
+    visibility_nodes: Vec<DatasetVisibilityNodeSummary>,
     sources: Vec<DatasetSourceDefinition>,
     fields: Vec<DatasetFieldDefinition>,
+}
+
+#[derive(Clone, Serialize)]
+pub struct DatasetVisibilityNodeSummary {
+    node_id: Uuid,
+    node_name: String,
+    node_type_name: String,
+    parent_node_id: Option<Uuid>,
+    node_path: String,
 }
 
 #[derive(Serialize)]
@@ -130,10 +143,18 @@ pub async fn create_dataset(
     headers: HeaderMap,
     Json(payload): Json<CreateDatasetRequest>,
 ) -> ApiResult<Json<IdResponse>> {
-    auth::require_capability(&state.pool, &headers, "datasets:write").await?;
+    let account = auth::require_capability(&state.pool, &headers, "datasets:manage").await?;
     require_text("dataset name", &payload.name)?;
     require_text("dataset slug", &payload.slug)?;
     require_dataset_slug_available(&state.pool, &payload.slug).await?;
+    require_node_ids_exist(&state.pool, &payload.visibility_node_ids).await?;
+    auth::require_capability_contains_nodes(
+        &state.pool,
+        &account,
+        "datasets:manage",
+        &payload.visibility_node_ids,
+    )
+    .await?;
     let grain = DatasetGrain::parse(&payload.grain)
         .map_err(|error| ApiError::BadRequest(error.to_string()))?;
     let composition_mode = DatasetCompositionMode::parse(&payload.composition_mode)
@@ -146,7 +167,7 @@ pub async fn create_dataset(
         payload.fields.iter().map(|field| field.key.as_str()),
     )
     .map_err(|error| ApiError::BadRequest(error.to_string()))?;
-    let sources = validate_dataset_sources(&state.pool, payload.sources).await?;
+    let sources = validate_dataset_sources(&state.pool, &account, payload.sources).await?;
     let fields = validate_dataset_fields(&state.pool, &sources, payload.fields).await?;
 
     let mut tx = state.pool.begin().await?;
@@ -162,6 +183,7 @@ pub async fn create_dataset(
 
     insert_dataset_sources(&mut tx, dataset_id, &sources).await?;
     insert_dataset_fields(&mut tx, dataset_id, &fields).await?;
+    replace_dataset_scope_nodes_tx(&mut tx, dataset_id, &payload.visibility_node_ids).await?;
     insert_dataset_revision(&mut tx, dataset_id, "Initial published definition").await?;
     tx.commit().await?;
 
@@ -175,11 +197,21 @@ pub async fn update_dataset(
     Path(dataset_id): Path<Uuid>,
     Json(payload): Json<CreateDatasetRequest>,
 ) -> ApiResult<Json<IdResponse>> {
-    auth::require_capability(&state.pool, &headers, "datasets:write").await?;
+    let account = auth::require_capability(&state.pool, &headers, "datasets:manage").await?;
     require_dataset_exists(&state.pool, dataset_id).await?;
+    require_dataset_fully_in_capability_scope(&state.pool, &account, "datasets:manage", dataset_id)
+        .await?;
     require_text("dataset name", &payload.name)?;
     require_text("dataset slug", &payload.slug)?;
     require_dataset_slug_available_for_update(&state.pool, dataset_id, &payload.slug).await?;
+    require_node_ids_exist(&state.pool, &payload.visibility_node_ids).await?;
+    auth::require_capability_contains_nodes(
+        &state.pool,
+        &account,
+        "datasets:manage",
+        &payload.visibility_node_ids,
+    )
+    .await?;
     let grain = DatasetGrain::parse(&payload.grain)
         .map_err(|error| ApiError::BadRequest(error.to_string()))?;
     let composition_mode = DatasetCompositionMode::parse(&payload.composition_mode)
@@ -192,7 +224,7 @@ pub async fn update_dataset(
         payload.fields.iter().map(|field| field.key.as_str()),
     )
     .map_err(|error| ApiError::BadRequest(error.to_string()))?;
-    let sources = validate_dataset_sources(&state.pool, payload.sources).await?;
+    let sources = validate_dataset_sources(&state.pool, &account, payload.sources).await?;
     let fields = validate_dataset_fields(&state.pool, &sources, payload.fields).await?;
 
     let mut tx = state.pool.begin().await?;
@@ -216,6 +248,7 @@ pub async fn update_dataset(
         .await?;
     insert_dataset_sources(&mut tx, dataset_id, &sources).await?;
     insert_dataset_fields(&mut tx, dataset_id, &fields).await?;
+    replace_dataset_scope_nodes_tx(&mut tx, dataset_id, &payload.visibility_node_ids).await?;
     insert_dataset_revision(&mut tx, dataset_id, "Published definition update").await?;
     tx.commit().await?;
 
@@ -228,8 +261,10 @@ pub async fn delete_dataset(
     headers: HeaderMap,
     Path(dataset_id): Path<Uuid>,
 ) -> ApiResult<Json<IdResponse>> {
-    auth::require_capability(&state.pool, &headers, "datasets:write").await?;
+    let account = auth::require_capability(&state.pool, &headers, "datasets:manage").await?;
     require_dataset_exists(&state.pool, dataset_id).await?;
+    require_dataset_fully_in_capability_scope(&state.pool, &account, "datasets:manage", dataset_id)
+        .await?;
 
     sqlx::query("DELETE FROM datasets WHERE id = $1")
         .bind(dataset_id)
@@ -244,10 +279,48 @@ pub async fn list_datasets(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> ApiResult<Json<Vec<DatasetSummary>>> {
-    auth::require_capability(&state.pool, &headers, "datasets:read").await?;
+    let account = auth::require_capability(&state.pool, &headers, "datasets:read").await?;
+    let boundary = auth::capability_boundary(&state.pool, &account, "datasets:read").await?;
 
-    let rows = sqlx::query(
-        r#"
+    let rows = match &boundary {
+        auth::CapabilityBoundary::Scoped(scope_ids) => {
+            sqlx::query(
+                r#"
+        SELECT
+            datasets.id,
+            current_revisions.id AS current_revision_id,
+            datasets.name,
+            datasets.slug,
+            datasets.grain,
+            datasets.composition_mode,
+            COUNT(DISTINCT dataset_sources.id) AS source_count,
+            COUNT(DISTINCT dataset_fields.id) AS field_count
+        FROM datasets
+        JOIN dataset_scope_nodes ON dataset_scope_nodes.dataset_id = datasets.id
+        LEFT JOIN dataset_revisions AS current_revisions
+            ON current_revisions.dataset_id = datasets.id
+           AND current_revisions.status = 'published'::dataset_revision_status
+        LEFT JOIN dataset_sources ON dataset_sources.dataset_id = datasets.id
+        LEFT JOIN dataset_fields ON dataset_fields.dataset_id = datasets.id
+        WHERE dataset_scope_nodes.node_id = ANY($1)
+        GROUP BY
+            datasets.id,
+            current_revisions.id,
+            datasets.name,
+            datasets.slug,
+            datasets.grain,
+            datasets.composition_mode,
+            datasets.created_at
+        ORDER BY datasets.created_at, datasets.name
+        "#,
+            )
+            .bind(scope_ids)
+            .fetch_all(&state.pool)
+            .await?
+        }
+        auth::CapabilityBoundary::Global => {
+            sqlx::query(
+                r#"
         SELECT
             datasets.id,
             current_revisions.id AS current_revision_id,
@@ -273,20 +346,35 @@ pub async fn list_datasets(
             datasets.created_at
         ORDER BY datasets.created_at, datasets.name
         "#,
-    )
-    .fetch_all(&state.pool)
-    .await?;
+            )
+            .fetch_all(&state.pool)
+            .await?
+        }
+        auth::CapabilityBoundary::None => return Err(ApiError::Forbidden("datasets:read".into())),
+    };
+    let dataset_ids = rows
+        .iter()
+        .map(|row| row.try_get::<Uuid, _>("id"))
+        .collect::<Result<Vec<_>, sqlx::Error>>()?;
+    let visible_node_filter = match &boundary {
+        auth::CapabilityBoundary::Scoped(scope_ids) => Some(scope_ids.as_slice()),
+        _ => None,
+    };
+    let visibility_nodes =
+        load_dataset_visibility_nodes(&state.pool, &dataset_ids, visible_node_filter).await?;
 
     let datasets = rows
         .into_iter()
         .map(|row| {
+            let id: Uuid = row.try_get("id")?;
             Ok(DatasetSummary {
-                id: row.try_get("id")?,
+                id,
                 current_revision_id: row.try_get("current_revision_id")?,
                 name: row.try_get("name")?,
                 slug: row.try_get("slug")?,
                 grain: row.try_get("grain")?,
                 composition_mode: row.try_get("composition_mode")?,
+                visibility_nodes: visibility_nodes.get(&id).cloned().unwrap_or_default(),
                 source_count: row.try_get("source_count")?,
                 field_count: row.try_get("field_count")?,
             })
@@ -302,7 +390,14 @@ pub async fn get_dataset(
     headers: HeaderMap,
     Path(dataset_id): Path<Uuid>,
 ) -> ApiResult<Json<DatasetDefinition>> {
-    auth::require_capability(&state.pool, &headers, "datasets:read").await?;
+    let account = auth::require_capability(&state.pool, &headers, "datasets:read").await?;
+    let boundary = auth::capability_boundary(&state.pool, &account, "datasets:read").await?;
+    require_dataset_visible_for_boundary(&state.pool, dataset_id, &boundary, "datasets:read")
+        .await?;
+    let visible_node_filter = match &boundary {
+        auth::CapabilityBoundary::Scoped(scope_ids) => Some(scope_ids.as_slice()),
+        _ => None,
+    };
 
     let dataset = sqlx::query(
         r#"
@@ -352,6 +447,9 @@ pub async fn get_dataset(
     .fetch_all(&state.pool)
     .await?;
 
+    let visibility_nodes =
+        load_dataset_visibility_nodes(&state.pool, &[dataset_id], visible_node_filter).await?;
+
     Ok(Json(DatasetDefinition {
         id: dataset.try_get("id")?,
         current_revision_id: dataset.try_get("current_revision_id")?,
@@ -359,6 +457,10 @@ pub async fn get_dataset(
         slug: dataset.try_get("slug")?,
         grain: dataset.try_get("grain")?,
         composition_mode: dataset.try_get("composition_mode")?,
+        visibility_nodes: visibility_nodes
+            .get(&dataset_id)
+            .cloned()
+            .unwrap_or_default(),
         sources: source_rows
             .into_iter()
             .map(|row| {
@@ -396,8 +498,17 @@ pub async fn run_dataset_table(
     headers: HeaderMap,
     Path(dataset_id): Path<Uuid>,
 ) -> ApiResult<Json<DatasetTable>> {
-    auth::require_capability(&state.pool, &headers, "datasets:read").await?;
-    let table_rows = load_dataset_table_rows(&state.pool, dataset_id).await?;
+    let account = auth::require_capability(&state.pool, &headers, "datasets:read").await?;
+    let boundary = auth::capability_boundary(&state.pool, &account, "datasets:read").await?;
+    require_dataset_visible_for_boundary(&state.pool, dataset_id, &boundary, "datasets:read")
+        .await?;
+    let node_filter = match boundary {
+        auth::CapabilityBoundary::Global => None,
+        auth::CapabilityBoundary::Scoped(scope_ids) => Some(scope_ids),
+        auth::CapabilityBoundary::None => return Err(ApiError::Forbidden("datasets:read".into())),
+    };
+    let table_rows =
+        load_dataset_table_rows(&state.pool, dataset_id, node_filter.as_deref()).await?;
 
     Ok(Json(DatasetTable {
         dataset_id,
@@ -407,6 +518,7 @@ pub async fn run_dataset_table(
 
 async fn validate_dataset_sources(
     pool: &sqlx::PgPool,
+    account: &auth::AccountContext,
     sources: Vec<CreateDatasetSourceRequest>,
 ) -> ApiResult<Vec<ValidatedDatasetSource>> {
     let mut validated = Vec::new();
@@ -432,6 +544,7 @@ async fn validate_dataset_sources(
             ));
         };
         require_form_exists(pool, form_id).await?;
+        require_form_readable_by_account(pool, account, form_id).await?;
         let form_version_major = match source.form_version_major {
             Some(form_version_major) => Some(form_version_major),
             None => load_latest_published_form_major(pool, form_id).await?,
@@ -550,6 +663,17 @@ async fn insert_dataset_revision(
     .bind(dataset_id)
     .fetch_one(&mut **tx)
     .await?;
+    sqlx::query(
+        r#"
+        UPDATE dataset_revisions
+        SET status = 'superseded'::dataset_revision_status
+        WHERE dataset_id = $1
+          AND status = 'published'::dataset_revision_status
+        "#,
+    )
+    .bind(dataset_id)
+    .execute(&mut **tx)
+    .await?;
     let revision_id = sqlx::query_scalar(
         r#"
         INSERT INTO dataset_revisions
@@ -562,19 +686,6 @@ async fn insert_dataset_revision(
     .bind(version_number)
     .bind(version_label)
     .fetch_one(&mut **tx)
-    .await?;
-    sqlx::query(
-        r#"
-        UPDATE dataset_revisions
-        SET status = 'superseded'::dataset_revision_status
-        WHERE dataset_id = $1
-          AND id <> $2
-          AND status = 'published'::dataset_revision_status
-        "#,
-    )
-    .bind(dataset_id)
-    .bind(revision_id)
-    .execute(&mut **tx)
     .await?;
 
     Ok(revision_id)
@@ -642,17 +753,21 @@ async fn require_source_field_exists(
 pub(crate) async fn load_dataset_table_rows(
     pool: &sqlx::PgPool,
     dataset_id: Uuid,
+    node_filter: Option<&[Uuid]>,
 ) -> ApiResult<Vec<DatasetTableRow>> {
     let composition_mode = require_executable_submission_dataset(pool, dataset_id).await?;
     match composition_mode {
-        DatasetCompositionMode::Union => run_union_dataset_table(pool, dataset_id).await,
-        DatasetCompositionMode::Join => run_join_dataset_table(pool, dataset_id).await,
+        DatasetCompositionMode::Union => {
+            run_union_dataset_table(pool, dataset_id, node_filter).await
+        }
+        DatasetCompositionMode::Join => run_join_dataset_table(pool, dataset_id, node_filter).await,
     }
 }
 
 async fn run_union_dataset_table(
     pool: &sqlx::PgPool,
     dataset_id: Uuid,
+    node_filter: Option<&[Uuid]>,
 ) -> ApiResult<Vec<DatasetTableRow>> {
     let rows = sqlx::query(
         r#"
@@ -700,6 +815,7 @@ async fn run_union_dataset_table(
                         AND form_versions.compatibility_group_id = dataset_sources.compatibility_group_id
                     )
               )
+              AND ($2::uuid[] IS NULL OR submission_fact.node_id = ANY($2))
         )
         SELECT
             ranked_submissions.submission_id::text AS submission_id,
@@ -720,6 +836,7 @@ async fn run_union_dataset_table(
         "#,
     )
     .bind(dataset_id)
+    .bind(node_filter)
     .fetch_all(pool)
     .await?;
 
@@ -749,6 +866,7 @@ async fn run_union_dataset_table(
 async fn run_join_dataset_table(
     pool: &sqlx::PgPool,
     dataset_id: Uuid,
+    node_filter: Option<&[Uuid]>,
 ) -> ApiResult<Vec<DatasetTableRow>> {
     let rows = sqlx::query(
         r#"
@@ -796,6 +914,7 @@ async fn run_join_dataset_table(
                         AND form_versions.compatibility_group_id = dataset_sources.compatibility_group_id
                     )
               )
+              AND ($2::uuid[] IS NULL OR submission_fact.node_id = ANY($2))
         ),
         selected_submissions AS (
             SELECT *
@@ -820,6 +939,7 @@ async fn run_join_dataset_table(
         "#,
     )
     .bind(dataset_id)
+    .bind(node_filter)
     .fetch_all(pool)
     .await?;
 
@@ -1003,6 +1123,159 @@ async fn require_dataset_exists(pool: &sqlx::PgPool, dataset_id: Uuid) -> ApiRes
     }
 }
 
+async fn require_node_ids_exist(pool: &sqlx::PgPool, node_ids: &[Uuid]) -> ApiResult<()> {
+    if node_ids.is_empty() {
+        return Err(ApiError::BadRequest(
+            "at least one visibility node is required".into(),
+        ));
+    }
+    let existing_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM nodes WHERE id = ANY($1)")
+        .bind(node_ids)
+        .fetch_one(pool)
+        .await?;
+    if existing_count as usize == node_ids.len() {
+        Ok(())
+    } else {
+        Err(ApiError::BadRequest(
+            "one or more visibility nodes do not exist".into(),
+        ))
+    }
+}
+
+async fn replace_dataset_scope_nodes_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    dataset_id: Uuid,
+    node_ids: &[Uuid],
+) -> ApiResult<()> {
+    sqlx::query("DELETE FROM dataset_scope_nodes WHERE dataset_id = $1")
+        .bind(dataset_id)
+        .execute(&mut **tx)
+        .await?;
+    for node_id in node_ids {
+        sqlx::query(
+            "INSERT INTO dataset_scope_nodes (dataset_id, node_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+        )
+        .bind(dataset_id)
+        .bind(node_id)
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(())
+}
+
+async fn load_dataset_visibility_nodes(
+    pool: &sqlx::PgPool,
+    dataset_ids: &[Uuid],
+    visible_node_filter: Option<&[Uuid]>,
+) -> ApiResult<BTreeMap<Uuid, Vec<DatasetVisibilityNodeSummary>>> {
+    if dataset_ids.is_empty() {
+        return Ok(BTreeMap::new());
+    }
+    let rows = if let Some(node_ids) = visible_node_filter {
+        sqlx::query(
+            r#"
+            SELECT
+                dataset_scope_nodes.dataset_id,
+                nodes.id AS node_id,
+                nodes.name AS node_name,
+                nodes.parent_node_id,
+                node_types.name AS node_type_name,
+                COALESCE(parent_nodes.name || ' / ' || nodes.name, nodes.name) AS node_path
+            FROM dataset_scope_nodes
+            JOIN nodes ON nodes.id = dataset_scope_nodes.node_id
+            JOIN node_types ON node_types.id = nodes.node_type_id
+            LEFT JOIN nodes AS parent_nodes ON parent_nodes.id = nodes.parent_node_id
+            WHERE dataset_scope_nodes.dataset_id = ANY($1)
+              AND dataset_scope_nodes.node_id = ANY($2)
+            ORDER BY node_path, nodes.name, nodes.id
+            "#,
+        )
+        .bind(dataset_ids)
+        .bind(node_ids)
+        .fetch_all(pool)
+        .await?
+    } else {
+        sqlx::query(
+            r#"
+            SELECT
+                dataset_scope_nodes.dataset_id,
+                nodes.id AS node_id,
+                nodes.name AS node_name,
+                nodes.parent_node_id,
+                node_types.name AS node_type_name,
+                COALESCE(parent_nodes.name || ' / ' || nodes.name, nodes.name) AS node_path
+            FROM dataset_scope_nodes
+            JOIN nodes ON nodes.id = dataset_scope_nodes.node_id
+            JOIN node_types ON node_types.id = nodes.node_type_id
+            LEFT JOIN nodes AS parent_nodes ON parent_nodes.id = nodes.parent_node_id
+            WHERE dataset_scope_nodes.dataset_id = ANY($1)
+            ORDER BY node_path, nodes.name, nodes.id
+            "#,
+        )
+        .bind(dataset_ids)
+        .fetch_all(pool)
+        .await?
+    };
+    let mut visibility_nodes = BTreeMap::<Uuid, Vec<DatasetVisibilityNodeSummary>>::new();
+    for row in rows {
+        let dataset_id: Uuid = row.try_get("dataset_id")?;
+        visibility_nodes
+            .entry(dataset_id)
+            .or_default()
+            .push(DatasetVisibilityNodeSummary {
+                node_id: row.try_get("node_id")?,
+                node_name: row.try_get("node_name")?,
+                node_type_name: row.try_get("node_type_name")?,
+                parent_node_id: row.try_get("parent_node_id")?,
+                node_path: row.try_get("node_path")?,
+            });
+    }
+    Ok(visibility_nodes)
+}
+
+async fn require_dataset_fully_in_capability_scope(
+    pool: &sqlx::PgPool,
+    account: &auth::AccountContext,
+    capability: &str,
+    dataset_id: Uuid,
+) -> ApiResult<()> {
+    let node_ids = load_dataset_scope_node_ids(pool, dataset_id).await?;
+    auth::require_capability_contains_nodes(pool, account, capability, &node_ids).await
+}
+
+async fn require_dataset_visible_for_boundary(
+    pool: &sqlx::PgPool,
+    dataset_id: Uuid,
+    boundary: &auth::CapabilityBoundary,
+    capability: &str,
+) -> ApiResult<()> {
+    match boundary {
+        auth::CapabilityBoundary::Global => Ok(()),
+        auth::CapabilityBoundary::Scoped(scope_ids) => {
+            let node_ids = load_dataset_scope_node_ids(pool, dataset_id).await?;
+            if node_ids.iter().any(|node_id| scope_ids.contains(node_id)) {
+                Ok(())
+            } else {
+                Err(ApiError::Forbidden(capability.into()))
+            }
+        }
+        auth::CapabilityBoundary::None => Err(ApiError::Forbidden(capability.into())),
+    }
+}
+
+pub(crate) async fn load_dataset_scope_node_ids(
+    pool: &sqlx::PgPool,
+    dataset_id: Uuid,
+) -> ApiResult<Vec<Uuid>> {
+    sqlx::query_scalar(
+        "SELECT node_id FROM dataset_scope_nodes WHERE dataset_id = $1 ORDER BY node_id",
+    )
+    .bind(dataset_id)
+    .fetch_all(pool)
+    .await
+    .map_err(Into::into)
+}
+
 async fn require_form_exists(pool: &sqlx::PgPool, form_id: Uuid) -> ApiResult<()> {
     let exists: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM forms WHERE id = $1)")
         .bind(form_id)
@@ -1013,6 +1286,38 @@ async fn require_form_exists(pool: &sqlx::PgPool, form_id: Uuid) -> ApiResult<()
         Ok(())
     } else {
         Err(ApiError::NotFound(format!("form {form_id}")))
+    }
+}
+
+async fn require_form_readable_by_account(
+    pool: &sqlx::PgPool,
+    account: &auth::AccountContext,
+    form_id: Uuid,
+) -> ApiResult<()> {
+    match auth::capability_boundary(pool, account, "forms:read").await? {
+        auth::CapabilityBoundary::Global => Ok(()),
+        auth::CapabilityBoundary::Scoped(scope_ids) => {
+            let visible: bool = sqlx::query_scalar(
+                r#"
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM form_scope_nodes
+                    WHERE form_id = $1
+                      AND node_id = ANY($2)
+                )
+                "#,
+            )
+            .bind(form_id)
+            .bind(scope_ids)
+            .fetch_one(pool)
+            .await?;
+            if visible {
+                Ok(())
+            } else {
+                Err(ApiError::Forbidden("forms:read".into()))
+            }
+        }
+        auth::CapabilityBoundary::None => Err(ApiError::Forbidden("forms:read".into())),
     }
 }
 

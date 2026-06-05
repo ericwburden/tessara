@@ -60,10 +60,10 @@ pub async fn get_summary(
                 (
                     SELECT COUNT(DISTINCT form_versions.id)
                     FROM form_versions
-                    JOIN workflow_steps ON workflow_steps.form_version_id = form_versions.id
-                    JOIN workflow_assignments ON workflow_assignments.workflow_step_id = workflow_steps.id
+                    JOIN forms ON forms.id = form_versions.form_id
+                    JOIN form_scope_nodes ON form_scope_nodes.form_id = forms.id
                     WHERE form_versions.status = 'published'::form_version_status
-                      AND workflow_assignments.node_id = ANY($1)
+                      AND form_scope_nodes.node_id = ANY($1)
                 ) AS published_form_versions,
                 (
                     SELECT COUNT(*)

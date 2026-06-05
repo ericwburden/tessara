@@ -25,6 +25,8 @@ pub struct CreateFormRequest {
     name: String,
     slug: String,
     scope_node_type_id: Option<Uuid>,
+    #[serde(default)]
+    visibility_node_ids: Vec<Uuid>,
 }
 
 #[derive(Deserialize)]
@@ -32,6 +34,8 @@ pub struct UpdateFormRequest {
     name: String,
     slug: String,
     scope_node_type_id: Option<Uuid>,
+    #[serde(default)]
+    visibility_node_ids: Vec<Uuid>,
 }
 
 #[derive(Deserialize, Default)]
@@ -150,6 +154,7 @@ pub struct FormSummary {
     slug: String,
     scope_node_type_id: Option<Uuid>,
     scope_node_type_name: Option<String>,
+    visibility_nodes: Vec<FormVisibilityNodeSummary>,
     versions: Vec<FormVersionSummary>,
 }
 
@@ -160,6 +165,7 @@ pub struct FormDefinition {
     slug: String,
     scope_node_type_id: Option<Uuid>,
     scope_node_type_name: Option<String>,
+    visibility_nodes: Vec<FormVisibilityNodeSummary>,
     versions: Vec<FormVersionSummary>,
     workflows: Vec<FormWorkflowLink>,
     dataset_sources: Vec<FormDatasetSourceLink>,
@@ -185,6 +191,15 @@ pub struct FormVersionSummary {
 
 #[derive(Clone, Serialize)]
 pub struct FormVersionAssignmentNodeSummary {
+    node_id: Uuid,
+    node_name: String,
+    node_type_name: String,
+    parent_node_id: Option<Uuid>,
+    node_path: String,
+}
+
+#[derive(Clone, Serialize)]
+pub struct FormVisibilityNodeSummary {
     node_id: Uuid,
     node_name: String,
     node_type_name: String,
@@ -302,22 +317,40 @@ pub async fn create_form(
     request: AuthenticatedRequest,
     Json(payload): Json<CreateFormRequest>,
 ) -> ApiResult<Json<IdResponse>> {
-    request.require_capability("forms:write")?;
+    let account = request.require_capability("forms:manage")?;
     require_text("form name", &payload.name)?;
     require_text("form slug", &payload.slug)?;
     require_form_slug_available(&state.pool, &payload.slug).await?;
+    let visibility_node_ids = normalize_form_visibility_node_ids(
+        &state.pool,
+        account,
+        payload.scope_node_type_id,
+        &payload.visibility_node_ids,
+    )
+    .await?;
+    require_node_ids_exist(&state.pool, &visibility_node_ids).await?;
+    auth::require_capability_contains_nodes(
+        &state.pool,
+        account,
+        "forms:manage",
+        &visibility_node_ids,
+    )
+    .await?;
     if let Some(scope_node_type_id) = payload.scope_node_type_id {
         require_node_type_exists(&state.pool, scope_node_type_id).await?;
     }
 
+    let mut tx = state.pool.begin().await?;
     let id = sqlx::query_scalar(
         "INSERT INTO forms (name, slug, scope_node_type_id) VALUES ($1, $2, $3) RETURNING id",
     )
     .bind(payload.name)
     .bind(payload.slug)
     .bind(payload.scope_node_type_id)
-    .fetch_one(&state.pool)
+    .fetch_one(&mut *tx)
     .await?;
+    replace_form_scope_nodes_tx(&mut tx, id, &visibility_node_ids).await?;
+    tx.commit().await?;
 
     Ok(Json(IdResponse { id }))
 }
@@ -329,15 +362,32 @@ pub async fn update_form(
     Path(form_id): Path<Uuid>,
     Json(payload): Json<UpdateFormRequest>,
 ) -> ApiResult<Json<IdResponse>> {
-    request.require_capability("forms:write")?;
+    let account = request.require_capability("forms:manage")?;
     require_text("form name", &payload.name)?;
     require_text("form slug", &payload.slug)?;
     require_form_exists(&state.pool, form_id).await?;
+    require_form_fully_in_capability_scope(&state.pool, account, "forms:manage", form_id).await?;
     require_form_slug_available_for_form(&state.pool, form_id, &payload.slug).await?;
+    let visibility_node_ids = normalize_form_visibility_node_ids(
+        &state.pool,
+        account,
+        payload.scope_node_type_id,
+        &payload.visibility_node_ids,
+    )
+    .await?;
+    require_node_ids_exist(&state.pool, &visibility_node_ids).await?;
+    auth::require_capability_contains_nodes(
+        &state.pool,
+        account,
+        "forms:manage",
+        &visibility_node_ids,
+    )
+    .await?;
     if let Some(scope_node_type_id) = payload.scope_node_type_id {
         require_node_type_exists(&state.pool, scope_node_type_id).await?;
     }
 
+    let mut tx = state.pool.begin().await?;
     let id = sqlx::query_scalar(
         r#"
         UPDATE forms
@@ -350,8 +400,10 @@ pub async fn update_form(
     .bind(payload.name)
     .bind(payload.slug)
     .bind(payload.scope_node_type_id)
-    .fetch_one(&state.pool)
+    .fetch_one(&mut *tx)
     .await?;
+    replace_form_scope_nodes_tx(&mut tx, form_id, &visibility_node_ids).await?;
+    tx.commit().await?;
 
     Ok(Json(IdResponse { id }))
 }
@@ -361,18 +413,14 @@ pub async fn list_forms(
     State(state): State<AppState>,
     request: AuthenticatedRequest,
 ) -> ApiResult<Json<Vec<FormSummary>>> {
-    request.require_capability("forms:write")?;
+    let account = request.require_capability("forms:manage")?;
+    let form_rows =
+        load_form_rows_for_boundary(&state.pool, account, "forms:manage", false).await?;
 
-    let form_rows = sqlx::query(
-        r#"
-        SELECT forms.id, forms.name, forms.slug, forms.scope_node_type_id, node_types.name AS scope_node_type_name
-        FROM forms
-        LEFT JOIN node_types ON node_types.id = forms.scope_node_type_id
-        ORDER BY forms.created_at, forms.name
-        "#,
-    )
-    .fetch_all(&state.pool)
-    .await?;
+    let form_ids = form_rows
+        .iter()
+        .map(|form| form.try_get::<Uuid, _>("id"))
+        .collect::<Result<Vec<_>, sqlx::Error>>()?;
 
     let version_rows = sqlx::query(
         r#"
@@ -418,6 +466,7 @@ pub async fn list_forms(
         .map(|version| version.try_get::<Uuid, _>("id"))
         .collect::<Result<Vec<_>, sqlx::Error>>()?;
     let assignment_nodes = load_form_version_assignment_nodes(&state.pool, &version_ids).await?;
+    let visibility_nodes = load_form_visibility_nodes(&state.pool, &form_ids, None).await?;
 
     let mut forms = Vec::new();
     for form in form_rows {
@@ -455,6 +504,7 @@ pub async fn list_forms(
             slug: form.try_get("slug")?,
             scope_node_type_id: form.try_get("scope_node_type_id")?,
             scope_node_type_name: form.try_get("scope_node_type_name")?,
+            visibility_nodes: visibility_nodes.get(&form_id).cloned().unwrap_or_default(),
             versions,
         });
     }
@@ -468,7 +518,8 @@ pub async fn get_form(
     request: AuthenticatedRequest,
     Path(form_id): Path<Uuid>,
 ) -> ApiResult<Json<FormDefinition>> {
-    request.require_capability("forms:write")?;
+    let account = request.require_capability("forms:manage")?;
+    require_form_fully_in_capability_scope(&state.pool, account, "forms:manage", form_id).await?;
     Ok(Json(get_form_definition(&state.pool, form_id).await?))
 }
 
@@ -478,8 +529,42 @@ pub async fn list_published_form_versions(
     headers: HeaderMap,
 ) -> ApiResult<Json<Vec<PublishedFormVersionSummary>>> {
     let account = auth::require_capability(&state.pool, &headers, "forms:read").await?;
-    let rows = sqlx::query(
-        r#"
+    let rows = match auth::capability_boundary(&state.pool, &account, "forms:read").await? {
+        auth::CapabilityBoundary::Scoped(scope_ids) => {
+            sqlx::query(
+                r#"
+        SELECT
+            forms.id AS form_id,
+            forms.name AS form_name,
+            forms.slug AS form_slug,
+            form_versions.id AS form_version_id,
+            form_versions.version_label,
+            form_versions.published_at,
+            COUNT(form_fields.id) AS field_count
+        FROM form_versions
+        JOIN forms ON forms.id = form_versions.form_id
+        JOIN form_scope_nodes ON form_scope_nodes.form_id = forms.id
+        LEFT JOIN form_fields ON form_fields.form_version_id = form_versions.id
+        WHERE form_versions.status = 'published'::form_version_status
+          AND form_scope_nodes.node_id = ANY($1)
+        GROUP BY
+            forms.id,
+            forms.name,
+            forms.slug,
+            form_versions.id,
+            form_versions.version_label,
+            form_versions.published_at,
+            form_versions.created_at
+        ORDER BY forms.name, form_versions.created_at
+        "#,
+            )
+            .bind(scope_ids)
+            .fetch_all(&state.pool)
+            .await?
+        }
+        auth::CapabilityBoundary::Global => {
+            sqlx::query(
+                r#"
         SELECT
             forms.id AS form_id,
             forms.name AS form_name,
@@ -502,9 +587,12 @@ pub async fn list_published_form_versions(
             form_versions.created_at
         ORDER BY forms.name, form_versions.created_at
         "#,
-    )
-    .fetch_all(&state.pool)
-    .await?;
+            )
+            .fetch_all(&state.pool)
+            .await?
+        }
+        auth::CapabilityBoundary::None => return Err(ApiError::Forbidden("forms:read".into())),
+    };
 
     let forms = rows
         .into_iter()
@@ -521,32 +609,7 @@ pub async fn list_published_form_versions(
         })
         .collect::<Result<Vec<_>, sqlx::Error>>()?;
 
-    match auth::capability_boundary(&state.pool, &account, "forms:read").await? {
-        auth::CapabilityBoundary::Scoped(scope_ids) => {
-            let allowed_form_version_ids = sqlx::query_scalar::<_, Uuid>(
-                r#"
-            SELECT DISTINCT form_versions.id
-            FROM form_versions
-            JOIN workflow_steps ON workflow_steps.form_version_id = form_versions.id
-            JOIN workflow_assignments ON workflow_assignments.workflow_step_id = workflow_steps.id
-            WHERE form_versions.status = 'published'::form_version_status
-              AND workflow_assignments.node_id = ANY($1)
-            "#,
-            )
-            .bind(scope_ids)
-            .fetch_all(&state.pool)
-            .await?;
-
-            Ok(Json(
-                forms
-                    .into_iter()
-                    .filter(|form| allowed_form_version_ids.contains(&form.form_version_id))
-                    .collect(),
-            ))
-        }
-        auth::CapabilityBoundary::Global => Ok(Json(forms)),
-        auth::CapabilityBoundary::None => Err(ApiError::Forbidden("forms:read".into())),
-    }
+    Ok(Json(forms))
 }
 
 pub async fn list_readable_forms(
@@ -554,39 +617,12 @@ pub async fn list_readable_forms(
     request: AuthenticatedRequest,
 ) -> ApiResult<Json<Vec<FormSummary>>> {
     let account = request.require_capability("forms:read")?;
-    let form_rows = match auth::capability_boundary(&state.pool, account, "forms:read").await? {
-        auth::CapabilityBoundary::Scoped(scope_ids) => sqlx::query(
-            r#"
-            SELECT DISTINCT
-                forms.id,
-                forms.name,
-                forms.slug,
-                forms.scope_node_type_id,
-                node_types.name AS scope_node_type_name
-            FROM forms
-            LEFT JOIN node_types ON node_types.id = forms.scope_node_type_id
-            JOIN form_versions ON form_versions.form_id = forms.id
-            JOIN workflow_steps ON workflow_steps.form_version_id = form_versions.id
-            JOIN workflow_assignments ON workflow_assignments.workflow_step_id = workflow_steps.id
-            WHERE workflow_assignments.node_id = ANY($1)
-            ORDER BY forms.name, forms.id
-            "#,
-        )
-        .bind(scope_ids)
-        .fetch_all(&state.pool)
-        .await?,
-        auth::CapabilityBoundary::Global => sqlx::query(
-            r#"
-            SELECT forms.id, forms.name, forms.slug, forms.scope_node_type_id, node_types.name AS scope_node_type_name
-            FROM forms
-            LEFT JOIN node_types ON node_types.id = forms.scope_node_type_id
-            ORDER BY forms.created_at, forms.name
-            "#,
-        )
-        .fetch_all(&state.pool)
-        .await?,
-        auth::CapabilityBoundary::None => return Err(ApiError::Forbidden("forms:read".into())),
+    let read_boundary = auth::capability_boundary(&state.pool, account, "forms:read").await?;
+    let scoped_node_filter = match &read_boundary {
+        auth::CapabilityBoundary::Scoped(scope_ids) => Some(scope_ids.as_slice()),
+        _ => None,
     };
+    let form_rows = load_form_rows_for_boundary(&state.pool, account, "forms:read", true).await?;
 
     let form_ids = form_rows
         .iter()
@@ -634,7 +670,7 @@ pub async fn list_readable_forms(
             ORDER BY form_versions.created_at, form_versions.version_label
             "#,
         )
-        .bind(form_ids)
+        .bind(&form_ids)
         .fetch_all(&state.pool)
         .await?
     };
@@ -643,6 +679,8 @@ pub async fn list_readable_forms(
         .map(|version| version.try_get::<Uuid, _>("id"))
         .collect::<Result<Vec<_>, sqlx::Error>>()?;
     let assignment_nodes = load_form_version_assignment_nodes(&state.pool, &version_ids).await?;
+    let visibility_nodes =
+        load_form_visibility_nodes(&state.pool, &form_ids, scoped_node_filter).await?;
 
     let mut forms = Vec::new();
     for form in form_rows {
@@ -680,6 +718,7 @@ pub async fn list_readable_forms(
             slug: form.try_get("slug")?,
             scope_node_type_id: form.try_get("scope_node_type_id")?,
             scope_node_type_name: form.try_get("scope_node_type_name")?,
+            visibility_nodes: visibility_nodes.get(&form_id).cloned().unwrap_or_default(),
             versions,
         });
     }
@@ -693,34 +732,28 @@ pub async fn get_readable_form(
     Path(form_id): Path<Uuid>,
 ) -> ApiResult<Json<FormDefinition>> {
     let account = request.require_capability("forms:read")?;
-    if let auth::CapabilityBoundary::Scoped(scope_ids) =
-        auth::capability_boundary(&state.pool, account, "forms:read").await?
-    {
-        let visible: bool = sqlx::query_scalar(
-            r#"
-            SELECT EXISTS (
-                SELECT 1
-                FROM form_versions
-                JOIN workflow_steps ON workflow_steps.form_version_id = form_versions.id
-                JOIN workflow_assignments ON workflow_assignments.workflow_step_id = workflow_steps.id
-                WHERE form_versions.form_id = $1
-                  AND workflow_assignments.node_id = ANY($2)
-            )
-            "#,
-        )
-        .bind(form_id)
-        .bind(scope_ids)
-        .fetch_one(&state.pool)
-        .await?;
-        if !visible {
-            return Err(ApiError::Forbidden("forms:read".into()));
-        }
-    }
+    let boundary = auth::capability_boundary(&state.pool, account, "forms:read").await?;
+    require_form_visible_for_boundary(&state.pool, form_id, &boundary, "forms:read").await?;
+    let scoped_node_filter = match &boundary {
+        auth::CapabilityBoundary::Scoped(scope_ids) => Some(scope_ids.as_slice()),
+        _ => None,
+    };
 
-    Ok(Json(get_form_definition(&state.pool, form_id).await?))
+    Ok(Json(
+        get_form_definition_with_visibility_filter(&state.pool, form_id, scoped_node_filter)
+            .await?,
+    ))
 }
 
 async fn get_form_definition(pool: &sqlx::PgPool, form_id: Uuid) -> ApiResult<FormDefinition> {
+    get_form_definition_with_visibility_filter(pool, form_id, None).await
+}
+
+async fn get_form_definition_with_visibility_filter(
+    pool: &sqlx::PgPool,
+    form_id: Uuid,
+    visible_node_filter: Option<&[Uuid]>,
+) -> ApiResult<FormDefinition> {
     let form = sqlx::query(
         r#"
         SELECT
@@ -910,6 +943,8 @@ async fn get_form_definition(pool: &sqlx::PgPool, form_id: Uuid) -> ApiResult<Fo
         })
     })
     .collect::<Result<Vec<_>, sqlx::Error>>()?;
+    let visibility_nodes =
+        load_form_visibility_nodes(pool, &[form_id], visible_node_filter).await?;
 
     Ok(FormDefinition {
         id: form.try_get("id")?,
@@ -917,6 +952,7 @@ async fn get_form_definition(pool: &sqlx::PgPool, form_id: Uuid) -> ApiResult<Fo
         slug: form.try_get("slug")?,
         scope_node_type_id: form.try_get("scope_node_type_id")?,
         scope_node_type_name: form.try_get("scope_node_type_name")?,
+        visibility_nodes: visibility_nodes.get(&form_id).cloned().unwrap_or_default(),
         versions,
         workflows,
         dataset_sources,
@@ -929,7 +965,7 @@ pub async fn create_form_version(
     Path(form_id): Path<Uuid>,
     Json(_payload): Json<CreateFormVersionRequest>,
 ) -> ApiResult<Json<IdResponse>> {
-    request.require_capability("forms:write")?;
+    request.require_capability("forms:manage")?;
     require_form_exists(&state.pool, form_id).await?;
 
     let draft_exists: bool = sqlx::query_scalar(
@@ -992,6 +1028,242 @@ async fn require_form_exists(pool: &sqlx::PgPool, form_id: Uuid) -> ApiResult<()
     }
 }
 
+async fn require_node_ids_exist(pool: &sqlx::PgPool, node_ids: &[Uuid]) -> ApiResult<()> {
+    if node_ids.is_empty() {
+        return Err(ApiError::BadRequest(
+            "at least one visibility node is required".into(),
+        ));
+    }
+    let existing_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM nodes WHERE id = ANY($1)")
+        .bind(node_ids)
+        .fetch_one(pool)
+        .await?;
+    if existing_count as usize == node_ids.len() {
+        Ok(())
+    } else {
+        Err(ApiError::BadRequest(
+            "one or more visibility nodes do not exist".into(),
+        ))
+    }
+}
+
+async fn replace_form_scope_nodes_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    form_id: Uuid,
+    node_ids: &[Uuid],
+) -> ApiResult<()> {
+    sqlx::query("DELETE FROM form_scope_nodes WHERE form_id = $1")
+        .bind(form_id)
+        .execute(&mut **tx)
+        .await?;
+    for node_id in node_ids {
+        sqlx::query(
+            "INSERT INTO form_scope_nodes (form_id, node_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+        )
+        .bind(form_id)
+        .bind(node_id)
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(())
+}
+
+async fn normalize_form_visibility_node_ids(
+    pool: &sqlx::PgPool,
+    account: &auth::AccountContext,
+    scope_node_type_id: Option<Uuid>,
+    explicit_node_ids: &[Uuid],
+) -> ApiResult<Vec<Uuid>> {
+    if !explicit_node_ids.is_empty() {
+        return Ok(explicit_node_ids.to_vec());
+    }
+
+    let Some(scope_node_type_id) = scope_node_type_id else {
+        return Ok(Vec::new());
+    };
+    let node_ids = sqlx::query_scalar::<_, Uuid>(
+        "SELECT id FROM nodes WHERE node_type_id = $1 ORDER BY name, id",
+    )
+    .bind(scope_node_type_id)
+    .fetch_all(pool)
+    .await?;
+
+    match auth::capability_boundary(pool, account, "forms:manage").await? {
+        auth::CapabilityBoundary::Global => Ok(node_ids),
+        auth::CapabilityBoundary::Scoped(scope_ids) => Ok(node_ids
+            .into_iter()
+            .filter(|node_id| scope_ids.contains(node_id))
+            .collect()),
+        auth::CapabilityBoundary::None => Err(ApiError::Forbidden("forms:manage".into())),
+    }
+}
+
+async fn load_form_rows_for_boundary(
+    pool: &sqlx::PgPool,
+    account: &auth::AccountContext,
+    capability: &str,
+    allow_overlap: bool,
+) -> ApiResult<Vec<sqlx::postgres::PgRow>> {
+    match auth::capability_boundary(pool, account, capability).await? {
+        auth::CapabilityBoundary::Global => sqlx::query(
+            r#"
+            SELECT forms.id, forms.name, forms.slug, forms.scope_node_type_id, node_types.name AS scope_node_type_name
+            FROM forms
+            LEFT JOIN node_types ON node_types.id = forms.scope_node_type_id
+            ORDER BY forms.created_at, forms.name
+            "#,
+        )
+        .fetch_all(pool)
+        .await
+        .map_err(Into::into),
+        auth::CapabilityBoundary::Scoped(scope_ids) if allow_overlap => sqlx::query(
+            r#"
+            SELECT DISTINCT forms.id, forms.name, forms.slug, forms.scope_node_type_id, node_types.name AS scope_node_type_name
+            FROM forms
+            LEFT JOIN node_types ON node_types.id = forms.scope_node_type_id
+            JOIN form_scope_nodes ON form_scope_nodes.form_id = forms.id
+            WHERE form_scope_nodes.node_id = ANY($1)
+            ORDER BY forms.name, forms.id
+            "#,
+        )
+        .bind(scope_ids)
+        .fetch_all(pool)
+        .await
+        .map_err(Into::into),
+        auth::CapabilityBoundary::Scoped(scope_ids) => sqlx::query(
+            r#"
+            SELECT forms.id, forms.name, forms.slug, forms.scope_node_type_id, node_types.name AS scope_node_type_name
+            FROM forms
+            LEFT JOIN node_types ON node_types.id = forms.scope_node_type_id
+            WHERE EXISTS (
+                SELECT 1 FROM form_scope_nodes WHERE form_scope_nodes.form_id = forms.id
+            )
+              AND NOT EXISTS (
+                SELECT 1
+                FROM form_scope_nodes
+                WHERE form_scope_nodes.form_id = forms.id
+                  AND form_scope_nodes.node_id <> ALL($1)
+              )
+            ORDER BY forms.name, forms.id
+            "#,
+        )
+        .bind(scope_ids)
+        .fetch_all(pool)
+        .await
+        .map_err(Into::into),
+        auth::CapabilityBoundary::None => Err(ApiError::Forbidden(capability.into())),
+    }
+}
+
+async fn load_form_visibility_nodes(
+    pool: &sqlx::PgPool,
+    form_ids: &[Uuid],
+    visible_node_filter: Option<&[Uuid]>,
+) -> ApiResult<BTreeMap<Uuid, Vec<FormVisibilityNodeSummary>>> {
+    if form_ids.is_empty() {
+        return Ok(BTreeMap::new());
+    }
+    let rows = if let Some(node_ids) = visible_node_filter {
+        sqlx::query(
+            r#"
+            SELECT
+                form_scope_nodes.form_id,
+                nodes.id AS node_id,
+                nodes.name AS node_name,
+                nodes.parent_node_id,
+                node_types.name AS node_type_name,
+                COALESCE(parent_nodes.name || ' / ' || nodes.name, nodes.name) AS node_path
+            FROM form_scope_nodes
+            JOIN nodes ON nodes.id = form_scope_nodes.node_id
+            JOIN node_types ON node_types.id = nodes.node_type_id
+            LEFT JOIN nodes AS parent_nodes ON parent_nodes.id = nodes.parent_node_id
+            WHERE form_scope_nodes.form_id = ANY($1)
+              AND form_scope_nodes.node_id = ANY($2)
+            ORDER BY node_path, nodes.name, nodes.id
+            "#,
+        )
+        .bind(form_ids)
+        .bind(node_ids)
+        .fetch_all(pool)
+        .await?
+    } else {
+        sqlx::query(
+            r#"
+            SELECT
+                form_scope_nodes.form_id,
+                nodes.id AS node_id,
+                nodes.name AS node_name,
+                nodes.parent_node_id,
+                node_types.name AS node_type_name,
+                COALESCE(parent_nodes.name || ' / ' || nodes.name, nodes.name) AS node_path
+            FROM form_scope_nodes
+            JOIN nodes ON nodes.id = form_scope_nodes.node_id
+            JOIN node_types ON node_types.id = nodes.node_type_id
+            LEFT JOIN nodes AS parent_nodes ON parent_nodes.id = nodes.parent_node_id
+            WHERE form_scope_nodes.form_id = ANY($1)
+            ORDER BY node_path, nodes.name, nodes.id
+            "#,
+        )
+        .bind(form_ids)
+        .fetch_all(pool)
+        .await?
+    };
+
+    let mut visibility_nodes = BTreeMap::<Uuid, Vec<FormVisibilityNodeSummary>>::new();
+    for row in rows {
+        let form_id: Uuid = row.try_get("form_id")?;
+        visibility_nodes
+            .entry(form_id)
+            .or_default()
+            .push(FormVisibilityNodeSummary {
+                node_id: row.try_get("node_id")?,
+                node_name: row.try_get("node_name")?,
+                node_type_name: row.try_get("node_type_name")?,
+                parent_node_id: row.try_get("parent_node_id")?,
+                node_path: row.try_get("node_path")?,
+            });
+    }
+    Ok(visibility_nodes)
+}
+
+async fn require_form_fully_in_capability_scope(
+    pool: &sqlx::PgPool,
+    account: &auth::AccountContext,
+    capability: &str,
+    form_id: Uuid,
+) -> ApiResult<()> {
+    let node_ids = load_form_scope_node_ids(pool, form_id).await?;
+    auth::require_capability_contains_nodes(pool, account, capability, &node_ids).await
+}
+
+async fn require_form_visible_for_boundary(
+    pool: &sqlx::PgPool,
+    form_id: Uuid,
+    boundary: &auth::CapabilityBoundary,
+    capability: &str,
+) -> ApiResult<()> {
+    match boundary {
+        auth::CapabilityBoundary::Global => Ok(()),
+        auth::CapabilityBoundary::Scoped(scope_ids) => {
+            let node_ids = load_form_scope_node_ids(pool, form_id).await?;
+            if node_ids.iter().any(|node_id| scope_ids.contains(node_id)) {
+                Ok(())
+            } else {
+                Err(ApiError::Forbidden(capability.into()))
+            }
+        }
+        auth::CapabilityBoundary::None => Err(ApiError::Forbidden(capability.into())),
+    }
+}
+
+async fn load_form_scope_node_ids(pool: &sqlx::PgPool, form_id: Uuid) -> ApiResult<Vec<Uuid>> {
+    sqlx::query_scalar("SELECT node_id FROM form_scope_nodes WHERE form_id = $1 ORDER BY node_id")
+        .bind(form_id)
+        .fetch_all(pool)
+        .await
+        .map_err(Into::into)
+}
+
 async fn require_form_slug_available(pool: &sqlx::PgPool, slug: &str) -> ApiResult<()> {
     let exists: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM forms WHERE slug = $1)")
         .bind(slug)
@@ -1034,7 +1306,7 @@ pub async fn create_form_section(
     Path(form_version_id): Path<Uuid>,
     Json(payload): Json<CreateFormSectionRequest>,
 ) -> ApiResult<Json<IdResponse>> {
-    request.require_capability("forms:write")?;
+    request.require_capability("forms:manage")?;
     assert_form_version_draft(&state.pool, form_version_id).await?;
     require_text("section title", &payload.title)?;
     let description = normalize_form_section_description(&payload.description);
@@ -1062,7 +1334,7 @@ pub async fn create_form_field(
     Path(form_version_id): Path<Uuid>,
     Json(payload): Json<CreateFormFieldRequest>,
 ) -> ApiResult<Json<IdResponse>> {
-    request.require_capability("forms:write")?;
+    request.require_capability("forms:manage")?;
     assert_form_version_draft(&state.pool, form_version_id).await?;
     require_text("field key", &payload.key)?;
     require_text("field label", &payload.label)?;
@@ -1110,7 +1382,7 @@ pub async fn update_form_section(
     Path(section_id): Path<Uuid>,
     Json(payload): Json<UpdateFormSectionRequest>,
 ) -> ApiResult<Json<IdResponse>> {
-    request.require_capability("forms:write")?;
+    request.require_capability("forms:manage")?;
     let form_version_id = require_section_form_version(&state.pool, section_id).await?;
     assert_form_version_draft(&state.pool, form_version_id).await?;
     require_text("section title", &payload.title)?;
@@ -1135,7 +1407,7 @@ pub async fn delete_form_section(
     request: AuthenticatedRequest,
     Path(section_id): Path<Uuid>,
 ) -> ApiResult<Json<IdResponse>> {
-    request.require_capability("forms:write")?;
+    request.require_capability("forms:manage")?;
     let form_version_id = require_section_form_version(&state.pool, section_id).await?;
     assert_form_version_draft(&state.pool, form_version_id).await?;
 
@@ -1154,7 +1426,7 @@ pub async fn update_form_field(
     Path(field_id): Path<Uuid>,
     Json(payload): Json<UpdateFormFieldRequest>,
 ) -> ApiResult<Json<IdResponse>> {
-    request.require_capability("forms:write")?;
+    request.require_capability("forms:manage")?;
     let existing = require_form_field(&state.pool, field_id).await?;
     assert_form_version_draft(&state.pool, existing.form_version_id).await?;
     require_text("field key", &payload.key)?;
@@ -1217,7 +1489,7 @@ pub async fn delete_form_field(
     request: AuthenticatedRequest,
     Path(field_id): Path<Uuid>,
 ) -> ApiResult<Json<IdResponse>> {
-    request.require_capability("forms:write")?;
+    request.require_capability("forms:manage")?;
     let existing = require_form_field(&state.pool, field_id).await?;
     assert_form_version_draft(&state.pool, existing.form_version_id).await?;
 
@@ -1234,7 +1506,7 @@ pub async fn publish_form_version(
     request: AuthenticatedRequest,
     Path(form_version_id): Path<Uuid>,
 ) -> ApiResult<Json<PublishFormVersionResponse>> {
-    request.require_capability("forms:write")?;
+    request.require_capability("forms:manage")?;
 
     let preview = build_publish_computation(&state.pool, form_version_id).await?;
     let mut tx = state.pool.begin().await?;

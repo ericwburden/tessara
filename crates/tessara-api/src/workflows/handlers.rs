@@ -74,8 +74,10 @@ pub async fn list_workflows(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> ApiResult<Json<Vec<WorkflowSummary>>> {
-    auth::require_capability(&state.pool, &headers, "workflows:read").await?;
-    Ok(Json(list_workflows_inner(&state.pool).await?))
+    let account = auth::require_capability(&state.pool, &headers, "workflows:read").await?;
+    Ok(Json(
+        list_workflows_inner(&state.pool, Some(&account)).await?,
+    ))
 }
 
 pub async fn get_workflow(
@@ -83,8 +85,12 @@ pub async fn get_workflow(
     headers: HeaderMap,
     Path(workflow_id): Path<Uuid>,
 ) -> ApiResult<Json<WorkflowDefinition>> {
-    auth::require_capability(&state.pool, &headers, "workflows:read").await?;
-    Ok(Json(get_workflow_inner(&state.pool, workflow_id).await?))
+    let account = auth::require_capability(&state.pool, &headers, "workflows:read").await?;
+    require_workflow_visible_for_capability(&state.pool, &account, "workflows:read", workflow_id)
+        .await?;
+    Ok(Json(
+        get_workflow_inner(&state.pool, &account, workflow_id).await?,
+    ))
 }
 
 pub async fn create_workflow(
@@ -92,7 +98,14 @@ pub async fn create_workflow(
     headers: HeaderMap,
     Json(payload): Json<CreateWorkflowRequest>,
 ) -> ApiResult<Json<IdResponse>> {
-    auth::require_capability(&state.pool, &headers, "workflows:write").await?;
+    let account = auth::require_capability(&state.pool, &headers, "workflows:manage").await?;
+    auth::require_capability_contains_nodes(
+        &state.pool,
+        &account,
+        "workflows:manage",
+        &payload.available_node_ids,
+    )
+    .await?;
     require_workflow_payload(
         &state.pool,
         &payload.available_node_ids,
@@ -130,7 +143,21 @@ pub async fn update_workflow(
     Path(workflow_id): Path<Uuid>,
     Json(payload): Json<UpdateWorkflowRequest>,
 ) -> ApiResult<Json<IdResponse>> {
-    auth::require_capability(&state.pool, &headers, "workflows:write").await?;
+    let account = auth::require_capability(&state.pool, &headers, "workflows:manage").await?;
+    require_workflow_fully_in_capability_scope(
+        &state.pool,
+        &account,
+        "workflows:manage",
+        workflow_id,
+    )
+    .await?;
+    auth::require_capability_contains_nodes(
+        &state.pool,
+        &account,
+        "workflows:manage",
+        &payload.available_node_ids,
+    )
+    .await?;
     require_workflow_payload(
         &state.pool,
         &payload.available_node_ids,
@@ -176,7 +203,14 @@ pub async fn create_workflow_version(
     Path(workflow_id): Path<Uuid>,
     Json(payload): Json<CreateWorkflowRevisionRequest>,
 ) -> ApiResult<Json<IdResponse>> {
-    auth::require_capability(&state.pool, &headers, "workflows:write").await?;
+    let account = auth::require_capability(&state.pool, &headers, "workflows:manage").await?;
+    require_workflow_fully_in_capability_scope(
+        &state.pool,
+        &account,
+        "workflows:manage",
+        workflow_id,
+    )
+    .await?;
 
     let steps = normalize_step_collection(payload.steps)?;
     let mut tx = state.pool.begin().await?;
@@ -252,7 +286,7 @@ pub async fn replace_workflow_version_steps(
     Path(workflow_version_id): Path<Uuid>,
     Json(payload): Json<UpdateWorkflowRevisionStepsRequest>,
 ) -> ApiResult<Json<IdResponse>> {
-    auth::require_capability(&state.pool, &headers, "workflows:write").await?;
+    auth::require_capability(&state.pool, &headers, "workflows:manage").await?;
     let steps = normalize_step_collection(payload.steps)?;
     let mut tx = state.pool.begin().await?;
     let status: String =
@@ -286,7 +320,7 @@ pub async fn delete_workflow_version(
     headers: HeaderMap,
     Path(workflow_version_id): Path<Uuid>,
 ) -> ApiResult<Json<IdResponse>> {
-    auth::require_capability(&state.pool, &headers, "workflows:write").await?;
+    auth::require_capability(&state.pool, &headers, "workflows:manage").await?;
 
     let mut tx = state.pool.begin().await?;
     let status: String =
@@ -318,7 +352,7 @@ pub async fn publish_workflow_version(
     headers: HeaderMap,
     Path(workflow_version_id): Path<Uuid>,
 ) -> ApiResult<Json<IdResponse>> {
-    auth::require_capability(&state.pool, &headers, "workflows:write").await?;
+    auth::require_capability(&state.pool, &headers, "workflows:manage").await?;
 
     let mut tx = state.pool.begin().await?;
     let workflow_id: Uuid =
@@ -369,9 +403,9 @@ pub async fn list_workflow_assignments(
     headers: HeaderMap,
     Query(query): Query<WorkflowAssignmentQuery>,
 ) -> ApiResult<Json<Vec<WorkflowAssignmentSummary>>> {
-    auth::require_capability(&state.pool, &headers, "workflows:read").await?;
+    let account = auth::require_capability(&state.pool, &headers, "workflows:read").await?;
     Ok(Json(
-        list_workflow_assignments_inner(&state.pool, &query).await?,
+        list_workflow_assignments_inner(&state.pool, &account, &query).await?,
     ))
 }
 
@@ -380,7 +414,7 @@ pub async fn create_workflow_assignment(
     headers: HeaderMap,
     Json(payload): Json<CreateWorkflowAssignmentRequest>,
 ) -> ApiResult<Json<IdResponse>> {
-    let account = auth::require_capability(&state.pool, &headers, "workflows:write").await?;
+    let account = auth::require_capability(&state.pool, &headers, "workflows:manage").await?;
     ensure_assignment_candidate_is_valid(
         &state.pool,
         &account,
@@ -405,7 +439,7 @@ pub async fn list_assignment_candidates(
     headers: HeaderMap,
     Query(query): Query<AssignmentCandidateQuery>,
 ) -> ApiResult<Json<Vec<WorkflowAssignmentCandidate>>> {
-    let account = auth::require_capability(&state.pool, &headers, "workflows:write").await?;
+    let account = auth::require_capability(&state.pool, &headers, "workflows:manage").await?;
     Ok(Json(
         list_assignment_candidates_inner(&state.pool, &account, query.node_id, query.q.as_deref())
             .await?,
@@ -417,7 +451,7 @@ pub async fn list_assignment_candidate_assignees(
     headers: HeaderMap,
     Query(query): Query<AssignmentCandidateAssigneeQuery>,
 ) -> ApiResult<Json<Vec<WorkflowAssigneeOption>>> {
-    let account = auth::require_capability(&state.pool, &headers, "workflows:write").await?;
+    let account = auth::require_capability(&state.pool, &headers, "workflows:manage").await?;
     ensure_assignment_candidate_is_valid(
         &state.pool,
         &account,
@@ -435,7 +469,7 @@ pub async fn bulk_create_workflow_assignments(
     headers: HeaderMap,
     Json(payload): Json<BulkWorkflowAssignmentRequest>,
 ) -> ApiResult<Json<BulkWorkflowAssignmentResponse>> {
-    let account = auth::require_capability(&state.pool, &headers, "workflows:write").await?;
+    let account = auth::require_capability(&state.pool, &headers, "workflows:manage").await?;
     if payload.account_ids.is_empty() {
         return Err(ApiError::BadRequest(
             "bulk workflow assignment requires at least one assignee".into(),
@@ -485,7 +519,7 @@ pub async fn update_workflow_assignment(
     Path(workflow_assignment_id): Path<Uuid>,
     Json(payload): Json<UpdateWorkflowAssignmentRequest>,
 ) -> ApiResult<Json<IdResponse>> {
-    let account = auth::require_capability(&state.pool, &headers, "workflows:write").await?;
+    let account = auth::require_capability(&state.pool, &headers, "workflows:manage").await?;
     let current = sqlx::query(
         r#"
         SELECT workflow_version_id
@@ -540,12 +574,19 @@ pub async fn list_pending_work(
     request: AuthenticatedRequest,
     Query(query): Query<WorkflowAssignmentQuery>,
 ) -> ApiResult<Json<Vec<PendingWorkflowWork>>> {
-    let delegate_account_id = auth::resolve_accessible_delegate_account_id(
-        &state.pool,
-        &request.account,
-        query.delegate_account_id,
-    )
-    .await?;
+    let delegate_account_id = if request.account.has_capability("workflows:manage") {
+        query
+            .delegate_account_id
+            .unwrap_or(request.account.account_id)
+    } else {
+        auth::ensure_capability(&request.account, "submissions:read_own")?;
+        auth::resolve_accessible_delegate_account_id(
+            &state.pool,
+            &request.account,
+            query.delegate_account_id,
+        )
+        .await?
+    };
     Ok(Json(
         list_pending_assignments_for_account(&state.pool, delegate_account_id).await?,
     ))
@@ -1467,7 +1508,10 @@ pub async fn list_pending_assignments_for_account(
         .map_err(Into::into)
 }
 
-async fn list_workflows_inner(pool: &sqlx::PgPool) -> ApiResult<Vec<WorkflowSummary>> {
+async fn list_workflows_inner(
+    pool: &sqlx::PgPool,
+    account: Option<&auth::AccountContext>,
+) -> ApiResult<Vec<WorkflowSummary>> {
     let rows = sqlx::query(
         r#"
         SELECT
@@ -1524,6 +1568,39 @@ async fn list_workflows_inner(pool: &sqlx::PgPool) -> ApiResult<Vec<WorkflowSumm
     )
     .fetch_all(pool)
     .await?;
+    let allowed_workflow_ids = if let Some(account) = account {
+        match auth::capability_boundary(pool, account, "workflows:read").await? {
+            auth::CapabilityBoundary::Global => None,
+            auth::CapabilityBoundary::Scoped(scope_ids) => Some(
+                sqlx::query_scalar::<_, Uuid>(
+                    r#"
+                    SELECT DISTINCT workflow_id
+                    FROM workflow_available_nodes
+                    WHERE node_id = ANY($1)
+                    "#,
+                )
+                .bind(scope_ids)
+                .fetch_all(pool)
+                .await?,
+            ),
+            auth::CapabilityBoundary::None => {
+                return Err(ApiError::Forbidden("workflows:read".into()));
+            }
+        }
+    } else {
+        None
+    };
+    let rows = if let Some(allowed_workflow_ids) = allowed_workflow_ids {
+        rows.into_iter()
+            .filter(|row| {
+                row.try_get::<Uuid, _>("id")
+                    .map(|id| allowed_workflow_ids.contains(&id))
+                    .unwrap_or(false)
+            })
+            .collect::<Vec<_>>()
+    } else {
+        rows
+    };
     let workflow_ids = rows
         .iter()
         .map(|row| row.try_get::<Uuid, _>("id"))
@@ -1565,6 +1642,7 @@ async fn list_workflows_inner(pool: &sqlx::PgPool) -> ApiResult<Vec<WorkflowSumm
 
 async fn get_workflow_inner(
     pool: &sqlx::PgPool,
+    account: &auth::AccountContext,
     workflow_id: Uuid,
 ) -> ApiResult<WorkflowDefinition> {
     let row = sqlx::query(
@@ -1626,6 +1704,7 @@ async fn get_workflow_inner(
 
     let assignments = list_workflow_assignments_inner(
         pool,
+        account,
         &WorkflowAssignmentQuery {
             workflow_id: Some(workflow_id),
             ..Default::default()
@@ -1794,9 +1873,9 @@ async fn list_assignment_candidates_inner(
     node_id: Option<Uuid>,
     search: Option<&str>,
 ) -> ApiResult<Vec<WorkflowAssignmentCandidate>> {
-    let scope_ids = match auth::capability_boundary(pool, account, "workflows:write").await? {
+    let scope_ids = match auth::capability_boundary(pool, account, "workflows:manage").await? {
         auth::CapabilityBoundary::None => {
-            return Err(ApiError::Forbidden("workflows:write".into()));
+            return Err(ApiError::Forbidden("workflows:manage".into()));
         }
         auth::CapabilityBoundary::Global => None,
         auth::CapabilityBoundary::Scoped(scope_ids) => Some(scope_ids),
@@ -1916,8 +1995,14 @@ async fn list_assignee_options_inner(
 
 async fn list_workflow_assignments_inner(
     pool: &sqlx::PgPool,
+    account: &auth::AccountContext,
     query: &WorkflowAssignmentQuery,
 ) -> ApiResult<Vec<WorkflowAssignmentSummary>> {
+    let scope_ids = match auth::capability_boundary(pool, account, "workflows:read").await? {
+        auth::CapabilityBoundary::Global => None,
+        auth::CapabilityBoundary::Scoped(scope_ids) => Some(scope_ids),
+        auth::CapabilityBoundary::None => return Err(ApiError::Forbidden("workflows:read".into())),
+    };
     let rows = sqlx::query(
         r#"
         SELECT
@@ -1965,6 +2050,7 @@ async fn list_workflow_assignments_inner(
           AND ($4::uuid IS NULL OR workflow_assignments.account_id = $4)
           AND ($5::uuid IS NULL OR workflow_assignments.node_id = $5)
           AND ($6::boolean IS NULL OR workflow_assignments.is_active = $6)
+          AND ($7::uuid[] IS NULL OR workflow_assignments.node_id = ANY($7))
         ORDER BY workflows.name, nodes.name, accounts.display_name, workflow_assignments.created_at
         "#,
     )
@@ -1974,6 +2060,7 @@ async fn list_workflow_assignments_inner(
     .bind(query.account_id)
     .bind(query.node_id)
     .bind(query.active)
+    .bind(scope_ids.as_deref())
     .fetch_all(pool)
     .await?;
 
@@ -2215,6 +2302,47 @@ async fn replace_workflow_available_nodes_tx(
     }
 
     Ok(())
+}
+
+async fn require_workflow_fully_in_capability_scope(
+    pool: &sqlx::PgPool,
+    account: &auth::AccountContext,
+    capability: &str,
+    workflow_id: Uuid,
+) -> ApiResult<()> {
+    let node_ids = load_workflow_available_node_ids(pool, workflow_id).await?;
+    auth::require_capability_contains_nodes(pool, account, capability, &node_ids).await
+}
+
+async fn require_workflow_visible_for_capability(
+    pool: &sqlx::PgPool,
+    account: &auth::AccountContext,
+    capability: &str,
+    workflow_id: Uuid,
+) -> ApiResult<()> {
+    match auth::capability_boundary(pool, account, capability).await? {
+        auth::CapabilityBoundary::Global => Ok(()),
+        auth::CapabilityBoundary::Scoped(scope_ids) => {
+            let node_ids = load_workflow_available_node_ids(pool, workflow_id).await?;
+            if node_ids.iter().any(|node_id| scope_ids.contains(node_id)) {
+                Ok(())
+            } else {
+                Err(ApiError::Forbidden(capability.into()))
+            }
+        }
+        auth::CapabilityBoundary::None => Err(ApiError::Forbidden(capability.into())),
+    }
+}
+
+async fn load_workflow_available_node_ids(
+    pool: &sqlx::PgPool,
+    workflow_id: Uuid,
+) -> ApiResult<Vec<Uuid>> {
+    sqlx::query_scalar("SELECT node_id FROM workflow_available_nodes WHERE workflow_id = $1")
+        .bind(workflow_id)
+        .fetch_all(pool)
+        .await
+        .map_err(Into::into)
 }
 
 async fn ensure_workflow_assignment_tx(

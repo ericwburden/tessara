@@ -141,6 +141,16 @@ CREATE TABLE forms (
     created_at timestamptz NOT NULL DEFAULT now()
 );
 
+CREATE TABLE form_scope_nodes (
+    form_id uuid NOT NULL REFERENCES forms(id) ON DELETE CASCADE,
+    node_id uuid NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (form_id, node_id)
+);
+
+CREATE INDEX form_scope_nodes_node_id_idx
+    ON form_scope_nodes (node_id, form_id);
+
 CREATE TABLE compatibility_groups (
     id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
     form_id uuid NOT NULL REFERENCES forms(id) ON DELETE CASCADE,
@@ -330,6 +340,16 @@ CREATE TABLE datasets (
     CHECK (composition_mode IN ('union', 'join'))
 );
 
+CREATE TABLE dataset_scope_nodes (
+    dataset_id uuid NOT NULL REFERENCES datasets(id) ON DELETE CASCADE,
+    node_id uuid NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (dataset_id, node_id)
+);
+
+CREATE INDEX dataset_scope_nodes_node_id_idx
+    ON dataset_scope_nodes (node_id, dataset_id);
+
 CREATE TABLE dataset_revisions (
     id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
     dataset_id uuid NOT NULL REFERENCES datasets(id) ON DELETE CASCADE,
@@ -416,6 +436,16 @@ CREATE TABLE dashboards (
     description text,
     created_at timestamptz NOT NULL DEFAULT now()
 );
+
+CREATE TABLE dashboard_scope_nodes (
+    dashboard_id uuid NOT NULL REFERENCES dashboards(id) ON DELETE CASCADE,
+    node_id uuid NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (dashboard_id, node_id)
+);
+
+CREATE INDEX dashboard_scope_nodes_node_id_idx
+    ON dashboard_scope_nodes (node_id, dashboard_id);
 
 CREATE TABLE dashboard_components (
     id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),

@@ -50,17 +50,17 @@ async fn seed_dev_admin(pool: &PgPool, config: &Config) -> anyhow::Result<()> {
         ("admin:all", "Full administration access"),
         ("hierarchy:read", "Browse runtime hierarchy records"),
         (
-            "hierarchy:write",
+            "hierarchy:manage",
             "Manage hierarchy configuration and nodes",
         ),
         ("forms:read", "Browse top-level form records"),
-        ("forms:write", "Manage form definitions and versions"),
+        ("forms:manage", "Manage form definitions and versions"),
         (
             "workflows:read",
             "Browse workflow definitions and assignments",
         ),
         (
-            "workflows:write",
+            "workflows:manage",
             "Manage workflow definitions and assignments",
         ),
         (
@@ -71,13 +71,16 @@ async fn seed_dev_admin(pool: &PgPool, config: &Config) -> anyhow::Result<()> {
             "submissions:respond",
             "Start and complete assigned response work",
         ),
-        ("submissions:write", "Create and update submissions"),
+        (
+            "submissions:manage",
+            "Manage submissions by hierarchy scope",
+        ),
         ("analytics:refresh", "Refresh analytics projections"),
-        ("datasets:write", "Manage dataset definitions"),
+        ("datasets:manage", "Manage dataset definitions"),
         ("datasets:read", "Inspect dataset definitions"),
-        ("components:write", "Manage component definitions"),
+        ("components:manage", "Manage component definitions"),
         ("components:read", "Inspect component definitions"),
-        ("dashboards:write", "Manage dashboard definitions"),
+        ("dashboards:manage", "Manage dashboard definitions"),
         ("dashboards:read", "Inspect dashboard definitions"),
     ];
 
@@ -102,9 +105,9 @@ async fn seed_dev_admin(pool: &PgPool, config: &Config) -> anyhow::Result<()> {
         "hierarchy:read",
         "forms:read",
         "workflows:read",
-        "workflows:write",
+        "workflows:manage",
         "submissions:respond",
-        "submissions:write",
+        "submissions:manage",
         "components:read",
         "dashboards:read",
     ] {

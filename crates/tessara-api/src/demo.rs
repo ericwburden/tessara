@@ -940,6 +940,40 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
     )
     .await?;
 
+    replace_form_scope_nodes(pool, partner_form.form_id, &[partner_a, partner_b]).await?;
+    replace_form_scope_nodes(
+        pool,
+        program_form.form_id,
+        &[program_a, program_b, program_c, program_d],
+    )
+    .await?;
+    replace_form_scope_nodes(
+        pool,
+        activity_form.form_id,
+        &[
+            activity_a, activity_b, activity_c, activity_d, activity_e, activity_f,
+        ],
+    )
+    .await?;
+    replace_form_scope_nodes(
+        pool,
+        intake_activity_form.form_id,
+        &[activity_a, activity_e],
+    )
+    .await?;
+    replace_form_scope_nodes(
+        pool,
+        workshop_activity_form.form_id,
+        &[activity_b, activity_f],
+    )
+    .await?;
+    replace_form_scope_nodes(
+        pool,
+        session_form.form_id,
+        &[session_a, session_b, session_g],
+    )
+    .await?;
+
     let _partner_submitted_a = ensure_seed_submission(
         pool,
         account_id,
@@ -1241,6 +1275,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         "Demo Partner Profile Dataset",
         "demo-partner-profile",
         "partner",
+        &[partner_a, partner_b],
         &[DatasetFieldBinding {
             logical_key: "contact_name",
             label: "Contact Name",
@@ -1255,6 +1290,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         "Demo Program Snapshot Dataset",
         "demo-program-snapshot",
         "program",
+        &[program_a, program_b, program_c, program_d],
         &[DatasetFieldBinding {
             logical_key: "participant_target",
             label: "Participant Target",
@@ -1269,6 +1305,9 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         "Demo Activity Plan Dataset",
         "demo-activity-plan",
         "activity",
+        &[
+            activity_a, activity_b, activity_c, activity_d, activity_e, activity_f,
+        ],
         &[DatasetFieldBinding {
             logical_key: "expected_attendees",
             label: "Expected Attendees",
@@ -1283,6 +1322,7 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         "Participants Dataset",
         "demo-session-participants",
         "session",
+        &[session_a, session_b, session_g],
         &[DatasetFieldBinding {
             logical_key: "participants",
             label: "Participants",
@@ -1325,6 +1365,11 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         pool,
         "Demo Operations Dashboard",
         Some("Operational view of partner, program, activity, and session data."),
+        &[
+            partner_a, partner_b, program_a, program_b, program_c, program_d, activity_a,
+            activity_b, activity_c, activity_d, activity_e, activity_f, session_a, session_b,
+            session_g,
+        ],
     )
     .await?;
     replace_dashboard_components(
@@ -1750,6 +1795,69 @@ async fn ensure_form(
     .fetch_one(pool)
     .await
     .map_err(Into::into)
+}
+
+async fn replace_form_scope_nodes(
+    pool: &PgPool,
+    form_id: Uuid,
+    node_ids: &[Uuid],
+) -> ApiResult<()> {
+    sqlx::query("DELETE FROM form_scope_nodes WHERE form_id = $1")
+        .bind(form_id)
+        .execute(pool)
+        .await?;
+    for node_id in node_ids {
+        sqlx::query(
+            "INSERT INTO form_scope_nodes (form_id, node_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+        )
+        .bind(form_id)
+        .bind(node_id)
+        .execute(pool)
+        .await?;
+    }
+    Ok(())
+}
+
+async fn replace_dataset_scope_nodes(
+    pool: &PgPool,
+    dataset_id: Uuid,
+    node_ids: &[Uuid],
+) -> ApiResult<()> {
+    sqlx::query("DELETE FROM dataset_scope_nodes WHERE dataset_id = $1")
+        .bind(dataset_id)
+        .execute(pool)
+        .await?;
+    for node_id in node_ids {
+        sqlx::query(
+            "INSERT INTO dataset_scope_nodes (dataset_id, node_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+        )
+        .bind(dataset_id)
+        .bind(node_id)
+        .execute(pool)
+        .await?;
+    }
+    Ok(())
+}
+
+async fn replace_dashboard_scope_nodes(
+    pool: &PgPool,
+    dashboard_id: Uuid,
+    node_ids: &[Uuid],
+) -> ApiResult<()> {
+    sqlx::query("DELETE FROM dashboard_scope_nodes WHERE dashboard_id = $1")
+        .bind(dashboard_id)
+        .execute(pool)
+        .await?;
+    for node_id in node_ids {
+        sqlx::query(
+            "INSERT INTO dashboard_scope_nodes (dashboard_id, node_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+        )
+        .bind(dashboard_id)
+        .bind(node_id)
+        .execute(pool)
+        .await?;
+    }
+    Ok(())
 }
 
 async fn ensure_compatibility_group(pool: &PgPool, form_id: Uuid, name: &str) -> ApiResult<Uuid> {
@@ -2272,6 +2380,7 @@ async fn ensure_dataset(
     name: &str,
     slug: &str,
     source_alias: &str,
+    visibility_node_ids: &[Uuid],
     bindings: &[DatasetFieldBinding<'_>],
 ) -> ApiResult<(Uuid, Uuid)> {
     let form_version_major = current_form_major(pool, form_id).await?;
@@ -2306,6 +2415,7 @@ async fn ensure_dataset(
         .bind(dataset_id)
         .execute(pool)
         .await?;
+    replace_dataset_scope_nodes(pool, dataset_id, visibility_node_ids).await?;
 
     sqlx::query(
         r#"
@@ -2346,6 +2456,17 @@ async fn ensure_dataset(
     .bind(dataset_id)
     .fetch_one(pool)
     .await?;
+    sqlx::query(
+        r#"
+        UPDATE dataset_revisions
+        SET status = 'superseded'::dataset_revision_status
+        WHERE dataset_id = $1
+          AND status = 'published'::dataset_revision_status
+        "#,
+    )
+    .bind(dataset_id)
+    .execute(pool)
+    .await?;
     let revision_id = sqlx::query_scalar(
         r#"
         INSERT INTO dataset_revisions
@@ -2358,19 +2479,6 @@ async fn ensure_dataset(
     .bind(version_number)
     .bind(version_number.to_string())
     .fetch_one(pool)
-    .await?;
-    sqlx::query(
-        r#"
-        UPDATE dataset_revisions
-        SET status = 'superseded'::dataset_revision_status
-        WHERE dataset_id = $1
-          AND id <> $2
-          AND status = 'published'::dataset_revision_status
-        "#,
-    )
-    .bind(dataset_id)
-    .bind(revision_id)
-    .execute(pool)
     .await?;
 
     Ok((dataset_id, revision_id))
@@ -2468,6 +2576,17 @@ async fn ensure_component(
     .bind(component_id)
     .fetch_one(pool)
     .await?;
+    sqlx::query(
+        r#"
+        UPDATE component_versions
+        SET status = 'superseded'::component_version_status
+        WHERE component_id = $1
+          AND status = 'published'::component_version_status
+        "#,
+    )
+    .bind(component_id)
+    .execute(pool)
+    .await?;
     let component_version_id = sqlx::query_scalar(
         r#"
         INSERT INTO component_versions
@@ -2483,24 +2602,16 @@ async fn ensure_component(
     .bind(json!({"columns": "all"}))
     .fetch_one(pool)
     .await?;
-    sqlx::query(
-        r#"
-        UPDATE component_versions
-        SET status = 'superseded'::component_version_status
-        WHERE component_id = $1
-          AND id <> $2
-          AND status = 'published'::component_version_status
-        "#,
-    )
-    .bind(component_id)
-    .bind(component_version_id)
-    .execute(pool)
-    .await?;
 
     Ok((component_id, component_version_id))
 }
 
-async fn ensure_dashboard(pool: &PgPool, name: &str, description: Option<&str>) -> ApiResult<Uuid> {
+async fn ensure_dashboard(
+    pool: &PgPool,
+    name: &str,
+    description: Option<&str>,
+    visibility_node_ids: &[Uuid],
+) -> ApiResult<Uuid> {
     if let Some(id) = sqlx::query_scalar("SELECT id FROM dashboards WHERE name = $1")
         .bind(name)
         .fetch_optional(pool)
@@ -2511,15 +2622,19 @@ async fn ensure_dashboard(pool: &PgPool, name: &str, description: Option<&str>) 
             .bind(id)
             .execute(pool)
             .await?;
+        replace_dashboard_scope_nodes(pool, id, visibility_node_ids).await?;
         return Ok(id);
     }
 
-    sqlx::query_scalar("INSERT INTO dashboards (name, description) VALUES ($1, $2) RETURNING id")
-        .bind(name)
-        .bind(description)
-        .fetch_one(pool)
-        .await
-        .map_err(Into::into)
+    let id = sqlx::query_scalar(
+        "INSERT INTO dashboards (name, description) VALUES ($1, $2) RETURNING id",
+    )
+    .bind(name)
+    .bind(description)
+    .fetch_one(pool)
+    .await?;
+    replace_dashboard_scope_nodes(pool, id, visibility_node_ids).await?;
+    Ok(id)
 }
 
 async fn replace_dashboard_components(

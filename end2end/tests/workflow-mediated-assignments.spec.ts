@@ -149,6 +149,14 @@ async function signInAsDelegate(page: Page) {
   await signIn(page, "delegate@tessara.local", "tessara-dev-delegate");
 }
 
+// PERMISSIONS TODO:
+// - Add signInAsOperator, signInAsRespondent, and signInAsDelegator helpers
+//   when their Playwright scenarios are added.
+// - Scoped operator scenarios should prove in-scope workflow assignments can be
+//   seen/started and out-of-scope assignments cannot be seen or started by URL.
+// - Respondent/delegate/delegator scenarios should prove response access remains
+//   ownership/delegation-based rather than profile-based.
+
 function uniqueSuffix() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -271,11 +279,48 @@ async function assignWorkflowToDelegate(
   };
 }
 
+// PERMISSIONS TODO:
+// - Add a scoped assignment helper that picks one workflow candidate inside the
+//   operator's effective scope and one outside it.
+// - Assert assignment candidates and assignee options are filtered by workflow
+//   available nodes plus assigner scope.
+
 async function workflowDetail(page: Page, workflowId: string) {
   return apiGet<WorkflowDefinition>(page, `/api/workflows/${workflowId}`);
 }
 
+// FUTURE PERMISSION SUITES (comment-only scaffold; do not convert these to
+// test.skip placeholders because skipped tests pollute reports):
+//
+// form-visibility-permissions.spec.ts
+// - Admin can create, publish, and read forms.
+// - Scoped operator can list/read only forms whose visibility nodes overlap
+//   effective scope.
+// - Scoped operator cannot read an out-of-scope form by direct URL/API.
+// - Future UI: scoped form create/edit requires all visibility nodes inside
+//   forms:manage scope.
+//
+// dataset-component-dashboard-permissions.spec.ts
+// - Dataset list/detail/table rows respect dataset visibility scope.
+// - Dataset table rows are filtered to user scope.
+// - Component visibility follows the attached dataset revision.
+// - Dashboard list/detail respects dashboard visibility.
+// - Dashboard components render only when the component dataset scope is
+//   compatible with dashboard visibility.
+//
+// admin-user-role-permissions.spec.ts
+// - Admin-only routes cover users, roles, capabilities, and node types.
+// - Future New User Screen: admin creates a user in-app and reaches access
+//   assignment for scope/delegation setup.
+// - Non-admin users cannot see Administration nav or load admin routes.
+
 test.describe("workflow-mediated form shortcuts", () => {
+  // PERMISSIONS TODO:
+  // - Keep these admin flows proving that admin@tessara.local can manage
+  //   generated workflows and workflow assignments globally through admin:all.
+  // - Add matching non-admin denial checks once the admin/user/role permission
+  //   suite has stable UI entry points.
+
   test("publishing a form creates a visible generated single-form workflow", async ({
     page,
   }) => {
