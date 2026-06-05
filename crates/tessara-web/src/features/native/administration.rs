@@ -706,7 +706,7 @@ pub fn AdministrationUserEditPage() -> impl IntoView {
                         view! {
                             <PageHeader
                                 title="Edit User"
-                                description="Update the account profile, active status, password, and assigned roles."
+                                description="Update the account details, active status, password, and assigned roles."
                             />
                             <form
                                 class="native-form administration-user-form"

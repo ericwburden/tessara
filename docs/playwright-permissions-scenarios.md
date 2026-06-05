@@ -34,7 +34,7 @@ The suite creates Playwright-owned fixtures with a `pw-permissions-*` prefix thr
 | Submissions scope plus ownership | Scoped manager can read/start an out-of-scope assignment assigned to them through ownership and can manage in-scope submissions through scope. | Scoped manager cannot read an unrelated out-of-scope submission. |
 | Response ownership | Owner sees and starts their own pending assignment and reads the resulting submission. | Owner cannot start another user's non-delegated assignment. |
 | Delegation | Delegator can query delegate pending work through `delegate_account_id`, start it, and read the resulting submission. | Non-delegated owner cannot access that delegated assignment. |
-| Session metadata | Session endpoint exposes capabilities, assigned scope roots, and delegations. | No profile-based access switch is asserted or required. |
+| Session metadata | Session endpoint exposes capabilities, assigned scope roots, and delegations. | No legacy access switch is asserted or required. |
 
 ## Known Remaining Gaps
 

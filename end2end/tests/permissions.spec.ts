@@ -672,7 +672,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
     await getJson(fixtures.delegator, `/api/submissions/${delegatedSubmission.id}`);
   });
 
-  test("session metadata exposes capabilities, scopes, and delegations without profile access switches", async () => {
+  test("session metadata exposes capabilities, scopes, and delegations without legacy access switches", async () => {
     const scopedSession = await getJson<SessionState>(fixtures.scopedManager, "/api/auth/session");
     expect(scopedSession.authenticated).toBe(true);
     expect(scopedSession.account?.capabilities).toEqual(

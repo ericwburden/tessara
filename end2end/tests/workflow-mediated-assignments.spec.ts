@@ -155,7 +155,7 @@ async function signInAsDelegate(page: Page) {
 // - Scoped operator scenarios should prove in-scope workflow assignments can be
 //   seen/started and out-of-scope assignments cannot be seen or started by URL.
 // - Respondent/delegate/delegator scenarios should prove response access remains
-//   ownership/delegation-based rather than profile-based.
+//   ownership/delegation-based rather than persona-based.
 
 function uniqueSuffix() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
