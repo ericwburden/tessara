@@ -1,10 +1,23 @@
+//! Admin user, role, scope, and delegation management endpoints.
+//!
+//! This module owns the administrator-facing access-management API. The public
+//! DTOs live in `dto`, while the handlers below keep the current route contract
+//! and coordinate validation, persistence, and effective-access projections.
+
 use axum::{
     Json,
     extract::{Path, State},
 };
-use serde::{Deserialize, Serialize};
 use sqlx::{PgPool, Postgres, Row, Transaction};
 use uuid::Uuid;
+
+mod dto;
+
+pub use dto::{
+    AccountAssignmentSummary, CapabilitySummary, CreateRoleRequest, CreateUserRequest, IdResponse,
+    RoleDetail, RoleSummary, UpdateRoleRequest, UpdateUserAccessRequest, UpdateUserRequest,
+    UserAccessDetail, UserDetail, UserSummary,
+};
 
 use crate::{
     auth::{self, AuthenticatedRequest, DelegationSummary, ScopeNodeSummary},
@@ -13,112 +26,7 @@ use crate::{
     hierarchy::require_text,
 };
 
-#[derive(Serialize)]
-pub struct RoleSummary {
-    pub id: Uuid,
-    pub name: String,
-    pub capability_count: i64,
-    pub account_count: i64,
-}
-
-#[derive(Serialize)]
-pub struct CapabilitySummary {
-    pub id: Uuid,
-    pub key: String,
-    pub description: String,
-}
-
-#[derive(Serialize)]
-pub struct AccountAssignmentSummary {
-    pub account_id: Uuid,
-    pub email: String,
-    pub display_name: String,
-}
-
-#[derive(Serialize)]
-pub struct RoleDetail {
-    pub id: Uuid,
-    pub name: String,
-    pub capabilities: Vec<CapabilitySummary>,
-    pub assigned_accounts: Vec<AccountAssignmentSummary>,
-}
-
-#[derive(Serialize)]
-pub struct UserSummary {
-    pub id: Uuid,
-    pub email: String,
-    pub display_name: String,
-    pub is_active: bool,
-    pub roles: Vec<RoleSummary>,
-}
-
-#[derive(Serialize)]
-pub struct UserDetail {
-    pub id: Uuid,
-    pub email: String,
-    pub display_name: String,
-    pub is_active: bool,
-    pub capabilities: Vec<String>,
-    pub roles: Vec<RoleSummary>,
-    pub scope_nodes: Vec<ScopeNodeSummary>,
-    pub delegations: Vec<DelegationSummary>,
-    pub delegated_by: Vec<DelegationSummary>,
-}
-
-#[derive(Serialize)]
-pub struct UserAccessDetail {
-    pub account_id: Uuid,
-    pub email: String,
-    pub display_name: String,
-    pub capabilities: Vec<String>,
-    pub scope_nodes: Vec<ScopeNodeSummary>,
-    pub available_scope_nodes: Vec<ScopeNodeSummary>,
-    pub delegations: Vec<DelegationSummary>,
-    pub available_delegate_accounts: Vec<DelegationSummary>,
-    pub scope_assignments_editable: bool,
-    pub delegation_assignments_editable: bool,
-}
-
-#[derive(Serialize)]
-pub struct IdResponse {
-    pub id: Uuid,
-}
-
-#[derive(Deserialize)]
-pub struct CreateUserRequest {
-    pub email: String,
-    pub display_name: String,
-    pub password: String,
-    pub is_active: bool,
-    pub role_ids: Vec<Uuid>,
-}
-
-#[derive(Deserialize)]
-pub struct UpdateUserRequest {
-    pub email: String,
-    pub display_name: String,
-    pub password: Option<String>,
-    pub is_active: bool,
-    pub role_ids: Vec<Uuid>,
-}
-
-#[derive(Deserialize)]
-pub struct CreateRoleRequest {
-    pub name: String,
-    pub capability_ids: Vec<Uuid>,
-}
-
-#[derive(Deserialize)]
-pub struct UpdateRoleRequest {
-    pub capability_ids: Vec<Uuid>,
-}
-
-#[derive(Deserialize)]
-pub struct UpdateUserAccessRequest {
-    pub scope_node_ids: Vec<Uuid>,
-    pub delegate_account_ids: Vec<Uuid>,
-}
-
+/// Lists the capability catalog admins use to compose role bundles.
 pub async fn list_capabilities(
     State(state): State<AppState>,
     request: AuthenticatedRequest,
@@ -128,6 +36,7 @@ pub async fn list_capabilities(
     Ok(Json(load_capabilities(&state.pool).await?))
 }
 
+/// Lists reusable role bundles and the number of assigned accounts/capabilities.
 pub async fn list_roles(
     State(state): State<AppState>,
     request: AuthenticatedRequest,
@@ -164,6 +73,7 @@ pub async fn list_roles(
     Ok(Json(roles))
 }
 
+/// Creates an administrator-managed role bundle from selected capabilities.
 pub async fn create_role(
     State(state): State<AppState>,
     request: AuthenticatedRequest,
@@ -193,6 +103,7 @@ pub async fn create_role(
     Ok(Json(IdResponse { id: role_id }))
 }
 
+/// Loads a role bundle with its capabilities and assigned accounts.
 pub async fn get_role(
     State(state): State<AppState>,
     request: AuthenticatedRequest,
@@ -202,6 +113,7 @@ pub async fn get_role(
     Ok(Json(load_role_detail(&state.pool, role_id).await?))
 }
 
+/// Replaces the capabilities assigned to an existing role bundle.
 pub async fn update_role(
     State(state): State<AppState>,
     request: AuthenticatedRequest,
@@ -261,6 +173,7 @@ pub async fn update_role(
     Ok(Json(IdResponse { id: role_id }))
 }
 
+/// Lists local accounts with their assigned role bundles.
 pub async fn list_users(
     State(state): State<AppState>,
     request: AuthenticatedRequest,
@@ -292,6 +205,7 @@ pub async fn list_users(
     Ok(Json(users))
 }
 
+/// Loads a local account with effective capabilities, scopes, and delegations.
 pub async fn get_user(
     State(state): State<AppState>,
     request: AuthenticatedRequest,
@@ -301,6 +215,7 @@ pub async fn get_user(
     Ok(Json(load_user_detail(&state.pool, account_id).await?))
 }
 
+/// Creates a local account, credential, and initial role assignments.
 pub async fn create_user(
     State(state): State<AppState>,
     request: AuthenticatedRequest,
@@ -350,6 +265,7 @@ pub async fn create_user(
     Ok(Json(IdResponse { id: account_id }))
 }
 
+/// Updates local account identity, active state, optional password, and roles.
 pub async fn update_user(
     State(state): State<AppState>,
     request: AuthenticatedRequest,
@@ -413,6 +329,7 @@ pub async fn update_user(
     Ok(Json(IdResponse { id: account_id }))
 }
 
+/// Loads editable scope/delegation assignment state for a local account.
 pub async fn get_user_access(
     State(state): State<AppState>,
     request: AuthenticatedRequest,
@@ -447,6 +364,7 @@ pub async fn get_user_access(
     }))
 }
 
+/// Replaces scope and delegation assignments for a local account.
 pub async fn update_user_access(
     State(state): State<AppState>,
     request: AuthenticatedRequest,
@@ -848,6 +766,9 @@ async fn replace_role_assignments(
     account_id: Uuid,
     role_ids: &[Uuid],
 ) -> ApiResult<()> {
+    // Role edits preserve the account's existing scope roots. Admin-granting
+    // roles remain global because scoped `admin:all` would make the management
+    // surface disappear unpredictably.
     let scoped_node_ids = current_scope_node_ids(tx, account_id).await?;
 
     sqlx::query("DELETE FROM role_assignments WHERE account_id = $1")
@@ -893,6 +814,8 @@ async fn replace_scope_assignments(
     account_id: Uuid,
     node_ids: &[Uuid],
 ) -> ApiResult<()> {
+    // Scope edits preserve selected roles and rewrite each role assignment to
+    // either global or per-node rows according to the capability bundle.
     let role_ids = current_role_ids(tx, account_id).await?;
 
     sqlx::query("DELETE FROM role_assignments WHERE account_id = $1")
@@ -948,6 +871,9 @@ async fn insert_role_assignment_rows(
     role_id: Uuid,
     scoped_node_ids: &[Uuid],
 ) -> ApiResult<()> {
+    // A role assignment with a NULL node is global. Empty scope selections
+    // intentionally mean unrestricted scope, and administrator roles are forced
+    // global to keep account/role management recoverable.
     if scoped_node_ids.is_empty() || role_grants_admin(tx, role_id).await? {
         sqlx::query(
             r#"
