@@ -76,9 +76,9 @@ The main gaps are no longer raw backend feasibility. The remaining work is to:
 - finish backend decomposition for workflow, response, reporting, dashboard, and dataset behavior so new work does not compound large route modules
 - complete response/runtime, dataset, component, and dashboard authoring in end-user-facing application shape
 - retire or clearly isolate remaining transitional reporting compatibility APIs
-- transition the reporting stack from the current `Report/Aggregation/Chart` model to the target `Component` model
-- close known scope leaks in report execution and chart/component inspection before expanding dataset/component authoring
-- restore a green dependency-audit posture and document any accepted advisory exceptions
+- transition deprecated analytical endpoints into adapter-only paths behind the target `Dataset -> Component -> Dashboard` model
+- close scoped analytical visibility gaps as dataset, component, and dashboard execution surfaces become real application features
+- maintain a green dependency-audit posture and document any accepted advisory exceptions
 
 ## Current Transitional Architecture
 
@@ -522,48 +522,47 @@ This section records the completed foundation sequence that led to the current n
 
 **User-testable exit condition:** operators can inspect runtime and readiness through the app while end-user flows remain working.
 
-### Sprint 2G: Scoped Analytics And Reporting Compatibility Hardening (Next)
-
-**Outcome:** the current transitional analytical stack is safe enough to keep serving compatibility use cases while dataset and component authoring expand.
-
-**Build:**
-
-- scope report execution results, not only report visibility, so operator-run reports return only rows from effective scope
-- apply the same scoped visibility rules to dataset-backed reports, join-backed report rows, aggregation execution, chart inspection, dashboard components, and any linked report/chart metadata exposed through Components
-- add negative regression coverage for scoped operators against direct form reports, union dataset reports, join dataset reports, aggregation-backed charts, and chart detail/list endpoints
-- move touched reporting, dashboard, chart, and component API behavior toward bounded-context structure instead of deepening the transitional route modules
-- document the compatibility boundary for `Report`, `Aggregation`, and `Chart` so later component work knows which paths are adapters and which paths are scheduled for replacement
-
-**Application UI delivered this sprint:**
-
-- no major new product surface, but existing Reports, Components, and Dashboards routes continue to work with corrected scoped data behavior
-- operator-facing empty/forbidden states remain understandable when scope removes rows or linked entities
-
-**User-testable exit condition:** a scoped operator can inspect reports, components, charts, and dashboards without seeing out-of-scope rows or metadata, while an admin still sees the full seeded reporting set.
-
 ## Phase 3: Dataset Engine And Revisions
 
-### Sprint 3A: Dataset Authoring Slice
+### Sprint 3A: Dataset Authoring Foundation Slice (Next)
 
-**Outcome:** datasets become first-class application assets.
+**Outcome:** datasets become first-class application assets for practical v1 authoring and preview.
 
 **Build:**
 
 - dataset directory/detail/create/edit flows
-- source composition, row filters, calculated fields, and previews
+- source composition and previews using published form sources
 - clearer separation between authoring and viewing surfaces
 - dataset and reporting work following bounded-context backend structure on touch
 - query planning and execution concerns moving behind clearer dataset and reporting service boundaries
 - pagination, limits, and guardrails added to dataset and reporting list and execution surfaces where touched
-- carry forward the scoped analytical execution guarantees from Sprint 2G for every dataset preview or derived reporting surface touched here
+- scoped analytical execution guarantees for every dataset preview or derived dataset surface touched here, including negative coverage that scoped operators cannot see out-of-scope rows
+- row filters and calculated fields are intentionally deferred to the follow-on advanced authoring slice
 
 **Application UI delivered this sprint:**
 
 - usable dataset authoring screens in the application
 
-**User-testable exit condition:** a tester can create, inspect, and edit datasets through app UI.
+**User-testable exit condition:** a tester can create, inspect, edit, and preview datasets through app UI, while scoped operators only see dataset rows and metadata inside their effective scope.
 
-### Sprint 3B: Dataset Revision And Compatibility Slice
+### Sprint 3B: Dataset Advanced Authoring Slice
+
+**Outcome:** dataset authors can refine datasets beyond direct source-field projection.
+
+**Build:**
+
+- row filter authoring for dataset sources or dataset output, with clear UI validation and preview behavior
+- calculated field authoring for v1-safe expressions over selected source fields
+- typed validation and error states for invalid filters, missing field references, and unsupported calculated-field expressions
+- preview execution that applies filters and calculated fields consistently with saved definitions
+
+**Application UI delivered this sprint:**
+
+- dataset edit screens expose row filters and calculated fields without changing the basic Sprint 3A authoring workflow
+
+**User-testable exit condition:** a tester can add a row filter and calculated field to a dataset, preview the resulting rows, save the definition, and verify scoped readers see only permitted filtered output.
+
+### Sprint 3C: Dataset Revision And Compatibility Slice
 
 **Outcome:** revision behavior is visible and manageable.
 
@@ -586,16 +585,16 @@ This section records the completed foundation sequence that led to the current n
 
 ### Sprint 4A: Table Component Slice
 
-**Outcome:** table-oriented presentation assets replace old report/aggregation planning.
+**Outcome:** table-oriented presentation assets become first-class components.
 
 **Build:**
 
 - `DetailTable` and `AggregateTable` authoring
 - component versioning and publication
 - validation and dataset-revision binding behavior
-- legacy `Report`, `Aggregation`, and `Chart` concepts retained only as adapters; no new core behavior may deepen them
+- any retained legacy analytical endpoints stay adapter-only; no new core behavior may deepen deprecated asset families
 - touched reporting and component routes continuing hybrid-shell removal rather than creating a second long-lived bridge
-- component list/detail endpoints inherit the scoped analytical visibility rules proven in Sprint 2G
+- component list/detail endpoints enforce scoped dataset and component visibility with negative operator coverage
 
 **Application UI delivered this sprint:**
 
@@ -613,16 +612,16 @@ This section records the completed foundation sequence that led to the current n
 - `Bar`, `Line`, `Pie/Donut`, and `StatCard` authoring
 - component-specific validation and viewing behavior
 - visual component authoring and viewing built directly on `ComponentVersion` and typed validation state
-- any retained legacy chart behavior kept explicitly compatibility-only
-- any legacy chart adapter endpoint touched here must enforce scoped report/component/dashboard visibility before returning metadata
+- any retained legacy visual-analysis endpoint kept explicitly adapter-only
+- any legacy adapter endpoint touched here must enforce scoped component and dashboard visibility before returning metadata
 
 **Application UI delivered this sprint:**
 
 - visual component builder and viewer screens
 
-**User-testable exit condition:** a tester can build and view visual components without old chart/aggregation-specific workbench flows.
+**User-testable exit condition:** a tester can build and view visual components without deprecated workbench flows.
 
-## Phase 5: Dashboards And Dependency Upgrade UX
+## Phase 5: Dashboards, Scoped Analytics, And Dependency Upgrade UX
 
 ### Sprint 5A: Dashboard Composition Slice
 
@@ -644,7 +643,27 @@ This section records the completed foundation sequence that led to the current n
 
 **User-testable exit condition:** a tester can assemble and view dashboards through the app.
 
-### Sprint 5B: Upgrade And Stale Dependency Slice
+### Sprint 5B: Scoped Analytics And Presentation Hardening Slice
+
+**Outcome:** dataset, component, and dashboard execution is scope-safe now that those application surfaces exist.
+
+**Build:**
+
+- enforce scoped row visibility for dataset previews, component execution, and dashboard viewing
+- apply scoped metadata visibility to datasets, dataset revisions, component versions, dashboard composition, and linked presentation assets
+- add negative regression coverage proving scoped operators cannot see out-of-scope rows, linked entities, component metadata, or dashboard contents
+- keep any retained deprecated analytical endpoints adapter-only and align their authorization with the canonical dataset, component, and dashboard contracts when touched
+- move touched dataset, component, and dashboard execution paths toward bounded-context service and repository boundaries
+- preserve clear empty and forbidden states when scope removes rows or linked assets
+
+**Application UI delivered this sprint:**
+
+- existing Dataset, Component, and Dashboard surfaces remain usable with corrected scoped behavior
+- operators receive understandable scoped empty states rather than leaked metadata or raw authorization failures
+
+**User-testable exit condition:** a scoped operator can preview datasets, run/view components, and view dashboards without seeing out-of-scope rows or metadata, while an admin still sees the full seeded analytical set.
+
+### Sprint 5C: Upgrade And Stale Dependency Slice
 
 **Outcome:** stale dependency and rebind flows are usable.
 
@@ -654,7 +673,7 @@ This section records the completed foundation sequence that led to the current n
 - carry-forward and rebinding flows
 - publication guards for incompatible changes
 - stale dependency, carry-forward, and rebinding flows operating on typed dataset, component, and dashboard relationships
-- publication guards consuming the typed compatibility and dependency outputs introduced in Sprint 3B
+- publication guards consuming the typed compatibility and dependency outputs introduced in Sprint 3C
 
 **Application UI delivered this sprint:**
 

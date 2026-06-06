@@ -10,7 +10,7 @@
   - added cleanup for `pw-permissions-*` Playwright entities before and after the permissions suite
   - updated smoke and UAT scripts for the current native shell/API contracts
   - completed Orpheum `implementation-and-release-prep` artifact checks
-  - marked Sprint 2F complete and Sprint 2G next in `docs/roadmap.md`
+  - marked Sprint 2F complete and Sprint 3A Dataset Authoring Foundation next in `docs/roadmap.md` after moving scoped analytics hardening behind real dataset/component/dashboard surfaces
 - Validation:
   - `cargo fmt --all -- --check` - passed
   - `.\scripts\validate.ps1` - passed
@@ -41,7 +41,7 @@
   - Operations UI is native, read-only, and uses standard table controls
   - Playwright cleanup removes generated `pw-permissions-*` entities
 - Next Focus:
-  - Sprint 2G: Scoped Analytics And Reporting Compatibility Hardening
+  - Sprint 3A: Dataset Authoring Foundation Slice
   - future planning item: administrative workflow assignment detail page with reassignment, admin completion, deactivation, and capability decisions
 
 ## 2026-06-05 - Sprint 2F Operations Status Implementation
