@@ -17,6 +17,7 @@ pub mod demo;
 pub mod error;
 mod forms;
 mod hierarchy;
+mod operations;
 mod submissions;
 mod users;
 mod workflows;
@@ -245,6 +246,16 @@ pub fn router(state: AppState) -> Router {
             }),
         )
         .route(
+            "/operations",
+            get(|| async {
+                native_app(
+                    "/operations",
+                    "Tessara Operations",
+                    "Inspect workflow assignment and dataset readiness status.",
+                )
+            }),
+        )
+        .route(
             "/components",
             get(|| async {
                 native_app(
@@ -407,6 +418,7 @@ fn api_routes() -> Router<AppState> {
         .merge(auth::routes())
         .merge(users::routes())
         .merge(hierarchy::routes())
+        .merge(operations::routes())
         .merge(forms::routes())
         .merge(workflows::routes())
         .merge(submissions::routes())

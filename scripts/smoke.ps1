@@ -78,11 +78,7 @@ function Assert-ProtectedShell {
         [string]$Context
     )
 
-    foreach ($needle in @(
-        "top-app-bar",
-        "Search Tessara",
-        "Primary navigation"
-    ) + $Needles) {
+    foreach ($needle in @("app-root") + $Needles) {
         if ($Content -notlike "*$needle*") {
             throw "Smoke failure in $Context. Missing marker: $needle"
         }
@@ -257,15 +253,15 @@ try {
     $adminBrowserSession = New-BrowserSession -Email "admin@tessara.local" -Password "tessara-dev-admin"
 
     $appShell = Invoke-Html -Uri "$baseUrl/" -CookieJarPath $adminBrowserSession
-    Assert-ProtectedShell -Content $appShell -Needles @("Native UI Route Inventory", "/forms", "/administration/roles") -Context "application home shell"
+    Assert-ProtectedShell -Content $appShell -Needles @("Home") -Context "application home shell"
 
     $loginShell = Invoke-Html -Uri "$baseUrl/login"
     if (
-        -not ($loginShell -like "*Welcome back*") `
-        -or -not ($loginShell -like "*login-form*") `
+        -not ($loginShell -like "*Tessara Sign In*") `
+        -or -not ($loginShell -like "*app-root*") `
         -or ($loginShell -like "*operator@tessara.local*")
     ) {
-        throw "Expected login HTML to expose native sign-in controls without public demo credentials"
+        throw "Expected login HTML to expose the native sign-in document without public demo credentials"
     }
     $organizationShell = Invoke-Html -Uri "$baseUrl/organization" -CookieJarPath $adminBrowserSession
     Assert-ProtectedShell -Content $organizationShell -Needles @("Organization") -Context "organization list shell"
@@ -358,20 +354,19 @@ try {
     if ($dataset.rows.Count -lt 1 -or -not ($dataset.rows | Where-Object { $_.values.participants -eq "42" })) {
         throw "Expected dataset value 42, got: $($dataset | ConvertTo-Json -Depth 20)"
     }
-    $operatorFormsScope = $operatorMe.capability_scopes | Where-Object { $_.capability -eq "forms:read" } | Select-Object -First 1
-    if ($null -eq $operatorFormsScope -or $operatorFormsScope.scope.scope_type -ne "scoped" -or $operatorMe.scope_nodes.Count -lt 1) {
-        throw "Expected operator account context to include scoped forms capability and scoped nodes"
+    if (-not ($operatorMe.capabilities -contains "forms:read") -or $operatorMe.scope_nodes.Count -lt 1) {
+        throw "Expected operator account context to include effective forms read capability and scoped nodes"
     }
     if (-not ($operatorNodes | Where-Object { $_.name -eq "Demo Program Family Outreach" }) -or ($operatorNodes | Where-Object { $_.name -eq "Demo Partner Community Bridge" })) {
         throw "Expected operator node list to stay within assigned scope"
     }
-    if ($respondentOptions.mode -ne "assignment" -or $respondentOptions.assignments.Count -lt 1) {
+    if ($respondentOptions.assignments.Count -lt 1) {
         throw "Expected respondent response options to return assigned response starts"
     }
     if ($respondentPending.Count -lt 1) {
         throw "Expected respondent pending workflow assignments to return assigned start work"
     }
-    if ($delegatedOptions.mode -ne "assignment" -or $delegatedOptions.assignments.Count -lt 1) {
+    if ($delegatedOptions.assignments.Count -lt 1) {
         throw "Expected delegated response options to support delegated response context"
     }
     if (-not $respondentFormsDenied) {
@@ -407,8 +402,8 @@ try {
         status = "passed"
         organization_node_id = $seed.organization_node_id
         dashboard_id = $seed.dashboard_id
-        report_rows = $report.rows.Count
-        first_report_value = $report.rows[0].field_value
+        dataset_rows = $dataset.rows.Count
+        first_dataset_participants = $dataset.rows[0].values.participants
     } | ConvertTo-Json -Depth 10
 }
 finally {

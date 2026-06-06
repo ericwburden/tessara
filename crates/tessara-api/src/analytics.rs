@@ -99,7 +99,11 @@ pub async fn refresh_projection(pool: &sqlx::PgPool) -> ApiResult<AnalyticsStatu
     analytics_status_for_pool(pool).await
 }
 
-pub async fn analytics_status(State(state): State<AppState>) -> ApiResult<Json<AnalyticsStatus>> {
+pub async fn analytics_status(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> ApiResult<Json<AnalyticsStatus>> {
+    auth::require_capability(&state.pool, &headers, "operations:view").await?;
     Ok(Json(analytics_status_for_pool(&state.pool).await?))
 }
 

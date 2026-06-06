@@ -1,6 +1,8 @@
 //! Database connection, migration, and seed wiring for the API service.
 
-use sqlx::{PgPool, postgres::PgPoolOptions};
+use std::path::PathBuf;
+
+use sqlx::{PgPool, migrate::Migrator, postgres::PgPoolOptions};
 
 use crate::{auth, config::Config};
 
@@ -27,10 +29,26 @@ pub async fn connect_and_prepare(config: &Config) -> anyhow::Result<PgPool> {
         .connect(&config.database_url)
         .await?;
 
-    sqlx::migrate!("./migrations").run(&pool).await?;
+    Migrator::new(migrations_dir().as_path())
+        .await?
+        .run(&pool)
+        .await?;
     seed_dev_admin(&pool, config).await?;
 
     Ok(pool)
+}
+
+fn migrations_dir() -> PathBuf {
+    if let Some(path) = std::env::var_os("TESSARA_MIGRATIONS_DIR") {
+        return PathBuf::from(path);
+    }
+
+    let workspace_path = PathBuf::from("crates/tessara-api/migrations");
+    if workspace_path.exists() {
+        return workspace_path;
+    }
+
+    PathBuf::from("migrations")
 }
 
 async fn seed_dev_admin(pool: &PgPool, config: &Config) -> anyhow::Result<()> {
@@ -76,6 +94,10 @@ async fn seed_dev_admin(pool: &PgPool, config: &Config) -> anyhow::Result<()> {
             "Manage submissions by hierarchy scope",
         ),
         ("analytics:refresh", "Refresh analytics projections"),
+        (
+            "operations:view",
+            "Inspect workflow assignment and dataset readiness status",
+        ),
         ("datasets:manage", "Manage dataset definitions"),
         ("datasets:read", "Inspect dataset definitions"),
         ("components:manage", "Manage component definitions"),
@@ -108,6 +130,7 @@ async fn seed_dev_admin(pool: &PgPool, config: &Config) -> anyhow::Result<()> {
         "workflows:manage",
         "submissions:respond",
         "submissions:manage",
+        "operations:view",
         "components:read",
         "dashboards:read",
     ] {

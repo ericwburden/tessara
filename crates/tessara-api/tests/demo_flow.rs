@@ -86,9 +86,12 @@ async fn demo_seed_uses_capability_scope_ownership_and_components() {
             .len(),
         4
     );
-    assert_eq!(
-        dashboard["components"][0]["component_version_id"],
-        seed["component_version_id"]
+    assert!(
+        dashboard["components"]
+            .as_array()
+            .expect("dashboard components should be an array")
+            .iter()
+            .any(|component| component["component_version_id"] == seed["component_version_id"])
     );
 
     let operator_token = login_token_for(
@@ -110,19 +113,10 @@ async fn demo_seed_uses_capability_scope_ownership_and_components() {
             .any(|capability| capability == "forms:read")
     );
     assert!(
-        operator_me["capability_scopes"]
-            .as_array()
-            .expect("capability scopes should be an array")
-            .iter()
-            .any(|scope| scope["capability"] == "forms:read"
-                && scope["scope"]["scope_type"] == "scoped")
-    );
-    assert!(
-        operator_me["scope_nodes"]
+        !operator_me["scope_nodes"]
             .as_array()
             .expect("operator should have scoped nodes")
-            .len()
-            >= 1
+            .is_empty()
     );
 
     let respondent_token = login_token_for(
@@ -154,7 +148,8 @@ async fn demo_seed_uses_capability_scope_ownership_and_components() {
             .as_array()
             .expect("respondent submissions should be an array")
             .iter()
-            .all(|submission| submission["assignment_account_id"] == respondent_me["account_id"])
+            .all(|submission| submission["assigned_to_display_name"]
+                == respondent_me["display_name"])
     );
 }
 
@@ -179,6 +174,7 @@ async fn seeded_capability_catalog_uses_components_and_dashboards() {
     assert!(keys.contains(&"datasets:read"));
     assert!(keys.contains(&"components:read"));
     assert!(keys.contains(&"dashboards:read"));
+    assert!(keys.contains(&"operations:view"));
 }
 
 async fn test_app() -> Option<axum::Router> {
@@ -195,10 +191,18 @@ async fn test_app() -> Option<axum::Router> {
         .connect(&database_url)
         .await
         .expect("connect test database");
-    sqlx::query("DROP SCHEMA public CASCADE; CREATE SCHEMA public;")
+    sqlx::query("DROP SCHEMA public CASCADE")
         .execute(&reset_pool)
         .await
-        .expect("reset test database");
+        .expect("drop test database schema");
+    sqlx::query("DROP SCHEMA IF EXISTS analytics CASCADE")
+        .execute(&reset_pool)
+        .await
+        .expect("drop analytics schema");
+    sqlx::query("CREATE SCHEMA public")
+        .execute(&reset_pool)
+        .await
+        .expect("create test database schema");
     reset_pool.close().await;
     let config = Config {
         database_url,

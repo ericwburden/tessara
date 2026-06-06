@@ -1318,19 +1318,15 @@ fn infer_plural_node_type_label(name: &str) -> String {
     if trimmed.ends_with('s') {
         return format!("{trimmed}es");
     }
-    if trimmed.ends_with('y') {
-        if trimmed.len() >= 2 {
-            let chars: Vec<char> = trimmed.chars().collect();
-            let stem: String = chars[..chars.len() - 1].iter().collect();
-            return format!("{stem}ies");
-        }
+    if trimmed.ends_with('y') && trimmed.len() >= 2 {
+        let chars: Vec<char> = trimmed.chars().collect();
+        let stem: String = chars[..chars.len() - 1].iter().collect();
+        return format!("{stem}ies");
     }
-    if trimmed.ends_with("fe") {
-        let stem = &trimmed[..trimmed.len() - 2];
+    if let Some(stem) = trimmed.strip_suffix("fe") {
         return format!("{stem}ves");
     }
-    if trimmed.ends_with("f") {
-        let stem = &trimmed[..trimmed.len() - 1];
+    if let Some(stem) = trimmed.strip_suffix("f") {
         return format!("{stem}ves");
     }
     format!("{trimmed}s")

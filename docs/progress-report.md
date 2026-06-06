@@ -1,5 +1,98 @@
 # Progress Report
 
+## 2026-06-06 - Sprint 2F Closeout
+
+- Completed:
+  - closed the Operations Status implementation for local review at `/operations`
+  - retained `operations:view` as a read-only capability separate from `analytics:refresh` and mutation permissions
+  - updated Operations metrics to focus on actionable exceptions: open workflow assignments, draft form responses, datasets needing attention, and reporting data status
+  - added standard searchable/filterable/paginated table behavior, mobile card rendering, and first-column links for workflow assignments and datasets
+  - added cleanup for `pw-permissions-*` Playwright entities before and after the permissions suite
+  - updated smoke and UAT scripts for the current native shell/API contracts
+  - completed Orpheum `implementation-and-release-prep` artifact checks
+  - marked Sprint 2F complete and Sprint 2G next in `docs/roadmap.md`
+- Validation:
+  - `cargo fmt --all -- --check` - passed
+  - `.\scripts\validate.ps1` - passed
+  - `cargo test -p tessara-api` - passed through `validate.ps1`; direct non-DB run also passed
+  - `cargo test -p tessara-web` - passed
+  - `npm --prefix end2end test` - passed, 26/26
+  - `.\scripts\validate-e2e.ps1 -BaseUrl "http://127.0.0.1:8080"` - passed, 26/26
+  - `.\scripts\smoke.ps1` - passed
+  - `.\scripts\local-launch.ps1` - passed; stack rebuilt and seeded
+  - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"` - passed
+  - `orpheum check run --json` - passed all artifact-backed checks; Orpheum v1 boundary checks remained `not_evaluable_in_v1`
+  - `git diff --check` - passed with CRLF normalization warnings for PowerShell scripts
+  - `cargo audit --quiet` - passed; `RUSTSEC-2023-0071` is ignored because SQLx MySQL is optional and unreachable in the Postgres-only dependency tree, and `paste` remains an allowed upstream warning via Leptos/DataFusion
+  - `cargo clippy --workspace --all-targets --all-features -- -D warnings` - passed after direct API lint fixes and explicit web-crate allowances for existing Leptos/style lint debt
+- Known release conditions:
+  - Audit still prints the allowed `paste` unmaintained warning from upstream Leptos/DataFusion dependencies.
+  - Web clippy cleanliness is enforced through documented crate-level allowances until the broader frontend patterns are refactored.
+- Sprint Handoff / Demo Instructions:
+  - local review stack is running at `http://localhost:8080`
+  - sign in as `admin@tessara.local` / `tessara-dev-admin`
+  - open `/operations` and confirm Operations appears in nav, status cards are action-oriented, workflow and dataset tables search/filter/page correctly, and row links navigate to the corresponding workflow-assignment filter or dataset detail
+  - sign in as `operator@tessara.local` / `tessara-dev-operator` to verify scoped Operations visibility
+  - sign in as `respondent@tessara.local` / `tessara-dev-respondent` to verify Operations is not visible
+- Acceptance Mapping:
+  - API access is protected by `operations:view`
+  - admin sees global status data; scoped operators see scoped rows only
+  - analytics status is no longer anonymous
+  - Operations UI is native, read-only, and uses standard table controls
+  - Playwright cleanup removes generated `pw-permissions-*` entities
+- Next Focus:
+  - Sprint 2G: Scoped Analytics And Reporting Compatibility Hardening
+  - future planning item: administrative workflow assignment detail page with reassignment, admin completion, deactivation, and capability decisions
+
+## 2026-06-05 - Sprint 2F Operations Status Implementation
+
+- Completed:
+  - applied Orpheum `implementation-and-release-prep`; active session is `sess_20260605_210732_b03e9afacb284734ae3266e175409474`
+  - locked the Sprint 2F implementation decision that Operations is a read-only `/operations` surface guarded by `operations:view`
+  - added `operations:view` to the capability catalog and seeded it into the built-in admin and operator roles
+  - added `GET /api/operations/status` with scoped workflow assignment and dataset readiness data
+  - protected existing analytics status reads behind `operations:view` while keeping `analytics:refresh` separate
+  - added native Operations navigation and route rendering for workflow assignment overview, dataset readiness, and reporting data status
+  - extended API and Playwright permission coverage around operations visibility and scoped data containment
+- Verification:
+  - `cargo fmt --all` - passed
+  - `cargo check --workspace` - passed
+  - `cargo test -p tessara-api --no-run` - passed
+  - focused operations API tests compiled and executed, but skipped DB assertions because `TEST_DATABASE_URL` was not set in this shell
+  - `npm --prefix end2end ci` - passed
+  - `npm --prefix end2end test -- --list` - passed and listed the new Operations visibility scenario
+  - `git diff --check` - passed
+  - `cargo clippy --workspace --all-targets --all-features -- -D warnings` - blocked by existing `tessara-web` clippy warnings outside the Operations slice
+
+## 2026-06-05 - Sprint 2F Kickoff Preparation
+
+- Completed:
+  - created Sprint 2F branch `codex/sprint-2f` and worktree `C:\Users\eric-dev\Projects\tessara-sprint-2f` from clean `main`
+  - reconciled the post-Sprint 2E Rust/UI styling detour as complete and moved the roadmap `(Next)` marker to Sprint 2F
+  - wrote `docs/sprints/sprint-2f-plan.md` as the implementation contract for Runtime Status And Materialization
+  - initialized Orpheum project support, configured the local catalog at `C:\Users\eric-dev\Projects\orpheum`, and mapped Sprint 2F to the `delivery-slice-planning`, `implementation-and-release-prep`, and `verification-and-release-gate` scenarios
+  - applied the Orpheum `delivery-slice-planning` scenario for Sprint 2F kickoff scoping; active session is `sess_20260605_201224_d2175270ad3445b1b8f35e8d4ce850ee`
+  - ran the initial Orpheum check; it failed because the full planning package artifacts were not authored yet
+  - backfilled the lightweight Orpheum planning package across product, architecture, planning, verification, and security/compliance docs
+  - reran `orpheum check run --json`; all artifact-backed checks passed, with only Orpheum v1 boundary/traceability checks marked `not_evaluable_in_v1`
+  - finalized and closed the Orpheum `delivery-slice-planning` session; the next implementation pass should apply `implementation-and-release-prep`
+- Planned verification:
+  - `cargo fmt --all`
+  - `.\scripts\validate.ps1`
+  - `cargo test -p tessara-api`
+  - `cargo test -p tessara-web`
+  - `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+  - `cargo audit`
+  - `npm --prefix end2end test`
+  - `.\scripts\validate-e2e.ps1 -BaseUrl "http://127.0.0.1:8080"`
+  - `.\scripts\smoke.ps1`
+  - `.\scripts\local-launch.ps1`
+  - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`
+  - `orpheum check run --json` for any applied Sprint 2F Orpheum scenario
+- Immediate implementation focus:
+  - inventory existing workflow runtime, submission, dataset, component, dashboard, maintenance, and refresh paths before building the smallest native operator monitoring surface
+  - decide route ownership and DTO boundaries, then apply Orpheum `implementation-and-release-prep` before broader code changes so implementation evidence is tracked from the start
+
 ## 2026-05-20 - Pre-RBAC Follow-Up Reconciliation
 
 - Completed:

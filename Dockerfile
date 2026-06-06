@@ -27,9 +27,11 @@ RUN apt-get update \
 WORKDIR /app
 COPY --from=builder /tmp/tessara-api /usr/local/bin/tessara-api
 COPY --from=builder /tmp/site /app/site
+COPY --from=builder /app/crates/tessara-api/migrations /app/migrations
 
 ENV LEPTOS_SITE_ROOT=/app/site
 ENV LEPTOS_SITE_PKG_DIR=pkg
+ENV TESSARA_MIGRATIONS_DIR=/app/migrations
 
 EXPOSE 8080
 CMD ["tessara-api"]

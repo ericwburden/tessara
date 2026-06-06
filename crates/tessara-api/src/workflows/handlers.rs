@@ -931,12 +931,11 @@ async fn promote_generated_workflow_if_needed_tx(
 
     let source: String = row.try_get("source")?;
     let source_form_id: Option<Uuid> = row.try_get("source_form_id")?;
-    if source == "generated_form" {
-        if let Some(form_id) = source_form_id {
-            if !generated_workflow_is_single_form_shortcut_tx(tx, workflow_id, form_id).await? {
-                promote_generated_workflow_tx(tx, workflow_id).await?;
-            }
-        }
+    if source == "generated_form"
+        && let Some(form_id) = source_form_id
+        && !generated_workflow_is_single_form_shortcut_tx(tx, workflow_id, form_id).await?
+    {
+        promote_generated_workflow_tx(tx, workflow_id).await?;
     }
     Ok(())
 }

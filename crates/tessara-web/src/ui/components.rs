@@ -23,7 +23,7 @@ struct NavItem {
     capabilities: &'static [&'static str],
 }
 
-const NAV_ITEMS: [NavItem; 9] = [
+const NAV_ITEMS: [NavItem; 10] = [
     NavItem {
         key: "home",
         href: "/",
@@ -62,6 +62,13 @@ const NAV_ITEMS: [NavItem; 9] = [
             "submissions:respond",
             "submissions:manage",
         ],
+    },
+    NavItem {
+        key: "operations",
+        href: "/operations",
+        label: "Operations",
+        section: "Main",
+        capabilities: &["operations:view"],
     },
     NavItem {
         key: "components",
@@ -397,6 +404,7 @@ fn NavIcon(route_key: &'static str) -> impl IntoView {
         "forms" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><FileText class="sidebar-link__icon"/></span> }.into_any(),
         "workflows" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><Workflow class="sidebar-link__icon"/></span> }.into_any(),
         "responses" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><ClipboardCheck class="sidebar-link__icon"/></span> }.into_any(),
+        "operations" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><Monitor class="sidebar-link__icon"/></span> }.into_any(),
         "components" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><Blocks class="sidebar-link__icon"/></span> }.into_any(),
         "dashboards" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><LayoutDashboard class="sidebar-link__icon"/></span> }.into_any(),
         "datasets" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><Database class="sidebar-link__icon"/></span> }.into_any(),
@@ -952,9 +960,9 @@ pub fn InfoRow(label: &'static str, value: &'static str) -> impl IntoView {
 }
 
 #[component]
-pub fn StatusBadge(label: &'static str) -> impl IntoView {
-    let class = match label {
-        "Done" => "status-badge is-success",
+pub fn StatusBadge(#[prop(into)] label: String) -> impl IntoView {
+    let class = match label.as_str() {
+        "Available" | "Done" | "Ready" | "Steps Complete" => "status-badge is-success",
         "Error" => "status-badge is-danger",
         "In Progress" => "status-badge is-warning",
         "Pending" => "status-badge is-info",

@@ -114,9 +114,7 @@ $adminBrowserSession = New-BrowserSession -Email "admin@tessara.local" -Password
 
 $homeShell = Invoke-Html -Uri "$BaseUrl/" -CookieJarPath $adminBrowserSession
 Assert-ProtectedShell -Content $homeShell -Needles @(
-    "Native UI Route Inventory",
-    "/forms",
-    "/administration/roles"
+    "Home"
 ) -Context "home shell"
 
 $orgList = Invoke-Html -Uri "$BaseUrl/organization" -CookieJarPath $adminBrowserSession

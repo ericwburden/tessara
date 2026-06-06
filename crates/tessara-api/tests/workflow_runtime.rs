@@ -2407,6 +2407,82 @@ async fn forms_and_hierarchy_endpoints_accept_cookie_sessions_without_authorizat
 }
 
 #[tokio::test]
+async fn operations_status_requires_view_capability_and_exposes_assignment_readiness() {
+    let _guard = TEST_DATABASE_LOCK.lock().await;
+    let Some(app) = test_app().await else { return };
+    let admin_token = login_token(app.clone()).await;
+
+    let _seed = request_json(
+        app.clone(),
+        authorized_request("POST", "/api/demo/seed", &admin_token, None),
+    )
+    .await;
+
+    let status = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/operations/status", &admin_token, None),
+    )
+    .await;
+    let datasets = status["dataset_readiness"]["datasets"]
+        .as_array()
+        .expect("operations status should include dataset readiness");
+    assert!(
+        datasets
+            .iter()
+            .any(|dataset| dataset["readiness"].as_str().is_some())
+    );
+    let dataset_attention_count = datasets
+        .iter()
+        .filter(|dataset| dataset["readiness"].as_str() != Some("Ready"))
+        .count() as i64;
+    assert_eq!(
+        status["summary"]["dataset_attention_count"]
+            .as_i64()
+            .expect("operations summary should expose dataset attention count"),
+        dataset_attention_count
+    );
+    assert!(
+        status["workflow_assignments"]
+            .as_array()
+            .expect("operations status should include workflow assignments")
+            .iter()
+            .any(|assignment| {
+                assignment["workflow_id"].as_str().is_some()
+                    && assignment["workflow_assignment_id"].as_str().is_some()
+            })
+    );
+
+    let operator_token = login_token_for(
+        app.clone(),
+        "operator@tessara.local",
+        "tessara-dev-operator",
+    )
+    .await;
+    let operator_status = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/operations/status", &operator_token, None),
+    )
+    .await;
+    assert!(
+        operator_status["summary"]["open_workflow_assignment_count"]
+            .as_i64()
+            .expect("operator operations summary should expose scoped open assignment count")
+            >= 0
+    );
+
+    let anonymous_analytics = request_status_and_json(
+        app,
+        Request::builder()
+            .method("GET")
+            .uri("/api/admin/analytics/status")
+            .body(Body::empty())
+            .expect("valid anonymous analytics status request"),
+    )
+    .await;
+    assert_eq!(anonymous_analytics.0, StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
 async fn invalid_login_uses_stable_error_payload() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
     let Some(app) = test_app().await else { return };

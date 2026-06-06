@@ -1,0 +1,7 @@
+[advisories]
+ignore = [
+    # `sqlx-mysql` remains listed as an optional package in `Cargo.lock`, but
+    # this workspace disables SQLx defaults and uses only the Postgres feature.
+    # `cargo tree -i sqlx-mysql` confirms it is not reachable.
+    "RUSTSEC-2023-0071",
+]

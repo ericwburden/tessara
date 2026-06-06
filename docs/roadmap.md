@@ -1,6 +1,6 @@
 # Tessara Roadmap
 
-This roadmap is authoritative as of May 17, 2026. It starts from the current implemented baseline after the native UI refresh, identifies the transition from the current reporting stack to the re-aligned target model, and defines future delivery as explicit vertical-slice sprints.
+This roadmap is authoritative as of June 5, 2026. It starts from the current implemented baseline after the native UI refresh and RBAC route coverage cleanup, identifies the transition from the current reporting stack to the re-aligned target model, and defines future delivery as explicit vertical-slice sprints.
 
 ## Delivery Rule
 
@@ -470,9 +470,9 @@ This section records the completed foundation sequence that led to the current n
 
 **User-testable exit condition:** a tester can create a workflow with more than one step, assign it from both an organization node and the global assignment console using only valid node/workflow/assignee combinations, start it, complete the first step, and observe the next step become the active work item through the application UI.
 
-### Post-Sprint 2E Design Detour: Rust/UI Styling And Component Alignment (Next)
+### Post-Sprint 2E Design Detour: Rust/UI Styling And Component Alignment (Complete)
 
-**Outcome:** the remaining workflow, assignment, response, and home UX feedback gathered during Sprint 2E is consolidated into a coherent component and stylesheet direction before the user/RBAC overhaul compounds the current styling debt.
+**Outcome:** the remaining workflow, assignment, response, home, and administration UX feedback gathered during Sprint 2E was consolidated into a coherent component, table, permissions, and stylesheet direction before the next functionality sprint.
 
 **Already landed after the refresh:**
 
@@ -483,14 +483,14 @@ This section records the completed foundation sequence that led to the current n
 - native shared UI primitives now cover buttons, icon buttons, status badges, data tables, searchable tables, filters, and common form action containers
 - Playwright and standard validation wrappers are available through `scripts/validate-e2e.ps1` and `scripts/validate.ps1`
 
-**Build:**
+**Completed reconciliation:**
 
-- finish the remaining Rust/UI table polish by deciding which lists need sort, page-size, pagination, and row-count summaries beyond the search/filter patterns already present
-- promote remaining route-local assignee, status, and action treatments into a consistent chip/badge/icon-button vocabulary
-- finish reusable form action/footer spacing, including the 16px top margin required for bottom-of-form button containers
-- consolidate stylesheet organization around the current `style/main.css` delivery path or introduce the documented SCSS entrypoint and named global/component/feature partials
-- add lightweight deployed-CSS verification so future UI edits prove that the stylesheet selectors being changed are the selectors being served
-- carry forward only the residual Sprint 2E UX comments without changing the accepted Sprint 2E functional behavior
+- table, queue, picker, and detail-readout surfaces now have approved Rust/UI-style direction in `docs/ui-table-inventory.md`
+- workflow, assignment, response, form, organization, administration user, and administration role tables have approved pagination, row-count, search/filter, mobile, and action treatments where applicable
+- RBAC route coverage cleanup landed after the detour planning notes and updated the permissions scenario documentation
+- `style/main.css` remains the documented active stylesheet entrypoint through the Cargo Leptos pipeline for the next functionality sprint
+- deployed selector verification remains part of the Sprint 2F validation story rather than a standalone blocker
+- residual UX polish is carried forward only when Sprint 2F touches the same runtime, materialization, or monitoring surfaces
 
 **Application UI delivered this detour:**
 
@@ -499,9 +499,9 @@ This section records the completed foundation sequence that led to the current n
 - response and home work queues visually prepared for later delegated-work redesign without changing assignment/runtime rules
 - stylesheet delivery and deployed-selector verification documented enough that UI edits can be validated without manual asset-path guessing
 
-**User-testable exit condition:** a tester can browse the touched workflow, assignment, response, and home routes and see consistent Rust/UI-style tables, tags, icon actions, and form button spacing while all Sprint 2E workflow behavior and the generated single-form workflow shortcut remain intact.
+**User-testable exit condition:** a tester can browse the touched workflow, assignment, response, home, forms, organization, and administration routes and see consistent Rust/UI-style tables, tags, icon actions, access behavior, and form button spacing while all Sprint 2E workflow behavior and the generated single-form workflow shortcut remain intact.
 
-### Sprint 2F: Runtime Status And Materialization Slice
+### Sprint 2F: Runtime Status And Materialization Slice (Complete)
 
 **Outcome:** runtime execution and materialization readiness are visible and usable.
 
@@ -522,7 +522,7 @@ This section records the completed foundation sequence that led to the current n
 
 **User-testable exit condition:** operators can inspect runtime and readiness through the app while end-user flows remain working.
 
-### Sprint 2G: Scoped Analytics And Reporting Compatibility Hardening
+### Sprint 2G: Scoped Analytics And Reporting Compatibility Hardening (Next)
 
 **Outcome:** the current transitional analytical stack is safe enough to keep serving compatibility use cases while dataset and component authoring expand.
 

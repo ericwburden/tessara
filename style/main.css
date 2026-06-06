@@ -549,6 +549,12 @@ input {
   padding: 1.25rem;
 }
 
+.route-panel__section {
+  display: grid;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
 .page-header {
   display: flex;
   align-items: flex-start;
@@ -560,6 +566,47 @@ input {
 .empty-state p,
 .login-panel p {
   color: var(--color-muted);
+}
+
+.operations-summary {
+  gap: 1rem;
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(10rem, 100%), 1fr));
+  gap: 0.6rem;
+}
+
+.operations-action-metrics {
+  grid-template-columns: repeat(auto-fit, minmax(min(12rem, 100%), 1fr));
+}
+
+.metric-card {
+  display: grid;
+  align-content: start;
+  gap: 0.45rem;
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-table-row);
+  padding: 0.85rem;
+}
+
+.metric-card span {
+  color: var(--color-muted);
+  font-size: 0.72rem;
+  font-weight: 850;
+  letter-spacing: 0.06em;
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+
+.metric-card strong {
+  color: var(--color-text);
+  font-family: var(--font-heading);
+  font-size: 2rem;
+  line-height: 1;
 }
 
 .info-list-table {
@@ -1476,6 +1523,14 @@ input {
 
 .searchable-data-table__filter select {
   min-width: 10rem;
+}
+
+.operations-mobile-cards {
+  display: none;
+}
+
+.operations-mobile-card {
+  background: var(--color-table-row);
 }
 
 .tabs {
@@ -3595,6 +3650,21 @@ input {
     width: auto;
     max-width: none;
     min-width: 0;
+  }
+
+  .operations-responsive-table > .table-wrap {
+    display: none;
+  }
+
+  .operations-responsive-table .searchable-data-table__search {
+    width: auto;
+    max-width: none;
+    min-width: 0;
+  }
+
+  .operations-mobile-cards {
+    display: grid;
+    gap: 0.75rem;
   }
 
   .forms-list__toolbar {

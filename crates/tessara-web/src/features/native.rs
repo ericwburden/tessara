@@ -12843,6 +12843,12 @@ pub fn WorkflowAssignmentsPage() -> impl IntoView {
     Effect::new(move |_| {
         load_workflow_assignments(assignments, assignments_loading, assignments_error);
         load_workflow_assignment_candidates(candidates, candidates_loading, candidates_error);
+        #[cfg(feature = "hydrate")]
+        {
+            if let Some(assignment_id) = current_search_param("assignment_id") {
+                assignment_search.set(assignment_id);
+            }
+        }
     });
 
     Effect::new(move |_| {
@@ -13054,6 +13060,7 @@ pub fn WorkflowAssignmentsPage() -> impl IntoView {
                             assignment.node_name.as_str(),
                             assignment.account_display_name.as_str(),
                             assignment.account_email.as_str(),
+                            assignment.id.as_str(),
                         ],
                     )
             })
@@ -16284,6 +16291,10 @@ pub use placeholders::{
     ComponentsDetailPage, ComponentsPage, DashboardsDetailPage, DashboardsEditPage,
     DashboardsNewPage, DashboardsPage, DatasetsDetailPage, DatasetsPage, NotFoundPage,
 };
+
+#[path = "native/operations.rs"]
+mod operations;
+pub use operations::OperationsPage;
 
 #[path = "native/responses.rs"]
 mod responses;

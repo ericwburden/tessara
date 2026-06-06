@@ -1,7 +1,10 @@
 import { expect, request, test, type APIRequestContext, type APIResponse, type Page } from "@playwright/test";
+import { execFileSync } from "node:child_process";
+import { resolve } from "node:path";
 
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:8080";
 const RUN_ID = `pw-permissions-${Date.now()}`;
+const PLAYWRIGHT_ENTITY_PREFIX = "pw-permissions-";
 const PASSWORD = "tessara-dev-permissions";
 
 type IdResponse = { id: string };
@@ -36,6 +39,15 @@ type ComponentSummary = { id: string; name: string; slug: string };
 type ComponentDefinition = { id: string; name: string; versions: unknown[] };
 type DashboardSummary = { id: string; name: string; visibility_nodes: VisibilityNode[] };
 type DashboardDefinition = DashboardSummary & { description: string | null };
+type OperationsStatus = {
+  summary: {
+    open_workflow_assignment_count: number;
+    draft_response_count: number;
+    dataset_attention_count: number;
+  };
+  workflow_assignments: Array<{ workflow_assignment_id: string; workflow_id: string; workflow_name: string; node_id: string }>;
+  dataset_readiness: { datasets: Array<{ dataset_id: string; readiness: string }> };
+};
 type WorkflowAssignmentCandidate = {
   workflow_version_id: string;
   workflow_id: string;
@@ -243,6 +255,7 @@ async function setupFixtures(): Promise<FixtureState> {
       "submissions:read_own",
       "submissions:respond",
       "submissions:manage",
+      "operations:view",
       "datasets:read",
       "components:read",
       "dashboards:read",
@@ -256,6 +269,7 @@ async function setupFixtures(): Promise<FixtureState> {
       "submissions:read_own",
       "submissions:respond",
       "submissions:manage",
+      "operations:view",
       "datasets:read",
       "components:read",
       "dashboards:read",
@@ -453,13 +467,120 @@ async function setupFixtures(): Promise<FixtureState> {
   };
 }
 
+function cleanupPlaywrightEntities() {
+  const sql = `
+CREATE TEMP TABLE pw_cleanup_accounts AS
+SELECT id FROM accounts
+  WHERE email LIKE '${PLAYWRIGHT_ENTITY_PREFIX}%'
+     OR display_name LIKE '${PLAYWRIGHT_ENTITY_PREFIX}%';
+
+CREATE TEMP TABLE pw_cleanup_forms AS
+SELECT id FROM forms
+  WHERE name LIKE '${PLAYWRIGHT_ENTITY_PREFIX}%'
+     OR slug LIKE '${PLAYWRIGHT_ENTITY_PREFIX}%';
+
+CREATE TEMP TABLE pw_cleanup_workflows AS
+SELECT id FROM workflows
+  WHERE name LIKE '${PLAYWRIGHT_ENTITY_PREFIX}%'
+     OR slug LIKE '${PLAYWRIGHT_ENTITY_PREFIX}%';
+
+CREATE TEMP TABLE pw_cleanup_workflow_versions AS
+SELECT workflow_versions.id
+  FROM workflow_versions
+  JOIN pw_cleanup_workflows ON pw_cleanup_workflows.id = workflow_versions.workflow_id;
+
+CREATE TEMP TABLE pw_cleanup_workflow_assignments AS
+SELECT workflow_assignments.id
+  FROM workflow_assignments
+  LEFT JOIN pw_cleanup_accounts account_scope ON account_scope.id = workflow_assignments.account_id
+  LEFT JOIN pw_cleanup_accounts assigner_scope ON assigner_scope.id = workflow_assignments.assigned_by_account_id
+  LEFT JOIN pw_cleanup_workflow_versions ON pw_cleanup_workflow_versions.id = workflow_assignments.workflow_version_id
+  WHERE account_scope.id IS NOT NULL
+     OR assigner_scope.id IS NOT NULL
+     OR pw_cleanup_workflow_versions.id IS NOT NULL;
+
+CREATE TEMP TABLE pw_cleanup_workflow_instances AS
+SELECT workflow_instances.id
+  FROM workflow_instances
+  LEFT JOIN pw_cleanup_workflow_assignments ON pw_cleanup_workflow_assignments.id = workflow_instances.workflow_assignment_id
+  LEFT JOIN pw_cleanup_accounts assignee_scope ON assignee_scope.id = workflow_instances.assignee_account_id
+  LEFT JOIN pw_cleanup_accounts starter_scope ON starter_scope.id = workflow_instances.started_by_account_id
+  WHERE pw_cleanup_workflow_assignments.id IS NOT NULL
+     OR assignee_scope.id IS NOT NULL
+     OR starter_scope.id IS NOT NULL;
+
+CREATE TEMP TABLE pw_cleanup_submissions AS
+SELECT submissions.id
+  FROM submissions
+  LEFT JOIN pw_cleanup_workflow_assignments ON pw_cleanup_workflow_assignments.id = submissions.workflow_assignment_id
+  LEFT JOIN pw_cleanup_workflow_instances ON pw_cleanup_workflow_instances.id = submissions.workflow_instance_id
+  LEFT JOIN form_versions ON form_versions.id = submissions.form_version_id
+  LEFT JOIN pw_cleanup_forms ON pw_cleanup_forms.id = form_versions.form_id
+  WHERE pw_cleanup_workflow_assignments.id IS NOT NULL
+     OR pw_cleanup_workflow_instances.id IS NOT NULL
+     OR pw_cleanup_forms.id IS NOT NULL;
+
+DELETE FROM analytics.submission_value_fact
+WHERE submission_id IN (SELECT id FROM pw_cleanup_submissions);
+
+DELETE FROM analytics.submission_fact
+WHERE submission_id IN (SELECT id FROM pw_cleanup_submissions);
+
+DELETE FROM submissions
+WHERE id IN (SELECT id FROM pw_cleanup_submissions);
+
+DELETE FROM workflow_instances
+WHERE id IN (SELECT id FROM pw_cleanup_workflow_instances);
+
+DELETE FROM workflow_assignments
+WHERE id IN (SELECT id FROM pw_cleanup_workflow_assignments);
+
+DELETE FROM dashboards
+WHERE name LIKE '${PLAYWRIGHT_ENTITY_PREFIX}%';
+
+DELETE FROM workflows
+WHERE name LIKE '${PLAYWRIGHT_ENTITY_PREFIX}%'
+   OR slug LIKE '${PLAYWRIGHT_ENTITY_PREFIX}%';
+
+DELETE FROM forms
+WHERE name LIKE '${PLAYWRIGHT_ENTITY_PREFIX}%'
+   OR slug LIKE '${PLAYWRIGHT_ENTITY_PREFIX}%';
+
+DELETE FROM node_types
+WHERE name LIKE '${PLAYWRIGHT_ENTITY_PREFIX}%'
+   OR slug LIKE '${PLAYWRIGHT_ENTITY_PREFIX}%';
+
+DELETE FROM accounts
+WHERE email LIKE '${PLAYWRIGHT_ENTITY_PREFIX}%'
+   OR display_name LIKE '${PLAYWRIGHT_ENTITY_PREFIX}%';
+
+DELETE FROM roles
+WHERE name LIKE '${PLAYWRIGHT_ENTITY_PREFIX}%';
+`;
+
+  execFileSync(
+    "docker",
+    ["compose", "exec", "-T", "postgres", "psql", "-v", "ON_ERROR_STOP=1", "-U", "tessara", "-d", "tessara"],
+    {
+      cwd: resolve(process.cwd(), ".."),
+      input: sql,
+      stdio: ["pipe", "pipe", "pipe"],
+    },
+  );
+}
+
 test.describe.serial("capability + scope + ownership permissions", () => {
   test.beforeAll(async () => {
+    cleanupPlaywrightEntities();
     fixtures = await setupFixtures();
   });
 
   test.afterAll(async () => {
-    await Promise.all(contexts.map((context) => context.dispose()));
+    try {
+      cleanupPlaywrightEntities();
+    } finally {
+      await Promise.all(contexts.map((context) => context.dispose()));
+    }
   });
 
   test("no-capability users are denied protected capability surfaces", async () => {
@@ -474,6 +595,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       "/api/workflow-assignments",
       "/api/workflow-assignments/pending",
       "/api/submissions",
+      "/api/operations/status",
       "/api/datasets",
       "/api/components",
       "/api/dashboards",
@@ -493,6 +615,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
 
     await page.goto("/");
     await expect(page.getByRole("link", { name: "Administration" })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Operations" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Forms" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Responses" })).toBeVisible();
   });
@@ -785,6 +908,14 @@ test.describe.serial("capability + scope + ownership permissions", () => {
     );
     expect(assignments.some((item) => item.id === fixtures.inScopeAssignmentId)).toBe(true);
     expect(assignments.some((item) => item.id === fixtures.outOfScopeAssignmentId)).toBe(true);
+
+    const operations = await getJson<OperationsStatus>(fixtures.admin, "/api/operations/status");
+    expect(operations.summary.open_workflow_assignment_count).toBeGreaterThanOrEqual(0);
+    expect(operations.summary.dataset_attention_count).toBe(
+      operations.dataset_readiness.datasets.filter((item) => item.readiness !== "Ready").length,
+    );
+    expect(operations.dataset_readiness.datasets.some((item) => item.dataset_id === fixtures.inScopeDataset.id)).toBe(true);
+    expect(operations.dataset_readiness.datasets.some((item) => item.dataset_id === fixtures.outOfScopeDataset.id)).toBe(true);
   });
 
   test("scoped manager reads in-scope surfaces and is denied out-of-scope surfaces", async () => {
@@ -832,6 +963,37 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       `/api/dashboards/${fixtures.outOfScopeDashboard.id}`,
       [403],
     );
+
+    const operations = await getJson<OperationsStatus>(fixtures.scopedManager, "/api/operations/status");
+    expect(operations.dataset_readiness.datasets.some((item) => item.dataset_id === fixtures.inScopeDataset.id)).toBe(true);
+    expect(operations.dataset_readiness.datasets.some((item) => item.dataset_id === fixtures.outOfScopeDataset.id)).toBe(false);
+    expect(operations.workflow_assignments.every((item) => fixtures.inScopeNodeIds.has(item.node_id))).toBe(true);
+  });
+
+  test("operations route is visible only to operations viewers", async ({ page }) => {
+    await signInPage(page, `${RUN_ID}-scoped-manager@tessara.local`);
+    const operations = await getJson<OperationsStatus>(fixtures.scopedManager, "/api/operations/status");
+    const linkedWorkflow = requireItem(
+      operations.workflow_assignments,
+      (item) => item.workflow_assignment_id.length > 0,
+      "operations should include a workflow assignment",
+    );
+    const linkedDataset = requireItem(
+      operations.dataset_readiness.datasets,
+      (item) => item.dataset_id.length > 0,
+      "operations should include a dataset readiness row",
+    );
+
+    await page.goto("/operations");
+    await expect(page.getByRole("heading", { level: 1, name: "Operations" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Workflow Assignments" })).toBeVisible();
+    await expect(page.locator(`a[href="/workflows/assignments?assignment_id=${linkedWorkflow.workflow_assignment_id}"]`)).not.toHaveCount(0);
+    await expect(page.locator(`a[href="/datasets/${linkedDataset.dataset_id}"]`)).not.toHaveCount(0);
+
+    await signInPage(page, `${RUN_ID}-no-access@tessara.local`);
+    await page.goto("/");
+    await expect(page.getByRole("link", { name: "Operations" })).toHaveCount(0);
+    await expectStatus(fixtures.noAccess, "get", "/api/operations/status", [403]);
   });
 
   test("workflow assignment candidates and starts respect manager scope", async () => {

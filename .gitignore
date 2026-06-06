@@ -29,3 +29,6 @@ Thumbs.db
 
 # Local planning artifacts not tracked in git
 docs/archive
+.orpheum/
+.orpheum-archive/
+.codex/orpheum/

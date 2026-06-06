@@ -55,6 +55,7 @@ pub fn App() -> impl IntoView {
                 <Route path=path!("/responses/new") view=native::ResponsesNewPage ssr=PRIMARY_SSR_MODE/>
                 <Route path=path!("/responses/:submission_id") view=native::ResponsesDetailPage ssr=PRIMARY_SSR_MODE/>
                 <Route path=path!("/responses/:submission_id/edit") view=native::ResponsesEditPage ssr=PRIMARY_SSR_MODE/>
+                <Route path=path!("/operations") view=native::OperationsPage ssr=PRIMARY_SSR_MODE/>
                 <Route path=path!("/components") view=native::ComponentsPage ssr=PRIMARY_SSR_MODE/>
                 <Route path=path!("/components/:component_ref") view=native::ComponentsDetailPage ssr=PRIMARY_SSR_MODE/>
                 <Route path=path!("/dashboards") view=native::DashboardsPage ssr=PRIMARY_SSR_MODE/>

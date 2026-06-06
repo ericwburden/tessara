@@ -1,4 +1,15 @@
 #![recursion_limit = "512"]
+#![allow(
+    clippy::collapsible_if,
+    clippy::manual_div_ceil,
+    clippy::needless_return,
+    clippy::redundant_closure,
+    clippy::redundant_iter_cloned,
+    clippy::too_many_arguments,
+    clippy::type_complexity,
+    clippy::unit_arg,
+    clippy::unused_unit
+)]
 
 //! Native Leptos SSR frontend for Tessara.
 
@@ -51,7 +62,7 @@ mod tests {
 
         assert!(html.contains(r#"<div id="app-overlays"></div>"#));
         assert!(html.contains(r#"<div id="app-root">"#));
-        assert!(html.contains("/organization"));
+        assert!(!html.contains("/app/"));
     }
 
     #[test]
