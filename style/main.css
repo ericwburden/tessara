@@ -1576,6 +1576,49 @@ input {
   gap: 0.75rem;
 }
 
+.dataset-expression-preview {
+  display: grid;
+  gap: 0.45rem;
+  border: 1px solid var(--semantic-info-border);
+  border-radius: var(--radius);
+  background: var(--semantic-info-soft);
+  padding: 0.8rem 0.9rem;
+}
+
+.dataset-expression-preview span {
+  color: var(--color-muted);
+  font-size: 0.78rem;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.dataset-expression-preview code,
+.dataset-sql-panel {
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.dataset-expression-preview code {
+  color: var(--color-text);
+  font-weight: 750;
+}
+
+.dataset-sql-panel {
+  max-height: 24rem;
+  margin: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-control);
+  color: var(--color-text);
+  padding: 1rem;
+}
+
+.dataset-join-key-grid {
+  grid-column: span 1;
+}
+
 .dataset-editor-row {
   align-items: end;
   display: grid;

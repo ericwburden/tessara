@@ -4,7 +4,11 @@
 //! visibility enforcement, and table execution; public request/response shapes
 //! live in `dto`.
 
-use std::collections::{BTreeMap, HashMap};
+use std::{
+    collections::{BTreeMap, BTreeSet, HashMap},
+    future::Future,
+    pin::Pin,
+};
 
 use axum::{
     Json, Router,
@@ -12,7 +16,7 @@ use axum::{
     http::HeaderMap,
     routing::{get, post},
 };
-use sqlx::{Postgres, Row, Transaction};
+use sqlx::{Column, Postgres, Row, Transaction};
 use tessara_datasets::{
     DatasetCompositionMode, DatasetGrain, DatasetSelectionRule, validate_dataset_shape,
 };
@@ -21,7 +25,7 @@ use uuid::Uuid;
 mod dto;
 
 pub use dto::{
-    CreateDatasetFieldRequest, CreateDatasetRequest, CreateDatasetSourceRequest, DatasetDefinition,
+    CreateDatasetFieldRequest, CreateDatasetRequest, DatasetDefinition, DatasetExpressionRequest,
     DatasetFieldDefinition, DatasetSourceDefinition, DatasetSummary, DatasetTable, DatasetTableRow,
     DatasetVisibilityNodeSummary,
 };
@@ -45,14 +49,17 @@ pub(crate) fn routes() -> Router<AppState> {
         .route("/api/datasets/{dataset_id}/table", get(run_dataset_table))
 }
 
+#[derive(Clone)]
 struct ValidatedDatasetSource {
     source_alias: String,
     form_id: Option<Uuid>,
     form_version_major: Option<i32>,
+    dataset_revision_id: Option<Uuid>,
     selection_rule: DatasetSelectionRule,
     position: i32,
 }
 
+#[derive(Clone)]
 struct ValidatedDatasetField {
     key: String,
     label: String,
@@ -60,6 +67,30 @@ struct ValidatedDatasetField {
     source_field_key: String,
     field_type: String,
     position: i32,
+}
+
+struct CompiledDataset {
+    definition_ast: DatasetExpressionRequest,
+    generated_sql: String,
+    sources: Vec<ValidatedDatasetSource>,
+    fields: Vec<ValidatedDatasetField>,
+}
+
+struct QueryCompiler<'a> {
+    pool: &'a sqlx::PgPool,
+    account: &'a auth::AccountContext,
+    dataset_id: Option<Uuid>,
+    projected_fields: &'a [CreateDatasetFieldRequest],
+    field_keys: Vec<String>,
+    ctes: Vec<String>,
+    cte_index: usize,
+    aliases: BTreeSet<String>,
+    sources: Vec<ValidatedDatasetSource>,
+}
+
+struct CompiledExpression {
+    cte_name: String,
+    columns: BTreeSet<String>,
 }
 
 /// Creates a semantic dataset definition and its first immutable revision.
@@ -82,34 +113,44 @@ pub async fn create_dataset(
     .await?;
     let grain = DatasetGrain::parse(&payload.grain)
         .map_err(|error| ApiError::BadRequest(error.to_string()))?;
-    let composition_mode = DatasetCompositionMode::parse(&payload.composition_mode)
-        .map_err(|error| ApiError::BadRequest(error.to_string()))?;
-    validate_dataset_shape(
-        payload
-            .sources
-            .iter()
-            .map(|source| source.source_alias.as_str()),
-        payload.fields.iter().map(|field| field.key.as_str()),
-    )
-    .map_err(|error| ApiError::BadRequest(error.to_string()))?;
-    let sources = validate_dataset_sources(&state.pool, &account, payload.sources).await?;
-    let fields = validate_dataset_fields(&state.pool, &sources, payload.fields).await?;
+    if grain != DatasetGrain::Submission {
+        return Err(ApiError::BadRequest(
+            "dataset query designer currently supports submission grain".into(),
+        ));
+    }
+    let composition_mode = top_level_composition_mode(&payload)?;
+    let projected_fields = request_projected_fields(&payload);
 
     let mut tx = state.pool.begin().await?;
     let dataset_id: Uuid = sqlx::query_scalar(
         "INSERT INTO datasets (name, slug, grain, composition_mode) VALUES ($1, $2, $3, $4) RETURNING id",
     )
-    .bind(payload.name)
-    .bind(payload.slug)
+    .bind(&payload.name)
+    .bind(&payload.slug)
     .bind(grain.as_str())
     .bind(composition_mode.as_str())
     .fetch_one(&mut *tx)
     .await?;
 
-    insert_dataset_sources(&mut tx, dataset_id, &sources).await?;
-    insert_dataset_fields(&mut tx, dataset_id, &fields).await?;
+    let compiled = compile_dataset_definition(
+        &state.pool,
+        &account,
+        Some(dataset_id),
+        &payload,
+        &projected_fields,
+    )
+    .await?;
+    insert_dataset_sources(&mut tx, dataset_id, &compiled.sources).await?;
+    insert_dataset_fields(&mut tx, dataset_id, &compiled.fields).await?;
     replace_dataset_scope_nodes_tx(&mut tx, dataset_id, &payload.visibility_node_ids).await?;
-    insert_dataset_revision(&mut tx, dataset_id, "Initial published definition").await?;
+    let revision_id = insert_dataset_revision(
+        &mut tx,
+        dataset_id,
+        "Initial published definition",
+        &compiled,
+    )
+    .await?;
+    materialize_dataset_revision(&mut tx, revision_id, &compiled).await?;
     tx.commit().await?;
 
     Ok(Json(IdResponse { id: dataset_id }))
@@ -139,18 +180,21 @@ pub async fn update_dataset(
     .await?;
     let grain = DatasetGrain::parse(&payload.grain)
         .map_err(|error| ApiError::BadRequest(error.to_string()))?;
-    let composition_mode = DatasetCompositionMode::parse(&payload.composition_mode)
-        .map_err(|error| ApiError::BadRequest(error.to_string()))?;
-    validate_dataset_shape(
-        payload
-            .sources
-            .iter()
-            .map(|source| source.source_alias.as_str()),
-        payload.fields.iter().map(|field| field.key.as_str()),
+    if grain != DatasetGrain::Submission {
+        return Err(ApiError::BadRequest(
+            "dataset query designer currently supports submission grain".into(),
+        ));
+    }
+    let composition_mode = top_level_composition_mode(&payload)?;
+    let projected_fields = request_projected_fields(&payload);
+    let compiled = compile_dataset_definition(
+        &state.pool,
+        &account,
+        Some(dataset_id),
+        &payload,
+        &projected_fields,
     )
-    .map_err(|error| ApiError::BadRequest(error.to_string()))?;
-    let sources = validate_dataset_sources(&state.pool, &account, payload.sources).await?;
-    let fields = validate_dataset_fields(&state.pool, &sources, payload.fields).await?;
+    .await?;
 
     let mut tx = state.pool.begin().await?;
     sqlx::query(
@@ -171,10 +215,17 @@ pub async fn update_dataset(
         .bind(dataset_id)
         .execute(&mut *tx)
         .await?;
-    insert_dataset_sources(&mut tx, dataset_id, &sources).await?;
-    insert_dataset_fields(&mut tx, dataset_id, &fields).await?;
+    insert_dataset_sources(&mut tx, dataset_id, &compiled.sources).await?;
+    insert_dataset_fields(&mut tx, dataset_id, &compiled.fields).await?;
     replace_dataset_scope_nodes_tx(&mut tx, dataset_id, &payload.visibility_node_ids).await?;
-    insert_dataset_revision(&mut tx, dataset_id, "Published definition update").await?;
+    let revision_id = insert_dataset_revision(
+        &mut tx,
+        dataset_id,
+        "Published definition update",
+        &compiled,
+    )
+    .await?;
+    materialize_dataset_revision(&mut tx, revision_id, &compiled).await?;
     tx.commit().await?;
 
     Ok(Json(IdResponse { id: dataset_id }))
@@ -218,6 +269,8 @@ pub async fn list_datasets(
             datasets.slug,
             datasets.grain,
             datasets.composition_mode,
+            current_revisions.materialized_row_count,
+            current_revisions.materialized_at,
             COUNT(DISTINCT dataset_sources.id) AS source_count,
             COUNT(DISTINCT dataset_fields.id) AS field_count
         FROM datasets
@@ -231,6 +284,8 @@ pub async fn list_datasets(
         GROUP BY
             datasets.id,
             current_revisions.id,
+            current_revisions.materialized_row_count,
+            current_revisions.materialized_at,
             datasets.name,
             datasets.slug,
             datasets.grain,
@@ -253,6 +308,8 @@ pub async fn list_datasets(
             datasets.slug,
             datasets.grain,
             datasets.composition_mode,
+            current_revisions.materialized_row_count,
+            current_revisions.materialized_at,
             COUNT(DISTINCT dataset_sources.id) AS source_count,
             COUNT(DISTINCT dataset_fields.id) AS field_count
         FROM datasets
@@ -264,6 +321,8 @@ pub async fn list_datasets(
         GROUP BY
             datasets.id,
             current_revisions.id,
+            current_revisions.materialized_row_count,
+            current_revisions.materialized_at,
             datasets.name,
             datasets.slug,
             datasets.grain,
@@ -299,6 +358,8 @@ pub async fn list_datasets(
                 slug: row.try_get("slug")?,
                 grain: row.try_get("grain")?,
                 composition_mode: row.try_get("composition_mode")?,
+                materialized_row_count: row.try_get("materialized_row_count")?,
+                materialized_at: row.try_get("materialized_at")?,
                 visibility_nodes: visibility_nodes.get(&id).cloned().unwrap_or_default(),
                 source_count: row.try_get("source_count")?,
                 field_count: row.try_get("field_count")?,
@@ -327,7 +388,13 @@ pub async fn get_dataset(
     let dataset = sqlx::query(
         r#"
         SELECT datasets.id, current_revisions.id AS current_revision_id,
-               datasets.name, datasets.slug, datasets.grain, datasets.composition_mode
+               datasets.name, datasets.slug, datasets.grain, datasets.composition_mode,
+               current_revisions.definition_ast,
+               current_revisions.generated_sql,
+               current_revisions.materialized_schema,
+               current_revisions.materialized_table,
+               current_revisions.materialized_row_count,
+               current_revisions.materialized_at
         FROM datasets
         LEFT JOIN dataset_revisions AS current_revisions
             ON current_revisions.dataset_id = datasets.id
@@ -348,6 +415,7 @@ pub async fn get_dataset(
             dataset_sources.form_id,
             forms.name AS form_name,
             dataset_sources.form_version_major,
+            dataset_sources.dataset_revision_id,
             dataset_sources.selection_rule,
             dataset_sources.position
         FROM dataset_sources
@@ -382,6 +450,20 @@ pub async fn get_dataset(
         slug: dataset.try_get("slug")?,
         grain: dataset.try_get("grain")?,
         composition_mode: dataset.try_get("composition_mode")?,
+        definition_ast: dataset
+            .try_get::<Option<serde_json::Value>, _>("definition_ast")?
+            .map(serde_json::from_value)
+            .transpose()
+            .map_err(|error| {
+                ApiError::Internal(anyhow::anyhow!(
+                    "stored dataset definition is invalid: {error}"
+                ))
+            })?,
+        generated_sql: dataset.try_get("generated_sql")?,
+        materialized_schema: dataset.try_get("materialized_schema")?,
+        materialized_table: dataset.try_get("materialized_table")?,
+        materialized_row_count: dataset.try_get("materialized_row_count")?,
+        materialized_at: dataset.try_get("materialized_at")?,
         visibility_nodes: visibility_nodes
             .get(&dataset_id)
             .cloned()
@@ -395,6 +477,7 @@ pub async fn get_dataset(
                     form_id: row.try_get("form_id")?,
                     form_name: row.try_get("form_name")?,
                     form_version_major: row.try_get("form_version_major")?,
+                    dataset_revision_id: row.try_get("dataset_revision_id")?,
                     selection_rule: row.try_get("selection_rule")?,
                     position: row.try_get("position")?,
                 })
@@ -441,49 +524,452 @@ pub async fn run_dataset_table(
     }))
 }
 
-async fn validate_dataset_sources(
+fn request_projected_fields(payload: &CreateDatasetRequest) -> Vec<CreateDatasetFieldRequest> {
+    if payload.projected_fields.is_empty() {
+        payload.fields.clone()
+    } else {
+        payload.projected_fields.clone()
+    }
+}
+
+fn top_level_composition_mode(payload: &CreateDatasetRequest) -> ApiResult<DatasetCompositionMode> {
+    if let Some(DatasetExpressionRequest::Operation { operation, .. }) = &payload.definition_ast {
+        return DatasetCompositionMode::parse(operation)
+            .map_err(|error| ApiError::BadRequest(error.to_string()));
+    }
+    DatasetCompositionMode::parse(&payload.composition_mode)
+        .map_err(|error| ApiError::BadRequest(error.to_string()))
+}
+
+async fn compile_dataset_definition(
     pool: &sqlx::PgPool,
     account: &auth::AccountContext,
-    sources: Vec<CreateDatasetSourceRequest>,
-) -> ApiResult<Vec<ValidatedDatasetSource>> {
-    let mut validated = Vec::new();
-    for (position, source) in sources.into_iter().enumerate() {
-        require_text("dataset source alias", &source.source_alias)?;
-        let selection_rule = DatasetSelectionRule::parse(&source.selection_rule)
-            .map_err(|error| ApiError::BadRequest(error.to_string()))?;
-        if let Some(form_version_major) = source.form_version_major {
-            if form_version_major < 1 {
-                return Err(ApiError::BadRequest(
-                    "dataset source major version must be 1 or greater".into(),
-                ));
-            }
-            if source.form_id.is_none() {
-                return Err(ApiError::BadRequest(
-                    "dataset source major version requires a form source".into(),
-                ));
-            }
-        }
-        let Some(form_id) = source.form_id else {
-            return Err(ApiError::BadRequest(
-                "dataset source must reference a form".into(),
-            ));
-        };
-        require_form_exists(pool, form_id).await?;
-        require_form_readable_by_account(pool, account, form_id).await?;
-        let form_version_major = match source.form_version_major {
-            Some(form_version_major) => Some(form_version_major),
-            None => load_latest_published_form_major(pool, form_id).await?,
-        };
-        validated.push(ValidatedDatasetSource {
-            source_alias: source.source_alias,
-            form_id: Some(form_id),
-            form_version_major,
-            selection_rule,
-            position: position as i32,
+    dataset_id: Option<Uuid>,
+    payload: &CreateDatasetRequest,
+    projected_fields: &[CreateDatasetFieldRequest],
+) -> ApiResult<CompiledDataset> {
+    let ast = payload
+        .definition_ast
+        .clone()
+        .unwrap_or_else(|| legacy_expression_from_payload(payload));
+    validate_dataset_shape(
+        collect_expression_aliases(&ast),
+        projected_fields.iter().map(|field| field.key.as_str()),
+    )
+    .map_err(|error| ApiError::BadRequest(error.to_string()))?;
+    let mut compiler = QueryCompiler {
+        pool,
+        account,
+        dataset_id,
+        projected_fields,
+        field_keys: projected_fields
+            .iter()
+            .map(|field| field.key.clone())
+            .collect(),
+        ctes: Vec::new(),
+        cte_index: 0,
+        aliases: BTreeSet::new(),
+        sources: Vec::new(),
+    };
+    let root = compiler.compile_expression(&ast).await?;
+    let generated_sql = compiler.final_sql(&root);
+    let fields =
+        validate_dataset_fields(pool, &compiler.sources, projected_fields.to_vec()).await?;
+    Ok(CompiledDataset {
+        definition_ast: ast,
+        generated_sql,
+        sources: compiler.sources,
+        fields,
+    })
+}
+
+fn legacy_expression_from_payload(payload: &CreateDatasetRequest) -> DatasetExpressionRequest {
+    let mut expressions = payload
+        .sources
+        .iter()
+        .map(|source| DatasetExpressionRequest::Form {
+            alias: source.source_alias.clone(),
+            form_id: source.form_id.unwrap_or_else(Uuid::nil),
+            form_version_major: source.form_version_major,
+            selection_rule: source.selection_rule.clone(),
         });
+    let first = expressions
+        .next()
+        .unwrap_or_else(|| DatasetExpressionRequest::Form {
+            alias: "source_1".into(),
+            form_id: Uuid::nil(),
+            form_version_major: None,
+            selection_rule: "latest".into(),
+        });
+    expressions.fold(first, |left, right| DatasetExpressionRequest::Operation {
+        alias: "result".into(),
+        operation: payload.composition_mode.clone(),
+        left: Box::new(left),
+        right: Box::new(right),
+        join_keys: Vec::new(),
+    })
+}
+
+fn collect_expression_aliases(ast: &DatasetExpressionRequest) -> Vec<&str> {
+    match ast {
+        DatasetExpressionRequest::Form { alias, .. }
+        | DatasetExpressionRequest::Dataset { alias, .. } => vec![alias.as_str()],
+        DatasetExpressionRequest::Operation { left, right, .. } => {
+            let mut aliases = Vec::new();
+            aliases.extend(collect_expression_aliases(left));
+            aliases.extend(collect_expression_aliases(right));
+            aliases
+        }
+    }
+}
+
+impl<'a> QueryCompiler<'a> {
+    fn compile_expression<'b>(
+        &'b mut self,
+        ast: &'b DatasetExpressionRequest,
+    ) -> Pin<Box<dyn Future<Output = ApiResult<CompiledExpression>> + Send + 'b>> {
+        Box::pin(async move {
+            match ast {
+                DatasetExpressionRequest::Form {
+                    alias,
+                    form_id,
+                    form_version_major,
+                    selection_rule,
+                } => {
+                    self.compile_form_source(alias, *form_id, *form_version_major, selection_rule)
+                        .await
+                }
+                DatasetExpressionRequest::Dataset {
+                    alias,
+                    dataset_id,
+                    dataset_revision_id,
+                } => {
+                    self.compile_dataset_source(alias, *dataset_id, *dataset_revision_id)
+                        .await
+                }
+                DatasetExpressionRequest::Operation {
+                    operation,
+                    left,
+                    right,
+                    join_keys,
+                    ..
+                } => {
+                    let left = self.compile_expression(left).await?;
+                    let right = self.compile_expression(right).await?;
+                    self.compile_operation(operation, left, right, join_keys)
+                }
+            }
+        })
     }
 
-    Ok(validated)
+    async fn compile_form_source(
+        &mut self,
+        alias: &str,
+        form_id: Uuid,
+        form_version_major: Option<i32>,
+        selection_rule: &str,
+    ) -> ApiResult<CompiledExpression> {
+        require_identifier("dataset source alias", alias)?;
+        if form_id.is_nil() {
+            return Err(ApiError::BadRequest(
+                "dataset form source must reference a form".into(),
+            ));
+        }
+        if !self.aliases.insert(alias.to_string()) {
+            return Err(ApiError::BadRequest(format!(
+                "dataset expression alias '{alias}' is duplicated"
+            )));
+        }
+        let selection_rule = DatasetSelectionRule::parse(selection_rule)
+            .map_err(|error| ApiError::BadRequest(error.to_string()))?;
+        require_form_exists(self.pool, form_id).await?;
+        require_form_readable_by_account(self.pool, self.account, form_id).await?;
+        let form_version_major = match form_version_major {
+            Some(value) => Some(value),
+            None => load_latest_published_form_major(self.pool, form_id).await?,
+        };
+        let source = ValidatedDatasetSource {
+            source_alias: alias.to_string(),
+            form_id: Some(form_id),
+            form_version_major,
+            dataset_revision_id: None,
+            selection_rule,
+            position: self.sources.len() as i32,
+        };
+        let cte_name = self.next_cte_name(alias)?;
+        let select_columns = self
+            .projected_fields
+            .iter()
+            .map(|field| {
+                let column = quote_identifier(&field.key);
+                if field.source_alias == alias {
+                    Ok(format!(
+                        "MAX(submission_value_fact.value_text) FILTER (WHERE submission_value_fact.field_key = {}) AS {column}",
+                        sql_literal(&field.source_field_key)
+                    ))
+                } else {
+                    Ok(format!("NULL::text AS {column}"))
+                }
+            })
+            .collect::<ApiResult<Vec<_>>>()?
+            .join(",\n                ");
+        let form_predicate = match form_version_major {
+            Some(major) => format!(
+                "form_versions.form_id = {}::uuid AND form_versions.version_major = {major}",
+                sql_literal(&form_id.to_string())
+            ),
+            None => format!(
+                "form_versions.form_id = {}::uuid",
+                sql_literal(&form_id.to_string())
+            ),
+        };
+        let order = match selection_rule {
+            DatasetSelectionRule::Earliest => "submission_fact.submitted_at ASC NULLS LAST",
+            DatasetSelectionRule::All | DatasetSelectionRule::Latest => {
+                "submission_fact.submitted_at DESC NULLS LAST"
+            }
+        };
+        let selected_filter = if selection_rule == DatasetSelectionRule::All {
+            "TRUE"
+        } else {
+            "selection_rank = 1"
+        };
+        let sql = format!(
+            r#"{cte_name} AS (
+            WITH ranked AS (
+                SELECT
+                    submission_fact.submission_id,
+                    submission_fact.node_id,
+                    node_dim.node_name,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY submission_fact.node_id
+                        ORDER BY {order}, submission_fact.submission_id
+                    ) AS selection_rank
+                FROM analytics.submission_fact
+                JOIN form_versions ON form_versions.id = submission_fact.form_version_id
+                JOIN analytics.node_dim ON node_dim.node_id = submission_fact.node_id
+                WHERE submission_fact.status = 'submitted'
+                  AND {form_predicate}
+            )
+            SELECT
+                ranked.submission_id::text AS __row_id,
+                ranked.node_id AS __node_id,
+                ranked.node_name AS __node_name,
+                {select_columns}
+            FROM ranked
+            LEFT JOIN analytics.submission_value_fact
+              ON submission_value_fact.submission_id = ranked.submission_id
+            WHERE {selected_filter}
+            GROUP BY ranked.submission_id, ranked.node_id, ranked.node_name
+        )"#
+        );
+        self.ctes.push(sql);
+        self.sources.push(source);
+        Ok(CompiledExpression {
+            cte_name,
+            columns: self.field_keys.iter().cloned().collect(),
+        })
+    }
+
+    async fn compile_dataset_source(
+        &mut self,
+        alias: &str,
+        dataset_id: Uuid,
+        dataset_revision_id: Uuid,
+    ) -> ApiResult<CompiledExpression> {
+        require_identifier("dataset source alias", alias)?;
+        if !self.aliases.insert(alias.to_string()) {
+            return Err(ApiError::BadRequest(format!(
+                "dataset expression alias '{alias}' is duplicated"
+            )));
+        }
+        if Some(dataset_id) == self.dataset_id {
+            return Err(ApiError::BadRequest(
+                "dataset definitions cannot reference themselves".into(),
+            ));
+        }
+        require_dataset_visible_for_account(self.pool, self.account, dataset_id).await?;
+        let row = sqlx::query(
+            r#"
+            SELECT materialized_schema, materialized_table
+            FROM dataset_revisions
+            WHERE id = $1
+              AND dataset_id = $2
+              AND materialized_table IS NOT NULL
+            "#,
+        )
+        .bind(dataset_revision_id)
+        .bind(dataset_id)
+        .fetch_optional(self.pool)
+        .await?
+        .ok_or_else(|| {
+            ApiError::BadRequest(format!(
+                "dataset revision {dataset_revision_id} is not materialized"
+            ))
+        })?;
+        let schema: String = row.try_get("materialized_schema")?;
+        let table: String = row.try_get("materialized_table")?;
+        let cte_name = self.next_cte_name(alias)?;
+        let select_columns = self
+            .field_keys
+            .iter()
+            .map(|field| {
+                format!(
+                    "{}::text AS {}",
+                    quote_identifier(field),
+                    quote_identifier(field)
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(",\n                ");
+        self.ctes.push(format!(
+            r#"{cte_name} AS (
+            SELECT
+                __row_id,
+                __node_id,
+                __node_name,
+                {select_columns}
+            FROM {}.{}
+        )"#,
+            quote_identifier(&schema),
+            quote_identifier(&table)
+        ));
+        self.sources.push(ValidatedDatasetSource {
+            source_alias: alias.to_string(),
+            form_id: None,
+            form_version_major: None,
+            dataset_revision_id: Some(dataset_revision_id),
+            selection_rule: DatasetSelectionRule::Latest,
+            position: self.sources.len() as i32,
+        });
+        Ok(CompiledExpression {
+            cte_name,
+            columns: self.field_keys.iter().cloned().collect(),
+        })
+    }
+
+    fn compile_operation(
+        &mut self,
+        operation: &str,
+        left: CompiledExpression,
+        right: CompiledExpression,
+        join_keys: &[dto::DatasetJoinKeyRequest],
+    ) -> ApiResult<CompiledExpression> {
+        let mode = DatasetCompositionMode::parse(operation)
+            .map_err(|error| ApiError::BadRequest(error.to_string()))?;
+        let cte_name = self.next_cte_name("op")?;
+        let columns = self
+            .field_keys
+            .iter()
+            .map(|field| {
+                let quoted = quote_identifier(field);
+                format!("COALESCE(l.{quoted}, r.{quoted}) AS {quoted}")
+            })
+            .collect::<Vec<_>>()
+            .join(",\n                ");
+        let sql = match mode {
+            DatasetCompositionMode::Union | DatasetCompositionMode::UnionAll => {
+                let op = if mode == DatasetCompositionMode::Union {
+                    "UNION"
+                } else {
+                    "UNION ALL"
+                };
+                format!(
+                    r#"{cte_name} AS (
+            SELECT * FROM {}
+            {op}
+            SELECT * FROM {}
+        )"#,
+                    quote_identifier(&left.cte_name),
+                    quote_identifier(&right.cte_name)
+                )
+            }
+            DatasetCompositionMode::LeftJoin
+            | DatasetCompositionMode::InnerJoin
+            | DatasetCompositionMode::OuterJoin
+            | DatasetCompositionMode::Join => {
+                if join_keys.is_empty() {
+                    return Err(ApiError::BadRequest(
+                        "join operations require at least one explicit join key".into(),
+                    ));
+                }
+                let join = match mode {
+                    DatasetCompositionMode::LeftJoin | DatasetCompositionMode::Join => "LEFT JOIN",
+                    DatasetCompositionMode::InnerJoin => "INNER JOIN",
+                    DatasetCompositionMode::OuterJoin => "FULL OUTER JOIN",
+                    _ => unreachable!(),
+                };
+                let predicates = join_keys
+                    .iter()
+                    .map(|key| {
+                        if !left.columns.contains(&key.left_field) {
+                            return Err(ApiError::BadRequest(format!(
+                                "left join key '{}' is not projected by the left input",
+                                key.left_field
+                            )));
+                        }
+                        if !right.columns.contains(&key.right_field) {
+                            return Err(ApiError::BadRequest(format!(
+                                "right join key '{}' is not projected by the right input",
+                                key.right_field
+                            )));
+                        }
+                        Ok(format!(
+                            "l.{} = r.{}",
+                            quote_identifier(&key.left_field),
+                            quote_identifier(&key.right_field)
+                        ))
+                    })
+                    .collect::<ApiResult<Vec<_>>>()?
+                    .join(" AND ");
+                format!(
+                    r#"{cte_name} AS (
+            SELECT
+                COALESCE(l.__row_id, r.__row_id) AS __row_id,
+                COALESCE(l.__node_id, r.__node_id) AS __node_id,
+                COALESCE(l.__node_name, r.__node_name) AS __node_name,
+                {columns}
+            FROM {} l
+            {join} {} r ON {predicates}
+        )"#,
+                    quote_identifier(&left.cte_name),
+                    quote_identifier(&right.cte_name)
+                )
+            }
+        };
+        self.ctes.push(sql);
+        Ok(CompiledExpression {
+            cte_name,
+            columns: self.field_keys.iter().cloned().collect(),
+        })
+    }
+
+    fn next_cte_name(&mut self, seed: &str) -> ApiResult<String> {
+        require_identifier("dataset expression alias", seed)?;
+        self.cte_index += 1;
+        Ok(format!("{}_{}", sanitize_identifier(seed), self.cte_index))
+    }
+
+    fn final_sql(&self, root: &CompiledExpression) -> String {
+        let field_select = self
+            .field_keys
+            .iter()
+            .map(|field| quote_identifier(field))
+            .collect::<Vec<_>>()
+            .join(",\n    ");
+        format!(
+            r#"WITH
+        {}
+        SELECT
+            __row_id,
+            __node_id,
+            __node_name,
+            {field_select}
+        FROM {}"#,
+            self.ctes.join(",\n        "),
+            quote_identifier(&root.cte_name)
+        )
+    }
 }
 
 async fn validate_dataset_fields(
@@ -510,7 +996,11 @@ async fn validate_dataset_fields(
                     field.key, field.source_alias
                 ))
             })?;
-        let field_type = require_source_field_exists(pool, source, &field.source_field_key).await?;
+        let field_type = if source.dataset_revision_id.is_some() {
+            "text".to_string()
+        } else {
+            require_source_field_exists(pool, source, &field.source_field_key).await?
+        };
         validated.push(ValidatedDatasetField {
             key: field.key,
             label: field.label,
@@ -533,14 +1023,15 @@ async fn insert_dataset_sources(
         sqlx::query(
             r#"
             INSERT INTO dataset_sources
-                (dataset_id, source_alias, form_id, form_version_major, compatibility_group_id, selection_rule, position)
-            VALUES ($1, $2, $3, $4, NULL, $5, $6)
+                (dataset_id, source_alias, form_id, form_version_major, compatibility_group_id, dataset_revision_id, selection_rule, position)
+            VALUES ($1, $2, $3, $4, NULL, $5, $6, $7)
             "#,
         )
         .bind(dataset_id)
         .bind(&source.source_alias)
         .bind(source.form_id)
         .bind(source.form_version_major)
+        .bind(source.dataset_revision_id)
         .bind(source.selection_rule.as_str())
         .bind(source.position)
         .execute(&mut **tx)
@@ -581,6 +1072,7 @@ async fn insert_dataset_revision(
     tx: &mut Transaction<'_, Postgres>,
     dataset_id: Uuid,
     version_label: &str,
+    compiled: &CompiledDataset,
 ) -> ApiResult<Uuid> {
     let version_number: i32 = sqlx::query_scalar(
         "SELECT COALESCE(MAX(version_number), 0) + 1 FROM dataset_revisions WHERE dataset_id = $1",
@@ -602,18 +1094,66 @@ async fn insert_dataset_revision(
     let revision_id = sqlx::query_scalar(
         r#"
         INSERT INTO dataset_revisions
-            (dataset_id, version_number, version_label, status, published_at)
-        VALUES ($1, $2, $3, 'published'::dataset_revision_status, now())
+            (dataset_id, version_number, version_label, status, published_at, definition_ast, generated_sql)
+        VALUES ($1, $2, $3, 'published'::dataset_revision_status, now(), $4, $5)
         RETURNING id
         "#,
     )
     .bind(dataset_id)
     .bind(version_number)
     .bind(version_label)
+    .bind(serde_json::to_value(&compiled.definition_ast).map_err(|error| {
+        ApiError::Internal(anyhow::anyhow!("dataset definition could not be serialized: {error}"))
+    })?)
+    .bind(&compiled.generated_sql)
     .fetch_one(&mut **tx)
     .await?;
 
     Ok(revision_id)
+}
+
+async fn materialize_dataset_revision(
+    tx: &mut Transaction<'_, Postgres>,
+    revision_id: Uuid,
+    compiled: &CompiledDataset,
+) -> ApiResult<()> {
+    let table_name = format!("dataset_{}", revision_id.simple());
+    let full_name = format!(
+        "{}.{}",
+        quote_identifier("dataset_materialized"),
+        quote_identifier(&table_name)
+    );
+    sqlx::query(&format!("DROP TABLE IF EXISTS {full_name}"))
+        .execute(&mut **tx)
+        .await?;
+    sqlx::query(&format!(
+        "CREATE TABLE {full_name} AS {}",
+        compiled.generated_sql
+    ))
+    .execute(&mut **tx)
+    .await?;
+    sqlx::query(&format!("CREATE INDEX ON {full_name} (__node_id)"))
+        .execute(&mut **tx)
+        .await?;
+    let row_count: i64 = sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {full_name}"))
+        .fetch_one(&mut **tx)
+        .await?;
+    sqlx::query(
+        r#"
+        UPDATE dataset_revisions
+        SET materialized_schema = 'dataset_materialized',
+            materialized_table = $1,
+            materialized_row_count = $2,
+            materialized_at = now()
+        WHERE id = $3
+        "#,
+    )
+    .bind(&table_name)
+    .bind(row_count)
+    .bind(revision_id)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
 }
 
 async fn require_source_field_exists(
@@ -680,13 +1220,81 @@ pub(crate) async fn load_dataset_table_rows(
     dataset_id: Uuid,
     node_filter: Option<&[Uuid]>,
 ) -> ApiResult<Vec<DatasetTableRow>> {
+    if let Some(rows) = load_materialized_dataset_table_rows(pool, dataset_id, node_filter).await? {
+        return Ok(rows);
+    }
     let composition_mode = require_executable_submission_dataset(pool, dataset_id).await?;
     match composition_mode {
-        DatasetCompositionMode::Union => {
+        DatasetCompositionMode::Union | DatasetCompositionMode::UnionAll => {
             run_union_dataset_table(pool, dataset_id, node_filter).await
         }
-        DatasetCompositionMode::Join => run_join_dataset_table(pool, dataset_id, node_filter).await,
+        DatasetCompositionMode::Join
+        | DatasetCompositionMode::LeftJoin
+        | DatasetCompositionMode::InnerJoin
+        | DatasetCompositionMode::OuterJoin => {
+            run_join_dataset_table(pool, dataset_id, node_filter).await
+        }
     }
+}
+
+async fn load_materialized_dataset_table_rows(
+    pool: &sqlx::PgPool,
+    dataset_id: Uuid,
+    node_filter: Option<&[Uuid]>,
+) -> ApiResult<Option<Vec<DatasetTableRow>>> {
+    let Some(row) = sqlx::query(
+        r#"
+        SELECT materialized_schema, materialized_table
+        FROM dataset_revisions
+        WHERE dataset_id = $1
+          AND status = 'published'::dataset_revision_status
+          AND materialized_table IS NOT NULL
+        "#,
+    )
+    .bind(dataset_id)
+    .fetch_optional(pool)
+    .await?
+    else {
+        return Ok(None);
+    };
+    let schema: String = row.try_get("materialized_schema")?;
+    let table: String = row.try_get("materialized_table")?;
+    let full_name = format!("{}.{}", quote_identifier(&schema), quote_identifier(&table));
+    let rows = if let Some(node_filter) = node_filter {
+        sqlx::query(&format!(
+            "SELECT * FROM {full_name} WHERE __node_id = ANY($1) ORDER BY __row_id LIMIT 200"
+        ))
+        .bind(node_filter)
+        .fetch_all(pool)
+        .await?
+    } else {
+        sqlx::query(&format!(
+            "SELECT * FROM {full_name} ORDER BY __row_id LIMIT 200"
+        ))
+        .fetch_all(pool)
+        .await?
+    };
+    let mut table_rows = Vec::new();
+    for row in rows {
+        let submission_id: String = row.try_get("__row_id")?;
+        let node_name: String = row.try_get("__node_name")?;
+        let mut values = BTreeMap::new();
+        for column in row.columns() {
+            let name = column.name();
+            if name.starts_with("__") {
+                continue;
+            }
+            let value: Option<String> = row.try_get(name)?;
+            values.insert(name.to_string(), value);
+        }
+        table_rows.push(DatasetTableRow {
+            submission_id,
+            node_name,
+            source_alias: "materialized".into(),
+            values,
+        });
+    }
+    Ok(Some(table_rows))
 }
 
 async fn run_union_dataset_table(
@@ -1188,6 +1796,15 @@ async fn require_dataset_visible_for_boundary(
     }
 }
 
+async fn require_dataset_visible_for_account(
+    pool: &sqlx::PgPool,
+    account: &auth::AccountContext,
+    dataset_id: Uuid,
+) -> ApiResult<()> {
+    let boundary = auth::capability_boundary(pool, account, "datasets:read").await?;
+    require_dataset_visible_for_boundary(pool, dataset_id, &boundary, "datasets:read").await
+}
+
 pub(crate) async fn load_dataset_scope_node_ids(
     pool: &sqlx::PgPool,
     dataset_id: Uuid,
@@ -1270,4 +1887,44 @@ async fn load_latest_published_form_major(
     .fetch_optional(pool)
     .await
     .map_err(Into::into)
+}
+
+fn require_identifier(label: &str, value: &str) -> ApiResult<()> {
+    let valid = !value.is_empty()
+        && value.len() <= 63
+        && value
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || character == '_')
+        && value
+            .chars()
+            .next()
+            .is_some_and(|character| character.is_ascii_alphabetic() || character == '_');
+    if valid {
+        Ok(())
+    } else {
+        Err(ApiError::BadRequest(format!(
+            "{label} must use only letters, numbers, and underscores, and must start with a letter or underscore"
+        )))
+    }
+}
+
+fn sanitize_identifier(value: &str) -> String {
+    value
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() || character == '_' {
+                character
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
+fn quote_identifier(value: &str) -> String {
+    format!("\"{}\"", value.replace('"', "\"\""))
+}
+
+fn sql_literal(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "''"))
 }

@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// Payload for creating or replacing a dataset definition and revision.
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 pub struct CreateDatasetRequest {
     pub(crate) name: String,
     pub(crate) slug: String,
@@ -13,12 +13,50 @@ pub struct CreateDatasetRequest {
     pub(crate) composition_mode: String,
     #[serde(default)]
     pub(crate) visibility_node_ids: Vec<Uuid>,
+    #[serde(default)]
+    pub(crate) definition_ast: Option<DatasetExpressionRequest>,
+    #[serde(default)]
+    pub(crate) projected_fields: Vec<CreateDatasetFieldRequest>,
+    #[serde(default)]
     pub(crate) sources: Vec<CreateDatasetSourceRequest>,
+    #[serde(default)]
     pub(crate) fields: Vec<CreateDatasetFieldRequest>,
 }
 
+/// Recursive visual dataset query expression.
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum DatasetExpressionRequest {
+    Form {
+        alias: String,
+        form_id: Uuid,
+        form_version_major: Option<i32>,
+        selection_rule: String,
+    },
+    Dataset {
+        alias: String,
+        dataset_id: Uuid,
+        dataset_revision_id: Uuid,
+    },
+    Operation {
+        alias: String,
+        operation: String,
+        left: Box<DatasetExpressionRequest>,
+        right: Box<DatasetExpressionRequest>,
+        #[serde(default)]
+        join_keys: Vec<DatasetJoinKeyRequest>,
+    },
+}
+
+/// One explicit join key pair.
+#[derive(Clone, Deserialize, Serialize)]
+pub struct DatasetJoinKeyRequest {
+    pub(crate) left_field: String,
+    pub(crate) right_field: String,
+}
+
 /// One source form selection inside a dataset revision.
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 pub struct CreateDatasetSourceRequest {
     pub(crate) source_alias: String,
     pub(crate) form_id: Option<Uuid>,
@@ -27,7 +65,7 @@ pub struct CreateDatasetSourceRequest {
 }
 
 /// One exposed field mapped from a dataset source field.
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 pub struct CreateDatasetFieldRequest {
     pub(crate) key: String,
     pub(crate) label: String,
@@ -45,6 +83,8 @@ pub struct DatasetSummary {
     pub(crate) slug: String,
     pub(crate) grain: String,
     pub(crate) composition_mode: String,
+    pub(crate) materialized_row_count: Option<i64>,
+    pub(crate) materialized_at: Option<chrono::DateTime<chrono::Utc>>,
     pub(crate) visibility_nodes: Vec<DatasetVisibilityNodeSummary>,
     pub(crate) source_count: i64,
     pub(crate) field_count: i64,
@@ -59,6 +99,12 @@ pub struct DatasetDefinition {
     pub(crate) slug: String,
     pub(crate) grain: String,
     pub(crate) composition_mode: String,
+    pub(crate) definition_ast: Option<DatasetExpressionRequest>,
+    pub(crate) generated_sql: Option<String>,
+    pub(crate) materialized_schema: Option<String>,
+    pub(crate) materialized_table: Option<String>,
+    pub(crate) materialized_row_count: Option<i64>,
+    pub(crate) materialized_at: Option<chrono::DateTime<chrono::Utc>>,
     pub(crate) visibility_nodes: Vec<DatasetVisibilityNodeSummary>,
     pub(crate) sources: Vec<DatasetSourceDefinition>,
     pub(crate) fields: Vec<DatasetFieldDefinition>,
@@ -82,6 +128,7 @@ pub struct DatasetSourceDefinition {
     pub(crate) form_id: Option<Uuid>,
     pub(crate) form_name: Option<String>,
     pub(crate) form_version_major: Option<i32>,
+    pub(crate) dataset_revision_id: Option<Uuid>,
     pub(crate) selection_rule: String,
     pub(crate) position: i32,
 }

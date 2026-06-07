@@ -177,6 +177,127 @@ async fn seeded_capability_catalog_uses_components_and_dashboards() {
     assert!(keys.contains(&"operations:view"));
 }
 
+#[tokio::test]
+async fn admin_dataset_query_designer_materializes_generated_sql() {
+    let _guard = TEST_DATABASE_LOCK.lock().await;
+    let Some(app) = test_app().await else { return };
+    let admin_token =
+        login_token_for(app.clone(), "admin@tessara.local", "tessara-dev-admin").await;
+
+    let seed = request_json(
+        app.clone(),
+        authorized_request("POST", "/api/demo/seed", &admin_token, None),
+    )
+    .await;
+    let form_id = seed["form_id"].as_str().expect("seed form id");
+    let form_version_id = seed["form_version_id"]
+        .as_str()
+        .expect("seed form version id");
+    let visibility_node_id = seed["partner_node_id"]
+        .as_str()
+        .expect("seed partner node id");
+    let rendered_form = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/form-versions/{form_version_id}/render"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    let field = &rendered_form["sections"]
+        .as_array()
+        .expect("rendered sections")[0]["fields"]
+        .as_array()
+        .expect("rendered fields")[0];
+    let field_key = field["key"].as_str().expect("field key");
+    let field_label = field["label"].as_str().expect("field label");
+    let payload = json!({
+        "name": "Query Designer Test Dataset",
+        "slug": "query-designer-test-dataset",
+        "grain": "submission",
+        "composition_mode": "union_all",
+        "visibility_node_ids": [visibility_node_id],
+        "definition_ast": {
+            "kind": "form",
+            "alias": "form_a",
+            "form_id": form_id,
+            "form_version_major": null,
+            "selection_rule": "latest"
+        },
+        "projected_fields": [{
+            "key": field_key,
+            "label": field_label,
+            "source_alias": "form_a",
+            "source_field_key": field_key,
+            "position": 0
+        }],
+        "sources": [{
+            "source_alias": "form_a",
+            "form_id": form_id,
+            "form_version_major": null,
+            "selection_rule": "latest"
+        }],
+        "fields": [{
+            "key": field_key,
+            "label": field_label,
+            "source_alias": "form_a",
+            "source_field_key": field_key,
+            "position": 0
+        }]
+    });
+
+    let created = request_json(
+        app.clone(),
+        authorized_request("POST", "/api/admin/datasets", &admin_token, Some(payload)),
+    )
+    .await;
+    let dataset_id = created["id"].as_str().expect("created dataset id");
+    let detail = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/datasets/{dataset_id}"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(detail["definition_ast"]["kind"], "form");
+    assert!(detail["generated_sql"].as_str().is_some_and(|sql| {
+        sql.contains("analytics.submission_fact") && sql.contains(field_key)
+    }));
+    assert!(
+        detail["materialized_table"]
+            .as_str()
+            .is_some_and(|table| table.starts_with("dataset_"))
+    );
+    assert!(
+        detail["materialized_row_count"]
+            .as_i64()
+            .is_some_and(|count| count > 0)
+    );
+
+    let table = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/datasets/{dataset_id}/table"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert!(
+        table["rows"]
+            .as_array()
+            .expect("preview rows should be an array")
+            .iter()
+            .any(|row| row["values"].get(field_key).is_some())
+    );
+}
+
 async fn test_app() -> Option<axum::Router> {
     LazyLock::force(&TEST_TRACING);
     let database_url = match std::env::var("TEST_DATABASE_URL") {

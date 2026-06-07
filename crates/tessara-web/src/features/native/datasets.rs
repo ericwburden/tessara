@@ -26,6 +26,8 @@ struct DatasetSummary {
     slug: String,
     grain: String,
     composition_mode: String,
+    materialized_row_count: Option<i64>,
+    materialized_at: Option<String>,
     visibility_nodes: Vec<DatasetVisibilityNode>,
     source_count: i64,
     field_count: i64,
@@ -39,6 +41,12 @@ struct DatasetDefinition {
     slug: String,
     grain: String,
     composition_mode: String,
+    definition_ast: Option<DatasetExpressionPayload>,
+    generated_sql: Option<String>,
+    materialized_schema: Option<String>,
+    materialized_table: Option<String>,
+    materialized_row_count: Option<i64>,
+    materialized_at: Option<String>,
     visibility_nodes: Vec<DatasetVisibilityNode>,
     sources: Vec<DatasetSourceDefinition>,
     fields: Vec<DatasetFieldDefinition>,
@@ -59,6 +67,7 @@ struct DatasetSourceDefinition {
     form_id: Option<String>,
     form_name: Option<String>,
     form_version_major: Option<i32>,
+    dataset_revision_id: Option<String>,
     selection_rule: String,
     position: i32,
 }
@@ -138,8 +147,40 @@ struct DatasetPayload {
     grain: String,
     composition_mode: String,
     visibility_node_ids: Vec<String>,
+    definition_ast: Option<DatasetExpressionPayload>,
+    projected_fields: Vec<DatasetFieldPayload>,
     sources: Vec<DatasetSourcePayload>,
     fields: Vec<DatasetFieldPayload>,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+enum DatasetExpressionPayload {
+    Form {
+        alias: String,
+        form_id: String,
+        form_version_major: Option<i32>,
+        selection_rule: String,
+    },
+    Dataset {
+        alias: String,
+        dataset_id: String,
+        dataset_revision_id: String,
+    },
+    Operation {
+        alias: String,
+        operation: String,
+        left: Box<DatasetExpressionPayload>,
+        right: Box<DatasetExpressionPayload>,
+        join_keys: Vec<DatasetJoinKeyPayload>,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+struct DatasetJoinKeyPayload {
+    left_field: String,
+    right_field: String,
 }
 
 #[allow(dead_code)]
@@ -163,10 +204,13 @@ struct DatasetFieldPayload {
 
 #[derive(Clone, Debug, PartialEq)]
 struct DatasetSourceDraft {
+    input_kind: String,
     source_alias: String,
     form_id: String,
     form_version_id: String,
     form_version_major: Option<i32>,
+    dataset_id: String,
+    dataset_revision_id: String,
     selection_rule: String,
 }
 
@@ -181,10 +225,13 @@ struct DatasetFieldDraft {
 impl Default for DatasetSourceDraft {
     fn default() -> Self {
         Self {
+            input_kind: "form".into(),
             source_alias: "source_1".into(),
             form_id: String::new(),
             form_version_id: String::new(),
             form_version_major: None,
+            dataset_id: String::new(),
+            dataset_revision_id: String::new(),
             selection_rule: "latest".into(),
         }
     }
@@ -455,11 +502,14 @@ fn DatasetDetailSurface(dataset_id: String, edit: bool) -> impl IntoView {
                                     <button class=tab_class(active_tab, "preview") type="button" on:click=move |_| active_tab.set("preview".into())>"Preview"</button>
                                     <button class=tab_class(active_tab, "sources") type="button" on:click=move |_| active_tab.set("sources".into())>"Sources"</button>
                                     <button class=tab_class(active_tab, "fields") type="button" on:click=move |_| active_tab.set("fields".into())>"Fields"</button>
+                                    <button class=tab_class(active_tab, "sql") type="button" on:click=move |_| active_tab.set("sql".into())>"SQL"</button>
                                 </div>
                                 {move || if active_tab.get() == "preview" {
                                     view! { <DatasetPreviewTable dataset=loaded.clone() table=table.get() error=table_error.get()/> }.into_any()
                                 } else if active_tab.get() == "sources" {
                                     view! { <DatasetSourcesTable sources=loaded.sources.clone()/> }.into_any()
+                                } else if active_tab.get() == "sql" {
+                                    view! { <DatasetSqlPanel sql=loaded.generated_sql.clone()/> }.into_any()
                                 } else {
                                     view! { <DatasetFieldsTable fields=loaded.fields.clone()/> }.into_any()
                                 }}
@@ -529,6 +579,20 @@ fn DatasetFieldsTable(fields: Vec<DatasetFieldDefinition>) -> impl IntoView {
 }
 
 #[component]
+fn DatasetSqlPanel(sql: Option<String>) -> impl IntoView {
+    view! {
+        <section class="route-panel__section">
+            <h3>"Generated SQL"</h3>
+            {if let Some(sql) = sql {
+                view! { <pre class="dataset-sql-panel"><code>{sql}</code></pre> }.into_any()
+            } else {
+                view! { <EmptyState title="SQL unavailable" message="This legacy dataset revision does not have generated SQL metadata."/> }.into_any()
+            }}
+        </section>
+    }
+}
+
+#[component]
 fn DatasetPreviewTable(
     dataset: DatasetDefinition,
     table: Option<DatasetTable>,
@@ -589,7 +653,10 @@ fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView {
     let visibility_node_ids = RwSignal::new(BTreeSet::<String>::new());
     let sources = RwSignal::new(vec![DatasetSourceDraft::default()]);
     let fields = RwSignal::new(Vec::<DatasetFieldDraft>::new());
+    let join_left_key = RwSignal::new(String::new());
+    let join_right_key = RwSignal::new(String::new());
     let forms = RwSignal::new(Vec::<FormSummary>::new());
+    let datasets = RwSignal::new(Vec::<DatasetSummary>::new());
     let nodes = RwSignal::new(Vec::<NodeResponse>::new());
     let rendered_forms = RwSignal::new(BTreeMap::<String, RenderedForm>::new());
     let table = RwSignal::new(None::<DatasetTable>);
@@ -602,6 +669,7 @@ fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView {
         let dataset_id = dataset_id.clone();
         move |_| {
             load_forms(forms, load_error);
+            load_datasets(datasets, RwSignal::new(false), load_error);
             load_nodes(nodes, load_error);
             if let Some(dataset_id) = dataset_id.clone() {
                 load_dataset_for_edit(
@@ -612,6 +680,8 @@ fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView {
                     visibility_node_ids,
                     sources,
                     fields,
+                    join_left_key,
+                    join_right_key,
                     load_error,
                 );
                 load_dataset_table(dataset_id, table, table_error);
@@ -641,6 +711,8 @@ fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView {
                         visibility_node_ids.get().into_iter().collect(),
                         sources.get(),
                         fields.get(),
+                        join_left_key.get(),
+                        join_right_key.get(),
                         save_error,
                         save_message,
                     );
@@ -656,15 +728,19 @@ fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView {
                                 <span>"Slug"</span>
                                 <input required prop:value=move || slug.get() on:input=move |event| slug.set(event_target_value(&event))/>
                             </label>
-                            <label class="form-field">
-                                <span>"Composition"</span>
-                                <select prop:value=move || composition_mode.get() on:change=move |event| composition_mode.set(event_target_value(&event))>
-                                    <option value="union">"Union"</option>
-                                    <option value="join">"Join"</option>
-                                </select>
-                            </label>
                         </div>
                     </section>
+                    <DatasetSourcesEditor
+                        sources
+                        forms
+                        datasets
+                        rendered_forms
+                        composition_mode
+                        fields
+                        join_left_key
+                        join_right_key
+                    />
+                    <DatasetFieldsEditor fields sources/>
                     <section class="route-panel__section dataset-editor-section">
                         <h3>"Visibility"</h3>
                         <div class="dataset-checkbox-grid">
@@ -689,8 +765,6 @@ fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView {
                             }).collect_view()}
                         </div>
                     </section>
-                    <DatasetSourcesEditor sources forms rendered_forms composition_mode fields/>
-                    <DatasetFieldsEditor fields sources rendered_forms/>
                     <div class="form-actions">
                         <button class="button" type="submit">{if is_edit { "Save Dataset" } else { "Create Dataset" }}</button>
                     </div>
@@ -704,6 +778,12 @@ fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView {
                             slug: slug.get(),
                             grain: "submission".into(),
                             composition_mode: composition_mode.get(),
+                            definition_ast: None,
+                            generated_sql: None,
+                            materialized_schema: None,
+                            materialized_table: None,
+                            materialized_row_count: None,
+                            materialized_at: None,
                             visibility_nodes: Vec::new(),
                             sources: Vec::new(),
                             fields: fields
@@ -738,19 +818,51 @@ fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView {
 fn DatasetSourcesEditor(
     sources: RwSignal<Vec<DatasetSourceDraft>>,
     forms: RwSignal<Vec<FormSummary>>,
+    datasets: RwSignal<Vec<DatasetSummary>>,
     rendered_forms: RwSignal<BTreeMap<String, RenderedForm>>,
     composition_mode: RwSignal<String>,
     fields: RwSignal<Vec<DatasetFieldDraft>>,
+    join_left_key: RwSignal<String>,
+    join_right_key: RwSignal<String>,
 ) -> impl IntoView {
     view! {
         <section class="route-panel__section dataset-editor-section">
             <div class="dataset-editor-section__header">
-                <h3>"Sources"</h3>
+                <h3>"Operation Designer"</h3>
                 <button class="button button--secondary button--compact" type="button" on:click=move |_| {
                     let next = sources.get().len() + 1;
                     sources.update(|items| items.push(DatasetSourceDraft { source_alias: format!("source_{next}"), ..DatasetSourceDraft::default() }));
-                }>"Add Source"</button>
+                }>"Add Input"</button>
             </div>
+            <div class="form-grid">
+                <label class="form-field">
+                    <span>"Operation"</span>
+                    <select prop:value=move || composition_mode.get() on:change=move |event| composition_mode.set(event_target_value(&event))>
+                        <option value="union">"Union"</option>
+                        <option value="union_all">"Union All"</option>
+                        <option value="left_join">"Left Join"</option>
+                        <option value="inner_join">"Inner Join"</option>
+                        <option value="outer_join">"Outer Join"</option>
+                    </select>
+                </label>
+                {move || if is_join_operation(&composition_mode.get()) {
+                    view! {
+                        <div class="form-grid dataset-join-key-grid">
+                            <label class="form-field">
+                                <span>"Left Join Key"</span>
+                                <input placeholder="field_key" prop:value=move || join_left_key.get() on:input=move |event| join_left_key.set(event_target_value(&event))/>
+                            </label>
+                            <label class="form-field">
+                                <span>"Right Join Key"</span>
+                                <input placeholder="field_key" prop:value=move || join_right_key.get() on:input=move |event| join_right_key.set(event_target_value(&event))/>
+                            </label>
+                        </div>
+                    }.into_any()
+                } else {
+                    view! { <span></span> }.into_any()
+                }}
+            </div>
+            <ExpressionPreview sources=sources composition_mode/>
             {move || sources.get().into_iter().enumerate().map(|(index, source)| {
                 view! {
                     <div class="dataset-editor-row dataset-editor-row--source">
@@ -762,7 +874,53 @@ fn DatasetSourcesEditor(
                             }/>
                         </label>
                         <label class="form-field">
-                            <span>"Form"</span>
+                            <span>"Input Type"</span>
+                            <select prop:value=source.input_kind.clone() on:change=move |event| {
+                                let value = event_target_value(&event);
+                                sources.update(|items| {
+                                    if let Some(item) = items.get_mut(index) {
+                                        item.input_kind = value.clone();
+                                    }
+                                });
+                            }>
+                                <option value="form">"Form"</option>
+                                <option value="dataset">"Dataset"</option>
+                            </select>
+                        </label>
+                        {if source.input_kind == "dataset" {
+                            view! {
+                                <label class="form-field">
+                                    <span>"Dataset"</span>
+                                    <select prop:value=source.dataset_id.clone() on:change=move |event| {
+                                        let dataset_id = event_target_value(&event);
+                                        let revision_id = datasets
+                                            .get()
+                                            .into_iter()
+                                            .find(|dataset| dataset.id == dataset_id)
+                                            .and_then(|dataset| dataset.current_revision_id)
+                                            .unwrap_or_default();
+                                        sources.update(|items| {
+                                            if let Some(item) = items.get_mut(index) {
+                                                item.dataset_id = dataset_id.clone();
+                                                item.dataset_revision_id = revision_id.clone();
+                                            }
+                                        });
+                                    }>
+                                        <option value="">"Select dataset"</option>
+                                        {datasets.get().into_iter().filter(|dataset| dataset.current_revision_id.is_some()).map(|dataset| {
+                                            view! { <option value=dataset.id>{dataset.name}</option> }
+                                        }).collect_view()}
+                                    </select>
+                                </label>
+                                <label class="form-field">
+                                    <span>"Revision"</span>
+                                    <input readonly prop:value=source.dataset_revision_id.clone()/>
+                                </label>
+                            }.into_any()
+                        } else {
+                            view! {
+                                <label class="form-field">
+                                    <span>"Form"</span>
                             <select prop:value=source.form_id.clone() on:change=move |event| {
                                 let form_id = event_target_value(&event);
                                 sources.update(|items| {
@@ -779,9 +937,9 @@ fn DatasetSourcesEditor(
                                 <option value="">"Select form"</option>
                                 {forms.get().into_iter().map(|form| view! { <option value=form.id>{form.name}</option> }).collect_view()}
                             </select>
-                        </label>
-                        <label class="form-field">
-                            <span>"Version"</span>
+                                </label>
+                                <label class="form-field">
+                                    <span>"Version"</span>
                             <select prop:value=source.form_version_id.clone() on:change=move |event| {
                                 let version_id = event_target_value(&event);
                                 sources.update(|items| {
@@ -796,9 +954,13 @@ fn DatasetSourcesEditor(
                                     view! { <option value=version.id>{version_label(&version)}</option> }
                                 }).collect_view()}
                             </select>
-                        </label>
-                        <label class="form-field">
-                            <span>"Selection"</span>
+                                </label>
+                            }.into_any()
+                        }}
+                        {if source.input_kind == "form" {
+                            view! {
+                                <label class="form-field">
+                                    <span>"Selection"</span>
                             <select prop:value=source.selection_rule.clone() on:change=move |event| {
                                 let value = event_target_value(&event);
                                 sources.update(|items| if let Some(item) = items.get_mut(index) { item.selection_rule = value; });
@@ -811,8 +973,16 @@ fn DatasetSourcesEditor(
                                     view! { <span></span> }.into_any()
                                 }}
                             </select>
-                        </label>
-                        <button class="button button--compact button--secondary" type="button" on:click=move |_| add_fields_from_source(index, sources, rendered_forms, fields)>"Add Fields"</button>
+                                </label>
+                            }.into_any()
+                        } else {
+                            view! { <span></span> }.into_any()
+                        }}
+                        {if source.input_kind == "form" {
+                            view! { <button class="button button--compact button--secondary" type="button" on:click=move |_| add_fields_from_source(index, sources, rendered_forms, fields)>"Add Fields"</button> }.into_any()
+                        } else {
+                            view! { <span class="data-table__secondary-text">"Project fields below"</span> }.into_any()
+                        }}
                     </div>
                 }
             }).collect_view()}
@@ -821,10 +991,22 @@ fn DatasetSourcesEditor(
 }
 
 #[component]
+fn ExpressionPreview(
+    sources: RwSignal<Vec<DatasetSourceDraft>>,
+    composition_mode: RwSignal<String>,
+) -> impl IntoView {
+    view! {
+        <div class="dataset-expression-preview">
+            <span>"Expression"</span>
+            <code>{move || expression_label(&sources.get(), &composition_mode.get())}</code>
+        </div>
+    }
+}
+
+#[component]
 fn DatasetFieldsEditor(
     fields: RwSignal<Vec<DatasetFieldDraft>>,
     sources: RwSignal<Vec<DatasetSourceDraft>>,
-    rendered_forms: RwSignal<BTreeMap<String, RenderedForm>>,
 ) -> impl IntoView {
     view! {
         <section class="route-panel__section dataset-editor-section">
@@ -857,14 +1039,10 @@ fn DatasetFieldsEditor(
                         </label>
                         <label class="form-field">
                             <span>"Source Field"</span>
-                            <select prop:value=field.source_field_key.clone() on:change=move |event| {
+                            <input prop:value=field.source_field_key.clone() on:input=move |event| {
                                 let value = event_target_value(&event);
                                 fields.update(|items| if let Some(item) = items.get_mut(index) { item.source_field_key = value; });
-                            }>
-                                {source_field_options(&sources.get(), &rendered_forms.get(), &field.source_alias).into_iter().map(|option| {
-                                    view! { <option value=option.key>{option.label}</option> }
-                                }).collect_view()}
-                            </select>
+                            }/>
                         </label>
                     </div>
                 }
@@ -924,6 +1102,163 @@ fn sentence_label(value: &str) -> String {
         })
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+fn operation_label(value: &str) -> &'static str {
+    match value {
+        "union" => "UNION",
+        "union_all" => "UNION ALL",
+        "left_join" => "LEFT JOIN",
+        "inner_join" => "INNER JOIN",
+        "outer_join" => "OUTER JOIN",
+        "join" => "LEFT JOIN",
+        _ => "OPERATION",
+    }
+}
+
+fn is_join_operation(value: &str) -> bool {
+    matches!(value, "join" | "left_join" | "inner_join" | "outer_join")
+}
+
+fn expression_label(sources: &[DatasetSourceDraft], operation: &str) -> String {
+    let aliases = sources
+        .iter()
+        .filter(|source| !source.source_alias.trim().is_empty())
+        .map(|source| source.source_alias.clone())
+        .collect::<Vec<_>>();
+    if aliases.is_empty() {
+        return "Choose at least one input".into();
+    }
+    aliases
+        .into_iter()
+        .reduce(|left, right| format!("({left}) {} ({right})", operation_label(operation)))
+        .unwrap_or_else(|| "Choose at least one input".into())
+}
+
+#[allow(dead_code)]
+fn expression_to_editor_drafts(
+    ast: &DatasetExpressionPayload,
+) -> (Vec<DatasetSourceDraft>, String, Vec<DatasetJoinKeyPayload>) {
+    let mut sources = Vec::new();
+    let mut operation = String::new();
+    let mut join_keys = Vec::new();
+    collect_expression_drafts(ast, &mut sources, &mut operation, &mut join_keys);
+    (sources, operation, join_keys)
+}
+
+#[allow(dead_code)]
+fn collect_expression_drafts(
+    ast: &DatasetExpressionPayload,
+    sources: &mut Vec<DatasetSourceDraft>,
+    operation: &mut String,
+    join_keys: &mut Vec<DatasetJoinKeyPayload>,
+) {
+    match ast {
+        DatasetExpressionPayload::Form {
+            alias,
+            form_id,
+            form_version_major,
+            selection_rule,
+        } => sources.push(DatasetSourceDraft {
+            input_kind: "form".into(),
+            source_alias: alias.clone(),
+            form_id: form_id.clone(),
+            form_version_id: String::new(),
+            form_version_major: *form_version_major,
+            dataset_id: String::new(),
+            dataset_revision_id: String::new(),
+            selection_rule: selection_rule.clone(),
+        }),
+        DatasetExpressionPayload::Dataset {
+            alias,
+            dataset_id,
+            dataset_revision_id,
+        } => sources.push(DatasetSourceDraft {
+            input_kind: "dataset".into(),
+            source_alias: alias.clone(),
+            form_id: String::new(),
+            form_version_id: String::new(),
+            form_version_major: None,
+            dataset_id: dataset_id.clone(),
+            dataset_revision_id: dataset_revision_id.clone(),
+            selection_rule: "latest".into(),
+        }),
+        DatasetExpressionPayload::Operation {
+            operation: node_operation,
+            left,
+            right,
+            join_keys: node_join_keys,
+            ..
+        } => {
+            if operation.is_empty() {
+                *operation = node_operation.clone();
+                *join_keys = node_join_keys.clone();
+            }
+            collect_expression_drafts(left, sources, operation, join_keys);
+            collect_expression_drafts(right, sources, operation, join_keys);
+        }
+    }
+}
+
+#[allow(dead_code)]
+fn build_expression_ast(
+    sources: &[DatasetSourceDraft],
+    operation: &str,
+    join_left_key: &str,
+    join_right_key: &str,
+) -> Option<DatasetExpressionPayload> {
+    let mut inputs = sources
+        .iter()
+        .filter_map(source_expression)
+        .collect::<Vec<_>>()
+        .into_iter();
+    let first = inputs.next()?;
+    Some(
+        inputs.fold(first, |left, right| DatasetExpressionPayload::Operation {
+            alias: "result".into(),
+            operation: operation.into(),
+            left: Box::new(left),
+            right: Box::new(right),
+            join_keys: if is_join_operation(operation)
+                && !join_left_key.trim().is_empty()
+                && !join_right_key.trim().is_empty()
+            {
+                vec![DatasetJoinKeyPayload {
+                    left_field: join_left_key.trim().into(),
+                    right_field: join_right_key.trim().into(),
+                }]
+            } else {
+                Vec::new()
+            },
+        }),
+    )
+}
+
+#[allow(dead_code)]
+fn source_expression(source: &DatasetSourceDraft) -> Option<DatasetExpressionPayload> {
+    if source.source_alias.trim().is_empty() {
+        return None;
+    }
+    if source.input_kind == "dataset" {
+        if source.dataset_id.is_empty() || source.dataset_revision_id.is_empty() {
+            return None;
+        }
+        Some(DatasetExpressionPayload::Dataset {
+            alias: source.source_alias.clone(),
+            dataset_id: source.dataset_id.clone(),
+            dataset_revision_id: source.dataset_revision_id.clone(),
+        })
+    } else {
+        if source.form_id.is_empty() {
+            return None;
+        }
+        Some(DatasetExpressionPayload::Form {
+            alias: source.source_alias.clone(),
+            form_id: source.form_id.clone(),
+            form_version_major: source.form_version_major,
+            selection_rule: source.selection_rule.clone(),
+        })
+    }
 }
 
 fn visibility_label(nodes: &[DatasetVisibilityNode]) -> String {
@@ -1248,6 +1583,8 @@ fn load_dataset_for_edit(
     visibility_node_ids: RwSignal<BTreeSet<String>>,
     sources: RwSignal<Vec<DatasetSourceDraft>>,
     fields: RwSignal<Vec<DatasetFieldDraft>>,
+    join_left_key: RwSignal<String>,
+    join_right_key: RwSignal<String>,
     load_error: RwSignal<Option<String>>,
 ) {
     leptos::task::spawn_local(async move {
@@ -1267,19 +1604,46 @@ fn load_dataset_for_edit(
                             .map(|node| node.node_id)
                             .collect(),
                     );
-                    sources.set(
-                        payload
+                    if let Some(ast) = payload.definition_ast.as_ref() {
+                        let (source_drafts, root_operation, join_keys) =
+                            expression_to_editor_drafts(ast);
+                        if !root_operation.is_empty() {
+                            composition_mode.set(root_operation);
+                        }
+                        if let Some(join_key) = join_keys.first() {
+                            join_left_key.set(join_key.left_field.clone());
+                            join_right_key.set(join_key.right_field.clone());
+                        }
+                        sources.set(if source_drafts.is_empty() {
+                            vec![DatasetSourceDraft::default()]
+                        } else {
+                            source_drafts
+                        });
+                    } else {
+                        let source_drafts = payload
                             .sources
                             .into_iter()
                             .map(|source| DatasetSourceDraft {
+                                input_kind: if source.dataset_revision_id.is_some() {
+                                    "dataset".into()
+                                } else {
+                                    "form".into()
+                                },
                                 source_alias: source.source_alias,
                                 form_id: source.form_id.unwrap_or_default(),
                                 form_version_id: String::new(),
                                 form_version_major: source.form_version_major,
+                                dataset_id: String::new(),
+                                dataset_revision_id: source.dataset_revision_id.unwrap_or_default(),
                                 selection_rule: source.selection_rule,
                             })
-                            .collect(),
-                    );
+                            .collect::<Vec<_>>();
+                        sources.set(if source_drafts.is_empty() {
+                            vec![DatasetSourceDraft::default()]
+                        } else {
+                            source_drafts
+                        });
+                    }
                     fields.set(
                         payload
                             .fields
@@ -1314,6 +1678,8 @@ fn load_dataset_for_edit(
     _: RwSignal<BTreeSet<String>>,
     _: RwSignal<Vec<DatasetSourceDraft>>,
     _: RwSignal<Vec<DatasetFieldDraft>>,
+    _: RwSignal<String>,
+    _: RwSignal<String>,
     _: RwSignal<Option<String>>,
 ) {
 }
@@ -1328,54 +1694,64 @@ fn save_dataset(
     visibility_node_ids: Vec<String>,
     mut sources: Vec<DatasetSourceDraft>,
     fields: Vec<DatasetFieldDraft>,
+    join_left_key: String,
+    join_right_key: String,
     save_error: RwSignal<Option<String>>,
     save_message: RwSignal<Option<String>>,
 ) {
     leptos::task::spawn_local(async move {
         save_error.set(None);
         save_message.set(None);
-        if composition_mode == "join" {
+        if is_join_operation(&composition_mode) {
             for source in &mut sources {
                 if source.selection_rule == "all" {
                     source.selection_rule = "latest".into();
                 }
             }
         }
+        let projected_fields = fields
+            .into_iter()
+            .enumerate()
+            .filter(|(_, field)| {
+                !field.key.trim().is_empty()
+                    && !field.label.trim().is_empty()
+                    && !field.source_alias.trim().is_empty()
+                    && !field.source_field_key.trim().is_empty()
+            })
+            .map(|(index, field)| DatasetFieldPayload {
+                key: field.key,
+                label: field.label,
+                source_alias: field.source_alias,
+                source_field_key: field.source_field_key,
+                position: index as i32,
+            })
+            .collect::<Vec<_>>();
+        let legacy_sources = sources
+            .iter()
+            .filter(|source| {
+                source.input_kind == "form"
+                    && !source.source_alias.trim().is_empty()
+                    && !source.form_id.is_empty()
+            })
+            .map(|source| DatasetSourcePayload {
+                source_alias: source.source_alias.clone(),
+                form_id: Some(source.form_id.clone()),
+                form_version_major: source.form_version_major,
+                selection_rule: source.selection_rule.clone(),
+            })
+            .collect::<Vec<_>>();
+        let definition_ast =
+            build_expression_ast(&sources, &composition_mode, &join_left_key, &join_right_key);
         let payload = DatasetPayload {
             name,
             slug,
             grain: "submission".into(),
             composition_mode,
             visibility_node_ids,
-            sources: sources
-                .into_iter()
-                .filter(|source| {
-                    !source.source_alias.trim().is_empty() && !source.form_id.is_empty()
-                })
-                .map(|source| DatasetSourcePayload {
-                    source_alias: source.source_alias,
-                    form_id: Some(source.form_id),
-                    form_version_major: source.form_version_major,
-                    selection_rule: source.selection_rule,
-                })
-                .collect(),
-            fields: fields
-                .into_iter()
-                .enumerate()
-                .filter(|(_, field)| {
-                    !field.key.trim().is_empty()
-                        && !field.label.trim().is_empty()
-                        && !field.source_alias.trim().is_empty()
-                        && !field.source_field_key.trim().is_empty()
-                })
-                .map(|(index, field)| DatasetFieldPayload {
-                    key: field.key,
-                    label: field.label,
-                    source_alias: field.source_alias,
-                    source_field_key: field.source_field_key,
-                    position: index as i32,
-                })
-                .collect(),
+            definition_ast,
+            projected_fields: projected_fields.clone(),
+            sources: legacy_sources,
+            fields: projected_fields,
         };
         let Ok(body) = serde_json::to_string(&payload) else {
             save_error.set(Some("Dataset payload could not be prepared.".into()));
@@ -1425,6 +1801,8 @@ fn save_dataset(
     _: Vec<String>,
     _: Vec<DatasetSourceDraft>,
     _: Vec<DatasetFieldDraft>,
+    _: String,
+    _: String,
     _: RwSignal<Option<String>>,
     _: RwSignal<Option<String>>,
 ) {

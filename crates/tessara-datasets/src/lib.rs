@@ -67,7 +67,15 @@ impl DatasetGrain {
 pub enum DatasetCompositionMode {
     /// Union rows from all configured sources into one dataset row stream.
     Union,
-    /// Join rows from multiple sources into one semantic row.
+    /// Union rows from all configured sources, preserving duplicates.
+    UnionAll,
+    /// Left join the right input onto the left input.
+    LeftJoin,
+    /// Inner join two inputs.
+    InnerJoin,
+    /// Full outer join two inputs.
+    OuterJoin,
+    /// Legacy alias for the original node-aligned join behavior.
     Join,
 }
 
@@ -76,6 +84,10 @@ impl DatasetCompositionMode {
     pub fn parse(value: &str) -> Result<Self, DatasetRuleError> {
         match value.trim() {
             "union" => Ok(Self::Union),
+            "union_all" => Ok(Self::UnionAll),
+            "left_join" => Ok(Self::LeftJoin),
+            "inner_join" => Ok(Self::InnerJoin),
+            "outer_join" => Ok(Self::OuterJoin),
             "join" => Ok(Self::Join),
             other => Err(DatasetRuleError::new(format!(
                 "unsupported dataset composition mode '{other}'"
@@ -87,6 +99,10 @@ impl DatasetCompositionMode {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Union => "union",
+            Self::UnionAll => "union_all",
+            Self::LeftJoin => "left_join",
+            Self::InnerJoin => "inner_join",
+            Self::OuterJoin => "outer_join",
             Self::Join => "join",
         }
     }
