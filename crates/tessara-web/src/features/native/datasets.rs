@@ -147,9 +147,7 @@ struct DatasetPayload {
     grain: String,
     composition_mode: String,
     visibility_node_ids: Vec<String>,
-    definition_ast: Option<DatasetExpressionPayload>,
-    projected_fields: Vec<DatasetFieldPayload>,
-    sources: Vec<DatasetSourcePayload>,
+    definition_ast: DatasetExpressionPayload,
     fields: Vec<DatasetFieldPayload>,
 }
 
@@ -181,15 +179,6 @@ enum DatasetExpressionPayload {
 struct DatasetJoinKeyPayload {
     left_field: String,
     right_field: String,
-}
-
-#[allow(dead_code)]
-#[derive(Clone, Debug, Serialize)]
-struct DatasetSourcePayload {
-    source_alias: String,
-    form_id: Option<String>,
-    form_version_major: Option<i32>,
-    selection_rule: String,
 }
 
 #[allow(dead_code)]
@@ -586,7 +575,7 @@ fn DatasetSqlPanel(sql: Option<String>) -> impl IntoView {
             {if let Some(sql) = sql {
                 view! { <pre class="dataset-sql-panel"><code>{sql}</code></pre> }.into_any()
             } else {
-                view! { <EmptyState title="SQL unavailable" message="This legacy dataset revision does not have generated SQL metadata."/> }.into_any()
+                view! { <EmptyState title="SQL unavailable" message="This dataset revision does not have generated SQL metadata."/> }.into_any()
             }}
         </section>
     }
@@ -1604,46 +1593,27 @@ fn load_dataset_for_edit(
                             .map(|node| node.node_id)
                             .collect(),
                     );
-                    if let Some(ast) = payload.definition_ast.as_ref() {
-                        let (source_drafts, root_operation, join_keys) =
-                            expression_to_editor_drafts(ast);
-                        if !root_operation.is_empty() {
-                            composition_mode.set(root_operation);
-                        }
-                        if let Some(join_key) = join_keys.first() {
-                            join_left_key.set(join_key.left_field.clone());
-                            join_right_key.set(join_key.right_field.clone());
-                        }
-                        sources.set(if source_drafts.is_empty() {
-                            vec![DatasetSourceDraft::default()]
-                        } else {
-                            source_drafts
-                        });
-                    } else {
-                        let source_drafts = payload
-                            .sources
-                            .into_iter()
-                            .map(|source| DatasetSourceDraft {
-                                input_kind: if source.dataset_revision_id.is_some() {
-                                    "dataset".into()
-                                } else {
-                                    "form".into()
-                                },
-                                source_alias: source.source_alias,
-                                form_id: source.form_id.unwrap_or_default(),
-                                form_version_id: String::new(),
-                                form_version_major: source.form_version_major,
-                                dataset_id: String::new(),
-                                dataset_revision_id: source.dataset_revision_id.unwrap_or_default(),
-                                selection_rule: source.selection_rule,
-                            })
-                            .collect::<Vec<_>>();
-                        sources.set(if source_drafts.is_empty() {
-                            vec![DatasetSourceDraft::default()]
-                        } else {
-                            source_drafts
-                        });
+                    let Some(ast) = payload.definition_ast.as_ref() else {
+                        load_error.set(Some(
+                            "This dataset was not created with the query designer and cannot be edited here."
+                                .into(),
+                        ));
+                        return;
+                    };
+                    let (source_drafts, root_operation, join_keys) =
+                        expression_to_editor_drafts(ast);
+                    if !root_operation.is_empty() {
+                        composition_mode.set(root_operation);
                     }
+                    if let Some(join_key) = join_keys.first() {
+                        join_left_key.set(join_key.left_field.clone());
+                        join_right_key.set(join_key.right_field.clone());
+                    }
+                    sources.set(if source_drafts.is_empty() {
+                        vec![DatasetSourceDraft::default()]
+                    } else {
+                        source_drafts
+                    });
                     fields.set(
                         payload
                             .fields
@@ -1709,7 +1679,7 @@ fn save_dataset(
                 }
             }
         }
-        let projected_fields = fields
+        let field_payloads = fields
             .into_iter()
             .enumerate()
             .filter(|(_, field)| {
@@ -1726,22 +1696,14 @@ fn save_dataset(
                 position: index as i32,
             })
             .collect::<Vec<_>>();
-        let legacy_sources = sources
-            .iter()
-            .filter(|source| {
-                source.input_kind == "form"
-                    && !source.source_alias.trim().is_empty()
-                    && !source.form_id.is_empty()
-            })
-            .map(|source| DatasetSourcePayload {
-                source_alias: source.source_alias.clone(),
-                form_id: Some(source.form_id.clone()),
-                form_version_major: source.form_version_major,
-                selection_rule: source.selection_rule.clone(),
-            })
-            .collect::<Vec<_>>();
-        let definition_ast =
-            build_expression_ast(&sources, &composition_mode, &join_left_key, &join_right_key);
+        let Some(definition_ast) =
+            build_expression_ast(&sources, &composition_mode, &join_left_key, &join_right_key)
+        else {
+            save_error.set(Some(
+                "Choose at least one complete dataset input before saving.".into(),
+            ));
+            return;
+        };
         let payload = DatasetPayload {
             name,
             slug,
@@ -1749,9 +1711,7 @@ fn save_dataset(
             composition_mode,
             visibility_node_ids,
             definition_ast,
-            projected_fields: projected_fields.clone(),
-            sources: legacy_sources,
-            fields: projected_fields,
+            fields: field_payloads,
         };
         let Ok(body) = serde_json::to_string(&payload) else {
             save_error.set(Some("Dataset payload could not be prepared.".into()));

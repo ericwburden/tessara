@@ -80,7 +80,7 @@ struct QueryCompiler<'a> {
     pool: &'a sqlx::PgPool,
     account: &'a auth::AccountContext,
     dataset_id: Option<Uuid>,
-    projected_fields: &'a [CreateDatasetFieldRequest],
+    output_fields: &'a [CreateDatasetFieldRequest],
     field_keys: Vec<String>,
     ctes: Vec<String>,
     cte_index: usize,
@@ -119,7 +119,7 @@ pub async fn create_dataset(
         ));
     }
     let composition_mode = top_level_composition_mode(&payload)?;
-    let projected_fields = request_projected_fields(&payload);
+    let field_requests = payload.fields.clone();
 
     let mut tx = state.pool.begin().await?;
     let dataset_id: Uuid = sqlx::query_scalar(
@@ -137,7 +137,7 @@ pub async fn create_dataset(
         &account,
         Some(dataset_id),
         &payload,
-        &projected_fields,
+        &field_requests,
     )
     .await?;
     insert_dataset_sources(&mut tx, dataset_id, &compiled.sources).await?;
@@ -186,13 +186,13 @@ pub async fn update_dataset(
         ));
     }
     let composition_mode = top_level_composition_mode(&payload)?;
-    let projected_fields = request_projected_fields(&payload);
+    let field_requests = payload.fields.clone();
     let compiled = compile_dataset_definition(
         &state.pool,
         &account,
         Some(dataset_id),
         &payload,
-        &projected_fields,
+        &field_requests,
     )
     .await?;
 
@@ -524,16 +524,8 @@ pub async fn run_dataset_table(
     }))
 }
 
-fn request_projected_fields(payload: &CreateDatasetRequest) -> Vec<CreateDatasetFieldRequest> {
-    if payload.projected_fields.is_empty() {
-        payload.fields.clone()
-    } else {
-        payload.projected_fields.clone()
-    }
-}
-
 fn top_level_composition_mode(payload: &CreateDatasetRequest) -> ApiResult<DatasetCompositionMode> {
-    if let Some(DatasetExpressionRequest::Operation { operation, .. }) = &payload.definition_ast {
+    if let DatasetExpressionRequest::Operation { operation, .. } = &payload.definition_ast {
         return DatasetCompositionMode::parse(operation)
             .map_err(|error| ApiError::BadRequest(error.to_string()));
     }
@@ -546,23 +538,20 @@ async fn compile_dataset_definition(
     account: &auth::AccountContext,
     dataset_id: Option<Uuid>,
     payload: &CreateDatasetRequest,
-    projected_fields: &[CreateDatasetFieldRequest],
+    field_requests: &[CreateDatasetFieldRequest],
 ) -> ApiResult<CompiledDataset> {
-    let ast = payload
-        .definition_ast
-        .clone()
-        .unwrap_or_else(|| legacy_expression_from_payload(payload));
+    let ast = payload.definition_ast.clone();
     validate_dataset_shape(
         collect_expression_aliases(&ast),
-        projected_fields.iter().map(|field| field.key.as_str()),
+        field_requests.iter().map(|field| field.key.as_str()),
     )
     .map_err(|error| ApiError::BadRequest(error.to_string()))?;
     let mut compiler = QueryCompiler {
         pool,
         account,
         dataset_id,
-        projected_fields,
-        field_keys: projected_fields
+        output_fields: field_requests,
+        field_keys: field_requests
             .iter()
             .map(|field| field.key.clone())
             .collect(),
@@ -573,40 +562,12 @@ async fn compile_dataset_definition(
     };
     let root = compiler.compile_expression(&ast).await?;
     let generated_sql = compiler.final_sql(&root);
-    let fields =
-        validate_dataset_fields(pool, &compiler.sources, projected_fields.to_vec()).await?;
+    let fields = validate_dataset_fields(pool, &compiler.sources, field_requests.to_vec()).await?;
     Ok(CompiledDataset {
         definition_ast: ast,
         generated_sql,
         sources: compiler.sources,
         fields,
-    })
-}
-
-fn legacy_expression_from_payload(payload: &CreateDatasetRequest) -> DatasetExpressionRequest {
-    let mut expressions = payload
-        .sources
-        .iter()
-        .map(|source| DatasetExpressionRequest::Form {
-            alias: source.source_alias.clone(),
-            form_id: source.form_id.unwrap_or_else(Uuid::nil),
-            form_version_major: source.form_version_major,
-            selection_rule: source.selection_rule.clone(),
-        });
-    let first = expressions
-        .next()
-        .unwrap_or_else(|| DatasetExpressionRequest::Form {
-            alias: "source_1".into(),
-            form_id: Uuid::nil(),
-            form_version_major: None,
-            selection_rule: "latest".into(),
-        });
-    expressions.fold(first, |left, right| DatasetExpressionRequest::Operation {
-        alias: "result".into(),
-        operation: payload.composition_mode.clone(),
-        left: Box::new(left),
-        right: Box::new(right),
-        join_keys: Vec::new(),
     })
 }
 
@@ -698,7 +659,7 @@ impl<'a> QueryCompiler<'a> {
         };
         let cte_name = self.next_cte_name(alias)?;
         let select_columns = self
-            .projected_fields
+            .output_fields
             .iter()
             .map(|field| {
                 let column = quote_identifier(&field.key);

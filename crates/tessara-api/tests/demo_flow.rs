@@ -226,19 +226,6 @@ async fn admin_dataset_query_designer_materializes_generated_sql() {
             "form_version_major": null,
             "selection_rule": "latest"
         },
-        "projected_fields": [{
-            "key": field_key,
-            "label": field_label,
-            "source_alias": "form_a",
-            "source_field_key": field_key,
-            "position": 0
-        }],
-        "sources": [{
-            "source_alias": "form_a",
-            "form_id": form_id,
-            "form_version_major": null,
-            "selection_rule": "latest"
-        }],
         "fields": [{
             "key": field_key,
             "label": field_label,
@@ -247,6 +234,27 @@ async fn admin_dataset_query_designer_materializes_generated_sql() {
             "position": 0
         }]
     });
+    let mut legacy_payload = payload.clone();
+    legacy_payload["sources"] = json!([{
+        "source_alias": "form_a",
+        "form_id": form_id,
+        "form_version_major": null,
+        "selection_rule": "latest"
+    }]);
+    let legacy_status = request_status(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/datasets",
+            &admin_token,
+            Some(legacy_payload),
+        ),
+    )
+    .await;
+    assert!(
+        !legacy_status.is_success(),
+        "legacy flat source payloads should be rejected"
+    );
 
     let created = request_json(
         app.clone(),
@@ -399,4 +407,11 @@ fn authorized_request(method: &str, uri: &str, token: &str, body: Option<Value>)
             None => Body::empty(),
         })
         .expect("valid authorized request")
+}
+
+async fn request_status(app: axum::Router, request: Request<Body>) -> StatusCode {
+    app.oneshot(request)
+        .await
+        .expect("request should succeed")
+        .status()
 }

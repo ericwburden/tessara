@@ -5,6 +5,7 @@ use uuid::Uuid;
 
 /// Payload for creating or replacing a dataset definition and revision.
 #[derive(Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct CreateDatasetRequest {
     pub(crate) name: String,
     pub(crate) slug: String,
@@ -13,13 +14,7 @@ pub struct CreateDatasetRequest {
     pub(crate) composition_mode: String,
     #[serde(default)]
     pub(crate) visibility_node_ids: Vec<Uuid>,
-    #[serde(default)]
-    pub(crate) definition_ast: Option<DatasetExpressionRequest>,
-    #[serde(default)]
-    pub(crate) projected_fields: Vec<CreateDatasetFieldRequest>,
-    #[serde(default)]
-    pub(crate) sources: Vec<CreateDatasetSourceRequest>,
-    #[serde(default)]
+    pub(crate) definition_ast: DatasetExpressionRequest,
     pub(crate) fields: Vec<CreateDatasetFieldRequest>,
 }
 
@@ -53,15 +48,6 @@ pub enum DatasetExpressionRequest {
 pub struct DatasetJoinKeyRequest {
     pub(crate) left_field: String,
     pub(crate) right_field: String,
-}
-
-/// One source form selection inside a dataset revision.
-#[derive(Clone, Deserialize)]
-pub struct CreateDatasetSourceRequest {
-    pub(crate) source_alias: String,
-    pub(crate) form_id: Option<Uuid>,
-    pub(crate) form_version_major: Option<i32>,
-    pub(crate) selection_rule: String,
 }
 
 /// One exposed field mapped from a dataset source field.
