@@ -95,6 +95,12 @@ struct DatasetTableRow {
     values: BTreeMap<String, Option<String>>,
 }
 
+#[cfg(feature = "hydrate")]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+struct DatasetSqlPreviewResponse {
+    generated_sql: String,
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 struct FormSummary {
     id: String,
@@ -660,6 +666,8 @@ fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView {
     let table_error = RwSignal::new(None::<String>);
     let save_error = RwSignal::new(None::<String>);
     let save_message = RwSignal::new(None::<String>);
+    let sql_preview = RwSignal::new(None::<String>);
+    let sql_preview_error = RwSignal::new(None::<String>);
     let designer_selection = RwSignal::new(DatasetDesignerSelection::Operation);
 
     Effect::new({
@@ -679,6 +687,7 @@ fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView {
                     fields,
                     join_left_key,
                     join_right_key,
+                    sql_preview,
                     load_error,
                 );
                 load_dataset_table(dataset_id, table, table_error);
@@ -739,6 +748,19 @@ fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView {
                         designer_selection
                     />
                     <DatasetFieldsEditor fields sources designer_selection/>
+                    <DatasetSqlPreviewPanel
+                        dataset_id=dataset_id.clone()
+                        name
+                        slug
+                        composition_mode
+                        visibility_node_ids
+                        sources
+                        fields
+                        join_left_key
+                        join_right_key
+                        sql_preview
+                        sql_preview_error
+                    />
                     <section class="route-panel__section dataset-editor-section">
                         <h3>"Visibility"</h3>
                         <div class="dataset-checkbox-grid">
@@ -892,6 +914,51 @@ fn DatasetSourcesEditor(
                     join_right_key
                 />
             </div>
+        </section>
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+#[component]
+fn DatasetSqlPreviewPanel(
+    dataset_id: Option<String>,
+    name: RwSignal<String>,
+    slug: RwSignal<String>,
+    composition_mode: RwSignal<String>,
+    visibility_node_ids: RwSignal<BTreeSet<String>>,
+    sources: RwSignal<Vec<DatasetSourceDraft>>,
+    fields: RwSignal<Vec<DatasetFieldDraft>>,
+    join_left_key: RwSignal<String>,
+    join_right_key: RwSignal<String>,
+    sql_preview: RwSignal<Option<String>>,
+    sql_preview_error: RwSignal<Option<String>>,
+) -> impl IntoView {
+    view! {
+        <section class="route-panel__section dataset-editor-section">
+            <div class="dataset-editor-section__header">
+                <h3>"Generated SQL"</h3>
+                <button class="button button--secondary button--compact" type="button" on:click=move |_| {
+                    preview_dataset_sql(
+                        dataset_id.clone(),
+                        name.get(),
+                        slug.get(),
+                        composition_mode.get(),
+                        visibility_node_ids.get().into_iter().collect(),
+                        sources.get(),
+                        fields.get(),
+                        join_left_key.get(),
+                        join_right_key.get(),
+                        sql_preview,
+                        sql_preview_error,
+                    );
+                }>"Preview SQL"</button>
+            </div>
+            {move || sql_preview_error.get().map(|message| view! { <p class="form-status is-error">{message}</p> })}
+            {move || if let Some(sql) = sql_preview.get() {
+                view! { <pre class="dataset-sql-panel"><code>{sql}</code></pre> }.into_any()
+            } else {
+                view! { <EmptyState title="SQL preview unavailable" message="Preview SQL to compile the current dataset definition without saving."/> }.into_any()
+            }}
         </section>
     }
 }
@@ -2013,6 +2080,7 @@ fn load_dataset_for_edit(
     fields: RwSignal<Vec<DatasetFieldDraft>>,
     join_left_key: RwSignal<String>,
     join_right_key: RwSignal<String>,
+    sql_preview: RwSignal<Option<String>>,
     load_error: RwSignal<Option<String>>,
 ) {
     leptos::task::spawn_local(async move {
@@ -2025,6 +2093,7 @@ fn load_dataset_for_edit(
                     name.set(payload.name);
                     slug.set(payload.slug);
                     composition_mode.set(payload.composition_mode);
+                    sql_preview.set(payload.generated_sql.clone());
                     visibility_node_ids.set(
                         payload
                             .visibility_nodes
@@ -2090,6 +2159,7 @@ fn load_dataset_for_edit(
     _: RwSignal<String>,
     _: RwSignal<String>,
     _: RwSignal<Option<String>>,
+    _: RwSignal<Option<String>>,
 ) {
 }
 
@@ -2101,7 +2171,7 @@ fn save_dataset(
     slug: String,
     composition_mode: String,
     visibility_node_ids: Vec<String>,
-    mut sources: Vec<DatasetSourceDraft>,
+    sources: Vec<DatasetSourceDraft>,
     fields: Vec<DatasetFieldDraft>,
     join_left_key: String,
     join_right_key: String,
@@ -2111,46 +2181,21 @@ fn save_dataset(
     leptos::task::spawn_local(async move {
         save_error.set(None);
         save_message.set(None);
-        if is_join_operation(&composition_mode) {
-            for source in &mut sources {
-                if source.selection_rule == "all" {
-                    source.selection_rule = "latest".into();
-                }
-            }
-        }
-        let field_payloads = fields
-            .into_iter()
-            .enumerate()
-            .filter(|(_, field)| {
-                !field.key.trim().is_empty()
-                    && !field.label.trim().is_empty()
-                    && !field.source_alias.trim().is_empty()
-                    && !field.source_field_key.trim().is_empty()
-            })
-            .map(|(index, field)| DatasetFieldPayload {
-                key: field.key,
-                label: field.label,
-                source_alias: field.source_alias,
-                source_field_key: field.source_field_key,
-                position: index as i32,
-            })
-            .collect::<Vec<_>>();
-        let Some(definition_ast) =
-            build_expression_ast(&sources, &composition_mode, &join_left_key, &join_right_key)
-        else {
-            save_error.set(Some(
-                "Choose at least one complete dataset input before saving.".into(),
-            ));
-            return;
-        };
-        let payload = DatasetPayload {
+        let payload = match dataset_payload_from_drafts(
             name,
             slug,
-            grain: "submission".into(),
             composition_mode,
             visibility_node_ids,
-            definition_ast,
-            fields: field_payloads,
+            sources,
+            fields,
+            join_left_key,
+            join_right_key,
+        ) {
+            Ok(payload) => payload,
+            Err(message) => {
+                save_error.set(Some(message));
+                return;
+            }
         };
         let Ok(body) = serde_json::to_string(&payload) else {
             save_error.set(Some("Dataset payload could not be prepared.".into()));
@@ -2188,6 +2233,125 @@ fn save_dataset(
             Err(message) => save_error.set(Some(message)),
         }
     });
+}
+
+#[cfg(feature = "hydrate")]
+fn dataset_payload_from_drafts(
+    name: String,
+    slug: String,
+    composition_mode: String,
+    visibility_node_ids: Vec<String>,
+    mut sources: Vec<DatasetSourceDraft>,
+    fields: Vec<DatasetFieldDraft>,
+    join_left_key: String,
+    join_right_key: String,
+) -> Result<DatasetPayload, String> {
+    if is_join_operation(&composition_mode) {
+        for source in &mut sources {
+            if source.selection_rule == "all" {
+                source.selection_rule = "latest".into();
+            }
+        }
+    }
+    let field_payloads = fields
+        .into_iter()
+        .enumerate()
+        .filter(|(_, field)| {
+            !field.key.trim().is_empty()
+                && !field.label.trim().is_empty()
+                && !field.source_alias.trim().is_empty()
+                && !field.source_field_key.trim().is_empty()
+        })
+        .map(|(index, field)| DatasetFieldPayload {
+            key: field.key,
+            label: field.label,
+            source_alias: field.source_alias,
+            source_field_key: field.source_field_key,
+            position: index as i32,
+        })
+        .collect::<Vec<_>>();
+    let Some(definition_ast) =
+        build_expression_ast(&sources, &composition_mode, &join_left_key, &join_right_key)
+    else {
+        return Err("Choose at least one complete dataset input before saving.".into());
+    };
+    Ok(DatasetPayload {
+        name,
+        slug,
+        grain: "submission".into(),
+        composition_mode,
+        visibility_node_ids,
+        definition_ast,
+        fields: field_payloads,
+    })
+}
+
+#[cfg(feature = "hydrate")]
+#[allow(clippy::too_many_arguments)]
+fn preview_dataset_sql(
+    dataset_id: Option<String>,
+    name: String,
+    slug: String,
+    composition_mode: String,
+    visibility_node_ids: Vec<String>,
+    sources: Vec<DatasetSourceDraft>,
+    fields: Vec<DatasetFieldDraft>,
+    join_left_key: String,
+    join_right_key: String,
+    sql_preview: RwSignal<Option<String>>,
+    sql_preview_error: RwSignal<Option<String>>,
+) {
+    leptos::task::spawn_local(async move {
+        sql_preview_error.set(None);
+        let payload = match dataset_payload_from_drafts(
+            name,
+            slug,
+            composition_mode,
+            visibility_node_ids,
+            sources,
+            fields,
+            join_left_key,
+            join_right_key,
+        ) {
+            Ok(payload) => payload,
+            Err(message) => {
+                sql_preview_error.set(Some(message));
+                return;
+            }
+        };
+        let Ok(body) = serde_json::to_string(&payload) else {
+            sql_preview_error.set(Some("Dataset payload could not be prepared.".into()));
+            return;
+        };
+        let request = if let Some(dataset_id) = dataset_id {
+            gloo_net::http::Request::post(&format!("/api/admin/datasets/{dataset_id}/sql-preview"))
+        } else {
+            gloo_net::http::Request::post("/api/admin/datasets/sql-preview")
+        };
+        let result: Result<DatasetSqlPreviewResponse, String> =
+            send_json_request(request, Some(body), "dataset SQL preview").await;
+        match result {
+            Ok(response) => sql_preview.set(Some(response.generated_sql)),
+            Err(message) => sql_preview_error.set(Some(message)),
+        }
+    });
+}
+
+#[cfg(not(feature = "hydrate"))]
+#[allow(clippy::too_many_arguments)]
+fn preview_dataset_sql(
+    _: Option<String>,
+    _: String,
+    _: String,
+    _: String,
+    _: Vec<String>,
+    _: Vec<DatasetSourceDraft>,
+    _: Vec<DatasetFieldDraft>,
+    _: String,
+    _: String,
+    _: RwSignal<Option<String>>,
+    _: RwSignal<Option<String>>,
+) {
 }
 
 #[cfg(not(feature = "hydrate"))]

@@ -138,6 +138,12 @@ pub struct DatasetTable {
     pub(crate) rows: Vec<DatasetTableRow>,
 }
 
+/// Generated SQL preview for an unsaved dataset definition draft.
+#[derive(Serialize)]
+pub struct DatasetSqlPreview {
+    pub(crate) generated_sql: String,
+}
+
 /// One executed dataset row at submission/source grain.
 #[derive(Serialize)]
 pub struct DatasetTableRow {

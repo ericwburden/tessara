@@ -26,8 +26,8 @@ mod dto;
 
 pub use dto::{
     CreateDatasetFieldRequest, CreateDatasetRequest, DatasetDefinition, DatasetExpressionRequest,
-    DatasetFieldDefinition, DatasetSourceDefinition, DatasetSummary, DatasetTable, DatasetTableRow,
-    DatasetVisibilityNodeSummary,
+    DatasetFieldDefinition, DatasetSourceDefinition, DatasetSqlPreview, DatasetSummary,
+    DatasetTable, DatasetTableRow, DatasetVisibilityNodeSummary,
 };
 
 use crate::{
@@ -40,6 +40,11 @@ use crate::{
 pub(crate) fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/admin/datasets", post(create_dataset))
+        .route("/api/admin/datasets/sql-preview", post(preview_dataset_sql))
+        .route(
+            "/api/admin/datasets/{dataset_id}/sql-preview",
+            post(preview_existing_dataset_sql),
+        )
         .route(
             "/api/admin/datasets/{dataset_id}",
             axum::routing::put(update_dataset).delete(delete_dataset),
@@ -91,6 +96,57 @@ struct QueryCompiler<'a> {
 struct CompiledExpression {
     cte_name: String,
     columns: BTreeSet<String>,
+}
+
+/// Compiles a dataset draft and returns generated SQL without saving it.
+pub async fn preview_dataset_sql(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<CreateDatasetRequest>,
+) -> ApiResult<Json<DatasetSqlPreview>> {
+    preview_dataset_sql_inner(state, headers, None, payload).await
+}
+
+/// Compiles an existing dataset draft and returns generated SQL without saving it.
+pub async fn preview_existing_dataset_sql(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(dataset_id): Path<Uuid>,
+    Json(payload): Json<CreateDatasetRequest>,
+) -> ApiResult<Json<DatasetSqlPreview>> {
+    preview_dataset_sql_inner(state, headers, Some(dataset_id), payload).await
+}
+
+async fn preview_dataset_sql_inner(
+    state: AppState,
+    headers: HeaderMap,
+    dataset_id: Option<Uuid>,
+    payload: CreateDatasetRequest,
+) -> ApiResult<Json<DatasetSqlPreview>> {
+    let account = auth::require_capability(&state.pool, &headers, "datasets:manage").await?;
+    require_text("dataset name", &payload.name)?;
+    require_text("dataset slug", &payload.slug)?;
+    require_node_ids_exist(&state.pool, &payload.visibility_node_ids).await?;
+    auth::require_capability_contains_nodes(
+        &state.pool,
+        &account,
+        "datasets:manage",
+        &payload.visibility_node_ids,
+    )
+    .await?;
+    let grain = DatasetGrain::parse(&payload.grain)
+        .map_err(|error| ApiError::BadRequest(error.to_string()))?;
+    if grain != DatasetGrain::Submission {
+        return Err(ApiError::BadRequest(
+            "dataset query designer currently supports submission grain".into(),
+        ));
+    }
+    let compiled =
+        compile_dataset_definition(&state.pool, &account, dataset_id, &payload, &payload.fields)
+            .await?;
+    Ok(Json(DatasetSqlPreview {
+        generated_sql: compiled.generated_sql,
+    }))
 }
 
 /// Creates a semantic dataset definition and its first immutable revision.
