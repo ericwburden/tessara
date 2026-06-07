@@ -645,18 +645,18 @@ fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView {
                         save_message,
                     );
                 }>
-                    <section class="route-panel__section">
+                    <section class="route-panel__section dataset-editor-section">
                         <h3>"Dataset Definition"</h3>
                         <div class="form-grid">
-                            <label class="field">
+                            <label class="form-field">
                                 <span>"Name"</span>
                                 <input required prop:value=move || name.get() on:input=move |event| name.set(event_target_value(&event))/>
                             </label>
-                            <label class="field">
+                            <label class="form-field">
                                 <span>"Slug"</span>
                                 <input required prop:value=move || slug.get() on:input=move |event| slug.set(event_target_value(&event))/>
                             </label>
-                            <label class="field">
+                            <label class="form-field">
                                 <span>"Composition"</span>
                                 <select prop:value=move || composition_mode.get() on:change=move |event| composition_mode.set(event_target_value(&event))>
                                     <option value="union">"Union"</option>
@@ -665,7 +665,7 @@ fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView {
                             </label>
                         </div>
                     </section>
-                    <section class="route-panel__section">
+                    <section class="route-panel__section dataset-editor-section">
                         <h3>"Visibility"</h3>
                         <div class="dataset-checkbox-grid">
                             {move || nodes.get().into_iter().map(|node| {
@@ -743,19 +743,25 @@ fn DatasetSourcesEditor(
     fields: RwSignal<Vec<DatasetFieldDraft>>,
 ) -> impl IntoView {
     view! {
-        <section class="route-panel__section">
-            <h3>"Sources"</h3>
+        <section class="route-panel__section dataset-editor-section">
+            <div class="dataset-editor-section__header">
+                <h3>"Sources"</h3>
+                <button class="button button--secondary button--compact" type="button" on:click=move |_| {
+                    let next = sources.get().len() + 1;
+                    sources.update(|items| items.push(DatasetSourceDraft { source_alias: format!("source_{next}"), ..DatasetSourceDraft::default() }));
+                }>"Add Source"</button>
+            </div>
             {move || sources.get().into_iter().enumerate().map(|(index, source)| {
                 view! {
-                    <div class="dataset-editor-row">
-                        <label class="field">
+                    <div class="dataset-editor-row dataset-editor-row--source">
+                        <label class="form-field">
                             <span>"Alias"</span>
                             <input prop:value=source.source_alias.clone() on:input=move |event| {
                                 let value = event_target_value(&event);
                                 sources.update(|items| if let Some(item) = items.get_mut(index) { item.source_alias = value; });
                             }/>
                         </label>
-                        <label class="field">
+                        <label class="form-field">
                             <span>"Form"</span>
                             <select prop:value=source.form_id.clone() on:change=move |event| {
                                 let form_id = event_target_value(&event);
@@ -774,7 +780,7 @@ fn DatasetSourcesEditor(
                                 {forms.get().into_iter().map(|form| view! { <option value=form.id>{form.name}</option> }).collect_view()}
                             </select>
                         </label>
-                        <label class="field">
+                        <label class="form-field">
                             <span>"Version"</span>
                             <select prop:value=source.form_version_id.clone() on:change=move |event| {
                                 let version_id = event_target_value(&event);
@@ -791,7 +797,7 @@ fn DatasetSourcesEditor(
                                 }).collect_view()}
                             </select>
                         </label>
-                        <label class="field">
+                        <label class="form-field">
                             <span>"Selection"</span>
                             <select prop:value=source.selection_rule.clone() on:change=move |event| {
                                 let value = event_target_value(&event);
@@ -810,10 +816,6 @@ fn DatasetSourcesEditor(
                     </div>
                 }
             }).collect_view()}
-            <button class="button button--secondary" type="button" on:click=move |_| {
-                let next = sources.get().len() + 1;
-                sources.update(|items| items.push(DatasetSourceDraft { source_alias: format!("source_{next}"), ..DatasetSourceDraft::default() }));
-            }>"Add Source"</button>
         </section>
     }
 }
@@ -825,26 +827,26 @@ fn DatasetFieldsEditor(
     rendered_forms: RwSignal<BTreeMap<String, RenderedForm>>,
 ) -> impl IntoView {
     view! {
-        <section class="route-panel__section">
+        <section class="route-panel__section dataset-editor-section">
             <h3>"Fields"</h3>
             {move || fields.get().into_iter().enumerate().map(|(index, field)| {
                 view! {
-                    <div class="dataset-editor-row">
-                        <label class="field">
+                    <div class="dataset-editor-row dataset-editor-row--fields">
+                        <label class="form-field">
                             <span>"Key"</span>
                             <input prop:value=field.key.clone() on:input=move |event| {
                                 let value = event_target_value(&event);
                                 fields.update(|items| if let Some(item) = items.get_mut(index) { item.key = value; });
                             }/>
                         </label>
-                        <label class="field">
+                        <label class="form-field">
                             <span>"Label"</span>
                             <input prop:value=field.label.clone() on:input=move |event| {
                                 let value = event_target_value(&event);
                                 fields.update(|items| if let Some(item) = items.get_mut(index) { item.label = value; });
                             }/>
                         </label>
-                        <label class="field">
+                        <label class="form-field">
                             <span>"Source"</span>
                             <select prop:value=field.source_alias.clone() on:change=move |event| {
                                 let value = event_target_value(&event);
@@ -853,7 +855,7 @@ fn DatasetFieldsEditor(
                                 {sources.get().into_iter().map(|source| view! { <option value=source.source_alias.clone()>{source.source_alias.clone()}</option> }).collect_view()}
                             </select>
                         </label>
-                        <label class="field">
+                        <label class="form-field">
                             <span>"Source Field"</span>
                             <select prop:value=field.source_field_key.clone() on:change=move |event| {
                                 let value = event_target_value(&event);

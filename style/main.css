@@ -390,6 +390,23 @@ input {
   margin-right: 0.4rem;
 }
 
+.button--secondary {
+  border: 1px solid var(--color-border);
+  background: var(--color-control);
+  color: var(--color-text);
+}
+
+.button--secondary:hover {
+  background: var(--semantic-primary-soft);
+  color: var(--color-text);
+}
+
+.button--compact {
+  min-height: 2.2rem;
+  padding: 0 0.75rem;
+  font-size: 0.86rem;
+}
+
 .icon-button--danger {
   background: var(--semantic-danger);
   color: var(--semantic-danger-foreground);
@@ -1545,28 +1562,78 @@ input {
   gap: 1rem;
 }
 
+.dataset-editor-section {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: rgb(15 23 42 / 14%);
+  padding: 1rem;
+}
+
+.dataset-editor-section__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
 .dataset-editor-row {
   align-items: end;
   display: grid;
   gap: 0.75rem;
-  grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
-  margin-bottom: 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-table-row);
+  padding: 0.85rem;
+}
+
+.dataset-editor-row--source {
+  grid-template-columns: minmax(7rem, 0.85fr) minmax(14rem, 1.6fr) minmax(7rem, 0.75fr) minmax(8rem, 0.85fr) auto;
+}
+
+.dataset-editor-row--fields {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.dataset-editor-row + .dataset-editor-row {
+  margin-top: 0.75rem;
 }
 
 .dataset-checkbox-grid {
   display: grid;
   gap: 0.5rem;
-  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  max-height: 18rem;
+  overflow: auto;
+  padding-right: 0.25rem;
 }
 
 .dataset-checkbox {
   align-items: center;
-  border: 1px solid var(--color-border-muted);
+  border: 1px solid var(--color-border);
   border-radius: 6px;
+  background: var(--color-control);
+  color: var(--color-muted);
+  cursor: pointer;
   display: flex;
   gap: 0.5rem;
-  min-height: 2.75rem;
+  min-height: 3rem;
   padding: 0.65rem 0.75rem;
+}
+
+.dataset-checkbox:hover,
+.dataset-checkbox:has(input:checked) {
+  border-color: var(--semantic-primary-border);
+  background: var(--semantic-primary-soft);
+  color: var(--color-text);
+}
+
+.dataset-checkbox input {
+  accent-color: var(--semantic-primary);
+  flex: 0 0 auto;
+}
+
+.dataset-checkbox span {
+  line-height: 1.35;
 }
 
 .tabs {
