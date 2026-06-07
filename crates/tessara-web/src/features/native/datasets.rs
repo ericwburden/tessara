@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use leptos::portal::Portal;
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -11,7 +12,7 @@ use super::{
 use crate::infra::http::{redirect_to_login, send_json_request};
 use crate::infra::routing::{DatasetRouteParams, require_route_params};
 use crate::ui::components::{AppShell, DataTable, EmptyState, PageHeader, StatusBadge};
-use icons::Search;
+use icons::{Search, X};
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 struct SessionAccount {
@@ -669,6 +670,7 @@ fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView {
     let sql_preview = RwSignal::new(None::<String>);
     let sql_preview_error = RwSignal::new(None::<String>);
     let designer_selection = RwSignal::new(DatasetDesignerSelection::Operation);
+    let designer_sheet_open = RwSignal::new(false);
     let auto_seeded_sources = RwSignal::new(BTreeSet::<String>::new());
 
     Effect::new({
@@ -747,9 +749,10 @@ fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView {
                         join_left_key
                         join_right_key
                         designer_selection
+                        designer_sheet_open
                         auto_seeded_sources
                     />
-                    <DatasetFieldsEditor fields sources designer_selection/>
+                    <DatasetFieldsEditor fields sources designer_selection designer_sheet_open/>
                     <DatasetSqlPreviewPanel
                         dataset_id=dataset_id.clone()
                         name
@@ -847,6 +850,7 @@ fn DatasetSourcesEditor(
     join_left_key: RwSignal<String>,
     join_right_key: RwSignal<String>,
     designer_selection: RwSignal<DatasetDesignerSelection>,
+    designer_sheet_open: RwSignal<bool>,
     auto_seeded_sources: RwSignal<BTreeSet<String>>,
 ) -> impl IntoView {
     Effect::new(move |_| {
@@ -903,6 +907,7 @@ fn DatasetSourcesEditor(
                     let next = sources.get().len() + 1;
                     sources.update(|items| items.push(DatasetSourceDraft { source_alias: format!("source_{next}"), ..DatasetSourceDraft::default() }));
                     designer_selection.set(DatasetDesignerSelection::Source(next - 1));
+                    designer_sheet_open.set(true);
                 }>"Add Input"</button>
             </div>
             <div class="dataset-expression-workspace">
@@ -912,10 +917,12 @@ fn DatasetSourcesEditor(
                         sources
                         composition_mode
                         designer_selection
+                        designer_sheet_open
                     />
                 </div>
                 <DatasetDesignerOptionsSheet
                     selection=designer_selection
+                    is_open=designer_sheet_open
                     sources
                     forms
                     datasets
@@ -993,6 +1000,7 @@ fn DatasetExpressionChain(
     sources: RwSignal<Vec<DatasetSourceDraft>>,
     composition_mode: RwSignal<String>,
     designer_selection: RwSignal<DatasetDesignerSelection>,
+    designer_sheet_open: RwSignal<bool>,
 ) -> impl IntoView {
     view! {
         <div class="dataset-expression-chain" aria-label="Dataset expression">
@@ -1008,7 +1016,10 @@ fn DatasetExpressionChain(
                                     "dataset-expression-button dataset-expression-button--source",
                                 )
                                 type="button"
-                                on:click=move |_| designer_selection.set(DatasetDesignerSelection::Source(index))
+                                on:click=move |_| {
+                                    designer_selection.set(DatasetDesignerSelection::Source(index));
+                                    designer_sheet_open.set(true);
+                                }
                             >
                                 {source_label.clone()}
                             </button>
@@ -1025,6 +1036,7 @@ fn DatasetExpressionChain(
                                         });
                                     });
                                     designer_selection.set(DatasetDesignerSelection::Source(index + 1));
+                                    designer_sheet_open.set(true);
                                 }
                             >
                                 "Convert To Expression"
@@ -1038,7 +1050,10 @@ fn DatasetExpressionChain(
                                         "dataset-expression-button dataset-expression-button--operation",
                                     )
                                     type="button"
-                                    on:click=move |_| designer_selection.set(DatasetDesignerSelection::Operation)
+                                    on:click=move |_| {
+                                        designer_selection.set(DatasetDesignerSelection::Operation);
+                                        designer_sheet_open.set(true);
+                                    }
                                 >
                                     {operation_label(&composition_mode.get())}
                                 </button>
@@ -1059,6 +1074,7 @@ fn DatasetExpressionChain(
                         ..DatasetSourceDraft::default()
                     }));
                     designer_selection.set(DatasetDesignerSelection::Source(next - 1));
+                    designer_sheet_open.set(true);
                 }
             >
                 "Chain Input"
@@ -1071,6 +1087,7 @@ fn DatasetExpressionChain(
 #[component]
 fn DatasetDesignerOptionsSheet(
     selection: RwSignal<DatasetDesignerSelection>,
+    is_open: RwSignal<bool>,
     sources: RwSignal<Vec<DatasetSourceDraft>>,
     forms: RwSignal<Vec<FormSummary>>,
     datasets: RwSignal<Vec<DatasetSummary>>,
@@ -1081,40 +1098,52 @@ fn DatasetDesignerOptionsSheet(
     join_right_key: RwSignal<String>,
 ) -> impl IntoView {
     view! {
-        <aside class="dataset-options-sheet" aria-label="Dataset designer options">
-            {move || match selection.get() {
-                DatasetDesignerSelection::Operation => view! {
-                    <OperationOptionsPanel
-                        sources
-                        forms
-                        rendered_forms
-                        composition_mode
-                        join_left_key
-                        join_right_key
-                    />
-                }.into_any(),
-                DatasetDesignerSelection::Source(index) => view! {
-                    <SourceOptionsPanel
-                        index
-                        sources
-                        forms
-                        datasets
-                        rendered_forms
-                        fields
-                        composition_mode
-                    />
-                }.into_any(),
-                DatasetDesignerSelection::Field(index) => view! {
-                    <FieldOptionsPanel
-                        index
-                        fields
-                        sources
-                        forms
-                        rendered_forms
-                    />
-                }.into_any(),
-            }}
-        </aside>
+        <Portal>
+            <Show when=move || is_open.get()>
+                <section class="sheet-overlay dataset-options-overlay" aria-label="Dataset designer options overlay">
+                    <button class="sheet-overlay__scrim" type="button" aria-label="Close dataset designer options" on:click=move |_| is_open.set(false)></button>
+                    <aside class="sheet-panel blurred-surface dataset-options-sheet" role="dialog" aria-modal="true" aria-label="Dataset designer options">
+                        <div class="sheet-panel__actions">
+                            <button class="icon-button sheet-panel__close" type="button" aria-label="Close dataset designer options" title="Close dataset designer options" on:click=move |_| is_open.set(false)>
+                                <X class="icon-button__icon"/>
+                            </button>
+                        </div>
+                        {move || match selection.get() {
+                            DatasetDesignerSelection::Operation => view! {
+                                <OperationOptionsPanel
+                                    sources
+                                    forms
+                                    rendered_forms
+                                    composition_mode
+                                    join_left_key
+                                    join_right_key
+                                />
+                            }.into_any(),
+                            DatasetDesignerSelection::Source(index) => view! {
+                                <SourceOptionsPanel
+                                    index
+                                    sources
+                                    forms
+                                    datasets
+                                    rendered_forms
+                                    fields
+                                    composition_mode
+                                />
+                            }.into_any(),
+                            DatasetDesignerSelection::Field(index) => view! {
+                                <FieldOptionsPanel
+                                    index
+                                    fields
+                                    sources
+                                    forms
+                                    rendered_forms
+                                />
+                            }.into_any(),
+                        }}
+                    </aside>
+                </section>
+            </Show>
+        </Portal>
     }
 }
 
@@ -1404,6 +1433,7 @@ fn DatasetFieldsEditor(
     fields: RwSignal<Vec<DatasetFieldDraft>>,
     sources: RwSignal<Vec<DatasetSourceDraft>>,
     designer_selection: RwSignal<DatasetDesignerSelection>,
+    designer_sheet_open: RwSignal<bool>,
 ) -> impl IntoView {
     view! {
         <section class="route-panel__section dataset-editor-section">
@@ -1418,6 +1448,7 @@ fn DatasetFieldsEditor(
                         source_field_key: String::new(),
                     }));
                     designer_selection.set(DatasetDesignerSelection::Field(next - 1));
+                    designer_sheet_open.set(true);
                 }>"Add Field"</button>
             </div>
             <div class="dataset-field-chip-grid">
@@ -1430,7 +1461,10 @@ fn DatasetFieldsEditor(
                             <button
                                 class="dataset-field-chip__body"
                                 type="button"
-                                on:click=move |_| designer_selection.set(DatasetDesignerSelection::Field(index))
+                                on:click=move |_| {
+                                    designer_selection.set(DatasetDesignerSelection::Field(index));
+                                    designer_sheet_open.set(true);
+                                }
                             >
                                 <strong>{field.label}</strong>
                                 <span>{format!("{} · {}", field.source_alias, field.source_field_key)}</span>
