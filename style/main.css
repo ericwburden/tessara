@@ -1653,7 +1653,6 @@ input {
   border-radius: var(--radius);
   background: var(--color-control);
   color: var(--color-text);
-  cursor: pointer;
   font: inherit;
   font-weight: 850;
   min-height: 2.55rem;
@@ -1674,6 +1673,10 @@ input {
   align-self: center;
   color: var(--semantic-primary);
   white-space: nowrap;
+}
+
+.dataset-expression-button {
+  cursor: pointer;
 }
 
 .dataset-expression-nest-button,
@@ -1721,7 +1724,27 @@ input {
 
 .dataset-field-chip {
   display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.dataset-field-chip__body {
+  display: grid;
   gap: 0.25rem;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 850;
+  padding: 0;
+  text-align: left;
+}
+
+.dataset-field-chip__remove {
+  align-self: center;
 }
 
 .dataset-field-chip strong,

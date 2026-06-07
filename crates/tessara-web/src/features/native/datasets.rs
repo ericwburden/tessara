@@ -669,6 +669,7 @@ fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView {
     let sql_preview = RwSignal::new(None::<String>);
     let sql_preview_error = RwSignal::new(None::<String>);
     let designer_selection = RwSignal::new(DatasetDesignerSelection::Operation);
+    let auto_seeded_sources = RwSignal::new(BTreeSet::<String>::new());
 
     Effect::new({
         let dataset_id = dataset_id.clone();
@@ -746,6 +747,7 @@ fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView {
                         join_left_key
                         join_right_key
                         designer_selection
+                        auto_seeded_sources
                     />
                     <DatasetFieldsEditor fields sources designer_selection/>
                     <DatasetSqlPreviewPanel
@@ -845,6 +847,7 @@ fn DatasetSourcesEditor(
     join_left_key: RwSignal<String>,
     join_right_key: RwSignal<String>,
     designer_selection: RwSignal<DatasetDesignerSelection>,
+    auto_seeded_sources: RwSignal<BTreeSet<String>>,
 ) -> impl IntoView {
     Effect::new(move |_| {
         let form_options = forms.get();
@@ -874,10 +877,19 @@ fn DatasetSourcesEditor(
 
     Effect::new(move |_| {
         let form_options = forms.get();
-        for source in sources.get() {
+        for (index, source) in sources.get().into_iter().enumerate() {
             if source.input_kind == "form" {
                 if let Some(version_id) = resolved_form_version_id(&source, &form_options) {
-                    load_rendered_form(version_id, rendered_forms);
+                    load_rendered_form(version_id.clone(), rendered_forms);
+                    if rendered_forms.get().contains_key(&version_id) {
+                        let seed_key = source_seed_key(index, &version_id);
+                        if !auto_seeded_sources.get().contains(&seed_key) {
+                            add_fields_from_source(index, sources, forms, rendered_forms, fields);
+                            auto_seeded_sources.update(|keys| {
+                                keys.insert(seed_key);
+                            });
+                        }
+                    }
                 }
             }
         }
@@ -1411,17 +1423,33 @@ fn DatasetFieldsEditor(
             <div class="dataset-field-chip-grid">
                 {move || fields.get().into_iter().enumerate().map(|(index, field)| {
                     view! {
-                        <button
-                            class=move || expression_button_class(
-                                designer_selection.get() == DatasetDesignerSelection::Field(index),
-                                "dataset-field-chip",
-                            )
-                            type="button"
-                            on:click=move |_| designer_selection.set(DatasetDesignerSelection::Field(index))
-                        >
-                            <strong>{field.label}</strong>
-                            <span>{format!("{} · {}", field.source_alias, field.source_field_key)}</span>
-                        </button>
+                        <div class=move || expression_button_class(
+                            designer_selection.get() == DatasetDesignerSelection::Field(index),
+                            "dataset-field-chip",
+                        )>
+                            <button
+                                class="dataset-field-chip__body"
+                                type="button"
+                                on:click=move |_| designer_selection.set(DatasetDesignerSelection::Field(index))
+                            >
+                                <strong>{field.label}</strong>
+                                <span>{format!("{} · {}", field.source_alias, field.source_field_key)}</span>
+                            </button>
+                            <button
+                                class="button button--secondary button--compact dataset-field-chip__remove"
+                                type="button"
+                                on:click=move |_| {
+                                    fields.update(|items| {
+                                        if index < items.len() {
+                                            items.remove(index);
+                                        }
+                                    });
+                                    designer_selection.set(DatasetDesignerSelection::Operation);
+                                }
+                            >
+                                "Remove"
+                            </button>
+                        </div>
                     }
                 }).collect_view()}
             </div>
@@ -1847,7 +1875,11 @@ fn add_fields_from_source(
         fields.update(|items| {
             for option in options {
                 let key = format!("{}_{}", source.source_alias, option.key);
-                if items.iter().any(|item| item.key == key) {
+                if items.iter().any(|item| {
+                    item.key == key
+                        || (item.source_alias == source.source_alias
+                            && item.source_field_key == option.key)
+                }) {
                     continue;
                 }
                 items.push(DatasetFieldDraft {
@@ -1859,6 +1891,10 @@ fn add_fields_from_source(
             }
         });
     }
+}
+
+fn source_seed_key(index: usize, form_version_id: &str) -> String {
+    format!("{index}:{form_version_id}")
 }
 
 fn table_summary(total_count: usize, page_size: usize, page_index: usize, label: &str) -> String {
