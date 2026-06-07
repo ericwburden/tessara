@@ -1,5 +1,7 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+CREATE SCHEMA IF NOT EXISTS dataset_materialized;
+
 CREATE TYPE field_type AS ENUM (
     'text',
     'number',
@@ -337,7 +339,7 @@ CREATE TABLE datasets (
     composition_mode text NOT NULL DEFAULT 'union',
     created_at timestamptz NOT NULL DEFAULT now(),
     CHECK (grain IN ('submission', 'node')),
-    CHECK (composition_mode IN ('union', 'join'))
+    CHECK (composition_mode IN ('union', 'union_all', 'left_join', 'inner_join', 'outer_join'))
 );
 
 CREATE TABLE dataset_scope_nodes (
@@ -356,6 +358,12 @@ CREATE TABLE dataset_revisions (
     version_number integer NOT NULL,
     version_label text NOT NULL,
     status dataset_revision_status NOT NULL DEFAULT 'draft',
+    definition_ast jsonb,
+    generated_sql text,
+    materialized_schema text,
+    materialized_table text,
+    materialized_row_count bigint,
+    materialized_at timestamptz,
     published_at timestamptz,
     created_at timestamptz NOT NULL DEFAULT now(),
     UNIQUE (dataset_id, version_number)
@@ -364,22 +372,24 @@ CREATE TABLE dataset_revisions (
 CREATE UNIQUE INDEX dataset_revisions_one_published_idx
     ON dataset_revisions (dataset_id)
     WHERE status = 'published';
+CREATE INDEX dataset_revisions_materialized_table_idx
+    ON dataset_revisions (materialized_schema, materialized_table);
 
 CREATE TABLE dataset_sources (
     id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
     dataset_id uuid NOT NULL REFERENCES datasets(id) ON DELETE CASCADE,
     source_alias text NOT NULL,
     form_id uuid REFERENCES forms(id) ON DELETE CASCADE,
+    dataset_revision_id uuid REFERENCES dataset_revisions(id) ON DELETE RESTRICT,
     form_version_major integer,
-    compatibility_group_id uuid REFERENCES compatibility_groups(id) ON DELETE CASCADE,
     selection_rule text NOT NULL DEFAULT 'all',
     position integer NOT NULL DEFAULT 0,
     created_at timestamptz NOT NULL DEFAULT now(),
     UNIQUE (dataset_id, source_alias),
     CHECK (selection_rule IN ('all', 'latest', 'earliest')),
     CHECK (
-        (form_id IS NOT NULL AND compatibility_group_id IS NULL)
-        OR (form_id IS NULL AND compatibility_group_id IS NOT NULL)
+        ((form_id IS NOT NULL)::integer
+        + (dataset_revision_id IS NOT NULL)::integer) = 1
     )
 );
 
@@ -496,7 +506,10 @@ CREATE TABLE analytics.submission_fact (
     form_version_id uuid NOT NULL,
     node_id uuid NOT NULL,
     status text NOT NULL,
-    submitted_at timestamptz
+    submitted_at timestamptz,
+    created_at timestamptz,
+    last_modified_at timestamptz,
+    last_modified_by_user_name text
 );
 
 CREATE TABLE analytics.submission_value_fact (
