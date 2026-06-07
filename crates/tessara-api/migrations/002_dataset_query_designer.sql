@@ -3,9 +3,13 @@ CREATE SCHEMA IF NOT EXISTS dataset_materialized;
 ALTER TABLE datasets
     DROP CONSTRAINT IF EXISTS datasets_composition_mode_check;
 
+UPDATE datasets
+SET composition_mode = 'left_join'
+WHERE composition_mode = 'join';
+
 ALTER TABLE datasets
     ADD CONSTRAINT datasets_composition_mode_check
-    CHECK (composition_mode IN ('union', 'union_all', 'left_join', 'inner_join', 'outer_join', 'join'));
+    CHECK (composition_mode IN ('union', 'union_all', 'left_join', 'inner_join', 'outer_join'));
 
 ALTER TABLE dataset_revisions
     ADD COLUMN IF NOT EXISTS definition_ast jsonb,
@@ -25,9 +29,11 @@ ALTER TABLE dataset_sources
     DROP CONSTRAINT IF EXISTS dataset_sources_check;
 
 ALTER TABLE dataset_sources
+    DROP COLUMN IF EXISTS compatibility_group_id;
+
+ALTER TABLE dataset_sources
     ADD CONSTRAINT dataset_sources_one_source_check
     CHECK (
         ((form_id IS NOT NULL)::integer
-        + (compatibility_group_id IS NOT NULL)::integer
         + (dataset_revision_id IS NOT NULL)::integer) = 1
     );

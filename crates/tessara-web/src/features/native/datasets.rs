@@ -1100,13 +1100,12 @@ fn operation_label(value: &str) -> &'static str {
         "left_join" => "LEFT JOIN",
         "inner_join" => "INNER JOIN",
         "outer_join" => "OUTER JOIN",
-        "join" => "LEFT JOIN",
         _ => "OPERATION",
     }
 }
 
 fn is_join_operation(value: &str) -> bool {
-    matches!(value, "join" | "left_join" | "inner_join" | "outer_join")
+    matches!(value, "left_join" | "inner_join" | "outer_join")
 }
 
 fn expression_label(sources: &[DatasetSourceDraft], operation: &str) -> String {

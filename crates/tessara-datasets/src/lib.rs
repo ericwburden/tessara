@@ -75,8 +75,6 @@ pub enum DatasetCompositionMode {
     InnerJoin,
     /// Full outer join two inputs.
     OuterJoin,
-    /// Legacy alias for the original node-aligned join behavior.
-    Join,
 }
 
 impl DatasetCompositionMode {
@@ -88,7 +86,6 @@ impl DatasetCompositionMode {
             "left_join" => Ok(Self::LeftJoin),
             "inner_join" => Ok(Self::InnerJoin),
             "outer_join" => Ok(Self::OuterJoin),
-            "join" => Ok(Self::Join),
             other => Err(DatasetRuleError::new(format!(
                 "unsupported dataset composition mode '{other}'"
             ))),
@@ -103,7 +100,6 @@ impl DatasetCompositionMode {
             Self::LeftJoin => "left_join",
             Self::InnerJoin => "inner_join",
             Self::OuterJoin => "outer_join",
-            Self::Join => "join",
         }
     }
 }
@@ -239,8 +235,8 @@ mod tests {
             DatasetCompositionMode::Union
         );
         assert_eq!(
-            DatasetCompositionMode::parse("join").expect("join should parse"),
-            DatasetCompositionMode::Join
+            DatasetCompositionMode::parse("left_join").expect("left join should parse"),
+            DatasetCompositionMode::LeftJoin
         );
         assert_eq!(
             DatasetCompositionMode::parse("merge")

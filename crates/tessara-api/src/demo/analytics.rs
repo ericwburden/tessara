@@ -22,7 +22,11 @@ pub(super) async fn ensure_dataset(
     visibility_node_ids: &[Uuid],
     bindings: &[DatasetFieldBinding<'_>],
 ) -> ApiResult<(Uuid, Uuid)> {
-    let form_version_major = current_form_major(pool, form_id).await?;
+    let form_version_major = current_form_major(pool, form_id).await?.ok_or_else(|| {
+        crate::error::ApiError::BadRequest(format!(
+            "demo dataset '{slug}' requires a published form version"
+        ))
+    })?;
     let dataset_id = if let Some(id) = sqlx::query_scalar("SELECT id FROM datasets WHERE slug = $1")
         .bind(slug)
         .fetch_optional(pool)
@@ -106,21 +110,143 @@ pub(super) async fn ensure_dataset(
     .bind(dataset_id)
     .execute(pool)
     .await?;
+    let definition_ast = json!({
+        "kind": "form",
+        "alias": source_alias,
+        "form_id": form_id,
+        "form_version_major": form_version_major,
+        "selection_rule": "latest"
+    });
+    let generated_sql = generated_dataset_sql(form_id, form_version_major, bindings);
     let revision_id = sqlx::query_scalar(
         r#"
         INSERT INTO dataset_revisions
-            (dataset_id, version_number, version_label, status, published_at)
-        VALUES ($1, $2, $3, 'published'::dataset_revision_status, now())
+            (dataset_id, version_number, version_label, status, published_at, definition_ast, generated_sql)
+        VALUES ($1, $2, $3, 'published'::dataset_revision_status, now(), $4, $5)
         RETURNING id
         "#,
     )
     .bind(dataset_id)
     .bind(version_number)
     .bind(version_number.to_string())
+    .bind(definition_ast)
+    .bind(&generated_sql)
     .fetch_one(pool)
     .await?;
+    materialize_dataset_revision(pool, revision_id, &generated_sql).await?;
 
     Ok((dataset_id, revision_id))
+}
+
+fn generated_dataset_sql(
+    form_id: Uuid,
+    form_version_major: i32,
+    bindings: &[DatasetFieldBinding<'_>],
+) -> String {
+    let select_columns = bindings
+        .iter()
+        .map(|binding| {
+            format!(
+                "MAX(submission_value_fact.value_text) FILTER (WHERE submission_value_fact.field_key = {}) AS {}",
+                sql_literal(binding.source_field_key),
+                quote_identifier(binding.logical_key)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",\n                ");
+
+    format!(
+        r#"WITH
+        form_a_1 AS (
+            WITH ranked AS (
+                SELECT
+                    submission_fact.submission_id,
+                    submission_fact.node_id,
+                    node_dim.node_name,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY submission_fact.node_id
+                        ORDER BY submission_fact.submitted_at DESC NULLS LAST, submission_fact.submission_id
+                    ) AS selection_rank
+                FROM analytics.submission_fact
+                JOIN form_versions ON form_versions.id = submission_fact.form_version_id
+                JOIN analytics.node_dim ON node_dim.node_id = submission_fact.node_id
+                WHERE submission_fact.status = 'submitted'
+                  AND form_versions.form_id = {}::uuid
+                  AND form_versions.version_major = {form_version_major}
+            )
+            SELECT
+                ranked.submission_id::text AS __row_id,
+                ranked.node_id AS __node_id,
+                ranked.node_name AS __node_name,
+                {select_columns}
+            FROM ranked
+            LEFT JOIN analytics.submission_value_fact
+              ON submission_value_fact.submission_id = ranked.submission_id
+            WHERE selection_rank = 1
+            GROUP BY ranked.submission_id, ranked.node_id, ranked.node_name
+        )
+        SELECT
+            __row_id,
+            __node_id,
+            __node_name,
+            {}
+        FROM form_a_1"#,
+        sql_literal(&form_id.to_string()),
+        bindings
+            .iter()
+            .map(|binding| quote_identifier(binding.logical_key))
+            .collect::<Vec<_>>()
+            .join(",\n            ")
+    )
+}
+
+async fn materialize_dataset_revision(
+    pool: &PgPool,
+    revision_id: Uuid,
+    generated_sql: &str,
+) -> ApiResult<()> {
+    let table_name = format!("dataset_{}", revision_id.simple());
+    let full_name = format!(
+        "{}.{}",
+        quote_identifier("dataset_materialized"),
+        quote_identifier(&table_name)
+    );
+    sqlx::query(&format!("DROP TABLE IF EXISTS {full_name}"))
+        .execute(pool)
+        .await?;
+    sqlx::query(&format!("CREATE TABLE {full_name} AS {generated_sql}"))
+        .execute(pool)
+        .await?;
+    sqlx::query(&format!("CREATE INDEX ON {full_name} (__node_id)"))
+        .execute(pool)
+        .await?;
+    let row_count: i64 = sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {full_name}"))
+        .fetch_one(pool)
+        .await?;
+    sqlx::query(
+        r#"
+        UPDATE dataset_revisions
+        SET materialized_schema = 'dataset_materialized',
+            materialized_table = $1,
+            materialized_row_count = $2,
+            materialized_at = now()
+        WHERE id = $3
+        "#,
+    )
+    .bind(&table_name)
+    .bind(row_count)
+    .bind(revision_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+fn quote_identifier(value: &str) -> String {
+    format!("\"{}\"", value.replace('"', "\"\""))
+}
+
+fn sql_literal(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "''"))
 }
 
 async fn replace_dataset_scope_nodes(
