@@ -16289,8 +16289,12 @@ fn ResponseFieldInput(
 mod placeholders;
 pub use placeholders::{
     ComponentsDetailPage, ComponentsPage, DashboardsDetailPage, DashboardsEditPage,
-    DashboardsNewPage, DashboardsPage, DatasetsDetailPage, DatasetsPage, NotFoundPage,
+    DashboardsNewPage, DashboardsPage, NotFoundPage,
 };
+
+#[path = "native/datasets.rs"]
+mod datasets;
+pub use datasets::{DatasetsDetailPage, DatasetsEditPage, DatasetsNewPage, DatasetsPage};
 
 #[path = "native/operations.rs"]
 mod operations;

@@ -26,7 +26,13 @@ type NodeTypeSummary = {
   child_relationships: Array<{ node_type_id: string; singular_label: string }>;
 };
 type VisibilityNode = { node_id: string; node_name: string };
-type FormSummary = { id: string; name: string; slug: string; visibility_nodes: VisibilityNode[] };
+type FormSummary = {
+  id: string;
+  name: string;
+  slug: string;
+  visibility_nodes: VisibilityNode[];
+  versions: Array<{ id: string; status: string }>;
+};
 type WorkflowSummary = { id: string; name: string; slug: string; available_nodes: Array<{ id: string; name: string }> };
 type WorkflowDefinition = WorkflowSummary & { versions: Array<{ id: string; status: string; steps: Array<{ form_version_id: string }> }> };
 type DatasetSummary = {
@@ -34,6 +40,12 @@ type DatasetSummary = {
   name: string;
   visibility_nodes: VisibilityNode[];
   current_revision_id: string | null;
+};
+type DatasetTable = {
+  rows: Array<{
+    node_name: string;
+    values: Record<string, string | null>;
+  }>;
 };
 type ComponentSummary = { id: string; name: string; slug: string };
 type ComponentDefinition = { id: string; name: string; versions: unknown[] };
@@ -584,12 +596,15 @@ test.describe.serial("capability + scope + ownership permissions", () => {
   });
 
   test("no-capability users are denied protected capability surfaces", async () => {
+    const inScopePublishedVersion = fixtures.inScopeForm.versions.find((version) => version.status === "published");
+    expect(inScopePublishedVersion).toBeTruthy();
     for (const url of [
       "/api/admin/capabilities",
       "/api/admin/roles",
       "/api/admin/users",
       "/api/admin/node-types",
       "/api/forms",
+      `/api/form-versions/${inScopePublishedVersion!.id}/render`,
       "/api/workflows",
       "/api/workflow-assignment-candidates",
       "/api/workflow-assignments",
@@ -597,6 +612,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       "/api/submissions",
       "/api/operations/status",
       "/api/datasets",
+      `/api/datasets/${fixtures.inScopeDataset.id}/table`,
       "/api/components",
       "/api/dashboards",
     ]) {
@@ -923,18 +939,41 @@ test.describe.serial("capability + scope + ownership permissions", () => {
     expect(forms.some((form) => form.id === fixtures.inScopeForm.id)).toBe(true);
     expect(forms.some((form) => form.id === fixtures.outOfScopeForm.id)).toBe(false);
     await getJson(fixtures.scopedManager, `/api/forms/${fixtures.inScopeForm.id}`);
+    const inScopePublishedVersion = fixtures.inScopeForm.versions.find((version) => version.status === "published");
+    const outOfScopePublishedVersion = fixtures.outOfScopeForm.versions.find((version) => version.status === "published");
+    expect(inScopePublishedVersion).toBeTruthy();
+    expect(outOfScopePublishedVersion).toBeTruthy();
+    await getJson(fixtures.scopedManager, `/api/form-versions/${inScopePublishedVersion!.id}/render`);
     await expectStatus(fixtures.scopedManager, "get", `/api/forms/${fixtures.outOfScopeForm.id}`, [
       403,
     ]);
+    await expectStatus(
+      fixtures.scopedManager,
+      "get",
+      `/api/form-versions/${outOfScopePublishedVersion!.id}/render`,
+      [403],
+    );
 
     const datasets = await getJson<DatasetSummary[]>(fixtures.scopedManager, "/api/datasets");
     expect(datasets.some((dataset) => dataset.id === fixtures.inScopeDataset.id)).toBe(true);
     expect(datasets.some((dataset) => dataset.id === fixtures.outOfScopeDataset.id)).toBe(false);
     await getJson(fixtures.scopedManager, `/api/datasets/${fixtures.inScopeDataset.id}`);
+    const table = await getJson<DatasetTable>(
+      fixtures.scopedManager,
+      `/api/datasets/${fixtures.inScopeDataset.id}/table`,
+    );
+    expect(table.rows.length).toBeGreaterThan(0);
+    expect(table.rows.every((row) => !row.node_name.includes("Community Bridge"))).toBe(true);
     await expectStatus(
       fixtures.scopedManager,
       "get",
       `/api/datasets/${fixtures.outOfScopeDataset.id}`,
+      [403],
+    );
+    await expectStatus(
+      fixtures.scopedManager,
+      "get",
+      `/api/datasets/${fixtures.outOfScopeDataset.id}/table`,
       [403],
     );
 

@@ -322,6 +322,26 @@ pub fn router(state: AppState) -> Router {
             }),
         )
         .route(
+            "/datasets/new",
+            get(|| async {
+                native_app(
+                    "/datasets/new",
+                    "Create Dataset",
+                    "Create a Tessara dataset.",
+                )
+            }),
+        )
+        .route(
+            "/datasets/{dataset_id}/edit",
+            get(|Path(dataset_id): Path<String>| async move {
+                native_app(
+                    format!("/datasets/{dataset_id}/edit"),
+                    "Edit Dataset",
+                    "Edit a Tessara dataset.",
+                )
+            }),
+        )
+        .route(
             "/datasets/{dataset_id}",
             get(|Path(dataset_id): Path<String>| async move {
                 native_app(

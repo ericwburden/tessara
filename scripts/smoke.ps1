@@ -285,6 +285,8 @@ try {
     Assert-ProtectedShell -Content $dashboardsShell -Needles @("Dashboards") -Context "dashboards shell"
     $datasetsShell = Invoke-Html -Uri "$baseUrl/datasets" -CookieJarPath $adminBrowserSession
     Assert-ProtectedShell -Content $datasetsShell -Needles @("Datasets") -Context "datasets shell"
+    $datasetNewShell = Invoke-Html -Uri "$baseUrl/datasets/new" -CookieJarPath $adminBrowserSession
+    Assert-ProtectedShell -Content $datasetNewShell -Needles @("Create Dataset") -Context "dataset create shell"
 
     $login = Invoke-Json `
         -Method "Post" `
@@ -397,6 +399,10 @@ try {
     Assert-ProtectedShell -Content $dashboardDetailPage -Needles @("Dashboard Detail") -Context "dashboard detail shell"
     $dashboardNew = Invoke-Html -Uri "$baseUrl/dashboards/new" -CookieJarPath $adminBrowserSession
     Assert-ProtectedShell -Content $dashboardNew -Needles @("Create Dashboard") -Context "dashboard create shell"
+    $datasetDetailPage = Invoke-Html -Uri "$baseUrl/datasets/$($seed.dataset_id)" -CookieJarPath $adminBrowserSession
+    Assert-ProtectedShell -Content $datasetDetailPage -Needles @("Dataset Detail") -Context "dataset detail shell"
+    $datasetEditPage = Invoke-Html -Uri "$baseUrl/datasets/$($seed.dataset_id)/edit" -CookieJarPath $adminBrowserSession
+    Assert-ProtectedShell -Content $datasetEditPage -Needles @("Edit Dataset") -Context "dataset edit shell"
 
     [pscustomobject]@{
         status = "passed"

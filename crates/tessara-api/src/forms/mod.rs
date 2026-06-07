@@ -1400,6 +1400,7 @@ pub async fn publish_form_version(
 /// Renders a published form version for response entry.
 pub async fn render_form_version(
     State(state): State<AppState>,
+    request: AuthenticatedRequest,
     Path(form_version_id): Path<Uuid>,
 ) -> ApiResult<Json<RenderedForm>> {
     let version = sqlx::query(
@@ -1419,6 +1420,9 @@ pub async fn render_form_version(
     .fetch_optional(&state.pool)
     .await?
     .ok_or_else(|| ApiError::NotFound(format!("form version {form_version_id}")))?;
+    let form_id: Uuid = version.try_get("form_id")?;
+    require_form_version_render_access(&state.pool, &request.account, form_id, form_version_id)
+        .await?;
 
     let section_rows = sqlx::query(
         r#"
@@ -1488,12 +1492,80 @@ pub async fn render_form_version(
 
     Ok(Json(RenderedForm {
         form_version_id,
-        form_id: version.try_get("form_id")?,
+        form_id,
         form_name: version.try_get("form_name")?,
         version_label: version.try_get("version_label")?,
         status: version.try_get("status")?,
         sections,
     }))
+}
+
+async fn require_form_version_render_access(
+    pool: &sqlx::PgPool,
+    account: &auth::AccountContext,
+    form_id: Uuid,
+    form_version_id: Uuid,
+) -> ApiResult<()> {
+    if account.has_capability("forms:read") {
+        let boundary = auth::capability_boundary(pool, account, "forms:read").await?;
+        if require_form_visible_for_boundary(pool, form_id, &boundary, "forms:read")
+            .await
+            .is_ok()
+        {
+            return Ok(());
+        }
+    }
+
+    if !account.has_capability("submissions:respond") {
+        return Err(ApiError::Forbidden("forms:read".into()));
+    }
+
+    let can_render: bool = sqlx::query_scalar(
+        r#"
+        SELECT EXISTS (
+            SELECT 1
+            FROM submissions
+            JOIN workflow_assignments
+              ON workflow_assignments.id = submissions.workflow_assignment_id
+            WHERE submissions.form_version_id = $1
+              AND (
+                workflow_assignments.account_id = $2
+                OR EXISTS (
+                    SELECT 1
+                    FROM account_delegations
+                    WHERE account_delegations.delegator_account_id = $2
+                      AND account_delegations.delegate_account_id = workflow_assignments.account_id
+                )
+              )
+            UNION
+            SELECT 1
+            FROM workflow_assignments
+            JOIN workflow_steps
+              ON workflow_steps.id = workflow_assignments.workflow_step_id
+            WHERE workflow_steps.form_version_id = $1
+              AND workflow_assignments.is_active = true
+              AND (
+                workflow_assignments.account_id = $2
+                OR EXISTS (
+                    SELECT 1
+                    FROM account_delegations
+                    WHERE account_delegations.delegator_account_id = $2
+                      AND account_delegations.delegate_account_id = workflow_assignments.account_id
+                )
+              )
+        )
+        "#,
+    )
+    .bind(form_version_id)
+    .bind(account.account_id)
+    .fetch_one(pool)
+    .await?;
+
+    if can_render {
+        Ok(())
+    } else {
+        Err(ApiError::Forbidden("forms:read".into()))
+    }
 }
 
 async fn require_section_form_version(pool: &sqlx::PgPool, section_id: Uuid) -> ApiResult<Uuid> {

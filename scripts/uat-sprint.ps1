@@ -147,6 +147,23 @@ Assert-ProtectedShell -Content $formDetail -Needles @("Form Detail") -Context "f
 $formEdit = Invoke-Html -Uri "$BaseUrl/forms/$($seedSummary.form_id)/edit" -CookieJarPath $adminBrowserSession
 Assert-ProtectedShell -Content $formEdit -Needles @("Edit Form") -Context "form edit"
 
+$datasetsList = Invoke-Html -Uri "$BaseUrl/datasets" -CookieJarPath $adminBrowserSession
+Assert-ProtectedShell -Content $datasetsList -Needles @("Datasets") -Context "datasets list"
+
+$datasetCreate = Invoke-Html -Uri "$BaseUrl/datasets/new" -CookieJarPath $adminBrowserSession
+Assert-ProtectedShell -Content $datasetCreate -Needles @("Create Dataset") -Context "dataset create"
+
+$datasetDetail = Invoke-Html -Uri "$BaseUrl/datasets/$($seedSummary.dataset_id)" -CookieJarPath $adminBrowserSession
+Assert-ProtectedShell -Content $datasetDetail -Needles @("Dataset Detail") -Context "dataset detail"
+
+$datasetEdit = Invoke-Html -Uri "$BaseUrl/datasets/$($seedSummary.dataset_id)/edit" -CookieJarPath $adminBrowserSession
+Assert-ProtectedShell -Content $datasetEdit -Needles @("Edit Dataset") -Context "dataset edit"
+
+$datasetPreview = Invoke-RestMethod -Uri "$BaseUrl/api/datasets/$($seedSummary.dataset_id)/table" -Headers $headers -TimeoutSec 30
+if (-not $datasetPreview.rows -or $datasetPreview.rows.Count -lt 1) {
+    throw "Sprint UAT failure: dataset preview did not return seeded rows."
+}
+
 $workflowsList = Invoke-Html -Uri "$BaseUrl/workflows" -CookieJarPath $adminBrowserSession
 Assert-ProtectedShell -Content $workflowsList -Needles @("Workflows") -Context "workflow directory"
 
@@ -183,5 +200,5 @@ foreach ($roleCheck in @(
     }
 }
 
-Write-Host "`n== Sprint UAT checks passed for organization, forms, and seed flows. ==" -ForegroundColor Green
+Write-Host "`n== Sprint UAT checks passed for organization, forms, datasets, and seed flows. ==" -ForegroundColor Green
 Write-Host "Next: if this was a sprint-completion run, keep the deployment open for UAT and log these pass markers."

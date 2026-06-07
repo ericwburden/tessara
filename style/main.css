@@ -1533,6 +1533,42 @@ input {
   background: var(--color-table-row);
 }
 
+.dataset-detail-summary {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 1rem;
+}
+
+.dataset-editor {
+  display: grid;
+  gap: 1rem;
+}
+
+.dataset-editor-row {
+  align-items: end;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+  margin-bottom: 0.75rem;
+}
+
+.dataset-checkbox-grid {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+}
+
+.dataset-checkbox {
+  align-items: center;
+  border: 1px solid var(--color-border-muted);
+  border-radius: 6px;
+  display: flex;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  padding: 0.65rem 0.75rem;
+}
+
 .tabs {
   display: grid;
   gap: 1rem;
@@ -3665,6 +3701,15 @@ input {
   .operations-mobile-cards {
     display: grid;
     gap: 0.75rem;
+  }
+
+  .dataset-table-section > .table-wrap {
+    display: none;
+  }
+
+  .dataset-detail-summary,
+  .dataset-editor-row {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .forms-list__toolbar {

@@ -1,5 +1,28 @@
 # Progress Report
 
+## 2026-06-06 - Sprint 3A Dataset Authoring Foundation Kickoff
+
+- Kickoff status:
+  - started Sprint 3A from clean `main` after committing and pushing roadmap sequencing prep
+  - created branch `codex/sprint-3a` and worktree `C:\Users\eric-dev\Projects\tessara-sprint-3a`
+  - added sprint plan at `docs/sprints/sprint-3a-plan.md`
+- Planned verification:
+  - `cargo fmt --all`
+  - `.\scripts\validate.ps1`
+  - `cargo test -p tessara-api`
+  - `cargo test -p tessara-web`
+  - `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+  - `cargo audit`
+  - `npm --prefix end2end test`
+  - `.\scripts\validate-e2e.ps1 -BaseUrl "http://127.0.0.1:8080"`
+  - `.\scripts\smoke.ps1`
+  - `.\scripts\local-launch.ps1`
+  - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`
+- Immediate implementation focus:
+  - replace `/datasets` placeholders with native dataset directory/detail/create/edit/preview flows
+  - keep authoring admin-only and preserve scoped read/preview behavior
+  - tighten form-version render access before using it for dataset field options
+
 ## 2026-06-06 - Sprint 2F Closeout
 
 - Completed:

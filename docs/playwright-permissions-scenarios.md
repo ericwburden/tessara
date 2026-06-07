@@ -38,7 +38,7 @@ When local fixture volume gets noisy, reset the development database with `.\scr
 | Administration routes | Admin loads users, user detail, user edit, user access alias, and node-type routes; admin creates/updates a node type through APIs. | Scoped non-admin receives forbidden responses for users, user detail/access, and node-type admin APIs. |
 | Global capability | Admin reads in-scope and out-of-scope forms, datasets, components, dashboards, and workflow assignments. | Not applicable; `admin:all` is intentionally global. |
 | Scoped forms | Scoped manager lists and reads forms whose visibility nodes overlap the assigned subtree. | Out-of-scope form is absent from list and direct detail access is forbidden. |
-| Scoped datasets | Scoped manager lists and reads datasets whose visibility nodes overlap the assigned subtree. | Out-of-scope dataset is absent from list and direct detail access is forbidden. |
+| Scoped datasets | Scoped manager lists, reads, and previews datasets whose visibility nodes overlap the assigned subtree, with preview rows limited to effective scope. | Out-of-scope dataset is absent from list and direct detail/table access is forbidden. |
 | Scoped components | Scoped manager lists and reads components backed by visible dataset revisions. | Out-of-scope component is absent from list and direct detail access is expected to be forbidden. |
 | Scoped dashboards | Scoped manager lists and reads dashboards whose visibility overlaps the assigned subtree. | Out-of-scope dashboard is absent from list and direct detail access is forbidden. |
 | Workflow candidates and assignments | Scoped manager sees only in-scope assignment candidates, can inspect assignees for an in-scope candidate, and can start an in-scope assignment through `workflows:manage`. | Scoped manager cannot create/start out-of-scope assignment work and should not see out-of-scope workflow assignments in the assignment list. |
@@ -54,4 +54,4 @@ When local fixture volume gets noisy, reset the development database with `.\scr
 
 - UI-level create/edit permission checks combine route assertions with API-level action checks where the current route is a placeholder or where form/editor interactions would require a larger purpose-built fixture.
 - There is no New User Screen yet, so user creation is verified through admin APIs rather than a browser form.
-- The report should be updated whenever new executable Playwright scenarios are added, especially for future form builder, dataset table, component, and dashboard UI flows.
+- The report should be updated whenever new executable Playwright scenarios are added, especially for future advanced dataset authoring, component, and dashboard UI flows.

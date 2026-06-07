@@ -122,7 +122,7 @@ test("authenticated primary routes render in the native shell", async ({
   await expect(
     page.getByRole("heading", { level: 1, name: "Datasets" }),
   ).toBeVisible();
-  await expect(page.getByText("Dataset functionality will be filled in later.")).toBeVisible();
+  await expect(page.getByPlaceholder("Search datasets")).toBeVisible();
   await assertNoConsoleErrors();
 });
 
