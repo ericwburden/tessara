@@ -814,6 +814,14 @@ fn DatasetSourcesEditor(
     join_left_key: RwSignal<String>,
     join_right_key: RwSignal<String>,
 ) -> impl IntoView {
+    Effect::new(move |_| {
+        for source in sources.get() {
+            if source.input_kind == "form" && !source.form_version_id.is_empty() {
+                load_rendered_form(source.form_version_id, rendered_forms);
+            }
+        }
+    });
+
     view! {
         <section class="route-panel__section dataset-editor-section">
             <div class="dataset-editor-section__header">
@@ -835,15 +843,37 @@ fn DatasetSourcesEditor(
                     </select>
                 </label>
                 {move || if is_join_operation(&composition_mode.get()) {
+                    let left_options = join_key_options_for_source_index(
+                        &sources.get(),
+                        &rendered_forms.get(),
+                        0,
+                        &join_left_key.get(),
+                    );
+                    let right_options = join_key_options_for_source_index(
+                        &sources.get(),
+                        &rendered_forms.get(),
+                        1,
+                        &join_right_key.get(),
+                    );
                     view! {
                         <div class="form-grid dataset-join-key-grid">
                             <label class="form-field">
                                 <span>"Left Join Key"</span>
-                                <input placeholder="field_key" prop:value=move || join_left_key.get() on:input=move |event| join_left_key.set(event_target_value(&event))/>
+                                <select prop:value=move || join_left_key.get() on:change=move |event| join_left_key.set(event_target_value(&event))>
+                                    <option value="">"Select field"</option>
+                                    {left_options.into_iter().map(|option| {
+                                        view! { <option value=option.key.clone()>{join_key_option_label(&option)}</option> }
+                                    }).collect_view()}
+                                </select>
                             </label>
                             <label class="form-field">
                                 <span>"Right Join Key"</span>
-                                <input placeholder="field_key" prop:value=move || join_right_key.get() on:input=move |event| join_right_key.set(event_target_value(&event))/>
+                                <select prop:value=move || join_right_key.get() on:change=move |event| join_right_key.set(event_target_value(&event))>
+                                    <option value="">"Select field"</option>
+                                    {right_options.into_iter().map(|option| {
+                                        view! { <option value=option.key.clone()>{join_key_option_label(&option)}</option> }
+                                    }).collect_view()}
+                                </select>
                             </label>
                         </div>
                     }.into_any()
@@ -1325,6 +1355,43 @@ fn source_field_options(
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default()
+}
+
+fn join_key_options_for_source_index(
+    sources: &[DatasetSourceDraft],
+    rendered_forms: &BTreeMap<String, RenderedForm>,
+    source_index: usize,
+    selected_key: &str,
+) -> Vec<RenderedField> {
+    let mut options = sources
+        .get(source_index)
+        .map(|source| source_field_options(sources, rendered_forms, &source.source_alias))
+        .unwrap_or_default();
+
+    if !selected_key.is_empty() && !options.iter().any(|option| option.key == selected_key) {
+        options.push(RenderedField {
+            key: selected_key.to_string(),
+            label: "Unknown field".into(),
+            field_type: String::new(),
+        });
+    }
+
+    options
+}
+
+fn join_key_option_label(field: &RenderedField) -> String {
+    format!("{} ({})", truncate_field_label(&field.label), field.key)
+}
+
+fn truncate_field_label(label: &str) -> String {
+    const MAX_CHARS: usize = 32;
+    let mut chars = label.chars();
+    let truncated = chars.by_ref().take(MAX_CHARS).collect::<String>();
+    if chars.next().is_some() {
+        format!("{truncated}...")
+    } else {
+        truncated
+    }
 }
 
 fn add_fields_from_source(
