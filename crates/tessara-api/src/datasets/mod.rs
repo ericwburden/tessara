@@ -664,10 +664,16 @@ impl<'a> QueryCompiler<'a> {
             .map(|field| {
                 let column = quote_identifier(&field.key);
                 if field.source_alias == alias {
-                    Ok(format!(
-                        "MAX(submission_value_fact.value_text) FILTER (WHERE submission_value_fact.field_key = {}) AS {column}",
-                        sql_literal(&field.source_field_key)
-                    ))
+                    if let Some(expression) =
+                        system_source_field_expression(&field.source_field_key)
+                    {
+                        Ok(format!("{expression} AS {column}"))
+                    } else {
+                        Ok(format!(
+                            "MAX(submission_value_fact.value_text) FILTER (WHERE submission_value_fact.field_key = {}) AS {column}",
+                            sql_literal(&field.source_field_key)
+                        ))
+                    }
                 } else {
                     Ok(format!("NULL::text AS {column}"))
                 }
@@ -700,8 +706,14 @@ impl<'a> QueryCompiler<'a> {
             WITH ranked AS (
                 SELECT
                     submission_fact.submission_id,
+                    submission_fact.form_version_id,
                     submission_fact.node_id,
                     node_dim.node_name,
+                    submission_fact.status,
+                    submission_fact.submitted_at,
+                    submission_fact.created_at,
+                    submission_fact.last_modified_at,
+                    submission_fact.last_modified_by_user_name,
                     ROW_NUMBER() OVER (
                         PARTITION BY submission_fact.node_id
                         ORDER BY {order}, submission_fact.submission_id
@@ -722,6 +734,8 @@ impl<'a> QueryCompiler<'a> {
               ON submission_value_fact.submission_id = ranked.submission_id
             WHERE {selected_filter}
             GROUP BY ranked.submission_id, ranked.node_id, ranked.node_name
+                , ranked.form_version_id, ranked.status, ranked.submitted_at
+                , ranked.created_at, ranked.last_modified_at, ranked.last_modified_by_user_name
         )"#
         );
         self.ctes.push(sql);
@@ -1121,6 +1135,10 @@ async fn require_source_field_exists(
     source: &ValidatedDatasetSource,
     source_field_key: &str,
 ) -> ApiResult<String> {
+    if let Some(field_type) = system_source_field_type(source_field_key) {
+        return Ok(field_type.to_string());
+    }
+
     let row = if let Some(form_id) = source.form_id {
         if let Some(form_version_major) = source.form_version_major {
             sqlx::query(
@@ -1173,6 +1191,34 @@ async fn require_source_field_exists(
                 source.source_alias
             ))
         })
+}
+
+fn system_source_field_expression(source_field_key: &str) -> Option<&'static str> {
+    match source_field_key {
+        "__submission_id" => Some("ranked.submission_id::text"),
+        "__form_version_id" => Some("ranked.form_version_id::text"),
+        "__node_id" => Some("ranked.node_id::text"),
+        "__node_name" => Some("ranked.node_name"),
+        "__submission_status" => Some("ranked.status"),
+        "__submitted_at" => Some("ranked.submitted_at::text"),
+        "__submission_created_at" => Some("ranked.created_at::text"),
+        "__last_updated_at" => Some("ranked.last_modified_at::text"),
+        "__last_updated_by_user_name" => Some("ranked.last_modified_by_user_name"),
+        _ => None,
+    }
+}
+
+fn system_source_field_type(source_field_key: &str) -> Option<&'static str> {
+    match source_field_key {
+        "__submitted_at" | "__submission_created_at" | "__last_updated_at" => Some("date"),
+        "__submission_id"
+        | "__form_version_id"
+        | "__node_id"
+        | "__node_name"
+        | "__submission_status"
+        | "__last_updated_by_user_name" => Some("text"),
+        _ => None,
+    }
 }
 
 pub(crate) async fn load_dataset_table_rows(

@@ -146,11 +146,15 @@ fn generated_dataset_sql(
     let select_columns = bindings
         .iter()
         .map(|binding| {
-            format!(
-                "MAX(submission_value_fact.value_text) FILTER (WHERE submission_value_fact.field_key = {}) AS {}",
-                sql_literal(binding.source_field_key),
-                quote_identifier(binding.logical_key)
-            )
+            let column = quote_identifier(binding.logical_key);
+            if let Some(expression) = system_source_field_expression(binding.source_field_key) {
+                format!("{expression} AS {column}")
+            } else {
+                format!(
+                    "MAX(submission_value_fact.value_text) FILTER (WHERE submission_value_fact.field_key = {}) AS {column}",
+                    sql_literal(binding.source_field_key)
+                )
+            }
         })
         .collect::<Vec<_>>()
         .join(",\n                ");
@@ -161,8 +165,14 @@ fn generated_dataset_sql(
             WITH ranked AS (
                 SELECT
                     submission_fact.submission_id,
+                    submission_fact.form_version_id,
                     submission_fact.node_id,
                     node_dim.node_name,
+                    submission_fact.status,
+                    submission_fact.submitted_at,
+                    submission_fact.created_at,
+                    submission_fact.last_modified_at,
+                    submission_fact.last_modified_by_user_name,
                     ROW_NUMBER() OVER (
                         PARTITION BY submission_fact.node_id
                         ORDER BY submission_fact.submitted_at DESC NULLS LAST, submission_fact.submission_id
@@ -183,7 +193,9 @@ fn generated_dataset_sql(
             LEFT JOIN analytics.submission_value_fact
               ON submission_value_fact.submission_id = ranked.submission_id
             WHERE selection_rank = 1
-            GROUP BY ranked.submission_id, ranked.node_id, ranked.node_name
+            GROUP BY ranked.submission_id, ranked.node_id, ranked.node_name,
+                ranked.form_version_id, ranked.status, ranked.submitted_at,
+                ranked.created_at, ranked.last_modified_at, ranked.last_modified_by_user_name
         )
         SELECT
             __row_id,
@@ -198,6 +210,21 @@ fn generated_dataset_sql(
             .collect::<Vec<_>>()
             .join(",\n            ")
     )
+}
+
+fn system_source_field_expression(source_field_key: &str) -> Option<&'static str> {
+    match source_field_key {
+        "__submission_id" => Some("ranked.submission_id::text"),
+        "__form_version_id" => Some("ranked.form_version_id::text"),
+        "__node_id" => Some("ranked.node_id::text"),
+        "__node_name" => Some("ranked.node_name"),
+        "__submission_status" => Some("ranked.status"),
+        "__submitted_at" => Some("ranked.submitted_at::text"),
+        "__submission_created_at" => Some("ranked.created_at::text"),
+        "__last_updated_at" => Some("ranked.last_modified_at::text"),
+        "__last_updated_by_user_name" => Some("ranked.last_modified_by_user_name"),
+        _ => None,
+    }
 }
 
 async fn materialize_dataset_revision(

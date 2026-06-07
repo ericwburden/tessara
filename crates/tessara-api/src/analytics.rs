@@ -68,10 +68,37 @@ pub async fn refresh_projection(pool: &sqlx::PgPool) -> ApiResult<AnalyticsStatu
         "#,
         r#"
         INSERT INTO analytics.submission_fact
-            (submission_id, form_version_id, node_id, status, submitted_at)
-        SELECT id, form_version_id, node_id, status::text, submitted_at
+            (
+                submission_id,
+                form_version_id,
+                node_id,
+                status,
+                submitted_at,
+                created_at,
+                last_modified_at,
+                last_modified_by_user_name
+            )
+        SELECT
+            submissions.id,
+            submissions.form_version_id,
+            submissions.node_id,
+            submissions.status::text,
+            submissions.submitted_at,
+            submissions.created_at,
+            COALESCE(last_audit.created_at, submissions.created_at) AS last_modified_at,
+            last_audit.display_name AS last_modified_by_user_name
         FROM submissions
-        WHERE status = 'submitted'::submission_status
+        LEFT JOIN LATERAL (
+            SELECT
+                submission_audit_events.created_at,
+                accounts.display_name
+            FROM submission_audit_events
+            LEFT JOIN accounts ON accounts.id = submission_audit_events.account_id
+            WHERE submission_audit_events.submission_id = submissions.id
+            ORDER BY submission_audit_events.created_at DESC, submission_audit_events.id DESC
+            LIMIT 1
+        ) last_audit ON TRUE
+        WHERE submissions.status = 'submitted'::submission_status
         "#,
         r#"
         INSERT INTO analytics.submission_value_fact

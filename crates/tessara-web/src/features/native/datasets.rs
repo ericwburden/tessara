@@ -729,7 +729,7 @@ fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView {
                         join_left_key
                         join_right_key
                     />
-                    <DatasetFieldsEditor fields sources/>
+                    <DatasetFieldsEditor fields sources forms rendered_forms/>
                     <section class="route-panel__section dataset-editor-section">
                         <h3>"Visibility"</h3>
                         <div class="dataset-checkbox-grid">
@@ -815,9 +815,38 @@ fn DatasetSourcesEditor(
     join_right_key: RwSignal<String>,
 ) -> impl IntoView {
     Effect::new(move |_| {
+        let form_options = forms.get();
+        sources.update(|items| {
+            for source in items {
+                if source.input_kind != "form"
+                    || source.form_id.is_empty()
+                    || !source.form_version_id.is_empty()
+                {
+                    continue;
+                }
+                let version = source
+                    .form_version_major
+                    .and_then(|major| {
+                        published_versions_for_form(&form_options, &source.form_id)
+                            .into_iter()
+                            .find(|version| version.version_major == Some(major))
+                    })
+                    .or_else(|| first_published_version(&form_options, &source.form_id));
+                if let Some(version) = version {
+                    source.form_version_id = version.id;
+                    source.form_version_major = version.version_major;
+                }
+            }
+        });
+    });
+
+    Effect::new(move |_| {
+        let form_options = forms.get();
         for source in sources.get() {
-            if source.input_kind == "form" && !source.form_version_id.is_empty() {
-                load_rendered_form(source.form_version_id, rendered_forms);
+            if source.input_kind == "form" {
+                if let Some(version_id) = resolved_form_version_id(&source, &form_options) {
+                    load_rendered_form(version_id, rendered_forms);
+                }
             }
         }
     });
@@ -845,12 +874,14 @@ fn DatasetSourcesEditor(
                 {move || if is_join_operation(&composition_mode.get()) {
                     let left_options = join_key_options_for_source_index(
                         &sources.get(),
+                        &forms.get(),
                         &rendered_forms.get(),
                         0,
                         &join_left_key.get(),
                     );
                     let right_options = join_key_options_for_source_index(
                         &sources.get(),
+                        &forms.get(),
                         &rendered_forms.get(),
                         1,
                         &join_right_key.get(),
@@ -998,7 +1029,7 @@ fn DatasetSourcesEditor(
                             view! { <span></span> }.into_any()
                         }}
                         {if source.input_kind == "form" {
-                            view! { <button class="button button--compact button--secondary" type="button" on:click=move |_| add_fields_from_source(index, sources, rendered_forms, fields)>"Add Fields"</button> }.into_any()
+                            view! { <button class="button button--compact button--secondary" type="button" on:click=move |_| add_fields_from_source(index, sources, forms, rendered_forms, fields)>"Add Fields"</button> }.into_any()
                         } else {
                             view! { <span class="data-table__secondary-text">"Project fields below"</span> }.into_any()
                         }}
@@ -1026,6 +1057,8 @@ fn ExpressionPreview(
 fn DatasetFieldsEditor(
     fields: RwSignal<Vec<DatasetFieldDraft>>,
     sources: RwSignal<Vec<DatasetSourceDraft>>,
+    forms: RwSignal<Vec<FormSummary>>,
+    rendered_forms: RwSignal<BTreeMap<String, RenderedForm>>,
 ) -> impl IntoView {
     view! {
         <section class="route-panel__section dataset-editor-section">
@@ -1058,10 +1091,20 @@ fn DatasetFieldsEditor(
                         </label>
                         <label class="form-field">
                             <span>"Source Field"</span>
-                            <input prop:value=field.source_field_key.clone() on:input=move |event| {
+                            <select prop:value=field.source_field_key.clone() on:change=move |event| {
                                 let value = event_target_value(&event);
                                 fields.update(|items| if let Some(item) = items.get_mut(index) { item.source_field_key = value; });
-                            }/>
+                            }>
+                                {source_field_options_with_selected(
+                                    &sources.get(),
+                                    &forms.get(),
+                                    &rendered_forms.get(),
+                                    &field.source_alias,
+                                    &field.source_field_key,
+                                ).into_iter().map(|option| {
+                                    view! { <option value=option.key.clone()>{join_key_option_label(&option)}</option> }
+                                }).collect_view()}
+                            </select>
                         </label>
                     </div>
                 }
@@ -1336,6 +1379,7 @@ fn find_version(forms: &[FormSummary], version_id: &str) -> Option<FormVersionSu
 
 fn source_field_options(
     sources: &[DatasetSourceDraft],
+    forms: &[FormSummary],
     rendered_forms: &BTreeMap<String, RenderedForm>,
     source_alias: &str,
 ) -> Vec<RenderedField> {
@@ -1345,27 +1389,54 @@ fn source_field_options(
     else {
         return Vec::new();
     };
-    rendered_forms
-        .get(&source.form_version_id)
-        .map(|rendered| {
-            rendered
-                .sections
-                .iter()
-                .flat_map(|section| section.fields.iter().cloned())
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default()
+    let mut options = system_source_field_options();
+    let form_version_id = resolved_form_version_id(source, forms);
+    options.extend(
+        form_version_id
+            .as_deref()
+            .and_then(|version_id| rendered_forms.get(version_id))
+            .map(|rendered| {
+                rendered
+                    .sections
+                    .iter()
+                    .flat_map(|section| section.fields.iter().cloned())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default(),
+    );
+    options
+}
+
+fn source_field_options_with_selected(
+    sources: &[DatasetSourceDraft],
+    forms: &[FormSummary],
+    rendered_forms: &BTreeMap<String, RenderedForm>,
+    source_alias: &str,
+    selected_key: &str,
+) -> Vec<RenderedField> {
+    let mut options = source_field_options(sources, forms, rendered_forms, source_alias);
+
+    if !selected_key.is_empty() && !options.iter().any(|option| option.key == selected_key) {
+        options.push(RenderedField {
+            key: selected_key.to_string(),
+            label: "Unknown field".into(),
+            field_type: String::new(),
+        });
+    }
+
+    options
 }
 
 fn join_key_options_for_source_index(
     sources: &[DatasetSourceDraft],
+    forms: &[FormSummary],
     rendered_forms: &BTreeMap<String, RenderedForm>,
     source_index: usize,
     selected_key: &str,
 ) -> Vec<RenderedField> {
     let mut options = sources
         .get(source_index)
-        .map(|source| source_field_options(sources, rendered_forms, &source.source_alias))
+        .map(|source| source_field_options(sources, forms, rendered_forms, &source.source_alias))
         .unwrap_or_default();
 
     if !selected_key.is_empty() && !options.iter().any(|option| option.key == selected_key) {
@@ -1377,6 +1448,46 @@ fn join_key_options_for_source_index(
     }
 
     options
+}
+
+fn resolved_form_version_id(source: &DatasetSourceDraft, forms: &[FormSummary]) -> Option<String> {
+    if !source.form_version_id.is_empty() {
+        return Some(source.form_version_id.clone());
+    }
+    source
+        .form_version_major
+        .and_then(|major| {
+            published_versions_for_form(forms, &source.form_id)
+                .into_iter()
+                .find(|version| version.version_major == Some(major))
+        })
+        .or_else(|| first_published_version(forms, &source.form_id))
+        .map(|version| version.id)
+}
+
+fn system_source_field_options() -> Vec<RenderedField> {
+    [
+        ("__submission_id", "Submission ID", "text"),
+        ("__form_version_id", "Form Version ID", "text"),
+        ("__node_id", "Attached Node ID", "text"),
+        ("__node_name", "Attached Node Name", "text"),
+        ("__submission_status", "Submission Status", "text"),
+        ("__submitted_at", "Submitted Date", "date"),
+        ("__submission_created_at", "Created Date", "date"),
+        ("__last_updated_at", "Updated Date", "date"),
+        (
+            "__last_updated_by_user_name",
+            "Updated By User Name",
+            "text",
+        ),
+    ]
+    .into_iter()
+    .map(|(key, label, field_type)| RenderedField {
+        key: key.into(),
+        label: label.into(),
+        field_type: field_type.into(),
+    })
+    .collect()
 }
 
 fn join_key_option_label(field: &RenderedField) -> String {
@@ -1397,13 +1508,18 @@ fn truncate_field_label(label: &str) -> String {
 fn add_fields_from_source(
     index: usize,
     sources: RwSignal<Vec<DatasetSourceDraft>>,
+    forms: RwSignal<Vec<FormSummary>>,
     rendered_forms: RwSignal<BTreeMap<String, RenderedForm>>,
     fields: RwSignal<Vec<DatasetFieldDraft>>,
 ) {
     let source = sources.get().get(index).cloned();
     if let Some(source) = source {
-        let options =
-            source_field_options(&sources.get(), &rendered_forms.get(), &source.source_alias);
+        let options = source_field_options(
+            &sources.get(),
+            &forms.get(),
+            &rendered_forms.get(),
+            &source.source_alias,
+        );
         fields.update(|items| {
             for option in options {
                 let key = format!("{}_{}", source.source_alias, option.key);
