@@ -211,6 +211,13 @@ struct DatasetFieldDraft {
     source_field_key: String,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+enum DatasetDesignerSelection {
+    Operation,
+    Source(usize),
+    Field(usize),
+}
+
 impl Default for DatasetSourceDraft {
     fn default() -> Self {
         Self {
@@ -653,6 +660,7 @@ fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView {
     let table_error = RwSignal::new(None::<String>);
     let save_error = RwSignal::new(None::<String>);
     let save_message = RwSignal::new(None::<String>);
+    let designer_selection = RwSignal::new(DatasetDesignerSelection::Operation);
 
     Effect::new({
         let dataset_id = dataset_id.clone();
@@ -728,8 +736,9 @@ fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView {
                         fields
                         join_left_key
                         join_right_key
+                        designer_selection
                     />
-                    <DatasetFieldsEditor fields sources forms rendered_forms/>
+                    <DatasetFieldsEditor fields sources designer_selection/>
                     <section class="route-panel__section dataset-editor-section">
                         <h3>"Visibility"</h3>
                         <div class="dataset-checkbox-grid">
@@ -813,6 +822,7 @@ fn DatasetSourcesEditor(
     fields: RwSignal<Vec<DatasetFieldDraft>>,
     join_left_key: RwSignal<String>,
     join_right_key: RwSignal<String>,
+    designer_selection: RwSignal<DatasetDesignerSelection>,
 ) -> impl IntoView {
     Effect::new(move |_| {
         let form_options = forms.get();
@@ -858,64 +868,266 @@ fn DatasetSourcesEditor(
                 <button class="button button--secondary button--compact" type="button" on:click=move |_| {
                     let next = sources.get().len() + 1;
                     sources.update(|items| items.push(DatasetSourceDraft { source_alias: format!("source_{next}"), ..DatasetSourceDraft::default() }));
+                    designer_selection.set(DatasetDesignerSelection::Source(next - 1));
                 }>"Add Input"</button>
             </div>
-            <div class="form-grid">
-                <label class="form-field">
-                    <span>"Operation"</span>
-                    <select prop:value=move || composition_mode.get() on:change=move |event| composition_mode.set(event_target_value(&event))>
-                        <option value="union">"Union"</option>
-                        <option value="union_all">"Union All"</option>
-                        <option value="left_join">"Left Join"</option>
-                        <option value="inner_join">"Inner Join"</option>
-                        <option value="outer_join">"Outer Join"</option>
-                    </select>
-                </label>
-                {move || if is_join_operation(&composition_mode.get()) {
-                    let left_options = join_key_options_for_source_index(
-                        &sources.get(),
-                        &forms.get(),
-                        &rendered_forms.get(),
-                        0,
-                        &join_left_key.get(),
-                    );
-                    let right_options = join_key_options_for_source_index(
-                        &sources.get(),
-                        &forms.get(),
-                        &rendered_forms.get(),
-                        1,
-                        &join_right_key.get(),
-                    );
-                    view! {
-                        <div class="form-grid dataset-join-key-grid">
-                            <label class="form-field">
-                                <span>"Left Join Key"</span>
-                                <select prop:value=move || join_left_key.get() on:change=move |event| join_left_key.set(event_target_value(&event))>
-                                    <option value="">"Select field"</option>
-                                    {left_options.into_iter().map(|option| {
-                                        view! { <option value=option.key.clone()>{join_key_option_label(&option)}</option> }
-                                    }).collect_view()}
-                                </select>
-                            </label>
-                            <label class="form-field">
-                                <span>"Right Join Key"</span>
-                                <select prop:value=move || join_right_key.get() on:change=move |event| join_right_key.set(event_target_value(&event))>
-                                    <option value="">"Select field"</option>
-                                    {right_options.into_iter().map(|option| {
-                                        view! { <option value=option.key.clone()>{join_key_option_label(&option)}</option> }
-                                    }).collect_view()}
-                                </select>
-                            </label>
-                        </div>
-                    }.into_any()
-                } else {
-                    view! { <span></span> }.into_any()
-                }}
+            <div class="dataset-expression-workspace">
+                <div class="dataset-expression-canvas">
+                    <ExpressionPreview sources=sources composition_mode/>
+                    <DatasetExpressionChain
+                        sources
+                        composition_mode
+                        designer_selection
+                    />
+                </div>
+                <DatasetDesignerOptionsSheet
+                    selection=designer_selection
+                    sources
+                    forms
+                    datasets
+                    rendered_forms
+                    composition_mode
+                    fields
+                    join_left_key
+                    join_right_key
+                />
             </div>
-            <ExpressionPreview sources=sources composition_mode/>
+        </section>
+    }
+}
+
+#[component]
+fn ExpressionPreview(
+    sources: RwSignal<Vec<DatasetSourceDraft>>,
+    composition_mode: RwSignal<String>,
+) -> impl IntoView {
+    view! {
+        <div class="dataset-expression-preview">
+            <span>"Expression"</span>
+            <code>{move || expression_label(&sources.get(), &composition_mode.get())}</code>
+        </div>
+    }
+}
+
+#[component]
+fn DatasetExpressionChain(
+    sources: RwSignal<Vec<DatasetSourceDraft>>,
+    composition_mode: RwSignal<String>,
+    designer_selection: RwSignal<DatasetDesignerSelection>,
+) -> impl IntoView {
+    view! {
+        <div class="dataset-expression-chain" aria-label="Dataset expression">
             {move || sources.get().into_iter().enumerate().map(|(index, source)| {
+                let is_last = index + 1 >= sources.get().len();
+                let source_label = source.source_alias.clone();
                 view! {
-                    <div class="dataset-editor-row dataset-editor-row--source">
+                    <div class="dataset-expression-node">
+                        <div class="dataset-expression-panel">
+                            <button
+                                class=move || expression_button_class(
+                                    designer_selection.get() == DatasetDesignerSelection::Source(index),
+                                    "dataset-expression-button dataset-expression-button--source",
+                                )
+                                type="button"
+                                on:click=move |_| designer_selection.set(DatasetDesignerSelection::Source(index))
+                            >
+                                {source_label.clone()}
+                            </button>
+                            <button
+                                class="button button--secondary button--compact dataset-expression-nest-button"
+                                type="button"
+                                on:click=move |_| {
+                                    sources.update(|items| {
+                                        let next = items.len() + 1;
+                                        let insert_at = (index + 1).min(items.len());
+                                        items.insert(insert_at, DatasetSourceDraft {
+                                            source_alias: format!("source_{next}"),
+                                            ..DatasetSourceDraft::default()
+                                        });
+                                    });
+                                    designer_selection.set(DatasetDesignerSelection::Source(index + 1));
+                                }
+                            >
+                                "Convert To Expression"
+                            </button>
+                        </div>
+                        {if !is_last {
+                            view! {
+                                <button
+                                    class=move || expression_button_class(
+                                        designer_selection.get() == DatasetDesignerSelection::Operation,
+                                        "dataset-expression-button dataset-expression-button--operation",
+                                    )
+                                    type="button"
+                                    on:click=move |_| designer_selection.set(DatasetDesignerSelection::Operation)
+                                >
+                                    {operation_label(&composition_mode.get())}
+                                </button>
+                            }.into_any()
+                        } else {
+                            view! { <span></span> }.into_any()
+                        }}
+                    </div>
+                }
+            }).collect_view()}
+            <button
+                class="button button--secondary button--compact dataset-expression-chain-add"
+                type="button"
+                on:click=move |_| {
+                    let next = sources.get().len() + 1;
+                    sources.update(|items| items.push(DatasetSourceDraft {
+                        source_alias: format!("source_{next}"),
+                        ..DatasetSourceDraft::default()
+                    }));
+                    designer_selection.set(DatasetDesignerSelection::Source(next - 1));
+                }
+            >
+                "Chain Input"
+            </button>
+        </div>
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+#[component]
+fn DatasetDesignerOptionsSheet(
+    selection: RwSignal<DatasetDesignerSelection>,
+    sources: RwSignal<Vec<DatasetSourceDraft>>,
+    forms: RwSignal<Vec<FormSummary>>,
+    datasets: RwSignal<Vec<DatasetSummary>>,
+    rendered_forms: RwSignal<BTreeMap<String, RenderedForm>>,
+    composition_mode: RwSignal<String>,
+    fields: RwSignal<Vec<DatasetFieldDraft>>,
+    join_left_key: RwSignal<String>,
+    join_right_key: RwSignal<String>,
+) -> impl IntoView {
+    view! {
+        <aside class="dataset-options-sheet" aria-label="Dataset designer options">
+            {move || match selection.get() {
+                DatasetDesignerSelection::Operation => view! {
+                    <OperationOptionsPanel
+                        sources
+                        forms
+                        rendered_forms
+                        composition_mode
+                        join_left_key
+                        join_right_key
+                    />
+                }.into_any(),
+                DatasetDesignerSelection::Source(index) => view! {
+                    <SourceOptionsPanel
+                        index
+                        sources
+                        forms
+                        datasets
+                        rendered_forms
+                        fields
+                        composition_mode
+                    />
+                }.into_any(),
+                DatasetDesignerSelection::Field(index) => view! {
+                    <FieldOptionsPanel
+                        index
+                        fields
+                        sources
+                        forms
+                        rendered_forms
+                    />
+                }.into_any(),
+            }}
+        </aside>
+    }
+}
+
+#[component]
+fn OperationOptionsPanel(
+    sources: RwSignal<Vec<DatasetSourceDraft>>,
+    forms: RwSignal<Vec<FormSummary>>,
+    rendered_forms: RwSignal<BTreeMap<String, RenderedForm>>,
+    composition_mode: RwSignal<String>,
+    join_left_key: RwSignal<String>,
+    join_right_key: RwSignal<String>,
+) -> impl IntoView {
+    view! {
+        <div class="dataset-options-sheet__content">
+            <header class="dataset-options-sheet__header">
+                <span>"Operation"</span>
+                <h4>{move || operation_label(&composition_mode.get())}</h4>
+            </header>
+            <label class="form-field">
+                <span>"Operation"</span>
+                <select prop:value=move || composition_mode.get() on:change=move |event| composition_mode.set(event_target_value(&event))>
+                    <option value="union">"Union"</option>
+                    <option value="union_all">"Union All"</option>
+                    <option value="left_join">"Left Join"</option>
+                    <option value="inner_join">"Inner Join"</option>
+                    <option value="outer_join">"Outer Join"</option>
+                </select>
+            </label>
+            {move || if is_join_operation(&composition_mode.get()) {
+                let left_options = join_key_options_for_source_index(
+                    &sources.get(),
+                    &forms.get(),
+                    &rendered_forms.get(),
+                    0,
+                    &join_left_key.get(),
+                );
+                let right_options = join_key_options_for_source_index(
+                    &sources.get(),
+                    &forms.get(),
+                    &rendered_forms.get(),
+                    1,
+                    &join_right_key.get(),
+                );
+                view! {
+                    <div class="dataset-options-sheet__stack">
+                        <label class="form-field">
+                            <span>"Left Join Key"</span>
+                            <select prop:value=move || join_left_key.get() on:change=move |event| join_left_key.set(event_target_value(&event))>
+                                <option value="">"Select field"</option>
+                                {left_options.into_iter().map(|option| {
+                                    view! { <option value=option.key.clone()>{join_key_option_label(&option)}</option> }
+                                }).collect_view()}
+                            </select>
+                        </label>
+                        <label class="form-field">
+                            <span>"Right Join Key"</span>
+                            <select prop:value=move || join_right_key.get() on:change=move |event| join_right_key.set(event_target_value(&event))>
+                                <option value="">"Select field"</option>
+                                {right_options.into_iter().map(|option| {
+                                    view! { <option value=option.key.clone()>{join_key_option_label(&option)}</option> }
+                                }).collect_view()}
+                            </select>
+                        </label>
+                    </div>
+                }.into_any()
+            } else {
+                view! { <span></span> }.into_any()
+            }}
+        </div>
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+#[component]
+fn SourceOptionsPanel(
+    index: usize,
+    sources: RwSignal<Vec<DatasetSourceDraft>>,
+    forms: RwSignal<Vec<FormSummary>>,
+    datasets: RwSignal<Vec<DatasetSummary>>,
+    rendered_forms: RwSignal<BTreeMap<String, RenderedForm>>,
+    fields: RwSignal<Vec<DatasetFieldDraft>>,
+    composition_mode: RwSignal<String>,
+) -> impl IntoView {
+    view! {
+        {move || sources.get().get(index).cloned().map(|source| {
+            view! {
+                <div class="dataset-options-sheet__content">
+                    <header class="dataset-options-sheet__header">
+                        <span>"Source"</span>
+                        <h4>{source.source_alias.clone()}</h4>
+                    </header>
+                    <div class="dataset-options-sheet__stack">
                         <label class="form-field">
                             <span>"Alias"</span>
                             <input prop:value=source.source_alias.clone() on:input=move |event| {
@@ -971,101 +1183,89 @@ fn DatasetSourcesEditor(
                             view! {
                                 <label class="form-field">
                                     <span>"Form"</span>
-                            <select prop:value=source.form_id.clone() on:change=move |event| {
-                                let form_id = event_target_value(&event);
-                                sources.update(|items| {
-                                    if let Some(item) = items.get_mut(index) {
-                                        item.form_id = form_id.clone();
-                                        if let Some(version) = first_published_version(&forms.get(), &form_id) {
-                                            item.form_version_id = version.id.clone();
-                                            item.form_version_major = version.version_major;
-                                            load_rendered_form(version.id.clone(), rendered_forms);
-                                        }
-                                    }
-                                });
-                            }>
-                                <option value="">"Select form"</option>
-                                {forms.get().into_iter().map(|form| view! { <option value=form.id>{form.name}</option> }).collect_view()}
-                            </select>
+                                    <select prop:value=source.form_id.clone() on:change=move |event| {
+                                        let form_id = event_target_value(&event);
+                                        sources.update(|items| {
+                                            if let Some(item) = items.get_mut(index) {
+                                                item.form_id = form_id.clone();
+                                                if let Some(version) = first_published_version(&forms.get(), &form_id) {
+                                                    item.form_version_id = version.id.clone();
+                                                    item.form_version_major = version.version_major;
+                                                    load_rendered_form(version.id.clone(), rendered_forms);
+                                                }
+                                            }
+                                        });
+                                    }>
+                                        <option value="">"Select form"</option>
+                                        {forms.get().into_iter().map(|form| view! { <option value=form.id>{form.name}</option> }).collect_view()}
+                                    </select>
                                 </label>
                                 <label class="form-field">
                                     <span>"Version"</span>
-                            <select prop:value=source.form_version_id.clone() on:change=move |event| {
-                                let version_id = event_target_value(&event);
-                                sources.update(|items| {
-                                    if let Some(item) = items.get_mut(index) {
-                                        item.form_version_id = version_id.clone();
-                                        item.form_version_major = find_version(&forms.get(), &version_id).and_then(|version| version.version_major);
-                                        load_rendered_form(version_id.clone(), rendered_forms);
-                                    }
-                                });
-                            }>
-                                {published_versions_for_form(&forms.get(), &source.form_id).into_iter().map(|version| {
-                                    view! { <option value=version.id>{version_label(&version)}</option> }
-                                }).collect_view()}
-                            </select>
+                                    <select prop:value=source.form_version_id.clone() on:change=move |event| {
+                                        let version_id = event_target_value(&event);
+                                        sources.update(|items| {
+                                            if let Some(item) = items.get_mut(index) {
+                                                item.form_version_id = version_id.clone();
+                                                item.form_version_major = find_version(&forms.get(), &version_id).and_then(|version| version.version_major);
+                                                load_rendered_form(version_id.clone(), rendered_forms);
+                                            }
+                                        });
+                                    }>
+                                        {published_versions_for_form(&forms.get(), &source.form_id).into_iter().map(|version| {
+                                            view! { <option value=version.id>{version_label(&version)}</option> }
+                                        }).collect_view()}
+                                    </select>
                                 </label>
-                            }.into_any()
-                        }}
-                        {if source.input_kind == "form" {
-                            view! {
                                 <label class="form-field">
                                     <span>"Selection"</span>
-                            <select prop:value=source.selection_rule.clone() on:change=move |event| {
-                                let value = event_target_value(&event);
-                                sources.update(|items| if let Some(item) = items.get_mut(index) { item.selection_rule = value; });
-                            }>
-                                <option value="latest">"Latest"</option>
-                                <option value="earliest">"Earliest"</option>
-                                {move || if composition_mode.get() == "union" {
-                                    view! { <option value="all">"All"</option> }.into_any()
-                                } else {
-                                    view! { <span></span> }.into_any()
-                                }}
-                            </select>
+                                    <select prop:value=source.selection_rule.clone() on:change=move |event| {
+                                        let value = event_target_value(&event);
+                                        sources.update(|items| if let Some(item) = items.get_mut(index) { item.selection_rule = value; });
+                                    }>
+                                        <option value="latest">"Latest"</option>
+                                        <option value="earliest">"Earliest"</option>
+                                        {move || if composition_mode.get() == "union" {
+                                            view! { <option value="all">"All"</option> }.into_any()
+                                        } else {
+                                            view! { <span></span> }.into_any()
+                                        }}
+                                    </select>
                                 </label>
+                                <button class="button button--secondary" type="button" on:click=move |_| add_fields_from_source(index, sources, forms, rendered_forms, fields)>"Add Fields From Source"</button>
                             }.into_any()
-                        } else {
-                            view! { <span></span> }.into_any()
-                        }}
-                        {if source.input_kind == "form" {
-                            view! { <button class="button button--compact button--secondary" type="button" on:click=move |_| add_fields_from_source(index, sources, forms, rendered_forms, fields)>"Add Fields"</button> }.into_any()
-                        } else {
-                            view! { <span class="data-table__secondary-text">"Project fields below"</span> }.into_any()
                         }}
                     </div>
-                }
-            }).collect_view()}
-        </section>
+                </div>
+            }.into_any()
+        }).unwrap_or_else(|| view! {
+            <div class="dataset-options-sheet__content">
+                <header class="dataset-options-sheet__header">
+                    <span>"Source"</span>
+                    <h4>"No Source Selected"</h4>
+                </header>
+            </div>
+        }.into_any())}
     }
 }
 
 #[component]
-fn ExpressionPreview(
-    sources: RwSignal<Vec<DatasetSourceDraft>>,
-    composition_mode: RwSignal<String>,
-) -> impl IntoView {
-    view! {
-        <div class="dataset-expression-preview">
-            <span>"Expression"</span>
-            <code>{move || expression_label(&sources.get(), &composition_mode.get())}</code>
-        </div>
-    }
-}
-
-#[component]
-fn DatasetFieldsEditor(
+fn FieldOptionsPanel(
+    index: usize,
     fields: RwSignal<Vec<DatasetFieldDraft>>,
     sources: RwSignal<Vec<DatasetSourceDraft>>,
     forms: RwSignal<Vec<FormSummary>>,
     rendered_forms: RwSignal<BTreeMap<String, RenderedForm>>,
 ) -> impl IntoView {
     view! {
-        <section class="route-panel__section dataset-editor-section">
-            <h3>"Fields"</h3>
-            {move || fields.get().into_iter().enumerate().map(|(index, field)| {
-                view! {
-                    <div class="dataset-editor-row dataset-editor-row--fields">
+        {move || fields.get().get(index).cloned().map(|field| {
+            view! {
+                <div class="dataset-options-sheet__content">
+                    <header class="dataset-options-sheet__header">
+                        <span>"Projected Field"</span>
+                        <h4>{field.label.clone()}</h4>
+                    </header>
+                    <div class="dataset-options-sheet__stack">
                         <label class="form-field">
                             <span>"Key"</span>
                             <input prop:value=field.key.clone() on:input=move |event| {
@@ -1107,8 +1307,57 @@ fn DatasetFieldsEditor(
                             </select>
                         </label>
                     </div>
-                }
-            }).collect_view()}
+                </div>
+            }.into_any()
+        }).unwrap_or_else(|| view! {
+            <div class="dataset-options-sheet__content">
+                <header class="dataset-options-sheet__header">
+                    <span>"Projected Field"</span>
+                    <h4>"No Field Selected"</h4>
+                </header>
+            </div>
+        }.into_any())}
+    }
+}
+
+#[component]
+fn DatasetFieldsEditor(
+    fields: RwSignal<Vec<DatasetFieldDraft>>,
+    sources: RwSignal<Vec<DatasetSourceDraft>>,
+    designer_selection: RwSignal<DatasetDesignerSelection>,
+) -> impl IntoView {
+    view! {
+        <section class="route-panel__section dataset-editor-section">
+            <div class="dataset-editor-section__header">
+                <h3>"Fields"</h3>
+                <button class="button button--secondary button--compact" type="button" on:click=move |_| {
+                    let next = fields.get().len() + 1;
+                    fields.update(|items| items.push(DatasetFieldDraft {
+                        key: format!("field_{next}"),
+                        label: format!("Field {next}"),
+                        source_alias: sources.get().first().map(|source| source.source_alias.clone()).unwrap_or_default(),
+                        source_field_key: String::new(),
+                    }));
+                    designer_selection.set(DatasetDesignerSelection::Field(next - 1));
+                }>"Add Field"</button>
+            </div>
+            <div class="dataset-field-chip-grid">
+                {move || fields.get().into_iter().enumerate().map(|(index, field)| {
+                    view! {
+                        <button
+                            class=move || expression_button_class(
+                                designer_selection.get() == DatasetDesignerSelection::Field(index),
+                                "dataset-field-chip",
+                            )
+                            type="button"
+                            on:click=move |_| designer_selection.set(DatasetDesignerSelection::Field(index))
+                        >
+                            <strong>{field.label}</strong>
+                            <span>{format!("{} · {}", field.source_alias, field.source_field_key)}</span>
+                        </button>
+                    }
+                }).collect_view()}
+            </div>
         </section>
     }
 }
@@ -1194,6 +1443,14 @@ fn expression_label(sources: &[DatasetSourceDraft], operation: &str) -> String {
         .into_iter()
         .reduce(|left, right| format!("({left}) {} ({right})", operation_label(operation)))
         .unwrap_or_else(|| "Choose at least one input".into())
+}
+
+fn expression_button_class(is_active: bool, base: &'static str) -> String {
+    if is_active {
+        format!("{base} is-active")
+    } else {
+        base.into()
+    }
 }
 
 #[allow(dead_code)]
