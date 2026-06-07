@@ -16294,7 +16294,9 @@ pub use placeholders::{
 
 #[path = "native/datasets.rs"]
 mod datasets;
-pub use datasets::{DatasetsDetailPage, DatasetsEditPage, DatasetsNewPage, DatasetsPage};
+pub use datasets::{
+    DatasetsDetailPage, DatasetsEditPage, DatasetsNewPage, DatasetsPage, DatasetsPreviewPage,
+};
 
 #[path = "native/operations.rs"]
 mod operations;

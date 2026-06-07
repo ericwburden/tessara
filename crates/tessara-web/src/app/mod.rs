@@ -64,6 +64,7 @@ pub fn App() -> impl IntoView {
                 <Route path=path!("/dashboards/:dashboard_id/edit") view=native::DashboardsEditPage ssr=PRIMARY_SSR_MODE/>
                 <Route path=path!("/datasets") view=native::DatasetsPage ssr=PRIMARY_SSR_MODE/>
                 <Route path=path!("/datasets/new") view=native::DatasetsNewPage ssr=PRIMARY_SSR_MODE/>
+                <Route path=path!("/datasets/:dataset_id/preview") view=native::DatasetsPreviewPage ssr=PRIMARY_SSR_MODE/>
                 <Route path=path!("/datasets/:dataset_id") view=native::DatasetsDetailPage ssr=PRIMARY_SSR_MODE/>
                 <Route path=path!("/datasets/:dataset_id/edit") view=native::DatasetsEditPage ssr=PRIMARY_SSR_MODE/>
                 <Route path=path!("/administration") view=native::AdministrationPage ssr=PRIMARY_SSR_MODE/>

@@ -1576,6 +1576,13 @@ input {
   gap: 0.75rem;
 }
 
+.dataset-editor-section__actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
 .dataset-expression-preview {
   display: grid;
   gap: 0.45rem;
@@ -1625,9 +1632,35 @@ input {
 .dataset-expression-chain {
   display: flex;
   align-items: stretch;
+  flex-wrap: wrap;
   gap: 0.65rem;
-  overflow-x: auto;
   padding: 0.15rem 0 0.35rem;
+}
+
+.dataset-expression-tree {
+  display: grid;
+  min-width: 0;
+  gap: 0.65rem;
+}
+
+.dataset-expression-group {
+  display: flex;
+  min-width: 0;
+  gap: 0.65rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: rgb(15 23 42 / 12%);
+  padding: 0.65rem;
+}
+
+.dataset-expression-group--row {
+  flex-flow: row wrap;
+  align-items: center;
+}
+
+.dataset-expression-group--column {
+  flex-direction: column;
+  align-items: stretch;
 }
 
 .dataset-expression-node {
@@ -1638,13 +1671,23 @@ input {
 }
 
 .dataset-expression-panel {
+  position: relative;
   display: grid;
   gap: 0.55rem;
   min-width: 10rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
   background: var(--color-table-row);
-  padding: 0.65rem;
+  padding: 0.65rem 0.65rem 0.65rem 0.65rem;
+}
+
+.dataset-expression-remove {
+  position: absolute;
+  top: -0.55rem;
+  right: -0.55rem;
+  width: 1.8rem;
+  min-width: 1.8rem;
+  min-height: 1.8rem;
 }
 
 .dataset-expression-button,
@@ -1763,6 +1806,45 @@ input {
   background: var(--color-control);
   color: var(--color-text);
   padding: 1rem;
+}
+
+.dataset-fields-table .data-table,
+.dataset-visibility-table .data-table {
+  min-width: 48rem;
+}
+
+.dataset-fields-table tr.is-selected {
+  background: var(--semantic-primary-soft);
+}
+
+.dataset-editor-preview-link {
+  justify-items: end;
+}
+
+.dataset-preview-page {
+  min-height: 100vh;
+  background: var(--color-bg);
+  color: var(--color-text);
+  padding: 1rem;
+}
+
+.dataset-preview-page__content {
+  display: grid;
+  gap: 1rem;
+}
+
+.dataset-preview-page__header {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.dataset-preview-page__header p {
+  margin: 0;
+  color: var(--semantic-primary);
+  font-size: 0.78rem;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .dataset-join-key-grid {

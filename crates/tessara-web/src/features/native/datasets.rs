@@ -452,6 +452,49 @@ pub fn DatasetsNewPage() -> impl IntoView {
 }
 
 #[component]
+pub fn DatasetsPreviewPage() -> impl IntoView {
+    let params = require_route_params::<DatasetRouteParams>();
+    let dataset_id = params.dataset_id;
+    let dataset = RwSignal::new(None::<DatasetDefinition>);
+    let table = RwSignal::new(None::<DatasetTable>);
+    let is_loading = RwSignal::new(true);
+    let load_error = RwSignal::new(None::<String>);
+    let table_error = RwSignal::new(None::<String>);
+
+    Effect::new({
+        let dataset_id = dataset_id.clone();
+        move |_| {
+            load_dataset_detail(dataset_id.clone(), dataset, is_loading, load_error);
+            load_dataset_table(dataset_id.clone(), table, table_error);
+        }
+    });
+
+    view! {
+        <main class="dataset-preview-page">
+            {move || {
+                if is_loading.get() {
+                    view! { <EmptyState title="Loading preview" message="Fetching dataset preview rows."/> }.into_any()
+                } else if let Some(message) = load_error.get() {
+                    view! { <EmptyState title="Preview unavailable" message=Box::leak(message.into_boxed_str())/> }.into_any()
+                } else if let Some(loaded) = dataset.get() {
+                    view! {
+                        <section class="dataset-preview-page__content">
+                            <header class="dataset-preview-page__header">
+                                <p>"Dataset Preview"</p>
+                                <h1>{loaded.name.clone()}</h1>
+                            </header>
+                            <DatasetPreviewTable dataset=loaded table=table.get() error=table_error.get()/ >
+                        </section>
+                    }.into_any()
+                } else {
+                    view! { <EmptyState title="Preview unavailable" message="Dataset details could not be loaded."/> }.into_any()
+                }
+            }}
+        </main>
+    }
+}
+
+#[component]
 fn DatasetDetailSurface(dataset_id: String, edit: bool) -> impl IntoView {
     let dataset = RwSignal::new(None::<DatasetDefinition>);
     let table = RwSignal::new(None::<DatasetTable>);
@@ -662,13 +705,13 @@ fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView {
     let datasets = RwSignal::new(Vec::<DatasetSummary>::new());
     let nodes = RwSignal::new(Vec::<NodeResponse>::new());
     let rendered_forms = RwSignal::new(BTreeMap::<String, RenderedForm>::new());
-    let table = RwSignal::new(None::<DatasetTable>);
     let load_error = RwSignal::new(None::<String>);
-    let table_error = RwSignal::new(None::<String>);
     let save_error = RwSignal::new(None::<String>);
     let save_message = RwSignal::new(None::<String>);
     let sql_preview = RwSignal::new(None::<String>);
     let sql_preview_error = RwSignal::new(None::<String>);
+    let sql_preview_expanded = RwSignal::new(false);
+    let visibility_search = RwSignal::new(String::new());
     let designer_selection = RwSignal::new(DatasetDesignerSelection::Operation);
     let designer_sheet_open = RwSignal::new(false);
     let auto_seeded_sources = RwSignal::new(BTreeSet::<String>::new());
@@ -693,7 +736,6 @@ fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView {
                     sql_preview,
                     load_error,
                 );
-                load_dataset_table(dataset_id, table, table_error);
             }
         }
     });
@@ -752,7 +794,7 @@ fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView {
                         designer_sheet_open
                         auto_seeded_sources
                     />
-                    <DatasetFieldsEditor fields sources designer_selection designer_sheet_open/>
+                    <DatasetFieldsEditor fields sources forms rendered_forms designer_selection designer_sheet_open/>
                     <DatasetSqlPreviewPanel
                         dataset_id=dataset_id.clone()
                         name
@@ -765,75 +807,84 @@ fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView {
                         join_right_key
                         sql_preview
                         sql_preview_error
+                        expanded=sql_preview_expanded
                     />
                     <section class="route-panel__section dataset-editor-section">
-                        <h3>"Visibility"</h3>
-                        <div class="dataset-checkbox-grid">
-                            {move || nodes.get().into_iter().map(|node| {
-                                let node_id = node.id.clone();
-                                let checked = visibility_node_ids.get().contains(&node_id);
-                                view! {
-                                    <label class="dataset-checkbox">
-                                        <input
-                                            type="checkbox"
-                                            checked=checked
-                                            on:change=move |event| {
-                                                let is_checked = event_target_checked(&event);
-                                                visibility_node_ids.update(|ids| {
-                                                    if is_checked { ids.insert(node_id.clone()); } else { ids.remove(&node_id); }
-                                                });
-                                            }
-                                        />
-                                        <span>{node_label(&node)}</span>
-                                    </label>
-                                }
-                            }).collect_view()}
+                        <div class="dataset-editor-section__header">
+                            <h3>"Visibility"</h3>
+                            <label class="searchable-data-table__search">
+                                <Search class="searchable-data-table__search-icon"/>
+                                <span class="sr-only">"Search visibility nodes"</span>
+                                <input
+                                    type="search"
+                                    placeholder="Search nodes"
+                                    prop:value=move || visibility_search.get()
+                                    on:input=move |event| visibility_search.set(event_target_value(&event))
+                                />
+                            </label>
+                        </div>
+                        <div class="table-wrap dataset-visibility-table">
+                            <DataTable>
+                                <thead>
+                                    <tr>
+                                        <th scope="col">"Visible"</th>
+                                        <th scope="col">"Node"</th>
+                                        <th scope="col">"Type"</th>
+                                        <th scope="col">"Parent"</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {move || {
+                                        let query = visibility_search.get();
+                                        let mut visible_nodes = nodes.get();
+                                        visible_nodes.sort_by(|left, right| {
+                                            left.node_type_name
+                                                .cmp(&right.node_type_name)
+                                                .then_with(|| left.parent_node_name.cmp(&right.parent_node_name))
+                                                .then_with(|| left.name.cmp(&right.name))
+                                        });
+                                        visible_nodes
+                                            .into_iter()
+                                            .filter(|node| node_matches_visibility_query(node, &query))
+                                            .map(|node| {
+                                                let node_id = node.id.clone();
+                                                let checked = visibility_node_ids.get().contains(&node_id);
+                                                view! {
+                                                    <tr>
+                                                        <td>
+                                                            <input
+                                                                type="checkbox"
+                                                                checked=checked
+                                                                aria-label=format!("Toggle visibility for {}", node.name)
+                                                                on:change=move |event| {
+                                                                    let is_checked = event_target_checked(&event);
+                                                                    visibility_node_ids.update(|ids| {
+                                                                        if is_checked { ids.insert(node_id.clone()); } else { ids.remove(&node_id); }
+                                                                    });
+                                                                }
+                                                            />
+                                                        </td>
+                                                        <th scope="row">{node.name}</th>
+                                                        <td>{sentence_label(&node.node_type_name)}</td>
+                                                        <td>{node.parent_node_name.unwrap_or_else(|| "Top-level".into())}</td>
+                                                    </tr>
+                                                }
+                                            })
+                                            .collect_view()
+                                    }}
+                                </tbody>
+                            </DataTable>
                         </div>
                     </section>
                     <div class="form-actions">
                         <button class="button" type="submit">{if is_edit { "Save Dataset" } else { "Create Dataset" }}</button>
                     </div>
                 </form>
-                {move || {
-                    preview_dataset_id.clone().map(|id| {
-                        let preview_dataset = DatasetDefinition {
-                            id,
-                            current_revision_id: None,
-                            name: name.get(),
-                            slug: slug.get(),
-                            grain: "submission".into(),
-                            composition_mode: composition_mode.get(),
-                            definition_ast: None,
-                            generated_sql: None,
-                            materialized_schema: None,
-                            materialized_table: None,
-                            materialized_row_count: None,
-                            materialized_at: None,
-                            visibility_nodes: Vec::new(),
-                            sources: Vec::new(),
-                            fields: fields
-                                .get()
-                                .into_iter()
-                                .enumerate()
-                                .map(|(index, field)| DatasetFieldDefinition {
-                                    key: field.key,
-                                    label: field.label,
-                                    source_alias: field.source_alias,
-                                    source_field_key: field.source_field_key,
-                                    field_type: String::new(),
-                                    position: index as i32,
-                                })
-                                .collect(),
-                        };
-                        view! {
-                            <DatasetPreviewTable
-                                dataset=preview_dataset
-                                table=table.get()
-                                error=table_error.get()
-                            />
-                        }
-                    })
-                }}
+                {move || preview_dataset_id.clone().map(|id| view! {
+                    <section class="route-panel__section dataset-editor-preview-link">
+                        <a class="button button--secondary" href=format!("/datasets/{id}/preview") target="_blank" rel="noopener">"Open Preview"</a>
+                    </section>
+                })}
             </section>
         </AppShell>
     }
@@ -915,6 +966,7 @@ fn DatasetSourcesEditor(
                     <ExpressionPreview sources=sources composition_mode/>
                     <DatasetExpressionChain
                         sources
+                        fields
                         composition_mode
                         designer_selection
                         designer_sheet_open
@@ -951,33 +1003,42 @@ fn DatasetSqlPreviewPanel(
     join_right_key: RwSignal<String>,
     sql_preview: RwSignal<Option<String>>,
     sql_preview_error: RwSignal<Option<String>>,
+    expanded: RwSignal<bool>,
 ) -> impl IntoView {
     view! {
         <section class="route-panel__section dataset-editor-section">
             <div class="dataset-editor-section__header">
                 <h3>"Generated SQL"</h3>
-                <button class="button button--secondary button--compact" type="button" on:click=move |_| {
-                    preview_dataset_sql(
-                        dataset_id.clone(),
-                        name.get(),
-                        slug.get(),
-                        composition_mode.get(),
-                        visibility_node_ids.get().into_iter().collect(),
-                        sources.get(),
-                        fields.get(),
-                        join_left_key.get(),
-                        join_right_key.get(),
-                        sql_preview,
-                        sql_preview_error,
-                    );
-                }>"Preview SQL"</button>
+                <div class="dataset-editor-section__actions">
+                    <button class="button button--secondary button--compact" type="button" on:click=move |_| expanded.update(|value| *value = !*value)>
+                        {move || if expanded.get() { "Hide SQL" } else { "Show SQL" }}
+                    </button>
+                    <button class="button button--secondary button--compact" type="button" on:click=move |_| {
+                        expanded.set(true);
+                        preview_dataset_sql(
+                            dataset_id.clone(),
+                            name.get(),
+                            slug.get(),
+                            composition_mode.get(),
+                            visibility_node_ids.get().into_iter().collect(),
+                            sources.get(),
+                            fields.get(),
+                            join_left_key.get(),
+                            join_right_key.get(),
+                            sql_preview,
+                            sql_preview_error,
+                        );
+                    }>"Preview SQL"</button>
+                </div>
             </div>
-            {move || sql_preview_error.get().map(|message| view! { <p class="form-status is-error">{message}</p> })}
-            {move || if let Some(sql) = sql_preview.get() {
-                view! { <pre class="dataset-sql-panel"><code>{sql}</code></pre> }.into_any()
-            } else {
-                view! { <EmptyState title="SQL preview unavailable" message="Preview SQL to compile the current dataset definition without saving."/> }.into_any()
-            }}
+            <Show when=move || expanded.get()>
+                {move || sql_preview_error.get().map(|message| view! { <p class="form-status is-error">{message}</p> })}
+                {move || if let Some(sql) = sql_preview.get() {
+                    view! { <pre class="dataset-sql-panel"><code>{sql}</code></pre> }.into_any()
+                } else {
+                    view! { <EmptyState title="SQL preview unavailable" message="Preview SQL to compile the current dataset definition without saving."/> }.into_any()
+                }}
+            </Show>
         </section>
     }
 }
@@ -998,72 +1059,26 @@ fn ExpressionPreview(
 #[component]
 fn DatasetExpressionChain(
     sources: RwSignal<Vec<DatasetSourceDraft>>,
+    fields: RwSignal<Vec<DatasetFieldDraft>>,
     composition_mode: RwSignal<String>,
     designer_selection: RwSignal<DatasetDesignerSelection>,
     designer_sheet_open: RwSignal<bool>,
 ) -> impl IntoView {
     view! {
         <div class="dataset-expression-chain" aria-label="Dataset expression">
-            {move || sources.get().into_iter().enumerate().map(|(index, source)| {
-                let is_last = index + 1 >= sources.get().len();
-                let source_label = source.source_alias.clone();
-                view! {
-                    <div class="dataset-expression-node">
-                        <div class="dataset-expression-panel">
-                            <button
-                                class=move || expression_button_class(
-                                    designer_selection.get() == DatasetDesignerSelection::Source(index),
-                                    "dataset-expression-button dataset-expression-button--source",
-                                )
-                                type="button"
-                                on:click=move |_| {
-                                    designer_selection.set(DatasetDesignerSelection::Source(index));
-                                    designer_sheet_open.set(true);
-                                }
-                            >
-                                {source_label.clone()}
-                            </button>
-                            <button
-                                class="button button--secondary button--compact dataset-expression-nest-button"
-                                type="button"
-                                on:click=move |_| {
-                                    sources.update(|items| {
-                                        let next = items.len() + 1;
-                                        let insert_at = (index + 1).min(items.len());
-                                        items.insert(insert_at, DatasetSourceDraft {
-                                            source_alias: format!("source_{next}"),
-                                            ..DatasetSourceDraft::default()
-                                        });
-                                    });
-                                    designer_selection.set(DatasetDesignerSelection::Source(index + 1));
-                                    designer_sheet_open.set(true);
-                                }
-                            >
-                                "Convert To Expression"
-                            </button>
-                        </div>
-                        {if !is_last {
-                            view! {
-                                <button
-                                    class=move || expression_button_class(
-                                        designer_selection.get() == DatasetDesignerSelection::Operation,
-                                        "dataset-expression-button dataset-expression-button--operation",
-                                    )
-                                    type="button"
-                                    on:click=move |_| {
-                                        designer_selection.set(DatasetDesignerSelection::Operation);
-                                        designer_sheet_open.set(true);
-                                    }
-                                >
-                                    {operation_label(&composition_mode.get())}
-                                </button>
-                            }.into_any()
-                        } else {
-                            view! { <span></span> }.into_any()
-                        }}
-                    </div>
-                }
-            }).collect_view()}
+            <div class="dataset-expression-tree">
+                {move || {
+                    let items = sources.get();
+                    expression_tree_view(
+                        items,
+                        sources,
+                        fields,
+                        composition_mode,
+                        designer_selection,
+                        designer_sheet_open,
+                    )
+                }}
+            </div>
             <button
                 class="button button--secondary button--compact dataset-expression-chain-add"
                 type="button"
@@ -1077,10 +1092,182 @@ fn DatasetExpressionChain(
                     designer_sheet_open.set(true);
                 }
             >
-                "Chain Input"
+                "Add Input"
             </button>
         </div>
     }
+}
+
+fn expression_tree_view(
+    items: Vec<DatasetSourceDraft>,
+    sources: RwSignal<Vec<DatasetSourceDraft>>,
+    fields: RwSignal<Vec<DatasetFieldDraft>>,
+    composition_mode: RwSignal<String>,
+    designer_selection: RwSignal<DatasetDesignerSelection>,
+    designer_sheet_open: RwSignal<bool>,
+) -> AnyView {
+    if items.is_empty() {
+        return view! { <p class="muted">"Add an input to start the dataset expression."</p> }
+            .into_any();
+    }
+
+    expression_tree_range(
+        &items,
+        0,
+        items.len(),
+        0,
+        sources,
+        fields,
+        composition_mode,
+        designer_selection,
+        designer_sheet_open,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn expression_tree_range(
+    items: &[DatasetSourceDraft],
+    start: usize,
+    end: usize,
+    depth: usize,
+    sources: RwSignal<Vec<DatasetSourceDraft>>,
+    fields: RwSignal<Vec<DatasetFieldDraft>>,
+    composition_mode: RwSignal<String>,
+    designer_selection: RwSignal<DatasetDesignerSelection>,
+    designer_sheet_open: RwSignal<bool>,
+) -> AnyView {
+    if end.saturating_sub(start) <= 1 {
+        return expression_source_panel(
+            start,
+            items[start].source_alias.clone(),
+            sources,
+            fields,
+            designer_selection,
+            designer_sheet_open,
+        );
+    }
+
+    let split = end - 1;
+    let layout_class = if depth % 2 == 0 {
+        "dataset-expression-group dataset-expression-group--row"
+    } else {
+        "dataset-expression-group dataset-expression-group--column"
+    };
+    let left = expression_tree_range(
+        items,
+        start,
+        split,
+        depth + 1,
+        sources,
+        fields,
+        composition_mode,
+        designer_selection,
+        designer_sheet_open,
+    );
+    let right = expression_tree_range(
+        items,
+        split,
+        end,
+        depth + 1,
+        sources,
+        fields,
+        composition_mode,
+        designer_selection,
+        designer_sheet_open,
+    );
+
+    view! {
+        <div class=layout_class>
+            {left}
+            <button
+                class=move || expression_button_class(
+                    designer_selection.get() == DatasetDesignerSelection::Operation,
+                    "dataset-expression-button dataset-expression-button--operation",
+                )
+                type="button"
+                on:click=move |_| {
+                    designer_selection.set(DatasetDesignerSelection::Operation);
+                    designer_sheet_open.set(true);
+                }
+            >
+                {operation_label(&composition_mode.get())}
+            </button>
+            {right}
+        </div>
+    }
+    .into_any()
+}
+
+fn expression_source_panel(
+    index: usize,
+    source_label: String,
+    sources: RwSignal<Vec<DatasetSourceDraft>>,
+    fields: RwSignal<Vec<DatasetFieldDraft>>,
+    designer_selection: RwSignal<DatasetDesignerSelection>,
+    designer_sheet_open: RwSignal<bool>,
+) -> AnyView {
+    let remove_label = source_label.clone();
+    view! {
+        <div class="dataset-expression-panel">
+            <button
+                class="icon-button icon-button--danger dataset-expression-remove"
+                type="button"
+                aria-label=format!("Remove input {}", remove_label)
+                title="Remove input"
+                on:click=move |_| {
+                    if confirm_action("Remove this dataset input and its projected fields?") {
+                        let removed_alias = sources.get().get(index).map(|source| source.source_alias.clone());
+                        sources.update(|items| {
+                            if index < items.len() {
+                                items.remove(index);
+                            }
+                            if items.is_empty() {
+                                items.push(DatasetSourceDraft::default());
+                            }
+                        });
+                        if let Some(alias) = removed_alias {
+                            fields.update(|items| items.retain(|field| field.source_alias != alias));
+                        }
+                        designer_selection.set(DatasetDesignerSelection::Operation);
+                        designer_sheet_open.set(false);
+                    }
+                }
+            >
+                <X class="icon-button__icon"/>
+            </button>
+            <button
+                class=move || expression_button_class(
+                    designer_selection.get() == DatasetDesignerSelection::Source(index),
+                    "dataset-expression-button dataset-expression-button--source",
+                )
+                type="button"
+                on:click=move |_| {
+                    designer_selection.set(DatasetDesignerSelection::Source(index));
+                    designer_sheet_open.set(true);
+                }
+            >
+                {source_label.clone()}
+            </button>
+            <button
+                class="button button--secondary button--compact dataset-expression-nest-button"
+                type="button"
+                on:click=move |_| {
+                    sources.update(|items| {
+                        let next = items.len() + 1;
+                        let insert_at = (index + 1).min(items.len());
+                        items.insert(insert_at, DatasetSourceDraft {
+                            source_alias: format!("source_{next}"),
+                            ..DatasetSourceDraft::default()
+                        });
+                    });
+                    designer_selection.set(DatasetDesignerSelection::Source(index + 1));
+                    designer_sheet_open.set(true);
+                }
+            >
+                "Convert To Expression"
+            </button>
+        </div>
+    }.into_any()
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1432,6 +1619,8 @@ fn FieldOptionsPanel(
 fn DatasetFieldsEditor(
     fields: RwSignal<Vec<DatasetFieldDraft>>,
     sources: RwSignal<Vec<DatasetSourceDraft>>,
+    forms: RwSignal<Vec<FormSummary>>,
+    rendered_forms: RwSignal<BTreeMap<String, RenderedForm>>,
     designer_selection: RwSignal<DatasetDesignerSelection>,
     designer_sheet_open: RwSignal<bool>,
 ) -> impl IntoView {
@@ -1451,41 +1640,63 @@ fn DatasetFieldsEditor(
                     designer_sheet_open.set(true);
                 }>"Add Field"</button>
             </div>
-            <div class="dataset-field-chip-grid">
-                {move || fields.get().into_iter().enumerate().map(|(index, field)| {
-                    view! {
-                        <div class=move || expression_button_class(
-                            designer_selection.get() == DatasetDesignerSelection::Field(index),
-                            "dataset-field-chip",
-                        )>
-                            <button
-                                class="dataset-field-chip__body"
-                                type="button"
-                                on:click=move |_| {
-                                    designer_selection.set(DatasetDesignerSelection::Field(index));
-                                    designer_sheet_open.set(true);
-                                }
-                            >
-                                <strong>{field.label}</strong>
-                                <span>{format!("{} · {}", field.source_alias, field.source_field_key)}</span>
-                            </button>
-                            <button
-                                class="button button--secondary button--compact dataset-field-chip__remove"
-                                type="button"
-                                on:click=move |_| {
-                                    fields.update(|items| {
-                                        if index < items.len() {
-                                            items.remove(index);
-                                        }
-                                    });
-                                    designer_selection.set(DatasetDesignerSelection::Operation);
-                                }
-                            >
-                                "Remove"
-                            </button>
-                        </div>
-                    }
-                }).collect_view()}
+            <div class="table-wrap dataset-fields-table">
+                <DataTable>
+                    <thead>
+                        <tr>
+                            <th scope="col">"Source"</th>
+                            <th scope="col">"Field"</th>
+                            <th scope="col">"Form Field Label"</th>
+                            <th scope="col">"Source Field"</th>
+                            <th scope="col">"Data Type"</th>
+                            <th scope="col">"Remove"</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {move || fields.get().into_iter().enumerate().map(|(index, field)| {
+                            let metadata = field_metadata(&field, &sources.get(), &forms.get(), &rendered_forms.get());
+                            view! {
+                                <tr class=move || if designer_selection.get() == DatasetDesignerSelection::Field(index) { "is-selected" } else { "" }>
+                                    <td>{field.source_alias.clone()}</td>
+                                    <th scope="row">
+                                        <button
+                                            class="link-button"
+                                            type="button"
+                                            on:click=move |_| {
+                                                designer_selection.set(DatasetDesignerSelection::Field(index));
+                                                designer_sheet_open.set(true);
+                                            }
+                                        >
+                                            {field.label.clone()}
+                                        </button>
+                                        <span class="data-table__secondary-text">{field.key.clone()}</span>
+                                    </th>
+                                    <td>{metadata.label}</td>
+                                    <td>{field.source_field_key.clone()}</td>
+                                    <td>{sentence_label(&metadata.field_type)}</td>
+                                    <td>
+                                        <button
+                                            class="button button--secondary button--compact"
+                                            type="button"
+                                            on:click=move |_| {
+                                                if confirm_action("Remove this projected field?") {
+                                                    fields.update(|items| {
+                                                        if index < items.len() {
+                                                            items.remove(index);
+                                                        }
+                                                    });
+                                                    designer_selection.set(DatasetDesignerSelection::Operation);
+                                                }
+                                            }
+                                        >
+                                            "Remove"
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        }).collect_view()}
+                    </tbody>
+                </DataTable>
             </div>
         </section>
     }
@@ -1716,11 +1927,45 @@ fn visibility_label(nodes: &[DatasetVisibilityNode]) -> String {
     }
 }
 
-fn node_label(node: &NodeResponse) -> String {
-    node.parent_node_name
-        .as_ref()
-        .map(|parent| format!("{parent} / {}", node.name))
-        .unwrap_or_else(|| node.name.clone())
+fn node_matches_visibility_query(node: &NodeResponse, query: &str) -> bool {
+    query.trim().is_empty()
+        || text_matches(query, &[&node.name])
+        || text_matches(query, &[&node.node_type_name])
+        || node
+            .parent_node_name
+            .as_ref()
+            .is_some_and(|parent| text_matches(query, &[parent]))
+}
+
+fn field_metadata(
+    field: &DatasetFieldDraft,
+    sources: &[DatasetSourceDraft],
+    forms: &[FormSummary],
+    rendered_forms: &BTreeMap<String, RenderedForm>,
+) -> RenderedField {
+    source_field_options(sources, forms, rendered_forms, &field.source_alias)
+        .into_iter()
+        .find(|option| option.key == field.source_field_key)
+        .unwrap_or_else(|| RenderedField {
+            key: field.source_field_key.clone(),
+            label: "Unknown field".into(),
+            field_type: String::new(),
+        })
+}
+
+fn confirm_action(message: &str) -> bool {
+    #[cfg(feature = "hydrate")]
+    {
+        return web_sys::window()
+            .and_then(|window| window.confirm_with_message(message).ok())
+            .unwrap_or(false);
+    }
+
+    #[cfg(not(feature = "hydrate"))]
+    {
+        let _ = message;
+        true
+    }
 }
 
 fn version_label(version: &FormVersionSummary) -> String {
