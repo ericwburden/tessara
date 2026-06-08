@@ -11,6 +11,8 @@ use icons::{
 };
 use leptos::portal::Portal;
 use leptos::prelude::*;
+use crate::ui::empty_view;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 #[cfg(feature = "hydrate")]
@@ -1398,7 +1400,7 @@ fn OrganizationDetailSheet(
                                         }
                                         .into_any()
                                     })
-                                    .unwrap_or_else(|| view! {}.into_any())
+                                    .unwrap_or_else(|| empty_view())
                             }}
                             <button class="icon-button sheet-panel__close" type="button" aria-label="Close details" title="Close details" on:click=close>
                                 <X class="icon-button__icon"/>
@@ -1424,7 +1426,7 @@ fn OrganizationDetailSheet(
                             } else if let Some(node_detail) = detail.get() {
                                 view! { <OrganizationDetailContent detail=node_detail/> }.into_any()
                             } else {
-                                view! {}.into_any()
+                                empty_view()
                             }
                         }}
                     </aside>
@@ -2236,7 +2238,7 @@ fn FilterHeader(
                     }
                     .into_any()
                 } else {
-                    view! {}.into_any()
+                    empty_view()
                 }}
                 <button
                     class=move || filter_option_class(&filter.get(), "all")
@@ -2723,7 +2725,7 @@ fn WorkflowSourceMarker(source: String) -> impl IntoView {
         }
         .into_any()
     } else {
-        view! {}.into_any()
+        empty_view()
     }
 }
 
@@ -9415,7 +9417,7 @@ fn FormsAttachedNodesList(
                 }
                 .into_any()
             } else {
-                view! {}.into_any()
+                empty_view()
             }}
         </div>
     }
@@ -9463,7 +9465,7 @@ fn FormsAttachedNodesSheet(detail: RwSignal<Option<FormsAttachedNodesSheetData>>
                                         }
                                         .into_any()
                                     })
-                                    .unwrap_or_else(|| view! {}.into_any())
+                                    .unwrap_or_else(|| empty_view())
                             }}
                             <button class="icon-button sheet-panel__close" type="button" aria-label="Close attached nodes" title="Close attached nodes" on:click=close>
                                 <X class="icon-button__icon"/>
@@ -9517,7 +9519,7 @@ fn FormsAttachedNodesSheet(detail: RwSignal<Option<FormsAttachedNodesSheetData>>
                                     }
                                     .into_any()
                                 })
-                                .unwrap_or_else(|| view! {}.into_any())
+                                .unwrap_or_else(|| empty_view())
                         }}
                     </aside>
                 </section>
@@ -9866,7 +9868,7 @@ fn WorkflowAvailableNodesSheet(
                                         }
                                         .into_any()
                                     })
-                                    .unwrap_or_else(|| view! {}.into_any())
+                                    .unwrap_or_else(|| empty_view())
                             }}
                             <button class="icon-button sheet-panel__close" type="button" aria-label="Close available nodes" title="Close available nodes" on:click=close>
                                 <X class="icon-button__icon"/>
@@ -9920,7 +9922,7 @@ fn WorkflowAvailableNodesSheet(
                                     }
                                     .into_any()
                                 })
-                                .unwrap_or_else(|| view! {}.into_any())
+                                .unwrap_or_else(|| empty_view())
                         }}
                     </aside>
                 </section>
@@ -10014,7 +10016,7 @@ fn WorkflowAssignedUsersSheet(
                                         }
                                         .into_any()
                                     })
-                                    .unwrap_or_else(|| view! {}.into_any())
+                                    .unwrap_or_else(|| empty_view())
                             }}
                             <button class="icon-button sheet-panel__close" type="button" aria-label="Close assigned users" title="Close assigned users" on:click=close>
                                 <X class="icon-button__icon"/>
@@ -10068,7 +10070,7 @@ fn WorkflowAssignedUsersSheet(
                                     }
                                     .into_any()
                                 })
-                                .unwrap_or_else(|| view! {}.into_any())
+                                .unwrap_or_else(|| empty_view())
                         }}
                     </aside>
                 </section>
@@ -10819,7 +10821,7 @@ fn FieldConfigSheet(
                             }
                             .into_any()
                         })
-                        .unwrap_or_else(|| view! {}.into_any())
+                        .unwrap_or_else(|| empty_view())
                 }}
             </Show>
         </Portal>
@@ -11120,7 +11122,7 @@ pub fn FormsDetailPage() -> impl IntoView {
                         }
                         .into_any()
                     } else {
-                        view! {}.into_any()
+                        empty_view()
                     }
                 }}
             </Breadcrumb>
@@ -11280,7 +11282,7 @@ fn FormDetailContent(form: FormDefinition, rendered_form: Option<RenderedForm>) 
                         if fields_expanded.get() {
                             view! { <RenderedFormSections rendered_form=rendered_form.clone()/> }.into_any()
                         } else {
-                            view! {}.into_any()
+                            empty_view()
                         }
                     }}
                 </section>
@@ -11531,7 +11533,7 @@ fn FormVersionsTable(versions: Vec<FormVersionSummary>) -> impl IntoView {
                     }
                     .into_any()
                 } else {
-                    view! {}.into_any()
+                    empty_view()
                 }
             }}
         </div>
@@ -11556,7 +11558,7 @@ fn RenderedFormSections(rendered_form: Option<RenderedForm>) -> impl IntoView {
                                         <div>
                                             <h4>{section.title}</h4>
                                             {if section.description.trim().is_empty() {
-                                                view! {}.into_any()
+                                                empty_view()
                                             } else {
                                                 view! { <p>{section.description}</p> }.into_any()
                                             }}
@@ -11988,7 +11990,7 @@ pub fn FormsEditPage() -> impl IntoView {
                             }
                             .into_any()
                         })
-                        .unwrap_or_else(|| view! {}.into_any())
+                        .unwrap_or_else(|| empty_view())
                 }}
                 <BreadcrumbItem>
                     <BreadcrumbPage>"Edit Form"</BreadcrumbPage>
@@ -13305,13 +13307,13 @@ pub fn WorkflowAssignmentsPage() -> impl IntoView {
                                     }
                                     .into_any()
                                 } else {
-                                    view! {}.into_any()
+                                    empty_view()
                                 }
                             }}
                             <div class="workflow-assignee-picker">
                                 <h4>"Eligible Assignees"</h4>
                                 {move || if selected_candidate_id.get().is_empty() {
-                                    view! {}.into_any()
+                                    empty_view()
                                 } else {
                                     view! {
                                         <label class="searchable-data-table__search searchable-data-table__control workflow-assignment-candidate-search">
@@ -13869,7 +13871,7 @@ pub fn WorkflowsDetailPage() -> impl IntoView {
                         }
                         .into_any()
                     } else {
-                        view! {}.into_any()
+                        empty_view()
                     }
                 }}
             </Breadcrumb>
@@ -14042,7 +14044,7 @@ fn WorkflowDetailContent(workflow: WorkflowDefinition) -> impl IntoView {
                         if steps_expanded.get() {
                             view! { <WorkflowStepsTable steps=steps.clone()/> }.into_any()
                         } else {
-                            view! {}.into_any()
+                            empty_view()
                         }
                     }}
                 </section>
@@ -14069,7 +14071,7 @@ fn WorkflowDetailContent(workflow: WorkflowDefinition) -> impl IntoView {
                         if revisions_expanded.get() {
                             view! { <WorkflowVersionsTable workflow_id=workflow_id.clone() versions=versions.clone()/> }.into_any()
                         } else {
-                            view! {}.into_any()
+                            empty_view()
                         }
                     }}
                 </section>
@@ -14096,7 +14098,7 @@ fn WorkflowDetailContent(workflow: WorkflowDefinition) -> impl IntoView {
                         if assignments_expanded.get() {
                             view! { <WorkflowDetailAssignmentsTable assignments=assignments.clone()/> }.into_any()
                         } else {
-                            view! {}.into_any()
+                            empty_view()
                         }
                     }}
                 </section>
@@ -15238,7 +15240,7 @@ fn ResponsesList(
                                                         }
                                                         .into_any()
                                                     } else {
-                                                        view! {}.into_any()
+                                                        empty_view()
                                                     }}
                                                 </DropdownMenu>
                                             </td>
@@ -15363,7 +15365,7 @@ fn ResponsesList(
                                             }
                                             .into_any()
                                         } else {
-                                            view! {}.into_any()
+                                            empty_view()
                                         }}
                                     </dl>
                                     <div class="response-mobile-card__actions">
@@ -15371,7 +15373,7 @@ fn ResponsesList(
                                         {if is_draft {
                                             view! { <a class="button button--compact button--quiet" href=edit_href>"Edit Draft"</a> }.into_any()
                                         } else {
-                                            view! {}.into_any()
+                                            empty_view()
                                         }}
                                     </div>
                                 </article>
@@ -15628,7 +15630,7 @@ fn ResponseAssignmentStartFields(
                 }
                 .into_any()
             } else {
-                view! {}.into_any()
+                empty_view()
             }
         }}
     }
@@ -15863,14 +15865,14 @@ fn ResponseDetailContent(detail: SubmissionDetail) -> impl IntoView {
                         {if is_draft {
                             view! { <a class="button" href=edit_href>"Edit Draft"</a> }.into_any()
                         } else {
-                            view! {}.into_any()
+                            empty_view()
                         }}
                     </div>
                 </section>
 
                 {runtime
                     .map(|runtime| view! { <ResponseRuntimeCard runtime/> }.into_any())
-                    .unwrap_or_else(|| view! {}.into_any())}
+                    .unwrap_or_else(|| empty_view())}
 
                 <section class="organization-detail-card organization-detail-card--wide form-detail-fields-card">
                     <header class="form-detail-disclosure-header">
@@ -15894,7 +15896,7 @@ fn ResponseDetailContent(detail: SubmissionDetail) -> impl IntoView {
                         if values_expanded.get() {
                             view! { <ResponseValuesTable values=values.clone()/> }.into_any()
                         } else {
-                            view! {}.into_any()
+                            empty_view()
                         }
                     }}
                 </section>
@@ -15921,7 +15923,7 @@ fn ResponseDetailContent(detail: SubmissionDetail) -> impl IntoView {
                         if audit_expanded.get() {
                             view! { <ResponseAuditTable events=audit_events.clone()/> }.into_any()
                         } else {
-                            view! {}.into_any()
+                            empty_view()
                         }
                     }}
                 </section>
@@ -16100,7 +16102,7 @@ fn ResponseEditForm(
                             {if !section.description.trim().is_empty() {
                                 view! { <p>{section.description}</p> }.into_any()
                             } else {
-                                view! {}.into_any()
+                                empty_view()
                             }}
                             <div class="form-grid response-form-grid">
                                 {section
@@ -16194,7 +16196,7 @@ fn ResponseFieldInput(
     view! {
         <div class=field_class style=layout_style>
             {if field.field_type == "static_text" {
-                view! {}.into_any()
+                empty_view()
             } else {
                 view! { <span>{format!("{}{}", field.label, required_label)}</span> }.into_any()
             }}

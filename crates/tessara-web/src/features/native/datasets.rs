@@ -1148,7 +1148,7 @@ fn expression_tree_range(
     }
 
     let split = end - 1;
-    let layout_class = if depth % 2 == 0 {
+    let layout_class = if depth.is_multiple_of(2) {
         "dataset-expression-group dataset-expression-group--row"
     } else {
         "dataset-expression-group dataset-expression-group--column"

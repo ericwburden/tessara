@@ -4,6 +4,8 @@ use icons::{
     Workflow,
 };
 use leptos::prelude::*;
+use crate::ui::empty_view;
+
 #[cfg(feature = "hydrate")]
 use serde::Deserialize;
 #[cfg(feature = "hydrate")]
@@ -367,7 +369,7 @@ fn nav_section_for(
         .collect::<Vec<_>>();
 
     if items.is_empty() {
-        return view! {}.into_any();
+        return empty_view();
     }
 
     view! {

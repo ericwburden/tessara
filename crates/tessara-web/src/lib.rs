@@ -7,8 +7,7 @@
     clippy::redundant_iter_cloned,
     clippy::too_many_arguments,
     clippy::type_complexity,
-    clippy::unit_arg,
-    clippy::unused_unit
+    clippy::unit_arg
 )]
 
 //! Native Leptos SSR frontend for Tessara.
