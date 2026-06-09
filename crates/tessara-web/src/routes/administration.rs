@@ -1,6 +1,6 @@
 use leptos::prelude::*;
 use leptos_router::components::Route;
-use leptos_router::{MatchNestedRoutes, SsrMode, path};
+use leptos_router::{MatchNestedRoutes, path};
 
 use crate::features::administration::{
     AdministrationNodeTypesPage, AdministrationPage, AdministrationRolesPage,
@@ -8,7 +8,7 @@ use crate::features::administration::{
     AdministrationUsersPage,
 };
 
-const PRIMARY_SSR_MODE: SsrMode = SsrMode::InOrder;
+use crate::routes::PRIMARY_SSR_MODE;
 
 pub fn administration_routes() -> impl MatchNestedRoutes + Clone {
     view! {

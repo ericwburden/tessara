@@ -8,8 +8,9 @@ use crate::features::shared::*;
 use crate::features::shared::{FilterHeader, unique_filter_options};
 use crate::types::AccountRouteParams;
 use crate::types::route_params::require_route_params;
-use crate::ui::components::{
-    AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator, DataTable, DropdownMenu, InfoListTable, PageHeader,
+use crate::ui::{
+    AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator,
+    DataTable, DropdownMenu, InfoListTable, PageHeader,
 };
 use crate::utils::pagination::pagination_page_start;
 use crate::utils::text::text_matches;

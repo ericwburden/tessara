@@ -1,5 +1,5 @@
-use crate::ui::components::AppShell;
-use crate::ui::components::EmptyState;
+use crate::ui::AppShell;
+use crate::ui::EmptyState;
 use leptos::prelude::*;
 
 #[component]

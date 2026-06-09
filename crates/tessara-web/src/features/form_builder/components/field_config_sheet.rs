@@ -5,8 +5,10 @@ use crate::features::form_builder::{
     FORM_BUILDER_COLUMN_COUNT, form_builder_field_has_collision, form_builder_layout_candidate,
     max_form_builder_field_height, max_form_builder_field_width, valid_form_builder_layout_values,
 };
-use crate::features::forms::{form_builder_field_default_label, form_builder_section_layout};
-use crate::features::shared::{blank_form_builder_section, slug_from_label};
+use crate::features::shared::{
+    blank_form_builder_section, form_builder_field_default_label, form_builder_section_layout,
+    slug_from_label,
+};
 use crate::features::workflows::submission::{FormBuilderFieldDraft, FormBuilderSectionDraft};
 use crate::ui::empty_view;
 use icons::{Trash2, X};

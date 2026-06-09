@@ -8,10 +8,11 @@ use crate::features::form_builder::{
     max_form_builder_new_field_width_at, schedule_form_builder_drag_preview,
     set_form_builder_drag_preview,
 };
-use crate::features::forms::{
-    FormBuilderFieldDraft, FormBuilderGridCell, FormBuilderSectionLayout,
-    blank_form_builder_field_at, form_builder_occupancy_map, form_builder_section_fields,
+use crate::features::shared::{
+    FormBuilderGridCell, FormBuilderSectionLayout, blank_form_builder_field_at,
+    form_builder_occupancy_map, form_builder_section_fields,
 };
+use crate::features::workflows::submission::FormBuilderFieldDraft;
 
 #[component]
 pub(crate) fn FormBuilderGrid(

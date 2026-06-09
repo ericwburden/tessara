@@ -7,6 +7,5 @@ pub(crate) const STORAGE_KEY: &str = "tessara.themePreference";
 pub(crate) const LIGHT_THEME_COLOR: &str = "#F8FAFC";
 pub(crate) const DARK_THEME_COLOR: &str = "#0F172A";
 
-/// Placeholder theme state type maintained for compatibility with existing imports.
 #[allow(clippy::exhaustive_structs)]
 pub(crate) struct ThemeState;

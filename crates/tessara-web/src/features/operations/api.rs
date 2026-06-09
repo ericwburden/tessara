@@ -1,4 +1,20 @@
-//! Operations API compatibility module.
-//!
-//! Operation data loading and mutation helpers are currently defined with the
-//! operation page in this pass. This module reserves the API namespace.
+#[cfg(feature = "hydrate")]
+use super::types::OperationsStatus;
+
+#[cfg(feature = "hydrate")]
+pub(super) async fn fetch_operations_status() -> Result<OperationsStatus, String> {
+    match gloo_net::http::Request::get("/api/operations/status")
+        .send()
+        .await
+    {
+        Ok(response) if response.ok() => response
+            .json::<OperationsStatus>()
+            .await
+            .map_err(|error| format!("Unable to parse operations status: {error}")),
+        Ok(response) => Err(format!(
+            "Unable to load operations status. Server returned {}.",
+            response.status()
+        )),
+        Err(error) => Err(format!("Unable to load operations status: {error}")),
+    }
+}

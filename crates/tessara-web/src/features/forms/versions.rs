@@ -1,5 +1,10 @@
-use super::*;
+use crate::features::organization::form_version_sort_label;
+use crate::features::shared::{
+    FormVersionSummary, form_version_desc_sort_key, sentence_label, status_badge_class,
+};
+use crate::ui::{DataTable, Timestamp, empty_view};
 use crate::utils::text::nonempty_text;
+use leptos::prelude::*;
 
 #[component]
 pub(crate) fn FormVersionsTable(versions: Vec<FormVersionSummary>) -> impl IntoView {

@@ -1,9 +1,21 @@
-use super::*;
-use crate::types::route_params::require_route_params;
-use crate::ui::components::{
-    AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator, DataTable, EmptyState, InfoListTable, PageHeader, Timestamp,
+use crate::features::organization::toggle_workflow_assignment;
+use crate::features::shared::{
+    WorkflowDefinition, WorkflowStepSummary, WorkflowVersionSummary,
+    active_workflow_definition_version, load_workflow_detail, nonempty_text, sentence_label,
+    status_badge_class, workflow_assignment_revision_label, workflow_assignment_state,
+    workflow_assignment_state_label, workflow_assignment_status_key,
+    workflow_assignment_status_label, workflow_available_nodes_label,
+    workflow_definition_status_label, workflow_definition_version_label,
+    workflow_revision_label_from_option, workflow_source_label,
 };
-use icons::Pencil;
+use crate::features::workflows::submission::WorkflowAssignmentSummary;
+use crate::types::route_params::WorkflowRouteParams;
+use crate::types::route_params::require_route_params;
+use crate::ui::{
+    AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator,
+    DataTable, DropdownMenu, EmptyState, InfoListTable, PageHeader, Timestamp, empty_view,
+};
+use icons::{PanelRight, Pencil, X};
 use leptos::portal::Portal;
 use leptos::prelude::*;
 

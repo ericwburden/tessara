@@ -2,245 +2,20 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use leptos::portal::Portal;
 use leptos::prelude::*;
-use serde::{Deserialize, Serialize};
 
-#[cfg(feature = "hydrate")]
-use crate::api::client::{redirect_to_login, send_json_request};
 use crate::types::route_params::{DatasetRouteParams, require_route_params};
-use crate::ui::components::{AppShell, DataTable, EmptyState, PageHeader, StatusBadge};
+use crate::ui::{AppShell, DataTable, EmptyState, PageHeader, StatusBadge};
 use crate::utils::{
     pagination::{
         pagination_current_page, pagination_page_count, pagination_page_end, pagination_page_start,
     },
-    text::text_matches,
+    text::{sentence_label, text_matches},
 };
 use icons::{Search, X};
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-struct SessionAccount {
-    capabilities: Vec<String>,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-struct DatasetSummary {
-    id: String,
-    current_revision_id: Option<String>,
-    name: String,
-    slug: String,
-    grain: String,
-    composition_mode: String,
-    materialized_row_count: Option<i64>,
-    materialized_at: Option<String>,
-    visibility_nodes: Vec<DatasetVisibilityNode>,
-    source_count: i64,
-    field_count: i64,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-struct DatasetDefinition {
-    id: String,
-    current_revision_id: Option<String>,
-    name: String,
-    slug: String,
-    grain: String,
-    composition_mode: String,
-    definition_ast: Option<DatasetExpressionPayload>,
-    generated_sql: Option<String>,
-    materialized_schema: Option<String>,
-    materialized_table: Option<String>,
-    materialized_row_count: Option<i64>,
-    materialized_at: Option<String>,
-    visibility_nodes: Vec<DatasetVisibilityNode>,
-    sources: Vec<DatasetSourceDefinition>,
-    fields: Vec<DatasetFieldDefinition>,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-struct DatasetVisibilityNode {
-    node_id: String,
-    node_name: String,
-    node_type_name: String,
-    parent_node_id: Option<String>,
-    node_path: String,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-struct DatasetSourceDefinition {
-    source_alias: String,
-    form_id: Option<String>,
-    form_name: Option<String>,
-    form_version_major: Option<i32>,
-    dataset_revision_id: Option<String>,
-    selection_rule: String,
-    position: i32,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-struct DatasetFieldDefinition {
-    key: String,
-    label: String,
-    source_alias: String,
-    source_field_key: String,
-    field_type: String,
-    position: i32,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-struct DatasetTable {
-    rows: Vec<DatasetTableRow>,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-struct DatasetTableRow {
-    submission_id: String,
-    node_name: String,
-    source_alias: String,
-    values: BTreeMap<String, Option<String>>,
-}
-
 #[cfg(feature = "hydrate")]
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-struct DatasetSqlPreviewResponse {
-    generated_sql: String,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-struct FormSummary {
-    id: String,
-    name: String,
-    versions: Vec<FormVersionSummary>,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-struct FormVersionSummary {
-    id: String,
-    version_label: Option<String>,
-    status: String,
-    version_major: Option<i32>,
-    field_count: i64,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-struct RenderedForm {
-    form_version_id: String,
-    form_id: String,
-    form_name: String,
-    sections: Vec<RenderedSection>,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-struct RenderedSection {
-    fields: Vec<RenderedField>,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-struct RenderedField {
-    key: String,
-    label: String,
-    field_type: String,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-struct NodeResponse {
-    id: String,
-    node_type_name: String,
-    parent_node_name: Option<String>,
-    name: String,
-}
-
-#[allow(dead_code)]
-#[derive(Clone, Debug, Serialize)]
-struct DatasetPayload {
-    name: String,
-    slug: String,
-    grain: String,
-    composition_mode: String,
-    visibility_node_ids: Vec<String>,
-    definition_ast: DatasetExpressionPayload,
-    fields: Vec<DatasetFieldPayload>,
-}
-
-#[allow(dead_code)]
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-enum DatasetExpressionPayload {
-    Form {
-        alias: String,
-        form_id: String,
-        form_version_major: Option<i32>,
-        selection_rule: String,
-    },
-    Dataset {
-        alias: String,
-        dataset_id: String,
-        dataset_revision_id: String,
-    },
-    Operation {
-        alias: String,
-        operation: String,
-        left: Box<DatasetExpressionPayload>,
-        right: Box<DatasetExpressionPayload>,
-        join_keys: Vec<DatasetJoinKeyPayload>,
-    },
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
-struct DatasetJoinKeyPayload {
-    left_field: String,
-    right_field: String,
-}
-
-#[allow(dead_code)]
-#[derive(Clone, Debug, Serialize)]
-struct DatasetFieldPayload {
-    key: String,
-    label: String,
-    source_alias: String,
-    source_field_key: String,
-    position: i32,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-struct DatasetSourceDraft {
-    input_kind: String,
-    source_alias: String,
-    form_id: String,
-    form_version_id: String,
-    form_version_major: Option<i32>,
-    dataset_id: String,
-    dataset_revision_id: String,
-    selection_rule: String,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-struct DatasetFieldDraft {
-    key: String,
-    label: String,
-    source_alias: String,
-    source_field_key: String,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-enum DatasetDesignerSelection {
-    Operation,
-    Source(usize),
-    Field(usize),
-}
-
-impl Default for DatasetSourceDraft {
-    fn default() -> Self {
-        Self {
-            input_kind: "form".into(),
-            source_alias: "source_1".into(),
-            form_id: String::new(),
-            form_version_id: String::new(),
-            form_version_major: None,
-            dataset_id: String::new(),
-            dataset_revision_id: String::new(),
-            selection_rule: "latest".into(),
-        }
-    }
-}
+use super::api;
+use super::types::*;
 
 #[component]
 pub fn DatasetsPage() -> impl IntoView {
@@ -1743,20 +1518,6 @@ fn can_manage_datasets(account: &SessionAccount) -> bool {
         .any(|capability| capability == "admin:all")
 }
 
-fn sentence_label(value: &str) -> String {
-    value
-        .split('_')
-        .map(|part| {
-            let mut chars = part.chars();
-            match chars.next() {
-                Some(first) => format!("{}{}", first.to_uppercase(), chars.as_str()),
-                None => String::new(),
-            }
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
 fn operation_label(value: &str) -> &'static str {
     match value {
         "union" => "UNION",
@@ -2204,14 +1965,8 @@ fn tab_class(active_tab: RwSignal<String>, value: &'static str) -> impl Fn() -> 
 #[cfg(feature = "hydrate")]
 fn load_account(account: RwSignal<Option<SessionAccount>>) {
     leptos::task::spawn_local(async move {
-        match gloo_net::http::Request::get("/api/me").send().await {
-            Ok(response) if response.status() == 401 => redirect_to_login(),
-            Ok(response) if response.ok() => {
-                if let Ok(payload) = response.json::<SessionAccount>().await {
-                    account.set(Some(payload));
-                }
-            }
-            _ => {}
+        if let Ok(Some(payload)) = api::fetch_account().await {
+            account.set(Some(payload));
         }
     });
 }
@@ -2227,17 +1982,10 @@ fn load_datasets(
 ) {
     leptos::task::spawn_local(async move {
         is_loading.set(true);
-        match gloo_net::http::Request::get("/api/datasets").send().await {
-            Ok(response) if response.status() == 401 => redirect_to_login(),
-            Ok(response) if response.ok() => match response.json::<Vec<DatasetSummary>>().await {
-                Ok(payload) => datasets.set(payload),
-                Err(_) => load_error.set(Some("Dataset list could not be read.".into())),
-            },
-            Ok(response) => load_error.set(Some(format!(
-                "Dataset list failed with status {}.",
-                response.status()
-            ))),
-            Err(_) => load_error.set(Some("Could not reach the dataset API.".into())),
+        match api::fetch_datasets().await {
+            Ok(Some(payload)) => datasets.set(payload),
+            Ok(None) => {}
+            Err(message) => load_error.set(Some(message)),
         }
         is_loading.set(false);
     });
@@ -2256,20 +2004,10 @@ fn load_dataset_detail(
 ) {
     leptos::task::spawn_local(async move {
         is_loading.set(true);
-        match gloo_net::http::Request::get(&format!("/api/datasets/{dataset_id}"))
-            .send()
-            .await
-        {
-            Ok(response) if response.status() == 401 => redirect_to_login(),
-            Ok(response) if response.ok() => match response.json::<DatasetDefinition>().await {
-                Ok(payload) => dataset.set(Some(payload)),
-                Err(_) => load_error.set(Some("Dataset detail could not be read.".into())),
-            },
-            Ok(response) => load_error.set(Some(format!(
-                "Dataset detail failed with status {}.",
-                response.status()
-            ))),
-            Err(_) => load_error.set(Some("Could not reach the dataset API.".into())),
+        match api::fetch_dataset_detail(&dataset_id).await {
+            Ok(Some(payload)) => dataset.set(Some(payload)),
+            Ok(None) => {}
+            Err(message) => load_error.set(Some(message)),
         }
         is_loading.set(false);
     });
@@ -2291,20 +2029,10 @@ fn load_dataset_table(
     table_error: RwSignal<Option<String>>,
 ) {
     leptos::task::spawn_local(async move {
-        match gloo_net::http::Request::get(&format!("/api/datasets/{dataset_id}/table"))
-            .send()
-            .await
-        {
-            Ok(response) if response.status() == 401 => redirect_to_login(),
-            Ok(response) if response.ok() => match response.json::<DatasetTable>().await {
-                Ok(payload) => table.set(Some(payload)),
-                Err(_) => table_error.set(Some("Dataset preview could not be read.".into())),
-            },
-            Ok(response) => table_error.set(Some(format!(
-                "Dataset preview failed with status {}.",
-                response.status()
-            ))),
-            Err(_) => table_error.set(Some("Could not reach the dataset preview API.".into())),
+        match api::fetch_dataset_table(&dataset_id).await {
+            Ok(Some(payload)) => table.set(Some(payload)),
+            Ok(None) => {}
+            Err(message) => table_error.set(Some(message)),
         }
     });
 }
@@ -2315,17 +2043,10 @@ fn load_dataset_table(_: String, _: RwSignal<Option<DatasetTable>>, _: RwSignal<
 #[cfg(feature = "hydrate")]
 fn load_forms(forms: RwSignal<Vec<FormSummary>>, load_error: RwSignal<Option<String>>) {
     leptos::task::spawn_local(async move {
-        match gloo_net::http::Request::get("/api/forms").send().await {
-            Ok(response) if response.status() == 401 => redirect_to_login(),
-            Ok(response) if response.ok() => match response.json::<Vec<FormSummary>>().await {
-                Ok(payload) => forms.set(payload),
-                Err(_) => load_error.set(Some("Form options could not be read.".into())),
-            },
-            Ok(response) => load_error.set(Some(format!(
-                "Form options failed with status {}.",
-                response.status()
-            ))),
-            Err(_) => load_error.set(Some("Could not reach the forms API.".into())),
+        match api::fetch_forms().await {
+            Ok(Some(payload)) => forms.set(payload),
+            Ok(None) => {}
+            Err(message) => load_error.set(Some(message)),
         }
     });
 }
@@ -2336,17 +2057,10 @@ fn load_forms(_: RwSignal<Vec<FormSummary>>, _: RwSignal<Option<String>>) {}
 #[cfg(feature = "hydrate")]
 fn load_nodes(nodes: RwSignal<Vec<NodeResponse>>, load_error: RwSignal<Option<String>>) {
     leptos::task::spawn_local(async move {
-        match gloo_net::http::Request::get("/api/nodes").send().await {
-            Ok(response) if response.status() == 401 => redirect_to_login(),
-            Ok(response) if response.ok() => match response.json::<Vec<NodeResponse>>().await {
-                Ok(payload) => nodes.set(payload),
-                Err(_) => load_error.set(Some("Visibility node options could not be read.".into())),
-            },
-            Ok(response) => load_error.set(Some(format!(
-                "Visibility nodes failed with status {}.",
-                response.status()
-            ))),
-            Err(_) => load_error.set(Some("Could not reach the nodes API.".into())),
+        match api::fetch_nodes().await {
+            Ok(Some(payload)) => nodes.set(payload),
+            Ok(None) => {}
+            Err(message) => load_error.set(Some(message)),
         }
     });
 }
@@ -2367,18 +2081,10 @@ fn load_rendered_form(
         return;
     }
     leptos::task::spawn_local(async move {
-        if let Ok(response) =
-            gloo_net::http::Request::get(&format!("/api/form-versions/{form_version_id}/render"))
-                .send()
-                .await
-        {
-            if response.ok() {
-                if let Ok(payload) = response.json::<RenderedForm>().await {
-                    rendered_forms.update(|forms| {
-                        forms.insert(form_version_id, payload);
-                    });
-                }
-            }
+        if let Ok(Some(payload)) = api::fetch_rendered_form(&form_version_id).await {
+            rendered_forms.update(|forms| {
+                forms.insert(form_version_id, payload);
+            });
         }
     });
 }
@@ -2401,64 +2107,54 @@ fn load_dataset_for_edit(
     load_error: RwSignal<Option<String>>,
 ) {
     leptos::task::spawn_local(async move {
-        match gloo_net::http::Request::get(&format!("/api/datasets/{dataset_id}"))
-            .send()
-            .await
-        {
-            Ok(response) if response.ok() => match response.json::<DatasetDefinition>().await {
-                Ok(payload) => {
-                    name.set(payload.name);
-                    slug.set(payload.slug);
-                    composition_mode.set(payload.composition_mode);
-                    sql_preview.set(payload.generated_sql.clone());
-                    visibility_node_ids.set(
-                        payload
-                            .visibility_nodes
-                            .into_iter()
-                            .map(|node| node.node_id)
-                            .collect(),
-                    );
-                    let Some(ast) = payload.definition_ast.as_ref() else {
-                        load_error.set(Some(
+        match api::fetch_dataset_detail(&dataset_id).await {
+            Ok(Some(payload)) => {
+                name.set(payload.name);
+                slug.set(payload.slug);
+                composition_mode.set(payload.composition_mode);
+                sql_preview.set(payload.generated_sql.clone());
+                visibility_node_ids.set(
+                    payload
+                        .visibility_nodes
+                        .into_iter()
+                        .map(|node| node.node_id)
+                        .collect(),
+                );
+                let Some(ast) = payload.definition_ast.as_ref() else {
+                    load_error.set(Some(
                             "This dataset was not created with the query designer and cannot be edited here."
                                 .into(),
                         ));
-                        return;
-                    };
-                    let (source_drafts, root_operation, join_keys) =
-                        expression_to_editor_drafts(ast);
-                    if !root_operation.is_empty() {
-                        composition_mode.set(root_operation);
-                    }
-                    if let Some(join_key) = join_keys.first() {
-                        join_left_key.set(join_key.left_field.clone());
-                        join_right_key.set(join_key.right_field.clone());
-                    }
-                    sources.set(if source_drafts.is_empty() {
-                        vec![DatasetSourceDraft::default()]
-                    } else {
-                        source_drafts
-                    });
-                    fields.set(
-                        payload
-                            .fields
-                            .into_iter()
-                            .map(|field| DatasetFieldDraft {
-                                key: field.key,
-                                label: field.label,
-                                source_alias: field.source_alias,
-                                source_field_key: field.source_field_key,
-                            })
-                            .collect(),
-                    );
+                    return;
+                };
+                let (source_drafts, root_operation, join_keys) = expression_to_editor_drafts(ast);
+                if !root_operation.is_empty() {
+                    composition_mode.set(root_operation);
                 }
-                Err(_) => load_error.set(Some("Dataset edit data could not be read.".into())),
-            },
-            Ok(response) => load_error.set(Some(format!(
-                "Dataset edit data failed with status {}.",
-                response.status()
-            ))),
-            Err(_) => load_error.set(Some("Could not reach the dataset API.".into())),
+                if let Some(join_key) = join_keys.first() {
+                    join_left_key.set(join_key.left_field.clone());
+                    join_right_key.set(join_key.right_field.clone());
+                }
+                sources.set(if source_drafts.is_empty() {
+                    vec![DatasetSourceDraft::default()]
+                } else {
+                    source_drafts
+                });
+                fields.set(
+                    payload
+                        .fields
+                        .into_iter()
+                        .map(|field| DatasetFieldDraft {
+                            key: field.key,
+                            label: field.label,
+                            source_alias: field.source_alias,
+                            source_field_key: field.source_field_key,
+                        })
+                        .collect(),
+                );
+            }
+            Ok(None) => {}
+            Err(message) => load_error.set(Some(message)),
         }
     });
 }
@@ -2514,26 +2210,7 @@ fn save_dataset(
                 return;
             }
         };
-        let Ok(body) = serde_json::to_string(&payload) else {
-            save_error.set(Some("Dataset payload could not be prepared.".into()));
-            return;
-        };
-        let result: Result<serde_json::Value, String> = if let Some(dataset_id) = dataset_id {
-            send_json_request(
-                gloo_net::http::Request::put(&format!("/api/admin/datasets/{dataset_id}")),
-                Some(body),
-                "dataset update",
-            )
-            .await
-        } else {
-            send_json_request(
-                gloo_net::http::Request::post("/api/admin/datasets"),
-                Some(body),
-                "dataset creation",
-            )
-            .await
-        };
-        match result {
+        match api::save_dataset_payload(dataset_id.as_deref(), &payload).await {
             Ok(value) => {
                 let id = value
                     .get("id")
@@ -2636,18 +2313,7 @@ fn preview_dataset_sql(
                 return;
             }
         };
-        let Ok(body) = serde_json::to_string(&payload) else {
-            sql_preview_error.set(Some("Dataset payload could not be prepared.".into()));
-            return;
-        };
-        let request = if let Some(dataset_id) = dataset_id {
-            gloo_net::http::Request::post(&format!("/api/admin/datasets/{dataset_id}/sql-preview"))
-        } else {
-            gloo_net::http::Request::post("/api/admin/datasets/sql-preview")
-        };
-        let result: Result<DatasetSqlPreviewResponse, String> =
-            send_json_request(request, Some(body), "dataset SQL preview").await;
-        match result {
+        match api::preview_dataset_sql_payload(dataset_id.as_deref(), &payload).await {
             Ok(response) => sql_preview.set(Some(response.generated_sql)),
             Err(message) => sql_preview_error.set(Some(message)),
         }

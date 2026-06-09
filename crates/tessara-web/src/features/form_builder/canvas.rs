@@ -4,7 +4,7 @@ use crate::features::form_builder::components::{FieldConfigSheet, FormBuilderSec
 use crate::features::form_builder::state::{
     add_form_builder_section_to_editor, FormBuilderEditorState,
 };
-use crate::ui::components::{Tabs, TabsList};
+use crate::ui::{Tabs, TabsList};
 use icons::Plus;
 
 #[component]

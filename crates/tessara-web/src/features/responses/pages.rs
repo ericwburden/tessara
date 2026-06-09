@@ -1,20 +1,16 @@
 //! Response route components.
-//!
-//! The response implementation still shares DTOs and helpers with the broader
-//! native module. Keeping the public route components here gives the next
-//! cleanup pass a stable module boundary for moving the remaining response
-//! internals without changing app routing.
 
+#[cfg(feature = "hydrate")]
+use crate::features::organization::current_search_param;
 use crate::features::shared::FilterHeader as SharedFilterHeader;
 use crate::features::shared::*;
 use crate::features::workflows::submission::*;
-use crate::features::workflows::*;
 use crate::types::route_params::{SubmissionRouteParams, require_route_params};
-use crate::ui::components::{
+use crate::ui::empty_view;
+use crate::ui::{
     AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator,
     DataTable, DropdownMenu, InfoListTable, PageHeader, Timestamp,
 };
-use crate::ui::empty_view;
 use crate::utils::text::{nonempty_text, text_matches};
 use std::collections::HashMap;
 

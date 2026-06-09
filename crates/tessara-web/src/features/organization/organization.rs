@@ -1,8 +1,50 @@
-// Code moved out of native.rs into a dedicated module.
-use super::*;
+#[cfg(feature = "hydrate")]
+use crate::api::client::redirect_to_login;
+#[cfg(feature = "hydrate")]
+use crate::features::administration::{CreateNodePayload, UpdateNodePayload};
+use crate::features::forms::FormsList;
+use crate::features::shared::{
+    FormDefinition, FormNodeFilterOption, FormSummary, FormVersionSummary, RenderedForm,
+    WorkflowSummary, form_attached_to_label, form_matches_node_filter, form_node_filter_options,
+    form_status_label, indented_node_label, load_forms, metadata_rows, nonempty_text,
+    sentence_label, unique_filter_options, visible_form_node_filter_options,
+};
+#[cfg(feature = "hydrate")]
+use crate::features::shared::{
+    existing_form_slugs_for_update, existing_workflow_slugs, load_workflow_assignments,
+    prepared_form_builder_fields, prepared_form_builder_sections, send_json_id_request,
+    unique_slug_from_label, workflow_assignment_candidate_key,
+};
+#[cfg(feature = "hydrate")]
+use crate::features::workflows::submission::{
+    BulkWorkflowAssignmentPayload, CreateFormFieldPayload, CreateFormPayload,
+    CreateFormSectionPayload, CreateWorkflowPayload, CreateWorkflowRevisionPayload,
+    UpdateFormPayload, UpdateWorkflowAssignmentPayload, UpdateWorkflowPayload,
+    UpdateWorkflowRevisionStepsPayload,
+};
+use crate::features::workflows::submission::{
+    CreateWorkflowStepPayload, FormBuilderFieldDraft, FormBuilderSectionDraft,
+    WorkflowAssignmentCandidate, WorkflowAssignmentSummary, WorkflowSaveIntent, WorkflowStepDraft,
+};
+use crate::types::route_params::{NodeRouteParams, require_route_params};
+use crate::ui::{
+    AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator,
+    Button, DataTable, DropdownMenu, EmptyState, PageHeader, SearchableDataTable, Tabs,
+    TabsContent, TabsList, TabsTrigger, Timestamp, empty_view,
+};
+use crate::utils::metadata::metadata_label;
 use crate::utils::pagination::{
     pagination_current_page, pagination_page_count, pagination_page_end, pagination_page_start,
 };
+use crate::utils::text::text_matches;
+use icons::{
+    ChevronDown, ChevronRight, ExternalLink, ListFilter, PanelRight, Pencil, Plus, Search, X,
+};
+use leptos::portal::Portal;
+use leptos::prelude::*;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::collections::{HashMap, HashSet};
 
 #[component]
 pub fn OrganizationPage() -> impl IntoView {
@@ -2549,7 +2591,9 @@ pub(crate) fn submit_create_form(
 
         let form_slug = unique_slug_from_label(
             &form_name,
-            &existing_form_slugs(existing_forms.get_untracked().as_slice()),
+            &crate::features::shared::existing_form_slugs(
+                existing_forms.get_untracked().as_slice(),
+            ),
         );
         if form_slug.is_empty() {
             message.set(Some("Form name must contain letters or numbers.".into()));

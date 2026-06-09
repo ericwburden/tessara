@@ -11,7 +11,11 @@ pub mod organization;
 pub mod responses;
 pub mod workflows;
 
+use leptos_router::SsrMode;
+
 pub use not_found::NotFoundPage;
+
+pub const PRIMARY_SSR_MODE: SsrMode = SsrMode::InOrder;
 
 pub fn routes() -> impl leptos_router::MatchNestedRoutes + Clone {
     (

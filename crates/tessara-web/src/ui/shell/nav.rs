@@ -1,6 +1,6 @@
 use crate::features::auth;
 use crate::state::navigation;
-use crate::state::session::shell_session_account;
+use crate::state::session::{shell_session_account, submit_logout};
 use crate::ui::empty_view;
 use icons::{
     CircleHelp, Database, File, FileText, GitBranch, House, LayoutDashboard, ListChecks, LogOut,
@@ -67,7 +67,7 @@ fn AccountCard(account: RwSignal<Option<auth::ShellAccountSummary>>) -> impl Int
                 type="button"
                 aria-label="Sign out"
                 title="Sign out"
-                on:click=move |_| auth::submit_logout()
+                on:click=move |_| submit_logout()
             >
                 <LogOut class="icon-button__icon"/>
             </button>

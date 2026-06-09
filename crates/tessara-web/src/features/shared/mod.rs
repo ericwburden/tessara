@@ -1,20 +1,16 @@
-#[cfg(feature = "hydrate")]
-pub(crate) use crate::api::client::{redirect_to_login, send_json_request};
-#[cfg(feature = "hydrate")]
-pub(crate) use std::{cell::Cell, cell::RefCell, rc::Rc};
-#[cfg(feature = "hydrate")]
-pub(crate) use wasm_bindgen::JsCast;
-
-use crate::features::forms::*;
-use crate::features::organization::*;
 use crate::ui::empty_view;
-use icons::{
-    CalendarDays, CircleDot, FileText,
-    Hash, ListChecks, ListFilter, Search,
-    SquareCheckBig, TextCursorInput, TextQuote,
-};
-use serde_json::Value;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use crate::utils::metadata::metadata_label as filter_metadata_label;
+use crate::utils::text::text_matches as filter_text_matches;
+use icons::{ListFilter, Search};
+use leptos::prelude::*;
+
+mod utility_exports {
+    use crate::utils::{metadata, text};
+
+    pub(crate) use metadata::{metadata_label, metadata_rows};
+    pub(crate) use text::{nonempty_text, sentence_label};
+}
+pub(crate) use utility_exports::*;
 
 #[cfg(feature = "hydrate")]
 pub(crate) fn navigate_to_href(href: &str) {
@@ -24,30 +20,39 @@ pub(crate) fn navigate_to_href(href: &str) {
 }
 
 mod shared {
-    pub(crate) use crate::features::shared_data::*;
+    use crate::features::shared_data;
+
+    pub(crate) use shared_data::*;
 }
 pub(crate) use shared::*;
 
 mod helpers;
-mod pagination;
+mod placeholder;
 mod ui;
+pub(crate) use placeholder::NativePlaceholderRoute;
 pub(crate) use ui::{
     FormBuilderGridCell, FormBuilderSectionLayout, WorkflowSourceMarker,
-    active_workflow_definition_version, blank_form_builder_field_at, form_attached_nodes, form_builder_field_default_label, form_builder_field_type_icon, form_builder_occupancy_map, form_builder_section_fields,
-    form_builder_section_layout, form_definition_scope_label, form_field_count_label,
-    form_version_desc_sort_key, node_count_label, node_display_path, rendered_field_layout_label, rendered_field_type_label, response_selected_assignment, response_start_can_submit,
-    submission_assignee_label, submission_progress_label, submission_status_key,
-    submission_status_label, submission_step_label,
-    submission_workflow_label, text_matches, user_count_label, workflow_assigned_user_links,
+    active_workflow_definition_version, blank_form_builder_field_at, form_attached_nodes,
+    form_builder_field_default_label, form_builder_field_type_icon, form_builder_occupancy_map,
+    form_builder_section_fields, form_builder_section_layout, form_definition_scope_label,
+    form_field_count_label, form_version_desc_sort_key, node_count_label, node_display_path,
+    rendered_field_layout_label, rendered_field_type_label, response_selected_assignment,
+    response_start_can_submit, submission_assignee_label, submission_progress_label,
+    submission_status_key, submission_status_label, submission_step_label,
+    submission_workflow_label, user_count_label, workflow_assigned_user_links,
     workflow_assignee_label, workflow_assignment_assignee_label, workflow_assignment_candidate_key,
     workflow_assignment_revision_label, workflow_assignment_state, workflow_assignment_state_label,
     workflow_assignment_status_key, workflow_assignment_status_label,
     workflow_available_node_links, workflow_available_nodes_label,
     workflow_definition_status_label, workflow_definition_version_label,
-    workflow_description_label, workflow_source_label,
-    workflow_status_key, workflow_status_label, workflow_version_label,
+    workflow_description_label, workflow_source_label, workflow_status_key, workflow_status_label,
+    workflow_version_label,
 };
-
+#[cfg(feature = "hydrate")]
+pub(crate) use ui::{
+    collect_response_values, prepared_form_builder_fields, prepared_form_builder_sections,
+    submission_value_maps,
+};
 
 mod filtering;
 pub(crate) use filtering::*;
@@ -78,7 +83,7 @@ pub(crate) fn FilterHeader(
         if current == "all" {
             format!("Filter {label}")
         } else {
-            format!("Filter {label}: {}", metadata_label(&current))
+            format!("Filter {label}: {}", filter_metadata_label(&current))
         }
     };
     let trigger_class = move || {
@@ -100,7 +105,10 @@ pub(crate) fn FilterHeader(
         options_for_buttons
             .iter()
             .filter(|option| {
-                text_matches(&query, &[option.as_str(), metadata_label(option).as_str()])
+                filter_text_matches(
+                    &query,
+                    &[option.as_str(), filter_metadata_label(option).as_str()],
+                )
             })
             .cloned()
             .collect::<Vec<_>>()
@@ -174,7 +182,7 @@ pub(crate) fn FilterHeader(
                                 let option_for_class = option.clone();
                                 let option_for_checked = option.clone();
                                 let option_for_click = option.clone();
-                                let option_label = metadata_label(&option);
+                                let option_label = filter_metadata_label(&option);
                                 view! {
                                     <button
                                         class=move || filter_option_class(&filter.get(), &option_for_class)

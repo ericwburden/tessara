@@ -1,12 +1,12 @@
 use leptos::prelude::*;
 use leptos_router::components::Route;
-use leptos_router::{MatchNestedRoutes, SsrMode, path};
+use leptos_router::{MatchNestedRoutes, path};
 
 use crate::features::datasets::{
     DatasetsDetailPage, DatasetsEditPage, DatasetsNewPage, DatasetsPage, DatasetsPreviewPage,
 };
 
-const PRIMARY_SSR_MODE: SsrMode = SsrMode::InOrder;
+use crate::routes::PRIMARY_SSR_MODE;
 
 pub fn dataset_routes() -> impl MatchNestedRoutes + Clone {
     view! {

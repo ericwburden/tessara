@@ -6,7 +6,7 @@ use crate::features::form_builder::{
 };
 use crate::features::workflows::submission::FormBuilderFieldDraft;
 
-use crate::features::forms::{form_builder_field_default_label, form_builder_field_type_icon};
+use crate::features::shared::{form_builder_field_default_label, form_builder_field_type_icon};
 
 #[component]
 pub(crate) fn FormBuilderGridTile(

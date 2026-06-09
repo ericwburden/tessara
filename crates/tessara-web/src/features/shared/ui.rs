@@ -1,4 +1,22 @@
-use super::*;
+use crate::features::form_builder::FORM_BUILDER_COLUMN_COUNT;
+use crate::features::organization::{
+    NodeTypeCatalogEntry, OrganizationNode, form_version_label, form_version_sort_label,
+};
+use crate::features::shared_data as shared;
+use crate::features::workflows::submission::{
+    AssignmentResponseStartOption, AssignmentResponseStartOptions, FormBuilderFieldDraft,
+    FormBuilderSectionDraft, SubmissionDetail, SubmissionSummary, WorkflowAssigneeOption,
+    WorkflowAssignmentCandidate, WorkflowAssignmentSummary,
+};
+use crate::ui::empty_view;
+use crate::utils::metadata::metadata_label;
+use crate::utils::text::{nonempty_text, sentence_label};
+use icons::{
+    CalendarDays, CircleDot, FileText, Hash, ListChecks, SquareCheckBig, TextCursorInput, TextQuote,
+};
+use leptos::prelude::*;
+use serde_json::Value;
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 type FormSummary = shared::FormSummary;
 type FormVersionSummary = shared::FormVersionSummary;
@@ -28,78 +46,6 @@ pub struct FormNodeFilterOption {
     pub(crate) path: String,
     pub(crate) depth: usize,
 }
-pub(crate) fn text_matches(query: &str, values: &[&str]) -> bool {
-    let query = query.trim().to_lowercase();
-    if query.is_empty() {
-        return true;
-    }
-
-    values
-        .iter()
-        .any(|value| value.to_lowercase().contains(&query))
-}
-
-fn nonempty_text(value: Option<&str>, fallback: &'static str) -> String {
-    value
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_string)
-        .unwrap_or_else(|| fallback.to_string())
-}
-
-fn sentence_label(value: &str) -> String {
-    let mut chars = value.chars();
-    match chars.next() {
-        Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
-        None => String::new(),
-    }
-}
-
-fn metadata_rows(metadata: &Value) -> Vec<(String, String)> {
-    match metadata {
-        Value::Object(values) => values
-            .iter()
-            .map(|(key, value)| (metadata_label(key), metadata_value(value)))
-            .collect(),
-        _ => Vec::new(),
-    }
-}
-
-fn metadata_label(key: &str) -> String {
-    key.split('_')
-        .filter(|part| !part.is_empty())
-        .map(|part| {
-            let mut chars = part.chars();
-            match chars.next() {
-                Some(first) => format!("{}{}", first.to_uppercase(), chars.as_str()),
-                None => String::new(),
-            }
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
-fn metadata_value(value: &Value) -> String {
-    match value {
-        Value::Null => "-".to_string(),
-        Value::Bool(value) => {
-            if *value {
-                "Yes".to_string()
-            } else {
-                "No".to_string()
-            }
-        }
-        Value::Number(value) => value.to_string(),
-        Value::String(value) => value.clone(),
-        Value::Array(values) => values
-            .iter()
-            .map(metadata_value)
-            .collect::<Vec<_>>()
-            .join(", "),
-        Value::Object(_) => value.to_string(),
-    }
-}
-
 pub(crate) fn form_version_desc_sort_key(version: &FormVersionSummary) -> (i32, i32, i32, String) {
     (
         version.version_major.unwrap_or(-1),

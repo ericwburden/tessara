@@ -1,5 +1,8 @@
-use super::*;
+use crate::features::form_builder::{
+    FORM_BUILDER_COLUMN_COUNT, FormBuilderDragPreview, FormBuilderResizeAxis,
+};
 use crate::features::workflows::submission::FormBuilderFieldDraft;
+use leptos::prelude::*;
 
 #[cfg(feature = "hydrate")]
 use std::{cell::Cell, cell::RefCell, rc::Rc};
@@ -285,6 +288,16 @@ pub(crate) fn set_form_builder_field_size(
     }
 
     fields[position] = candidate;
+}
+
+#[cfg(feature = "hydrate")]
+fn form_builder_grid_tile_style(field: &FormBuilderFieldDraft) -> String {
+    let column = field.grid_column.max(1);
+    let row = field.grid_row.max(1);
+    let width = field.grid_width.max(1);
+    let height = field.grid_height.max(1);
+
+    format!("grid-column: {column} / span {width}; grid-row: {row} / span {height};")
 }
 
 #[cfg(feature = "hydrate")]

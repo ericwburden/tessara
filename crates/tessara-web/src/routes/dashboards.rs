@@ -1,12 +1,12 @@
 use leptos::prelude::*;
 use leptos_router::components::Route;
-use leptos_router::{MatchNestedRoutes, SsrMode, path};
+use leptos_router::{MatchNestedRoutes, path};
 
 use crate::features::dashboards::{
     DashboardsDetailPage, DashboardsEditPage, DashboardsNewPage, DashboardsPage,
 };
 
-const PRIMARY_SSR_MODE: SsrMode = SsrMode::InOrder;
+use crate::routes::PRIMARY_SSR_MODE;
 
 pub fn dashboard_routes() -> impl MatchNestedRoutes + Clone {
     view! {

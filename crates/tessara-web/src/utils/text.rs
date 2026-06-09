@@ -16,3 +16,17 @@ pub(crate) fn nonempty_text(value: Option<&str>, fallback: &'static str) -> Stri
         .map(str::to_string)
         .unwrap_or_else(|| fallback.to_string())
 }
+
+pub(crate) fn sentence_label(value: &str) -> String {
+    value
+        .split('_')
+        .map(|part| {
+            let mut chars = part.chars();
+            match chars.next() {
+                Some(first) => format!("{}{}", first.to_uppercase(), chars.as_str()),
+                None => String::new(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}

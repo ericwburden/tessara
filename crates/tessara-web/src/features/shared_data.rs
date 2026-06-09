@@ -1,17 +1,31 @@
 #[cfg(feature = "hydrate")]
 use crate::api::client::{redirect_to_login, send_json_request};
+use crate::features::administration::{AdminUserAccessDetail, AdminUserDetail, AdminUserSummary};
+#[cfg(feature = "hydrate")]
+use crate::features::administration::{UpdateAdminUserAccessPayload, UpdateAdminUserPayload};
 use crate::features::form_builder::FORM_BUILDER_COLUMN_COUNT;
-use crate::features::forms::*;
-use crate::features::organization::*;
-use crate::features::workflows::submission::{FormBuilderFieldDraft, FormBuilderSectionDraft};
+use crate::features::organization::{AdminRoleSummary, NodeTypeCatalogEntry, OrganizationNode};
+#[cfg(feature = "hydrate")]
+use crate::features::organization::{
+    IdResponse, active_form_definition_version, editable_form_definition_version,
+};
+#[cfg(feature = "hydrate")]
+use crate::features::shared::{
+    collect_response_values, navigate_to_href, node_display_path, submission_value_maps,
+};
+#[cfg(feature = "hydrate")]
+use crate::features::workflows::submission::SaveSubmissionValuesPayload;
+use crate::features::workflows::submission::{
+    AssignmentResponseStartOptions, FormBuilderFieldDraft, FormBuilderSectionDraft,
+    PendingWorkflowWork, SubmissionDetail, SubmissionSummary, WorkflowAssigneeOption,
+    WorkflowAssignmentCandidate, WorkflowAssignmentSummary,
+};
+use crate::utils::text::{nonempty_text, sentence_label};
 
+use leptos::prelude::*;
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::HashMap;
-#[cfg(feature = "hydrate")]
-use std::{cell::Cell, cell::RefCell, rc::Rc};
-#[cfg(feature = "hydrate")]
-use wasm_bindgen::JsCast;
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 pub(crate) struct FormSummary {
@@ -225,67 +239,6 @@ pub(crate) struct WorkflowAvailableNodesSheetData {
     pub(crate) workflow_name: String,
     pub(crate) workflow_href: String,
     pub(crate) nodes: Vec<FormAttachmentLink>,
-}
-
-pub(crate) fn nonempty_text(value: Option<&str>, fallback: &'static str) -> String {
-    value
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_string)
-        .unwrap_or_else(|| fallback.to_string())
-}
-
-pub(crate) fn sentence_label(value: &str) -> String {
-    let mut chars = value.chars();
-    match chars.next() {
-        Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
-        None => String::new(),
-    }
-}
-
-pub(crate) fn metadata_rows(metadata: &Value) -> Vec<(String, String)> {
-    match metadata {
-        Value::Object(values) => values
-            .iter()
-            .map(|(key, value)| (metadata_label(key), metadata_value(value)))
-            .collect(),
-        _ => Vec::new(),
-    }
-}
-
-pub(crate) fn metadata_label(key: &str) -> String {
-    key.split('_')
-        .filter(|part| !part.is_empty())
-        .map(|part| {
-            let mut chars = part.chars();
-            match chars.next() {
-                Some(first) => format!("{}{}", first.to_uppercase(), chars.as_str()),
-                None => String::new(),
-            }
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
-pub(crate) fn metadata_value(value: &Value) -> String {
-    match value {
-        Value::Null => "-".to_string(),
-        Value::Bool(value) => {
-            if *value {
-                "Yes".to_string()
-            } else {
-                "No".to_string()
-            }
-        }
-        Value::Number(value) => value.to_string(),
-        Value::String(value) => value.clone(),
-        Value::Array(values) => values
-            .iter()
-            .map(metadata_value)
-            .collect::<Vec<_>>()
-            .join(", "),
-        Value::Object(_) => value.to_string(),
-    }
 }
 
 pub(crate) fn form_status_label(version: Option<&FormVersionSummary>) -> String {

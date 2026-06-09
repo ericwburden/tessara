@@ -1,5 +1,4 @@
-//! Type-level compatibility surface for route params and other shared frontend
-//! DTO-like value types used across feature modules.
+//! Shared frontend value types used across routes and feature modules.
 
 pub(crate) mod route_params;
 

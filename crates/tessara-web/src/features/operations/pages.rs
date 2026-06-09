@@ -1,5 +1,5 @@
 use crate::features::shared::{FilterHeader, unique_filter_options};
-use crate::ui::components::{AppShell, DataTable, EmptyState, PageHeader, StatusBadge, Timestamp};
+use crate::ui::{AppShell, DataTable, EmptyState, PageHeader, StatusBadge, Timestamp};
 use crate::utils::{
     pagination::{
         pagination_current_page, pagination_page_count, pagination_page_end, pagination_page_start,
@@ -8,67 +8,10 @@ use crate::utils::{
 };
 use icons::Search;
 use leptos::prelude::*;
-use serde::Deserialize;
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-struct OperationsStatus {
-    summary: OperationsSummary,
-    workflow_assignments: Vec<WorkflowAssignmentStatus>,
-    dataset_readiness: DatasetReadiness,
-    reporting_data: ReportingDataStatus,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-struct OperationsSummary {
-    open_workflow_assignment_count: i64,
-    draft_response_count: i64,
-    dataset_attention_count: i64,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-struct WorkflowAssignmentStatus {
-    workflow_instance_id: String,
-    workflow_assignment_id: String,
-    workflow_id: String,
-    workflow_name: String,
-    workflow_version_label: Option<String>,
-    node_name: String,
-    assignee_display_name: String,
-    assignee_email: String,
-    assignment_status: String,
-    current_step_title: Option<String>,
-    completed_step_count: i64,
-    total_step_count: i64,
-    draft_response_count: i64,
-    submitted_response_count: i64,
-    started_at: String,
-    completed_at: Option<String>,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-struct DatasetReadiness {
-    datasets: Vec<DatasetStatus>,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-struct DatasetStatus {
-    dataset_id: String,
-    dataset_name: String,
-    revision_status: String,
-    readiness: String,
-    source_count: i64,
-    field_count: i64,
-    ready_response_count: i64,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-struct ReportingDataStatus {
-    status: String,
-    reporting_node_count: i64,
-    submitted_response_count: i64,
-    response_value_count: i64,
-    message: String,
-}
+#[cfg(feature = "hydrate")]
+use super::api;
+use super::types::*;
 
 #[component]
 pub fn OperationsPage() -> impl IntoView {
@@ -717,27 +660,11 @@ fn load_operations_status(
             is_loading.set(true);
             load_error.set(None);
 
-            match gloo_net::http::Request::get("/api/operations/status")
-                .send()
-                .await
-            {
-                Ok(response) if response.ok() => match response.json::<OperationsStatus>().await {
-                    Ok(loaded_status) => status.set(Some(loaded_status)),
-                    Err(error) => {
-                        status.set(None);
-                        load_error.set(Some(format!("Unable to parse operations status: {error}")));
-                    }
-                },
-                Ok(response) => {
-                    status.set(None);
-                    load_error.set(Some(format!(
-                        "Unable to load operations status. Server returned {}.",
-                        response.status()
-                    )));
-                }
+            match api::fetch_operations_status().await {
+                Ok(loaded_status) => status.set(Some(loaded_status)),
                 Err(error) => {
                     status.set(None);
-                    load_error.set(Some(format!("Unable to load operations status: {error}")));
+                    load_error.set(Some(error));
                 }
             }
 
