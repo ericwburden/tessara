@@ -3,11 +3,7 @@
 
 pub(crate) mod route_params;
 
-pub(crate) use route_params::{
-    AccountRouteParams, ComponentRouteParams, DashboardRouteParams, DatasetRouteParams,
-    FormRouteParams, NodeRouteParams, NodeTypeRouteParams, ReportRouteParams, RoleRouteParams,
-    SubmissionRouteParams, WorkflowRouteParams,
-};
+pub(crate) use route_params::AccountRouteParams;
 
 pub(crate) mod ids;
 pub(crate) mod pagination;

@@ -60,17 +60,3 @@ pub(crate) fn redirect_to_login() {
         let _ = window.location().set_href("/login");
     }
 }
-
-#[cfg(not(feature = "hydrate"))]
-pub(crate) fn send_json_request<T>(
-    _builder: gloo_net::http::RequestBuilder,
-    _body: Option<String>,
-    action: &str,
-) -> Result<T, String> {
-    Err(format!("{action} unavailable in non-hydrate builds."))
-}
-
-#[cfg(not(feature = "hydrate"))]
-pub(crate) fn redirect_to_login() {
-    let _ = ();
-}

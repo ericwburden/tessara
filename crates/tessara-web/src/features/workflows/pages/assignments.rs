@@ -1,6 +1,5 @@
 use super::*;
 use crate::features::shared::FilterHeader as SharedFilterHeader;
-use crate::types::route_params::require_route_params;
 use icons::{PanelRight, Search, X};
 use leptos::prelude::*;
 use std::collections::HashSet;

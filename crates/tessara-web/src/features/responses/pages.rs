@@ -12,11 +12,10 @@ use crate::features::workflows::*;
 use crate::types::route_params::{SubmissionRouteParams, require_route_params};
 use crate::ui::components::{
     AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator,
-    DataTable, DropdownMenu, InfoListTable, InfoRow, PageHeader, SearchableDataTable, Timestamp,
+    DataTable, DropdownMenu, InfoListTable, PageHeader, Timestamp,
 };
 use crate::ui::empty_view;
 use crate::utils::text::{nonempty_text, text_matches};
-use leptos::portal::Portal;
 use std::collections::HashMap;
 
 use icons::{PanelRight, Pencil, Search};

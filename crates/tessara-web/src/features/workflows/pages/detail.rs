@@ -1,13 +1,11 @@
 use super::*;
 use crate::types::route_params::require_route_params;
 use crate::ui::components::{
-    AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator,
-    Button, DataTable, EmptyState, InfoListTable, PageHeader, Timestamp,
+    AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator, DataTable, EmptyState, InfoListTable, PageHeader, Timestamp,
 };
 use icons::Pencil;
 use leptos::portal::Portal;
 use leptos::prelude::*;
-use std::collections::HashSet;
 
 #[component]
 pub fn WorkflowsDetailPage() -> impl IntoView {

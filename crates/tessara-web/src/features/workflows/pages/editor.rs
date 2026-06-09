@@ -5,11 +5,9 @@ use crate::features::workflows::submission::{
 };
 use crate::types::route_params::{WorkflowRouteParams, require_route_params};
 use crate::ui::components::{
-    AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator,
-    Button, DataTable, DropdownMenu, EmptyState, InfoListTable, PageHeader, Timestamp,
+    AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator, PageHeader,
 };
-use crate::ui::empty_view;
-use icons::{ArrowDown, ArrowUp, Search, Trash2, X};
+use icons::{ArrowDown, ArrowUp, Search, Trash2};
 use leptos::prelude::*;
 use std::collections::HashSet;
 

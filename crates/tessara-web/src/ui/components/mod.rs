@@ -20,7 +20,6 @@ pub(crate) use dropdown::DropdownMenu;
 pub(crate) use empty_state::*;
 pub(crate) use info_list::{InfoListTable, InfoRow};
 pub(crate) use page_header::*;
-pub(crate) use sheet::{Drawer, Sheet};
 pub(crate) use status_badge::*;
 pub(crate) use tabs::{Tabs, TabsContent, TabsList, TabsTrigger};
 pub(crate) use timestamp::*;
