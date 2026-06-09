@@ -13,12 +13,14 @@
 //! Native Leptos SSR frontend for Tessara.
 
 pub mod app;
-mod brand;
+pub mod routes;
 mod document;
 pub mod features;
-pub mod infra;
+pub mod api;
+pub mod state;
+pub mod types;
+pub mod utils;
 mod pipeline;
-mod theme;
 pub mod ui;
 
 #[cfg(feature = "hydrate")]
@@ -48,7 +50,7 @@ pub fn pkg_dir() -> std::path::PathBuf {
 }
 
 pub fn svg_asset(name: &str) -> Option<&'static str> {
-    brand::svg_asset(name)
+    document::svg_asset(name)
 }
 
 #[cfg(test)]
