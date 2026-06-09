@@ -287,16 +287,6 @@ pub(crate) fn set_form_builder_field_size(
     fields[position] = candidate;
 }
 
-pub(crate) fn form_builder_grid_tile_style(field: &FormBuilderFieldDraft) -> String {
-    format!(
-        "grid-column: {} / span {}; grid-row: {} / span {};",
-        field.grid_column.max(1),
-        field.grid_width.max(1),
-        field.grid_row.max(1),
-        field.grid_height.max(1),
-    )
-}
-
 #[cfg(feature = "hydrate")]
 pub(crate) fn start_form_builder_field_resize(
     event: leptos::ev::MouseEvent,
