@@ -1,10 +1,11 @@
 use leptos::prelude::*;
-use leptos_router::{path, MatchNestedRoutes, SsrMode};
 use leptos_router::components::Route;
+use leptos_router::{MatchNestedRoutes, SsrMode, path};
 
 use crate::features::administration::{
-    AdministrationNodeTypesPage, AdministrationPage, AdministrationRolesPage, AdministrationUserAccessPage,
-    AdministrationUserDetailPage, AdministrationUserEditPage, AdministrationUsersPage,
+    AdministrationNodeTypesPage, AdministrationPage, AdministrationRolesPage,
+    AdministrationUserAccessPage, AdministrationUserDetailPage, AdministrationUserEditPage,
+    AdministrationUsersPage,
 };
 
 const PRIMARY_SSR_MODE: SsrMode = SsrMode::InOrder;

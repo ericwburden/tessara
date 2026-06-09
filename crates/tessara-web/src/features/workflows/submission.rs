@@ -397,11 +397,14 @@ pub(crate) fn start_workflow_assignment_response(
             .await
             {
                 Ok(response) => {
-                    let id = response.get("id").and_then(|value| value.as_str().map(str::to_owned)).or_else(|| {
-                        response
-                            .get("id")
-                            .and_then(|value| value.as_i64().map(|value| value.to_string()))
-                    });
+                    let id = response
+                        .get("id")
+                        .and_then(|value| value.as_str().map(str::to_owned))
+                        .or_else(|| {
+                            response
+                                .get("id")
+                                .and_then(|value| value.as_i64().map(|value| value.to_string()))
+                        });
                     if let Some(id) = id {
                         if let Some(window) = web_sys::window() {
                             let _ = window.location().set_href(&format!("/responses/{id}/edit"));
@@ -439,4 +442,3 @@ pub(crate) fn workflow_revision_label_from_raw(label: &str) -> String {
         .map(|revision| revision.to_string())
         .unwrap_or_else(|| trimmed.to_string())
 }
-

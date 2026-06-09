@@ -1,7 +1,7 @@
+use crate::features::form_builder::types::FormBuilderDragPreview;
 use crate::features::shared::blank_form_builder_section;
 use crate::features::workflows::submission::FormBuilderFieldDraft;
 use crate::features::workflows::submission::FormBuilderSectionDraft;
-use crate::features::form_builder::types::FormBuilderDragPreview;
 use leptos::prelude::*;
 
 #[derive(Clone, Copy)]
@@ -50,4 +50,3 @@ pub(crate) fn add_form_builder_section_to_editor(
     });
     active_builder_section.set(section_id.to_string());
 }
-

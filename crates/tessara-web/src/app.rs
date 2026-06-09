@@ -3,8 +3,8 @@ use leptos_router::components::{Router, Routes};
 #[cfg(feature = "hydrate")]
 use wasm_bindgen::{JsCast, prelude::wasm_bindgen};
 
-use crate::state::session::provide_shell_session;
 use crate::routes;
+use crate::state::session::provide_shell_session;
 
 #[cfg(feature = "hydrate")]
 #[wasm_bindgen]

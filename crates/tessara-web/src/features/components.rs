@@ -1,6 +1,8 @@
 use leptos::prelude::*;
 
-use crate::ui::components::{AppShell, EmptyState, InfoListTable, InfoRow, PageHeader, StatusBadge};
+use crate::ui::components::{
+    AppShell, EmptyState, InfoListTable, InfoRow, PageHeader, StatusBadge,
+};
 
 #[component]
 fn NativePlaceholderRoute(

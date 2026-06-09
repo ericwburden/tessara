@@ -1,5 +1,1 @@
-pub(crate) use crate::features::forms::pages::{
-    FormsDetailPage,
-    FormsEditPage,
-    FormsNewPage,
-};
+pub(crate) use crate::features::forms::pages::{FormsDetailPage, FormsEditPage, FormsNewPage};

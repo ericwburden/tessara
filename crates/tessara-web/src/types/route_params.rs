@@ -160,4 +160,3 @@ where
             .unwrap_or_else(|error| panic!("failed to parse current route params: {error:?}"))
     })
 }
-

@@ -7,7 +7,7 @@ use leptos::prelude::Set;
 #[cfg(feature = "hydrate")]
 use leptos::task::spawn_local;
 
-use crate::features::auth::types::{ShellAccountSummary, SessionStateResponse};
+use crate::features::auth::types::{SessionStateResponse, ShellAccountSummary};
 
 #[cfg(feature = "hydrate")]
 pub async fn fetch_session() -> Option<SessionStateResponse> {
@@ -61,5 +61,4 @@ pub fn submit_logout() {
 }
 
 #[cfg(not(feature = "hydrate"))]
-pub fn submit_logout() {
-}
+pub fn submit_logout() {}

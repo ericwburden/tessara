@@ -562,9 +562,8 @@ pub fn OrganizationNewPage() -> impl IntoView {
             &nodes.get(),
         )
     };
-    let can_submit = move || {
-        !is_loading.get() && !is_saving.get() && !selected_node_type_id.get().is_empty()
-    };
+    let can_submit =
+        move || !is_loading.get() && !is_saving.get() && !selected_node_type_id.get().is_empty();
 
     view! {
         <AppShell active_route="organization" title="Organization">
@@ -1955,7 +1954,9 @@ pub(crate) fn active_form_definition_version(form: &FormDefinition) -> Option<&F
 }
 
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
-pub(crate) fn editable_form_definition_version(form: &FormDefinition) -> Option<&FormVersionSummary> {
+pub(crate) fn editable_form_definition_version(
+    form: &FormDefinition,
+) -> Option<&FormVersionSummary> {
     form.versions
         .iter()
         .rev()
@@ -3651,7 +3652,10 @@ pub(crate) fn workflow_step_title_by_id(steps: &[WorkflowStepDraft], step_id: us
         .unwrap_or_default()
 }
 
-pub(crate) fn workflow_step_form_version_id_by_id(steps: &[WorkflowStepDraft], step_id: usize) -> String {
+pub(crate) fn workflow_step_form_version_id_by_id(
+    steps: &[WorkflowStepDraft],
+    step_id: usize,
+) -> String {
     steps
         .iter()
         .find(|step| step.id == step_id)

@@ -1,7 +1,7 @@
 use leptos::prelude::*;
 
-use crate::features::auth;
 use super::{sidebar::Sidebar, top_app_bar::TopAppBar};
+use crate::features::auth;
 
 #[component]
 pub fn AppShell(

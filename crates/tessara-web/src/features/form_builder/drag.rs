@@ -86,7 +86,9 @@ pub(crate) fn form_builder_grid_cell_from_pointer(
 }
 
 #[cfg(feature = "hydrate")]
-pub(crate) fn form_builder_add_tile_from_click_event(event: &leptos::ev::MouseEvent) -> Option<(i32, i32)> {
+pub(crate) fn form_builder_add_tile_from_click_event(
+    event: &leptos::ev::MouseEvent,
+) -> Option<(i32, i32)> {
     let target = event.target()?.dyn_into::<web_sys::Element>().ok()?;
     let add_cell = target
         .closest(".form-builder-grid-cell[data-empty]")
@@ -98,7 +100,9 @@ pub(crate) fn form_builder_add_tile_from_click_event(event: &leptos::ev::MouseEv
 }
 
 #[cfg(not(feature = "hydrate"))]
-pub(crate) fn form_builder_add_tile_from_click_event(_event: &leptos::ev::MouseEvent) -> Option<(i32, i32)> {
+pub(crate) fn form_builder_add_tile_from_click_event(
+    _event: &leptos::ev::MouseEvent,
+) -> Option<(i32, i32)> {
     None
 }
 

@@ -6,8 +6,8 @@ pub mod forms;
 pub mod home;
 pub mod login;
 pub mod not_found;
-pub mod organization;
 pub mod operations;
+pub mod organization;
 pub mod responses;
 pub mod workflows;
 

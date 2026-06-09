@@ -1,9 +1,9 @@
-use std::collections::HashSet;
+use super::*;
+use crate::features::shared::FilterHeader as SharedFilterHeader;
+use crate::types::route_params::require_route_params;
 use icons::{PanelRight, Search, X};
 use leptos::prelude::*;
-use crate::features::shared::FilterHeader as SharedFilterHeader;
-use super::*;
-use crate::types::route_params::require_route_params;
+use std::collections::HashSet;
 
 #[component]
 pub fn WorkflowAssignmentsPage() -> impl IntoView {
@@ -126,7 +126,7 @@ pub fn WorkflowAssignmentsPage() -> impl IntoView {
             .filter(|candidate| {
                 (selected_node_id.is_empty() || candidate.node_id == selected_node_id)
                     && seen.insert(candidate.workflow_version_id.clone())
-                && crate::utils::text::text_matches(
+                    && crate::utils::text::text_matches(
                         &query,
                         &[
                             candidate.workflow_name.as_str(),
@@ -156,7 +156,7 @@ pub fn WorkflowAssignmentsPage() -> impl IntoView {
                 (selected_workflow_version_id.is_empty()
                     || candidate.workflow_version_id == selected_workflow_version_id)
                     && seen.insert(candidate.node_id.clone())
-                && crate::utils::text::text_matches(
+                    && crate::utils::text::text_matches(
                         &query,
                         &[candidate.node_name.as_str(), candidate.node_path.as_str()],
                     )
@@ -1022,4 +1022,3 @@ fn WorkflowAssignmentsList(
         })}
     }
 }
-

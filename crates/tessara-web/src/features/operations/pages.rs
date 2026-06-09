@@ -1,14 +1,14 @@
 use crate::features::shared::{FilterHeader, unique_filter_options};
+use crate::ui::components::{AppShell, DataTable, EmptyState, PageHeader, StatusBadge, Timestamp};
 use crate::utils::{
     pagination::{
         pagination_current_page, pagination_page_count, pagination_page_end, pagination_page_start,
     },
     text::text_matches,
 };
+use icons::Search;
 use leptos::prelude::*;
 use serde::Deserialize;
-use crate::ui::components::{AppShell, DataTable, EmptyState, PageHeader, StatusBadge, Timestamp};
-use icons::Search;
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 struct OperationsStatus {

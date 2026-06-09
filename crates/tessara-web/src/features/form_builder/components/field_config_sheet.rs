@@ -1,13 +1,11 @@
-use leptos::prelude::*;
 use leptos::portal::Portal;
+use leptos::prelude::*;
 
 use crate::features::form_builder::{
-    form_builder_field_has_collision, form_builder_layout_candidate, max_form_builder_field_width,
-    max_form_builder_field_height, valid_form_builder_layout_values, FORM_BUILDER_COLUMN_COUNT,
+    FORM_BUILDER_COLUMN_COUNT, form_builder_field_has_collision, form_builder_layout_candidate,
+    max_form_builder_field_height, max_form_builder_field_width, valid_form_builder_layout_values,
 };
-use crate::features::forms::{
-    form_builder_field_default_label, form_builder_section_layout,
-};
+use crate::features::forms::{form_builder_field_default_label, form_builder_section_layout};
 use crate::features::shared::{blank_form_builder_section, slug_from_label};
 use crate::features::workflows::submission::{FormBuilderFieldDraft, FormBuilderSectionDraft};
 use crate::ui::empty_view;

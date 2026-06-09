@@ -1,9 +1,9 @@
 #[cfg(feature = "hydrate")]
-use leptos::task::spawn_local;
-#[cfg(feature = "hydrate")]
 use crate::features::auth::api;
 #[cfg(feature = "hydrate")]
 use crate::state::navigation;
+#[cfg(feature = "hydrate")]
+use leptos::task::spawn_local;
 
 #[cfg(feature = "hydrate")]
 pub fn require_authenticated_route(active_route: &'static str) {

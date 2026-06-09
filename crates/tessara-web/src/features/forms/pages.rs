@@ -868,7 +868,9 @@ pub(crate) fn FormRelatedWorkflowsTable(workflows: Vec<FormWorkflowLink>) -> imp
 }
 
 #[component]
-pub(crate) fn FormRelatedDatasetSourcesTable(dataset_sources: Vec<FormDatasetSourceLink>) -> impl IntoView {
+pub(crate) fn FormRelatedDatasetSourcesTable(
+    dataset_sources: Vec<FormDatasetSourceLink>,
+) -> impl IntoView {
     let search = RwSignal::new(String::new());
     let page_size = RwSignal::new(10usize);
     let page_index = RwSignal::new(0usize);
@@ -1233,5 +1235,3 @@ pub fn FormsEditPage() -> impl IntoView {
         </AppShell>
     }
 }
-
-

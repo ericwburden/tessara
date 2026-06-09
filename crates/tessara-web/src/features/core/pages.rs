@@ -1,13 +1,11 @@
 use leptos::prelude::*;
 
-use crate::features::workflows::submission::{
-    load_pending_work,
-    start_workflow_assignment_response,
-    workflow_revision_label_from_raw,
-};
-use crate::utils::text::nonempty_text;
 use crate::features::workflows::submission::PendingWorkflowWork;
+use crate::features::workflows::submission::{
+    load_pending_work, start_workflow_assignment_response, workflow_revision_label_from_raw,
+};
 use crate::ui::components::{AppShell, DataTable, PageHeader, Timestamp};
+use crate::utils::text::nonempty_text;
 use icons::{LockKeyhole, Mail};
 
 #[component]

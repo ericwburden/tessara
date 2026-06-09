@@ -1,18 +1,12 @@
 use leptos::prelude::*;
 
 use crate::features::form_builder::{
-    clear_form_builder_drag_intent,
-    schedule_form_builder_drag_preview,
-    start_form_builder_field_resize,
-    FormBuilderDragPreview,
-    FormBuilderResizeAxis,
+    FormBuilderDragPreview, FormBuilderResizeAxis, clear_form_builder_drag_intent,
+    schedule_form_builder_drag_preview, start_form_builder_field_resize,
 };
 use crate::features::workflows::submission::FormBuilderFieldDraft;
 
-use crate::features::forms::{
-    form_builder_field_default_label,
-    form_builder_field_type_icon,
-};
+use crate::features::forms::{form_builder_field_default_label, form_builder_field_type_icon};
 
 #[component]
 pub(crate) fn FormBuilderGridTile(

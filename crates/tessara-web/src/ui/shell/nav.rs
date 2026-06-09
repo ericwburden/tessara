@@ -2,11 +2,11 @@ use crate::features::auth;
 use crate::state::navigation;
 use crate::state::session::shell_session_account;
 use crate::ui::empty_view;
-use leptos::prelude::*;
 use icons::{
-    CircleHelp, Database, File, FileText, GitBranch, House, LayoutDashboard, ListChecks, LogOut, PanelRight,
-    Pencil, SlidersHorizontal,
+    CircleHelp, Database, File, FileText, GitBranch, House, LayoutDashboard, ListChecks, LogOut,
+    PanelRight, Pencil, SlidersHorizontal,
 };
+use leptos::prelude::*;
 
 #[component]
 pub(crate) fn SidebarContent(active_route: &'static str) -> impl IntoView {

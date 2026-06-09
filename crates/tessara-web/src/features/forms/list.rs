@@ -481,7 +481,9 @@ pub(crate) fn FormsAttachedNodesList(
 }
 
 #[component]
-pub(crate) fn FormsAttachedNodesSheet(detail: RwSignal<Option<FormsAttachedNodesSheetData>>) -> impl IntoView {
+pub(crate) fn FormsAttachedNodesSheet(
+    detail: RwSignal<Option<FormsAttachedNodesSheetData>>,
+) -> impl IntoView {
     let search = RwSignal::new(String::new());
     let close = move |_| {
         detail.set(None);

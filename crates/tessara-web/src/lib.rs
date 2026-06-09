@@ -12,16 +12,16 @@
 
 //! Native Leptos SSR frontend for Tessara.
 
+pub mod api;
 pub mod app;
-pub mod routes;
 mod document;
 pub mod features;
-pub mod api;
+mod pipeline;
+pub mod routes;
 pub mod state;
 pub mod types;
-pub mod utils;
-mod pipeline;
 pub mod ui;
+pub mod utils;
 
 #[cfg(feature = "hydrate")]
 use wasm_bindgen::prelude::wasm_bindgen;

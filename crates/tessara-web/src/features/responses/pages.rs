@@ -5,19 +5,19 @@
 //! cleanup pass a stable module boundary for moving the remaining response
 //! internals without changing app routing.
 
-use crate::features::shared::*;
-use crate::ui::components::{
-    AppShell, DataTable, DropdownMenu, InfoListTable, InfoRow, PageHeader, SearchableDataTable,
-    Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator, Timestamp,
-};
-use crate::features::workflows::*;
 use crate::features::shared::FilterHeader as SharedFilterHeader;
-use std::collections::HashMap;
-use leptos::portal::Portal;
+use crate::features::shared::*;
 use crate::features::workflows::submission::*;
+use crate::features::workflows::*;
+use crate::types::route_params::{SubmissionRouteParams, require_route_params};
+use crate::ui::components::{
+    AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator,
+    DataTable, DropdownMenu, InfoListTable, InfoRow, PageHeader, SearchableDataTable, Timestamp,
+};
 use crate::ui::empty_view;
 use crate::utils::text::{nonempty_text, text_matches};
-use crate::types::route_params::{require_route_params, SubmissionRouteParams};
+use leptos::portal::Portal;
+use std::collections::HashMap;
 
 use icons::{PanelRight, Pencil, Search};
 use leptos::prelude::*;
@@ -41,8 +41,6 @@ pub fn ResponsesDetailPage() -> impl IntoView {
 pub fn ResponsesEditPage() -> impl IntoView {
     view! { <ResponsesEditPageContent/> }
 }
-
-
 
 #[allow(non_snake_case)]
 pub(super) fn ResponsesPageContent() -> impl IntoView {
@@ -1385,6 +1383,3 @@ fn ResponseFieldInput(
         </div>
     }
 }
-
-
-

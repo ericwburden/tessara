@@ -2,15 +2,13 @@ use leptos::prelude::*;
 
 use crate::features::form_builder::components::{FieldConfigSheet, FormBuilderSection};
 use crate::features::form_builder::state::{
-    add_form_builder_section_to_editor, FormBuilderEditorState,
+    FormBuilderEditorState, add_form_builder_section_to_editor,
 };
 use crate::ui::components::{Tabs, TabsList};
 use icons::Plus;
 
 #[component]
-pub(crate) fn FormBuilderCanvas(
-    state: FormBuilderEditorState,
-) -> impl IntoView {
+pub(crate) fn FormBuilderCanvas(state: FormBuilderEditorState) -> impl IntoView {
     let FormBuilderEditorState {
         builder_sections,
         active_builder_section,

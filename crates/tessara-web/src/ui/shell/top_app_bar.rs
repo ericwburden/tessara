@@ -1,6 +1,6 @@
+use super::MobileNav;
 use icons::{Bell, CircleHelp, Moon, Sun};
 use leptos::prelude::*;
-use super::MobileNav;
 
 #[cfg(feature = "hydrate")]
 use crate::state::theme::{DARK_THEME_COLOR, LIGHT_THEME_COLOR, STORAGE_KEY};

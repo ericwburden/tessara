@@ -112,11 +112,8 @@ pub(crate) fn form_matches_node_filter(
 
     form.versions.iter().any(|version| {
         version.assignment_nodes.iter().any(|node| {
-            node.node_id == selected_node_id || form_node_is_descendant_of_selected(
-                &node.node_id,
-                selected_node_id,
-                options,
-            )
+            node.node_id == selected_node_id
+                || form_node_is_descendant_of_selected(&node.node_id, selected_node_id, options)
         })
     })
 }
@@ -324,5 +321,3 @@ pub(crate) fn workflow_step_form_label(forms: &[FormSummary], form_version_id: &
         .map(|(_, label)| label)
         .unwrap_or_else(|| "Select form version".to_string())
 }
-
-

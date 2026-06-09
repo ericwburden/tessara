@@ -1,6 +1,6 @@
 use leptos::prelude::*;
-use leptos_router::{path, MatchNestedRoutes, SsrMode};
 use leptos_router::components::Route;
+use leptos_router::{MatchNestedRoutes, SsrMode, path};
 
 use crate::features::core::LoginPage;
 

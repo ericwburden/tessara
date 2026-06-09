@@ -68,4 +68,3 @@ mod tests {
         assert!(svg_asset("missing.svg").is_none());
     }
 }
-

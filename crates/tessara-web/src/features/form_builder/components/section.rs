@@ -1,13 +1,9 @@
 use leptos::prelude::*;
 
 use crate::features::form_builder::components::grid::FormBuilderGrid;
+use crate::features::form_builder::{FORM_BUILDER_COLUMN_COUNT, FormBuilderDragPreview};
 use crate::features::shared::{blank_form_builder_section, form_builder_section_layout};
-use crate::features::form_builder::{
-    FORM_BUILDER_COLUMN_COUNT, FormBuilderDragPreview,
-};
-use crate::features::workflows::submission::{
-    FormBuilderFieldDraft, FormBuilderSectionDraft,
-};
+use crate::features::workflows::submission::{FormBuilderFieldDraft, FormBuilderSectionDraft};
 
 #[component]
 pub(crate) fn FormBuilderSection(

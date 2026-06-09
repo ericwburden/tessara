@@ -283,7 +283,9 @@ pub(crate) fn workflow_assignment_state(assignment: &WorkflowAssignmentSummary) 
     }
 }
 
-pub(crate) fn workflow_assignment_state_label(assignment: &WorkflowAssignmentSummary) -> &'static str {
+pub(crate) fn workflow_assignment_state_label(
+    assignment: &WorkflowAssignmentSummary,
+) -> &'static str {
     match workflow_assignment_state(assignment) {
         "submitted" => "Submitted",
         "draft" => "Draft Exists",
@@ -291,7 +293,9 @@ pub(crate) fn workflow_assignment_state_label(assignment: &WorkflowAssignmentSum
     }
 }
 
-pub(crate) fn workflow_assignment_status_key(assignment: &WorkflowAssignmentSummary) -> &'static str {
+pub(crate) fn workflow_assignment_status_key(
+    assignment: &WorkflowAssignmentSummary,
+) -> &'static str {
     if assignment.is_active {
         "active"
     } else {
@@ -299,7 +303,9 @@ pub(crate) fn workflow_assignment_status_key(assignment: &WorkflowAssignmentSumm
     }
 }
 
-pub(crate) fn workflow_assignment_status_label(assignment: &WorkflowAssignmentSummary) -> &'static str {
+pub(crate) fn workflow_assignment_status_label(
+    assignment: &WorkflowAssignmentSummary,
+) -> &'static str {
     if assignment.is_active {
         "Active"
     } else {
@@ -511,7 +517,9 @@ pub(crate) fn active_workflow_definition_version(
         .or_else(|| workflow.versions.first())
 }
 
-pub(crate) fn workflow_definition_version_label(version: Option<&WorkflowVersionSummary>) -> String {
+pub(crate) fn workflow_definition_version_label(
+    version: Option<&WorkflowVersionSummary>,
+) -> String {
     version
         .and_then(|version| version.workflow_revision_label.as_deref())
         .map(workflow_revision_label_from_raw)
@@ -1062,7 +1070,10 @@ pub(crate) fn form_builder_field_has_collision(
         .any(|candidate| candidate.id != field.id && form_builder_fields_overlap(field, candidate))
 }
 
-pub(crate) fn form_builder_linear_grid_index(field: &FormBuilderFieldDraft, column_count: i32) -> i32 {
+pub(crate) fn form_builder_linear_grid_index(
+    field: &FormBuilderFieldDraft,
+    column_count: i32,
+) -> i32 {
     let column_count = column_count.max(1);
     (field.grid_row.max(1) - 1) * column_count + field.grid_column.max(1) - 1
 }
@@ -1177,6 +1188,3 @@ fn status_badge_class(status: &str) -> &'static str {
         _ => "status-badge is-info",
     }
 }
-
-
-

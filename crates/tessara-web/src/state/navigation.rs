@@ -41,7 +41,11 @@ pub const NAV_ITEMS: [NavItem; 10] = [
         href: "/responses",
         label: "Responses",
         section: "Main",
-        capabilities: &["submissions:read_own", "submissions:respond", "submissions:manage"],
+        capabilities: &[
+            "submissions:read_own",
+            "submissions:respond",
+            "submissions:manage",
+        ],
     },
     NavItem {
         key: "operations",
@@ -86,14 +90,19 @@ pub fn nav_item_for_route(route_key: &str) -> Option<&'static NavItem> {
 
 pub fn nav_item_is_allowed(item: &NavItem, capabilities: &[String]) -> bool {
     item.capabilities.is_empty()
-        || capabilities.iter().any(|capability| capability == "admin:all")
+        || capabilities
+            .iter()
+            .any(|capability| capability == "admin:all")
         || item
             .capabilities
             .iter()
             .any(|required| capabilities.iter().any(|capability| capability == required))
 }
 
-pub fn nav_items_for_section(section: &'static str, capabilities: &[String]) -> Vec<&'static NavItem> {
+pub fn nav_items_for_section(
+    section: &'static str,
+    capabilities: &[String],
+) -> Vec<&'static NavItem> {
     NAV_ITEMS
         .iter()
         .filter(move |item| item.section == section)

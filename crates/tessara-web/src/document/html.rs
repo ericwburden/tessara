@@ -4,11 +4,7 @@ use leptos_router::location::RequestUrl;
 
 use crate::{app, pipeline};
 
-pub(crate) fn render_native_app_document(
-    title: &str,
-    description: &str,
-    _path: &str,
-) -> String {
+pub(crate) fn render_native_app_document(title: &str, description: &str, _path: &str) -> String {
     let shell = Owner::new().with(|| {
         view! {
             <Provider value=RequestUrl::new(_path)>
@@ -42,4 +38,3 @@ pub(crate) fn render_native_app_document(
         app_root_id = pipeline::APP_ROOT_ID,
     )
 }
-

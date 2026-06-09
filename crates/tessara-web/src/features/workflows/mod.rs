@@ -13,10 +13,7 @@ pub(crate) use crate::features::organization::*;
 pub(crate) use crate::features::shared::*;
 pub(crate) use crate::features::workflows::submission::*;
 pub(crate) use crate::utils::pagination::{
-    pagination_current_page,
-    pagination_page_count,
-    pagination_page_end,
-    pagination_page_start,
+    pagination_current_page, pagination_page_count, pagination_page_end, pagination_page_start,
 };
 
 pub(crate) use assignments::*;

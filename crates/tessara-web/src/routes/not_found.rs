@@ -1,6 +1,6 @@
-use leptos::prelude::*;
-use crate::ui::components::EmptyState;
 use crate::ui::components::AppShell;
+use crate::ui::components::EmptyState;
+use leptos::prelude::*;
 
 #[component]
 pub fn NotFoundPage() -> impl IntoView {

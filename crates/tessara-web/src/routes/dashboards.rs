@@ -1,8 +1,10 @@
 use leptos::prelude::*;
-use leptos_router::{path, MatchNestedRoutes, SsrMode};
 use leptos_router::components::Route;
+use leptos_router::{MatchNestedRoutes, SsrMode, path};
 
-use crate::features::dashboards::{DashboardsDetailPage, DashboardsEditPage, DashboardsNewPage, DashboardsPage};
+use crate::features::dashboards::{
+    DashboardsDetailPage, DashboardsEditPage, DashboardsNewPage, DashboardsPage,
+};
 
 const PRIMARY_SSR_MODE: SsrMode = SsrMode::InOrder;
 

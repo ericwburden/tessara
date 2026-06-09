@@ -1,15 +1,17 @@
-use std::collections::HashSet;
+use super::*;
+use crate::features::workflows::submission::{
+    WorkflowSaveIntent, WorkflowStepDraft,
+    workflow_revision_label_from_raw as workflow_submission_workflow_revision_label_from_raw,
+};
+use crate::types::route_params::{WorkflowRouteParams, require_route_params};
+use crate::ui::components::{
+    AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator,
+    Button, DataTable, DropdownMenu, EmptyState, InfoListTable, PageHeader, Timestamp,
+};
+use crate::ui::empty_view;
 use icons::{ArrowDown, ArrowUp, Search, Trash2, X};
 use leptos::prelude::*;
-use crate::features::workflows::submission::{
-    workflow_revision_label_from_raw as workflow_submission_workflow_revision_label_from_raw,
-    WorkflowSaveIntent,
-    WorkflowStepDraft,
-};
-use super::*;
-use crate::types::route_params::{require_route_params, WorkflowRouteParams};
-use crate::ui::empty_view;
-use crate::ui::components::{AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator, Button, DataTable, DropdownMenu, EmptyState, InfoListTable, PageHeader, Timestamp};
+use std::collections::HashSet;
 
 #[component]
 fn WorkflowAvailableNodesPicker(
@@ -491,8 +493,6 @@ pub fn WorkflowsNewPage() -> impl IntoView {
         </AppShell>
     }
 }
-
-
 
 #[component]
 pub fn WorkflowsEditPage() -> impl IntoView {
@@ -1050,5 +1050,3 @@ pub fn WorkflowsEditPage() -> impl IntoView {
         </AppShell>
     }
 }
-
-

@@ -1,10 +1,13 @@
-use std::collections::HashSet;
+use super::*;
+use crate::types::route_params::require_route_params;
+use crate::ui::components::{
+    AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator,
+    Button, DataTable, EmptyState, InfoListTable, PageHeader, Timestamp,
+};
 use icons::Pencil;
 use leptos::portal::Portal;
 use leptos::prelude::*;
-use super::*;
-use crate::types::route_params::require_route_params;
-use crate::ui::components::{AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator, Button, DataTable, EmptyState, InfoListTable, PageHeader, Timestamp};
+use std::collections::HashSet;
 
 #[component]
 pub fn WorkflowsDetailPage() -> impl IntoView {
@@ -559,4 +562,3 @@ fn WorkflowDetailAssignmentsTable(assignments: Vec<WorkflowAssignmentSummary>) -
         })}
     }
 }
-
