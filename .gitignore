@@ -32,3 +32,4 @@ docs/archive
 .orpheum/
 .orpheum-archive/
 .codex/orpheum/
+crates/tessara-web/tessara-web-refactoring-plan.md
