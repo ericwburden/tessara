@@ -1,7 +1,5 @@
 use crate::features::form_builder::FORM_BUILDER_COLUMN_COUNT;
-use crate::features::organization::{
-    NodeTypeCatalogEntry, OrganizationNode, form_version_label, form_version_sort_label,
-};
+use crate::features::organization::OrganizationNode;
 use crate::features::shared_data as shared;
 use crate::features::workflows::submission::{
     AssignmentResponseStartOption, AssignmentResponseStartOptions, FormBuilderFieldDraft,
@@ -16,36 +14,17 @@ use icons::{
 };
 use leptos::prelude::*;
 use serde_json::Value;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 
-type FormSummary = shared::FormSummary;
 type FormVersionSummary = shared::FormVersionSummary;
-type FormVersionAssignmentNodeSummary = shared::FormVersionAssignmentNodeSummary;
 type WorkflowSummary = shared::WorkflowSummary;
 type WorkflowAvailableNodeSummary = shared::WorkflowAvailableNodeSummary;
-type WorkflowAssignedUserSummary = shared::WorkflowAssignedUserSummary;
 type WorkflowDefinition = shared::WorkflowDefinition;
 type WorkflowVersionSummary = shared::WorkflowVersionSummary;
-type WorkflowStepSummary = shared::WorkflowStepSummary;
 type FormDefinition = shared::FormDefinition;
-type FormWorkflowLink = shared::FormWorkflowLink;
-type FormDatasetSourceLink = shared::FormDatasetSourceLink;
 type RenderedForm = shared::RenderedForm;
-type RenderedSection = shared::RenderedSection;
 type RenderedField = shared::RenderedField;
 type FormAttachmentLink = shared::FormAttachmentLink;
-type FormsAttachedNodesSheetData = shared::FormsAttachedNodesSheetData;
-type WorkflowAssignedUsersSheetData = shared::WorkflowAssignedUsersSheetData;
-type WorkflowAvailableNodesSheetData = shared::WorkflowAvailableNodesSheetData;
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct FormNodeFilterOption {
-    pub(crate) id: String,
-    pub(crate) name: String,
-    pub(crate) parent_node_id: Option<String>,
-    pub(crate) path: String,
-    pub(crate) depth: usize,
-}
 pub(crate) fn form_version_desc_sort_key(version: &FormVersionSummary) -> (i32, i32, i32, String) {
     (
         version.version_major.unwrap_or(-1),
@@ -53,12 +32,6 @@ pub(crate) fn form_version_desc_sort_key(version: &FormVersionSummary) -> (i32, 
         version.version_patch.unwrap_or(-1),
         version.published_at.clone().unwrap_or_default(),
     )
-}
-
-fn form_status_label(version: Option<&FormVersionSummary>) -> String {
-    version
-        .map(|version| sentence_label(&version.status))
-        .unwrap_or_else(|| "No versions".to_string())
 }
 
 pub(crate) fn form_field_count_label(version: Option<&FormVersionSummary>) -> String {
@@ -94,13 +67,6 @@ pub(crate) fn workflow_revision_label_from_raw(label: &str) -> String {
         .and_then(|part| part.trim().parse::<u64>().ok())
         .map(|revision| revision.to_string())
         .unwrap_or_else(|| trimmed.to_string())
-}
-
-fn workflow_revision_label_from_option(label: Option<String>) -> String {
-    label
-        .as_deref()
-        .map(workflow_revision_label_from_raw)
-        .unwrap_or_else(|| "-".to_string())
 }
 
 pub(crate) fn workflow_version_label(workflow: &WorkflowSummary) -> String {
@@ -301,29 +267,6 @@ pub(crate) fn submission_progress_label(submission: &SubmissionSummary) -> Strin
     }
 }
 
-fn response_value_label(value: Option<&Value>) -> String {
-    match value {
-        None | Some(Value::Null) => "Missing".into(),
-        Some(Value::String(value)) if value.trim().is_empty() => "Missing".into(),
-        Some(Value::String(value)) => value.clone(),
-        Some(Value::Bool(value)) => {
-            if *value {
-                "Yes".into()
-            } else {
-                "No".into()
-            }
-        }
-        Some(Value::Array(values)) if values.is_empty() => "Missing".into(),
-        Some(Value::Array(values)) => values
-            .iter()
-            .filter_map(|value| value.as_str())
-            .filter(|value| !value.trim().is_empty())
-            .collect::<Vec<_>>()
-            .join(", "),
-        Some(value) => value.to_string(),
-    }
-}
-
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
 pub(crate) fn response_input_value(value: Option<&Value>) -> String {
     match value {
@@ -507,21 +450,6 @@ pub(crate) fn workflow_assignment_assignee_label(assignment: &WorkflowAssignment
     }
 }
 
-fn form_attached_to_label(version: Option<&FormVersionSummary>) -> String {
-    version
-        .map(|version| {
-            version
-                .assignment_nodes
-                .iter()
-                .map(|node| node.node_name.as_str())
-                .filter(|name| !name.trim().is_empty())
-                .collect::<Vec<_>>()
-                .join(", ")
-        })
-        .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| "Not attached".to_string())
-}
-
 pub(crate) fn form_attached_nodes(version: Option<&FormVersionSummary>) -> Vec<FormAttachmentLink> {
     version
         .map(|version| {
@@ -561,187 +489,6 @@ pub(crate) fn rendered_field_layout_label(field: &RenderedField) -> String {
     )
 }
 
-fn form_node_filter_options(forms: &[FormSummary]) -> Vec<FormNodeFilterOption> {
-    let mut options_by_id = BTreeMap::<String, FormNodeFilterOption>::new();
-
-    for form in forms {
-        for version in &form.versions {
-            for node in &version.assignment_nodes {
-                if node.node_id.trim().is_empty() || node.node_name.trim().is_empty() {
-                    continue;
-                }
-
-                let path = if node.node_path.trim().is_empty() {
-                    node.node_name.clone()
-                } else {
-                    node.node_path.clone()
-                };
-
-                options_by_id
-                    .entry(node.node_id.clone())
-                    .or_insert_with(|| FormNodeFilterOption {
-                        id: node.node_id.clone(),
-                        name: node.node_name.clone(),
-                        parent_node_id: node.parent_node_id.clone(),
-                        path,
-                        depth: 0,
-                    });
-            }
-        }
-    }
-
-    let options_map = options_by_id.clone();
-    let mut options = options_by_id
-        .into_values()
-        .map(|mut option| {
-            option.depth = form_node_filter_depth(&option.id, &options_map, &mut HashSet::new());
-            option.path = form_node_filter_path(&option.id, &options_map, &mut HashSet::new());
-            option
-        })
-        .collect::<Vec<_>>();
-    options.sort_by(|left, right| left.path.cmp(&right.path).then(left.name.cmp(&right.name)));
-    options
-}
-
-fn form_node_filter_depth(
-    node_id: &str,
-    options_by_id: &BTreeMap<String, FormNodeFilterOption>,
-    visited: &mut HashSet<String>,
-) -> usize {
-    if !visited.insert(node_id.to_string()) {
-        return 0;
-    }
-
-    options_by_id
-        .get(node_id)
-        .and_then(|option| option.parent_node_id.as_deref())
-        .and_then(|parent_id| {
-            options_by_id
-                .contains_key(parent_id)
-                .then(|| 1 + form_node_filter_depth(parent_id, options_by_id, visited))
-        })
-        .unwrap_or(0)
-}
-
-fn form_node_filter_path(
-    node_id: &str,
-    options_by_id: &BTreeMap<String, FormNodeFilterOption>,
-    visited: &mut HashSet<String>,
-) -> String {
-    if !visited.insert(node_id.to_string()) {
-        return options_by_id
-            .get(node_id)
-            .map(|option| option.name.clone())
-            .unwrap_or_else(|| node_id.to_string());
-    }
-
-    let Some(option) = options_by_id.get(node_id) else {
-        return node_id.to_string();
-    };
-
-    option
-        .parent_node_id
-        .as_deref()
-        .filter(|parent_id| options_by_id.contains_key(*parent_id))
-        .map(|parent_id| {
-            format!(
-                "{} / {}",
-                form_node_filter_path(parent_id, options_by_id, visited),
-                option.name
-            )
-        })
-        .unwrap_or_else(|| option.name.clone())
-}
-
-fn form_matches_node_filter(
-    form: &FormSummary,
-    selected_node_id: Option<&str>,
-    options: &[FormNodeFilterOption],
-) -> bool {
-    let Some(selected_node_id) = selected_node_id else {
-        return true;
-    };
-
-    form.versions.iter().any(|version| {
-        version.assignment_nodes.iter().any(|node| {
-            node.node_id == selected_node_id
-                || form_node_is_descendant_of_selected(&node.node_id, selected_node_id, options)
-        })
-    })
-}
-
-fn form_node_is_descendant_of_selected(
-    node_id: &str,
-    selected_node_id: &str,
-    options: &[FormNodeFilterOption],
-) -> bool {
-    let by_id = options
-        .iter()
-        .map(|option| (option.id.as_str(), option))
-        .collect::<HashMap<_, _>>();
-    let mut current_parent = by_id
-        .get(node_id)
-        .and_then(|option| option.parent_node_id.as_deref());
-    let mut visited = HashSet::<String>::new();
-
-    while let Some(parent_id) = current_parent {
-        if parent_id == selected_node_id {
-            return true;
-        }
-        if !visited.insert(parent_id.to_string()) {
-            return false;
-        }
-        current_parent = by_id
-            .get(parent_id)
-            .and_then(|option| option.parent_node_id.as_deref());
-    }
-
-    false
-}
-
-fn visible_form_node_filter_options(
-    options: &[FormNodeFilterOption],
-    selected_node_id: Option<&str>,
-    query: &str,
-) -> Vec<FormNodeFilterOption> {
-    let query = query.trim().to_lowercase();
-
-    options
-        .iter()
-        .filter(|option| {
-            if selected_node_id == Some(option.id.as_str()) {
-                return false;
-            }
-
-            let Some(selected_node_id) = selected_node_id else {
-                return true;
-            };
-
-            form_node_is_descendant_of_selected(&option.id, selected_node_id, options)
-        })
-        .filter(|option| {
-            query.is_empty()
-                || option.name.to_lowercase().contains(&query)
-                || option.path.to_lowercase().contains(&query)
-        })
-        .cloned()
-        .collect()
-}
-
-fn indented_node_label(option: &FormNodeFilterOption) -> String {
-    format!("{}{}", " ".repeat(option.depth), option.name)
-}
-
-fn unique_filter_options(values: impl IntoIterator<Item = String>) -> Vec<String> {
-    let mut options = values
-        .into_iter()
-        .filter(|value| !value.trim().is_empty())
-        .collect::<Vec<_>>();
-    options.sort();
-    options.dedup();
-    options
-}
-
 fn slug_from_label(label: &str) -> String {
     let mut slug = String::new();
     let mut last_was_dash = false;
@@ -765,125 +512,6 @@ fn slug_from_label(label: &str) -> String {
     }
 
     slug
-}
-
-#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
-fn unique_slug_from_label(label: &str, existing_slugs: &[String]) -> String {
-    let base = slug_from_label(label);
-    if base.is_empty() {
-        return String::new();
-    }
-
-    let existing = existing_slugs.iter().cloned().collect::<HashSet<_>>();
-    if !existing.contains(&base) {
-        return base;
-    }
-
-    let mut suffix = 2;
-    loop {
-        let candidate = format!("{base}-{suffix}");
-        if !existing.contains(&candidate) {
-            return candidate;
-        }
-        suffix += 1;
-    }
-}
-
-#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
-fn existing_form_slugs(forms: &[FormSummary]) -> Vec<String> {
-    forms.iter().map(|form| form.slug.clone()).collect()
-}
-
-#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
-fn existing_form_slugs_for_update(forms: &[FormSummary], current_form_id: &str) -> Vec<String> {
-    forms
-        .iter()
-        .filter(|form| form.id != current_form_id)
-        .map(|form| form.slug.clone())
-        .collect()
-}
-
-#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
-fn existing_workflow_slugs(workflows: &[WorkflowSummary]) -> Vec<String> {
-    workflows
-        .iter()
-        .map(|workflow| workflow.slug.clone())
-        .collect()
-}
-
-fn workflow_form_is_in_scope(
-    form: &FormSummary,
-    node_types: &[NodeTypeCatalogEntry],
-    workflow_node_type_id: &str,
-) -> bool {
-    let _ = (form, node_types, workflow_node_type_id);
-    true
-}
-
-fn workflow_form_version_options(
-    forms: &[FormSummary],
-    node_types: &[NodeTypeCatalogEntry],
-    workflow_node_type_id: &str,
-) -> Vec<(String, String, String)> {
-    let mut options = Vec::new();
-
-    for form in forms {
-        if !workflow_form_is_in_scope(form, node_types, workflow_node_type_id) {
-            continue;
-        }
-        let mut versions = form
-            .versions
-            .iter()
-            .filter(|version| version.status == "published")
-            .collect::<Vec<_>>();
-        versions.sort_by(|left, right| {
-            form_version_sort_label(*left).cmp(&form_version_sort_label(*right))
-        });
-
-        for version in versions {
-            let version_label = form_version_label(Some(version));
-            options.push((
-                version.id.clone(),
-                format!("{} ({version_label})", form.name),
-                form.name.clone(),
-            ));
-        }
-    }
-
-    options.sort_by(|left, right| left.1.cmp(&right.1));
-    options
-}
-
-#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
-fn workflow_step_form_label(forms: &[FormSummary], form_version_id: &str) -> String {
-    forms
-        .iter()
-        .flat_map(|form| {
-            form.versions.iter().map(move |version| {
-                (
-                    version.id.as_str(),
-                    format!("{} ({})", form.name, form_version_label(Some(version))),
-                )
-            })
-        })
-        .find(|(id, _)| *id == form_version_id)
-        .map(|(_, label)| label)
-        .unwrap_or_else(|| "Select form version".to_string())
-}
-
-fn blank_form_builder_section(id: usize) -> FormBuilderSectionDraft {
-    FormBuilderSectionDraft {
-        id,
-        remote_id: None,
-        title: if id == 1 {
-            "Main".into()
-        } else {
-            format!("Section {id}")
-        },
-        description: String::new(),
-        default_column_width: 6,
-        position: id as i32,
-    }
 }
 
 pub(crate) fn blank_form_builder_field_at(
@@ -983,67 +611,6 @@ pub(crate) fn form_builder_section_layout(
     }
 }
 
-pub(crate) fn form_builder_fields_overlap(
-    left: &FormBuilderFieldDraft,
-    right: &FormBuilderFieldDraft,
-) -> bool {
-    if left.section_id != right.section_id || left.id == right.id {
-        return false;
-    }
-
-    let left_row_start = left.grid_row.max(1);
-    let left_row_end = left_row_start + left.grid_height.max(1) - 1;
-    let left_column_start = left.grid_column.max(1);
-    let left_column_end = left_column_start + left.grid_width.max(1) - 1;
-
-    let right_row_start = right.grid_row.max(1);
-    let right_row_end = right_row_start + right.grid_height.max(1) - 1;
-    let right_column_start = right.grid_column.max(1);
-    let right_column_end = right_column_start + right.grid_width.max(1) - 1;
-
-    left_row_start <= right_row_end
-        && left_row_end >= right_row_start
-        && left_column_start <= right_column_end
-        && left_column_end >= right_column_start
-}
-
-pub(crate) fn form_builder_field_has_collision(
-    field: &FormBuilderFieldDraft,
-    fields: &[FormBuilderFieldDraft],
-) -> bool {
-    fields
-        .iter()
-        .any(|candidate| candidate.id != field.id && form_builder_fields_overlap(field, candidate))
-}
-
-pub(crate) fn form_builder_linear_grid_index(
-    field: &FormBuilderFieldDraft,
-    column_count: i32,
-) -> i32 {
-    let column_count = column_count.max(1);
-    (field.grid_row.max(1) - 1) * column_count + field.grid_column.max(1) - 1
-}
-
-fn rendered_form_field_layout_style(field: &RenderedField) -> String {
-    let width = field.grid_width.clamp(1, FORM_BUILDER_COLUMN_COUNT);
-    let max_column = (FORM_BUILDER_COLUMN_COUNT - width + 1).max(1);
-    let column = field.grid_column.clamp(1, max_column);
-    let row = field.grid_row.max(1);
-    let height = field.grid_height.max(1);
-    let control_min_height = 2.65 + ((height - 1) as f32 * 1.0);
-
-    format!(
-        "--response-field-column: {column}; --response-field-width: {width}; --response-field-row: {row}; --response-field-height: {height}; --response-control-min-height: {control_min_height:.2}rem;",
-    )
-}
-
-fn response_field_class(field_type: &str) -> String {
-    format!(
-        "form-field response-form-field response-form-field--{}",
-        field_type.replace('_', "-")
-    )
-}
-
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
 pub(crate) fn prepared_form_builder_sections(
     sections: &[FormBuilderSectionDraft],
@@ -1123,14 +690,5 @@ pub(crate) fn form_builder_field_type_icon(field_type: &str) -> AnyView {
         "single_choice" => view! { <CircleDot /> }.into_any(),
         "multi_choice" => view! { <ListChecks /> }.into_any(),
         _ => view! { <TextCursorInput /> }.into_any(),
-    }
-}
-
-fn status_badge_class(status: &str) -> &'static str {
-    match status {
-        "published" | "done" | "active" | "submitted" => "status-badge is-success",
-        "draft" | "in_progress" => "status-badge is-warning",
-        "error" | "archived" => "status-badge is-danger",
-        _ => "status-badge is-info",
     }
 }

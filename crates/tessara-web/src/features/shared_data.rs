@@ -17,8 +17,8 @@ use crate::features::shared::{
 use crate::features::workflows::submission::SaveSubmissionValuesPayload;
 use crate::features::workflows::submission::{
     AssignmentResponseStartOptions, FormBuilderFieldDraft, FormBuilderSectionDraft,
-    PendingWorkflowWork, SubmissionDetail, SubmissionSummary, WorkflowAssigneeOption,
-    WorkflowAssignmentCandidate, WorkflowAssignmentSummary,
+    SubmissionDetail, SubmissionSummary, WorkflowAssigneeOption, WorkflowAssignmentCandidate,
+    WorkflowAssignmentSummary,
 };
 use crate::utils::text::{nonempty_text, sentence_label};
 
@@ -444,63 +444,6 @@ pub(crate) fn load_workflow_assignments(
     #[cfg(not(feature = "hydrate"))]
     {
         let _ = (assignments, is_loading, load_error);
-    }
-}
-
-#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
-fn load_pending_work(
-    pending_work: RwSignal<Vec<PendingWorkflowWork>>,
-    is_loading: RwSignal<bool>,
-    load_error: RwSignal<Option<String>>,
-) {
-    #[cfg(feature = "hydrate")]
-    {
-        leptos::task::spawn_local(async move {
-            is_loading.set(true);
-            load_error.set(None);
-
-            match gloo_net::http::Request::get("/api/workflow-assignments/pending")
-                .send()
-                .await
-            {
-                Ok(response) if response.status() == 401 => {
-                    pending_work.set(Vec::new());
-                    is_loading.set(false);
-                    redirect_to_login();
-                }
-                Ok(response) if response.ok() => {
-                    match response.json::<Vec<PendingWorkflowWork>>().await {
-                        Ok(loaded_work) => {
-                            pending_work.set(loaded_work);
-                            is_loading.set(false);
-                        }
-                        Err(error) => {
-                            pending_work.set(Vec::new());
-                            load_error.set(Some(format!("Unable to parse assigned work: {error}")));
-                            is_loading.set(false);
-                        }
-                    }
-                }
-                Ok(response) => {
-                    pending_work.set(Vec::new());
-                    load_error.set(Some(format!(
-                        "Unable to load assigned work. Server returned {}.",
-                        response.status()
-                    )));
-                    is_loading.set(false);
-                }
-                Err(error) => {
-                    pending_work.set(Vec::new());
-                    load_error.set(Some(format!("Unable to load assigned work: {error}")));
-                    is_loading.set(false);
-                }
-            }
-        });
-    }
-
-    #[cfg(not(feature = "hydrate"))]
-    {
-        let _ = (pending_work, is_loading, load_error);
     }
 }
 
@@ -1156,41 +1099,6 @@ pub(crate) fn load_response_start_options(
     #[cfg(not(feature = "hydrate"))]
     {
         let _ = (options, is_loading, message, delegate_account_id);
-    }
-}
-
-fn start_workflow_assignment_response(
-    workflow_assignment_id: String,
-    is_saving: RwSignal<bool>,
-    message: RwSignal<Option<String>>,
-) {
-    #[cfg(feature = "hydrate")]
-    {
-        leptos::task::spawn_local(async move {
-            is_saving.set(true);
-            message.set(Some("Starting assigned response...".into()));
-
-            match send_json_id_request(
-                gloo_net::http::Request::post(&format!(
-                    "/api/workflow-assignments/{workflow_assignment_id}/start"
-                )),
-                Some("{}".into()),
-                "Start assigned response",
-            )
-            .await
-            {
-                Ok(response) => navigate_to_href(&format!("/responses/{}/edit", response.id)),
-                Err(error) => {
-                    message.set(Some(error));
-                    is_saving.set(false);
-                }
-            }
-        });
-    }
-
-    #[cfg(not(feature = "hydrate"))]
-    {
-        let _ = (workflow_assignment_id, is_saving, message);
     }
 }
 

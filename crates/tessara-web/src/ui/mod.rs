@@ -11,7 +11,6 @@ pub mod dropdown;
 mod empty_state;
 mod info_list;
 mod page_header;
-mod sheet;
 pub mod shell;
 mod status_badge;
 mod tabs;

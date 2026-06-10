@@ -23,38 +23,13 @@ pub(crate) struct SubmissionRouteParams {
 }
 
 #[derive(PartialEq, Clone, Debug)]
-pub(crate) struct ReportRouteParams {
-    pub report_id: String,
-}
-
-#[derive(PartialEq, Clone, Debug)]
-pub(crate) struct DashboardRouteParams {
-    pub dashboard_id: String,
-}
-
-#[derive(PartialEq, Clone, Debug)]
 pub(crate) struct DatasetRouteParams {
     pub dataset_id: String,
 }
 
 #[derive(PartialEq, Clone, Debug)]
-pub(crate) struct ComponentRouteParams {
-    pub component_ref: String,
-}
-
-#[derive(PartialEq, Clone, Debug)]
 pub(crate) struct AccountRouteParams {
     pub account_id: String,
-}
-
-#[derive(PartialEq, Clone, Debug)]
-pub(crate) struct RoleRouteParams {
-    pub role_id: String,
-}
-
-#[derive(PartialEq, Clone, Debug)]
-pub(crate) struct NodeTypeRouteParams {
-    pub node_type_id: String,
 }
 
 fn require_map_value(map: &ParamsMap, key: &'static str) -> Result<String, ParamsError> {
@@ -94,22 +69,6 @@ impl Params for SubmissionRouteParams {
     }
 }
 
-impl Params for ReportRouteParams {
-    fn from_map(map: &ParamsMap) -> Result<Self, ParamsError> {
-        Ok(Self {
-            report_id: require_map_value(map, "report_id")?,
-        })
-    }
-}
-
-impl Params for DashboardRouteParams {
-    fn from_map(map: &ParamsMap) -> Result<Self, ParamsError> {
-        Ok(Self {
-            dashboard_id: require_map_value(map, "dashboard_id")?,
-        })
-    }
-}
-
 impl Params for DatasetRouteParams {
     fn from_map(map: &ParamsMap) -> Result<Self, ParamsError> {
         Ok(Self {
@@ -118,34 +77,10 @@ impl Params for DatasetRouteParams {
     }
 }
 
-impl Params for ComponentRouteParams {
-    fn from_map(map: &ParamsMap) -> Result<Self, ParamsError> {
-        Ok(Self {
-            component_ref: require_map_value(map, "component_ref")?,
-        })
-    }
-}
-
 impl Params for AccountRouteParams {
     fn from_map(map: &ParamsMap) -> Result<Self, ParamsError> {
         Ok(Self {
             account_id: require_map_value(map, "account_id")?,
-        })
-    }
-}
-
-impl Params for RoleRouteParams {
-    fn from_map(map: &ParamsMap) -> Result<Self, ParamsError> {
-        Ok(Self {
-            role_id: require_map_value(map, "role_id")?,
-        })
-    }
-}
-
-impl Params for NodeTypeRouteParams {
-    fn from_map(map: &ParamsMap) -> Result<Self, ParamsError> {
-        Ok(Self {
-            node_type_id: require_map_value(map, "node_type_id")?,
         })
     }
 }
