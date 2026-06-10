@@ -40,7 +40,7 @@ fn WorkflowsList(
         if total_count == 0 {
             1
         } else {
-            ((total_count + page_size.get() - 1) / page_size.get()).max(1)
+            total_count.div_ceil(page_size.get()).max(1)
         }
     };
     let current_page = move || page_index.get().min(page_count() - 1);
@@ -356,7 +356,7 @@ fn WorkflowAvailableNodesSheet(
                                         }
                                         .into_any()
                                     })
-                                    .unwrap_or_else(|| empty_view())
+                                    .unwrap_or_else(empty_view)
                             }}
                             <button class="icon-button sheet-panel__close" type="button" aria-label="Close available nodes" title="Close available nodes" on:click=close>
                                 <X class="icon-button__icon"/>
@@ -410,7 +410,7 @@ fn WorkflowAvailableNodesSheet(
                                     }
                                     .into_any()
                                 })
-                                .unwrap_or_else(|| empty_view())
+                                .unwrap_or_else(empty_view)
                         }}
                     </aside>
                 </section>
@@ -504,7 +504,7 @@ fn WorkflowAssignedUsersSheet(
                                         }
                                         .into_any()
                                     })
-                                    .unwrap_or_else(|| empty_view())
+                                    .unwrap_or_else(empty_view)
                             }}
                             <button class="icon-button sheet-panel__close" type="button" aria-label="Close assigned users" title="Close assigned users" on:click=close>
                                 <X class="icon-button__icon"/>
@@ -558,7 +558,7 @@ fn WorkflowAssignedUsersSheet(
                                     }
                                     .into_any()
                                 })
-                                .unwrap_or_else(|| empty_view())
+                                .unwrap_or_else(empty_view)
                         }}
                     </aside>
                 </section>

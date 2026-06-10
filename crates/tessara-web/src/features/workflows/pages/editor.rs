@@ -369,11 +369,10 @@ pub fn WorkflowsNewPage() -> impl IntoView {
                                                                                 disabled=move || step_position() <= 1
                                                                                 on:click=move |_| {
                                                                                     steps.update(|steps| {
-                                                                                        if let Some(index) = steps.iter().position(|step| step.id == step_id) {
-                                                                                            if index > 0 {
+                                                                                        if let Some(index) = steps.iter().position(|step| step.id == step_id)
+                                                                                            && index > 0 {
                                                                                                 steps.swap(index, index - 1);
                                                                                             }
-                                                                                        }
                                                                                     });
                                                                                 }
                                                                             >
@@ -389,11 +388,10 @@ pub fn WorkflowsNewPage() -> impl IntoView {
                                                                                 }
                                                                                 on:click=move |_| {
                                                                                     steps.update(|steps| {
-                                                                                        if let Some(index) = steps.iter().position(|step| step.id == step_id) {
-                                                                                            if index + 1 < steps.len() {
+                                                                                        if let Some(index) = steps.iter().position(|step| step.id == step_id)
+                                                                                            && index + 1 < steps.len() {
                                                                                                 steps.swap(index, index + 1);
                                                                                             }
-                                                                                        }
                                                                                     });
                                                                                 }
                                                                             >
@@ -841,7 +839,8 @@ pub fn WorkflowsEditPage() -> impl IntoView {
                                                 }
                                                 .into_any()
                                             } else {
-                                                view! { <></> }.into_any()
+                                                let _: () = view! { <></> };
+                                                ().into_any()
                                             }
                                         }}
 
@@ -885,11 +884,10 @@ pub fn WorkflowsEditPage() -> impl IntoView {
                                                                                 disabled=move || step_position() <= 1
                                                                                 on:click=move |_| {
                                                                                     steps.update(|steps| {
-                                                                                        if let Some(index) = steps.iter().position(|step| step.id == step_id) {
-                                                                                            if index > 0 {
+                                                                                        if let Some(index) = steps.iter().position(|step| step.id == step_id)
+                                                                                            && index > 0 {
                                                                                                 steps.swap(index, index - 1);
                                                                                             }
-                                                                                        }
                                                                                     });
                                                                                 }
                                                                             >
@@ -905,11 +903,10 @@ pub fn WorkflowsEditPage() -> impl IntoView {
                                                                                 }
                                                                                 on:click=move |_| {
                                                                                     steps.update(|steps| {
-                                                                                        if let Some(index) = steps.iter().position(|step| step.id == step_id) {
-                                                                                            if index + 1 < steps.len() {
+                                                                                        if let Some(index) = steps.iter().position(|step| step.id == step_id)
+                                                                                            && index + 1 < steps.len() {
                                                                                                 steps.swap(index, index + 1);
                                                                                             }
-                                                                                        }
                                                                                     });
                                                                                 }
                                                                             >

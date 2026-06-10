@@ -934,7 +934,7 @@ pub(crate) fn OrganizationDetailSheet(
                                         }
                                         .into_any()
                                     })
-                                    .unwrap_or_else(|| empty_view())
+                                    .unwrap_or_else(empty_view)
                             }}
                             <button class="icon-button sheet-panel__close" type="button" aria-label="Close details" title="Close details" on:click=close>
                                 <X class="icon-button__icon"/>

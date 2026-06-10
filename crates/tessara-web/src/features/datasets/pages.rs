@@ -710,8 +710,8 @@ fn DatasetSourcesEditor(
     Effect::new(move |_| {
         let form_options = forms.get();
         for (index, source) in sources.get().into_iter().enumerate() {
-            if source.input_kind == "form" {
-                if let Some(version_id) = resolved_form_version_id(&source, &form_options) {
+            if source.input_kind == "form"
+                && let Some(version_id) = resolved_form_version_id(&source, &form_options) {
                     load_rendered_form(version_id.clone(), rendered_forms);
                     if rendered_forms.get().contains_key(&version_id) {
                         let seed_key = source_seed_key(index, &version_id);
@@ -723,7 +723,6 @@ fn DatasetSourcesEditor(
                         }
                     }
                 }
-            }
         }
     });
 

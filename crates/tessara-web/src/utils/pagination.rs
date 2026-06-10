@@ -2,7 +2,7 @@ pub(crate) fn pagination_page_count(total_count: usize, page_size: usize) -> usi
     if total_count == 0 {
         1
     } else {
-        ((total_count + page_size - 1) / page_size).max(1)
+        total_count.div_ceil(page_size)
     }
 }
 

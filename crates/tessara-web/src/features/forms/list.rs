@@ -218,7 +218,7 @@ pub(crate) fn FormsList(
         if total_count == 0 {
             1
         } else {
-            ((total_count + page_size.get() - 1) / page_size.get()).max(1)
+            total_count.div_ceil(page_size.get()).max(1)
         }
     };
     let current_page = move || page_index.get().min(page_count() - 1);
@@ -531,7 +531,7 @@ pub(crate) fn FormsAttachedNodesSheet(
                                         }
                                         .into_any()
                                     })
-                                    .unwrap_or_else(|| empty_view())
+                                    .unwrap_or_else(empty_view)
                             }}
                             <button class="icon-button sheet-panel__close" type="button" aria-label="Close attached nodes" title="Close attached nodes" on:click=close>
                                 <X class="icon-button__icon"/>
@@ -585,7 +585,7 @@ pub(crate) fn FormsAttachedNodesSheet(
                                     }
                                     .into_any()
                                 })
-                                .unwrap_or_else(|| empty_view())
+                                .unwrap_or_else(empty_view)
                         }}
                     </aside>
                 </section>

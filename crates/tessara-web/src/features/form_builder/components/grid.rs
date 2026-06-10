@@ -103,8 +103,8 @@ pub(crate) fn FormBuilderGrid(
             }
             on:drop=move |event| {
                 event.prevent_default();
-                if let Some(field_id) = dragged_builder_field.get_untracked() {
-                    if let Some((row, column, _)) =
+                if let Some(field_id) = dragged_builder_field.get_untracked()
+                    && let Some((row, column, _)) =
                         form_builder_grid_cell_from_pointer(&event, grid_rows.get_untracked())
                     {
                         set_form_builder_drag_preview(
@@ -117,7 +117,6 @@ pub(crate) fn FormBuilderGrid(
                             },
                         );
                     }
-                }
                 commit_form_builder_drag_preview(
                     builder_fields,
                     builder_drag_preview,

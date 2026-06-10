@@ -175,11 +175,10 @@ pub(crate) fn FieldConfigSheet(
                                                         on:change=move |event| {
                                                             let checked = event_target_checked(&event);
                                                             builder_fields.update(|fields| {
-                                                                if let Some(field) = fields.iter_mut().find(|field| field.id == field_id) {
-                                                                    if field.field_type != "static_text" {
+                                                                if let Some(field) = fields.iter_mut().find(|field| field.id == field_id)
+                                                                    && field.field_type != "static_text" {
                                                                         field.required = checked;
                                                                     }
-                                                                }
                                                             });
                                                         }
                                                     />
@@ -263,7 +262,7 @@ pub(crate) fn FieldConfigSheet(
                             }
                             .into_any()
                         })
-                        .unwrap_or_else(|| empty_view())
+                        .unwrap_or_else(empty_view)
                 }}
             </Show>
         </Portal>

@@ -1086,7 +1086,7 @@ pub fn FormsEditPage() -> impl IntoView {
                             }
                             .into_any()
                         })
-                        .unwrap_or_else(|| empty_view())
+                        .unwrap_or_else(empty_view)
                 }}
                 <BreadcrumbItem>
                     <BreadcrumbPage>"Edit Form"</BreadcrumbPage>

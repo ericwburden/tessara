@@ -197,7 +197,7 @@ fn AdministrationUsersList(
         if total_count == 0 {
             1
         } else {
-            ((total_count + page_size.get() - 1) / page_size.get()).max(1)
+            total_count.div_ceil(page_size.get()).max(1)
         }
     };
     let current_page = move || page_index.get().min(page_count() - 1);
@@ -1597,7 +1597,7 @@ fn AdministrationNodeTypeEditor(
                     <h2>{title}</h2>
                     {if selected_detail.is_some() || is_creating {
                         view! {
-                            <span class=move || node_type_kind_status()>{move || node_type_kind_label()}</span>
+                            <span class=node_type_kind_status>{move || node_type_kind_label()}</span>
                         }
                         .into_any()
                     } else {
@@ -2405,8 +2405,8 @@ fn node_type_ancestor_ids(
         .unwrap_or_default();
 
     while let Some(candidate_id) = stack.pop() {
-        if ancestors.insert(candidate_id.clone()) {
-            if let Some(candidate) = node_types
+        if ancestors.insert(candidate_id.clone())
+            && let Some(candidate) = node_types
                 .iter()
                 .find(|node_type| node_type.id == candidate_id)
             {
@@ -2417,7 +2417,6 @@ fn node_type_ancestor_ids(
                         .map(|peer| peer.node_type_id.clone()),
                 );
             }
-        }
     }
 
     ancestors
@@ -2441,8 +2440,8 @@ fn node_type_descendant_ids(
         .unwrap_or_default();
 
     while let Some(candidate_id) = stack.pop() {
-        if descendants.insert(candidate_id.clone()) {
-            if let Some(candidate) = node_types
+        if descendants.insert(candidate_id.clone())
+            && let Some(candidate) = node_types
                 .iter()
                 .find(|node_type| node_type.id == candidate_id)
             {
@@ -2453,7 +2452,6 @@ fn node_type_descendant_ids(
                         .map(|peer| peer.node_type_id.clone()),
                 );
             }
-        }
     }
 
     descendants
@@ -2784,7 +2782,7 @@ fn AdministrationRolesList(
         if total_count == 0 {
             1
         } else {
-            ((total_count + page_size.get() - 1) / page_size.get()).max(1)
+            total_count.div_ceil(page_size.get()).max(1)
         }
     };
     let current_page = move || page_index.get().min(page_count() - 1);

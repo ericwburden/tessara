@@ -180,7 +180,7 @@ fn ResponsesList(
         if total_count == 0 {
             1
         } else {
-            ((total_count + page_size.get() - 1) / page_size.get()).max(1)
+            total_count.div_ceil(page_size.get()).max(1)
         }
     };
     let current_page = move || page_index.get().min(page_count() - 1);
@@ -964,7 +964,7 @@ fn ResponseDetailContent(detail: SubmissionDetail) -> impl IntoView {
 
                 {runtime
                     .map(|runtime| view! { <ResponseRuntimeCard runtime/> }.into_any())
-                    .unwrap_or_else(|| empty_view())}
+                    .unwrap_or_else(empty_view)}
 
                 <section class="organization-detail-card organization-detail-card--wide form-detail-fields-card">
                     <header class="form-detail-disclosure-header">

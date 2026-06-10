@@ -666,7 +666,7 @@ fn WorkflowAssignmentsList(
         if total_count == 0 {
             1
         } else {
-            ((total_count + page_size.get() - 1) / page_size.get()).max(1)
+            total_count.div_ceil(page_size.get()).max(1)
         }
     };
     let current_page = move || page_index.get().min(page_count() - 1);
