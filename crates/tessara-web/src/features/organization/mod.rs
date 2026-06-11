@@ -5,6 +5,8 @@
 pub(crate) mod api;
 mod detail;
 mod node_editor;
+mod node_metadata;
+mod node_options;
 pub(crate) mod pages;
 mod related_work;
 mod tree;
