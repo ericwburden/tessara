@@ -1,16 +1,12 @@
-//! Editing components and helpers for the Workflows feature.
+//! Workflow editor page implementations.
 //!
-//! Keep form state, draft manipulation, and edit-page presentation here; transport payload submission belongs in API modules.
+//! Keep create/edit workflow page state here while reusable editor controls and helpers live in sibling modules.
 
 use crate::features::forms::FormSummary;
 use crate::features::organization::{NodeTypeCatalogEntry, OrganizationNode};
 use crate::features::shared::status_badge_class;
 use crate::features::workflows::api::workflow_revision_label_from_raw as workflow_submission_workflow_revision_label_from_raw;
 use crate::features::workflows::api::{load_workflow_create_options, load_workflow_detail};
-use crate::features::workflows::editor::{
-    WorkflowAvailableNodesPicker, WorkflowStepList, add_workflow_step, can_submit_workflow_editor,
-    prune_unavailable_workflow_steps,
-};
 use crate::features::workflows::types::{
     WorkflowDefinition, WorkflowSaveIntent, WorkflowStepDraft, WorkflowSummary,
 };
@@ -30,9 +26,14 @@ use crate::utils::url::current_search_param;
 use leptos::prelude::*;
 use std::collections::HashSet;
 
+use super::{
+    WorkflowAvailableNodesPicker, WorkflowStepList, add_workflow_step, can_submit_workflow_editor,
+    prune_unavailable_workflow_steps,
+};
+
 #[component]
 /// Renders the workflows new page view.
-pub fn WorkflowsNewPage() -> impl IntoView {
+pub(crate) fn WorkflowsNewPage() -> impl IntoView {
     let node_types = RwSignal::new(Vec::<NodeTypeCatalogEntry>::new());
     let organization_nodes = RwSignal::new(Vec::<OrganizationNode>::new());
     let forms = RwSignal::new(Vec::<FormSummary>::new());
@@ -260,7 +261,7 @@ pub fn WorkflowsNewPage() -> impl IntoView {
 
 #[component]
 /// Renders the workflows edit page view.
-pub fn WorkflowsEditPage() -> impl IntoView {
+pub(crate) fn WorkflowsEditPage() -> impl IntoView {
     let params = require_route_params::<WorkflowRouteParams>();
     let workflow_id = params.workflow_id;
     let detail = RwSignal::new(None::<WorkflowDefinition>);
