@@ -9,6 +9,7 @@ use crate::utils::metadata::metadata_rows;
 use icons::{ExternalLink, X};
 use leptos::portal::Portal;
 use leptos::prelude::*;
+
 #[component]
 /// Renders the organization detail sheet view.
 pub(crate) fn OrganizationDetailSheet(

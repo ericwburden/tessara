@@ -9,6 +9,7 @@ use super::pages::{build_expression_ast, expression_to_editor_drafts, is_join_op
 use super::types::*;
 use leptos::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
+
 #[cfg(feature = "hydrate")]
 /// Loads the load account data.
 pub(super) fn load_account(account: RwSignal<Option<SessionAccount>>) {

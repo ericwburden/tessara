@@ -24,6 +24,7 @@ use crate::features::organization::types::OrganizationNode;
 use crate::features::shared::{existing_form_slugs_for_update, unique_slug_from_label};
 use crate::features::workflows::types::WorkflowSummary;
 use leptos::prelude::*;
+
 /// Handles the active form version behavior.
 pub(crate) fn active_form_version(form: &FormSummary) -> Option<&FormVersionSummary> {
     form.versions

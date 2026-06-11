@@ -6,6 +6,7 @@ use crate::features::forms::RenderedForm;
 use crate::features::responses::types::SubmissionDetail;
 use serde_json::Value;
 use std::collections::HashMap;
+
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
 /// Handles the response input value behavior.
 pub(crate) fn response_input_value(value: Option<&Value>) -> String {

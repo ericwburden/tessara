@@ -20,6 +20,7 @@ use crate::http::redirect_to_login;
 use leptos::prelude::*;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
+
 #[component]
 /// Renders the metadata field input view.
 pub(crate) fn MetadataFieldInput(

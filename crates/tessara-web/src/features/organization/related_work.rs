@@ -15,6 +15,7 @@ use crate::utils::pagination::{
 use crate::utils::text::{nonempty_text, sentence_label, text_matches};
 use icons::{ListFilter, Search};
 use leptos::prelude::*;
+
 #[component]
 /// Renders the related work summary view.
 pub(crate) fn RelatedWorkSummary(

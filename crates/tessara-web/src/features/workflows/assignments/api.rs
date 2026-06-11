@@ -9,6 +9,7 @@ use crate::features::workflows::assignments::types::{
 #[cfg(feature = "hydrate")]
 use crate::http::redirect_to_login;
 use leptos::prelude::*;
+
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
 /// Loads the load pending work data.
 pub(crate) fn load_pending_work(

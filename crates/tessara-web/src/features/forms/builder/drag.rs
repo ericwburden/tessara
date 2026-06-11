@@ -12,6 +12,7 @@ use wasm_bindgen::JsCast;
 
 #[cfg(feature = "hydrate")]
 use wasm_bindgen::closure::Closure;
+
 /// Handles the set form builder drag preview behavior.
 pub(crate) fn set_form_builder_drag_preview(
     builder_drag_preview: RwSignal<Option<FormBuilderDragPreview>>,

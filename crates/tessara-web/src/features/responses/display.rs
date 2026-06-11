@@ -11,6 +11,7 @@ use crate::utils::metadata::metadata_label;
 use crate::utils::text::nonempty_text;
 use leptos::prelude::*;
 use serde_json::Value;
+
 /// Handles the submission status key behavior.
 pub(crate) fn submission_status_key(submission: &SubmissionSummary) -> String {
     submission.status.trim().to_lowercase()
