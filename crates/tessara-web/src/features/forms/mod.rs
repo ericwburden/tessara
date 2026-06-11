@@ -2,13 +2,14 @@
 //!
 //! Re-export only the pages, types, and helpers other modules need; keep Forms-specific implementation details in child modules.
 
-pub(crate) mod api;
+mod api;
 mod attached_nodes;
 pub(crate) mod builder;
 mod detail;
 mod display;
 mod filtering;
 mod list;
+mod loaders;
 mod pages;
 mod save;
 mod tables;

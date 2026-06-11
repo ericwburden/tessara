@@ -1,487 +1,79 @@
-//! Client-side API orchestration for the Forms feature.
+//! Transport calls for the Forms feature.
 //!
-//! Keep endpoint calls, request assembly, and response handling for Forms screens here; pure DTOs and display formatting belong in sibling modules.
+//! Keep endpoint requests and response parsing here; Leptos signal orchestration belongs in loaders and save actions.
 
-use crate::features::forms::builder::{
-    FORM_BUILDER_COLUMN_COUNT, FormBuilderFieldDraft, FormBuilderSectionDraft,
-    blank_form_builder_section,
-};
+#[cfg(feature = "hydrate")]
 use crate::features::forms::{FormDefinition, FormSummary, RenderedForm};
+
 #[cfg(feature = "hydrate")]
-use crate::features::forms::{active_form_definition_version, editable_form_definition_version};
-use crate::features::organization::NodeTypeCatalogEntry;
+pub(super) enum FormsApiError {
+    Unauthorized,
+    Message(String),
+}
+
 #[cfg(feature = "hydrate")]
-use crate::http::redirect_to_login;
-use crate::utils::text::nonempty_text;
-use leptos::prelude::*;
-use std::collections::HashMap;
-
-/// Loads the load forms data.
-pub(crate) fn load_forms(
-    forms: RwSignal<Vec<FormSummary>>,
-    is_loading: RwSignal<bool>,
-    load_error: RwSignal<Option<String>>,
-) {
-    #[cfg(feature = "hydrate")]
-    {
-        leptos::task::spawn_local(async move {
-            is_loading.set(true);
-            load_error.set(None);
-
-            match gloo_net::http::Request::get("/api/forms").send().await {
-                Ok(response) if response.status() == 401 => {
-                    forms.set(Vec::new());
-                    is_loading.set(false);
-                    redirect_to_login();
-                }
-                Ok(response) if response.ok() => match response.json::<Vec<FormSummary>>().await {
-                    Ok(loaded_forms) => {
-                        forms.set(loaded_forms);
-                        is_loading.set(false);
-                    }
-                    Err(error) => {
-                        forms.set(Vec::new());
-                        load_error.set(Some(format!("Unable to parse forms: {error}")));
-                        is_loading.set(false);
-                    }
-                },
-                Ok(response) => {
-                    forms.set(Vec::new());
-                    load_error.set(Some(format!(
-                        "Unable to load forms. Server returned {}.",
-                        response.status()
-                    )));
-                    is_loading.set(false);
-                }
-                Err(error) => {
-                    forms.set(Vec::new());
-                    load_error.set(Some(format!("Unable to load forms: {error}")));
-                    is_loading.set(false);
-                }
-            }
-        });
-    }
-
-    #[cfg(not(feature = "hydrate"))]
-    {
-        let _ = (forms, is_loading, load_error);
+impl FormsApiError {
+    fn message(message: impl Into<String>) -> Self {
+        Self::Message(message.into())
     }
 }
 
-/// Loads the load form detail data.
-pub(crate) fn load_form_detail(
-    form_id: String,
-    detail: RwSignal<Option<FormDefinition>>,
-    rendered_form: RwSignal<Option<RenderedForm>>,
-    is_loading: RwSignal<bool>,
-    load_error: RwSignal<Option<String>>,
-) {
-    #[cfg(feature = "hydrate")]
-    {
-        leptos::task::spawn_local(async move {
-            is_loading.set(true);
-            load_error.set(None);
-            rendered_form.set(None);
-
-            match gloo_net::http::Request::get(&format!("/api/forms/{form_id}"))
-                .send()
-                .await
-            {
-                Ok(response) if response.status() == 401 => {
-                    detail.set(None);
-                    rendered_form.set(None);
-                    is_loading.set(false);
-                    redirect_to_login();
-                }
-                Ok(response) if response.ok() => match response.json::<FormDefinition>().await {
-                    Ok(form) => {
-                        let active_version_id =
-                            active_form_definition_version(&form).map(|version| version.id.clone());
-                        detail.set(Some(form));
-                        if let Some(version_id) = active_version_id {
-                            load_rendered_form_version(version_id, rendered_form);
-                        }
-                        is_loading.set(false);
-                    }
-                    Err(error) => {
-                        detail.set(None);
-                        load_error.set(Some(format!("Unable to parse form detail: {error}")));
-                        is_loading.set(false);
-                    }
-                },
-                Ok(response) => {
-                    detail.set(None);
-                    load_error.set(Some(format!(
-                        "Unable to load form detail. Server returned {}.",
-                        response.status()
-                    )));
-                    is_loading.set(false);
-                }
-                Err(error) => {
-                    detail.set(None);
-                    load_error.set(Some(format!("Unable to load form detail: {error}")));
-                    is_loading.set(false);
-                }
-            }
-        });
-    }
-
-    #[cfg(not(feature = "hydrate"))]
-    {
-        let _ = (form_id, detail, rendered_form, is_loading, load_error);
-    }
-}
-
-#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
-/// Loads the load rendered form version data.
-pub(crate) fn load_rendered_form_version(
-    form_version_id: String,
-    rendered_form: RwSignal<Option<RenderedForm>>,
-) {
-    #[cfg(feature = "hydrate")]
-    {
-        leptos::task::spawn_local(async move {
-            match gloo_net::http::Request::get(&format!(
-                "/api/form-versions/{form_version_id}/render"
-            ))
-            .send()
+#[cfg(feature = "hydrate")]
+pub(super) async fn fetch_forms() -> Result<Vec<FormSummary>, FormsApiError> {
+    match gloo_net::http::Request::get("/api/forms").send().await {
+        Ok(response) if response.status() == 401 => Err(FormsApiError::Unauthorized),
+        Ok(response) if response.ok() => response
+            .json::<Vec<FormSummary>>()
             .await
-            {
-                Ok(response) if response.ok() => {
-                    if let Ok(rendered) = response.json::<RenderedForm>().await {
-                        rendered_form.set(Some(rendered));
-                    }
-                }
-                _ => rendered_form.set(None),
-            }
-        });
-    }
-
-    #[cfg(not(feature = "hydrate"))]
-    {
-        let _ = (form_version_id, rendered_form);
+            .map_err(|error| FormsApiError::message(format!("Unable to parse forms: {error}"))),
+        Ok(response) => Err(FormsApiError::message(format!(
+            "Unable to load forms. Server returned {}.",
+            response.status()
+        ))),
+        Err(error) => Err(FormsApiError::message(format!(
+            "Unable to load forms: {error}"
+        ))),
     }
 }
 
-/// Loads the load form create options data.
-pub(crate) fn load_form_create_options(
-    node_types: RwSignal<Vec<NodeTypeCatalogEntry>>,
-    existing_forms: RwSignal<Vec<FormSummary>>,
-    is_loading: RwSignal<bool>,
-    message: RwSignal<Option<String>>,
-) {
-    #[cfg(feature = "hydrate")]
+#[cfg(feature = "hydrate")]
+pub(super) async fn fetch_form_detail(form_id: &str) -> Result<FormDefinition, FormsApiError> {
+    match gloo_net::http::Request::get(&format!("/api/forms/{form_id}"))
+        .send()
+        .await
     {
-        leptos::task::spawn_local(async move {
-            is_loading.set(true);
-            message.set(None);
-
-            let node_types_response = gloo_net::http::Request::get("/api/node-types").send().await;
-            let forms_response = gloo_net::http::Request::get("/api/forms").send().await;
-
-            match (node_types_response, forms_response) {
-                (Ok(response), _) if response.status() == 401 => {
-                    node_types.set(Vec::new());
-                    existing_forms.set(Vec::new());
-                    is_loading.set(false);
-                    redirect_to_login();
-                }
-                (_, Ok(response)) if response.status() == 401 => {
-                    node_types.set(Vec::new());
-                    existing_forms.set(Vec::new());
-                    is_loading.set(false);
-                    redirect_to_login();
-                }
-                (Ok(node_types_response), Ok(forms_response))
-                    if node_types_response.ok() && forms_response.ok() =>
-                {
-                    let loaded_node_types = node_types_response
-                        .json::<Vec<NodeTypeCatalogEntry>>()
-                        .await;
-                    let loaded_forms = forms_response.json::<Vec<FormSummary>>().await;
-
-                    match (loaded_node_types, loaded_forms) {
-                        (Ok(loaded_node_types), Ok(loaded_forms)) => {
-                            node_types.set(loaded_node_types);
-                            existing_forms.set(loaded_forms);
-                            is_loading.set(false);
-                        }
-                        _ => {
-                            node_types.set(Vec::new());
-                            existing_forms.set(Vec::new());
-                            message.set(Some("Form options could not be read.".into()));
-                            is_loading.set(false);
-                        }
-                    }
-                }
-                (Ok(node_types_response), Ok(forms_response)) => {
-                    node_types.set(Vec::new());
-                    existing_forms.set(Vec::new());
-                    message.set(Some(format!(
-                        "Form options failed with status {} / {}.",
-                        node_types_response.status(),
-                        forms_response.status()
-                    )));
-                    is_loading.set(false);
-                }
-                _ => {
-                    node_types.set(Vec::new());
-                    existing_forms.set(Vec::new());
-                    message.set(Some("Could not reach the form option APIs.".into()));
-                    is_loading.set(false);
-                }
-            }
-        });
-    }
-
-    #[cfg(not(feature = "hydrate"))]
-    {
-        let _ = (node_types, existing_forms, is_loading, message);
+        Ok(response) if response.status() == 401 => Err(FormsApiError::Unauthorized),
+        Ok(response) if response.ok() => response.json::<FormDefinition>().await.map_err(|error| {
+            FormsApiError::message(format!("Unable to parse form detail: {error}"))
+        }),
+        Ok(response) => Err(FormsApiError::message(format!(
+            "Unable to load form detail. Server returned {}.",
+            response.status()
+        ))),
+        Err(error) => Err(FormsApiError::message(format!(
+            "Unable to load form detail: {error}"
+        ))),
     }
 }
 
-#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
-/// Handles the hydrate form builder from rendered behavior.
-pub(crate) fn hydrate_form_builder_from_rendered(
-    rendered_form: Option<&RenderedForm>,
-) -> (
-    Vec<FormBuilderSectionDraft>,
-    Vec<FormBuilderFieldDraft>,
-    usize,
-    usize,
-) {
-    let Some(rendered_form) = rendered_form else {
-        return (vec![blank_form_builder_section(1)], Vec::new(), 2, 1);
-    };
-
-    let mut sections = rendered_form.sections.clone();
-    sections.sort_by(|left, right| {
-        left.position
-            .cmp(&right.position)
-            .then(left.title.cmp(&right.title))
-    });
-
-    if sections.is_empty() {
-        return (vec![blank_form_builder_section(1)], Vec::new(), 2, 1);
-    }
-
-    let mut section_id_by_remote = HashMap::new();
-    let mut builder_sections = Vec::new();
-    let mut builder_fields = Vec::new();
-    let mut next_section_id = 1usize;
-    let mut next_field_id = 1usize;
-
-    for section in &sections {
-        let local_section_id = next_section_id;
-        next_section_id += 1;
-        section_id_by_remote.insert(section.id.clone(), local_section_id);
-
-        builder_sections.push(FormBuilderSectionDraft {
-            id: local_section_id,
-            remote_id: Some(section.id.clone()),
-            title: nonempty_text(Some(section.title.as_str()), "Main"),
-            description: section.description.clone(),
-            default_column_width: 6,
-            position: section.position,
-        });
-    }
-
-    for section in &sections {
-        let Some(section_id) = section_id_by_remote.get(&section.id).copied() else {
-            continue;
-        };
-        let mut fields = section.fields.clone();
-        fields.sort_by(|left, right| {
-            left.position
-                .cmp(&right.position)
-                .then(left.label.cmp(&right.label))
-        });
-
-        for field in fields {
-            let local_field_id = next_field_id;
-            next_field_id += 1;
-            builder_fields.push(FormBuilderFieldDraft {
-                id: local_field_id,
-                remote_id: Some(field.id),
-                section_id,
-                label: field.label,
-                key: field.key,
-                field_type: field.field_type,
-                required: field.required,
-                grid_row: field.grid_row.max(1),
-                grid_column: field.grid_column.clamp(1, FORM_BUILDER_COLUMN_COUNT),
-                grid_width: field.grid_width.clamp(1, FORM_BUILDER_COLUMN_COUNT),
-                grid_height: field.grid_height.clamp(1, 6),
-                key_was_edited: true,
-            });
-        }
-    }
-
-    (
-        builder_sections,
-        builder_fields,
-        next_section_id,
-        next_field_id,
-    )
-}
-
-#[allow(clippy::too_many_arguments)]
-/// Loads the load form edit options data.
-pub(crate) fn load_form_edit_options(
-    form_id: String,
-    node_types: RwSignal<Vec<NodeTypeCatalogEntry>>,
-    existing_forms: RwSignal<Vec<FormSummary>>,
-    detail: RwSignal<Option<FormDefinition>>,
-    rendered_form: RwSignal<Option<RenderedForm>>,
-    edit_version_id: RwSignal<Option<String>>,
-    edit_version_status: RwSignal<Option<String>>,
-    name: RwSignal<String>,
-    workflow_node_type_id: RwSignal<String>,
-    builder_sections: RwSignal<Vec<FormBuilderSectionDraft>>,
-    builder_fields: RwSignal<Vec<FormBuilderFieldDraft>>,
-    active_builder_section: RwSignal<String>,
-    next_builder_section_id: RwSignal<usize>,
-    next_builder_field_id: RwSignal<usize>,
-    is_loading: RwSignal<bool>,
-    message: RwSignal<Option<String>>,
-) {
-    #[cfg(feature = "hydrate")]
+#[cfg(feature = "hydrate")]
+pub(super) async fn fetch_rendered_form_version(
+    form_version_id: &str,
+) -> Result<RenderedForm, FormsApiError> {
+    match gloo_net::http::Request::get(&format!("/api/form-versions/{form_version_id}/render"))
+        .send()
+        .await
     {
-        leptos::task::spawn_local(async move {
-            is_loading.set(true);
-            message.set(None);
-            detail.set(None);
-            rendered_form.set(None);
-            edit_version_id.set(None);
-            edit_version_status.set(None);
-
-            let node_types_response = gloo_net::http::Request::get("/api/node-types").send().await;
-            let forms_response = gloo_net::http::Request::get("/api/forms").send().await;
-            let detail_response =
-                gloo_net::http::Request::get(&format!("/api/admin/forms/{form_id}"))
-                    .send()
-                    .await;
-
-            match (node_types_response, forms_response, detail_response) {
-                (Ok(response), _, _) if response.status() == 401 => {
-                    is_loading.set(false);
-                    redirect_to_login();
-                }
-                (_, Ok(response), _) if response.status() == 401 => {
-                    is_loading.set(false);
-                    redirect_to_login();
-                }
-                (_, _, Ok(response)) if response.status() == 401 => {
-                    is_loading.set(false);
-                    redirect_to_login();
-                }
-                (Ok(node_types_response), Ok(forms_response), Ok(detail_response))
-                    if node_types_response.ok() && forms_response.ok() && detail_response.ok() =>
-                {
-                    let loaded_node_types = node_types_response
-                        .json::<Vec<NodeTypeCatalogEntry>>()
-                        .await;
-                    let loaded_forms = forms_response.json::<Vec<FormSummary>>().await;
-                    let loaded_detail = detail_response.json::<FormDefinition>().await;
-
-                    match (loaded_node_types, loaded_forms, loaded_detail) {
-                        (Ok(loaded_node_types), Ok(loaded_forms), Ok(form)) => {
-                            let selected_version = editable_form_definition_version(&form).cloned();
-                            let mut loaded_rendered_form = None;
-
-                            if let Some(version) = selected_version.as_ref() {
-                                match gloo_net::http::Request::get(&format!(
-                                    "/api/form-versions/{}/render",
-                                    version.id
-                                ))
-                                .send()
-                                .await
-                                {
-                                    Ok(response) if response.ok() => {
-                                        loaded_rendered_form =
-                                            response.json::<RenderedForm>().await.ok();
-                                    }
-                                    Ok(response) if response.status() == 401 => {
-                                        is_loading.set(false);
-                                        redirect_to_login();
-                                        return;
-                                    }
-                                    _ => {
-                                        loaded_rendered_form = None;
-                                    }
-                                }
-                            }
-
-                            let (sections, fields, next_section, next_field) =
-                                hydrate_form_builder_from_rendered(loaded_rendered_form.as_ref());
-                            let active_section = sections
-                                .first()
-                                .map(|section| section.id.to_string())
-                                .unwrap_or_else(|| "1".to_string());
-
-                            name.set(form.name.clone());
-                            workflow_node_type_id
-                                .set(form.scope_node_type_id.clone().unwrap_or_default());
-                            edit_version_id
-                                .set(selected_version.as_ref().map(|version| version.id.clone()));
-                            edit_version_status.set(
-                                selected_version
-                                    .as_ref()
-                                    .map(|version| version.status.clone()),
-                            );
-                            active_builder_section.set(active_section);
-                            next_builder_section_id.set(next_section);
-                            next_builder_field_id.set(next_field);
-                            builder_sections.set(sections);
-                            builder_fields.set(fields);
-                            rendered_form.set(loaded_rendered_form);
-                            detail.set(Some(form));
-                            node_types.set(loaded_node_types);
-                            existing_forms.set(loaded_forms);
-                            is_loading.set(false);
-                        }
-                        _ => {
-                            is_loading.set(false);
-                            message.set(Some("Form edit options could not be read.".into()));
-                        }
-                    }
-                }
-                (Ok(node_types_response), Ok(forms_response), Ok(detail_response)) => {
-                    is_loading.set(false);
-                    message.set(Some(format!(
-                        "Form edit options failed with status {} / {} / {}.",
-                        node_types_response.status(),
-                        forms_response.status(),
-                        detail_response.status()
-                    )));
-                }
-                _ => {
-                    is_loading.set(false);
-                    message.set(Some("Could not reach the form edit APIs.".into()));
-                }
-            }
-        });
-    }
-
-    #[cfg(not(feature = "hydrate"))]
-    {
-        let _ = (
-            form_id,
-            node_types,
-            existing_forms,
-            detail,
-            rendered_form,
-            edit_version_id,
-            edit_version_status,
-            name,
-            workflow_node_type_id,
-            builder_sections,
-            builder_fields,
-            active_builder_section,
-            next_builder_section_id,
-            next_builder_field_id,
-            is_loading,
-            message,
-        );
+        Ok(response) if response.status() == 401 => Err(FormsApiError::Unauthorized),
+        Ok(response) if response.ok() => response.json::<RenderedForm>().await.map_err(|error| {
+            FormsApiError::message(format!("Unable to parse rendered form: {error}"))
+        }),
+        Ok(response) => Err(FormsApiError::message(format!(
+            "Unable to load rendered form. Server returned {}.",
+            response.status()
+        ))),
+        Err(error) => Err(FormsApiError::message(format!(
+            "Unable to load rendered form: {error}"
+        ))),
     }
 }

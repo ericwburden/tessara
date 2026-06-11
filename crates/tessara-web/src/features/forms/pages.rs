@@ -2,9 +2,11 @@
 //!
 //! Keep Leptos page components that correspond directly to routes here; reusable widgets, API calls, and DTOs should live in sibling modules.
 
-use crate::features::forms::api::{load_form_create_options, load_form_edit_options, load_forms};
 use crate::features::forms::builder::{
     FormBuilderCanvas, FormBuilderEditorState, new_form_builder_editor_state,
+};
+use crate::features::forms::loaders::{
+    load_form_create_options, load_form_edit_options, load_forms,
 };
 use crate::features::forms::{FormDefinition, FormSummary, FormsList, RenderedForm};
 use crate::features::forms::{

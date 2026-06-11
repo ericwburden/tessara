@@ -2,7 +2,7 @@
 //!
 //! Keep read-focused panels and detail-page presentation here; mutation workflows should live in editor or API modules.
 
-use crate::features::forms::api::load_form_detail;
+use crate::features::forms::loaders::load_form_detail;
 use crate::features::forms::{
     FormDatasetSourceLink, FormDefinition, FormVersionsTable, FormWorkflowLink, RenderedForm,
 };

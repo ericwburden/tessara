@@ -5,6 +5,7 @@
 mod components;
 mod display;
 mod drag;
+mod hydrate;
 mod layout;
 mod state;
 mod types;
@@ -18,6 +19,8 @@ pub(crate) use drag::{
     form_builder_grid_cell_from_pointer, schedule_form_builder_drag_preview,
     set_form_builder_drag_preview,
 };
+#[cfg(feature = "hydrate")]
+pub(crate) use hydrate::hydrate_form_builder_from_rendered;
 pub(crate) use layout::{
     FormBuilderGridCell, FormBuilderSectionLayout, blank_form_builder_field_at,
     form_builder_field_has_collision, form_builder_layout_candidate, form_builder_occupancy_map,
