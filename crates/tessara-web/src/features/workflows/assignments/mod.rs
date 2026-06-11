@@ -3,6 +3,7 @@
 //! Re-export assignment API helpers, display formatters, and DTOs from here while keeping the broader workflow feature independent of assignment internals.
 
 mod api;
+mod components;
 mod display;
 pub(crate) mod types;
 
@@ -11,6 +12,7 @@ pub(crate) use api::{
     load_pending_work, load_workflow_assignment_assignees, load_workflow_assignment_candidates,
     load_workflow_assignments,
 };
+pub(in crate::features::workflows) use components::WorkflowAssignmentsList;
 pub(crate) use display::{
     workflow_assigned_user_links, workflow_assignee_label, workflow_assignment_assignee_label,
     workflow_assignment_candidate_key, workflow_assignment_revision_label,
