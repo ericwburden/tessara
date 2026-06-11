@@ -1,9 +1,8 @@
 //! Workflow editor option and slug helpers.
 
 use crate::features::forms::FormSummary;
-use crate::features::organization::{
-    NodeTypeCatalogEntry, form_version_label, form_version_sort_label,
-};
+use crate::features::forms::{form_version_label, form_version_sort_label};
+use crate::features::organization::NodeTypeCatalogEntry;
 use crate::features::workflows::types::WorkflowSummary;
 
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]

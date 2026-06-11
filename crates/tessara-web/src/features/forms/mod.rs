@@ -32,4 +32,9 @@ pub(crate) use types::{
     FormDatasetSourceLink, FormDefinition, FormSummary, FormVersionSummary, FormWorkflowLink,
     RenderedField, RenderedForm,
 };
-pub(crate) use versions::FormVersionsTable;
+#[cfg(feature = "hydrate")]
+pub(crate) use versions::editable_form_definition_version;
+pub(crate) use versions::{
+    FormVersionsTable, active_form_definition_version, active_form_version, form_version_label,
+    form_version_sort_label,
+};

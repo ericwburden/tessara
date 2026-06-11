@@ -3,10 +3,10 @@
 //! Keep collection tables, list filters, and list-page presentation here; detail/editor flows should stay in their dedicated modules.
 
 use crate::features::forms::{
-    FormNodeFilterOption, FormSummary, indented_node_label, visible_form_node_filter_options,
+    FormNodeFilterOption, FormSummary, active_form_version, form_version_label,
+    indented_node_label, visible_form_node_filter_options,
 };
 use crate::features::forms::{form_attached_nodes, form_field_count_label, form_status_label};
-use crate::features::organization::{active_form_version, form_version_label};
 use crate::features::shared::{
     FilterHeader as SharedFilterHeader, FormAttachmentLink, FormsAttachedNodesSheetData,
     node_count_label, status_badge_class,

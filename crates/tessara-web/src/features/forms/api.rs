@@ -7,11 +7,9 @@ use crate::features::forms::builder::{
     blank_form_builder_section,
 };
 use crate::features::forms::{FormDefinition, FormSummary, RenderedForm};
-use crate::features::organization::NodeTypeCatalogEntry;
 #[cfg(feature = "hydrate")]
-use crate::features::organization::{
-    active_form_definition_version, editable_form_definition_version,
-};
+use crate::features::forms::{active_form_definition_version, editable_form_definition_version};
+use crate::features::organization::NodeTypeCatalogEntry;
 #[cfg(feature = "hydrate")]
 use crate::http::redirect_to_login;
 use crate::utils::text::nonempty_text;

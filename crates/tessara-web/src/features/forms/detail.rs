@@ -7,10 +7,10 @@ use crate::features::forms::{
     FormDatasetSourceLink, FormDefinition, FormVersionsTable, FormWorkflowLink, RenderedForm,
 };
 use crate::features::forms::{
-    form_attached_nodes, form_definition_scope_label, form_field_count_label, form_status_label,
-    rendered_field_layout_label, rendered_field_type_label,
+    active_form_definition_version, form_attached_nodes, form_definition_scope_label,
+    form_field_count_label, form_status_label, form_version_label, rendered_field_layout_label,
+    rendered_field_type_label,
 };
-use crate::features::organization::{active_form_definition_version, form_version_label};
 use crate::features::shared::{FormAttachmentLink, status_badge_class};
 use crate::types::route_params::{FormRouteParams, require_route_params};
 use crate::ui::{
