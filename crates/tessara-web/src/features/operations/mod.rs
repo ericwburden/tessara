@@ -3,6 +3,9 @@
 //! Re-export only the pages, types, and helpers other modules need; keep Operations-specific implementation details in child modules.
 
 mod api;
+mod display;
+mod loaders;
 mod pages;
+mod tables;
 mod types;
 pub(crate) use pages::OperationsPage;
