@@ -6,13 +6,10 @@ use super::display::{
 };
 use super::types::*;
 use crate::features::shared::unique_filter_options;
-use crate::ui::{DataTable, EmptyState, FilterHeader, StatusBadge, Timestamp};
-use crate::utils::{
-    pagination::{
-        pagination_current_page, pagination_page_count, pagination_page_end, pagination_page_start,
-    },
-    text::text_matches,
+use crate::ui::{
+    DataTable, EmptyState, FilterHeader, StatusBadge, TablePaginationFooter, Timestamp,
 };
+use crate::utils::{pagination::pagination_page_start, text::text_matches};
 use icons::Search;
 use leptos::prelude::*;
 
@@ -106,28 +103,7 @@ pub(crate) fn WorkflowAssignmentsTable(
             .cloned()
             .collect::<Vec<_>>()
     });
-    let page_count =
-        move || pagination_page_count(filtered_assignments.get().len(), page_size.get());
-    let current_page = move || {
-        pagination_current_page(
-            filtered_assignments.get().len(),
-            page_size.get(),
-            page_index.get(),
-        )
-    };
-    let page_summary = move || {
-        let total_count = filtered_assignments.get().len();
-        if total_count == 0 {
-            "No workflow assignments to display".to_string()
-        } else {
-            format!(
-                "Showing {}-{} of {} workflow assignments",
-                pagination_page_start(total_count, page_size.get(), page_index.get()) + 1,
-                pagination_page_end(total_count, page_size.get(), page_index.get()),
-                total_count
-            )
-        }
-    };
+    let total_count = Memo::new(move |_| filtered_assignments.get().len());
 
     view! {
         <section class="route-panel__section operations-table-section" aria-label="Workflow assignments">
@@ -196,7 +172,7 @@ pub(crate) fn WorkflowAssignmentsTable(
                             <tbody>
                                 {move || filtered_assignments.get()
                                     .into_iter()
-                                    .skip(pagination_page_start(filtered_assignments.get().len(), page_size.get(), page_index.get()))
+                                    .skip(pagination_page_start(total_count.get(), page_size.get(), page_index.get()))
                                     .take(page_size.get())
                                     .map(|instance| {
                                         view! { <WorkflowAssignmentRow instance/> }
@@ -204,49 +180,13 @@ pub(crate) fn WorkflowAssignmentsTable(
                                     .collect_view()}
                             </tbody>
                         </DataTable>
-                        <div class="directory-table-pagination" aria-label="Workflow assignments table pagination">
-                            <p>{move || page_summary()}</p>
-                            <div class="directory-table-pagination__actions">
-                                <label class="directory-table-pagination__page-size searchable-data-table__filter searchable-data-table__control">
-                                    <span>"Rows"</span>
-                                    <select
-                                        prop:value=move || page_size.get().to_string()
-                                        on:change=move |event| {
-                                            if let Ok(size) = event_target_value(&event).parse::<usize>() {
-                                                page_size.set(size);
-                                                page_index.set(0);
-                                            }
-                                        }
-                                    >
-                                        <option value="10">"10"</option>
-                                        <option value="25">"25"</option>
-                                        <option value="50">"50"</option>
-                                    </select>
-                                </label>
-                                <button
-                                    class="button button--compact button--secondary"
-                                    type="button"
-                                    disabled=move || current_page() == 0
-                                    on:click=move |_| {
-                                        page_index.update(|page| *page = page.saturating_sub(1));
-                                    }
-                                >
-                                    "Previous"
-                                </button>
-                                <span>{move || format!("Page {} of {}", current_page() + 1, page_count())}</span>
-                                <button
-                                    class="button button--compact button--secondary"
-                                    type="button"
-                                    disabled=move || { current_page() + 1 >= page_count() }
-                                    on:click=move |_| {
-                                        let last_page = page_count().saturating_sub(1);
-                                        page_index.update(|page| *page = (*page + 1).min(last_page));
-                                    }
-                                >
-                                    "Next"
-                                </button>
-                            </div>
-                        </div>
+                        <TablePaginationFooter
+                            aria_label="Workflow assignments table pagination"
+                            item_label="workflow assignments"
+                            total_count=total_count
+                            page_size=page_size
+                            page_index=page_index
+                        />
                         <div class="operations-mobile-cards">
                             {move || {
                                 let visible_assignments = filtered_assignments.get();
@@ -255,7 +195,7 @@ pub(crate) fn WorkflowAssignmentsTable(
                                 } else {
                                     visible_assignments
                                         .into_iter()
-                                        .skip(pagination_page_start(filtered_assignments.get().len(), page_size.get(), page_index.get()))
+                                        .skip(pagination_page_start(total_count.get(), page_size.get(), page_index.get()))
                                         .take(page_size.get())
                                         .map(|instance| view! { <WorkflowAssignmentMobileCard instance/> })
                                         .collect_view()
@@ -302,27 +242,7 @@ pub(crate) fn DatasetReadinessTable(datasets: Vec<DatasetStatus>) -> impl IntoVi
             .cloned()
             .collect::<Vec<_>>()
     });
-    let page_count = move || pagination_page_count(filtered_datasets.get().len(), page_size.get());
-    let current_page = move || {
-        pagination_current_page(
-            filtered_datasets.get().len(),
-            page_size.get(),
-            page_index.get(),
-        )
-    };
-    let page_summary = move || {
-        let total_count = filtered_datasets.get().len();
-        if total_count == 0 {
-            "No datasets to display".to_string()
-        } else {
-            format!(
-                "Showing {}-{} of {} datasets",
-                pagination_page_start(total_count, page_size.get(), page_index.get()) + 1,
-                pagination_page_end(total_count, page_size.get(), page_index.get()),
-                total_count
-            )
-        }
-    };
+    let total_count = Memo::new(move |_| filtered_datasets.get().len());
 
     view! {
         <section class="route-panel__section operations-table-section" aria-label="Dataset readiness">
@@ -374,7 +294,7 @@ pub(crate) fn DatasetReadinessTable(datasets: Vec<DatasetStatus>) -> impl IntoVi
                             <tbody>
                                 {move || filtered_datasets.get()
                                     .into_iter()
-                                    .skip(pagination_page_start(filtered_datasets.get().len(), page_size.get(), page_index.get()))
+                                    .skip(pagination_page_start(total_count.get(), page_size.get(), page_index.get()))
                                     .take(page_size.get())
                                     .map(|dataset| {
                                         view! { <DatasetReadinessRow dataset/> }
@@ -382,49 +302,13 @@ pub(crate) fn DatasetReadinessTable(datasets: Vec<DatasetStatus>) -> impl IntoVi
                                     .collect_view()}
                             </tbody>
                         </DataTable>
-                        <div class="directory-table-pagination" aria-label="Dataset readiness table pagination">
-                            <p>{move || page_summary()}</p>
-                            <div class="directory-table-pagination__actions">
-                                <label class="directory-table-pagination__page-size searchable-data-table__filter searchable-data-table__control">
-                                    <span>"Rows"</span>
-                                    <select
-                                        prop:value=move || page_size.get().to_string()
-                                        on:change=move |event| {
-                                            if let Ok(size) = event_target_value(&event).parse::<usize>() {
-                                                page_size.set(size);
-                                                page_index.set(0);
-                                            }
-                                        }
-                                    >
-                                        <option value="10">"10"</option>
-                                        <option value="25">"25"</option>
-                                        <option value="50">"50"</option>
-                                    </select>
-                                </label>
-                                <button
-                                    class="button button--compact button--secondary"
-                                    type="button"
-                                    disabled=move || current_page() == 0
-                                    on:click=move |_| {
-                                        page_index.update(|page| *page = page.saturating_sub(1));
-                                    }
-                                >
-                                    "Previous"
-                                </button>
-                                <span>{move || format!("Page {} of {}", current_page() + 1, page_count())}</span>
-                                <button
-                                    class="button button--compact button--secondary"
-                                    type="button"
-                                    disabled=move || { current_page() + 1 >= page_count() }
-                                    on:click=move |_| {
-                                        let last_page = page_count().saturating_sub(1);
-                                        page_index.update(|page| *page = (*page + 1).min(last_page));
-                                    }
-                                >
-                                    "Next"
-                                </button>
-                            </div>
-                        </div>
+                        <TablePaginationFooter
+                            aria_label="Dataset readiness table pagination"
+                            item_label="datasets"
+                            total_count=total_count
+                            page_size=page_size
+                            page_index=page_index
+                        />
                         <div class="operations-mobile-cards">
                             {move || {
                                 let visible_datasets = filtered_datasets.get();
@@ -433,7 +317,7 @@ pub(crate) fn DatasetReadinessTable(datasets: Vec<DatasetStatus>) -> impl IntoVi
                                 } else {
                                     visible_datasets
                                         .into_iter()
-                                        .skip(pagination_page_start(filtered_datasets.get().len(), page_size.get(), page_index.get()))
+                                        .skip(pagination_page_start(total_count.get(), page_size.get(), page_index.get()))
                                         .take(page_size.get())
                                         .map(|dataset| view! { <DatasetReadinessMobileCard dataset/> })
                                         .collect_view()
