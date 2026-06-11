@@ -1,3 +1,5 @@
+//! Owns the features::auth::types module behavior.
+
 use serde::Deserialize;
 
 #[derive(Deserialize)]
@@ -21,6 +23,7 @@ pub struct ShellAccountSummary {
 }
 
 impl From<ShellAccountContext> for ShellAccountSummary {
+    /// Handles the from behavior.
     fn from(context: ShellAccountContext) -> Self {
         Self {
             email: context.email,

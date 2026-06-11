@@ -1,14 +1,15 @@
+//! Owns the features module behavior.
+
 pub mod administration;
 pub mod auth;
 pub mod components;
-pub mod core;
 pub mod dashboards;
 pub mod datasets;
-pub mod form_builder;
 pub mod forms;
+pub mod home;
+pub mod login;
 pub mod operations;
 pub mod organization;
 pub mod responses;
 pub mod shared;
-pub mod shared_data;
 pub mod workflows;

@@ -1,0 +1,23 @@
+//! Owns the features::workflows::assignments module behavior.
+
+mod api;
+mod display;
+pub(crate) mod types;
+
+pub(crate) use crate::features::workflows::pages::assignments::WorkflowAssignmentsPage;
+pub(crate) use api::{
+    load_pending_work, load_workflow_assignment_assignees, load_workflow_assignment_candidates,
+    load_workflow_assignments,
+};
+pub(crate) use display::{
+    workflow_assigned_user_links, workflow_assignee_label, workflow_assignment_assignee_label,
+    workflow_assignment_candidate_key, workflow_assignment_revision_label,
+    workflow_assignment_state, workflow_assignment_state_label, workflow_assignment_status_key,
+    workflow_assignment_status_label, workflow_available_node_links,
+};
+#[cfg(feature = "hydrate")]
+pub(crate) use types::{BulkWorkflowAssignmentPayload, UpdateWorkflowAssignmentPayload};
+pub(crate) use types::{
+    PendingWorkflowWork, WorkflowAssigneeOption, WorkflowAssignmentCandidate,
+    WorkflowAssignmentSummary,
+};

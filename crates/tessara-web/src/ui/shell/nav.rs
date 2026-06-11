@@ -1,3 +1,5 @@
+//! Owns the ui::shell::nav module behavior.
+
 use crate::features::auth;
 use crate::state::navigation;
 use crate::state::session::{shell_session_account, submit_logout};
@@ -9,6 +11,7 @@ use icons::{
 use leptos::prelude::*;
 
 #[component]
+/// Renders the sidebar content view.
 pub(crate) fn SidebarContent(active_route: &'static str) -> impl IntoView {
     let account = shell_session_account();
 
@@ -30,6 +33,7 @@ pub(crate) fn SidebarContent(active_route: &'static str) -> impl IntoView {
 }
 
 #[component]
+/// Renders the account card view.
 fn AccountCard(account: RwSignal<Option<auth::ShellAccountSummary>>) -> impl IntoView {
     view! {
         <section class="account-card" aria-label="Account context">
@@ -75,6 +79,7 @@ fn AccountCard(account: RwSignal<Option<auth::ShellAccountSummary>>) -> impl Int
     }
 }
 
+/// Handles the account initials behavior.
 fn account_initials(display_name: &str, email: &str) -> String {
     let initials = display_name
         .split_whitespace()
@@ -91,6 +96,7 @@ fn account_initials(display_name: &str, email: &str) -> String {
 }
 
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+/// Handles the nav section for behavior.
 pub(crate) fn nav_section_for(
     section: &'static str,
     active_route: &'static str,
@@ -118,6 +124,7 @@ pub(crate) fn nav_section_for(
     .into_any()
 }
 
+/// Handles the nav item link behavior.
 fn nav_item_link(item: &'static navigation::NavItem, active_route: &'static str) -> impl IntoView {
     let class = if item.key == active_route {
         "sidebar-link is-active"
@@ -132,6 +139,7 @@ fn nav_item_link(item: &'static navigation::NavItem, active_route: &'static str)
     }
 }
 
+/// Handles the nav icon for behavior.
 fn nav_icon_for(route_key: &'static str) -> impl IntoView {
     match route_key {
         "home" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><House class="sidebar-link__icon"/></span> }.into_any(),

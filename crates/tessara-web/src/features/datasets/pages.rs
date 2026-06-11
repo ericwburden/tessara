@@ -1,3 +1,5 @@
+//! Owns the features::datasets::pages module behavior.
+
 use std::collections::{BTreeMap, BTreeSet};
 
 use leptos::portal::Portal;
@@ -13,11 +15,11 @@ use crate::utils::{
 };
 use icons::{Search, X};
 
-#[cfg(feature = "hydrate")]
-use super::api;
+use super::loaders::*;
 use super::types::*;
 
 #[component]
+/// Renders the datasets page view.
 pub fn DatasetsPage() -> impl IntoView {
     let datasets = RwSignal::new(Vec::<DatasetSummary>::new());
     let account = RwSignal::new(None::<SessionAccount>);
@@ -91,6 +93,7 @@ pub fn DatasetsPage() -> impl IntoView {
 }
 
 #[component]
+/// Renders the dataset directory table view.
 fn DatasetDirectoryTable(
     datasets: Vec<DatasetSummary>,
     search: RwSignal<String>,
@@ -155,6 +158,7 @@ fn DatasetDirectoryTable(
 }
 
 #[component]
+/// Renders the dataset summary row view.
 fn DatasetSummaryRow(dataset: DatasetSummary) -> impl IntoView {
     let href = format!("/datasets/{}", dataset.id);
     view! {
@@ -173,6 +177,7 @@ fn DatasetSummaryRow(dataset: DatasetSummary) -> impl IntoView {
 }
 
 #[component]
+/// Renders the dataset mobile cards view.
 fn DatasetMobileCards(
     datasets: Vec<DatasetSummary>,
     page_index: RwSignal<usize>,
@@ -210,6 +215,7 @@ fn DatasetMobileCards(
 }
 
 #[component]
+/// Renders the datasets detail page view.
 pub fn DatasetsDetailPage() -> impl IntoView {
     let params = require_route_params::<DatasetRouteParams>();
     let dataset_id = params.dataset_id;
@@ -217,6 +223,7 @@ pub fn DatasetsDetailPage() -> impl IntoView {
 }
 
 #[component]
+/// Renders the datasets edit page view.
 pub fn DatasetsEditPage() -> impl IntoView {
     let params = require_route_params::<DatasetRouteParams>();
     let dataset_id = params.dataset_id;
@@ -224,11 +231,13 @@ pub fn DatasetsEditPage() -> impl IntoView {
 }
 
 #[component]
+/// Renders the datasets new page view.
 pub fn DatasetsNewPage() -> impl IntoView {
     view! { <DatasetEditorSurface dataset_id=None/> }
 }
 
 #[component]
+/// Renders the datasets preview page view.
 pub fn DatasetsPreviewPage() -> impl IntoView {
     let params = require_route_params::<DatasetRouteParams>();
     let dataset_id = params.dataset_id;
@@ -272,6 +281,7 @@ pub fn DatasetsPreviewPage() -> impl IntoView {
 }
 
 #[component]
+/// Renders the dataset detail surface view.
 fn DatasetDetailSurface(dataset_id: String, edit: bool) -> impl IntoView {
     let dataset = RwSignal::new(None::<DatasetDefinition>);
     let table = RwSignal::new(None::<DatasetTable>);
@@ -348,6 +358,7 @@ fn DatasetDetailSurface(dataset_id: String, edit: bool) -> impl IntoView {
 }
 
 #[component]
+/// Renders the metric card view.
 fn MetricCard(label: &'static str, value: String) -> impl IntoView {
     view! {
         <div class="metric-card">
@@ -358,6 +369,7 @@ fn MetricCard(label: &'static str, value: String) -> impl IntoView {
 }
 
 #[component]
+/// Renders the dataset sources table view.
 fn DatasetSourcesTable(sources: Vec<DatasetSourceDefinition>) -> impl IntoView {
     view! {
         <section class="route-panel__section">
@@ -380,6 +392,7 @@ fn DatasetSourcesTable(sources: Vec<DatasetSourceDefinition>) -> impl IntoView {
 }
 
 #[component]
+/// Renders the dataset fields table view.
 fn DatasetFieldsTable(fields: Vec<DatasetFieldDefinition>) -> impl IntoView {
     view! {
         <section class="route-panel__section">
@@ -402,6 +415,7 @@ fn DatasetFieldsTable(fields: Vec<DatasetFieldDefinition>) -> impl IntoView {
 }
 
 #[component]
+/// Renders the dataset sql panel view.
 fn DatasetSqlPanel(sql: Option<String>) -> impl IntoView {
     view! {
         <section class="route-panel__section">
@@ -416,6 +430,7 @@ fn DatasetSqlPanel(sql: Option<String>) -> impl IntoView {
 }
 
 #[component]
+/// Renders the dataset preview table view.
 fn DatasetPreviewTable(
     dataset: DatasetDefinition,
     table: Option<DatasetTable>,
@@ -463,6 +478,7 @@ fn DatasetPreviewTable(
 }
 
 #[component]
+/// Renders the dataset editor surface view.
 fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView {
     let is_edit = dataset_id.is_some();
     let title = if is_edit {
@@ -478,10 +494,10 @@ fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView {
     let fields = RwSignal::new(Vec::<DatasetFieldDraft>::new());
     let join_left_key = RwSignal::new(String::new());
     let join_right_key = RwSignal::new(String::new());
-    let forms = RwSignal::new(Vec::<FormSummary>::new());
+    let forms = RwSignal::new(Vec::<DatasetFormOption>::new());
     let datasets = RwSignal::new(Vec::<DatasetSummary>::new());
     let nodes = RwSignal::new(Vec::<NodeResponse>::new());
-    let rendered_forms = RwSignal::new(BTreeMap::<String, RenderedForm>::new());
+    let rendered_forms = RwSignal::new(BTreeMap::<String, DatasetRenderedForm>::new());
     let load_error = RwSignal::new(None::<String>);
     let save_error = RwSignal::new(None::<String>);
     let save_message = RwSignal::new(None::<String>);
@@ -668,11 +684,12 @@ fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView {
 }
 
 #[component]
+/// Renders the dataset sources editor view.
 fn DatasetSourcesEditor(
     sources: RwSignal<Vec<DatasetSourceDraft>>,
-    forms: RwSignal<Vec<FormSummary>>,
+    forms: RwSignal<Vec<DatasetFormOption>>,
     datasets: RwSignal<Vec<DatasetSummary>>,
-    rendered_forms: RwSignal<BTreeMap<String, RenderedForm>>,
+    rendered_forms: RwSignal<BTreeMap<String, DatasetRenderedForm>>,
     composition_mode: RwSignal<String>,
     fields: RwSignal<Vec<DatasetFieldDraft>>,
     join_left_key: RwSignal<String>,
@@ -711,18 +728,19 @@ fn DatasetSourcesEditor(
         let form_options = forms.get();
         for (index, source) in sources.get().into_iter().enumerate() {
             if source.input_kind == "form"
-                && let Some(version_id) = resolved_form_version_id(&source, &form_options) {
-                    load_rendered_form(version_id.clone(), rendered_forms);
-                    if rendered_forms.get().contains_key(&version_id) {
-                        let seed_key = source_seed_key(index, &version_id);
-                        if !auto_seeded_sources.get().contains(&seed_key) {
-                            add_fields_from_source(index, sources, forms, rendered_forms, fields);
-                            auto_seeded_sources.update(|keys| {
-                                keys.insert(seed_key);
-                            });
-                        }
+                && let Some(version_id) = resolved_form_version_id(&source, &form_options)
+            {
+                load_rendered_form(version_id.clone(), rendered_forms);
+                if rendered_forms.get().contains_key(&version_id) {
+                    let seed_key = source_seed_key(index, &version_id);
+                    if !auto_seeded_sources.get().contains(&seed_key) {
+                        add_fields_from_source(index, sources, forms, rendered_forms, fields);
+                        auto_seeded_sources.update(|keys| {
+                            keys.insert(seed_key);
+                        });
                     }
                 }
+            }
         }
     });
 
@@ -767,6 +785,7 @@ fn DatasetSourcesEditor(
 
 #[allow(clippy::too_many_arguments)]
 #[component]
+/// Renders the dataset sql preview panel view.
 fn DatasetSqlPreviewPanel(
     dataset_id: Option<String>,
     name: RwSignal<String>,
@@ -820,6 +839,7 @@ fn DatasetSqlPreviewPanel(
 }
 
 #[component]
+/// Renders the expression preview view.
 fn ExpressionPreview(
     sources: RwSignal<Vec<DatasetSourceDraft>>,
     composition_mode: RwSignal<String>,
@@ -833,6 +853,7 @@ fn ExpressionPreview(
 }
 
 #[component]
+/// Renders the dataset expression chain view.
 fn DatasetExpressionChain(
     sources: RwSignal<Vec<DatasetSourceDraft>>,
     fields: RwSignal<Vec<DatasetFieldDraft>>,
@@ -874,6 +895,7 @@ fn DatasetExpressionChain(
     }
 }
 
+/// Handles the expression tree view behavior.
 fn expression_tree_view(
     items: Vec<DatasetSourceDraft>,
     sources: RwSignal<Vec<DatasetSourceDraft>>,
@@ -901,6 +923,7 @@ fn expression_tree_view(
 }
 
 #[allow(clippy::too_many_arguments)]
+/// Handles the expression tree range behavior.
 fn expression_tree_range(
     items: &[DatasetSourceDraft],
     start: usize,
@@ -974,6 +997,7 @@ fn expression_tree_range(
     .into_any()
 }
 
+/// Handles the expression source panel behavior.
 fn expression_source_panel(
     index: usize,
     source_label: String,
@@ -1048,13 +1072,14 @@ fn expression_source_panel(
 
 #[allow(clippy::too_many_arguments)]
 #[component]
+/// Renders the dataset designer options sheet view.
 fn DatasetDesignerOptionsSheet(
     selection: RwSignal<DatasetDesignerSelection>,
     is_open: RwSignal<bool>,
     sources: RwSignal<Vec<DatasetSourceDraft>>,
-    forms: RwSignal<Vec<FormSummary>>,
+    forms: RwSignal<Vec<DatasetFormOption>>,
     datasets: RwSignal<Vec<DatasetSummary>>,
-    rendered_forms: RwSignal<BTreeMap<String, RenderedForm>>,
+    rendered_forms: RwSignal<BTreeMap<String, DatasetRenderedForm>>,
     composition_mode: RwSignal<String>,
     fields: RwSignal<Vec<DatasetFieldDraft>>,
     join_left_key: RwSignal<String>,
@@ -1111,10 +1136,11 @@ fn DatasetDesignerOptionsSheet(
 }
 
 #[component]
+/// Renders the operation options panel view.
 fn OperationOptionsPanel(
     sources: RwSignal<Vec<DatasetSourceDraft>>,
-    forms: RwSignal<Vec<FormSummary>>,
-    rendered_forms: RwSignal<BTreeMap<String, RenderedForm>>,
+    forms: RwSignal<Vec<DatasetFormOption>>,
+    rendered_forms: RwSignal<BTreeMap<String, DatasetRenderedForm>>,
     composition_mode: RwSignal<String>,
     join_left_key: RwSignal<String>,
     join_right_key: RwSignal<String>,
@@ -1181,12 +1207,13 @@ fn OperationOptionsPanel(
 
 #[allow(clippy::too_many_arguments)]
 #[component]
+/// Renders the source options panel view.
 fn SourceOptionsPanel(
     index: usize,
     sources: RwSignal<Vec<DatasetSourceDraft>>,
-    forms: RwSignal<Vec<FormSummary>>,
+    forms: RwSignal<Vec<DatasetFormOption>>,
     datasets: RwSignal<Vec<DatasetSummary>>,
-    rendered_forms: RwSignal<BTreeMap<String, RenderedForm>>,
+    rendered_forms: RwSignal<BTreeMap<String, DatasetRenderedForm>>,
     fields: RwSignal<Vec<DatasetFieldDraft>>,
     composition_mode: RwSignal<String>,
 ) -> impl IntoView {
@@ -1321,12 +1348,13 @@ fn SourceOptionsPanel(
 }
 
 #[component]
+/// Renders the field options panel view.
 fn FieldOptionsPanel(
     index: usize,
     fields: RwSignal<Vec<DatasetFieldDraft>>,
     sources: RwSignal<Vec<DatasetSourceDraft>>,
-    forms: RwSignal<Vec<FormSummary>>,
-    rendered_forms: RwSignal<BTreeMap<String, RenderedForm>>,
+    forms: RwSignal<Vec<DatasetFormOption>>,
+    rendered_forms: RwSignal<BTreeMap<String, DatasetRenderedForm>>,
 ) -> impl IntoView {
     view! {
         {move || fields.get().get(index).cloned().map(|field| {
@@ -1392,11 +1420,12 @@ fn FieldOptionsPanel(
 }
 
 #[component]
+/// Renders the dataset fields editor view.
 fn DatasetFieldsEditor(
     fields: RwSignal<Vec<DatasetFieldDraft>>,
     sources: RwSignal<Vec<DatasetSourceDraft>>,
-    forms: RwSignal<Vec<FormSummary>>,
-    rendered_forms: RwSignal<BTreeMap<String, RenderedForm>>,
+    forms: RwSignal<Vec<DatasetFormOption>>,
+    rendered_forms: RwSignal<BTreeMap<String, DatasetRenderedForm>>,
     designer_selection: RwSignal<DatasetDesignerSelection>,
     designer_sheet_open: RwSignal<bool>,
 ) -> impl IntoView {
@@ -1479,6 +1508,7 @@ fn DatasetFieldsEditor(
 }
 
 #[component]
+/// Renders the table pagination view.
 fn TablePagination(
     summary: String,
     page_count: usize,
@@ -1510,6 +1540,7 @@ fn TablePagination(
     }
 }
 
+/// Handles the can manage datasets behavior.
 fn can_manage_datasets(account: &SessionAccount) -> bool {
     account
         .capabilities
@@ -1517,6 +1548,7 @@ fn can_manage_datasets(account: &SessionAccount) -> bool {
         .any(|capability| capability == "admin:all")
 }
 
+/// Handles the operation label behavior.
 fn operation_label(value: &str) -> &'static str {
     match value {
         "union" => "UNION",
@@ -1528,10 +1560,12 @@ fn operation_label(value: &str) -> &'static str {
     }
 }
 
-fn is_join_operation(value: &str) -> bool {
+/// Returns whether the is join operation condition is met.
+pub(super) fn is_join_operation(value: &str) -> bool {
     matches!(value, "left_join" | "inner_join" | "outer_join")
 }
 
+/// Handles the expression label behavior.
 fn expression_label(sources: &[DatasetSourceDraft], operation: &str) -> String {
     let aliases = sources
         .iter()
@@ -1547,6 +1581,7 @@ fn expression_label(sources: &[DatasetSourceDraft], operation: &str) -> String {
         .unwrap_or_else(|| "Choose at least one input".into())
 }
 
+/// Handles the expression button class behavior.
 fn expression_button_class(is_active: bool, base: &'static str) -> String {
     if is_active {
         format!("{base} is-active")
@@ -1556,7 +1591,8 @@ fn expression_button_class(is_active: bool, base: &'static str) -> String {
 }
 
 #[allow(dead_code)]
-fn expression_to_editor_drafts(
+/// Handles the expression to editor drafts behavior.
+pub(super) fn expression_to_editor_drafts(
     ast: &DatasetExpressionPayload,
 ) -> (Vec<DatasetSourceDraft>, String, Vec<DatasetJoinKeyPayload>) {
     let mut sources = Vec::new();
@@ -1567,6 +1603,7 @@ fn expression_to_editor_drafts(
 }
 
 #[allow(dead_code)]
+/// Collects the collect expression drafts values.
 fn collect_expression_drafts(
     ast: &DatasetExpressionPayload,
     sources: &mut Vec<DatasetSourceDraft>,
@@ -1621,7 +1658,8 @@ fn collect_expression_drafts(
 }
 
 #[allow(dead_code)]
-fn build_expression_ast(
+/// Builds the build expression ast value.
+pub(super) fn build_expression_ast(
     sources: &[DatasetSourceDraft],
     operation: &str,
     join_left_key: &str,
@@ -1655,6 +1693,7 @@ fn build_expression_ast(
 }
 
 #[allow(dead_code)]
+/// Handles the source expression behavior.
 fn source_expression(source: &DatasetSourceDraft) -> Option<DatasetExpressionPayload> {
     if source.source_alias.trim().is_empty() {
         return None;
@@ -1681,6 +1720,7 @@ fn source_expression(source: &DatasetSourceDraft) -> Option<DatasetExpressionPay
     }
 }
 
+/// Handles the visibility label behavior.
 fn visibility_label(nodes: &[DatasetVisibilityNode]) -> String {
     match nodes.len() {
         0 => "No nodes".into(),
@@ -1689,6 +1729,7 @@ fn visibility_label(nodes: &[DatasetVisibilityNode]) -> String {
     }
 }
 
+/// Handles the node matches visibility query behavior.
 fn node_matches_visibility_query(node: &NodeResponse, query: &str) -> bool {
     query.trim().is_empty()
         || text_matches(query, &[&node.name])
@@ -1699,22 +1740,24 @@ fn node_matches_visibility_query(node: &NodeResponse, query: &str) -> bool {
             .is_some_and(|parent| text_matches(query, &[parent]))
 }
 
+/// Handles the field metadata behavior.
 fn field_metadata(
     field: &DatasetFieldDraft,
     sources: &[DatasetSourceDraft],
-    forms: &[FormSummary],
-    rendered_forms: &BTreeMap<String, RenderedForm>,
-) -> RenderedField {
+    forms: &[DatasetFormOption],
+    rendered_forms: &BTreeMap<String, DatasetRenderedForm>,
+) -> DatasetRenderedField {
     source_field_options(sources, forms, rendered_forms, &field.source_alias)
         .into_iter()
         .find(|option| option.key == field.source_field_key)
-        .unwrap_or_else(|| RenderedField {
+        .unwrap_or_else(|| DatasetRenderedField {
             key: field.source_field_key.clone(),
             label: "Unknown field".into(),
             field_type: String::new(),
         })
 }
 
+/// Handles the confirm action behavior.
 fn confirm_action(message: &str) -> bool {
     #[cfg(feature = "hydrate")]
     {
@@ -1730,14 +1773,19 @@ fn confirm_action(message: &str) -> bool {
     }
 }
 
-fn version_label(version: &FormVersionSummary) -> String {
+/// Handles the version label behavior.
+fn version_label(version: &DatasetFormVersionOption) -> String {
     version
         .version_label
         .clone()
         .unwrap_or_else(|| format!("Major {}", version.version_major.unwrap_or(1)))
 }
 
-fn first_published_version(forms: &[FormSummary], form_id: &str) -> Option<FormVersionSummary> {
+/// Handles the first published version behavior.
+fn first_published_version(
+    forms: &[DatasetFormOption],
+    form_id: &str,
+) -> Option<DatasetFormVersionOption> {
     forms
         .iter()
         .find(|form| form.id == form_id)
@@ -1748,7 +1796,11 @@ fn first_published_version(forms: &[FormSummary], form_id: &str) -> Option<FormV
         })
 }
 
-fn published_versions_for_form(forms: &[FormSummary], form_id: &str) -> Vec<FormVersionSummary> {
+/// Handles the published versions for form behavior.
+fn published_versions_for_form(
+    forms: &[DatasetFormOption],
+    form_id: &str,
+) -> Vec<DatasetFormVersionOption> {
     forms
         .iter()
         .find(|form| form.id == form_id)
@@ -1762,7 +1814,8 @@ fn published_versions_for_form(forms: &[FormSummary], form_id: &str) -> Vec<Form
         .unwrap_or_default()
 }
 
-fn find_version(forms: &[FormSummary], version_id: &str) -> Option<FormVersionSummary> {
+/// Handles the find version behavior.
+fn find_version(forms: &[DatasetFormOption], version_id: &str) -> Option<DatasetFormVersionOption> {
     forms
         .iter()
         .flat_map(|form| form.versions.iter())
@@ -1770,12 +1823,13 @@ fn find_version(forms: &[FormSummary], version_id: &str) -> Option<FormVersionSu
         .cloned()
 }
 
+/// Handles the source field options behavior.
 fn source_field_options(
     sources: &[DatasetSourceDraft],
-    forms: &[FormSummary],
-    rendered_forms: &BTreeMap<String, RenderedForm>,
+    forms: &[DatasetFormOption],
+    rendered_forms: &BTreeMap<String, DatasetRenderedForm>,
     source_alias: &str,
-) -> Vec<RenderedField> {
+) -> Vec<DatasetRenderedField> {
     let Some(source) = sources
         .iter()
         .find(|source| source.source_alias == source_alias)
@@ -1800,17 +1854,18 @@ fn source_field_options(
     options
 }
 
+/// Handles the source field options with selected behavior.
 fn source_field_options_with_selected(
     sources: &[DatasetSourceDraft],
-    forms: &[FormSummary],
-    rendered_forms: &BTreeMap<String, RenderedForm>,
+    forms: &[DatasetFormOption],
+    rendered_forms: &BTreeMap<String, DatasetRenderedForm>,
     source_alias: &str,
     selected_key: &str,
-) -> Vec<RenderedField> {
+) -> Vec<DatasetRenderedField> {
     let mut options = source_field_options(sources, forms, rendered_forms, source_alias);
 
     if !selected_key.is_empty() && !options.iter().any(|option| option.key == selected_key) {
-        options.push(RenderedField {
+        options.push(DatasetRenderedField {
             key: selected_key.to_string(),
             label: "Unknown field".into(),
             field_type: String::new(),
@@ -1820,20 +1875,21 @@ fn source_field_options_with_selected(
     options
 }
 
+/// Handles the join key options for source index behavior.
 fn join_key_options_for_source_index(
     sources: &[DatasetSourceDraft],
-    forms: &[FormSummary],
-    rendered_forms: &BTreeMap<String, RenderedForm>,
+    forms: &[DatasetFormOption],
+    rendered_forms: &BTreeMap<String, DatasetRenderedForm>,
     source_index: usize,
     selected_key: &str,
-) -> Vec<RenderedField> {
+) -> Vec<DatasetRenderedField> {
     let mut options = sources
         .get(source_index)
         .map(|source| source_field_options(sources, forms, rendered_forms, &source.source_alias))
         .unwrap_or_default();
 
     if !selected_key.is_empty() && !options.iter().any(|option| option.key == selected_key) {
-        options.push(RenderedField {
+        options.push(DatasetRenderedField {
             key: selected_key.to_string(),
             label: "Unknown field".into(),
             field_type: String::new(),
@@ -1843,7 +1899,11 @@ fn join_key_options_for_source_index(
     options
 }
 
-fn resolved_form_version_id(source: &DatasetSourceDraft, forms: &[FormSummary]) -> Option<String> {
+/// Handles the resolved form version id behavior.
+fn resolved_form_version_id(
+    source: &DatasetSourceDraft,
+    forms: &[DatasetFormOption],
+) -> Option<String> {
     if !source.form_version_id.is_empty() {
         return Some(source.form_version_id.clone());
     }
@@ -1858,7 +1918,8 @@ fn resolved_form_version_id(source: &DatasetSourceDraft, forms: &[FormSummary]) 
         .map(|version| version.id)
 }
 
-fn system_source_field_options() -> Vec<RenderedField> {
+/// Handles the system source field options behavior.
+fn system_source_field_options() -> Vec<DatasetRenderedField> {
     [
         ("__submission_id", "Submission ID", "text"),
         ("__form_version_id", "Form Version ID", "text"),
@@ -1875,7 +1936,7 @@ fn system_source_field_options() -> Vec<RenderedField> {
         ),
     ]
     .into_iter()
-    .map(|(key, label, field_type)| RenderedField {
+    .map(|(key, label, field_type)| DatasetRenderedField {
         key: key.into(),
         label: label.into(),
         field_type: field_type.into(),
@@ -1883,10 +1944,12 @@ fn system_source_field_options() -> Vec<RenderedField> {
     .collect()
 }
 
-fn join_key_option_label(field: &RenderedField) -> String {
+/// Handles the join key option label behavior.
+fn join_key_option_label(field: &DatasetRenderedField) -> String {
     format!("{} ({})", truncate_field_label(&field.label), field.key)
 }
 
+/// Handles the truncate field label behavior.
 fn truncate_field_label(label: &str) -> String {
     const MAX_CHARS: usize = 32;
     let mut chars = label.chars();
@@ -1898,11 +1961,12 @@ fn truncate_field_label(label: &str) -> String {
     }
 }
 
+/// Handles the add fields from source behavior.
 fn add_fields_from_source(
     index: usize,
     sources: RwSignal<Vec<DatasetSourceDraft>>,
-    forms: RwSignal<Vec<FormSummary>>,
-    rendered_forms: RwSignal<BTreeMap<String, RenderedForm>>,
+    forms: RwSignal<Vec<DatasetFormOption>>,
+    rendered_forms: RwSignal<BTreeMap<String, DatasetRenderedForm>>,
     fields: RwSignal<Vec<DatasetFieldDraft>>,
 ) {
     let source = sources.get().get(index).cloned();
@@ -1934,10 +1998,12 @@ fn add_fields_from_source(
     }
 }
 
+/// Handles the source seed key behavior.
 fn source_seed_key(index: usize, form_version_id: &str) -> String {
     format!("{index}:{form_version_id}")
 }
 
+/// Handles the table summary behavior.
 fn table_summary(total_count: usize, page_size: usize, page_index: usize, label: &str) -> String {
     if total_count == 0 {
         format!("No {label} to display")
@@ -1951,6 +2017,7 @@ fn table_summary(total_count: usize, page_size: usize, page_index: usize, label:
     }
 }
 
+/// Handles the tab class behavior.
 fn tab_class(active_tab: RwSignal<String>, value: &'static str) -> impl Fn() -> &'static str {
     move || {
         if active_tab.get() == value {
@@ -1959,396 +2026,4 @@ fn tab_class(active_tab: RwSignal<String>, value: &'static str) -> impl Fn() -> 
             "tabs-trigger"
         }
     }
-}
-
-#[cfg(feature = "hydrate")]
-fn load_account(account: RwSignal<Option<SessionAccount>>) {
-    leptos::task::spawn_local(async move {
-        if let Ok(Some(payload)) = api::fetch_account().await {
-            account.set(Some(payload));
-        }
-    });
-}
-
-#[cfg(not(feature = "hydrate"))]
-fn load_account(_: RwSignal<Option<SessionAccount>>) {}
-
-#[cfg(feature = "hydrate")]
-fn load_datasets(
-    datasets: RwSignal<Vec<DatasetSummary>>,
-    is_loading: RwSignal<bool>,
-    load_error: RwSignal<Option<String>>,
-) {
-    leptos::task::spawn_local(async move {
-        is_loading.set(true);
-        match api::fetch_datasets().await {
-            Ok(Some(payload)) => datasets.set(payload),
-            Ok(None) => {}
-            Err(message) => load_error.set(Some(message)),
-        }
-        is_loading.set(false);
-    });
-}
-
-#[cfg(not(feature = "hydrate"))]
-fn load_datasets(_: RwSignal<Vec<DatasetSummary>>, _: RwSignal<bool>, _: RwSignal<Option<String>>) {
-}
-
-#[cfg(feature = "hydrate")]
-fn load_dataset_detail(
-    dataset_id: String,
-    dataset: RwSignal<Option<DatasetDefinition>>,
-    is_loading: RwSignal<bool>,
-    load_error: RwSignal<Option<String>>,
-) {
-    leptos::task::spawn_local(async move {
-        is_loading.set(true);
-        match api::fetch_dataset_detail(&dataset_id).await {
-            Ok(Some(payload)) => dataset.set(Some(payload)),
-            Ok(None) => {}
-            Err(message) => load_error.set(Some(message)),
-        }
-        is_loading.set(false);
-    });
-}
-
-#[cfg(not(feature = "hydrate"))]
-fn load_dataset_detail(
-    _: String,
-    _: RwSignal<Option<DatasetDefinition>>,
-    _: RwSignal<bool>,
-    _: RwSignal<Option<String>>,
-) {
-}
-
-#[cfg(feature = "hydrate")]
-fn load_dataset_table(
-    dataset_id: String,
-    table: RwSignal<Option<DatasetTable>>,
-    table_error: RwSignal<Option<String>>,
-) {
-    leptos::task::spawn_local(async move {
-        match api::fetch_dataset_table(&dataset_id).await {
-            Ok(Some(payload)) => table.set(Some(payload)),
-            Ok(None) => {}
-            Err(message) => table_error.set(Some(message)),
-        }
-    });
-}
-
-#[cfg(not(feature = "hydrate"))]
-fn load_dataset_table(_: String, _: RwSignal<Option<DatasetTable>>, _: RwSignal<Option<String>>) {}
-
-#[cfg(feature = "hydrate")]
-fn load_forms(forms: RwSignal<Vec<FormSummary>>, load_error: RwSignal<Option<String>>) {
-    leptos::task::spawn_local(async move {
-        match api::fetch_forms().await {
-            Ok(Some(payload)) => forms.set(payload),
-            Ok(None) => {}
-            Err(message) => load_error.set(Some(message)),
-        }
-    });
-}
-
-#[cfg(not(feature = "hydrate"))]
-fn load_forms(_: RwSignal<Vec<FormSummary>>, _: RwSignal<Option<String>>) {}
-
-#[cfg(feature = "hydrate")]
-fn load_nodes(nodes: RwSignal<Vec<NodeResponse>>, load_error: RwSignal<Option<String>>) {
-    leptos::task::spawn_local(async move {
-        match api::fetch_nodes().await {
-            Ok(Some(payload)) => nodes.set(payload),
-            Ok(None) => {}
-            Err(message) => load_error.set(Some(message)),
-        }
-    });
-}
-
-#[cfg(not(feature = "hydrate"))]
-fn load_nodes(_: RwSignal<Vec<NodeResponse>>, _: RwSignal<Option<String>>) {}
-
-#[cfg(feature = "hydrate")]
-fn load_rendered_form(
-    form_version_id: String,
-    rendered_forms: RwSignal<BTreeMap<String, RenderedForm>>,
-) {
-    if form_version_id.is_empty()
-        || rendered_forms
-            .get_untracked()
-            .contains_key(&form_version_id)
-    {
-        return;
-    }
-    leptos::task::spawn_local(async move {
-        if let Ok(Some(payload)) = api::fetch_rendered_form(&form_version_id).await {
-            rendered_forms.update(|forms| {
-                forms.insert(form_version_id, payload);
-            });
-        }
-    });
-}
-
-#[cfg(not(feature = "hydrate"))]
-fn load_rendered_form(_: String, _: RwSignal<BTreeMap<String, RenderedForm>>) {}
-
-#[cfg(feature = "hydrate")]
-fn load_dataset_for_edit(
-    dataset_id: String,
-    name: RwSignal<String>,
-    slug: RwSignal<String>,
-    composition_mode: RwSignal<String>,
-    visibility_node_ids: RwSignal<BTreeSet<String>>,
-    sources: RwSignal<Vec<DatasetSourceDraft>>,
-    fields: RwSignal<Vec<DatasetFieldDraft>>,
-    join_left_key: RwSignal<String>,
-    join_right_key: RwSignal<String>,
-    sql_preview: RwSignal<Option<String>>,
-    load_error: RwSignal<Option<String>>,
-) {
-    leptos::task::spawn_local(async move {
-        match api::fetch_dataset_detail(&dataset_id).await {
-            Ok(Some(payload)) => {
-                name.set(payload.name);
-                slug.set(payload.slug);
-                composition_mode.set(payload.composition_mode);
-                sql_preview.set(payload.generated_sql.clone());
-                visibility_node_ids.set(
-                    payload
-                        .visibility_nodes
-                        .into_iter()
-                        .map(|node| node.node_id)
-                        .collect(),
-                );
-                let Some(ast) = payload.definition_ast.as_ref() else {
-                    load_error.set(Some(
-                            "This dataset was not created with the query designer and cannot be edited here."
-                                .into(),
-                        ));
-                    return;
-                };
-                let (source_drafts, root_operation, join_keys) = expression_to_editor_drafts(ast);
-                if !root_operation.is_empty() {
-                    composition_mode.set(root_operation);
-                }
-                if let Some(join_key) = join_keys.first() {
-                    join_left_key.set(join_key.left_field.clone());
-                    join_right_key.set(join_key.right_field.clone());
-                }
-                sources.set(if source_drafts.is_empty() {
-                    vec![DatasetSourceDraft::default()]
-                } else {
-                    source_drafts
-                });
-                fields.set(
-                    payload
-                        .fields
-                        .into_iter()
-                        .map(|field| DatasetFieldDraft {
-                            key: field.key,
-                            label: field.label,
-                            source_alias: field.source_alias,
-                            source_field_key: field.source_field_key,
-                        })
-                        .collect(),
-                );
-            }
-            Ok(None) => {}
-            Err(message) => load_error.set(Some(message)),
-        }
-    });
-}
-
-#[cfg(not(feature = "hydrate"))]
-#[allow(clippy::too_many_arguments)]
-fn load_dataset_for_edit(
-    _: String,
-    _: RwSignal<String>,
-    _: RwSignal<String>,
-    _: RwSignal<String>,
-    _: RwSignal<BTreeSet<String>>,
-    _: RwSignal<Vec<DatasetSourceDraft>>,
-    _: RwSignal<Vec<DatasetFieldDraft>>,
-    _: RwSignal<String>,
-    _: RwSignal<String>,
-    _: RwSignal<Option<String>>,
-    _: RwSignal<Option<String>>,
-) {
-}
-
-#[cfg(feature = "hydrate")]
-#[allow(clippy::too_many_arguments)]
-fn save_dataset(
-    dataset_id: Option<String>,
-    name: String,
-    slug: String,
-    composition_mode: String,
-    visibility_node_ids: Vec<String>,
-    sources: Vec<DatasetSourceDraft>,
-    fields: Vec<DatasetFieldDraft>,
-    join_left_key: String,
-    join_right_key: String,
-    save_error: RwSignal<Option<String>>,
-    save_message: RwSignal<Option<String>>,
-) {
-    leptos::task::spawn_local(async move {
-        save_error.set(None);
-        save_message.set(None);
-        let payload = match dataset_payload_from_drafts(
-            name,
-            slug,
-            composition_mode,
-            visibility_node_ids,
-            sources,
-            fields,
-            join_left_key,
-            join_right_key,
-        ) {
-            Ok(payload) => payload,
-            Err(message) => {
-                save_error.set(Some(message));
-                return;
-            }
-        };
-        match api::save_dataset_payload(dataset_id.as_deref(), &payload).await {
-            Ok(value) => {
-                let id = value
-                    .get("id")
-                    .and_then(|value| value.as_str())
-                    .unwrap_or_default()
-                    .to_string();
-                save_message.set(Some("Dataset saved.".into()));
-                if !id.is_empty() {
-                    if let Some(window) = web_sys::window() {
-                        let _ = window.location().set_href(&format!("/datasets/{id}"));
-                    }
-                }
-            }
-            Err(message) => save_error.set(Some(message)),
-        }
-    });
-}
-
-#[cfg(feature = "hydrate")]
-fn dataset_payload_from_drafts(
-    name: String,
-    slug: String,
-    composition_mode: String,
-    visibility_node_ids: Vec<String>,
-    mut sources: Vec<DatasetSourceDraft>,
-    fields: Vec<DatasetFieldDraft>,
-    join_left_key: String,
-    join_right_key: String,
-) -> Result<DatasetPayload, String> {
-    if is_join_operation(&composition_mode) {
-        for source in &mut sources {
-            if source.selection_rule == "all" {
-                source.selection_rule = "latest".into();
-            }
-        }
-    }
-    let field_payloads = fields
-        .into_iter()
-        .enumerate()
-        .filter(|(_, field)| {
-            !field.key.trim().is_empty()
-                && !field.label.trim().is_empty()
-                && !field.source_alias.trim().is_empty()
-                && !field.source_field_key.trim().is_empty()
-        })
-        .map(|(index, field)| DatasetFieldPayload {
-            key: field.key,
-            label: field.label,
-            source_alias: field.source_alias,
-            source_field_key: field.source_field_key,
-            position: index as i32,
-        })
-        .collect::<Vec<_>>();
-    let Some(definition_ast) =
-        build_expression_ast(&sources, &composition_mode, &join_left_key, &join_right_key)
-    else {
-        return Err("Choose at least one complete dataset input before saving.".into());
-    };
-    Ok(DatasetPayload {
-        name,
-        slug,
-        grain: "submission".into(),
-        composition_mode,
-        visibility_node_ids,
-        definition_ast,
-        fields: field_payloads,
-    })
-}
-
-#[cfg(feature = "hydrate")]
-#[allow(clippy::too_many_arguments)]
-fn preview_dataset_sql(
-    dataset_id: Option<String>,
-    name: String,
-    slug: String,
-    composition_mode: String,
-    visibility_node_ids: Vec<String>,
-    sources: Vec<DatasetSourceDraft>,
-    fields: Vec<DatasetFieldDraft>,
-    join_left_key: String,
-    join_right_key: String,
-    sql_preview: RwSignal<Option<String>>,
-    sql_preview_error: RwSignal<Option<String>>,
-) {
-    leptos::task::spawn_local(async move {
-        sql_preview_error.set(None);
-        let payload = match dataset_payload_from_drafts(
-            name,
-            slug,
-            composition_mode,
-            visibility_node_ids,
-            sources,
-            fields,
-            join_left_key,
-            join_right_key,
-        ) {
-            Ok(payload) => payload,
-            Err(message) => {
-                sql_preview_error.set(Some(message));
-                return;
-            }
-        };
-        match api::preview_dataset_sql_payload(dataset_id.as_deref(), &payload).await {
-            Ok(response) => sql_preview.set(Some(response.generated_sql)),
-            Err(message) => sql_preview_error.set(Some(message)),
-        }
-    });
-}
-
-#[cfg(not(feature = "hydrate"))]
-#[allow(clippy::too_many_arguments)]
-fn preview_dataset_sql(
-    _: Option<String>,
-    _: String,
-    _: String,
-    _: String,
-    _: Vec<String>,
-    _: Vec<DatasetSourceDraft>,
-    _: Vec<DatasetFieldDraft>,
-    _: String,
-    _: String,
-    _: RwSignal<Option<String>>,
-    _: RwSignal<Option<String>>,
-) {
-}
-
-#[cfg(not(feature = "hydrate"))]
-#[allow(clippy::too_many_arguments)]
-fn save_dataset(
-    _: Option<String>,
-    _: String,
-    _: String,
-    _: String,
-    _: Vec<String>,
-    _: Vec<DatasetSourceDraft>,
-    _: Vec<DatasetFieldDraft>,
-    _: String,
-    _: String,
-    _: RwSignal<Option<String>>,
-    _: RwSignal<Option<String>>,
-) {
 }

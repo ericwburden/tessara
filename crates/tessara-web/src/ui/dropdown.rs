@@ -1,3 +1,5 @@
+//! Owns the ui::dropdown module behavior.
+
 use icons::Ellipsis;
 use leptos::prelude::*;
 
@@ -5,6 +7,7 @@ use leptos::prelude::*;
 use wasm_bindgen::JsCast;
 
 #[cfg(feature = "hydrate")]
+/// Handles the scroll app main by behavior.
 fn scroll_app_main_by(delta_y: f64) {
     let Some(scroller) = web_sys::window()
         .and_then(|window| window.document())
@@ -19,6 +22,7 @@ fn scroll_app_main_by(delta_y: f64) {
 }
 
 #[component]
+/// Renders the dropdown menu view.
 pub fn DropdownMenu(#[prop(into)] label: String, children: Children) -> impl IntoView {
     let is_open = RwSignal::new(false);
     let menu_class = move || {

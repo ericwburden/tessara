@@ -1,3 +1,5 @@
+//! Owns the app module behavior.
+
 use leptos::{children::ToChildren, prelude::*};
 use leptos_router::components::{Router, Routes};
 #[cfg(feature = "hydrate")]
@@ -8,6 +10,7 @@ use crate::state::session::provide_shell_session;
 
 #[cfg(feature = "hydrate")]
 #[wasm_bindgen]
+/// Handles the hydrate app behavior.
 pub fn hydrate_app(root_id: &str) {
     use leptos::mount::mount_to;
     use web_sys::window;
@@ -30,6 +33,7 @@ pub fn hydrate_app(root_id: &str) {
 }
 
 #[component]
+/// Renders the app view.
 pub fn App() -> impl IntoView {
     let _ = provide_shell_session();
 

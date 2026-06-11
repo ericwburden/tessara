@@ -1,3 +1,5 @@
+//! Owns the document module behavior.
+
 pub(crate) mod assets;
 pub(crate) mod html;
 pub(crate) mod theme_bootstrap;

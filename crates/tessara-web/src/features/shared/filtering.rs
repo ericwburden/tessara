@@ -1,7 +1,10 @@
+//! Owns the features::shared::filtering module behavior.
+
+use crate::features::forms::FormSummary;
 use crate::features::organization::{
     NodeTypeCatalogEntry, form_version_label, form_version_sort_label,
 };
-use crate::features::shared_data::{FormSummary, WorkflowSummary};
+use crate::features::workflows::types::WorkflowSummary;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -13,6 +16,7 @@ pub struct FormNodeFilterOption {
     pub(crate) depth: usize,
 }
 
+/// Handles the form node filter options behavior.
 pub(crate) fn form_node_filter_options(forms: &[FormSummary]) -> Vec<FormNodeFilterOption> {
     let mut options_by_id = BTreeMap::<String, FormNodeFilterOption>::new();
 
@@ -55,6 +59,7 @@ pub(crate) fn form_node_filter_options(forms: &[FormSummary]) -> Vec<FormNodeFil
     options
 }
 
+/// Handles the form node filter depth behavior.
 pub(crate) fn form_node_filter_depth(
     node_id: &str,
     options_by_id: &BTreeMap<String, FormNodeFilterOption>,
@@ -75,6 +80,7 @@ pub(crate) fn form_node_filter_depth(
         .unwrap_or(0)
 }
 
+/// Handles the form node filter path behavior.
 pub(crate) fn form_node_filter_path(
     node_id: &str,
     options_by_id: &BTreeMap<String, FormNodeFilterOption>,
@@ -105,6 +111,7 @@ pub(crate) fn form_node_filter_path(
         .unwrap_or_else(|| option.name.clone())
 }
 
+/// Handles the form matches node filter behavior.
 pub(crate) fn form_matches_node_filter(
     form: &FormSummary,
     selected_node_id: Option<&str>,
@@ -122,6 +129,7 @@ pub(crate) fn form_matches_node_filter(
     })
 }
 
+/// Handles the form node is descendant of selected behavior.
 pub(crate) fn form_node_is_descendant_of_selected(
     node_id: &str,
     selected_node_id: &str,
@@ -151,6 +159,7 @@ pub(crate) fn form_node_is_descendant_of_selected(
     false
 }
 
+/// Handles the visible form node filter options behavior.
 pub(crate) fn visible_form_node_filter_options(
     options: &[FormNodeFilterOption],
     selected_node_id: Option<&str>,
@@ -180,10 +189,12 @@ pub(crate) fn visible_form_node_filter_options(
         .collect()
 }
 
+/// Handles the indented node label behavior.
 pub(crate) fn indented_node_label(option: &FormNodeFilterOption) -> String {
     format!("{}{}", " ".repeat(option.depth), option.name)
 }
 
+/// Handles the unique filter options behavior.
 pub(crate) fn unique_filter_options(values: impl IntoIterator<Item = String>) -> Vec<String> {
     let mut options = values
         .into_iter()
@@ -194,6 +205,7 @@ pub(crate) fn unique_filter_options(values: impl IntoIterator<Item = String>) ->
     options
 }
 
+/// Handles the slug from label behavior.
 pub(crate) fn slug_from_label(label: &str) -> String {
     let mut slug = String::new();
     let mut last_was_dash = false;
@@ -220,6 +232,7 @@ pub(crate) fn slug_from_label(label: &str) -> String {
 }
 
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+/// Handles the unique slug from label behavior.
 pub(crate) fn unique_slug_from_label(label: &str, existing_slugs: &[String]) -> String {
     let base = slug_from_label(label);
     if base.is_empty() {
@@ -242,11 +255,13 @@ pub(crate) fn unique_slug_from_label(label: &str, existing_slugs: &[String]) -> 
 }
 
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+/// Handles the existing form slugs behavior.
 pub(crate) fn existing_form_slugs(forms: &[FormSummary]) -> Vec<String> {
     forms.iter().map(|form| form.slug.clone()).collect()
 }
 
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+/// Handles the existing form slugs for update behavior.
 pub(crate) fn existing_form_slugs_for_update(
     forms: &[FormSummary],
     current_form_id: &str,
@@ -259,6 +274,7 @@ pub(crate) fn existing_form_slugs_for_update(
 }
 
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+/// Handles the existing workflow slugs behavior.
 pub(crate) fn existing_workflow_slugs(workflows: &[WorkflowSummary]) -> Vec<String> {
     workflows
         .iter()
@@ -266,6 +282,7 @@ pub(crate) fn existing_workflow_slugs(workflows: &[WorkflowSummary]) -> Vec<Stri
         .collect()
 }
 
+/// Handles the workflow form is in scope behavior.
 pub(crate) fn workflow_form_is_in_scope(
     form: &FormSummary,
     node_types: &[NodeTypeCatalogEntry],
@@ -275,6 +292,7 @@ pub(crate) fn workflow_form_is_in_scope(
     true
 }
 
+/// Handles the workflow form version options behavior.
 pub(crate) fn workflow_form_version_options(
     forms: &[FormSummary],
     node_types: &[NodeTypeCatalogEntry],
@@ -310,6 +328,7 @@ pub(crate) fn workflow_form_version_options(
 }
 
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+/// Handles the workflow step form label behavior.
 pub(crate) fn workflow_step_form_label(forms: &[FormSummary], form_version_id: &str) -> String {
     forms
         .iter()

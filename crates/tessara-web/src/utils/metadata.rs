@@ -1,5 +1,8 @@
+//! Owns the utils::metadata module behavior.
+
 use serde_json::Value;
 
+/// Handles the metadata rows behavior.
 pub(crate) fn metadata_rows(metadata: &Value) -> Vec<(String, String)> {
     match metadata {
         Value::Object(values) => values
@@ -10,6 +13,7 @@ pub(crate) fn metadata_rows(metadata: &Value) -> Vec<(String, String)> {
     }
 }
 
+/// Handles the metadata label behavior.
 pub(crate) fn metadata_label(key: &str) -> String {
     key.split('_')
         .filter(|part| !part.is_empty())
@@ -24,6 +28,7 @@ pub(crate) fn metadata_label(key: &str) -> String {
         .join(" ")
 }
 
+/// Handles the metadata value behavior.
 pub(crate) fn metadata_value(value: &Value) -> String {
     match value {
         Value::Null => "-".to_string(),

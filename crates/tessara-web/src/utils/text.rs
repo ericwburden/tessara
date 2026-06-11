@@ -1,3 +1,5 @@
+//! Owns the utils::text module behavior.
+
 pub(crate) fn text_matches(query: &str, values: &[&str]) -> bool {
     let query = query.trim().to_lowercase();
     if query.is_empty() {
@@ -9,6 +11,7 @@ pub(crate) fn text_matches(query: &str, values: &[&str]) -> bool {
         .any(|value| value.to_lowercase().contains(&query))
 }
 
+/// Handles the nonempty text behavior.
 pub(crate) fn nonempty_text(value: Option<&str>, fallback: &'static str) -> String {
     value
         .map(str::trim)
@@ -17,6 +20,7 @@ pub(crate) fn nonempty_text(value: Option<&str>, fallback: &'static str) -> Stri
         .unwrap_or_else(|| fallback.to_string())
 }
 
+/// Handles the sentence label behavior.
 pub(crate) fn sentence_label(value: &str) -> String {
     value
         .split('_')

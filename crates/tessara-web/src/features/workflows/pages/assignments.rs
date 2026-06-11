@@ -1,29 +1,34 @@
+//! Owns the features::workflows::pages::assignments module behavior.
+
 #[cfg(feature = "hydrate")]
 use crate::features::organization::current_search_param;
 use crate::features::organization::{
     IntoNonemptyString, submit_workflow_assignment_bulk, toggle_workflow_assignment,
 };
 use crate::features::shared::FilterHeader as SharedFilterHeader;
-use crate::features::shared::{
+use crate::features::shared::{status_badge_class, unique_filter_options};
+use crate::features::workflows::assignments::{
+    WorkflowAssigneeOption, WorkflowAssignmentCandidate, WorkflowAssignmentSummary,
     load_workflow_assignment_assignees, load_workflow_assignment_candidates,
-    load_workflow_assignments, nonempty_text, status_badge_class, unique_filter_options,
+    load_workflow_assignments,
+};
+use crate::features::workflows::{
     workflow_assignee_label, workflow_assignment_assignee_label, workflow_assignment_candidate_key,
     workflow_assignment_revision_label, workflow_assignment_state, workflow_assignment_state_label,
     workflow_assignment_status_key, workflow_assignment_status_label,
-};
-use crate::features::workflows::submission::{
-    WorkflowAssigneeOption, WorkflowAssignmentCandidate, WorkflowAssignmentSummary,
 };
 use crate::ui::{
     AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator,
     DataTable, DropdownMenu, PageHeader, Timestamp, empty_view,
 };
+use crate::utils::text::nonempty_text;
 use icons::{PanelRight, Search, X};
 use leptos::portal::Portal;
 use leptos::prelude::*;
 use std::collections::HashSet;
 
 #[component]
+/// Renders the workflow assignments page view.
 pub fn WorkflowAssignmentsPage() -> impl IntoView {
     let assignments = RwSignal::new(Vec::<WorkflowAssignmentSummary>::new());
     let candidates = RwSignal::new(Vec::<WorkflowAssignmentCandidate>::new());
@@ -634,6 +639,7 @@ pub fn WorkflowAssignmentsPage() -> impl IntoView {
 }
 
 #[component]
+/// Renders the workflow assignments list view.
 fn WorkflowAssignmentsList(
     assignments: Vec<WorkflowAssignmentSummary>,
     search: RwSignal<String>,

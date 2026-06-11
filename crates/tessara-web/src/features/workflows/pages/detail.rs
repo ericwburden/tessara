@@ -1,25 +1,32 @@
+//! Owns the features::workflows::pages::detail module behavior.
+
 use crate::features::organization::toggle_workflow_assignment;
-use crate::features::shared::{
+use crate::features::shared::status_badge_class;
+use crate::features::workflows::api::load_workflow_detail;
+use crate::features::workflows::assignments::WorkflowAssignmentSummary;
+use crate::features::workflows::types::{
     WorkflowDefinition, WorkflowStepSummary, WorkflowVersionSummary,
-    active_workflow_definition_version, load_workflow_detail, nonempty_text, sentence_label,
-    status_badge_class, workflow_assignment_revision_label, workflow_assignment_state,
-    workflow_assignment_state_label, workflow_assignment_status_key,
+};
+use crate::features::workflows::{
+    active_workflow_definition_version, workflow_assignment_revision_label,
+    workflow_assignment_state, workflow_assignment_state_label, workflow_assignment_status_key,
     workflow_assignment_status_label, workflow_available_nodes_label,
     workflow_definition_status_label, workflow_definition_version_label,
     workflow_revision_label_from_option, workflow_source_label,
 };
-use crate::features::workflows::submission::WorkflowAssignmentSummary;
 use crate::types::route_params::WorkflowRouteParams;
 use crate::types::route_params::require_route_params;
 use crate::ui::{
     AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator,
     DataTable, DropdownMenu, EmptyState, InfoListTable, PageHeader, Timestamp, empty_view,
 };
+use crate::utils::text::{nonempty_text, sentence_label};
 use icons::{PanelRight, Pencil, X};
 use leptos::portal::Portal;
 use leptos::prelude::*;
 
 #[component]
+/// Renders the workflows detail page view.
 pub fn WorkflowsDetailPage() -> impl IntoView {
     let params = require_route_params::<WorkflowRouteParams>();
     let workflow_id = params.workflow_id;
@@ -105,6 +112,7 @@ pub fn WorkflowsDetailPage() -> impl IntoView {
 }
 
 #[component]
+/// Renders the workflow detail content view.
 fn WorkflowDetailContent(workflow: WorkflowDefinition) -> impl IntoView {
     let steps_expanded = RwSignal::new(false);
     let revisions_expanded = RwSignal::new(false);
@@ -293,6 +301,7 @@ fn WorkflowDetailContent(workflow: WorkflowDefinition) -> impl IntoView {
 }
 
 #[component]
+/// Renders the workflow steps table view.
 fn WorkflowStepsTable(steps: Vec<WorkflowStepSummary>) -> impl IntoView {
     view! {
         <DataTable>
@@ -334,6 +343,7 @@ fn WorkflowStepsTable(steps: Vec<WorkflowStepSummary>) -> impl IntoView {
 }
 
 #[component]
+/// Renders the workflow versions table view.
 fn WorkflowVersionsTable(
     workflow_id: String,
     versions: Vec<WorkflowVersionSummary>,
@@ -393,6 +403,7 @@ fn WorkflowVersionsTable(
 }
 
 #[component]
+/// Renders the workflow detail assignments table view.
 fn WorkflowDetailAssignmentsTable(assignments: Vec<WorkflowAssignmentSummary>) -> impl IntoView {
     let assignments_signal = RwSignal::new(assignments);
     let selected_detail = RwSignal::new(None::<WorkflowAssignmentSummary>);

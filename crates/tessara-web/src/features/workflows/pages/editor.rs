@@ -1,3 +1,6 @@
+//! Owns the features::workflows::pages::editor module behavior.
+
+use crate::features::forms::FormSummary;
 #[cfg(feature = "hydrate")]
 use crate::features::organization::current_search_param;
 use crate::features::organization::{
@@ -5,13 +8,13 @@ use crate::features::organization::{
     workflow_step_form_version_id_by_id, workflow_step_signature, workflow_step_title_by_id,
 };
 use crate::features::shared::{
-    FormSummary, WorkflowDefinition, WorkflowSummary, active_workflow_definition_version,
-    load_workflow_create_options, load_workflow_detail, node_display_path, status_badge_class,
-    workflow_form_version_options, workflow_step_form_label,
+    node_display_path, status_badge_class, workflow_form_version_options, workflow_step_form_label,
 };
-use crate::features::workflows::submission::{
-    WorkflowSaveIntent, WorkflowStepDraft,
-    workflow_revision_label_from_raw as workflow_submission_workflow_revision_label_from_raw,
+use crate::features::workflows::active_workflow_definition_version;
+use crate::features::workflows::api::workflow_revision_label_from_raw as workflow_submission_workflow_revision_label_from_raw;
+use crate::features::workflows::api::{load_workflow_create_options, load_workflow_detail};
+use crate::features::workflows::types::{
+    WorkflowDefinition, WorkflowSaveIntent, WorkflowStepDraft, WorkflowSummary,
 };
 use crate::types::route_params::{WorkflowRouteParams, require_route_params};
 use crate::ui::{
@@ -24,6 +27,7 @@ use leptos::prelude::*;
 use std::collections::HashSet;
 
 #[component]
+/// Renders the workflow available nodes picker view.
 fn WorkflowAvailableNodesPicker(
     nodes: Vec<OrganizationNode>,
     selected_node_ids: RwSignal<HashSet<String>>,
@@ -113,6 +117,7 @@ fn WorkflowAvailableNodesPicker(
 }
 
 #[component]
+/// Renders the workflows new page view.
 pub fn WorkflowsNewPage() -> impl IntoView {
     let node_types = RwSignal::new(Vec::<NodeTypeCatalogEntry>::new());
     let organization_nodes = RwSignal::new(Vec::<OrganizationNode>::new());
@@ -503,6 +508,7 @@ pub fn WorkflowsNewPage() -> impl IntoView {
 }
 
 #[component]
+/// Renders the workflows edit page view.
 pub fn WorkflowsEditPage() -> impl IntoView {
     let params = require_route_params::<WorkflowRouteParams>();
     let workflow_id = params.workflow_id;

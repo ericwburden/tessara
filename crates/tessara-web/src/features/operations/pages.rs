@@ -1,3 +1,5 @@
+//! Owns the features::operations::pages module behavior.
+
 use crate::features::shared::{FilterHeader, unique_filter_options};
 use crate::ui::{AppShell, DataTable, EmptyState, PageHeader, StatusBadge, Timestamp};
 use crate::utils::{
@@ -14,6 +16,7 @@ use super::api;
 use super::types::*;
 
 #[component]
+/// Renders the operations page view.
 pub fn OperationsPage() -> impl IntoView {
     let status = RwSignal::new(None::<OperationsStatus>);
     let is_loading = RwSignal::new(true);
@@ -70,6 +73,7 @@ pub fn OperationsPage() -> impl IntoView {
 }
 
 #[component]
+/// Renders the operations summary panel view.
 fn OperationsSummaryPanel(
     summary: OperationsSummary,
     reporting_data: ReportingDataStatus,
@@ -87,6 +91,7 @@ fn OperationsSummaryPanel(
 }
 
 #[component]
+/// Renders the operations metric view.
 fn OperationsMetric(label: &'static str, value: String) -> impl IntoView {
     view! {
         <div class="metric-card">
@@ -97,6 +102,7 @@ fn OperationsMetric(label: &'static str, value: String) -> impl IntoView {
 }
 
 #[component]
+/// Renders the workflow assignments table view.
 fn WorkflowAssignmentsTable(assignments: Vec<WorkflowAssignmentStatus>) -> impl IntoView {
     let all_assignments = assignments.clone();
     let search = RwSignal::new(String::new());
@@ -320,6 +326,7 @@ fn WorkflowAssignmentsTable(assignments: Vec<WorkflowAssignmentStatus>) -> impl 
 }
 
 #[component]
+/// Renders the dataset readiness table view.
 fn DatasetReadinessTable(datasets: Vec<DatasetStatus>) -> impl IntoView {
     let all_datasets = datasets.clone();
     let search = RwSignal::new(String::new());
@@ -497,6 +504,7 @@ fn DatasetReadinessTable(datasets: Vec<DatasetStatus>) -> impl IntoView {
 }
 
 #[component]
+/// Renders the workflow assignment row view.
 fn WorkflowAssignmentRow(instance: WorkflowAssignmentStatus) -> impl IntoView {
     let assignment_href = workflow_assignment_href(&instance);
     let step_summary = workflow_step_summary(&instance);
@@ -523,6 +531,7 @@ fn WorkflowAssignmentRow(instance: WorkflowAssignmentStatus) -> impl IntoView {
 }
 
 #[component]
+/// Renders the workflow assignment mobile card view.
 fn WorkflowAssignmentMobileCard(instance: WorkflowAssignmentStatus) -> impl IntoView {
     let assignment_href = workflow_assignment_href(&instance);
     view! {
@@ -568,6 +577,7 @@ fn WorkflowAssignmentMobileCard(instance: WorkflowAssignmentStatus) -> impl Into
 }
 
 #[component]
+/// Renders the dataset readiness row view.
 fn DatasetReadinessRow(dataset: DatasetStatus) -> impl IntoView {
     let dataset_href = format!("/datasets/{}", dataset.dataset_id);
     view! {
@@ -585,6 +595,7 @@ fn DatasetReadinessRow(dataset: DatasetStatus) -> impl IntoView {
 }
 
 #[component]
+/// Renders the dataset readiness mobile card view.
 fn DatasetReadinessMobileCard(dataset: DatasetStatus) -> impl IntoView {
     let dataset_href = format!("/datasets/{}", dataset.dataset_id);
     view! {
@@ -618,6 +629,7 @@ fn DatasetReadinessMobileCard(dataset: DatasetStatus) -> impl IntoView {
     }
 }
 
+/// Handles the workflow revision label behavior.
 fn workflow_revision_label(instance: &WorkflowAssignmentStatus) -> String {
     format!(
         "Revision {}",
@@ -628,6 +640,7 @@ fn workflow_revision_label(instance: &WorkflowAssignmentStatus) -> String {
     )
 }
 
+/// Handles the workflow assignment href behavior.
 fn workflow_assignment_href(instance: &WorkflowAssignmentStatus) -> String {
     format!(
         "/workflows/assignments?assignment_id={}",
@@ -635,6 +648,7 @@ fn workflow_assignment_href(instance: &WorkflowAssignmentStatus) -> String {
     )
 }
 
+/// Handles the workflow step summary behavior.
 fn workflow_step_summary(instance: &WorkflowAssignmentStatus) -> String {
     format!(
         "{} of {} steps complete",
@@ -642,6 +656,7 @@ fn workflow_step_summary(instance: &WorkflowAssignmentStatus) -> String {
     )
 }
 
+/// Handles the workflow response summary behavior.
 fn workflow_response_summary(instance: &WorkflowAssignmentStatus) -> String {
     format!(
         "{} draft / {} submitted",
@@ -649,6 +664,7 @@ fn workflow_response_summary(instance: &WorkflowAssignmentStatus) -> String {
     )
 }
 
+/// Loads the load operations status data.
 fn load_operations_status(
     status: RwSignal<Option<OperationsStatus>>,
     is_loading: RwSignal<bool>,

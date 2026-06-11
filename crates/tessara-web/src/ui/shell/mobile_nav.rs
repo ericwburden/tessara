@@ -1,8 +1,11 @@
+//! Owns the ui::shell::mobile_nav module behavior.
+
 use super::nav::SidebarContent;
 use icons::Menu;
 use leptos::prelude::*;
 
 #[component]
+/// Renders the mobile nav view.
 pub fn MobileNav(active_route: &'static str) -> impl IntoView {
     let is_open = RwSignal::new(false);
     let nav_class = move || {

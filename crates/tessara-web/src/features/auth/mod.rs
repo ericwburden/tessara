@@ -1,3 +1,5 @@
+//! Owns the features::auth module behavior.
+
 pub mod api;
 pub mod components;
 pub mod guards;

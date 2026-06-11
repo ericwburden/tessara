@@ -1,19 +1,28 @@
-use crate::features::form_builder::{
+//! Owns the features::forms::pages module behavior.
+
+use crate::features::forms::api::{
+    load_form_create_options, load_form_detail, load_form_edit_options, load_forms,
+};
+use crate::features::forms::builder::{
     FormBuilderCanvas, FormBuilderEditorState, new_form_builder_editor_state,
 };
-use crate::features::forms::{FormVersionsTable, FormsList};
+use crate::features::forms::{
+    FormDatasetSourceLink, FormDefinition, FormSummary, FormWorkflowLink, RenderedForm,
+};
+use crate::features::forms::{
+    FormVersionsTable, FormsList, form_attached_nodes, form_attached_to_label,
+    form_definition_scope_label, form_field_count_label, form_status_label,
+    rendered_field_layout_label, rendered_field_type_label,
+};
 use crate::features::organization::{
     NodeTypeCatalogEntry, RelatedWorkPaginationFooter, active_form_definition_version,
     active_form_version, form_version_label, submit_create_form, submit_update_form,
 };
 use crate::features::shared::{
-    FormAttachmentLink, FormDatasetSourceLink, FormDefinition, FormSummary, FormWorkflowLink,
-    RenderedForm, WorkflowSourceMarker, form_attached_nodes, form_attached_to_label,
-    form_definition_scope_label, form_field_count_label, form_matches_node_filter,
-    form_node_filter_options, form_status_label, load_form_create_options, load_form_detail,
-    load_form_edit_options, load_forms, rendered_field_layout_label, rendered_field_type_label,
-    sentence_label, status_badge_class, unique_filter_options, workflow_revision_label_from_option,
+    FormAttachmentLink, form_matches_node_filter, form_node_filter_options, status_badge_class,
+    unique_filter_options,
 };
+use crate::features::workflows::{WorkflowSourceMarker, workflow_revision_label_from_option};
 use crate::types::route_params::{FormRouteParams, require_route_params};
 use crate::ui::{
     AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator,
@@ -21,10 +30,12 @@ use crate::ui::{
     TabsContent, TabsList, TabsTrigger, Timestamp, empty_view,
 };
 use crate::utils::pagination::pagination_page_start;
+use crate::utils::text::sentence_label;
 use crate::utils::text::text_matches;
 use leptos::prelude::*;
 
 #[component]
+/// Renders the forms page view.
 pub fn FormsPage() -> impl IntoView {
     let forms = RwSignal::new(Vec::<FormSummary>::new());
     let search = RwSignal::new(String::new());
@@ -127,6 +138,7 @@ pub fn FormsPage() -> impl IntoView {
 }
 
 #[component]
+/// Renders the forms new page view.
 pub fn FormsNewPage() -> impl IntoView {
     let node_types = RwSignal::new(Vec::<NodeTypeCatalogEntry>::new());
     let existing_forms = RwSignal::new(Vec::<FormSummary>::new());
@@ -307,6 +319,7 @@ pub fn FormsNewPage() -> impl IntoView {
 }
 
 #[component]
+/// Renders the forms detail page view.
 pub fn FormsDetailPage() -> impl IntoView {
     let params = require_route_params::<FormRouteParams>();
     let form_id = params.form_id;
@@ -407,6 +420,7 @@ pub fn FormsDetailPage() -> impl IntoView {
 }
 
 #[component]
+/// Renders the form detail content view.
 fn FormDetailContent(form: FormDefinition, rendered_form: Option<RenderedForm>) -> impl IntoView {
     let fields_expanded = RwSignal::new(false);
     let active_version = active_form_definition_version(&form).cloned();
@@ -528,6 +542,7 @@ fn FormDetailContent(form: FormDefinition, rendered_form: Option<RenderedForm>) 
 }
 
 #[component]
+/// Renders the form attached nodes related table view.
 pub(crate) fn FormAttachedNodesRelatedTable(nodes: Vec<FormAttachmentLink>) -> impl IntoView {
     let search = RwSignal::new(String::new());
     let page_size = RwSignal::new(10usize);
@@ -633,6 +648,7 @@ pub(crate) fn FormAttachedNodesRelatedTable(nodes: Vec<FormAttachmentLink>) -> i
 }
 
 #[component]
+/// Renders the rendered form sections view.
 fn RenderedFormSections(rendered_form: Option<RenderedForm>) -> impl IntoView {
     view! {
         <div class="form-detail-sections">
@@ -709,6 +725,7 @@ fn RenderedFormSections(rendered_form: Option<RenderedForm>) -> impl IntoView {
 }
 
 #[component]
+/// Renders the form related links view.
 fn FormRelatedLinks(
     attached_nodes: Vec<FormAttachmentLink>,
     workflows: Vec<FormWorkflowLink>,
@@ -748,6 +765,7 @@ fn FormRelatedLinks(
 }
 
 #[component]
+/// Renders the form related workflows table view.
 pub(crate) fn FormRelatedWorkflowsTable(workflows: Vec<FormWorkflowLink>) -> impl IntoView {
     let search = RwSignal::new(String::new());
     let page_size = RwSignal::new(10usize);
@@ -891,6 +909,7 @@ pub(crate) fn FormRelatedWorkflowsTable(workflows: Vec<FormWorkflowLink>) -> imp
 }
 
 #[component]
+/// Renders the form related dataset sources table view.
 pub(crate) fn FormRelatedDatasetSourcesTable(
     dataset_sources: Vec<FormDatasetSourceLink>,
 ) -> impl IntoView {
@@ -1011,6 +1030,7 @@ pub(crate) fn FormRelatedDatasetSourcesTable(
 }
 
 #[component]
+/// Renders the forms edit page view.
 pub fn FormsEditPage() -> impl IntoView {
     let params = require_route_params::<FormRouteParams>();
     let form_id = params.form_id;

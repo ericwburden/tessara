@@ -1,11 +1,36 @@
-mod assignments;
+//! Owns the features::workflows module behavior.
+
+pub(crate) mod api;
+pub(crate) mod assignments;
 mod detail;
+mod display;
 mod editor;
 mod list;
 mod pages;
-pub(crate) mod submission;
+mod payloads;
+pub(crate) mod types;
 
-pub(crate) use assignments::*;
-pub(crate) use detail::*;
-pub(crate) use editor::*;
-pub(crate) use list::*;
+pub(crate) use assignments::{
+    WorkflowAssignmentsPage, workflow_assigned_user_links, workflow_assignee_label,
+    workflow_assignment_assignee_label, workflow_assignment_candidate_key,
+    workflow_assignment_revision_label, workflow_assignment_state, workflow_assignment_state_label,
+    workflow_assignment_status_key, workflow_assignment_status_label,
+    workflow_available_node_links,
+};
+pub(crate) use detail::WorkflowsDetailPage;
+pub(crate) use display::{
+    WorkflowSourceMarker, active_workflow_definition_version, workflow_available_nodes_label,
+    workflow_definition_status_label, workflow_definition_version_label,
+    workflow_description_label, workflow_revision_label_from_option,
+    workflow_revision_label_from_raw, workflow_source_label, workflow_status_key,
+    workflow_status_label, workflow_version_label,
+};
+pub(crate) use editor::{WorkflowsEditPage, WorkflowsNewPage};
+pub(crate) use list::WorkflowsPage;
+pub(crate) use payloads::CreateWorkflowStepPayload;
+#[cfg(feature = "hydrate")]
+pub(crate) use payloads::{
+    CreateWorkflowPayload, CreateWorkflowRevisionPayload, UpdateWorkflowPayload,
+    UpdateWorkflowRevisionStepsPayload,
+};
+pub(crate) use types::{WorkflowSaveIntent, WorkflowStepDraft};

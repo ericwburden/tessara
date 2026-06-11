@@ -5,6 +5,12 @@
 use serde::{Deserialize, de::DeserializeOwned};
 
 #[cfg(feature = "hydrate")]
+#[derive(Debug, Deserialize)]
+pub(crate) struct IdResponse {
+    pub(crate) id: String,
+}
+
+#[cfg(feature = "hydrate")]
 #[derive(Deserialize)]
 struct ApiErrorResponse {
     error: Option<String>,
@@ -12,6 +18,7 @@ struct ApiErrorResponse {
 }
 
 #[cfg(feature = "hydrate")]
+/// Handles the send json request behavior.
 pub(crate) async fn send_json_request<T>(
     builder: gloo_net::http::RequestBuilder,
     body: Option<String>,
@@ -55,6 +62,17 @@ where
 }
 
 #[cfg(feature = "hydrate")]
+/// Handles the send json id request behavior.
+pub(crate) async fn send_json_id_request(
+    builder: gloo_net::http::RequestBuilder,
+    body: Option<String>,
+    action: &str,
+) -> Result<IdResponse, String> {
+    send_json_request(builder, body, action).await
+}
+
+#[cfg(feature = "hydrate")]
+/// Handles the redirect to login behavior.
 pub(crate) fn redirect_to_login() {
     if let Some(window) = web_sys::window() {
         let _ = window.location().set_href("/login");

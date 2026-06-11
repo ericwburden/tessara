@@ -1,3 +1,5 @@
+//! Owns the features::operations::types module behavior.
+
 use serde::Deserialize;
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]

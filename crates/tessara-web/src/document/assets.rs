@@ -46,6 +46,7 @@ mod tests {
     use super::{document_head_tags, svg_asset};
 
     #[test]
+    /// Verifies the document head exposes brand assets behavior.
     fn document_head_exposes_brand_assets() {
         let head = document_head_tags("Tessara", "Test description");
 
@@ -62,6 +63,7 @@ mod tests {
     }
 
     #[test]
+    /// Verifies the svg asset lookup serves expected assets behavior.
     fn svg_asset_lookup_serves_expected_assets() {
         assert!(svg_asset("tessara-favicon-32.svg").is_some());
         assert!(svg_asset("tessara-wordmark.svg").is_some());

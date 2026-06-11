@@ -1,3 +1,5 @@
+//! Owns the utils::pagination module behavior.
+
 pub(crate) fn pagination_page_count(total_count: usize, page_size: usize) -> usize {
     if total_count == 0 {
         1
@@ -6,6 +8,7 @@ pub(crate) fn pagination_page_count(total_count: usize, page_size: usize) -> usi
     }
 }
 
+/// Handles the pagination current page behavior.
 pub(crate) fn pagination_current_page(
     total_count: usize,
     page_size: usize,
@@ -14,6 +17,7 @@ pub(crate) fn pagination_current_page(
     page_index.min(pagination_page_count(total_count, page_size) - 1)
 }
 
+/// Handles the pagination page start behavior.
 pub(crate) fn pagination_page_start(
     total_count: usize,
     page_size: usize,
@@ -26,6 +30,7 @@ pub(crate) fn pagination_page_start(
     }
 }
 
+/// Handles the pagination page end behavior.
 pub(crate) fn pagination_page_end(
     total_count: usize,
     page_size: usize,

@@ -1,3 +1,5 @@
+//! Owns the ui::shell::top_app_bar module behavior.
+
 use super::MobileNav;
 use icons::{Bell, CircleHelp, Moon, Sun};
 use leptos::prelude::*;
@@ -6,6 +8,7 @@ use leptos::prelude::*;
 use crate::state::theme::{DARK_THEME_COLOR, LIGHT_THEME_COLOR, STORAGE_KEY};
 
 #[component]
+/// Renders the top app bar view.
 pub fn TopAppBar(active_route: &'static str, title: &'static str) -> impl IntoView {
     view! {
         <header class="top-app-bar">
@@ -31,6 +34,7 @@ pub fn TopAppBar(active_route: &'static str, title: &'static str) -> impl IntoVi
 }
 
 #[component]
+/// Renders the icon button view.
 pub fn IconButton(label: &'static str, children: Children) -> impl IntoView {
     view! {
         <button class="icon-button" type="button" aria-label=label title=label>
@@ -40,6 +44,7 @@ pub fn IconButton(label: &'static str, children: Children) -> impl IntoView {
 }
 
 #[component]
+/// Renders the theme toggle view.
 fn ThemeToggle() -> impl IntoView {
     let preference = RwSignal::new("system");
     let is_open = RwSignal::new(false);
@@ -122,6 +127,7 @@ fn ThemeToggle() -> impl IntoView {
     }
 }
 
+/// Handles the theme option class behavior.
 fn theme_option_class(is_active: bool) -> &'static str {
     if is_active {
         "theme-toggle__option is-active"
@@ -130,6 +136,7 @@ fn theme_option_class(is_active: bool) -> &'static str {
     }
 }
 
+/// Handles the read theme preference behavior.
 fn read_theme_preference() -> &'static str {
     #[cfg(feature = "hydrate")]
     {
@@ -150,6 +157,7 @@ fn read_theme_preference() -> &'static str {
     }
 }
 
+/// Handles the set theme preference behavior.
 fn set_theme_preference(preference: &'static str) {
     #[cfg(feature = "hydrate")]
     {

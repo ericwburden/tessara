@@ -1,12 +1,15 @@
+//! Owns the features::forms::versions module behavior.
+
+use crate::features::forms::FormVersionSummary;
+use crate::features::forms::form_version_desc_sort_key;
 use crate::features::organization::form_version_sort_label;
-use crate::features::shared::{
-    FormVersionSummary, form_version_desc_sort_key, sentence_label, status_badge_class,
-};
+use crate::features::shared::status_badge_class;
 use crate::ui::{DataTable, Timestamp, empty_view};
-use crate::utils::text::nonempty_text;
+use crate::utils::text::{nonempty_text, sentence_label};
 use leptos::prelude::*;
 
 #[component]
+/// Renders the form versions table view.
 pub(crate) fn FormVersionsTable(versions: Vec<FormVersionSummary>) -> impl IntoView {
     const DEFAULT_VISIBLE_FORM_VERSIONS: usize = 5;
 

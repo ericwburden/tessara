@@ -1,8 +1,11 @@
+//! Owns the routes::not_found module behavior.
+
 use crate::ui::AppShell;
 use crate::ui::EmptyState;
 use leptos::prelude::*;
 
 #[component]
+/// Renders the not found page view.
 pub fn NotFoundPage() -> impl IntoView {
     view! {
         <AppShell active_route="home" title="Not Found">

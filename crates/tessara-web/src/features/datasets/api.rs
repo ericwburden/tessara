@@ -1,15 +1,18 @@
+//! Owns the features::datasets::api module behavior.
+
 #[cfg(feature = "hydrate")]
 use super::types::DatasetSqlPreviewResponse;
 #[cfg(feature = "hydrate")]
 use super::types::{
-    DatasetDefinition, DatasetPayload, DatasetSummary, DatasetTable, FormSummary, NodeResponse,
-    RenderedForm, SessionAccount,
+    DatasetDefinition, DatasetFormOption, DatasetPayload, DatasetRenderedForm, DatasetSummary,
+    DatasetTable, NodeResponse, SessionAccount,
 };
 
 #[cfg(feature = "hydrate")]
 use crate::api::client::{redirect_to_login, send_json_request};
 
 #[cfg(feature = "hydrate")]
+/// Fetches the fetch json data.
 async fn fetch_json<T>(url: &str, action: &str) -> Result<Option<T>, String>
 where
     T: serde::de::DeserializeOwned,
@@ -33,16 +36,19 @@ where
 }
 
 #[cfg(feature = "hydrate")]
+/// Fetches the fetch account data.
 pub(super) async fn fetch_account() -> Result<Option<SessionAccount>, String> {
     fetch_json("/api/me", "account").await
 }
 
 #[cfg(feature = "hydrate")]
+/// Fetches the fetch datasets data.
 pub(super) async fn fetch_datasets() -> Result<Option<Vec<DatasetSummary>>, String> {
     fetch_json("/api/datasets", "Dataset list").await
 }
 
 #[cfg(feature = "hydrate")]
+/// Fetches the fetch dataset detail data.
 pub(super) async fn fetch_dataset_detail(
     dataset_id: &str,
 ) -> Result<Option<DatasetDefinition>, String> {
@@ -50,6 +56,7 @@ pub(super) async fn fetch_dataset_detail(
 }
 
 #[cfg(feature = "hydrate")]
+/// Fetches the fetch dataset table data.
 pub(super) async fn fetch_dataset_table(dataset_id: &str) -> Result<Option<DatasetTable>, String> {
     fetch_json(
         &format!("/api/datasets/{dataset_id}/table"),
@@ -59,25 +66,28 @@ pub(super) async fn fetch_dataset_table(dataset_id: &str) -> Result<Option<Datas
 }
 
 #[cfg(feature = "hydrate")]
-pub(super) async fn fetch_forms() -> Result<Option<Vec<FormSummary>>, String> {
+/// Fetches the fetch forms data.
+pub(super) async fn fetch_forms() -> Result<Option<Vec<DatasetFormOption>>, String> {
     fetch_json("/api/forms", "Form options").await
 }
 
 #[cfg(feature = "hydrate")]
+/// Fetches the fetch nodes data.
 pub(super) async fn fetch_nodes() -> Result<Option<Vec<NodeResponse>>, String> {
     fetch_json("/api/nodes", "Visibility nodes").await
 }
 
 #[cfg(feature = "hydrate")]
+/// Fetches the fetch rendered form data.
 pub(super) async fn fetch_rendered_form(
     form_version_id: &str,
-) -> Result<Option<RenderedForm>, String> {
+) -> Result<Option<DatasetRenderedForm>, String> {
     match gloo_net::http::Request::get(&format!("/api/form-versions/{form_version_id}/render"))
         .send()
         .await
     {
         Ok(response) if response.ok() => response
-            .json::<RenderedForm>()
+            .json::<DatasetRenderedForm>()
             .await
             .map(Some)
             .map_err(|_| "Rendered form could not be read.".to_string()),
@@ -86,6 +96,7 @@ pub(super) async fn fetch_rendered_form(
 }
 
 #[cfg(feature = "hydrate")]
+/// Handles the save dataset payload behavior.
 pub(super) async fn save_dataset_payload(
     dataset_id: Option<&str>,
     payload: &DatasetPayload,
@@ -111,6 +122,7 @@ pub(super) async fn save_dataset_payload(
 }
 
 #[cfg(feature = "hydrate")]
+/// Handles the preview dataset sql payload behavior.
 pub(super) async fn preview_dataset_sql_payload(
     dataset_id: Option<&str>,
     payload: &DatasetPayload,

@@ -1,9 +1,12 @@
+//! Owns the document::html module behavior.
+
 use leptos::context::Provider;
 use leptos::prelude::*;
 use leptos_router::location::RequestUrl;
 
 use crate::{app, pipeline};
 
+/// Handles the render native app document behavior.
 pub(crate) fn render_native_app_document(title: &str, description: &str, _path: &str) -> String {
     let shell = Owner::new().with(|| {
         view! {

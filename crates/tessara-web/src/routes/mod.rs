@@ -1,3 +1,5 @@
+//! Owns the routes module behavior.
+
 pub mod administration;
 pub mod components;
 pub mod dashboards;
@@ -17,6 +19,7 @@ pub use not_found::NotFoundPage;
 
 pub const PRIMARY_SSR_MODE: SsrMode = SsrMode::InOrder;
 
+/// Handles the routes behavior.
 pub fn routes() -> impl leptos_router::MatchNestedRoutes + Clone {
     (
         home::home_routes(),

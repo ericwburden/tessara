@@ -1,6 +1,9 @@
+//! Owns the ui::status_badge module behavior.
+
 use leptos::prelude::*;
 
 #[component]
+/// Renders the status badge view.
 pub fn StatusBadge(#[prop(into)] label: String) -> impl IntoView {
     let class = match label.as_str() {
         "Available" | "Done" | "Ready" | "Steps Complete" => "status-badge is-success",

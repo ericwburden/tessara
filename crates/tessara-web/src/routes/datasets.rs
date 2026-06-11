@@ -1,3 +1,5 @@
+//! Owns the routes::datasets module behavior.
+
 use leptos::prelude::*;
 use leptos_router::components::Route;
 use leptos_router::{MatchNestedRoutes, path};
@@ -8,6 +10,7 @@ use crate::features::datasets::{
 
 use crate::routes::PRIMARY_SSR_MODE;
 
+/// Handles the dataset routes behavior.
 pub fn dataset_routes() -> impl MatchNestedRoutes + Clone {
     view! {
         <>

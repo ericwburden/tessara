@@ -1,3 +1,5 @@
+//! Owns the features::datasets::types module behavior.
+
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
@@ -91,14 +93,14 @@ pub(super) struct DatasetSqlPreviewResponse {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
-pub(super) struct FormSummary {
+pub(super) struct DatasetFormOption {
     pub(super) id: String,
     pub(super) name: String,
-    pub(super) versions: Vec<FormVersionSummary>,
+    pub(super) versions: Vec<DatasetFormVersionOption>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
-pub(super) struct FormVersionSummary {
+pub(super) struct DatasetFormVersionOption {
     pub(super) id: String,
     pub(super) version_label: Option<String>,
     pub(super) status: String,
@@ -107,20 +109,20 @@ pub(super) struct FormVersionSummary {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
-pub(super) struct RenderedForm {
+pub(super) struct DatasetRenderedForm {
     pub(super) form_version_id: String,
     pub(super) form_id: String,
     pub(super) form_name: String,
-    pub(super) sections: Vec<RenderedSection>,
+    pub(super) sections: Vec<DatasetRenderedSection>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
-pub(super) struct RenderedSection {
-    pub(super) fields: Vec<RenderedField>,
+pub(super) struct DatasetRenderedSection {
+    pub(super) fields: Vec<DatasetRenderedField>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
-pub(super) struct RenderedField {
+pub(super) struct DatasetRenderedField {
     pub(super) key: String,
     pub(super) label: String,
     pub(super) field_type: String,
@@ -214,6 +216,7 @@ pub(super) enum DatasetDesignerSelection {
 }
 
 impl Default for DatasetSourceDraft {
+    /// Handles the default behavior.
     fn default() -> Self {
         Self {
             input_kind: "form".into(),

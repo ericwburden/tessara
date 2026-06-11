@@ -1,13 +1,18 @@
+//! Owns the features::workflows::pages::list module behavior.
+
 use crate::features::organization::{
     OrganizationNode, load_workflow_assignment_nodes, load_workflows, workflow_assigned_users_label,
 };
 use crate::features::shared::FilterHeader as SharedFilterHeader;
 use crate::features::shared::{
     FormAttachmentLink, WorkflowAssignedUsersSheetData, WorkflowAvailableNodesSheetData,
-    WorkflowSourceMarker, WorkflowSummary, node_count_label, status_badge_class,
-    unique_filter_options, user_count_label, workflow_assigned_user_links,
-    workflow_available_node_links, workflow_available_nodes_label, workflow_description_label,
-    workflow_status_key, workflow_status_label, workflow_version_label,
+    node_count_label, status_badge_class, unique_filter_options, user_count_label,
+};
+use crate::features::workflows::types::WorkflowSummary;
+use crate::features::workflows::{
+    WorkflowSourceMarker, workflow_assigned_user_links, workflow_available_node_links,
+    workflow_available_nodes_label, workflow_description_label, workflow_status_key,
+    workflow_status_label, workflow_version_label,
 };
 use crate::ui::empty_view;
 use crate::ui::{AppShell, Button, DataTable, PageHeader};
@@ -17,6 +22,7 @@ use leptos::portal::Portal;
 use leptos::prelude::*;
 
 #[component]
+/// Renders the workflows list view.
 fn WorkflowsList(
     workflows: Vec<WorkflowSummary>,
     search: RwSignal<String>,
@@ -272,6 +278,7 @@ fn WorkflowsList(
 }
 
 #[component]
+/// Renders the workflow available nodes list view.
 fn WorkflowAvailableNodesList(
     nodes: Vec<FormAttachmentLink>,
     workflow_name: String,
@@ -313,6 +320,7 @@ fn WorkflowAvailableNodesList(
 }
 
 #[component]
+/// Renders the workflow available nodes sheet view.
 fn WorkflowAvailableNodesSheet(
     detail: RwSignal<Option<WorkflowAvailableNodesSheetData>>,
 ) -> impl IntoView {
@@ -420,6 +428,7 @@ fn WorkflowAvailableNodesSheet(
 }
 
 #[component]
+/// Renders the workflow assigned users list view.
 fn WorkflowAssignedUsersList(
     users: Vec<FormAttachmentLink>,
     workflow_name: String,
@@ -461,6 +470,7 @@ fn WorkflowAssignedUsersList(
 }
 
 #[component]
+/// Renders the workflow assigned users sheet view.
 fn WorkflowAssignedUsersSheet(
     detail: RwSignal<Option<WorkflowAssignedUsersSheetData>>,
 ) -> impl IntoView {
@@ -568,6 +578,7 @@ fn WorkflowAssignedUsersSheet(
 }
 
 #[component]
+/// Renders the workflows page view.
 pub fn WorkflowsPage() -> impl IntoView {
     let workflows = RwSignal::new(Vec::<WorkflowSummary>::new());
     let organization_nodes = RwSignal::new(Vec::<OrganizationNode>::new());

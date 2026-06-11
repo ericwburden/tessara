@@ -1,3 +1,5 @@
+//! Owns the state::session module behavior.
+
 #[cfg(feature = "hydrate")]
 use crate::features::auth;
 use crate::features::auth::ShellAccountSummary;
@@ -16,6 +18,7 @@ pub(crate) struct ShellSessionState {
 }
 
 #[cfg(feature = "hydrate")]
+/// Handles the shell session account behavior.
 pub(crate) fn shell_session_account() -> RwSignal<Option<ShellAccountSummary>> {
     use_context::<ShellSessionState>()
         .map(|state| state.shell_account)
@@ -23,11 +26,13 @@ pub(crate) fn shell_session_account() -> RwSignal<Option<ShellAccountSummary>> {
 }
 
 #[cfg(not(feature = "hydrate"))]
+/// Handles the shell session account behavior.
 pub(crate) fn shell_session_account() -> RwSignal<Option<ShellAccountSummary>> {
     RwSignal::new(None)
 }
 
 #[cfg(feature = "hydrate")]
+/// Handles the provide shell session behavior.
 pub(crate) fn provide_shell_session() -> RwSignal<Option<ShellAccountSummary>> {
     let shell_account = RwSignal::new(None::<ShellAccountSummary>);
     load_shell_account(shell_account);
@@ -36,11 +41,13 @@ pub(crate) fn provide_shell_session() -> RwSignal<Option<ShellAccountSummary>> {
 }
 
 #[cfg(not(feature = "hydrate"))]
+/// Handles the provide shell session behavior.
 pub(crate) fn provide_shell_session() -> RwSignal<Option<ShellAccountSummary>> {
     RwSignal::new(None)
 }
 
 #[cfg(feature = "hydrate")]
+/// Loads the load shell account data.
 pub(crate) fn load_shell_account(account: RwSignal<Option<ShellAccountSummary>>) {
     spawn_local(async move {
         let session = auth::fetch_session().await;
@@ -55,11 +62,13 @@ pub(crate) fn load_shell_account(account: RwSignal<Option<ShellAccountSummary>>)
 
 #[cfg(not(feature = "hydrate"))]
 #[allow(dead_code)]
+/// Loads the load shell account data.
 pub(crate) fn load_shell_account(account: RwSignal<Option<ShellAccountSummary>>) {
     let _ = account;
 }
 
 #[cfg(feature = "hydrate")]
+/// Submits the submit logout request.
 pub(crate) fn submit_logout() {
     spawn_local(async move {
         auth::api::submit_logout().await;
@@ -71,4 +80,5 @@ pub(crate) fn submit_logout() {
 }
 
 #[cfg(not(feature = "hydrate"))]
+/// Submits the submit logout request.
 pub(crate) fn submit_logout() {}

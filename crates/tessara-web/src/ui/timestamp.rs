@@ -1,3 +1,5 @@
+//! Owns the ui::timestamp module behavior.
+
 use leptos::prelude::*;
 
 #[cfg(feature = "hydrate")]
@@ -6,6 +8,7 @@ use js_sys::Date;
 use wasm_bindgen::JsValue;
 
 #[component]
+/// Renders the timestamp view.
 pub fn Timestamp(value: String) -> impl IntoView {
     let datetime = value.clone();
     let display_value = RwSignal::new(value.clone());
@@ -21,6 +24,7 @@ pub fn Timestamp(value: String) -> impl IntoView {
 }
 
 #[cfg(feature = "hydrate")]
+/// Formats the format local timestamp value.
 fn format_local_timestamp(value: &str) -> String {
     let date = Date::new(&JsValue::from_str(value));
     if date.get_time().is_nan() {

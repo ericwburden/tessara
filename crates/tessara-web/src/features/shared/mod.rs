@@ -1,63 +1,46 @@
+//! Owns the features::shared module behavior.
+
 use crate::ui::empty_view;
 use crate::utils::metadata::metadata_label as filter_metadata_label;
 use crate::utils::text::text_matches as filter_text_matches;
 use icons::{ListFilter, Search};
 use leptos::prelude::*;
 
-mod utility_exports {
-    use crate::utils::{metadata, text};
-
-    pub(crate) use metadata::{metadata_label, metadata_rows};
-    pub(crate) use text::{nonempty_text, sentence_label};
-}
-pub(crate) use utility_exports::*;
-
 #[cfg(feature = "hydrate")]
+/// Handles the navigate to href behavior.
 pub(crate) fn navigate_to_href(href: &str) {
     if let Some(window) = web_sys::window() {
         let _ = window.location().set_href(href);
     }
 }
 
-mod shared {
-    use crate::features::shared_data;
-
-    pub(crate) use shared_data::*;
-}
-pub(crate) use shared::*;
-
+mod display;
 mod helpers;
 mod placeholder;
+mod types;
 mod ui;
+pub(crate) use display::status_badge_class;
 pub(crate) use placeholder::NativePlaceholderRoute;
-pub(crate) use ui::{
-    FormBuilderGridCell, FormBuilderSectionLayout, WorkflowSourceMarker,
-    active_workflow_definition_version, blank_form_builder_field_at, form_attached_nodes,
-    form_builder_field_default_label, form_builder_field_type_icon, form_builder_occupancy_map,
-    form_builder_section_fields, form_builder_section_layout, form_definition_scope_label,
-    form_field_count_label, form_version_desc_sort_key, node_count_label, node_display_path,
-    rendered_field_layout_label, rendered_field_type_label, response_selected_assignment,
-    response_start_can_submit, submission_assignee_label, submission_progress_label,
-    submission_status_key, submission_status_label, submission_step_label,
-    submission_workflow_label, user_count_label, workflow_assigned_user_links,
-    workflow_assignee_label, workflow_assignment_assignee_label, workflow_assignment_candidate_key,
-    workflow_assignment_revision_label, workflow_assignment_state, workflow_assignment_state_label,
-    workflow_assignment_status_key, workflow_assignment_status_label,
-    workflow_available_node_links, workflow_available_nodes_label,
-    workflow_definition_status_label, workflow_definition_version_label,
-    workflow_description_label, workflow_source_label, workflow_status_key, workflow_status_label,
-    workflow_version_label,
+pub(crate) use types::{
+    FormAttachmentLink, FormsAttachedNodesSheetData, WorkflowAssignedUsersSheetData,
+    WorkflowAvailableNodesSheetData,
 };
-#[cfg(feature = "hydrate")]
-pub(crate) use ui::{
-    collect_response_values, prepared_form_builder_fields, prepared_form_builder_sections,
-    submission_value_maps,
-};
+pub(crate) use ui::{node_count_label, node_display_path, user_count_label};
 
 mod filtering;
-pub(crate) use filtering::*;
+pub(crate) use filtering::{
+    FormNodeFilterOption, form_matches_node_filter, form_node_filter_options, indented_node_label,
+    slug_from_label, unique_filter_options, visible_form_node_filter_options,
+    workflow_form_version_options, workflow_step_form_label,
+};
+#[cfg(feature = "hydrate")]
+pub(crate) use filtering::{
+    existing_form_slugs, existing_form_slugs_for_update, existing_workflow_slugs,
+    unique_slug_from_label,
+};
 
 #[component]
+/// Renders the filter header view.
 pub(crate) fn FilterHeader(
     label: &'static str,
     all_label: &'static str,

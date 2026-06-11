@@ -1,3 +1,5 @@
+//! Owns the features::administration::models module behavior.
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 

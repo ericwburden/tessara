@@ -1,3 +1,5 @@
+//! Owns the ui::shell module behavior.
+
 mod app_shell;
 mod mobile_nav;
 mod nav;

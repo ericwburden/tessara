@@ -1,8 +1,11 @@
+//! Owns the features::shared::placeholder module behavior.
+
 use leptos::prelude::*;
 
 use crate::ui::{AppShell, EmptyState, InfoListTable, InfoRow, PageHeader, StatusBadge};
 
 #[component]
+/// Renders the native placeholder route view.
 pub(crate) fn NativePlaceholderRoute(
     active_route: &'static str,
     title: &'static str,

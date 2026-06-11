@@ -1,3 +1,5 @@
+//! Owns the routes::administration module behavior.
+
 use leptos::prelude::*;
 use leptos_router::components::Route;
 use leptos_router::{MatchNestedRoutes, path};
@@ -10,6 +12,7 @@ use crate::features::administration::{
 
 use crate::routes::PRIMARY_SSR_MODE;
 
+/// Handles the administration routes behavior.
 pub fn administration_routes() -> impl MatchNestedRoutes + Clone {
     view! {
         <>

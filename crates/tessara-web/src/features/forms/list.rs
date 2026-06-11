@@ -1,8 +1,12 @@
+//! Owns the features::forms::list module behavior.
+
+use crate::features::forms::FormSummary;
+use crate::features::forms::{form_attached_nodes, form_field_count_label, form_status_label};
 use crate::features::organization::{active_form_version, form_version_label};
 use crate::features::shared::{
-    FilterHeader as SharedFilterHeader, FormAttachmentLink, FormNodeFilterOption, FormSummary,
-    FormsAttachedNodesSheetData, form_attached_nodes, form_field_count_label, form_status_label,
-    indented_node_label, node_count_label, status_badge_class, visible_form_node_filter_options,
+    FilterHeader as SharedFilterHeader, FormAttachmentLink, FormNodeFilterOption,
+    FormsAttachedNodesSheetData, indented_node_label, node_count_label, status_badge_class,
+    visible_form_node_filter_options,
 };
 use crate::ui::{DataTable, empty_view};
 use icons::{ChevronDown, ExternalLink, ListFilter, PanelRight, Search, X};
@@ -10,6 +14,7 @@ use leptos::portal::Portal;
 use leptos::prelude::*;
 
 #[component]
+/// Renders the forms node lineage filter view.
 pub(crate) fn FormsNodeLineageFilter(
     options: Vec<FormNodeFilterOption>,
     selected_node_id: RwSignal<Option<String>>,
@@ -194,6 +199,7 @@ pub(crate) fn FormsNodeLineageFilter(
 }
 
 #[component]
+/// Renders the forms list view.
 pub(crate) fn FormsList(
     forms: Vec<FormSummary>,
     search: RwSignal<String>,
@@ -445,6 +451,7 @@ pub(crate) fn FormsList(
 }
 
 #[component]
+/// Renders the forms attached nodes list view.
 pub(crate) fn FormsAttachedNodesList(
     nodes: Vec<FormAttachmentLink>,
     form_name: String,
@@ -488,6 +495,7 @@ pub(crate) fn FormsAttachedNodesList(
 }
 
 #[component]
+/// Renders the forms attached nodes sheet view.
 pub(crate) fn FormsAttachedNodesSheet(
     detail: RwSignal<Option<FormsAttachedNodesSheetData>>,
 ) -> impl IntoView {
