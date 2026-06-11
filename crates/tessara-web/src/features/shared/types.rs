@@ -1,4 +1,6 @@
-//! Owns the features::shared::types module behavior.
+//! Cross-feature shared data contracts.
+//!
+//! Keep DTOs here only when forms, workflows, organization, or responses jointly consume the same response shape.
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct FormAttachmentLink {

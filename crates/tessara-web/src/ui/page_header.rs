@@ -1,4 +1,6 @@
-//! Owns the ui::page_header module behavior.
+//! Shared page header components.
+//!
+//! This module owns consistent title, subtitle, action, and toolbar layout for top-level feature pages.
 
 use leptos::prelude::*;
 

@@ -1,4 +1,6 @@
-//! Owns the features::forms::versions module behavior.
+//! Version-focused views and helpers for the Forms feature.
+//!
+//! Keep version selection, labels, and version detail presentation here rather than mixing it into broad page modules.
 
 use crate::features::forms::FormVersionSummary;
 use crate::features::forms::form_version_desc_sort_key;

@@ -1,4 +1,6 @@
-//! Owns the routes::administration module behavior.
+//! Route definitions for the Administration feature.
+//!
+//! Keep URL nesting, route parameters, and route-to-page wiring here; page composition and data loading belong in features::administration.
 
 use leptos::prelude::*;
 use leptos_router::components::Route;

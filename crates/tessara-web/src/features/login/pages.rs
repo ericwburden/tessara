@@ -1,4 +1,6 @@
-//! Owns the features::login::pages module behavior.
+//! Route-level page composition for the Login feature.
+//!
+//! Keep Leptos page components that correspond directly to routes here; reusable widgets, API calls, and DTOs should live in sibling modules.
 
 use icons::{LockKeyhole, Mail};
 use leptos::prelude::*;

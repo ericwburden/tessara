@@ -1,4 +1,6 @@
-//! Owns the ui::status_badge module behavior.
+//! Generic status badge component.
+//!
+//! Keep domain-neutral badge rendering here; status-specific class selection belongs with the feature or shared display helper that understands the value.
 
 use leptos::prelude::*;
 

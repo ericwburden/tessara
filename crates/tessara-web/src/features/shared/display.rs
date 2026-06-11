@@ -1,4 +1,6 @@
-//! Owns the features::shared::display module behavior.
+//! Cross-feature display formatting helpers.
+//!
+//! Keep status class and label helpers here when the same visual mapping is shared by several feature domains.
 
 pub(crate) fn status_badge_class(status: &str) -> &'static str {
     match status {

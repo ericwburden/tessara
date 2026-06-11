@@ -1,4 +1,6 @@
-//! Owns the features::workflows::payloads module behavior.
+//! Request payload types for the Workflows feature.
+//!
+//! Keep serializable mutation bodies here so API helpers and editors share one contract definition.
 
 use serde::Serialize;
 

@@ -1,4 +1,6 @@
-//! Owns the ui module behavior.
+//! Shared UI component registry.
+//!
+//! Re-export reusable, domain-neutral components from here; feature-specific views and workflows should stay under `features`.
 
 use leptos::prelude::{AnyView, Fragment};
 

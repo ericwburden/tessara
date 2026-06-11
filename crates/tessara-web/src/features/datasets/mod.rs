@@ -1,4 +1,6 @@
-//! Owns the features::datasets module behavior.
+//! Public boundary for the Datasets feature.
+//!
+//! Re-export only the pages, types, and helpers other modules need; keep Datasets-specific implementation details in child modules.
 
 mod api;
 mod loaders;

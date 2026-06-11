@@ -1,4 +1,6 @@
-//! Owns the features::responses::display module behavior.
+//! Display formatting helpers for the Responses feature.
+//!
+//! Keep label, class, and summary formatting here when it depends on Responses domain values but not on route state.
 
 use crate::features::forms::RenderedField;
 use crate::features::forms::builder::FORM_BUILDER_COLUMN_COUNT;

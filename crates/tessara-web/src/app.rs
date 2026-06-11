@@ -1,4 +1,6 @@
-//! Owns the app module behavior.
+//! Top-level Leptos application composition.
+//!
+//! Keep router mounting, global context provisioning, and wasm hydration setup here; route definitions and screen behavior belong in `routes` and `features`.
 
 use leptos::{children::ToChildren, prelude::*};
 use leptos_router::components::{Router, Routes};

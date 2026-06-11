@@ -1,4 +1,6 @@
-//! Owns the routes::organization module behavior.
+//! Route definitions for the Organization feature.
+//!
+//! Keep URL nesting, route parameters, and route-to-page wiring here; page composition and data loading belong in features::organization.
 
 use leptos::prelude::*;
 use leptos_router::components::Route;

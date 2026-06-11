@@ -1,4 +1,6 @@
-//! Owns the features::forms::builder module behavior.
+//! Form builder module boundary.
+//!
+//! Re-export the builder canvas, state, drag, layout, validation, display, and type helpers needed by forms and organization form workflows.
 
 mod components;
 mod display;

@@ -1,4 +1,6 @@
-//! Owns the routes::dashboards module behavior.
+//! Route definitions for the Dashboards feature.
+//!
+//! Keep URL nesting, route parameters, and route-to-page wiring here; page composition and data loading belong in features::dashboards.
 
 use leptos::prelude::*;
 use leptos_router::components::Route;

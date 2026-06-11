@@ -1,4 +1,6 @@
-//! Owns the routes::not_found module behavior.
+//! Not-found route definition.
+//!
+//! Keep the fallback page route boundary here and delegate any reusable missing-state UI to shared UI modules.
 
 use crate::ui::AppShell;
 use crate::ui::EmptyState;

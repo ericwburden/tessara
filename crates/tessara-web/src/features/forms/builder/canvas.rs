@@ -1,4 +1,6 @@
-//! Owns the features::forms::builder::canvas module behavior.
+//! Form builder canvas composition.
+//!
+//! Keep the editable section-and-field canvas here; low-level field, grid, and section widgets belong in component submodules.
 
 use leptos::prelude::*;
 

@@ -1,4 +1,6 @@
-//! Owns the state::session module behavior.
+//! Shell session context management.
+//!
+//! This module owns loading, providing, reading, and clearing the current account summary used by the application shell.
 
 #[cfg(feature = "hydrate")]
 use crate::features::auth;

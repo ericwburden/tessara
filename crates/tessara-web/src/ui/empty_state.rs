@@ -1,4 +1,6 @@
-//! Owns the ui::empty_state module behavior.
+//! Empty-state presentation component.
+//!
+//! This module owns the reusable message pattern for views with no records or no matching results.
 
 use leptos::prelude::*;
 

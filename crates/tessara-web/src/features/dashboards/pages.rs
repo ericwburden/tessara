@@ -1,4 +1,6 @@
-//! Owns the features::dashboards::pages module behavior.
+//! Route-level page composition for the Dashboards feature.
+//!
+//! Keep Leptos page components that correspond directly to routes here; reusable widgets, API calls, and DTOs should live in sibling modules.
 
 use leptos::prelude::*;
 

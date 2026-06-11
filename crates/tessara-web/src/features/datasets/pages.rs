@@ -1,4 +1,6 @@
-//! Owns the features::datasets::pages module behavior.
+//! Route-level page composition for the Datasets feature.
+//!
+//! Keep Leptos page components that correspond directly to routes here; reusable widgets, API calls, and DTOs should live in sibling modules.
 
 use std::collections::{BTreeMap, BTreeSet};
 

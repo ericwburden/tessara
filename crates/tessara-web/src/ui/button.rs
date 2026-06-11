@@ -1,4 +1,6 @@
-//! Owns the ui::button module behavior.
+//! Shared button primitives.
+//!
+//! Keep general-purpose button variants here when they are not coupled to a feature workflow or form state.
 
 use leptos::prelude::*;
 

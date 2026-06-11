@@ -1,4 +1,6 @@
-//! Owns the features::operations::api module behavior.
+//! Client-side API orchestration for the Operations feature.
+//!
+//! Keep endpoint calls, request assembly, and response handling for Operations screens here; pure DTOs and display formatting belong in sibling modules.
 
 #[cfg(feature = "hydrate")]
 use super::types::OperationsStatus;

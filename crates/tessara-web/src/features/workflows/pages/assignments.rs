@@ -1,4 +1,6 @@
-//! Owns the features::workflows::pages::assignments module behavior.
+//! Assignments support for the Workflows feature.
+//!
+//! Keep functionality here when it is owned by Workflows and specifically supports the Assignments concern.
 
 #[cfg(feature = "hydrate")]
 use crate::features::organization::current_search_param;

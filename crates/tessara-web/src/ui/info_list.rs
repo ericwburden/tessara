@@ -1,4 +1,6 @@
-//! Owns the ui::info_list module behavior.
+//! Definition-list style information components.
+//!
+//! Keep reusable label/value display primitives here for detail panels and summary sections across features.
 
 use leptos::prelude::*;
 

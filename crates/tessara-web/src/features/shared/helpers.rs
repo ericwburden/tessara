@@ -1,3 +1,3 @@
-//! Shared helper aliases used to keep domain modules importable from one boundary.
+//! Compatibility re-exports for shared feature helpers.
 //!
-//! The concrete implementations remain in `filtering` and `ui`.
+//! Keep this module limited to forwarding helper APIs from their real owner modules while call sites migrate to narrower imports.

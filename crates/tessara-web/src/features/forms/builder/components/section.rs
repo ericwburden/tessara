@@ -1,4 +1,6 @@
-//! Owns the features::forms::builder::components::section module behavior.
+//! Form builder section component.
+//!
+//! Keep section header, ordering, and section-level canvas composition here.
 
 use leptos::prelude::*;
 

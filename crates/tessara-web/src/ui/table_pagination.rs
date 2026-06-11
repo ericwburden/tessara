@@ -1,4 +1,6 @@
-//! Owns the ui::table_pagination module behavior.
+//! Reusable table pagination controls.
+//!
+//! This module owns footer markup and row-range summaries for paginated feature tables.
 
 use leptos::prelude::*;
 

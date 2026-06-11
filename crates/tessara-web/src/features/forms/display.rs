@@ -1,4 +1,6 @@
-//! Owns the features::forms::display module behavior.
+//! Display formatting helpers for the Forms feature.
+//!
+//! Keep label, class, and summary formatting here when it depends on Forms domain values but not on route state.
 
 use crate::features::forms::types::{FormDefinition, FormVersionSummary, RenderedField};
 use crate::features::shared::FormAttachmentLink;

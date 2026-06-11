@@ -1,4 +1,6 @@
-//! Owns the types::route_params module behavior.
+//! Route parameter value objects.
+//!
+//! Keep typed route parameter structs here so route definitions and feature pages agree on URL shape without duplicating parameter declarations.
 
 use leptos::prelude::With;
 use leptos_router::hooks::use_params;

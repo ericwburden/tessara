@@ -1,4 +1,6 @@
-//! Owns the features::organization::types module behavior.
+//! Data contracts for the Organization feature.
+//!
+//! Keep API response shapes, request payloads, and feature-local value objects here when they are owned by Organization.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

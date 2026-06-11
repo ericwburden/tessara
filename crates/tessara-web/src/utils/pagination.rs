@@ -1,4 +1,6 @@
-//! Owns the utils::pagination module behavior.
+//! Pagination math helpers for table-like views.
+//!
+//! Keep page count, current-page clamping, and row-range calculations here so feature tables share the same pagination semantics.
 
 pub(crate) fn pagination_page_count(total_count: usize, page_size: usize) -> usize {
     if total_count == 0 {

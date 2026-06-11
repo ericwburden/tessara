@@ -1,4 +1,6 @@
-//! Owns the features::forms::builder::components::grid module behavior.
+//! Form builder grid component.
+//!
+//! Keep grid-cell rendering, drop targets, and field placement visualization here.
 
 use leptos::prelude::*;
 

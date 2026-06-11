@@ -1,4 +1,6 @@
-//! Brand and document head assets for Tessara web shells.
+//! Static document head and SVG asset lookup helpers.
+//!
+//! Keep favicon, stylesheet, preload, and embedded SVG lookup concerns here so native rendering has a single asset metadata source.
 
 /// Route prefix used for SVG brand assets served by the API crate.
 pub const ASSET_PREFIX: &str = "/assets";

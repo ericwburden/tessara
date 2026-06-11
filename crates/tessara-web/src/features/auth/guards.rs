@@ -1,4 +1,6 @@
-//! Owns the features::auth::guards module behavior.
+//! Authentication guard helpers.
+//!
+//! Keep route/session gating helpers here so pages can delegate auth decisions to one module.
 
 #[cfg(feature = "hydrate")]
 use crate::features::auth::api;

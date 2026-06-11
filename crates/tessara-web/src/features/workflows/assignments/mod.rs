@@ -1,4 +1,6 @@
-//! Owns the features::workflows::assignments module behavior.
+//! Workflow assignment module boundary.
+//!
+//! Re-export assignment API helpers, display formatters, and DTOs from here while keeping the broader workflow feature independent of assignment internals.
 
 mod api;
 mod display;

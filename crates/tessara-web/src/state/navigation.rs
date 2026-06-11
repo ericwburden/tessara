@@ -1,4 +1,6 @@
-//! Owns the state::navigation module behavior.
+//! Shell navigation model and capability filtering.
+//!
+//! Keep route labels, navigation sections, icon selection, and permission checks here; feature modules should not duplicate sidebar metadata.
 
 #[derive(Clone, Copy)]
 pub struct NavItem {

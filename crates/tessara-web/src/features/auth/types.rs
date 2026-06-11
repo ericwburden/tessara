@@ -1,4 +1,6 @@
-//! Owns the features::auth::types module behavior.
+//! Data contracts for the Auth feature.
+//!
+//! Keep API response shapes, request payloads, and feature-local value objects here when they are owned by Auth.
 
 use serde::Deserialize;
 

@@ -1,4 +1,6 @@
-//! Owns the features::administration::models module behavior.
+//! View models for the Administration feature.
+//!
+//! Keep derived frontend models and lightweight state shapes here when they are shared by multiple Administration pages or helpers.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

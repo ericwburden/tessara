@@ -1,4 +1,6 @@
-//! Owns the features::organization::tree module behavior.
+//! Organization tree loading and rendering helpers.
+//!
+//! Keep hierarchy construction, branch expansion, tree navigation, and node detail loading here.
 
 #[cfg(feature = "hydrate")]
 use crate::api::client::redirect_to_login;

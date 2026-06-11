@@ -1,4 +1,6 @@
-//! Owns the features::forms::builder::display module behavior.
+//! Display formatting helpers for the Forms feature.
+//!
+//! Keep label, class, and summary formatting here when it depends on Forms domain values but not on route state.
 
 use icons::{
     CalendarDays, CircleDot, Hash, ListChecks, SquareCheckBig, TextCursorInput, TextQuote,

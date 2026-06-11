@@ -1,4 +1,6 @@
-//! Owns the document::html module behavior.
+//! Native HTML document assembly.
+//!
+//! This module owns the server-rendered document wrapper around the Leptos app root, overlay root, head tags, and hydration script tags.
 
 use leptos::context::Provider;
 use leptos::prelude::*;

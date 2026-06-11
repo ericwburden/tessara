@@ -1,4 +1,6 @@
-//! Owns the routes module behavior.
+//! Root route-tree assembly for the Tessara frontend.
+//!
+//! Keep only route nesting and feature route wiring here; screen rendering and data loading should remain in the corresponding feature modules.
 
 pub mod administration;
 pub mod components;

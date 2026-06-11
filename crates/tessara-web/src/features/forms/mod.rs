@@ -1,4 +1,6 @@
-//! Owns the features::forms module behavior.
+//! Public boundary for the Forms feature.
+//!
+//! Re-export only the pages, types, and helpers other modules need; keep Forms-specific implementation details in child modules.
 
 pub(crate) mod api;
 mod attached_nodes;

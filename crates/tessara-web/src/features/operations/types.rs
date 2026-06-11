@@ -1,4 +1,6 @@
-//! Owns the features::operations::types module behavior.
+//! Data contracts for the Operations feature.
+//!
+//! Keep API response shapes, request payloads, and feature-local value objects here when they are owned by Operations.
 
 use serde::Deserialize;
 

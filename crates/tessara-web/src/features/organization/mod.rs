@@ -1,4 +1,6 @@
-//! Owns the features::organization module behavior.
+//! Public boundary for the Organization feature.
+//!
+//! Re-export only the pages, types, and helpers other modules need; keep Organization-specific implementation details in child modules.
 
 pub(crate) mod api;
 mod detail;

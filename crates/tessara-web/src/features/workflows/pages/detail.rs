@@ -1,4 +1,6 @@
-//! Owns the features::workflows::pages::detail module behavior.
+//! Detail view components for the Workflows feature.
+//!
+//! Keep read-focused panels and detail-page presentation here; mutation workflows should live in editor or API modules.
 
 use crate::features::organization::toggle_workflow_assignment;
 use crate::features::shared::status_badge_class;

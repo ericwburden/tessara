@@ -1,4 +1,6 @@
-//! Owns the features::responses module behavior.
+//! Public boundary for the Responses feature.
+//!
+//! Re-export only the pages, types, and helpers other modules need; keep Responses-specific implementation details in child modules.
 
 mod api;
 mod detail;

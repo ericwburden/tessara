@@ -1,4 +1,6 @@
-//! Owns the features::responses::value_collection module behavior.
+//! Response value collection helpers.
+//!
+//! Keep form-field value extraction and submission value maps here so response start and edit flows share one conversion path.
 
 use crate::features::forms::RenderedForm;
 use crate::features::responses::types::SubmissionDetail;

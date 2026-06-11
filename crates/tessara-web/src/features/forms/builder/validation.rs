@@ -1,4 +1,6 @@
-//! Owns the features::forms::builder::validation module behavior.
+//! Form builder validation helpers.
+//!
+//! Keep draft-to-payload preparation and validation errors here so builder UI and submit flows share the same checks.
 
 use crate::features::forms::builder::{FormBuilderFieldDraft, FormBuilderSectionDraft};
 use crate::features::shared::slug_from_label;

@@ -1,4 +1,6 @@
-//! Owns the routes::login module behavior.
+//! Route definitions for the Login feature.
+//!
+//! Keep URL nesting, route parameters, and route-to-page wiring here; page composition and data loading belong in features::login.
 
 use leptos::prelude::*;
 use leptos_router::components::Route;

@@ -1,4 +1,6 @@
-//! Owns the features::organization::api::workflows module behavior.
+//! Workflows support for the Organization feature.
+//!
+//! Keep functionality here when it is owned by Organization and specifically supports the Workflows concern.
 
 #[cfg(feature = "hydrate")]
 use crate::api::client::{redirect_to_login, send_json_id_request};

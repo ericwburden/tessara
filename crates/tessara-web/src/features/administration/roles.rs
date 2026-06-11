@@ -1,4 +1,6 @@
-//! Role-management administration pages and related helpers.
+//! Role-management administration pages and helpers.
+//!
+//! Keep role list, role detail, capability selection, and role save workflows here.
 
 use super::users::toggle_string_selection;
 #[cfg(feature = "hydrate")]

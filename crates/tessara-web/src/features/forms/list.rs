@@ -1,4 +1,6 @@
-//! Owns the features::forms::list module behavior.
+//! List view components for the Forms feature.
+//!
+//! Keep collection tables, list filters, and list-page presentation here; detail/editor flows should stay in their dedicated modules.
 
 use crate::features::forms::FormSummary;
 use crate::features::forms::{form_attached_nodes, form_field_count_label, form_status_label};

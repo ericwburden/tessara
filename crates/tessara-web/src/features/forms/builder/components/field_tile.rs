@@ -1,4 +1,6 @@
-//! Owns the features::forms::builder::components::field_tile module behavior.
+//! Form builder field tile component.
+//!
+//! Keep draggable field-card rendering and per-field resize handles here.
 
 use leptos::prelude::*;
 

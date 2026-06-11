@@ -1,4 +1,6 @@
-//! Owns the features::shared::placeholder module behavior.
+//! Native placeholder route components.
+//!
+//! Keep SSR-only placeholder surfaces here for feature routes that are registered before their full interactive page exists.
 
 use leptos::prelude::*;
 

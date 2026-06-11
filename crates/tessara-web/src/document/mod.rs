@@ -1,4 +1,6 @@
-//! Owns the document module behavior.
+//! Native document rendering boundary.
+//!
+//! Group document shell HTML, asset tags, and theme bootstrap helpers here; feature screens should only receive the completed document through crate-level helpers.
 
 pub(crate) mod assets;
 pub(crate) mod html;

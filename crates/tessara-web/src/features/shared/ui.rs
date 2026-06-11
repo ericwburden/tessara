@@ -1,4 +1,6 @@
-//! Owns the features::shared::ui module behavior.
+//! Shared domain-aware UI label helpers.
+//!
+//! Keep small labels and display strings here when they are reused by multiple features but depend on Tessara domain concepts such as nodes or users.
 
 use crate::features::organization::OrganizationNode;
 

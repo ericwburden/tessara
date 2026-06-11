@@ -1,4 +1,6 @@
-//! Owns the ui::shell::app_shell module behavior.
+//! Full application shell layout.
+//!
+//! This module owns the page frame that combines top navigation, side navigation, mobile navigation, overlays, and feature page content.
 
 use leptos::prelude::*;
 

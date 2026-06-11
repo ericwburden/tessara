@@ -1,4 +1,6 @@
-//! Owns the features module behavior.
+//! Feature-domain registry for Tessara web.
+//!
+//! Add top-level product areas here and keep each domain responsible for its own route pages, API helpers, DTOs, display helpers, and local components.
 
 pub mod administration;
 pub mod auth;

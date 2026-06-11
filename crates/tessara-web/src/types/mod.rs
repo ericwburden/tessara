@@ -1,4 +1,6 @@
-//! Shared frontend value types used across routes and feature modules.
+//! Shared frontend type registry.
+//!
+//! Re-export cross-cutting value types here when they are not owned by a single product feature.
 
 pub(crate) mod route_params;
 

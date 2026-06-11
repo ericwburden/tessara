@@ -1,4 +1,6 @@
-//! Owns the ui::shell::nav module behavior.
+//! Shared shell navigation rendering helpers.
+//!
+//! This module owns reusable navigation item markup and active-state mapping used by both desktop and mobile shell surfaces.
 
 use crate::features::auth;
 use crate::state::navigation;

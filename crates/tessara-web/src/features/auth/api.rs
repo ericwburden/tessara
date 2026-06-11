@@ -1,4 +1,6 @@
-//! Owns the features::auth::api module behavior.
+//! Client-side API orchestration for the Auth feature.
+//!
+//! Keep endpoint calls, request assembly, and response handling for Auth screens here; pure DTOs and display formatting belong in sibling modules.
 
 #[cfg(feature = "hydrate")]
 use gloo_net::http::Request;

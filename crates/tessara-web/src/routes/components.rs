@@ -1,4 +1,6 @@
-//! Owns the routes::components module behavior.
+//! Route definitions for the Components feature.
+//!
+//! Keep URL nesting, route parameters, and route-to-page wiring here; page composition and data loading belong in features::components.
 
 use leptos::prelude::*;
 use leptos_router::components::Route;

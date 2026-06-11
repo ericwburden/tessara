@@ -1,4 +1,6 @@
-//! Owns the features::organization::pages module behavior.
+//! Route-level page composition for the Organization feature.
+//!
+//! Keep Leptos page components that correspond directly to routes here; reusable widgets, API calls, and DTOs should live in sibling modules.
 
 use super::api::{active_form_version, form_version_label};
 use super::detail::{OrganizationDetailFullContent, OrganizationDetailSheet};
@@ -26,6 +28,7 @@ use crate::ui::{
 use crate::utils::text::text_matches;
 use leptos::prelude::*;
 use std::collections::{HashMap, HashSet};
+
 #[component]
 /// Renders the organization page view.
 pub fn OrganizationPage() -> impl IntoView {

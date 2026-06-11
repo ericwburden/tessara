@@ -1,4 +1,6 @@
-//! Owns the features::forms::types module behavior.
+//! Data contracts for the Forms feature.
+//!
+//! Keep API response shapes, request payloads, and feature-local value objects here when they are owned by Forms.
 
 use serde::{Deserialize, Serialize};
 

@@ -1,4 +1,6 @@
-//! Owns the features::workflows::assignments::display module behavior.
+//! Display formatting helpers for the Workflows feature.
+//!
+//! Keep label, class, and summary formatting here when it depends on Workflows domain values but not on route state.
 
 use crate::features::shared::FormAttachmentLink;
 use crate::features::workflows::assignments::types::{

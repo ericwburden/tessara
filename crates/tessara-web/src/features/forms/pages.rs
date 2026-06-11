@@ -1,4 +1,6 @@
-//! Owns the features::forms::pages module behavior.
+//! Route-level page composition for the Forms feature.
+//!
+//! Keep Leptos page components that correspond directly to routes here; reusable widgets, API calls, and DTOs should live in sibling modules.
 
 use crate::features::forms::api::{
     load_form_create_options, load_form_detail, load_form_edit_options, load_forms,

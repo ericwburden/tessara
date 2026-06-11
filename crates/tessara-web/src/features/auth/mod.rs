@@ -1,4 +1,6 @@
-//! Owns the features::auth module behavior.
+//! Public boundary for the Auth feature.
+//!
+//! Re-export only the pages, types, and helpers other modules need; keep Auth-specific implementation details in child modules.
 
 pub mod api;
 pub mod components;

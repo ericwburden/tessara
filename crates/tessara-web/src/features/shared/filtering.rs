@@ -1,4 +1,6 @@
-//! Owns the features::shared::filtering module behavior.
+//! Shared filtering and option helpers.
+//!
+//! Keep reusable node, form, workflow, slug, and metadata filter logic here when several feature tables need the same semantics.
 
 use crate::features::forms::FormSummary;
 use crate::features::organization::{

@@ -1,4 +1,6 @@
-//! Owns the features::forms::builder::state module behavior.
+//! Form builder editor state constructors.
+//!
+//! Keep draft state initialization and signal grouping here so builder pages start from one consistent state shape.
 
 use crate::features::forms::builder::types::FormBuilderDragPreview;
 use crate::features::forms::builder::{

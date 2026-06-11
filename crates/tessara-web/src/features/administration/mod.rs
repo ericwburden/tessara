@@ -1,4 +1,6 @@
-//! Owns the features::administration module behavior.
+//! Public boundary for the Administration feature.
+//!
+//! Re-export only the pages, types, and helpers other modules need; keep Administration-specific implementation details in child modules.
 
 mod api;
 mod models;

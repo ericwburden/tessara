@@ -1,4 +1,6 @@
-//! Owns the features::forms::builder::layout module behavior.
+//! Form builder grid layout rules.
+//!
+//! Keep placement, collision detection, resize bounds, and occupancy calculations here; visual rendering belongs in builder components.
 
 use crate::features::forms::builder::FormBuilderFieldDraft;
 use crate::features::forms::builder::{

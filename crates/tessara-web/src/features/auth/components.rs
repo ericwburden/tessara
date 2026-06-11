@@ -1,4 +1,3 @@
-//! Auth-domain UI components.
+//! Auth feature UI components.
 //!
-//! This module exists to preserve a domain-oriented feature layout while
-//! keeping behavior unchanged during refactoring.
+//! Keep reusable components that are specific to Auth here; shared, domain-neutral components belong under `ui`.

@@ -1,4 +1,6 @@
-//! Owns the ui::dropdown module behavior.
+//! Shared dropdown menu primitives.
+//!
+//! Keep generic trigger, menu, and item composition here; feature-specific choices and side effects belong in caller modules.
 
 use icons::Ellipsis;
 use leptos::prelude::*;

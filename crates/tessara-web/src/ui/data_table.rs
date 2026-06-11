@@ -1,4 +1,6 @@
-//! Owns the ui::data_table module behavior.
+//! Shared data-table layout components.
+//!
+//! This module owns reusable table wrappers and structural markup; row content, filters, and domain actions belong with feature pages.
 
 use icons::Search;
 use leptos::prelude::*;

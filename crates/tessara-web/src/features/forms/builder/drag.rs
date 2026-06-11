@@ -1,4 +1,6 @@
-//! Owns the features::forms::builder::drag module behavior.
+//! Form builder drag interaction state.
+//!
+//! Keep drag previews, drop intent, and pointer-driven field movement helpers here.
 
 #[cfg(feature = "hydrate")]
 use crate::features::forms::builder::FORM_BUILDER_COLUMN_COUNT;

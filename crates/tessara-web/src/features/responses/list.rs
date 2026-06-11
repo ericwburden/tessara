@@ -1,4 +1,6 @@
-//! Response route components.
+//! List view components for the Responses feature.
+//!
+//! Keep collection tables, list filters, and list-page presentation here; detail/editor flows should stay in their dedicated modules.
 
 use super::api::load_submissions;
 use crate::features::responses::display::{

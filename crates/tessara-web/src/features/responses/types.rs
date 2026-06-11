@@ -1,4 +1,6 @@
-//! Owns the features::responses::types module behavior.
+//! Data contracts for the Responses feature.
+//!
+//! Keep API response shapes, request payloads, and feature-local value objects here when they are owned by Responses.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

@@ -1,4 +1,6 @@
-//! Owns the ui::breadcrumb module behavior.
+//! Breadcrumb navigation primitives.
+//!
+//! Keep domain-neutral breadcrumb containers, links, current-page labels, and separators here for reuse across feature pages.
 
 use icons::ChevronRight;
 use leptos::prelude::*;

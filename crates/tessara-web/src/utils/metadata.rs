@@ -1,4 +1,6 @@
-//! Owns the utils::metadata module behavior.
+//! Metadata display helpers.
+//!
+//! This module owns conversion of arbitrary metadata keys and JSON values into stable labels and table rows for feature screens.
 
 use serde_json::Value;
 

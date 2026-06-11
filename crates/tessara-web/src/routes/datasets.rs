@@ -1,4 +1,6 @@
-//! Owns the routes::datasets module behavior.
+//! Route definitions for the Datasets feature.
+//!
+//! Keep URL nesting, route parameters, and route-to-page wiring here; page composition and data loading belong in features::datasets.
 
 use leptos::prelude::*;
 use leptos_router::components::Route;

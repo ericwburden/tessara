@@ -1,4 +1,6 @@
-//! Node-type administration pages and related helpers.
+//! Node-type administration pages and helpers.
+//!
+//! Keep node type catalog, relationship editing, metadata fields, and scoped form displays here.
 
 #[cfg(feature = "hydrate")]
 use crate::api::{redirect_to_login, send_json_id_request};

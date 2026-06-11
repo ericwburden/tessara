@@ -1,4 +1,6 @@
-//! Owns the features::datasets::api module behavior.
+//! Client-side API orchestration for the Datasets feature.
+//!
+//! Keep endpoint calls, request assembly, and response handling for Datasets screens here; pure DTOs and display formatting belong in sibling modules.
 
 #[cfg(feature = "hydrate")]
 use super::types::DatasetSqlPreviewResponse;

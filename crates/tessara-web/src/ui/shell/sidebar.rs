@@ -1,4 +1,6 @@
-//! Owns the ui::shell::sidebar module behavior.
+//! Desktop sidebar shell navigation.
+//!
+//! Keep persistent navigation, section grouping, account affordances, and desktop shell links here.
 
 use crate::ui::shell::nav::SidebarContent;
 use leptos::prelude::*;

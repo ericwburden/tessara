@@ -1,4 +1,6 @@
-//! Owns the ui::tabs module behavior.
+//! Shared tab components.
+//!
+//! Keep accessible tab list, trigger, and content primitives here while tab labels and feature state remain with callers.
 
 use leptos::prelude::*;
 

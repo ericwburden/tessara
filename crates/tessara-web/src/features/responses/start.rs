@@ -1,4 +1,6 @@
-//! Response route components.
+//! Response start page components.
+//!
+//! Keep the workflow/form launch flow for new responses here; response editing and detail presentation belong in sibling modules.
 
 use super::api::load_response_start_options;
 #[cfg(feature = "hydrate")]

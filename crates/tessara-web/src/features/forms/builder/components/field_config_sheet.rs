@@ -1,4 +1,6 @@
-//! Owns the features::forms::builder::components::field_config_sheet module behavior.
+//! Form builder field configuration sheet.
+//!
+//! Keep side-panel controls for editing field labels, types, validation, and layout here.
 
 use leptos::portal::Portal;
 use leptos::prelude::*;

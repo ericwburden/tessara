@@ -1,4 +1,6 @@
-//! Owns the features::workflows module behavior.
+//! Public boundary for the Workflows feature.
+//!
+//! Re-export only the pages, types, and helpers other modules need; keep Workflows-specific implementation details in child modules.
 
 pub(crate) mod api;
 pub(crate) mod assignments;

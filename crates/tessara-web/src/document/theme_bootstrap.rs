@@ -1,4 +1,6 @@
-//! Owns the document::theme_bootstrap module behavior.
+//! Theme bootstrap markup for native documents.
+//!
+//! Keep early stylesheet links and pre-hydration theme scripts here so theme state is applied before the interactive shell mounts.
 
 use crate::pipeline;
 pub(crate) use crate::state::theme::{DARK_THEME_COLOR, LIGHT_THEME_COLOR, STORAGE_KEY};

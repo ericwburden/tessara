@@ -1,4 +1,6 @@
-//! Response route components.
+//! Edit support for the Responses feature.
+//!
+//! Keep functionality here when it is owned by Responses and specifically supports the Edit concern.
 
 use super::api::{load_submission_edit_context, save_submission_values, submit_response_values};
 use crate::features::forms::{RenderedField, RenderedForm};

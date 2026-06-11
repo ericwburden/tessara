@@ -1,4 +1,6 @@
-//! Owns the pipeline module behavior.
+//! Build-pipeline asset path helpers.
+//!
+//! This module owns the conventions for locating generated CSS, JavaScript, wasm, and package assets used by native rendering and hydration.
 
 use std::path::PathBuf;
 

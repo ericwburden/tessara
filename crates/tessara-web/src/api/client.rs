@@ -1,5 +1,6 @@
 //! Browser HTTP transport helpers shared by Leptos feature screens.
-//! Kept in `crate::api::client` for a clearer frontend infrastructure boundary.
+//!
+//! Keep JSON request sending, ID-returning mutations, and auth redirect plumbing here; feature-specific endpoint orchestration belongs in feature API modules.
 
 #[cfg(feature = "hydrate")]
 use serde::{Deserialize, de::DeserializeOwned};

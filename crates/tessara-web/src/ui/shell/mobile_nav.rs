@@ -1,4 +1,6 @@
-//! Owns the ui::shell::mobile_nav module behavior.
+//! Mobile shell navigation components.
+//!
+//! Keep compact navigation rendering and mobile account actions here; desktop sidebar behavior belongs in the sidebar module.
 
 use super::nav::SidebarContent;
 use icons::Menu;

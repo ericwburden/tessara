@@ -1,4 +1,6 @@
-//! Owns the features::organization::node_editor module behavior.
+//! Organization node creation and editing workflows.
+//!
+//! Keep node type selection, metadata input state, parent choices, and create/update submission helpers here.
 
 #[cfg(feature = "hydrate")]
 use crate::api::client::redirect_to_login;

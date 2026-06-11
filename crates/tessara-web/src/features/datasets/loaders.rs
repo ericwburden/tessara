@@ -1,4 +1,6 @@
-//! Owns the features::datasets::loaders module behavior.
+//! Data-loading helpers for the Datasets feature.
+//!
+//! Keep reusable load routines here when multiple Datasets pages need the same fetch-and-signal update pattern.
 
 #[cfg(feature = "hydrate")]
 use super::api;

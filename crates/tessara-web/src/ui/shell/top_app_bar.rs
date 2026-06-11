@@ -1,4 +1,6 @@
-//! Owns the ui::shell::top_app_bar module behavior.
+//! Top application bar controls.
+//!
+//! This module owns route titles, icon actions, theme selection, and other shell-level controls shown above feature content.
 
 use super::MobileNav;
 use icons::{Bell, CircleHelp, Moon, Sun};

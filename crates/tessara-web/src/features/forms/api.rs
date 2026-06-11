@@ -1,4 +1,6 @@
-//! Owns the features::forms::api module behavior.
+//! Client-side API orchestration for the Forms feature.
+//!
+//! Keep endpoint calls, request assembly, and response handling for Forms screens here; pure DTOs and display formatting belong in sibling modules.
 
 #[cfg(feature = "hydrate")]
 use crate::api::client::redirect_to_login;

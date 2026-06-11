@@ -1,4 +1,6 @@
-//! User-management administration pages and related helpers.
+//! User-management administration pages and helpers.
+//!
+//! Keep account list, access editing, and user administration workflows here.
 
 use super::api::{
     load_admin_user_access, load_admin_user_edit_context, load_admin_users,

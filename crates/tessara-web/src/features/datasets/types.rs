@@ -1,4 +1,6 @@
-//! Owns the features::datasets::types module behavior.
+//! Data contracts for the Datasets feature.
+//!
+//! Keep API response shapes, request payloads, and feature-local value objects here when they are owned by Datasets.
 
 use std::collections::BTreeMap;
 

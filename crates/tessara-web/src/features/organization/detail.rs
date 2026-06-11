@@ -1,4 +1,6 @@
-//! Owns the features::organization::detail module behavior.
+//! Detail view components for the Organization feature.
+//!
+//! Keep read-focused panels and detail-page presentation here; mutation workflows should live in editor or API modules.
 
 use super::related_work::RelatedWorkSummary;
 use crate::features::organization::types::OrganizationNodeDetail;

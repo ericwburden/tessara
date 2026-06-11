@@ -1,4 +1,6 @@
-//! Owns the features::forms::builder::types module behavior.
+//! Data contracts for the Forms feature.
+//!
+//! Keep API response shapes, request payloads, and feature-local value objects here when they are owned by Forms.
 
 pub(crate) const FORM_BUILDER_COLUMN_COUNT: i32 = 12;
 

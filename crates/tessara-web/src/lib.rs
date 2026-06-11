@@ -1,6 +1,8 @@
 #![recursion_limit = "512"]
 
-//! Native Leptos SSR frontend for Tessara.
+//! Crate root for the Tessara Leptos frontend.
+//!
+//! Keep public crate exports, hydration entry points, and native document helpers here; route, feature, UI, and utility behavior should stay in their dedicated modules.
 
 pub mod api;
 pub mod app;

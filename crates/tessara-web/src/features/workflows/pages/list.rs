@@ -1,4 +1,6 @@
-//! Owns the features::workflows::pages::list module behavior.
+//! List view components for the Workflows feature.
+//!
+//! Keep collection tables, list filters, and list-page presentation here; detail/editor flows should stay in their dedicated modules.
 
 use crate::features::organization::{
     OrganizationNode, load_workflow_assignment_nodes, load_workflows, workflow_assigned_users_label,

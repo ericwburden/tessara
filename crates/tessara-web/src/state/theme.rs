@@ -1,7 +1,6 @@
 //! Theme-state constants for Tessara web.
 //!
-//! This module owns browser theme metadata currently consumed by shell bootstrap
-//! and runtime toggles.
+//! Keep browser theme metadata here for the document bootstrap script and runtime shell theme toggles.
 
 pub(crate) const STORAGE_KEY: &str = "tessara.themePreference";
 pub(crate) const LIGHT_THEME_COLOR: &str = "#F8FAFC";

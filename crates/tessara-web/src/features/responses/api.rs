@@ -1,4 +1,6 @@
-//! Owns the features::responses::api module behavior.
+//! Client-side API orchestration for the Responses feature.
+//!
+//! Keep endpoint calls, request assembly, and response handling for Responses screens here; pure DTOs and display formatting belong in sibling modules.
 
 #[cfg(feature = "hydrate")]
 use crate::api::client::{redirect_to_login, send_json_request};

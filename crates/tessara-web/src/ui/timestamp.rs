@@ -1,4 +1,6 @@
-//! Owns the ui::timestamp module behavior.
+//! Timestamp display component.
+//!
+//! This module owns browser-local timestamp formatting and the reusable component that presents API timestamps in feature views.
 
 use leptos::prelude::*;
 

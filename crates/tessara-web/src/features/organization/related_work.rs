@@ -1,4 +1,6 @@
-//! Owns the features::organization::related_work module behavior.
+//! Related work views for organization nodes.
+//!
+//! Keep tables and pagination for forms, responses, dashboards, and other work linked to organization nodes here.
 
 use crate::features::organization::types::{
     NodeDashboardLink, NodeFormLink, NodeSubmissionLink, OrganizationNodeDetail,
