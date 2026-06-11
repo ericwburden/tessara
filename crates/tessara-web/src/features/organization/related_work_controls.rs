@@ -1,7 +1,5 @@
 //! Related work filtering and pagination controls for organization nodes.
 
-use crate::ui::TablePaginationFooter;
-use crate::utils::pagination::{pagination_page_end, pagination_page_start};
 use crate::utils::text::sentence_label;
 use icons::ListFilter;
 use leptos::prelude::*;
@@ -110,38 +108,5 @@ pub(crate) fn filter_option_class(current: &str, value: &str) -> &'static str {
         "data-table-filter__option is-active"
     } else {
         "data-table-filter__option"
-    }
-}
-
-#[component]
-/// Renders the related work pagination footer view.
-pub(crate) fn RelatedWorkPaginationFooter(
-    aria_label: &'static str,
-    label: &'static str,
-    total_count: Memo<usize>,
-    page_size: RwSignal<usize>,
-    page_index: RwSignal<usize>,
-) -> impl IntoView {
-    view! {
-        <TablePaginationFooter aria_label=aria_label item_label=label total_count=total_count page_size=page_size page_index=page_index/>
-    }
-}
-
-/// Handles the related work page summary behavior.
-pub(crate) fn related_work_page_summary(
-    total_count: usize,
-    page_size: usize,
-    page_index: usize,
-    label: &'static str,
-) -> String {
-    if total_count == 0 {
-        format!("No {label} to display")
-    } else {
-        format!(
-            "Showing {}-{} of {} {label}",
-            pagination_page_start(total_count, page_size, page_index) + 1,
-            pagination_page_end(total_count, page_size, page_index),
-            total_count
-        )
     }
 }

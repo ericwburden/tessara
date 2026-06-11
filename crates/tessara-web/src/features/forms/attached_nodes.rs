@@ -2,9 +2,8 @@
 //!
 //! Keep components that summarize and navigate nodes attached to forms here; generic node labels belong in shared helpers.
 
-use crate::features::organization::RelatedWorkPaginationFooter;
 use crate::features::shared::FormAttachmentLink;
-use crate::ui::SearchableDataTable;
+use crate::ui::{SearchableDataTable, TablePaginationFooter};
 use crate::utils::pagination::pagination_page_start;
 use crate::utils::text::text_matches;
 use leptos::prelude::*;
@@ -70,9 +69,9 @@ pub(crate) fn FormAttachedNodesRelatedTable(nodes: Vec<FormAttachmentLink>) -> i
                     }}
                 </tbody>
             </SearchableDataTable>
-            <RelatedWorkPaginationFooter
+            <TablePaginationFooter
                 aria_label="Attached nodes table pagination"
-                label="attached nodes"
+                item_label="attached nodes"
                 total_count=total_count
                 page_size=page_size
                 page_index=page_index

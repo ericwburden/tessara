@@ -3,10 +3,9 @@
 //! Keep reusable Forms table rendering here when several pages share row layout or table affordances.
 
 use crate::features::forms::{FormDatasetSourceLink, FormWorkflowLink};
-use crate::features::organization::RelatedWorkPaginationFooter;
 use crate::features::shared::status_badge_class;
 use crate::features::workflows::{WorkflowSourceMarker, workflow_revision_label_from_option};
-use crate::ui::SearchableDataTable;
+use crate::ui::{SearchableDataTable, TablePaginationFooter};
 use crate::utils::pagination::pagination_page_start;
 use crate::utils::text::{sentence_label, text_matches};
 use leptos::prelude::*;
@@ -93,9 +92,9 @@ pub(crate) fn FormRelatedWorkflowsTable(workflows: Vec<FormWorkflowLink>) -> imp
                     }}
                 </tbody>
             </SearchableDataTable>
-            <RelatedWorkPaginationFooter
+            <TablePaginationFooter
                 aria_label="Related workflows table pagination"
-                label="related workflows"
+                item_label="related workflows"
                 total_count=total_count
                 page_size=page_size
                 page_index=page_index
@@ -228,9 +227,9 @@ pub(crate) fn FormRelatedDatasetSourcesTable(
                     }}
                 </tbody>
             </SearchableDataTable>
-            <RelatedWorkPaginationFooter
+            <TablePaginationFooter
                 aria_label="Related dataset sources table pagination"
-                label="related dataset sources"
+                item_label="related dataset sources"
                 total_count=total_count
                 page_size=page_size
                 page_index=page_index

@@ -1,11 +1,9 @@
 //! Related work table components for organization nodes.
 
-use super::related_work_controls::{StatusFilterHeader, related_work_page_summary};
+use super::related_work_controls::StatusFilterHeader;
 use super::types::{NodeDashboardLink, NodeFormLink, NodeSubmissionLink};
-use crate::ui::{DataTable, SearchableDataTable, Timestamp};
-use crate::utils::pagination::{
-    pagination_current_page, pagination_page_count, pagination_page_start,
-};
+use crate::ui::{DataTable, SearchableDataTable, TablePaginationFooter, Timestamp};
+use crate::utils::pagination::pagination_page_start;
 use crate::utils::text::{nonempty_text, sentence_label, text_matches};
 use icons::Search;
 use leptos::prelude::*;
@@ -38,6 +36,7 @@ pub(crate) fn RelatedResponsesTable(responses: Vec<NodeSubmissionLink>) -> impl 
             .cloned()
             .collect::<Vec<_>>()
     });
+    let total_count = Memo::new(move |_| filtered_responses.get().len());
 
     view! {
         <div class="searchable-data-table related-work-responsive-table">
@@ -110,60 +109,13 @@ pub(crate) fn RelatedResponsesTable(responses: Vec<NodeSubmissionLink>) -> impl 
                     }}
                 </tbody>
             </DataTable>
-            <div class="directory-table-pagination" aria-label="Related responses table pagination">
-                <p>{move || related_work_page_summary(filtered_responses.get().len(), page_size.get(), page_index.get(), "related responses")}</p>
-                <div class="directory-table-pagination__actions">
-                    <label class="directory-table-pagination__page-size searchable-data-table__filter searchable-data-table__control">
-                        <span>"Rows"</span>
-                        <select
-                            prop:value=move || page_size.get().to_string()
-                            on:change=move |event| {
-                                if let Ok(size) = event_target_value(&event).parse::<usize>() {
-                                    page_size.set(size);
-                                    page_index.set(0);
-                                }
-                            }
-                        >
-                            <option value="10">"10"</option>
-                            <option value="25">"25"</option>
-                            <option value="50">"50"</option>
-                        </select>
-                    </label>
-                    <button
-                        class="button button--compact button--secondary"
-                        type="button"
-                        disabled=move || pagination_current_page(filtered_responses.get().len(), page_size.get(), page_index.get()) == 0
-                        on:click=move |_| {
-                            page_index.update(|page| *page = page.saturating_sub(1));
-                        }
-                    >
-                        "Previous"
-                    </button>
-                    <span>{move || {
-                        let total_count = filtered_responses.get().len();
-                        format!(
-                            "Page {} of {}",
-                            pagination_current_page(total_count, page_size.get(), page_index.get()) + 1,
-                            pagination_page_count(total_count, page_size.get())
-                        )
-                    }}</span>
-                    <button
-                        class="button button--compact button--secondary"
-                        type="button"
-                        disabled=move || {
-                            let total_count = filtered_responses.get().len();
-                            pagination_current_page(total_count, page_size.get(), page_index.get()) + 1
-                                >= pagination_page_count(total_count, page_size.get())
-                        }
-                        on:click=move |_| {
-                            let last_page = pagination_page_count(filtered_responses.get().len(), page_size.get()).saturating_sub(1);
-                            page_index.update(|page| *page = (*page + 1).min(last_page));
-                        }
-                    >
-                        "Next"
-                    </button>
-                </div>
-            </div>
+            <TablePaginationFooter
+                aria_label="Related responses table pagination"
+                item_label="related responses"
+                total_count=total_count
+                page_size=page_size
+                page_index=page_index
+            />
             <div class="related-work-mobile-cards">
                 {move || {
                     let rows = filtered_responses.get();
@@ -242,6 +194,7 @@ pub(crate) fn RelatedFormsTable(forms: Vec<NodeFormLink>) -> impl IntoView {
             .cloned()
             .collect::<Vec<_>>()
     });
+    let total_count = Memo::new(move |_| filtered_forms.get().len());
 
     view! {
         <div class="related-work-responsive-table">
@@ -289,60 +242,13 @@ pub(crate) fn RelatedFormsTable(forms: Vec<NodeFormLink>) -> impl IntoView {
                     }}
                 </tbody>
             </SearchableDataTable>
-            <div class="directory-table-pagination" aria-label="Related forms table pagination">
-                <p>{move || related_work_page_summary(filtered_forms.get().len(), page_size.get(), page_index.get(), "related forms")}</p>
-                <div class="directory-table-pagination__actions">
-                    <label class="directory-table-pagination__page-size searchable-data-table__filter searchable-data-table__control">
-                        <span>"Rows"</span>
-                        <select
-                            prop:value=move || page_size.get().to_string()
-                            on:change=move |event| {
-                                if let Ok(size) = event_target_value(&event).parse::<usize>() {
-                                    page_size.set(size);
-                                    page_index.set(0);
-                                }
-                            }
-                        >
-                            <option value="10">"10"</option>
-                            <option value="25">"25"</option>
-                            <option value="50">"50"</option>
-                        </select>
-                    </label>
-                    <button
-                        class="button button--compact button--secondary"
-                        type="button"
-                        disabled=move || pagination_current_page(filtered_forms.get().len(), page_size.get(), page_index.get()) == 0
-                        on:click=move |_| {
-                            page_index.update(|page| *page = page.saturating_sub(1));
-                        }
-                    >
-                        "Previous"
-                    </button>
-                    <span>{move || {
-                        let total_count = filtered_forms.get().len();
-                        format!(
-                            "Page {} of {}",
-                            pagination_current_page(total_count, page_size.get(), page_index.get()) + 1,
-                            pagination_page_count(total_count, page_size.get())
-                        )
-                    }}</span>
-                    <button
-                        class="button button--compact button--secondary"
-                        type="button"
-                        disabled=move || {
-                            let total_count = filtered_forms.get().len();
-                            pagination_current_page(total_count, page_size.get(), page_index.get()) + 1
-                                >= pagination_page_count(total_count, page_size.get())
-                        }
-                        on:click=move |_| {
-                            let last_page = pagination_page_count(filtered_forms.get().len(), page_size.get()).saturating_sub(1);
-                            page_index.update(|page| *page = (*page + 1).min(last_page));
-                        }
-                    >
-                        "Next"
-                    </button>
-                </div>
-            </div>
+            <TablePaginationFooter
+                aria_label="Related forms table pagination"
+                item_label="related forms"
+                total_count=total_count
+                page_size=page_size
+                page_index=page_index
+            />
             <div class="related-work-mobile-cards">
                 {move || {
                     let rows = filtered_forms.get();
@@ -410,6 +316,7 @@ pub(crate) fn RelatedDashboardsTable(dashboards: Vec<NodeDashboardLink>) -> impl
             .cloned()
             .collect::<Vec<_>>()
     });
+    let total_count = Memo::new(move |_| filtered_dashboards.get().len());
 
     view! {
         <div class="related-work-responsive-table">
@@ -457,60 +364,13 @@ pub(crate) fn RelatedDashboardsTable(dashboards: Vec<NodeDashboardLink>) -> impl
                     }}
                 </tbody>
             </SearchableDataTable>
-            <div class="directory-table-pagination" aria-label="Related dashboards table pagination">
-                <p>{move || related_work_page_summary(filtered_dashboards.get().len(), page_size.get(), page_index.get(), "related dashboards")}</p>
-                <div class="directory-table-pagination__actions">
-                    <label class="directory-table-pagination__page-size searchable-data-table__filter searchable-data-table__control">
-                        <span>"Rows"</span>
-                        <select
-                            prop:value=move || page_size.get().to_string()
-                            on:change=move |event| {
-                                if let Ok(size) = event_target_value(&event).parse::<usize>() {
-                                    page_size.set(size);
-                                    page_index.set(0);
-                                }
-                            }
-                        >
-                            <option value="10">"10"</option>
-                            <option value="25">"25"</option>
-                            <option value="50">"50"</option>
-                        </select>
-                    </label>
-                    <button
-                        class="button button--compact button--secondary"
-                        type="button"
-                        disabled=move || pagination_current_page(filtered_dashboards.get().len(), page_size.get(), page_index.get()) == 0
-                        on:click=move |_| {
-                            page_index.update(|page| *page = page.saturating_sub(1));
-                        }
-                    >
-                        "Previous"
-                    </button>
-                    <span>{move || {
-                        let total_count = filtered_dashboards.get().len();
-                        format!(
-                            "Page {} of {}",
-                            pagination_current_page(total_count, page_size.get(), page_index.get()) + 1,
-                            pagination_page_count(total_count, page_size.get())
-                        )
-                    }}</span>
-                    <button
-                        class="button button--compact button--secondary"
-                        type="button"
-                        disabled=move || {
-                            let total_count = filtered_dashboards.get().len();
-                            pagination_current_page(total_count, page_size.get(), page_index.get()) + 1
-                                >= pagination_page_count(total_count, page_size.get())
-                        }
-                        on:click=move |_| {
-                            let last_page = pagination_page_count(filtered_dashboards.get().len(), page_size.get()).saturating_sub(1);
-                            page_index.update(|page| *page = (*page + 1).min(last_page));
-                        }
-                    >
-                        "Next"
-                    </button>
-                </div>
-            </div>
+            <TablePaginationFooter
+                aria_label="Related dashboards table pagination"
+                item_label="related dashboards"
+                total_count=total_count
+                page_size=page_size
+                page_index=page_index
+            />
             <div class="related-work-mobile-cards">
                 {move || {
                     let rows = filtered_dashboards.get();

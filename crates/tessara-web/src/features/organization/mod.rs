@@ -19,7 +19,6 @@ pub(crate) use api::current_search_param;
 pub(crate) use pages::{
     OrganizationDetailPage, OrganizationEditPage, OrganizationNewPage, OrganizationPage,
 };
-pub(crate) use related_work::RelatedWorkPaginationFooter;
 pub(crate) use types::{
     AdminRoleSummary, NodeMetadataFieldSummary, NodeTypeCatalogEntry, NodeTypeDefinition,
     NodeTypeFormLink, NodeTypeUpsertRequest, OrganizationNode,

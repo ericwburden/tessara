@@ -2,12 +2,12 @@
 
 use super::super::api::save_node_type_metadata_field;
 use crate::features::organization::{
-    NodeMetadataFieldSummary, NodeTypeDefinition, NodeTypeFormLink, RelatedWorkPaginationFooter,
+    NodeMetadataFieldSummary, NodeTypeDefinition, NodeTypeFormLink,
 };
 use crate::features::shared::status_badge_class;
 #[cfg(feature = "hydrate")]
 use crate::http::send_json_id_request;
-use crate::ui::{DataTable, DropdownMenu};
+use crate::ui::{DataTable, DropdownMenu, TablePaginationFooter};
 use crate::utils::metadata::metadata_label;
 use crate::utils::pagination::pagination_page_start;
 use icons::{Pencil, Plus, Search, Trash2, X};
@@ -81,9 +81,9 @@ pub(crate) fn NodeTypeScopedFormsList(forms: Vec<NodeTypeFormLink>) -> impl Into
                             }
                         }}
                     </div>
-                    <RelatedWorkPaginationFooter
+                    <TablePaginationFooter
                         aria_label="Scoped forms list pagination"
-                        label="scoped forms"
+                        item_label="scoped forms"
                         total_count=total_count
                         page_size=page_size
                         page_index=page_index

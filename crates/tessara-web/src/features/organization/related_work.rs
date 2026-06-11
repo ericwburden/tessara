@@ -9,8 +9,6 @@ use crate::features::organization::types::OrganizationNodeDetail;
 use crate::ui::{Tabs, TabsContent, TabsList, TabsTrigger};
 use leptos::prelude::*;
 
-pub(crate) use super::related_work_controls::RelatedWorkPaginationFooter;
-
 #[component]
 /// Renders the related work summary view.
 pub(crate) fn RelatedWorkSummary(
