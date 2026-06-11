@@ -8,9 +8,9 @@ use super::api::{
 };
 use crate::features::administration::models::*;
 use crate::features::organization::AdminRoleSummary;
-#[cfg(feature = "hydrate")]
-use crate::features::shared::navigate_to_href;
 use crate::features::shared::{FilterHeader, status_badge_class, unique_filter_options};
+#[cfg(feature = "hydrate")]
+use crate::http::navigate_to_href;
 #[cfg(feature = "hydrate")]
 use crate::http::redirect_to_login;
 use crate::types::AccountRouteParams;

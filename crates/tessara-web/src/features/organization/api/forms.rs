@@ -1,6 +1,6 @@
-//! Client-side API orchestration for the Organization feature.
+//! Organization-owned form API orchestration.
 //!
-//! Keep endpoint calls, request assembly, and response handling for Organization screens here; pure DTOs and display formatting belong in sibling modules.
+//! Keep form version labels, create/update request assembly, and form save endpoint sequencing here while route pages stay in `organization::pages` and builder validation stays under `forms::builder`.
 
 #[cfg(feature = "hydrate")]
 use crate::http::{redirect_to_login, send_json_id_request};
@@ -19,11 +19,12 @@ use crate::features::forms::types::{
 use crate::features::forms::{FormDefinition, FormSummary, FormVersionSummary, RenderedForm};
 #[cfg(feature = "hydrate")]
 use crate::features::organization::types::IdResponse;
-use crate::features::organization::types::OrganizationNode;
 #[cfg(feature = "hydrate")]
 use crate::features::shared::{existing_form_slugs_for_update, unique_slug_from_label};
-use crate::features::workflows::types::WorkflowSummary;
 use leptos::prelude::*;
+
+#[cfg(feature = "hydrate")]
+use super::helpers::IntoNonemptyString;
 
 /// Handles the active form version behavior.
 pub(crate) fn active_form_version(form: &FormSummary) -> Option<&FormVersionSummary> {
@@ -75,99 +76,6 @@ pub(crate) fn form_version_sort_label(version: &FormVersionSummary) -> String {
             _ => "-".to_string(),
         }
     })
-}
-
-/// Handles the workflow assigned users label behavior.
-pub(crate) fn workflow_assigned_users_label(workflow: &WorkflowSummary) -> String {
-    if workflow.assigned_users.is_empty() {
-        "No active assignments".to_string()
-    } else {
-        workflow
-            .assigned_users
-            .iter()
-            .map(|user| format!("{} {}", user.display_name, user.email))
-            .collect::<Vec<_>>()
-            .join(", ")
-    }
-}
-/// Loads the load workflows data.
-pub(crate) fn load_workflows(
-    workflows: RwSignal<Vec<WorkflowSummary>>,
-    is_loading: RwSignal<bool>,
-    load_error: RwSignal<Option<String>>,
-) {
-    #[cfg(feature = "hydrate")]
-    {
-        leptos::task::spawn_local(async move {
-            is_loading.set(true);
-            load_error.set(None);
-
-            match gloo_net::http::Request::get("/api/workflows").send().await {
-                Ok(response) if response.status() == 401 => {
-                    workflows.set(Vec::new());
-                    is_loading.set(false);
-                    redirect_to_login();
-                }
-                Ok(response) if response.ok() => {
-                    match response.json::<Vec<WorkflowSummary>>().await {
-                        Ok(loaded_workflows) => {
-                            workflows.set(loaded_workflows);
-                            is_loading.set(false);
-                        }
-                        Err(error) => {
-                            workflows.set(Vec::new());
-                            load_error.set(Some(format!("Unable to parse workflows: {error}")));
-                            is_loading.set(false);
-                        }
-                    }
-                }
-                Ok(response) => {
-                    workflows.set(Vec::new());
-                    load_error.set(Some(format!(
-                        "Unable to load workflows. Server returned {}.",
-                        response.status()
-                    )));
-                    is_loading.set(false);
-                }
-                Err(error) => {
-                    workflows.set(Vec::new());
-                    load_error.set(Some(format!("Unable to load workflows: {error}")));
-                    is_loading.set(false);
-                }
-            }
-        });
-    }
-
-    #[cfg(not(feature = "hydrate"))]
-    {
-        let _ = (workflows, is_loading, load_error);
-    }
-}
-
-/// Loads the load workflow assignment nodes data.
-pub(crate) fn load_workflow_assignment_nodes(nodes: RwSignal<Vec<OrganizationNode>>) {
-    #[cfg(feature = "hydrate")]
-    {
-        leptos::task::spawn_local(async move {
-            match gloo_net::http::Request::get("/api/nodes").send().await {
-                Ok(response) if response.status() == 401 => {
-                    nodes.set(Vec::new());
-                    redirect_to_login();
-                }
-                Ok(response) if response.ok() => {
-                    if let Ok(loaded_nodes) = response.json::<Vec<OrganizationNode>>().await {
-                        nodes.set(loaded_nodes);
-                    }
-                }
-                _ => nodes.set(Vec::new()),
-            }
-        });
-    }
-
-    #[cfg(not(feature = "hydrate"))]
-    {
-        let _ = nodes;
-    }
 }
 
 #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
@@ -855,32 +763,4 @@ pub(crate) fn submit_update_form(
             publish_after_save,
         );
     }
-}
-
-mod workflows;
-pub(crate) use workflows::{
-    submit_create_workflow, submit_update_workflow, submit_workflow_assignment_bulk,
-    toggle_workflow_assignment, workflow_step_form_version_id_by_id, workflow_step_signature,
-    workflow_step_title_by_id,
-};
-
-#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
-pub(crate) trait IntoNonemptyString {
-    /// Handles the into nonempty behavior.
-    fn into_nonempty(self) -> Option<String>;
-}
-
-impl IntoNonemptyString for String {
-    /// Handles the into nonempty behavior.
-    fn into_nonempty(self) -> Option<String> {
-        if self.is_empty() { None } else { Some(self) }
-    }
-}
-
-#[cfg(feature = "hydrate")]
-/// Handles the current search param behavior.
-pub(crate) fn current_search_param(name: &str) -> Option<String> {
-    let search = web_sys::window().and_then(|window| window.location().search().ok())?;
-    let params = web_sys::UrlSearchParams::new_with_str(&search).ok()?;
-    params.get(name).filter(|value| !value.is_empty())
 }

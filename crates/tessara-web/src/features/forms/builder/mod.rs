@@ -32,5 +32,4 @@ pub(crate) use types::{
     FormBuilderResizeAxis, FormBuilderSectionDraft, blank_form_builder_section,
 };
 #[cfg(feature = "hydrate")]
-#[cfg(feature = "hydrate")]
 pub(crate) use validation::{prepared_form_builder_fields, prepared_form_builder_sections};

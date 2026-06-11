@@ -8,11 +8,11 @@ use crate::features::responses::display::{
     submission_status_label, submission_step_label, submission_workflow_label,
 };
 use crate::features::responses::types::SubmissionSummary;
-#[cfg(feature = "hydrate")]
-use crate::features::shared::navigate_to_href;
 use crate::features::shared::{
     FilterHeader as SharedFilterHeader, status_badge_class, unique_filter_options,
 };
+#[cfg(feature = "hydrate")]
+use crate::http::navigate_to_href;
 use crate::ui::empty_view;
 use crate::ui::{AppShell, DataTable, DropdownMenu, PageHeader, TablePaginationFooter, Timestamp};
 use crate::utils::text::text_matches;

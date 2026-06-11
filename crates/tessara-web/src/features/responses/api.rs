@@ -15,7 +15,7 @@ use crate::features::responses::value_collection::{
     collect_response_values, submission_value_maps,
 };
 #[cfg(feature = "hydrate")]
-use crate::features::shared::navigate_to_href;
+use crate::http::navigate_to_href;
 #[cfg(feature = "hydrate")]
 use crate::http::{redirect_to_login, send_json_request};
 use leptos::prelude::*;
