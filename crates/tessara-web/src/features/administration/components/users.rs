@@ -7,10 +7,10 @@ use super::super::state::toggle_string_selection;
 use crate::features::administration::models::{
     AdminCapabilitySummary, AdminDelegationSummary, AdminScopeNodeSummary, AdminUserSummary,
 };
-use crate::features::shared::{FilterHeader, status_badge_class};
+use crate::features::shared::status_badge_class;
 #[cfg(feature = "hydrate")]
 use crate::http::navigate_to_href;
-use crate::ui::{DataTable, DropdownMenu};
+use crate::ui::{DataTable, DropdownMenu, FilterHeader};
 use crate::utils::pagination::pagination_page_start;
 use crate::utils::text::text_matches;
 use icons::{PanelRight, Pencil, Search};

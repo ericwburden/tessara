@@ -1,6 +1,5 @@
 //! Workflow assignment UI components.
 
-use crate::features::shared::FilterHeader as SharedFilterHeader;
 use crate::features::shared::status_badge_class;
 use crate::features::workflows::assignments::WorkflowAssignmentSummary;
 use crate::features::workflows::{
@@ -8,7 +7,7 @@ use crate::features::workflows::{
     workflow_assignment_state_label, workflow_assignment_status_key,
     workflow_assignment_status_label,
 };
-use crate::ui::{DataTable, DropdownMenu, Timestamp};
+use crate::ui::{DataTable, DropdownMenu, FilterHeader as SharedFilterHeader, Timestamp};
 use crate::utils::text::nonempty_text;
 use icons::{PanelRight, Search, X};
 use leptos::portal::Portal;

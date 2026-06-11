@@ -3,13 +3,11 @@
 //! Re-export only the pages, types, and helpers other modules need; keep Shared-specific implementation details in child modules.
 
 mod display;
-mod filter_header;
 mod helpers;
 mod placeholder;
 mod types;
 mod ui;
 pub(crate) use display::status_badge_class;
-pub(crate) use filter_header::FilterHeader;
 pub(crate) use placeholder::NativePlaceholderRoute;
 pub(crate) use types::{
     FormAttachmentLink, FormsAttachedNodesSheetData, WorkflowAssignedUsersSheetData,

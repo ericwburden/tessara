@@ -8,10 +8,9 @@ use crate::features::forms::{
 };
 use crate::features::forms::{form_attached_nodes, form_field_count_label, form_status_label};
 use crate::features::shared::{
-    FilterHeader as SharedFilterHeader, FormAttachmentLink, FormsAttachedNodesSheetData,
-    node_count_label, status_badge_class,
+    FormAttachmentLink, FormsAttachedNodesSheetData, node_count_label, status_badge_class,
 };
-use crate::ui::{DataTable, empty_view};
+use crate::ui::{DataTable, FilterHeader as SharedFilterHeader, empty_view};
 use icons::{ChevronDown, ExternalLink, ListFilter, PanelRight, Search, X};
 use leptos::portal::Portal;
 use leptos::prelude::*;

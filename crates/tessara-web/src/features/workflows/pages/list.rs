@@ -3,7 +3,6 @@
 //! Keep collection tables, list filters, and list-page presentation here; detail/editor flows should stay in their dedicated modules.
 
 use crate::features::organization::OrganizationNode;
-use crate::features::shared::FilterHeader as SharedFilterHeader;
 use crate::features::shared::{
     FormAttachmentLink, WorkflowAssignedUsersSheetData, WorkflowAvailableNodesSheetData,
     node_count_label, status_badge_class, unique_filter_options, user_count_label,
@@ -17,8 +16,8 @@ use crate::features::workflows::{
 use crate::features::workflows::{
     load_workflow_assignment_nodes, load_workflows, workflow_assigned_users_label,
 };
-use crate::ui::empty_view;
 use crate::ui::{AppShell, Button, DataTable, PageHeader};
+use crate::ui::{FilterHeader as SharedFilterHeader, empty_view};
 use crate::utils::text::text_matches;
 use icons::{ExternalLink, PanelRight, Search, X};
 use leptos::portal::Portal;

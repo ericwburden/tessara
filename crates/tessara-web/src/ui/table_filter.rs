@@ -1,4 +1,4 @@
-//! Shared filter-header component for feature table controls.
+//! Generic filter-header component for table controls.
 //!
 //! Keep generic filter dropdown rendering here so feature tables can supply labels, options, and selected state without duplicating menu markup.
 

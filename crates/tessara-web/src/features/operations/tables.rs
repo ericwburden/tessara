@@ -5,8 +5,8 @@ use super::display::{
     workflow_step_summary,
 };
 use super::types::*;
-use crate::features::shared::{FilterHeader, unique_filter_options};
-use crate::ui::{DataTable, EmptyState, StatusBadge, Timestamp};
+use crate::features::shared::unique_filter_options;
+use crate::ui::{DataTable, EmptyState, FilterHeader, StatusBadge, Timestamp};
 use crate::utils::{
     pagination::{
         pagination_current_page, pagination_page_count, pagination_page_end, pagination_page_start,
