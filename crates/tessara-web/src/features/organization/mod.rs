@@ -9,6 +9,8 @@ mod node_metadata;
 mod node_options;
 pub(crate) mod pages;
 mod related_work;
+mod related_work_controls;
+mod related_work_tables;
 mod tree;
 pub(crate) mod types;
 pub(crate) use api::IntoNonemptyString;
