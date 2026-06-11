@@ -2,9 +2,6 @@
 //!
 //! Keep functionality here when it is owned by Workflows and specifically supports the Assignments concern.
 
-use crate::features::organization::IntoNonemptyString;
-#[cfg(feature = "hydrate")]
-use crate::features::organization::current_search_param;
 use crate::features::workflows::assignments::{
     WorkflowAssigneeOption, WorkflowAssignmentCandidate, WorkflowAssignmentSummary,
     WorkflowAssignmentsList, assignee_filter_options, filtered_assignees, filtered_assignments,
@@ -22,6 +19,9 @@ use crate::ui::{
     AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator,
     PageHeader, empty_view,
 };
+use crate::utils::text::IntoNonemptyString;
+#[cfg(feature = "hydrate")]
+use crate::utils::url::current_search_param;
 use icons::{Search, X};
 use leptos::prelude::*;
 use std::collections::HashSet;

@@ -4,8 +4,6 @@
 
 use super::actions::start_workflow_assignment_response;
 use super::loaders::load_response_start_options;
-#[cfg(feature = "hydrate")]
-use crate::features::organization::current_search_param;
 use crate::features::responses::display::{
     response_selected_assignment, response_start_can_submit,
 };
@@ -19,6 +17,8 @@ use crate::ui::{
     PageHeader,
 };
 use crate::utils::text::nonempty_text;
+#[cfg(feature = "hydrate")]
+use crate::utils::url::current_search_param;
 
 use leptos::prelude::*;
 

@@ -3,8 +3,6 @@
 //! Keep form state, draft manipulation, and edit-page presentation here; transport payload submission belongs in API modules.
 
 use crate::features::forms::FormSummary;
-#[cfg(feature = "hydrate")]
-use crate::features::organization::current_search_param;
 use crate::features::organization::{NodeTypeCatalogEntry, OrganizationNode};
 use crate::features::shared::status_badge_class;
 use crate::features::workflows::api::workflow_revision_label_from_raw as workflow_submission_workflow_revision_label_from_raw;
@@ -27,6 +25,8 @@ use crate::ui::{
     PageHeader,
 };
 use crate::utils::text::sentence_label;
+#[cfg(feature = "hydrate")]
+use crate::utils::url::current_search_param;
 use leptos::prelude::*;
 use std::collections::HashSet;
 

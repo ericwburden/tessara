@@ -5,8 +5,6 @@
 #[cfg(feature = "hydrate")]
 use crate::features::administration::{CreateNodePayload, UpdateNodePayload};
 #[cfg(feature = "hydrate")]
-use crate::features::organization::api::current_search_param;
-#[cfg(feature = "hydrate")]
 use crate::features::organization::types::{IdResponse, NodeTypeDefinition};
 use crate::features::organization::types::{
     NodeMetadataFieldSummary, NodeTypeCatalogEntry, OrganizationNode, OrganizationNodeDetail,
@@ -15,11 +13,12 @@ use crate::features::organization::types::{
 use crate::http::redirect_to_login;
 #[cfg(feature = "hydrate")]
 use crate::utils::text::IntoNonemptyString;
+#[cfg(feature = "hydrate")]
+use crate::utils::url::current_search_param;
 use leptos::prelude::*;
 use std::collections::HashMap;
 
 pub(crate) use super::node_metadata::MetadataFieldInput;
-#[cfg(feature = "hydrate")]
 #[cfg(feature = "hydrate")]
 use super::node_metadata::{collect_node_metadata, metadata_input_state};
 pub(crate) use super::node_options::{
