@@ -18,12 +18,15 @@ use crate::utils::url::current_search_param;
 use leptos::prelude::*;
 use std::collections::HashMap;
 
+mod pages;
+
 pub(crate) use super::node_metadata::MetadataFieldInput;
 #[cfg(feature = "hydrate")]
 use super::node_metadata::{collect_node_metadata, metadata_input_state};
 pub(crate) use super::node_options::{
     available_node_types_for_parent, parent_node_options, parent_node_options_for_edit,
 };
+pub(crate) use pages::{OrganizationEditPage, OrganizationNewPage};
 
 /// Loads the load organization create options data.
 pub(crate) fn load_organization_create_options(
