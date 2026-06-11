@@ -2,7 +2,7 @@
 //!
 //! Keep read-focused panels and detail-page presentation here; mutation workflows should live in editor or API modules.
 
-use super::api::load_submission_detail;
+use super::loaders::load_submission_detail;
 use crate::features::responses::display::response_value_label;
 use crate::features::responses::types::{
     SubmissionAuditEventSummary, SubmissionDetail, SubmissionRuntimeDetail, SubmissionValueDetail,

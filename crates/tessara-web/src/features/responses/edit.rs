@@ -2,7 +2,8 @@
 //!
 //! Keep functionality here when it is owned by Responses and specifically supports the Edit concern.
 
-use super::api::{load_submission_edit_context, save_submission_values, submit_response_values};
+use super::actions::{save_submission_values, submit_response_values};
+use super::loaders::load_submission_edit_context;
 use crate::features::forms::{RenderedField, RenderedForm};
 use crate::features::responses::display::{rendered_form_field_layout_style, response_field_class};
 use crate::features::responses::types::SubmissionDetail;

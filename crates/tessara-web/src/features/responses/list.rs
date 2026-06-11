@@ -2,7 +2,7 @@
 //!
 //! Keep collection tables, list filters, and list-page presentation here; detail/editor flows should stay in their dedicated modules.
 
-use super::api::load_submissions;
+use super::loaders::load_submissions;
 use crate::features::responses::display::{
     submission_assignee_label, submission_progress_label, submission_status_key,
     submission_status_label, submission_step_label, submission_workflow_label,
