@@ -14,10 +14,9 @@ pub(crate) mod types;
 
 pub(crate) use assignments::{
     WorkflowAssignmentsPage, workflow_assigned_user_links, workflow_assignee_label,
-    workflow_assignment_assignee_label, workflow_assignment_candidate_key,
-    workflow_assignment_revision_label, workflow_assignment_state, workflow_assignment_state_label,
-    workflow_assignment_status_key, workflow_assignment_status_label,
-    workflow_available_node_links,
+    workflow_assignment_candidate_key, workflow_assignment_revision_label,
+    workflow_assignment_state, workflow_assignment_state_label, workflow_assignment_status_key,
+    workflow_assignment_status_label, workflow_available_node_links,
 };
 pub(crate) use detail::WorkflowsDetailPage;
 pub(crate) use display::{

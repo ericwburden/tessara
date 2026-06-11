@@ -5,15 +5,17 @@
 #[cfg(feature = "hydrate")]
 use crate::features::organization::current_search_param;
 use crate::features::organization::{IntoNonemptyString, submit_workflow_assignment_bulk};
-use crate::features::shared::unique_filter_options;
 use crate::features::workflows::assignments::{
     WorkflowAssigneeOption, WorkflowAssignmentCandidate, WorkflowAssignmentSummary,
-    WorkflowAssignmentsList, load_workflow_assignment_assignees,
+    WorkflowAssignmentsList, assignee_filter_options, filtered_assignees, filtered_assignments,
+    filtered_node_candidates, filtered_workflow_candidates, load_workflow_assignment_assignees,
     load_workflow_assignment_candidates, load_workflow_assignments,
+    selected_node_summary as selected_node_assignment_summary,
+    selected_workflow_summary as selected_workflow_assignment_summary,
+    workflow_assignment_pair_is_valid,
 };
 use crate::features::workflows::{
-    workflow_assignee_label, workflow_assignment_assignee_label, workflow_assignment_candidate_key,
-    workflow_assignment_revision_label, workflow_assignment_state, workflow_assignment_status_key,
+    workflow_assignee_label, workflow_assignment_candidate_key, workflow_assignment_revision_label,
 };
 use crate::ui::{
     AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator,
@@ -136,62 +138,25 @@ pub fn WorkflowAssignmentsPage() -> impl IntoView {
     });
 
     let filtered_workflow_candidates = move || {
-        let query = workflow_search.get();
-        let selected_node_id = selected_node_id.get();
-        let mut seen = HashSet::new();
-        let mut workflows = candidates
-            .get()
-            .into_iter()
-            .filter(|candidate| {
-                (selected_node_id.is_empty() || candidate.node_id == selected_node_id)
-                    && seen.insert(candidate.workflow_version_id.clone())
-                    && crate::utils::text::text_matches(
-                        &query,
-                        &[
-                            candidate.workflow_name.as_str(),
-                            candidate
-                                .workflow_version_label
-                                .as_deref()
-                                .unwrap_or_default(),
-                        ],
-                    )
-            })
-            .collect::<Vec<_>>();
-        workflows.sort_by(|left, right| {
-            left.workflow_name
-                .cmp(&right.workflow_name)
-                .then(left.workflow_version_id.cmp(&right.workflow_version_id))
-        });
-        workflows
+        filtered_workflow_candidates(
+            candidates.get(),
+            &workflow_search.get(),
+            &selected_node_id.get(),
+        )
     };
     let filtered_node_candidates = move || {
-        let query = node_search.get();
-        let selected_workflow_version_id = selected_workflow_version_id.get();
-        let mut seen = HashSet::new();
-        let mut nodes = candidates
-            .get()
-            .into_iter()
-            .filter(|candidate| {
-                (selected_workflow_version_id.is_empty()
-                    || candidate.workflow_version_id == selected_workflow_version_id)
-                    && seen.insert(candidate.node_id.clone())
-                    && crate::utils::text::text_matches(
-                        &query,
-                        &[candidate.node_name.as_str(), candidate.node_path.as_str()],
-                    )
-            })
-            .collect::<Vec<_>>();
-        nodes.sort_by(|left, right| left.node_path.cmp(&right.node_path));
-        nodes
+        filtered_node_candidates(
+            candidates.get(),
+            &node_search.get(),
+            &selected_workflow_version_id.get(),
+        )
     };
     let selected_pair_is_valid = move || {
-        let workflow_version_id = selected_workflow_version_id.get();
-        let node_id = selected_node_id.get();
-        !workflow_version_id.is_empty()
-            && !node_id.is_empty()
-            && candidates.get().into_iter().any(|candidate| {
-                candidate.workflow_version_id == workflow_version_id && candidate.node_id == node_id
-            })
+        workflow_assignment_pair_is_valid(
+            &candidates.get(),
+            &selected_workflow_version_id.get(),
+            &selected_node_id.get(),
+        )
     };
     let invalid_pair_message = move || {
         if selected_workflow_version_id.get().is_empty()
@@ -204,87 +169,21 @@ pub fn WorkflowAssignmentsPage() -> impl IntoView {
         }
     };
     let selected_workflow_summary = move || {
-        let selected_id = selected_workflow_version_id.get();
-        candidates
-            .get()
-            .into_iter()
-            .find(|candidate| candidate.workflow_version_id == selected_id)
-            .map(|candidate| {
-                let revision =
-                    workflow_assignment_revision_label(candidate.workflow_version_label.as_deref());
-                (candidate.workflow_name, format!("Revision {revision}"))
-            })
+        selected_workflow_assignment_summary(candidates.get(), &selected_workflow_version_id.get())
     };
-    let selected_node_summary = move || {
-        let selected_id = selected_node_id.get();
-        candidates
-            .get()
-            .into_iter()
-            .find(|candidate| candidate.node_id == selected_id)
-            .map(|candidate| {
-                let node_path = if candidate.node_path.trim().is_empty() {
-                    candidate.node_name.clone()
-                } else {
-                    candidate.node_path.clone()
-                };
-                (candidate.node_name, node_path)
-            })
-    };
-    let filtered_assignees = move || {
-        let query = assignee_search.get();
-        assignees
-            .get()
-            .into_iter()
-            .filter(|assignee| {
-                crate::utils::text::text_matches(
-                    &query,
-                    &[assignee.display_name.as_str(), assignee.email.as_str()],
-                )
-            })
-            .collect::<Vec<_>>()
-    };
+    let selected_node_summary =
+        move || selected_node_assignment_summary(candidates.get(), &selected_node_id.get());
+    let filtered_assignees = move || filtered_assignees(assignees.get(), &assignee_search.get());
     let filtered_assignments = move || {
-        let query = assignment_search.get();
-        let status = status_filter.get();
-        let state = state_filter.get();
-        let assignee = assignee_filter.get();
-        assignments
-            .get()
-            .into_iter()
-            .filter(|assignment| {
-                let matches_status =
-                    status == "all" || workflow_assignment_status_key(assignment) == status;
-                let matches_state =
-                    state == "all" || workflow_assignment_state(assignment) == state;
-                let matches_assignee =
-                    assignee == "all" || workflow_assignment_assignee_label(assignment) == assignee;
-                matches_status
-                    && matches_state
-                    && matches_assignee
-                    && crate::utils::text::text_matches(
-                        &query,
-                        &[
-                            assignment.workflow_name.as_str(),
-                            assignment.workflow_step_title.as_str(),
-                            assignment.form_name.as_str(),
-                            assignment.node_name.as_str(),
-                            assignment.account_display_name.as_str(),
-                            assignment.account_email.as_str(),
-                            assignment.id.as_str(),
-                        ],
-                    )
-            })
-            .collect::<Vec<_>>()
-    };
-    let assignee_filter_options = move || {
-        unique_filter_options(
-            assignments
-                .get()
-                .iter()
-                .map(workflow_assignment_assignee_label)
-                .collect::<Vec<_>>(),
+        filtered_assignments(
+            assignments.get(),
+            &assignment_search.get(),
+            &status_filter.get(),
+            &state_filter.get(),
+            &assignee_filter.get(),
         )
     };
+    let assignee_filter_options = move || assignee_filter_options(&assignments.get());
     let can_create = move || {
         !is_saving.get()
             && !selected_candidate_id.get().is_empty()
