@@ -319,6 +319,54 @@ pub(crate) fn load_response_start_options(
     }
 }
 
+/// Starts a workflow assignment response and navigates to the draft response editor.
+pub(crate) fn start_workflow_assignment_response(
+    workflow_assignment_id: String,
+    is_saving: RwSignal<bool>,
+    message: RwSignal<Option<String>>,
+) {
+    #[cfg(feature = "hydrate")]
+    {
+        leptos::task::spawn_local(async move {
+            is_saving.set(true);
+            message.set(Some("Starting assigned response...".into()));
+
+            match send_json_request::<serde_json::Value>(
+                gloo_net::http::Request::post(&format!(
+                    "/api/workflow-assignments/{workflow_assignment_id}/start"
+                )),
+                Some("{}".into()),
+                "Start assigned response",
+            )
+            .await
+            {
+                Ok(response) => {
+                    let id = response
+                        .get("id")
+                        .and_then(|value| value.as_str().map(str::to_owned))
+                        .or_else(|| {
+                            response
+                                .get("id")
+                                .and_then(|value| value.as_i64().map(|value| value.to_string()))
+                        });
+                    if let Some(id) = id {
+                        navigate_to_href(&format!("/responses/{id}/edit"));
+                    }
+                }
+                Err(error) => {
+                    message.set(Some(error));
+                    is_saving.set(false);
+                }
+            }
+        });
+    }
+
+    #[cfg(not(feature = "hydrate"))]
+    {
+        let _ = (workflow_assignment_id, is_saving, message);
+    }
+}
+
 /// Handles the save submission values behavior.
 pub(crate) fn save_submission_values(
     submission_id: String,

@@ -8,7 +8,7 @@ use crate::features::organization::{NodeTypeCatalogEntry, OrganizationNode};
 use crate::features::shared::node_display_path;
 use crate::features::workflows::types::{WorkflowDefinition, WorkflowSummary};
 #[cfg(feature = "hydrate")]
-use crate::http::{redirect_to_login, send_json_request};
+use crate::http::redirect_to_login;
 use leptos::prelude::*;
 
 /// Loads the load workflow detail data.
@@ -231,56 +231,6 @@ pub(crate) fn load_workflow_create_options(
             is_loading,
             message,
         );
-    }
-}
-
-/// Handles the start workflow assignment response behavior.
-pub(crate) fn start_workflow_assignment_response(
-    workflow_assignment_id: String,
-    is_saving: RwSignal<bool>,
-    message: RwSignal<Option<String>>,
-) {
-    #[cfg(feature = "hydrate")]
-    {
-        leptos::task::spawn_local(async move {
-            is_saving.set(true);
-            message.set(Some("Starting assigned response...".into()));
-
-            match send_json_request::<serde_json::Value>(
-                gloo_net::http::Request::post(&format!(
-                    "/api/workflow-assignments/{workflow_assignment_id}/start"
-                )),
-                Some("{}".into()),
-                "Start assigned response",
-            )
-            .await
-            {
-                Ok(response) => {
-                    let id = response
-                        .get("id")
-                        .and_then(|value| value.as_str().map(str::to_owned))
-                        .or_else(|| {
-                            response
-                                .get("id")
-                                .and_then(|value| value.as_i64().map(|value| value.to_string()))
-                        });
-                    if let Some(id) = id
-                        && let Some(window) = web_sys::window()
-                    {
-                        let _ = window.location().set_href(&format!("/responses/{id}/edit"));
-                    }
-                }
-                Err(error) => {
-                    message.set(Some(error));
-                    is_saving.set(false);
-                }
-            }
-        });
-    }
-
-    #[cfg(not(feature = "hydrate"))]
-    {
-        let _ = (workflow_assignment_id, is_saving, message);
     }
 }
 

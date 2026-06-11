@@ -4,9 +4,8 @@
 
 use leptos::prelude::*;
 
-use crate::features::workflows::api::{
-    start_workflow_assignment_response, workflow_revision_label_from_raw,
-};
+use crate::features::responses::start_workflow_assignment_response;
+use crate::features::workflows::api::workflow_revision_label_from_raw;
 use crate::features::workflows::assignments::{PendingWorkflowWork, load_pending_work};
 use crate::ui::{AppShell, DataTable, PageHeader, Timestamp};
 use crate::utils::text::nonempty_text;

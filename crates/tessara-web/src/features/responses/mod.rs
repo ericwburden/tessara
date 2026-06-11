@@ -11,4 +11,5 @@ mod pages;
 mod start;
 pub(crate) mod types;
 pub(crate) mod value_collection;
+pub(crate) use api::start_workflow_assignment_response;
 pub(crate) use pages::{ResponsesDetailPage, ResponsesEditPage, ResponsesNewPage, ResponsesPage};

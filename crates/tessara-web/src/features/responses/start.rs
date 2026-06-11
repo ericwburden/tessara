@@ -2,7 +2,7 @@
 //!
 //! Keep the workflow/form launch flow for new responses here; response editing and detail presentation belong in sibling modules.
 
-use super::api::load_response_start_options;
+use super::api::{load_response_start_options, start_workflow_assignment_response};
 #[cfg(feature = "hydrate")]
 use crate::features::organization::current_search_param;
 use crate::features::responses::display::{
@@ -11,7 +11,6 @@ use crate::features::responses::display::{
 use crate::features::responses::types::{
     AssignmentResponseStartOption, AssignmentResponseStartOptions,
 };
-use crate::features::workflows::api::start_workflow_assignment_response;
 use crate::features::workflows::workflow_revision_label_from_option;
 use crate::ui::empty_view;
 use crate::ui::{
