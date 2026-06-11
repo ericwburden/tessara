@@ -3,7 +3,7 @@
 //! Keep endpoint calls, request assembly, and response handling for Administration screens here; pure DTOs and display formatting belong in sibling modules.
 
 use crate::features::administration::models::{
-    AdminUserAccessDetail, AdminUserDetail, AdminUserSummary,
+    AdminCapabilitySummary, AdminUserAccessDetail, AdminUserDetail, AdminUserSummary,
 };
 #[cfg(feature = "hydrate")]
 use crate::features::administration::models::{
@@ -72,6 +72,34 @@ pub(crate) fn load_admin_users(
     #[cfg(not(feature = "hydrate"))]
     {
         let _ = (users, is_loading, load_error);
+    }
+}
+
+/// Loads the administration capability catalog.
+pub(crate) fn load_admin_capability_catalog(capabilities: RwSignal<Vec<AdminCapabilitySummary>>) {
+    #[cfg(feature = "hydrate")]
+    {
+        leptos::task::spawn_local(async move {
+            match gloo_net::http::Request::get("/api/admin/capabilities")
+                .send()
+                .await
+            {
+                Ok(response) if response.status() == 401 => {
+                    redirect_to_login();
+                }
+                Ok(response) if response.ok() => {
+                    if let Ok(items) = response.json::<Vec<AdminCapabilitySummary>>().await {
+                        capabilities.set(items);
+                    }
+                }
+                _ => {}
+            }
+        });
+    }
+
+    #[cfg(not(feature = "hydrate"))]
+    {
+        let _ = capabilities;
     }
 }
 

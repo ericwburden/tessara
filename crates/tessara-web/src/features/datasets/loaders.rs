@@ -5,7 +5,7 @@
 #[cfg(feature = "hydrate")]
 use super::api;
 #[cfg(feature = "hydrate")]
-use super::pages::{build_expression_ast, expression_to_editor_drafts, is_join_operation};
+use super::expressions::{build_expression_ast, expression_to_editor_drafts, is_join_operation};
 use super::types::*;
 use leptos::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};

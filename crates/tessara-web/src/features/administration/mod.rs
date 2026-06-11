@@ -3,18 +3,17 @@
 //! Re-export only the pages, types, and helpers other modules need; keep Administration-specific implementation details in child modules.
 
 mod api;
+mod components;
+mod display;
+mod graph;
 mod models;
-mod node_types;
 mod nodes;
 mod pages;
-mod roles;
-mod users;
+mod state;
 #[cfg(feature = "hydrate")]
 pub(crate) use models::{CreateNodePayload, UpdateNodePayload};
-pub(crate) use node_types::AdministrationNodeTypesPage;
-pub(crate) use pages::AdministrationPage;
-pub(crate) use roles::AdministrationRolesPage;
-pub(crate) use users::{
+pub(crate) use pages::{
+    AdministrationNodeTypesPage, AdministrationPage, AdministrationRolesPage,
     AdministrationUserAccessPage, AdministrationUserDetailPage, AdministrationUserEditPage,
     AdministrationUsersPage,
 };

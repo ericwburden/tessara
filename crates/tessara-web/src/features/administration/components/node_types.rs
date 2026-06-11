@@ -1,248 +1,25 @@
-//! Node-type administration pages and helpers.
-//!
-//! Keep node type catalog, relationship editing, metadata fields, and scoped form displays here.
+//! Node type Administration components.
 
-#[cfg(feature = "hydrate")]
-use crate::features::organization::{
-    CreateNodeMetadataFieldRequest, UpdateNodeMetadataFieldRequest,
-};
+use super::super::api::save_node_type_metadata_field;
+use super::super::graph::{node_type_ancestor_ids, node_type_descendant_ids};
 use crate::features::organization::{
     NodeMetadataFieldSummary, NodeTypeCatalogEntry, NodeTypeDefinition, NodeTypeFormLink,
-    NodeTypeUpsertRequest, RelatedWorkPaginationFooter,
+    RelatedWorkPaginationFooter,
 };
 use crate::features::shared::status_badge_class;
 #[cfg(feature = "hydrate")]
-use crate::http::{redirect_to_login, send_json_id_request};
-use crate::ui::{
-    AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator,
-    DataTable, DropdownMenu, PageHeader,
-};
+use crate::http::send_json_id_request;
+use crate::ui::{DataTable, DropdownMenu};
 use crate::utils::metadata::metadata_label;
 use crate::utils::pagination::pagination_page_start;
-use leptos::portal::Portal;
-use std::collections::HashSet;
-
 use icons::{ChevronDown, ListFilter, Pencil, Plus, Search, Trash2, X};
+use leptos::portal::Portal;
 use leptos::prelude::*;
-
-#[component]
-/// Renders the administration node types page view.
-pub fn AdministrationNodeTypesPage() -> impl IntoView {
-    let node_types = RwSignal::new(Vec::<NodeTypeCatalogEntry>::new());
-    let selected_node_type_id = RwSignal::new(None::<String>);
-    let selected_detail = RwSignal::new(None::<NodeTypeDefinition>);
-    let search = RwSignal::new(String::new());
-    let is_loading = RwSignal::new(true);
-    let detail_loading = RwSignal::new(false);
-    let is_saving = RwSignal::new(false);
-    let is_creating = RwSignal::new(false);
-    let message = RwSignal::new(None::<String>);
-    let name = RwSignal::new(String::new());
-    let slug = RwSignal::new(String::new());
-    let plural_label = RwSignal::new(String::new());
-    let parent_node_type_ids = RwSignal::new(HashSet::<String>::new());
-    let child_node_type_ids = RwSignal::new(HashSet::<String>::new());
-
-    load_admin_node_type_catalog(node_types, selected_node_type_id, is_loading, message, None);
-
-    Effect::new(move |_| {
-        if let Some(node_type_id) = selected_node_type_id.get() {
-            if !node_type_id.is_empty() {
-                load_admin_node_type_detail(
-                    node_type_id,
-                    selected_detail,
-                    detail_loading,
-                    message,
-                    name,
-                    slug,
-                    plural_label,
-                    parent_node_type_ids,
-                    child_node_type_ids,
-                );
-            }
-        } else {
-            selected_detail.set(None);
-        }
-    });
-
-    let begin_new = move |_| {
-        selected_node_type_id.set(None);
-        selected_detail.set(None);
-        is_creating.set(true);
-        message.set(None);
-        name.set(String::new());
-        slug.set(String::new());
-        plural_label.set(String::new());
-        parent_node_type_ids.set(HashSet::new());
-        child_node_type_ids.set(HashSet::new());
-    };
-
-    let cancel_new = move |_| {
-        is_creating.set(false);
-        message.set(None);
-        let first_id = node_types.with(|items| items.first().map(|item| item.id.clone()));
-        selected_node_type_id.set(first_id);
-    };
-    let refresh_selected_node_type = move || {
-        if let Some(node_type_id) = selected_node_type_id.get_untracked() {
-            load_admin_node_type_detail(
-                node_type_id,
-                selected_detail,
-                detail_loading,
-                message,
-                name,
-                slug,
-                plural_label,
-                parent_node_type_ids,
-                child_node_type_ids,
-            );
-        }
-    };
-
-    let save_node_type = move |event: leptos::ev::SubmitEvent| {
-        event.prevent_default();
-        let trimmed_name = name.get().trim().to_string();
-        let trimmed_slug = slug.get().trim().to_string();
-        let trimmed_plural = plural_label.get().trim().to_string();
-        if trimmed_name.is_empty() || trimmed_slug.is_empty() {
-            message.set(Some("Name and slug are required.".into()));
-            return;
-        }
-
-        let request = NodeTypeUpsertRequest {
-            name: trimmed_name,
-            slug: trimmed_slug,
-            plural_label: if trimmed_plural.is_empty() {
-                None
-            } else {
-                Some(trimmed_plural)
-            },
-            parent_node_type_ids: parent_node_type_ids.get().into_iter().collect::<Vec<_>>(),
-            child_node_type_ids: child_node_type_ids.get().into_iter().collect::<Vec<_>>(),
-        };
-        let body = match serde_json::to_string(&request) {
-            Ok(body) => body,
-            Err(_) => {
-                message.set(Some("Node type request could not be prepared.".into()));
-                return;
-            }
-        };
-        let selected_id = selected_node_type_id.get_untracked();
-        let creating = is_creating.get_untracked() || selected_id.is_none();
-
-        #[cfg(feature = "hydrate")]
-        {
-            leptos::task::spawn_local(async move {
-                is_saving.set(true);
-                message.set(None);
-                let builder = if creating {
-                    gloo_net::http::Request::post("/api/admin/node-types")
-                } else if let Some(node_type_id) = selected_id {
-                    gloo_net::http::Request::put(&format!("/api/admin/node-types/{node_type_id}"))
-                } else {
-                    is_saving.set(false);
-                    message.set(Some("Select a node type before saving.".into()));
-                    return;
-                };
-
-                match send_json_id_request(builder, Some(body), "Save node type").await {
-                    Ok(response) => {
-                        is_creating.set(false);
-                        load_admin_node_type_catalog(
-                            node_types,
-                            selected_node_type_id,
-                            is_loading,
-                            message,
-                            Some(response.id),
-                        );
-                    }
-                    Err(error) => message.set(Some(error)),
-                }
-                is_saving.set(false);
-            });
-        }
-        #[cfg(not(feature = "hydrate"))]
-        let _ = (body, creating, is_saving);
-    };
-
-    view! {
-        <AppShell active_route="administration" title="Node Types">
-            <section class="route-panel administration-node-types-page">
-                <Breadcrumb>
-                    <BreadcrumbItem>
-                        <BreadcrumbLink href="/administration">"Administration"</BreadcrumbLink>
-                    </BreadcrumbItem>
-                    <BreadcrumbSeparator/>
-                    <BreadcrumbItem>
-                        <BreadcrumbPage>"Node Types"</BreadcrumbPage>
-                    </BreadcrumbItem>
-                </Breadcrumb>
-
-                <PageHeader
-                    title="Node Types"
-                    description="Manage organization node type labels and parent-child hierarchy rules."
-                >
-                    <button class="button" type="button" on:click=begin_new>
-                        "New Node Type"
-                    </button>
-                </PageHeader>
-
-                {move || {
-                    if is_loading.get() {
-                        view! {
-                            <section class="organization-state" aria-live="polite">
-                                <h3>"Loading node types"</h3>
-                                <p>"Fetching hierarchy configuration."</p>
-                            </section>
-                        }
-                        .into_any()
-                    } else if let Some(error) = message.get().filter(|_| node_types.get().is_empty()) {
-                        view! {
-                            <section class="organization-state is-error" role="alert">
-                                <h3>"Node types unavailable"</h3>
-                                <p>{error}</p>
-                            </section>
-                        }
-                        .into_any()
-                    } else {
-                        view! {
-                            <div class="administration-node-types-layout">
-                                <AdministrationNodeTypesList
-                                    node_types=node_types.get()
-                                    search
-                                    selected_node_type_id
-                                    is_creating=is_creating.get()
-                                />
-                                <AdministrationNodeTypeEditor
-                                    all_node_types=node_types.get()
-                                    selected_detail=selected_detail.get()
-                                    is_creating=is_creating.get()
-                                    detail_loading=detail_loading.get()
-                                    is_saving=is_saving.get()
-                                    message=message.get()
-                                    selected_node_type_id
-                                    name
-                                    slug
-                                    plural_label
-                                    parent_node_type_ids
-                                    child_node_type_ids
-                                    on_cancel=cancel_new
-                                    on_submit=save_node_type
-                                    on_metadata_changed=refresh_selected_node_type
-                                />
-                            </div>
-                        }
-                        .into_any()
-                    }
-                }}
-            </section>
-        </AppShell>
-    }
-}
+use std::collections::HashSet;
 
 #[component]
 /// Renders the administration node types list view.
-fn AdministrationNodeTypesList(
+pub(crate) fn AdministrationNodeTypesList(
     node_types: Vec<NodeTypeCatalogEntry>,
     search: RwSignal<String>,
     selected_node_type_id: RwSignal<Option<String>>,
@@ -377,8 +154,66 @@ fn AdministrationNodeTypesList(
 }
 
 #[component]
+/// Renders the node type relationship picker view.
+pub(crate) fn NodeTypeRelationshipPicker(
+    title: &'static str,
+    empty_message: &'static str,
+    node_types: Vec<NodeTypeCatalogEntry>,
+    selected_ids: RwSignal<HashSet<String>>,
+    opposite_selected_ids: RwSignal<HashSet<String>>,
+) -> impl IntoView {
+    view! {
+        <section class="organization-detail-card node-type-relationship-picker">
+            <h3>{title}</h3>
+            <div class="checkbox-list node-type-relationship-picker__list">
+                {if node_types.is_empty() {
+                    view! { <p class="muted">{empty_message}</p> }.into_any()
+                } else {
+                    node_types
+                        .into_iter()
+                        .map(|node_type| {
+                            let node_type_id = node_type.id.clone();
+                            let checked_id = node_type_id.clone();
+                            let change_id = node_type_id;
+                            view! {
+                                <label class="checkbox-list__item node-type-relationship-picker__item">
+                                    <input
+                                        type="checkbox"
+                                        prop:checked=move || selected_ids.get().contains(&checked_id)
+                                        on:change=move |event| {
+                                            let is_checked = event_target_checked(&event);
+                                            selected_ids.update(|ids| {
+                                                if is_checked {
+                                                    ids.insert(change_id.clone());
+                                                } else {
+                                                    ids.remove(&change_id);
+                                                }
+                                            });
+                                            if is_checked {
+                                                opposite_selected_ids.update(|ids| {
+                                                    ids.remove(&change_id);
+                                                });
+                                            }
+                                        }
+                                    />
+                                    <span>
+                                        <strong>{node_type.name}</strong>
+                                        <small>{node_type.singular_label} " - " {node_type.plural_label}</small>
+                                    </span>
+                                </label>
+                            }
+                        })
+                        .collect_view()
+                        .into_any()
+                }}
+            </div>
+        </section>
+    }
+}
+
+#[component]
 /// Renders the administration node type editor view.
-fn AdministrationNodeTypeEditor(
+pub(crate) fn AdministrationNodeTypeEditor(
     all_node_types: Vec<NodeTypeCatalogEntry>,
     selected_detail: Option<NodeTypeDefinition>,
     is_creating: bool,
@@ -604,66 +439,89 @@ fn AdministrationNodeTypeEditor(
 }
 
 #[component]
-/// Renders the node type relationship picker view.
-fn NodeTypeRelationshipPicker(
-    title: &'static str,
-    empty_message: &'static str,
-    node_types: Vec<NodeTypeCatalogEntry>,
-    selected_ids: RwSignal<HashSet<String>>,
-    opposite_selected_ids: RwSignal<HashSet<String>>,
-) -> impl IntoView {
+/// Renders the node type scoped forms list view.
+pub(crate) fn NodeTypeScopedFormsList(forms: Vec<NodeTypeFormLink>) -> impl IntoView {
+    let search = RwSignal::new(String::new());
+    let page_size = RwSignal::new(10usize);
+    let page_index = RwSignal::new(0usize);
+    let has_forms = !forms.is_empty();
+    let searchable_forms = forms;
+    let filtered_forms = Memo::new(move |_| {
+        let query = search.get().trim().to_lowercase();
+        searchable_forms
+            .iter()
+            .filter(|form| {
+                query.is_empty()
+                    || form.form_name.to_lowercase().contains(&query)
+                    || form.form_slug.to_lowercase().contains(&query)
+            })
+            .cloned()
+            .collect::<Vec<_>>()
+    });
+    let total_count = Memo::new(move |_| filtered_forms.get().len());
     view! {
-        <section class="organization-detail-card node-type-relationship-picker">
-            <h3>{title}</h3>
-            <div class="checkbox-list node-type-relationship-picker__list">
-                {if node_types.is_empty() {
-                    view! { <p class="muted">{empty_message}</p> }.into_any()
-                } else {
-                    node_types
-                        .into_iter()
-                        .map(|node_type| {
-                            let node_type_id = node_type.id.clone();
-                            let checked_id = node_type_id.clone();
-                            let change_id = node_type_id;
-                            view! {
-                                <label class="checkbox-list__item node-type-relationship-picker__item">
-                                    <input
-                                        type="checkbox"
-                                        prop:checked=move || selected_ids.get().contains(&checked_id)
-                                        on:change=move |event| {
-                                            let is_checked = event_target_checked(&event);
-                                            selected_ids.update(|ids| {
-                                                if is_checked {
-                                                    ids.insert(change_id.clone());
-                                                } else {
-                                                    ids.remove(&change_id);
-                                                }
-                                            });
-                                            if is_checked {
-                                                opposite_selected_ids.update(|ids| {
-                                                    ids.remove(&change_id);
-                                                });
-                                            }
-                                        }
-                                    />
-                                    <span>
-                                        <strong>{node_type.name}</strong>
-                                        <small>{node_type.singular_label} " - " {node_type.plural_label}</small>
-                                    </span>
-                                </label>
-                            }
-                        })
-                        .collect_view()
-                        .into_any()
-                }}
+        <section class="organization-detail-card node-type-detail-list node-type-detail-list--wide">
+            <div class="node-type-detail-list__header">
+                <h3>"Scoped Forms"</h3>
+                <label class="searchable-data-table__search searchable-data-table__control node-type-detail-list__search">
+                    <Search class="searchable-data-table__control-icon"/>
+                    <span class="sr-only">"Search scoped forms"</span>
+                    <input
+                        type="search"
+                        placeholder="Search forms"
+                        prop:value=move || search.get()
+                        on:input=move |event| {
+                            search.set(event_target_value(&event));
+                            page_index.set(0);
+                        }
+                    />
+                </label>
             </div>
+            {if !has_forms {
+                view! { <p class="muted">"No forms are scoped to this node type."</p> }.into_any()
+            } else {
+                view! {
+                    <div class="capability-list node-type-scoped-forms-list">
+                        {move || {
+                            let visible_forms = filtered_forms.get();
+                            if visible_forms.is_empty() {
+                                view! { <div class="capability-list__item">"No scoped forms match this search."</div> }.into_any()
+                            } else {
+                                let total_count = visible_forms.len();
+                                let start = pagination_page_start(total_count, page_size.get(), page_index.get());
+                                visible_forms
+                                    .iter()
+                                    .skip(start)
+                                    .take(page_size.get())
+                                    .cloned()
+                                    .map(|form| view! {
+                                        <div class="capability-list__item">
+                                            <strong>{form.form_name}</strong>
+                                            <small>{form.form_slug}</small>
+                                        </div>
+                                    })
+                                    .collect_view()
+                                    .into_any()
+                            }
+                        }}
+                    </div>
+                    <RelatedWorkPaginationFooter
+                        aria_label="Scoped forms list pagination"
+                        label="scoped forms"
+                        total_count=total_count
+                        page_size=page_size
+                        page_index=page_index
+                    />
+                }
+                .into_any()
+            }}
         </section>
     }
 }
 
 #[component]
 /// Renders the node type detail collections view.
-fn NodeTypeDetailCollections(
+pub(crate) fn NodeTypeDetailCollections(
     detail: Option<NodeTypeDefinition>,
     on_metadata_changed: impl Fn() + 'static + Copy + Send + Sync,
 ) -> impl IntoView {
@@ -1087,402 +945,5 @@ fn NodeTypeMetadataList(
                 </Show>
             </Portal>
         </section>
-    }
-}
-
-/// Handles the save node type metadata field behavior.
-fn save_node_type_metadata_field(
-    node_type_id: String,
-    editing_field_id: RwSignal<Option<String>>,
-    field_label: RwSignal<String>,
-    field_key: RwSignal<String>,
-    field_type: RwSignal<String>,
-    field_required: RwSignal<bool>,
-    is_saving_field: RwSignal<bool>,
-    field_message: RwSignal<Option<String>>,
-    sheet_open: RwSignal<bool>,
-    clear_field_editor: impl Fn() + 'static + Copy + Send + Sync,
-    on_metadata_changed: impl Fn() + 'static + Copy + Send + Sync,
-) {
-    let label = field_label.get().trim().to_string();
-    let key = field_key.get().trim().to_string();
-    let field_type_value = field_type.get();
-    let required = field_required.get();
-    if label.is_empty() || key.is_empty() {
-        field_message.set(Some("Metadata label and key are required.".into()));
-        return;
-    }
-
-    #[cfg(feature = "hydrate")]
-    {
-        let editing_id = editing_field_id.get_untracked();
-        leptos::task::spawn_local(async move {
-            is_saving_field.set(true);
-            field_message.set(None);
-            let result = if let Some(field_id) = editing_id {
-                let request = UpdateNodeMetadataFieldRequest {
-                    key,
-                    label,
-                    field_type: field_type_value,
-                    required,
-                };
-                match serde_json::to_string(&request) {
-                    Ok(body) => {
-                        send_json_id_request(
-                            gloo_net::http::Request::put(&format!(
-                                "/api/admin/node-metadata-fields/{field_id}"
-                            )),
-                            Some(body),
-                            "Save metadata field",
-                        )
-                        .await
-                    }
-                    Err(_) => Err("Metadata field request could not be prepared.".into()),
-                }
-            } else {
-                let request = CreateNodeMetadataFieldRequest {
-                    node_type_id,
-                    key,
-                    label,
-                    field_type: field_type_value,
-                    required,
-                };
-                match serde_json::to_string(&request) {
-                    Ok(body) => {
-                        send_json_id_request(
-                            gloo_net::http::Request::post("/api/admin/node-metadata-fields"),
-                            Some(body),
-                            "Create metadata field",
-                        )
-                        .await
-                    }
-                    Err(_) => Err("Metadata field request could not be prepared.".into()),
-                }
-            };
-
-            match result {
-                Ok(_) => {
-                    sheet_open.set(false);
-                    clear_field_editor();
-                    on_metadata_changed();
-                }
-                Err(error) => field_message.set(Some(error)),
-            }
-            is_saving_field.set(false);
-        });
-    }
-    #[cfg(not(feature = "hydrate"))]
-    let _ = (
-        node_type_id,
-        editing_field_id,
-        label,
-        key,
-        field_type_value,
-        required,
-        is_saving_field,
-        sheet_open,
-        clear_field_editor,
-        on_metadata_changed,
-    );
-}
-
-#[component]
-/// Renders the node type scoped forms list view.
-fn NodeTypeScopedFormsList(forms: Vec<NodeTypeFormLink>) -> impl IntoView {
-    let search = RwSignal::new(String::new());
-    let page_size = RwSignal::new(10usize);
-    let page_index = RwSignal::new(0usize);
-    let has_forms = !forms.is_empty();
-    let searchable_forms = forms;
-    let filtered_forms = Memo::new(move |_| {
-        let query = search.get().trim().to_lowercase();
-        searchable_forms
-            .iter()
-            .filter(|form| {
-                query.is_empty()
-                    || form.form_name.to_lowercase().contains(&query)
-                    || form.form_slug.to_lowercase().contains(&query)
-            })
-            .cloned()
-            .collect::<Vec<_>>()
-    });
-    let total_count = Memo::new(move |_| filtered_forms.get().len());
-    view! {
-        <section class="organization-detail-card node-type-detail-list node-type-detail-list--wide">
-            <div class="node-type-detail-list__header">
-                <h3>"Scoped Forms"</h3>
-                <label class="searchable-data-table__search searchable-data-table__control node-type-detail-list__search">
-                    <Search class="searchable-data-table__control-icon"/>
-                    <span class="sr-only">"Search scoped forms"</span>
-                    <input
-                        type="search"
-                        placeholder="Search forms"
-                        prop:value=move || search.get()
-                        on:input=move |event| {
-                            search.set(event_target_value(&event));
-                            page_index.set(0);
-                        }
-                    />
-                </label>
-            </div>
-            {if !has_forms {
-                view! { <p class="muted">"No forms are scoped to this node type."</p> }.into_any()
-            } else {
-                view! {
-                    <div class="capability-list node-type-scoped-forms-list">
-                        {move || {
-                            let visible_forms = filtered_forms.get();
-                            if visible_forms.is_empty() {
-                                view! { <div class="capability-list__item">"No scoped forms match this search."</div> }.into_any()
-                            } else {
-                                let total_count = visible_forms.len();
-                                let start = pagination_page_start(total_count, page_size.get(), page_index.get());
-                                visible_forms
-                                    .iter()
-                                    .skip(start)
-                                    .take(page_size.get())
-                                    .cloned()
-                                    .map(|form| view! {
-                                        <div class="capability-list__item">
-                                            <strong>{form.form_name}</strong>
-                                            <small>{form.form_slug}</small>
-                                        </div>
-                                    })
-                                    .collect_view()
-                                    .into_any()
-                            }
-                        }}
-                    </div>
-                    <RelatedWorkPaginationFooter
-                        aria_label="Scoped forms list pagination"
-                        label="scoped forms"
-                        total_count=total_count
-                        page_size=page_size
-                        page_index=page_index
-                    />
-                }
-                .into_any()
-            }}
-        </section>
-    }
-}
-
-/// Handles the node type ancestor ids behavior.
-fn node_type_ancestor_ids(
-    node_type_id: &str,
-    node_types: &[NodeTypeCatalogEntry],
-) -> HashSet<String> {
-    let mut ancestors = HashSet::new();
-    let mut stack = node_types
-        .iter()
-        .find(|node_type| node_type.id == node_type_id)
-        .map(|node_type| {
-            node_type
-                .parent_relationships
-                .iter()
-                .map(|peer| peer.node_type_id.clone())
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
-
-    while let Some(candidate_id) = stack.pop() {
-        if ancestors.insert(candidate_id.clone())
-            && let Some(candidate) = node_types
-                .iter()
-                .find(|node_type| node_type.id == candidate_id)
-        {
-            stack.extend(
-                candidate
-                    .parent_relationships
-                    .iter()
-                    .map(|peer| peer.node_type_id.clone()),
-            );
-        }
-    }
-
-    ancestors
-}
-
-/// Handles the node type descendant ids behavior.
-fn node_type_descendant_ids(
-    node_type_id: &str,
-    node_types: &[NodeTypeCatalogEntry],
-) -> HashSet<String> {
-    let mut descendants = HashSet::new();
-    let mut stack = node_types
-        .iter()
-        .find(|node_type| node_type.id == node_type_id)
-        .map(|node_type| {
-            node_type
-                .child_relationships
-                .iter()
-                .map(|peer| peer.node_type_id.clone())
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
-
-    while let Some(candidate_id) = stack.pop() {
-        if descendants.insert(candidate_id.clone())
-            && let Some(candidate) = node_types
-                .iter()
-                .find(|node_type| node_type.id == candidate_id)
-        {
-            stack.extend(
-                candidate
-                    .child_relationships
-                    .iter()
-                    .map(|peer| peer.node_type_id.clone()),
-            );
-        }
-    }
-
-    descendants
-}
-
-/// Loads the load admin node type catalog data.
-fn load_admin_node_type_catalog(
-    node_types: RwSignal<Vec<NodeTypeCatalogEntry>>,
-    selected_node_type_id: RwSignal<Option<String>>,
-    is_loading: RwSignal<bool>,
-    message: RwSignal<Option<String>>,
-    preferred_id: Option<String>,
-) {
-    #[cfg(feature = "hydrate")]
-    {
-        leptos::task::spawn_local(async move {
-            is_loading.set(true);
-            match gloo_net::http::Request::get("/api/node-types").send().await {
-                Ok(response) if response.status() == 401 => {
-                    is_loading.set(false);
-                    redirect_to_login();
-                }
-                Ok(response) if response.ok() => {
-                    match response.json::<Vec<NodeTypeCatalogEntry>>().await {
-                        Ok(items) => {
-                            let selected = preferred_id
-                                .or_else(|| {
-                                    selected_node_type_id
-                                        .get_untracked()
-                                        .filter(|id| items.iter().any(|item| item.id == *id))
-                                })
-                                .or_else(|| items.first().map(|item| item.id.clone()));
-                            node_types.set(items);
-                            selected_node_type_id.set(selected);
-                            message.set(None);
-                        }
-                        Err(_) => {
-                            node_types.set(Vec::new());
-                            message.set(Some("Node type response could not be read.".into()));
-                        }
-                    }
-                    is_loading.set(false);
-                }
-                Ok(response) => {
-                    let status = response.status();
-                    node_types.set(Vec::new());
-                    message.set(Some(format!(
-                        "Load node types failed with status {status}."
-                    )));
-                    is_loading.set(false);
-                }
-                Err(_) => {
-                    node_types.set(Vec::new());
-                    message.set(Some("Could not reach the node type API.".into()));
-                    is_loading.set(false);
-                }
-            }
-        });
-    }
-    #[cfg(not(feature = "hydrate"))]
-    {
-        let _ = (node_types, selected_node_type_id, message, preferred_id);
-        is_loading.set(false);
-    }
-}
-
-/// Loads the load admin node type detail data.
-fn load_admin_node_type_detail(
-    node_type_id: String,
-    selected_detail: RwSignal<Option<NodeTypeDefinition>>,
-    detail_loading: RwSignal<bool>,
-    message: RwSignal<Option<String>>,
-    name: RwSignal<String>,
-    slug: RwSignal<String>,
-    plural_label: RwSignal<String>,
-    parent_node_type_ids: RwSignal<HashSet<String>>,
-    child_node_type_ids: RwSignal<HashSet<String>>,
-) {
-    #[cfg(feature = "hydrate")]
-    {
-        leptos::task::spawn_local(async move {
-            detail_loading.set(true);
-            match gloo_net::http::Request::get(&format!("/api/admin/node-types/{node_type_id}"))
-                .send()
-                .await
-            {
-                Ok(response) if response.status() == 401 => {
-                    detail_loading.set(false);
-                    redirect_to_login();
-                }
-                Ok(response) if response.ok() => {
-                    match response.json::<NodeTypeDefinition>().await {
-                        Ok(detail) => {
-                            name.set(detail.name.clone());
-                            slug.set(detail.slug.clone());
-                            plural_label.set(detail.plural_label.clone());
-                            parent_node_type_ids.set(
-                                detail
-                                    .parent_relationships
-                                    .iter()
-                                    .map(|peer| peer.node_type_id.clone())
-                                    .collect(),
-                            );
-                            child_node_type_ids.set(
-                                detail
-                                    .child_relationships
-                                    .iter()
-                                    .map(|peer| peer.node_type_id.clone())
-                                    .collect(),
-                            );
-                            selected_detail.set(Some(detail));
-                            message.set(None);
-                        }
-                        Err(_) => {
-                            selected_detail.set(None);
-                            message
-                                .set(Some("Node type detail response could not be read.".into()));
-                        }
-                    }
-                    detail_loading.set(false);
-                }
-                Ok(response) => {
-                    selected_detail.set(None);
-                    message.set(Some(format!(
-                        "Load node type detail failed with status {}.",
-                        response.status()
-                    )));
-                    detail_loading.set(false);
-                }
-                Err(_) => {
-                    selected_detail.set(None);
-                    message.set(Some("Could not reach the node type detail API.".into()));
-                    detail_loading.set(false);
-                }
-            }
-        });
-    }
-    #[cfg(not(feature = "hydrate"))]
-    {
-        let _ = (
-            node_type_id,
-            selected_detail,
-            message,
-            name,
-            slug,
-            plural_label,
-            parent_node_type_ids,
-            child_node_type_ids,
-        );
-        detail_loading.set(false);
     }
 }

@@ -1,6 +1,4 @@
-//! Route-level page composition for the Administration feature.
-//!
-//! Keep Leptos page components that correspond directly to routes here; reusable widgets, API calls, and DTOs should live in sibling modules.
+//! Landing page for Administration feature routes.
 
 use crate::ui::{AppShell, PageHeader};
 
