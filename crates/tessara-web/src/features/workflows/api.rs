@@ -2,6 +2,10 @@
 //!
 //! Keep endpoint calls, request assembly, and response handling for Workflows screens here; pure DTOs and display formatting belong in sibling modules.
 
+mod display;
+mod loaders;
+mod save;
+
 use crate::features::forms::FormSummary;
 use crate::features::organization::{NodeTypeCatalogEntry, OrganizationNode};
 #[cfg(feature = "hydrate")]
@@ -10,6 +14,10 @@ use crate::features::workflows::types::{WorkflowDefinition, WorkflowSummary};
 #[cfg(feature = "hydrate")]
 use crate::http::redirect_to_login;
 use leptos::prelude::*;
+
+pub(crate) use display::workflow_assigned_users_label;
+pub(crate) use loaders::{load_workflow_assignment_nodes, load_workflows};
+pub(crate) use save::{submit_create_workflow, submit_update_workflow};
 
 /// Loads the load workflow detail data.
 pub(crate) fn load_workflow_detail(

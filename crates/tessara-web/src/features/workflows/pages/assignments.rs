@@ -2,9 +2,9 @@
 //!
 //! Keep functionality here when it is owned by Workflows and specifically supports the Assignments concern.
 
+use crate::features::organization::IntoNonemptyString;
 #[cfg(feature = "hydrate")]
 use crate::features::organization::current_search_param;
-use crate::features::organization::{IntoNonemptyString, submit_workflow_assignment_bulk};
 use crate::features::workflows::assignments::{
     WorkflowAssigneeOption, WorkflowAssignmentCandidate, WorkflowAssignmentSummary,
     WorkflowAssignmentsList, assignee_filter_options, filtered_assignees, filtered_assignments,
@@ -15,7 +15,8 @@ use crate::features::workflows::assignments::{
     workflow_assignment_pair_is_valid,
 };
 use crate::features::workflows::{
-    workflow_assignee_label, workflow_assignment_candidate_key, workflow_assignment_revision_label,
+    submit_workflow_assignment_bulk, workflow_assignee_label, workflow_assignment_candidate_key,
+    workflow_assignment_revision_label,
 };
 use crate::ui::{
     AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator,

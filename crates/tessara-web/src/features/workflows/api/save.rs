@@ -1,8 +1,6 @@
 //! Workflow create/update save orchestration.
 
 #[cfg(feature = "hydrate")]
-use super::steps::{workflow_step_payloads_from_drafts, workflow_step_signature};
-#[cfg(feature = "hydrate")]
 use crate::features::shared::unique_slug_from_label;
 #[cfg(feature = "hydrate")]
 use crate::features::workflows::existing_workflow_slugs;
@@ -13,6 +11,8 @@ use crate::features::workflows::{
     UpdateWorkflowPayload, UpdateWorkflowRevisionStepsPayload,
 };
 use crate::features::workflows::{WorkflowSaveIntent, WorkflowStepDraft};
+#[cfg(feature = "hydrate")]
+use crate::features::workflows::{workflow_step_payloads_from_drafts, workflow_step_signature};
 #[cfg(feature = "hydrate")]
 use crate::http::send_json_id_request;
 #[cfg(feature = "hydrate")]

@@ -2,9 +2,7 @@
 //!
 //! Keep collection tables, list filters, and list-page presentation here; detail/editor flows should stay in their dedicated modules.
 
-use crate::features::organization::{
-    OrganizationNode, load_workflow_assignment_nodes, load_workflows, workflow_assigned_users_label,
-};
+use crate::features::organization::OrganizationNode;
 use crate::features::shared::FilterHeader as SharedFilterHeader;
 use crate::features::shared::{
     FormAttachmentLink, WorkflowAssignedUsersSheetData, WorkflowAvailableNodesSheetData,
@@ -15,6 +13,9 @@ use crate::features::workflows::{
     WorkflowSourceMarker, workflow_assigned_user_links, workflow_available_node_links,
     workflow_available_nodes_label, workflow_description_label, workflow_status_key,
     workflow_status_label, workflow_version_label,
+};
+use crate::features::workflows::{
+    load_workflow_assignment_nodes, load_workflows, workflow_assigned_users_label,
 };
 use crate::ui::empty_view;
 use crate::ui::{AppShell, Button, DataTable, PageHeader};

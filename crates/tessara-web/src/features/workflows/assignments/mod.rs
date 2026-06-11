@@ -5,6 +5,7 @@
 mod api;
 mod components;
 mod display;
+mod mutations;
 mod state;
 pub(crate) mod types;
 
@@ -20,6 +21,7 @@ pub(crate) use display::{
     workflow_assignment_status_key, workflow_assignment_status_label,
     workflow_available_node_links,
 };
+pub(crate) use mutations::{submit_workflow_assignment_bulk, toggle_workflow_assignment};
 pub(in crate::features::workflows) use state::{
     assignee_filter_options, filtered_assignees, filtered_assignments, filtered_node_candidates,
     filtered_workflow_candidates, selected_node_summary, selected_workflow_summary,

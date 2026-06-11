@@ -6,6 +6,7 @@ mod available_nodes_picker;
 mod options;
 mod state;
 mod step_list;
+mod steps;
 
 pub(crate) use crate::features::workflows::pages::editor::{WorkflowsEditPage, WorkflowsNewPage};
 pub(in crate::features::workflows) use available_nodes_picker::WorkflowAvailableNodesPicker;
@@ -16,3 +17,6 @@ pub(in crate::features::workflows) use state::{
     add_workflow_step, can_submit_workflow_editor, prune_unavailable_workflow_steps,
 };
 pub(in crate::features::workflows) use step_list::WorkflowStepList;
+#[cfg(feature = "hydrate")]
+pub(in crate::features::workflows) use steps::workflow_step_payloads_from_drafts;
+pub(crate) use steps::workflow_step_signature;
