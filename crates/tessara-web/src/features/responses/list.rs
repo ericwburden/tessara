@@ -15,6 +15,7 @@ use crate::ui::{
     AppShell, DataTable, DropdownMenu, FilterHeader as SharedFilterHeader, PageHeader,
     TablePaginationFooter, Timestamp, empty_view,
 };
+use crate::utils::pagination::pagination_page_start;
 use crate::utils::text::text_matches;
 
 use icons::{PanelRight, Pencil, Search};
@@ -162,21 +163,6 @@ fn ResponsesList(
     let page_index = RwSignal::new(0usize);
     let total_count = table_submissions.len();
     let total_count_memo = Memo::new(move |_| total_count);
-    let page_count = move || {
-        if total_count == 0 {
-            1
-        } else {
-            total_count.div_ceil(page_size.get()).max(1)
-        }
-    };
-    let current_page = move || page_index.get().min(page_count() - 1);
-    let page_start = move || {
-        if total_count == 0 {
-            0
-        } else {
-            current_page() * page_size.get()
-        }
-    };
 
     view! {
         <div class="forms-list forms-list-responsive-table responses-list">
@@ -231,7 +217,7 @@ fn ResponsesList(
                         } else {
                             table_submissions
                                 .iter()
-                                .skip(page_start())
+                                .skip(pagination_page_start(total_count, page_size.get(), page_index.get()))
                                 .take(page_size.get())
                                 .cloned()
                                 .map(|submission| {
@@ -331,7 +317,7 @@ fn ResponsesList(
                 } else {
                     card_submissions
                         .iter()
-                        .skip(page_start())
+                        .skip(pagination_page_start(total_count, page_size.get(), page_index.get()))
                         .take(page_size.get())
                         .cloned()
                         .map(|submission| {
