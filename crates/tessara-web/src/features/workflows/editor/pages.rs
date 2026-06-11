@@ -4,13 +4,11 @@
 
 use crate::features::forms::FormSummary;
 use crate::features::organization::{NodeTypeCatalogEntry, OrganizationNode};
-use crate::features::shared::status_badge_class;
 use crate::features::workflows::api::workflow_revision_label_from_raw as workflow_submission_workflow_revision_label_from_raw;
 use crate::features::workflows::api::{load_workflow_create_options, load_workflow_detail};
 use crate::features::workflows::types::{
     WorkflowDefinition, WorkflowSaveIntent, WorkflowStepDraft, WorkflowSummary,
 };
-use crate::features::workflows::workflow_form_version_options;
 use crate::features::workflows::{
     active_workflow_definition_version, submit_create_workflow, submit_update_workflow,
     workflow_step_signature,
@@ -27,8 +25,9 @@ use leptos::prelude::*;
 use std::collections::HashSet;
 
 use super::{
-    WorkflowAvailableNodesPicker, WorkflowStepList, add_workflow_step, can_submit_workflow_editor,
-    prune_unavailable_workflow_steps,
+    WorkflowActiveRevisionSection, WorkflowAvailabilitySection, WorkflowCreateStepsSection,
+    WorkflowEditStepsSection, WorkflowIdentityFields, add_workflow_step,
+    can_submit_workflow_editor, prune_unavailable_workflow_steps,
 };
 
 #[component]
@@ -111,7 +110,7 @@ pub(crate) fn WorkflowsNewPage() -> impl IntoView {
         prune_unavailable_workflow_steps(&forms.get(), &node_types.get(), steps);
     });
 
-    let add_step = move || add_workflow_step(next_step_id, steps);
+    let add_step = move |_| add_workflow_step(next_step_id, steps);
 
     let can_submit = move || can_submit_workflow_editor(is_saving, name, available_node_ids, steps);
 
@@ -157,86 +156,19 @@ pub(crate) fn WorkflowsNewPage() -> impl IntoView {
                                         );
                                     }
                                 >
-                                    <div class="form-grid">
-                                        <label class="form-field">
-                                            <span>"Workflow Name"</span>
-                                            <input
-                                                type="text"
-                                                value=move || name.get()
-                                                on:input=move |event| {
-                                                    name.set(event_target_value(&event));
-                                                }
-                                            />
-                                        </label>
-                                        <label class="form-field">
-                                            <span>"Description"</span>
-                                            <textarea
-                                                prop:value=move || description.get()
-                                                on:input=move |event| {
-                                                    description.set(event_target_value(&event));
-                                                }
-                                            ></textarea>
-                                        </label>
-                                    </div>
+                                    <WorkflowIdentityFields name=name description=description/>
 
-                                    <section class="form-section">
-                                        <h3>"Available At"</h3>
-                                        <WorkflowAvailableNodesPicker
-                                            nodes=organization_nodes.get()
-                                            selected_node_ids=available_node_ids
-                                        />
-                                    </section>
+                                    <WorkflowAvailabilitySection
+                                        organization_nodes=organization_nodes
+                                        available_node_ids=available_node_ids
+                                    />
 
-                                    <section class="form-section">
-                                        <div class="form-builder-section-card__header">
-                                            <h3>"Workflow Steps"</h3>
-                                            <button
-                                                class="button button--secondary"
-                                                type="button"
-                                                disabled=move || {
-                                                    workflow_form_version_options(
-                                                        &forms.get(),
-                                                        &node_types.get(),
-                                                        "",
-                                                    ).is_empty()
-                                                }
-                                                on:click=move |_| add_step()
-                                            >
-                                                "+ Add Step"
-                                            </button>
-                                        </div>
-                                        {move || {
-                                            let options = workflow_form_version_options(
-                                                &forms.get(),
-                                                &node_types.get(),
-                                                "",
-                                            );
-                                            if options.is_empty() {
-                                                return view! {
-                                                    <section class="organization-state">
-                                                        <h3>"No published forms available"</h3>
-                                                        <p>"Publish at least one form version before creating a workflow."</p>
-                                                    </section>
-                                                }
-                                                .into_any();
-                                            }
-
-                                            if steps.get().is_empty() {
-                                                return view! {
-                                                    <section class="organization-state">
-                                                        <h3>"No workflow steps yet"</h3>
-                                                        <p>"Add one or more form steps to define the workflow."</p>
-                                                    </section>
-                                                }
-                                                .into_any();
-                                            }
-
-                                            view! {
-                                                <WorkflowStepList forms=forms node_types=node_types steps=steps/>
-                                            }
-                                            .into_any()
-                                        }}
-                                    </section>
+                                    <WorkflowCreateStepsSection
+                                        forms=forms
+                                        node_types=node_types
+                                        steps=steps
+                                        on_add_step=add_step
+                                    />
 
                                     {move || message.get().map(|message| view! {
                                         <p class="form-message" role="status">{message}</p>
@@ -399,7 +331,7 @@ pub(crate) fn WorkflowsEditPage() -> impl IntoView {
         prune_unavailable_workflow_steps(&forms.get(), &node_types.get(), steps);
     });
 
-    let add_step = move || add_workflow_step(next_step_id, steps);
+    let add_step = move |_| add_workflow_step(next_step_id, steps);
 
     let can_submit = move || can_submit_workflow_editor(is_saving, name, available_node_ids, steps);
     let has_step_changes = move || {
@@ -474,121 +406,25 @@ pub(crate) fn WorkflowsEditPage() -> impl IntoView {
                                         );
                                     }
                                 >
-                                    <div class="form-grid">
-                                        <label class="form-field">
-                                            <span>"Workflow Name"</span>
-                                            <input
-                                                type="text"
-                                                value=move || name.get()
-                                                on:input=move |event| {
-                                                    name.set(event_target_value(&event));
-                                                }
-                                            />
-                                        </label>
-                                        <label class="form-field">
-                                            <span>"Description"</span>
-                                            <textarea
-                                                prop:value=move || description.get()
-                                                on:input=move |event| {
-                                                    description.set(event_target_value(&event));
-                                                }
-                                            ></textarea>
-                                        </label>
-                                    </div>
+                                    <WorkflowIdentityFields name=name description=description/>
 
-                                    <section class="form-section">
-                                        <h3>"Available At"</h3>
-                                        <WorkflowAvailableNodesPicker
-                                            nodes=organization_nodes.get()
-                                            selected_node_ids=available_node_ids
-                                        />
-                                    </section>
+                                    <WorkflowAvailabilitySection
+                                        organization_nodes=organization_nodes
+                                        available_node_ids=available_node_ids
+                                    />
 
-                                    <section class="form-section">
-                                        <h3>"Active Revision"</h3>
-                                        <table class="info-list-table">
-                                            <tbody>
-                                                <tr>
-                                                    <th scope="row">"Revision"</th>
-                                                    <td>{move || edit_version_label.get()}</td>
-                                                </tr>
-                                                <tr>
-                                                    <th scope="row">"Status"</th>
-                                                    <td>{move || {
-                                                        let status = edit_version_status.get();
-                                                        let key = status.to_lowercase().replace(' ', "-");
-                                                        view! { <span class=status_badge_class(&key)>{status}</span> }
-                                                    }}</td>
-                                                </tr>
-                                            </tbody>
-                                        </table>
-                                    </section>
+                                    <WorkflowActiveRevisionSection
+                                        edit_version_label=edit_version_label
+                                        edit_version_status=edit_version_status
+                                    />
 
-                                    <section class="form-section">
-                                        <div class="form-builder-section-card__header">
-                                            <h3>"Workflow Steps"</h3>
-                                            <button
-                                                class="button button--secondary"
-                                                type="button"
-                                                disabled=move || {
-                                                    workflow_form_version_options(
-                                                        &forms.get(),
-                                                        &node_types.get(),
-                                                        "",
-                                                    )
-                                                    .is_empty()
-                                                }
-                                                on:click=move |_| add_step()
-                                            >
-                                                "+ Add Step"
-                                            </button>
-                                        </div>
-
-                                        {move || {
-                                            if workflow_form_version_options(
-                                                &forms.get(),
-                                                &node_types.get(),
-                                                "",
-                                            ).is_empty() {
-                                                return view! {
-                                                    <section class="organization-state">
-                                                        <h3>"No published forms available"</h3>
-                                                        <p>"Publish at least one form version before editing workflow steps."</p>
-                                                    </section>
-                                                }
-                                                .into_any();
-                                            }
-
-                                            if !version_is_draft.get() {
-                                                view! {
-                                                    <p class="form-message" role="status">
-                                                        "Step changes will create a new draft workflow revision."
-                                                    </p>
-                                                }
-                                                .into_any()
-                                            } else {
-                                                let _: () = view! { <></> };
-                                                ().into_any()
-                                            }
-                                        }}
-
-                                        {move || {
-                                            if steps.get().is_empty() {
-                                                return view! {
-                                                    <section class="organization-state">
-                                                        <h3>"No workflow steps"</h3>
-                                                        <p>"This workflow revision does not have steps yet."</p>
-                                                    </section>
-                                                }
-                                                .into_any();
-                                            }
-
-                                            view! {
-                                                <WorkflowStepList forms=forms node_types=node_types steps=steps/>
-                                            }
-                                            .into_any()
-                                        }}
-                                    </section>
+                                    <WorkflowEditStepsSection
+                                        forms=forms
+                                        node_types=node_types
+                                        steps=steps
+                                        version_is_draft=version_is_draft
+                                        on_add_step=add_step
+                                    />
 
                                     {move || message.get().map(|message| view! {
                                         <p class="form-message" role="status">{message}</p>

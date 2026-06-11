@@ -5,6 +5,7 @@
 mod available_nodes_picker;
 mod options;
 mod pages;
+mod sections;
 mod state;
 mod step_list;
 mod steps;
@@ -14,6 +15,10 @@ pub(in crate::features::workflows) use available_nodes_picker::WorkflowAvailable
 pub(crate) use options::existing_workflow_slugs;
 pub(crate) use options::workflow_form_version_options;
 pub(crate) use pages::{WorkflowsEditPage, WorkflowsNewPage};
+pub(in crate::features::workflows) use sections::{
+    WorkflowActiveRevisionSection, WorkflowAvailabilitySection, WorkflowCreateStepsSection,
+    WorkflowEditStepsSection, WorkflowIdentityFields,
+};
 pub(in crate::features::workflows) use state::{
     add_workflow_step, can_submit_workflow_editor, prune_unavailable_workflow_steps,
 };
