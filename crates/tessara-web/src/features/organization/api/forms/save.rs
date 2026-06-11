@@ -13,9 +13,11 @@ use crate::features::forms::types::{
 };
 use crate::features::forms::{FormSummary, RenderedForm};
 #[cfg(feature = "hydrate")]
+use crate::features::forms::{existing_form_slugs, existing_form_slugs_for_update};
+#[cfg(feature = "hydrate")]
 use crate::features::organization::types::IdResponse;
 #[cfg(feature = "hydrate")]
-use crate::features::shared::{existing_form_slugs_for_update, unique_slug_from_label};
+use crate::features::shared::unique_slug_from_label;
 #[cfg(feature = "hydrate")]
 use crate::http::{redirect_to_login, send_json_id_request};
 use leptos::prelude::*;
@@ -48,9 +50,7 @@ pub(crate) fn submit_create_form(
 
         let form_slug = unique_slug_from_label(
             &form_name,
-            &crate::features::shared::existing_form_slugs(
-                existing_forms.get_untracked().as_slice(),
-            ),
+            &existing_form_slugs(existing_forms.get_untracked().as_slice()),
         );
         if form_slug.is_empty() {
             message.set(Some("Form name must contain letters or numbers.".into()));

@@ -1,10 +1,10 @@
 //! Workflow step list and step card UI for workflow editing.
 
+use super::options::{workflow_form_version_options, workflow_step_form_label};
 use crate::features::forms::FormSummary;
 use crate::features::organization::{
     NodeTypeCatalogEntry, workflow_step_form_version_id_by_id, workflow_step_title_by_id,
 };
-use crate::features::shared::{workflow_form_version_options, workflow_step_form_label};
 use crate::features::workflows::types::WorkflowStepDraft;
 use icons::{ArrowDown, ArrowUp, Trash2};
 use leptos::prelude::*;

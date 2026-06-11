@@ -5,7 +5,9 @@ use super::super::helpers::IntoNonemptyString;
 #[cfg(feature = "hydrate")]
 use super::steps::{workflow_step_payloads_from_drafts, workflow_step_signature};
 #[cfg(feature = "hydrate")]
-use crate::features::shared::{existing_workflow_slugs, unique_slug_from_label};
+use crate::features::shared::unique_slug_from_label;
+#[cfg(feature = "hydrate")]
+use crate::features::workflows::existing_workflow_slugs;
 use crate::features::workflows::types::WorkflowSummary;
 #[cfg(feature = "hydrate")]
 use crate::features::workflows::{

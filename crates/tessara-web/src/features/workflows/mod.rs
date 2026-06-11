@@ -27,7 +27,9 @@ pub(crate) use display::{
     workflow_revision_label_from_raw, workflow_source_label, workflow_status_key,
     workflow_status_label, workflow_version_label,
 };
-pub(crate) use editor::{WorkflowsEditPage, WorkflowsNewPage};
+#[cfg(feature = "hydrate")]
+pub(crate) use editor::existing_workflow_slugs;
+pub(crate) use editor::{WorkflowsEditPage, WorkflowsNewPage, workflow_form_version_options};
 pub(crate) use list::WorkflowsPage;
 pub(crate) use payloads::CreateWorkflowStepPayload;
 #[cfg(feature = "hydrate")]

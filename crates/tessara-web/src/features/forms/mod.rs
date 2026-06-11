@@ -7,6 +7,7 @@ mod attached_nodes;
 pub(crate) mod builder;
 mod detail;
 mod display;
+mod filtering;
 mod list;
 mod pages;
 mod tables;
@@ -19,6 +20,12 @@ pub(crate) use display::{
     form_field_count_label, form_status_label, form_version_desc_sort_key,
     rendered_field_layout_label, rendered_field_type_label,
 };
+pub(crate) use filtering::{
+    FormNodeFilterOption, form_matches_node_filter, form_node_filter_options, indented_node_label,
+    visible_form_node_filter_options,
+};
+#[cfg(feature = "hydrate")]
+pub(crate) use filtering::{existing_form_slugs, existing_form_slugs_for_update};
 pub(crate) use list::FormsList;
 pub(crate) use pages::{FormsEditPage, FormsNewPage, FormsPage};
 pub(crate) use types::{
