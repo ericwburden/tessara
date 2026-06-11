@@ -1,11 +1,10 @@
-//! Organization-owned form API orchestration.
+//! Organization form API compatibility boundary.
 //!
-//! Re-export focused form version helpers and save flows while keeping callers on the stable `organization::api::forms` boundary.
+//! Re-export focused form version helpers and Forms-owned save flows while keeping callers on the stable `organization::api::forms` boundary.
 
-mod save;
 mod version;
 
-pub(crate) use save::{submit_create_form, submit_update_form};
+pub(crate) use crate::features::forms::{submit_create_form, submit_update_form};
 #[cfg(feature = "hydrate")]
 pub(crate) use version::editable_form_definition_version;
 pub(crate) use version::{

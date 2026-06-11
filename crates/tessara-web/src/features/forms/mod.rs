@@ -10,6 +10,7 @@ mod display;
 mod filtering;
 mod list;
 mod pages;
+mod save;
 mod tables;
 pub(crate) mod types;
 mod versions;
@@ -24,10 +25,9 @@ pub(crate) use filtering::{
     FormNodeFilterOption, form_matches_node_filter, form_node_filter_options, indented_node_label,
     visible_form_node_filter_options,
 };
-#[cfg(feature = "hydrate")]
-pub(crate) use filtering::{existing_form_slugs, existing_form_slugs_for_update};
 pub(crate) use list::FormsList;
 pub(crate) use pages::{FormsEditPage, FormsNewPage, FormsPage};
+pub(crate) use save::{submit_create_form, submit_update_form};
 pub(crate) use types::{
     FormDatasetSourceLink, FormDefinition, FormSummary, FormVersionSummary, FormWorkflowLink,
     RenderedField, RenderedForm,
