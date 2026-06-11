@@ -5,8 +5,6 @@
 #[cfg(feature = "hydrate")]
 use crate::features::administration::{CreateNodePayload, UpdateNodePayload};
 #[cfg(feature = "hydrate")]
-use crate::features::organization::api::IntoNonemptyString;
-#[cfg(feature = "hydrate")]
 use crate::features::organization::api::current_search_param;
 #[cfg(feature = "hydrate")]
 use crate::features::organization::types::{IdResponse, NodeTypeDefinition};
@@ -15,6 +13,8 @@ use crate::features::organization::types::{
 };
 #[cfg(feature = "hydrate")]
 use crate::http::redirect_to_login;
+#[cfg(feature = "hydrate")]
+use crate::utils::text::IntoNonemptyString;
 use leptos::prelude::*;
 use std::collections::HashMap;
 

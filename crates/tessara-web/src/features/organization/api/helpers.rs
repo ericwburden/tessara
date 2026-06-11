@@ -2,18 +2,7 @@
 //!
 //! Keep query-string parsing and narrow string conversion helpers here when they support organization workflows but do not belong to a specific form, workflow, or node endpoint group.
 
-#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
-pub(crate) trait IntoNonemptyString {
-    /// Handles the into nonempty behavior.
-    fn into_nonempty(self) -> Option<String>;
-}
-
-impl IntoNonemptyString for String {
-    /// Handles the into nonempty behavior.
-    fn into_nonempty(self) -> Option<String> {
-        if self.is_empty() { None } else { Some(self) }
-    }
-}
+pub(crate) use crate::utils::text::IntoNonemptyString;
 
 #[cfg(feature = "hydrate")]
 /// Handles the current search param behavior.

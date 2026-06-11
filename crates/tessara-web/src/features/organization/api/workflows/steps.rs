@@ -1,7 +1,7 @@
 //! Workflow step helper functions used by workflow editor flows.
 
-use super::super::helpers::IntoNonemptyString;
 use crate::features::workflows::{CreateWorkflowStepPayload, WorkflowStepDraft};
+use crate::utils::text::IntoNonemptyString;
 
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
 /// Handles the workflow step payloads from drafts behavior.

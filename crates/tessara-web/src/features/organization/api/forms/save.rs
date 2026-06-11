@@ -1,7 +1,5 @@
 //! Form create/update save orchestration for Organization-owned form flows.
 
-#[cfg(feature = "hydrate")]
-use super::super::helpers::IntoNonemptyString;
 use crate::features::forms::builder::{FormBuilderFieldDraft, FormBuilderSectionDraft};
 #[cfg(feature = "hydrate")]
 use crate::features::forms::builder::{
@@ -20,6 +18,8 @@ use crate::features::organization::types::IdResponse;
 use crate::features::shared::unique_slug_from_label;
 #[cfg(feature = "hydrate")]
 use crate::http::{redirect_to_login, send_json_id_request};
+#[cfg(feature = "hydrate")]
+use crate::utils::text::IntoNonemptyString;
 use leptos::prelude::*;
 #[cfg(feature = "hydrate")]
 use std::collections::{HashMap, HashSet};
