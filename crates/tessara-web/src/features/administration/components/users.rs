@@ -10,7 +10,7 @@ use crate::features::administration::models::{
 use crate::features::shared::status_badge_class;
 #[cfg(feature = "hydrate")]
 use crate::http::navigate_to_href;
-use crate::ui::{DataTable, DropdownMenu, FilterHeader};
+use crate::ui::{DataTable, DropdownMenu, FilterHeader, TablePaginationFooter};
 use crate::utils::pagination::pagination_page_start;
 use crate::utils::text::text_matches;
 use icons::{PanelRight, Pencil, Search};
@@ -30,34 +30,7 @@ pub(crate) fn AdministrationUsersList(
     let page_size = RwSignal::new(10usize);
     let page_index = RwSignal::new(0usize);
     let total_count = users.len();
-    let page_count = move || {
-        if total_count == 0 {
-            1
-        } else {
-            total_count.div_ceil(page_size.get()).max(1)
-        }
-    };
-    let current_page = move || page_index.get().min(page_count() - 1);
-    let page_start = move || {
-        if total_count == 0 {
-            0
-        } else {
-            current_page() * page_size.get()
-        }
-    };
-    let page_end = move || (page_start() + page_size.get()).min(total_count);
-    let page_summary = move || {
-        if total_count == 0 {
-            "No users to display".to_string()
-        } else {
-            format!(
-                "Showing {}-{} of {} users",
-                page_start() + 1,
-                page_end(),
-                total_count
-            )
-        }
-    };
+    let total_count = Memo::new(move |_| total_count);
 
     view! {
         <div class="forms-list forms-list-responsive-table administration-users-list">
@@ -180,49 +153,13 @@ pub(crate) fn AdministrationUsersList(
                         }}
                     </tbody>
                 </DataTable>
-                <div class="directory-table-pagination" aria-label="Administration users table pagination">
-                    <p>{move || page_summary()}</p>
-                    <div class="directory-table-pagination__actions">
-                        <label class="directory-table-pagination__page-size searchable-data-table__filter searchable-data-table__control">
-                            <span>"Rows"</span>
-                            <select
-                                prop:value=move || page_size.get().to_string()
-                                on:change=move |event| {
-                                    if let Ok(size) = event_target_value(&event).parse::<usize>() {
-                                        page_size.set(size);
-                                        page_index.set(0);
-                                    }
-                                }
-                            >
-                                <option value="10">"10"</option>
-                                <option value="25">"25"</option>
-                                <option value="50">"50"</option>
-                            </select>
-                        </label>
-                        <button
-                            class="button button--compact button--secondary"
-                            type="button"
-                            disabled=move || current_page() == 0
-                            on:click=move |_| {
-                                page_index.update(|page| *page = page.saturating_sub(1));
-                            }
-                        >
-                            "Previous"
-                        </button>
-                        <span>{move || format!("Page {} of {}", current_page() + 1, page_count())}</span>
-                        <button
-                            class="button button--compact button--secondary"
-                            type="button"
-                            disabled=move || { current_page() + 1 >= page_count() }
-                            on:click=move |_| {
-                                let last_page = page_count().saturating_sub(1);
-                                page_index.update(|page| *page = (*page + 1).min(last_page));
-                            }
-                        >
-                            "Next"
-                        </button>
-                    </div>
-                </div>
+                <TablePaginationFooter
+                    aria_label="Administration users table pagination"
+                    item_label="users"
+                    total_count=total_count
+                    page_size=page_size
+                    page_index=page_index
+                />
             </div>
 
             <div class="forms-list-mobile-cards administration-users-mobile-cards">
