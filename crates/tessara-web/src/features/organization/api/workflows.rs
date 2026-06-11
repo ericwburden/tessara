@@ -3,8 +3,6 @@
 //! Keep functionality here when it is owned by Organization and specifically supports the Workflows concern.
 
 #[cfg(feature = "hydrate")]
-use crate::api::client::{redirect_to_login, send_json_id_request};
-#[cfg(feature = "hydrate")]
 use crate::features::shared::{existing_workflow_slugs, unique_slug_from_label};
 #[cfg(feature = "hydrate")]
 use crate::features::workflows::assignments::{
@@ -24,6 +22,8 @@ use crate::features::workflows::{
 use crate::features::workflows::{
     CreateWorkflowStepPayload, WorkflowSaveIntent, WorkflowStepDraft,
 };
+#[cfg(feature = "hydrate")]
+use crate::http::{redirect_to_login, send_json_id_request};
 use leptos::prelude::*;
 use std::collections::HashSet;
 

@@ -3,7 +3,7 @@
 //! Keep endpoint calls, request assembly, and response handling for Organization screens here; pure DTOs and display formatting belong in sibling modules.
 
 #[cfg(feature = "hydrate")]
-use crate::api::client::{redirect_to_login, send_json_id_request};
+use crate::http::{redirect_to_login, send_json_id_request};
 #[cfg(feature = "hydrate")]
 use std::collections::{HashMap, HashSet};
 

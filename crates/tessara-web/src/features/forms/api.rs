@@ -2,8 +2,6 @@
 //!
 //! Keep endpoint calls, request assembly, and response handling for Forms screens here; pure DTOs and display formatting belong in sibling modules.
 
-#[cfg(feature = "hydrate")]
-use crate::api::client::redirect_to_login;
 use crate::features::forms::builder::{
     FORM_BUILDER_COLUMN_COUNT, FormBuilderFieldDraft, FormBuilderSectionDraft,
     blank_form_builder_section,
@@ -14,6 +12,8 @@ use crate::features::organization::NodeTypeCatalogEntry;
 use crate::features::organization::{
     active_form_definition_version, editable_form_definition_version,
 };
+#[cfg(feature = "hydrate")]
+use crate::http::redirect_to_login;
 use crate::utils::text::nonempty_text;
 use leptos::prelude::*;
 use std::collections::HashMap;

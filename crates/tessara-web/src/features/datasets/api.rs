@@ -11,7 +11,7 @@ use super::types::{
 };
 
 #[cfg(feature = "hydrate")]
-use crate::api::client::{redirect_to_login, send_json_request};
+use crate::http::{redirect_to_login, send_json_request};
 
 #[cfg(feature = "hydrate")]
 /// Fetches the fetch json data.

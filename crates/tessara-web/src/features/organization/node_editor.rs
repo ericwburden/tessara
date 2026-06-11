@@ -3,8 +3,6 @@
 //! Keep node type selection, metadata input state, parent choices, and create/update submission helpers here.
 
 #[cfg(feature = "hydrate")]
-use crate::api::client::redirect_to_login;
-#[cfg(feature = "hydrate")]
 use crate::features::administration::{CreateNodePayload, UpdateNodePayload};
 #[cfg(feature = "hydrate")]
 use crate::features::organization::api::IntoNonemptyString;
@@ -17,6 +15,8 @@ use crate::features::organization::types::{
     NodeMetadataFieldSummary, NodeTypeCatalogEntry, OrganizationNode, OrganizationNodeDetail,
     OrganizationTreeNode, ParentNodeOption,
 };
+#[cfg(feature = "hydrate")]
+use crate::http::redirect_to_login;
 use leptos::prelude::*;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};

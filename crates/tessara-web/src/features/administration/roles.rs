@@ -3,10 +3,10 @@
 //! Keep role list, role detail, capability selection, and role save workflows here.
 
 use super::users::toggle_string_selection;
-#[cfg(feature = "hydrate")]
-use crate::api::{redirect_to_login, send_json_id_request};
 use crate::features::administration::models::*;
 use crate::features::organization::AdminRoleSummary;
+#[cfg(feature = "hydrate")]
+use crate::http::{redirect_to_login, send_json_id_request};
 use crate::ui::{
     AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator,
     DataTable, DropdownMenu, PageHeader,

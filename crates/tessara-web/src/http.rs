@@ -1,6 +1,8 @@
-//! Browser HTTP transport helpers shared by Leptos feature screens.
+//! Shared browser HTTP transport for feature modules.
 //!
-//! Keep JSON request sending, ID-returning mutations, and auth redirect plumbing here; feature-specific endpoint orchestration belongs in feature API modules.
+//! Keep JSON request sending, API error parsing, ID-returning mutation helpers,
+//! and auth-failure redirects here; feature-specific endpoint orchestration
+//! belongs in `features::*::api` modules.
 
 #[cfg(feature = "hydrate")]
 use serde::{Deserialize, de::DeserializeOwned};
@@ -19,7 +21,7 @@ struct ApiErrorResponse {
 }
 
 #[cfg(feature = "hydrate")]
-/// Handles the send json request behavior.
+/// Sends a browser JSON request and normalizes API and transport failures.
 pub(crate) async fn send_json_request<T>(
     builder: gloo_net::http::RequestBuilder,
     body: Option<String>,
@@ -63,7 +65,7 @@ where
 }
 
 #[cfg(feature = "hydrate")]
-/// Handles the send json id request behavior.
+/// Sends a browser JSON request that returns an ID payload.
 pub(crate) async fn send_json_id_request(
     builder: gloo_net::http::RequestBuilder,
     body: Option<String>,
@@ -73,7 +75,7 @@ pub(crate) async fn send_json_id_request(
 }
 
 #[cfg(feature = "hydrate")]
-/// Handles the redirect to login behavior.
+/// Redirects the browser to the login route after an authentication failure.
 pub(crate) fn redirect_to_login() {
     if let Some(window) = web_sys::window() {
         let _ = window.location().set_href("/login");

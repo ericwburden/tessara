@@ -6,13 +6,13 @@ use super::api::{
     load_admin_user_access, load_admin_user_edit_context, load_admin_users,
     submit_update_admin_user, submit_update_admin_user_access,
 };
-#[cfg(feature = "hydrate")]
-use crate::api::redirect_to_login;
 use crate::features::administration::models::*;
 use crate::features::organization::AdminRoleSummary;
 #[cfg(feature = "hydrate")]
 use crate::features::shared::navigate_to_href;
 use crate::features::shared::{FilterHeader, status_badge_class, unique_filter_options};
+#[cfg(feature = "hydrate")]
+use crate::http::redirect_to_login;
 use crate::types::AccountRouteParams;
 use crate::types::route_params::require_route_params;
 use crate::ui::{

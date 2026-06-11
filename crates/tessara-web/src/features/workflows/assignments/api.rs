@@ -2,12 +2,12 @@
 //!
 //! Keep endpoint calls, request assembly, and response handling for Workflows screens here; pure DTOs and display formatting belong in sibling modules.
 
-#[cfg(feature = "hydrate")]
-use crate::api::client::redirect_to_login;
 use crate::features::workflows::assignments::types::{
     PendingWorkflowWork, WorkflowAssigneeOption, WorkflowAssignmentCandidate,
     WorkflowAssignmentSummary,
 };
+#[cfg(feature = "hydrate")]
+use crate::http::redirect_to_login;
 use leptos::prelude::*;
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
 /// Loads the load pending work data.

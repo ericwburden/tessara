@@ -2,12 +2,12 @@
 //!
 //! Keep hierarchy construction, branch expansion, tree navigation, and node detail loading here.
 
-#[cfg(feature = "hydrate")]
-use crate::api::client::redirect_to_login;
 use crate::features::organization::types::{
     CreateChildLink, NodeTypeCatalogEntry, OrganizationNode, OrganizationNodeDetail,
     OrganizationTreeNode,
 };
+#[cfg(feature = "hydrate")]
+use crate::http::redirect_to_login;
 use crate::ui::DropdownMenu;
 use icons::{ChevronDown, ChevronRight, PanelRight, Pencil, Plus};
 use leptos::prelude::*;

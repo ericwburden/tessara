@@ -2,8 +2,6 @@
 //!
 //! Keep endpoint calls, request assembly, and response handling for Administration screens here; pure DTOs and display formatting belong in sibling modules.
 
-#[cfg(feature = "hydrate")]
-use crate::api::client::{redirect_to_login, send_json_request};
 use crate::features::administration::models::{
     AdminUserAccessDetail, AdminUserDetail, AdminUserSummary,
 };
@@ -16,6 +14,8 @@ use crate::features::organization::AdminRoleSummary;
 use crate::features::organization::IdResponse;
 #[cfg(feature = "hydrate")]
 use crate::features::shared::navigate_to_href;
+#[cfg(feature = "hydrate")]
+use crate::http::{redirect_to_login, send_json_request};
 use leptos::prelude::*;
 
 /// Loads the load admin users data.

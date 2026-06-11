@@ -3,8 +3,6 @@
 //! Keep node type catalog, relationship editing, metadata fields, and scoped form displays here.
 
 #[cfg(feature = "hydrate")]
-use crate::api::{redirect_to_login, send_json_id_request};
-#[cfg(feature = "hydrate")]
 use crate::features::organization::{
     CreateNodeMetadataFieldRequest, UpdateNodeMetadataFieldRequest,
 };
@@ -13,6 +11,8 @@ use crate::features::organization::{
     NodeTypeUpsertRequest, RelatedWorkPaginationFooter,
 };
 use crate::features::shared::status_badge_class;
+#[cfg(feature = "hydrate")]
+use crate::http::{redirect_to_login, send_json_id_request};
 use crate::ui::{
     AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator,
     DataTable, DropdownMenu, PageHeader,

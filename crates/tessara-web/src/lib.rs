@@ -4,10 +4,10 @@
 //!
 //! Keep public crate exports, hydration entry points, and native document helpers here; route, feature, UI, and utility behavior should stay in their dedicated modules.
 
-pub mod api;
 pub mod app;
 mod document;
 pub mod features;
+pub mod http;
 mod pipeline;
 pub mod routes;
 pub mod state;

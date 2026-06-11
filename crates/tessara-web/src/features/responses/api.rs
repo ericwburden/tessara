@@ -2,8 +2,6 @@
 //!
 //! Keep endpoint calls, request assembly, and response handling for Responses screens here; pure DTOs and display formatting belong in sibling modules.
 
-#[cfg(feature = "hydrate")]
-use crate::api::client::{redirect_to_login, send_json_request};
 use crate::features::forms::RenderedForm;
 #[cfg(feature = "hydrate")]
 use crate::features::organization::IdResponse;
@@ -18,6 +16,8 @@ use crate::features::responses::value_collection::{
 };
 #[cfg(feature = "hydrate")]
 use crate::features::shared::navigate_to_href;
+#[cfg(feature = "hydrate")]
+use crate::http::{redirect_to_login, send_json_request};
 use leptos::prelude::*;
 use std::collections::HashMap;
 
