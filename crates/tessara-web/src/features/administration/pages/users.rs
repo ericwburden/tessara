@@ -10,18 +10,18 @@ use super::super::components::{
     AdminCapabilityList, AdminDelegationChecklist, AdminDelegationList, AdminScopeNodeChecklist,
     AdminScopeNodeList, AdministrationUsersList,
 };
-use super::super::display::{admin_editable_label, admin_user_role_names, admin_user_status_key};
-use super::super::state::toggle_string_selection;
+use super::super::display::admin_editable_label;
+use super::super::state::{
+    admin_user_role_filter_options, filtered_admin_users, toggle_string_selection,
+};
 use crate::features::administration::models::*;
 use crate::features::organization::AdminRoleSummary;
-use crate::features::shared::unique_filter_options;
 use crate::types::AccountRouteParams;
 use crate::types::route_params::require_route_params;
 use crate::ui::{
     AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator,
     InfoListTable, PageHeader,
 };
-use crate::utils::text::text_matches;
 
 use leptos::prelude::*;
 
@@ -40,40 +40,14 @@ pub fn AdministrationUsersPage() -> impl IntoView {
     });
 
     let filtered_users = move || {
-        let query = search.get();
-        let status = status_filter.get();
-        let role = role_filter.get();
-        users
-            .get()
-            .into_iter()
-            .filter(|user| {
-                let status_key = admin_user_status_key(user);
-                let role_names = admin_user_role_names(user);
-                let matches_status = status == "all" || status == status_key;
-                let matches_role =
-                    role == "all" || user.roles.iter().any(|user_role| user_role.name == role);
-                matches_status
-                    && matches_role
-                    && text_matches(
-                        &query,
-                        &[
-                            user.display_name.as_str(),
-                            user.email.as_str(),
-                            status_key,
-                            role_names.as_str(),
-                        ],
-                    )
-            })
-            .collect::<Vec<_>>()
+        filtered_admin_users(
+            users.get(),
+            &search.get(),
+            &status_filter.get(),
+            &role_filter.get(),
+        )
     };
-    let role_options = move || {
-        unique_filter_options(users.get().iter().flat_map(|user| {
-            user.roles
-                .iter()
-                .map(|role| role.name.clone())
-                .collect::<Vec<_>>()
-        }))
-    };
+    let role_options = move || admin_user_role_filter_options(&users.get());
 
     view! {
         <AppShell active_route="administration" title="Users">
