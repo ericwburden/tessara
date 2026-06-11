@@ -13,13 +13,22 @@ use crate::utils::pagination::{
 pub(crate) fn TablePaginationFooter(
     aria_label: &'static str,
     item_label: &'static str,
+    #[prop(optional)] empty_item_label: Option<&'static str>,
     total_count: Memo<usize>,
     page_size: RwSignal<usize>,
     page_index: RwSignal<usize>,
 ) -> impl IntoView {
     view! {
         <div class="directory-table-pagination" aria-label=aria_label>
-            <p>{move || table_page_summary(total_count.get(), page_size.get(), page_index.get(), item_label)}</p>
+            <p>{move || {
+                table_page_summary(
+                    total_count.get(),
+                    page_size.get(),
+                    page_index.get(),
+                    item_label,
+                    empty_item_label,
+                )
+            }}</p>
             <div class="directory-table-pagination__actions">
                 <label class="directory-table-pagination__page-size searchable-data-table__filter searchable-data-table__control">
                     <span>"Rows"</span>
@@ -79,9 +88,10 @@ fn table_page_summary(
     page_size: usize,
     page_index: usize,
     item_label: &'static str,
+    empty_item_label: Option<&'static str>,
 ) -> String {
     if total_count == 0 {
-        format!("No {item_label} to display")
+        format!("No {} to display", empty_item_label.unwrap_or(item_label))
     } else {
         format!(
             "Showing {}-{} of {} {item_label}",
