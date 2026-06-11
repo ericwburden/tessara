@@ -13,7 +13,10 @@ use crate::features::shared::status_badge_class;
 use crate::features::workflows::active_workflow_definition_version;
 use crate::features::workflows::api::workflow_revision_label_from_raw as workflow_submission_workflow_revision_label_from_raw;
 use crate::features::workflows::api::{load_workflow_create_options, load_workflow_detail};
-use crate::features::workflows::editor::{WorkflowAvailableNodesPicker, WorkflowStepList};
+use crate::features::workflows::editor::{
+    WorkflowAvailableNodesPicker, WorkflowStepList, add_workflow_step, can_submit_workflow_editor,
+    prune_unavailable_workflow_steps,
+};
 use crate::features::workflows::types::{
     WorkflowDefinition, WorkflowSaveIntent, WorkflowStepDraft, WorkflowSummary,
 };
@@ -104,41 +107,12 @@ pub fn WorkflowsNewPage() -> impl IntoView {
         if is_loading.get() {
             return;
         }
-        let available_options = workflow_form_version_options(&forms.get(), &node_types.get(), "");
-        steps.update(|steps| {
-            steps.retain(|step| {
-                step.form_version_id.is_empty()
-                    || available_options
-                        .iter()
-                        .any(|(id, _, _)| id == &step.form_version_id)
-            });
-        });
+        prune_unavailable_workflow_steps(&forms.get(), &node_types.get(), steps);
     });
 
-    let add_step = move || {
-        let id = next_step_id.get_untracked();
-        next_step_id.set(id + 1);
-        steps.update(|steps| {
-            steps.push(WorkflowStepDraft {
-                id,
-                title: format!("Step {}", steps.len() + 1),
-                form_version_id: String::new(),
-            });
-        });
-    };
+    let add_step = move || add_workflow_step(next_step_id, steps);
 
-    let can_submit = move || {
-        !is_saving.get()
-            && !name.get().trim().is_empty()
-            && !available_node_ids.get().is_empty()
-            && {
-                let current_steps = steps.get();
-                !current_steps.is_empty()
-                    && current_steps
-                        .iter()
-                        .all(|step| !step.form_version_id.trim().is_empty())
-            }
-    };
+    let can_submit = move || can_submit_workflow_editor(is_saving, name, available_node_ids, steps);
 
     view! {
         <AppShell active_route="workflows" title="Workflows">
@@ -421,42 +395,12 @@ pub fn WorkflowsEditPage() -> impl IntoView {
         if options_loading.get() {
             return;
         }
-        let available_options = workflow_form_version_options(&forms.get(), &node_types.get(), "");
-        steps.update(|steps| {
-            steps.retain(|step| {
-                step.form_version_id.is_empty()
-                    || available_options
-                        .iter()
-                        .any(|(id, _, _)| id == &step.form_version_id)
-            });
-        });
+        prune_unavailable_workflow_steps(&forms.get(), &node_types.get(), steps);
     });
 
-    let add_step = move || {
-        let id = next_step_id.get_untracked();
-        next_step_id.set(id + 1);
-        steps.update(|steps| {
-            steps.push(WorkflowStepDraft {
-                id,
-                title: format!("Step {}", steps.len() + 1),
-                form_version_id: String::new(),
-            });
-        });
-    };
+    let add_step = move || add_workflow_step(next_step_id, steps);
 
-    let can_submit = move || {
-        if is_saving.get() || name.get().trim().is_empty() {
-            return false;
-        }
-        if available_node_ids.get().is_empty() {
-            return false;
-        }
-        let current_steps = steps.get();
-        !current_steps.is_empty()
-            && current_steps
-                .iter()
-                .all(|step| !step.form_version_id.trim().is_empty())
-    };
+    let can_submit = move || can_submit_workflow_editor(is_saving, name, available_node_ids, steps);
     let has_step_changes = move || {
         workflow_step_signature(&steps.get()) != workflow_step_signature(&original_steps.get())
     };
