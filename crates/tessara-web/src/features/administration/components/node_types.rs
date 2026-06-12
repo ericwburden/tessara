@@ -7,6 +7,7 @@ use leptos::prelude::*;
 use std::collections::HashSet;
 
 use super::node_type_editor_options::{eligible_child_node_types, eligible_parent_node_types};
+use super::node_type_identity_fields::NodeTypeIdentityFields;
 use super::{NodeTypeDetailCollections, NodeTypeRelationshipPicker};
 
 #[component]
@@ -110,59 +111,12 @@ pub(crate) fn AdministrationNodeTypeEditor(
                     .into_any()
                 } else {
                     view! {
-                        <div class="form-grid administration-node-type-fields">
-                            <label class="form-field">
-                                <span>"Name"</span>
-                                <input
-                                    type="text"
-                                    placeholder="Program"
-                                    prop:value=move || name.get()
-                                    on:input=move |event| name.set(event_target_value(&event))
-                                />
-                            </label>
-                            <label class="form-field">
-                                <span>"Slug"</span>
-                                <input
-                                    type="text"
-                                    placeholder="program"
-                                    prop:value=move || slug.get()
-                                    on:input=move |event| slug.set(event_target_value(&event))
-                                />
-                            </label>
-                            <label class="form-field">
-                                <span>"Plural Label"</span>
-                                <input
-                                    type="text"
-                                    placeholder="Programs"
-                                    prop:value=move || plural_label.get()
-                                    on:input=move |event| plural_label.set(event_target_value(&event))
-                                />
-                            </label>
-                            {if let Some(detail) = selected_detail.as_ref() {
-                                let node_count = detail.node_count.to_string();
-                                let metadata_count = detail.metadata_fields.len().to_string();
-                                let scoped_form_count = detail.scoped_forms.len().to_string();
-                                view! {
-                                    <div class="node-type-count-badges" aria-label="Node type counts">
-                                        <span class="node-type-count-badge">
-                                            <strong>{node_count}</strong>
-                                            <span>"Nodes"</span>
-                                        </span>
-                                        <span class="node-type-count-badge">
-                                            <strong>{metadata_count}</strong>
-                                            <span>"Metadata Fields"</span>
-                                        </span>
-                                        <span class="node-type-count-badge">
-                                            <strong>{scoped_form_count}</strong>
-                                            <span>"Scoped Forms"</span>
-                                        </span>
-                                    </div>
-                                }
-                                .into_any()
-                            } else {
-                                view! { <span></span> }.into_any()
-                            }}
-                        </div>
+                        <NodeTypeIdentityFields
+                            selected_detail=selected_detail.clone()
+                            name
+                            slug
+                            plural_label
+                        />
                         {if selected_detail.is_none() {
                             view! { <p class="muted">"Configure labels and hierarchy relationships, then save this node type."</p> }.into_any()
                         } else {
