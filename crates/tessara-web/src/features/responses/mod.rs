@@ -4,6 +4,7 @@
 
 mod actions;
 mod api;
+mod components;
 mod detail;
 pub(crate) mod display;
 mod edit;
