@@ -1,11 +1,7 @@
-//! Form builder field tile component.
-//!
-//! Keep draggable field-card rendering and per-field resize handles here.
+//! Form builder grid tile component.
 
-mod resize_handles;
-
+use super::resize_handles::FormBuilderFieldResizeHandles;
 use leptos::prelude::*;
-use resize_handles::FormBuilderFieldResizeHandles;
 
 use crate::features::forms::builder::FormBuilderFieldDraft;
 use crate::features::forms::builder::{

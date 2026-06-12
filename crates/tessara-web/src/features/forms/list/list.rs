@@ -1,10 +1,7 @@
-//! List view components for the Forms feature.
-//!
-//! Keep collection tables, list filters, and list-page presentation here; detail/editor flows should stay in their dedicated modules.
+//! List view component for the Forms feature.
 
-mod mobile_cards;
-
-use super::components::FormsNodeLineageFilter;
+use super::super::components::FormsNodeLineageFilter;
+use super::mobile_cards::FormsMobileCards;
 use crate::features::forms::{
     FormNodeFilterOption, FormSummary, active_form_version, form_version_label,
 };
@@ -15,7 +12,6 @@ use crate::ui::{DataTable, TableFilterHeader, TablePaginationFooter};
 use crate::utils::pagination::pagination_page_start;
 use icons::Search;
 use leptos::prelude::*;
-use mobile_cards::FormsMobileCards;
 
 #[component]
 pub(in crate::features::forms) fn FormsList(

@@ -1,9 +1,6 @@
-//! List view components for the Workflows feature.
-//!
-//! Keep collection tables, list filters, and list-page presentation here; detail/editor flows should stay in their dedicated modules.
+//! List view component for the Workflows feature.
 
-mod mobile_cards;
-
+use super::mobile_cards::WorkflowsMobileCards;
 use crate::features::organization::OrganizationNode;
 use crate::features::shared::{
     WorkflowAssignedUsersSheetData, WorkflowAvailableNodesSheetData, status_badge_class,
@@ -19,7 +16,6 @@ use crate::ui::{DataTable, TableFilterHeader, TablePaginationFooter};
 use crate::utils::pagination::pagination_page_start;
 use icons::Search;
 use leptos::prelude::*;
-use mobile_cards::WorkflowsMobileCards;
 
 pub(crate) use crate::features::workflows::pages::list::WorkflowsPage;
 

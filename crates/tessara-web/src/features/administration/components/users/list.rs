@@ -1,10 +1,9 @@
-//! User list Administration components.
+//! User list Administration component.
 
-mod mobile_cards;
-
-use super::super::display::{
+use super::super::super::display::{
     admin_user_role_names, admin_user_status_key, admin_user_status_label,
 };
+use super::mobile_cards::AdministrationUserMobileCards;
 use crate::features::administration::models::AdminUserSummary;
 use crate::features::shared::status_badge_class;
 #[cfg(feature = "hydrate")]
@@ -13,7 +12,6 @@ use crate::ui::{DataTable, DropdownMenu, TableFilterHeader, TablePaginationFoote
 use crate::utils::pagination::pagination_page_start;
 use icons::{PanelRight, Pencil, Search};
 use leptos::prelude::*;
-use mobile_cards::AdministrationUserMobileCards;
 
 #[component]
 pub(crate) fn AdministrationUsersList(

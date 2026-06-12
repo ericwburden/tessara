@@ -1,17 +1,14 @@
-//! Dataset detail and preview components.
+//! Dataset detail surface and preview table.
 
-mod summary;
-mod tables;
-
-use super::super::display::visibility_label;
-use super::super::loaders::{load_account, load_dataset_detail, load_dataset_table};
-use super::super::permissions::can_manage_datasets;
-use super::super::types::*;
+use super::super::super::display::visibility_label;
+use super::super::super::loaders::{load_account, load_dataset_detail, load_dataset_table};
+use super::super::super::permissions::can_manage_datasets;
+use super::super::super::types::*;
+use super::summary::{MetricCard, tab_class};
+use super::tables::{DatasetFieldsTable, DatasetSourcesTable, DatasetSqlPanel};
 use crate::ui::{AppShell, DataTable, EmptyState, PageHeader};
 use crate::utils::text::sentence_label;
 use leptos::prelude::*;
-use summary::{MetricCard, tab_class};
-use tables::{DatasetFieldsTable, DatasetSourcesTable, DatasetSqlPanel};
 
 #[component]
 pub(crate) fn DatasetDetailSurface(dataset_id: String, edit: bool) -> impl IntoView {

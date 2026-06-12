@@ -1,14 +1,10 @@
-//! Role-management Administration components.
-
-mod detail;
+//! Role-management Administration list component.
 
 use crate::features::organization::AdminRoleSummary;
 use crate::ui::{DataTable, DropdownMenu, TablePaginationFooter};
 use crate::utils::pagination::pagination_page_start;
 use icons::{PanelRight, Search};
 use leptos::prelude::*;
-
-pub(crate) use detail::AdministrationRoleDetailPanel;
 
 #[component]
 pub(crate) fn AdministrationRolesList(

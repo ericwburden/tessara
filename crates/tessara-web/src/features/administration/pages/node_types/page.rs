@@ -1,10 +1,6 @@
-//! Route-level node-type administration page.
+//! Route-level node-type administration page entrypoint.
 
-mod actions;
-mod state;
-mod surface;
-
-use self::surface::AdministrationNodeTypesSurface;
+use super::surface::AdministrationNodeTypesSurface;
 use leptos::prelude::*;
 
 #[component]

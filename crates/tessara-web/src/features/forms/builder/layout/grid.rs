@@ -1,15 +1,11 @@
 //! Form builder grid layout rules.
-//!
-//! Keep placement, collision detection, resize bounds, and occupancy calculations here; visual rendering belongs in builder components.
 
-mod collision;
-
+pub(crate) use super::collision::form_builder_field_has_collision;
+use super::collision::{form_builder_fields_overlap, form_builder_linear_grid_index};
 use crate::features::forms::builder::FormBuilderFieldDraft;
 use crate::features::forms::builder::{
     FORM_BUILDER_COLUMN_COUNT, FormBuilderDragPreview, FormBuilderSectionDraft,
 };
-pub(crate) use collision::form_builder_field_has_collision;
-use collision::{form_builder_fields_overlap, form_builder_linear_grid_index};
 use std::collections::HashSet;
 
 pub(crate) fn blank_form_builder_field_at(

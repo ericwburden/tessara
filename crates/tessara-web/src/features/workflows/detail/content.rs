@@ -1,19 +1,14 @@
-//! Detail view components for the Workflows feature.
-//!
-//! Keep read-focused panels and detail-page presentation here; route loading belongs in `pages`.
+//! Workflow detail content component.
 
-mod cards;
-mod sections;
-
+use super::cards::{WorkflowActiveRevisionCard, WorkflowDetailsCard};
+use super::sections::{WorkflowAssignmentsSection, WorkflowRevisionsSection, WorkflowStepsSection};
 use crate::features::workflows::types::WorkflowDefinition;
 use crate::features::workflows::{
     active_workflow_definition_version, workflow_available_nodes_label,
     workflow_definition_status_label, workflow_definition_version_label, workflow_source_label,
 };
 use crate::utils::text::nonempty_text;
-use cards::{WorkflowActiveRevisionCard, WorkflowDetailsCard};
 use leptos::prelude::*;
-use sections::{WorkflowAssignmentsSection, WorkflowRevisionsSection, WorkflowStepsSection};
 
 #[component]
 pub(in crate::features::workflows) fn WorkflowDetailContent(

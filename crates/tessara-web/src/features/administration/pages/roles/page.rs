@@ -1,9 +1,6 @@
-//! Route-level role-management administration page.
+//! Route-level role-management administration page entrypoint.
 
-mod state;
-mod surface;
-
-use self::surface::AdministrationRolesSurface;
+use super::surface::AdministrationRolesSurface;
 use leptos::prelude::*;
 
 #[component]

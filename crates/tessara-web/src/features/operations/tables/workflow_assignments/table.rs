@@ -1,9 +1,5 @@
 //! Workflow assignment status table for Operations.
 
-mod filtering;
-mod mobile_card;
-mod row;
-
 use crate::features::operations::types::WorkflowAssignmentStatus;
 use crate::ui::{DataTable, EmptyState, TableFilterHeader, TablePaginationFooter};
 use crate::utils::filtering::unique_filter_options;
@@ -11,9 +7,9 @@ use crate::utils::pagination::pagination_page_start;
 use icons::Search;
 use leptos::prelude::*;
 
-use filtering::filtered_workflow_assignments;
-use mobile_card::WorkflowAssignmentMobileCard;
-use row::WorkflowAssignmentRow;
+use super::filtering::filtered_workflow_assignments;
+use super::mobile_card::WorkflowAssignmentMobileCard;
+use super::row::WorkflowAssignmentRow;
 
 #[component]
 pub(crate) fn WorkflowAssignmentsTable(

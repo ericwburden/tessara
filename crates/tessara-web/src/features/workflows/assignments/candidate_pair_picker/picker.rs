@@ -1,14 +1,11 @@
-//! Workflow and node candidate picker for assignment creation.
+//! Workflow and node candidate pair picker.
 
-mod node_list;
-mod workflow_list;
-
-use super::filtering::workflow_assignment_pair_is_valid;
-use super::types::WorkflowAssignmentCandidate;
+use super::super::filtering::workflow_assignment_pair_is_valid;
+use super::super::types::WorkflowAssignmentCandidate;
+use super::node_list::WorkflowAssignmentNodePicker;
+use super::workflow_list::WorkflowAssignmentWorkflowPicker;
 use leptos::prelude::*;
-use node_list::WorkflowAssignmentNodePicker;
 use std::collections::HashSet;
-use workflow_list::WorkflowAssignmentWorkflowPicker;
 
 #[component]
 pub(in crate::features::workflows) fn WorkflowAssignmentCandidatePairPicker(
