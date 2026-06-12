@@ -9,7 +9,6 @@ use crate::features::workflows::assignments::types::{
 use crate::features::workflows::types::{WorkflowAvailableNodeSummary, WorkflowSummary};
 use crate::features::workflows::workflow_revision_label_from_raw;
 
-/// Handles the assignment count label behavior.
 fn assignment_count_label(count: usize) -> String {
     if count == 1 {
         "1 Assignment".to_string()
@@ -18,7 +17,6 @@ fn assignment_count_label(count: usize) -> String {
     }
 }
 
-/// Handles the workflow assigned user links behavior.
 pub(crate) fn workflow_assigned_user_links(workflow: &WorkflowSummary) -> Vec<FormAttachmentLink> {
     workflow
         .assigned_users
@@ -35,7 +33,6 @@ pub(crate) fn workflow_assigned_user_links(workflow: &WorkflowSummary) -> Vec<Fo
         .collect()
 }
 
-/// Handles the workflow available node links behavior.
 pub(crate) fn workflow_available_node_links(
     nodes: &[WorkflowAvailableNodeSummary],
 ) -> Vec<FormAttachmentLink> {
@@ -49,7 +46,6 @@ pub(crate) fn workflow_available_node_links(
         .collect()
 }
 
-/// Handles the workflow assignment state behavior.
 pub(crate) fn workflow_assignment_state(assignment: &WorkflowAssignmentSummary) -> &'static str {
     if assignment.has_submitted {
         "submitted"
@@ -60,7 +56,6 @@ pub(crate) fn workflow_assignment_state(assignment: &WorkflowAssignmentSummary) 
     }
 }
 
-/// Handles the workflow assignment state label behavior.
 pub(crate) fn workflow_assignment_state_label(
     assignment: &WorkflowAssignmentSummary,
 ) -> &'static str {
@@ -71,7 +66,6 @@ pub(crate) fn workflow_assignment_state_label(
     }
 }
 
-/// Handles the workflow assignment status key behavior.
 pub(crate) fn workflow_assignment_status_key(
     assignment: &WorkflowAssignmentSummary,
 ) -> &'static str {
@@ -82,7 +76,6 @@ pub(crate) fn workflow_assignment_status_key(
     }
 }
 
-/// Handles the workflow assignment status label behavior.
 pub(crate) fn workflow_assignment_status_label(
     assignment: &WorkflowAssignmentSummary,
 ) -> &'static str {
@@ -93,19 +86,16 @@ pub(crate) fn workflow_assignment_status_label(
     }
 }
 
-/// Handles the workflow assignment revision label behavior.
 pub(crate) fn workflow_assignment_revision_label(label: Option<&str>) -> String {
     label
         .map(workflow_revision_label_from_raw)
         .unwrap_or_else(|| "-".to_string())
 }
 
-/// Handles the workflow assignment candidate key behavior.
 pub(crate) fn workflow_assignment_candidate_key(candidate: &WorkflowAssignmentCandidate) -> String {
     format!("{}|{}", candidate.workflow_version_id, candidate.node_id)
 }
 
-/// Handles the workflow assignee label behavior.
 pub(crate) fn workflow_assignee_label(assignee: &WorkflowAssigneeOption) -> String {
     if assignee.display_name.trim().is_empty() {
         assignee.email.clone()
@@ -114,7 +104,6 @@ pub(crate) fn workflow_assignee_label(assignee: &WorkflowAssigneeOption) -> Stri
     }
 }
 
-/// Handles the workflow assignment assignee label behavior.
 pub(crate) fn workflow_assignment_assignee_label(assignment: &WorkflowAssignmentSummary) -> String {
     if assignment.account_display_name.trim().is_empty() {
         assignment.account_email.clone()
