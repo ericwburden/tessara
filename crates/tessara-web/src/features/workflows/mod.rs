@@ -8,6 +8,7 @@ mod detail;
 mod display;
 mod editor;
 mod list;
+mod list_panels;
 mod pages;
 mod payloads;
 pub(crate) mod types;
@@ -36,6 +37,10 @@ pub(crate) use editor::{
     workflow_form_version_options,
 };
 pub(crate) use list::WorkflowsPage;
+pub(in crate::features::workflows) use list_panels::{
+    WorkflowAssignedUsersList, WorkflowAssignedUsersSheet, WorkflowAvailableNodesList,
+    WorkflowAvailableNodesSheet,
+};
 pub(crate) use payloads::CreateWorkflowStepPayload;
 #[cfg(feature = "hydrate")]
 pub(crate) use payloads::{
