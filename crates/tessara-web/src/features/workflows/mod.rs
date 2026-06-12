@@ -5,6 +5,7 @@
 pub(crate) mod api;
 pub(crate) mod assignments;
 mod detail;
+mod detail_tables;
 mod display;
 mod editor;
 mod list;
@@ -24,6 +25,9 @@ pub(crate) use assignments::{
     workflow_available_node_links,
 };
 pub(crate) use detail::WorkflowsDetailPage;
+pub(in crate::features::workflows) use detail_tables::{
+    WorkflowDetailAssignmentsTable, WorkflowStepsTable, WorkflowVersionsTable,
+};
 pub(crate) use display::{
     WorkflowSourceMarker, active_workflow_definition_version, workflow_available_nodes_label,
     workflow_definition_status_label, workflow_definition_version_label,
