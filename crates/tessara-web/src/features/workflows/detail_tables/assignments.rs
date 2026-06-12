@@ -2,11 +2,11 @@
 
 use crate::features::shared::status_badge_class;
 use crate::features::workflows::assignments::{
-    WorkflowAssignmentDetailSheet, WorkflowAssignmentSummary,
+    WorkflowAssignmentDetailSheet, WorkflowAssignmentSummary, toggle_workflow_assignment,
 };
 use crate::features::workflows::{
-    toggle_workflow_assignment, workflow_assignment_state, workflow_assignment_state_label,
-    workflow_assignment_status_key, workflow_assignment_status_label,
+    workflow_assignment_state, workflow_assignment_state_label, workflow_assignment_status_key,
+    workflow_assignment_status_label,
 };
 use crate::ui::{DataTable, DropdownMenu, Timestamp};
 use icons::{PanelRight, X};

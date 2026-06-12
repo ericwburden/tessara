@@ -5,10 +5,9 @@
 use crate::features::organization::OrganizationNode;
 use crate::features::shared::unique_filter_options;
 use crate::features::workflows::list::WorkflowsList;
+use crate::features::workflows::loaders::{load_workflow_assignment_nodes, load_workflows};
 use crate::features::workflows::types::WorkflowSummary;
-use crate::features::workflows::{
-    load_workflow_assignment_nodes, load_workflows, workflow_assigned_users_label,
-};
+use crate::features::workflows::workflow_assigned_users_label;
 use crate::features::workflows::{
     workflow_available_nodes_label, workflow_description_label, workflow_status_label,
     workflow_version_label,

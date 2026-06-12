@@ -3,7 +3,7 @@
 //! Keep list and detail page loading state here; endpoint transport belongs in `api`.
 
 #[cfg(feature = "hydrate")]
-use crate::features::forms::active_form_definition_version;
+use crate::features::forms::versions::active_form_definition_version;
 use crate::features::forms::{FormDefinition, FormSummary, RenderedForm};
 #[cfg(feature = "hydrate")]
 use crate::http::redirect_to_login;

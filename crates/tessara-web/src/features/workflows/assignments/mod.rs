@@ -39,7 +39,7 @@ pub(crate) use loaders::{
     load_workflow_assignments,
 };
 pub(in crate::features::workflows) use mobile_cards::WorkflowAssignmentMobileCards;
-pub(crate) use mutations::{submit_workflow_assignment_bulk, toggle_workflow_assignment};
+pub(in crate::features::workflows) use mutations::toggle_workflow_assignment;
 pub(in crate::features::workflows) use page_state::WorkflowAssignmentsPageState;
 pub(in crate::features::workflows) use surface::WorkflowAssignmentsSurface;
 pub(in crate::features::workflows) use table_row::WorkflowAssignmentTableRow;

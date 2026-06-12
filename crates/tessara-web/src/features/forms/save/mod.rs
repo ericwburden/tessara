@@ -15,5 +15,5 @@ mod slugs;
 mod structure;
 mod update;
 
-pub(crate) use create::submit_create_form;
-pub(crate) use update::submit_update_form;
+pub(in crate::features::forms) use create::submit_create_form;
+pub(in crate::features::forms) use update::submit_update_form;

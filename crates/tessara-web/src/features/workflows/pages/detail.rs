@@ -2,8 +2,9 @@
 //!
 //! Keep route parameter handling and load-state switching here; read-focused detail presentation lives in the Workflows detail module.
 
+use crate::features::workflows::WorkflowDetailContent;
+use crate::features::workflows::loaders::load_workflow_detail;
 use crate::features::workflows::types::WorkflowDefinition;
-use crate::features::workflows::{WorkflowDetailContent, load_workflow_detail};
 use crate::types::route_params::WorkflowRouteParams;
 use crate::types::route_params::require_route_params;
 use crate::ui::{

@@ -3,12 +3,14 @@
 use crate::features::shared::status_badge_class;
 use crate::features::workflows::assignments::WorkflowAssignmentSummary;
 use crate::features::workflows::{
-    toggle_workflow_assignment, workflow_assignment_state, workflow_assignment_state_label,
-    workflow_assignment_status_key, workflow_assignment_status_label,
+    workflow_assignment_state, workflow_assignment_state_label, workflow_assignment_status_key,
+    workflow_assignment_status_label,
 };
 use crate::ui::Timestamp;
 use crate::utils::pagination::pagination_page_start;
 use leptos::prelude::*;
+
+use super::mutations::toggle_workflow_assignment;
 
 #[allow(clippy::too_many_arguments)]
 #[component]

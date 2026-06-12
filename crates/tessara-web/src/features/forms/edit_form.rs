@@ -2,10 +2,12 @@
 
 use crate::features::forms::builder::{FormBuilderCanvas, FormBuilderEditorState};
 use crate::features::forms::{
-    FormEditableVersionSummary, FormIdentityFields, FormSummary, RenderedForm, submit_update_form,
+    FormEditableVersionSummary, FormIdentityFields, FormSummary, RenderedForm,
 };
 use crate::features::organization::NodeTypeCatalogEntry;
 use leptos::prelude::*;
+
+use super::save::submit_update_form;
 
 #[allow(clippy::too_many_arguments)]
 #[component]

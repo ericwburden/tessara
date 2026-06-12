@@ -2,7 +2,7 @@
 
 use crate::features::forms::FormSummary;
 use crate::features::organization::{NodeTypeCatalogEntry, OrganizationNode};
-use crate::features::workflows::load_workflow_create_options;
+use crate::features::workflows::loaders::load_workflow_create_options;
 use crate::features::workflows::types::{WorkflowStepDraft, WorkflowSummary};
 use crate::ui::{
     AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator,

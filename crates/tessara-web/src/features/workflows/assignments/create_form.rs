@@ -4,10 +4,11 @@ use super::types::{
     WorkflowAssigneeOption, WorkflowAssignmentCandidate, WorkflowAssignmentSummary,
 };
 use super::{WorkflowAssignmentAssigneePicker, WorkflowAssignmentCandidatePairPicker};
-use crate::features::workflows::submit_workflow_assignment_bulk;
 use crate::ui::empty_view;
 use leptos::prelude::*;
 use std::collections::HashSet;
+
+use super::mutations::submit_workflow_assignment_bulk;
 
 #[component]
 pub(in crate::features::workflows) fn WorkflowAssignmentCreateForm(
