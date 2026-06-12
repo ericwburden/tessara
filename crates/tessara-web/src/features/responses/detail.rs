@@ -2,20 +2,17 @@
 //!
 //! Keep read-focused panels and detail-page presentation here; mutation workflows should live in editor or API modules.
 
-use super::components::ResponseValuesTable;
+use super::components::{ResponseAuditTable, ResponseRuntimeCard, ResponseValuesTable};
 use super::loaders::load_submission_detail;
-use crate::features::responses::types::{
-    SubmissionAuditEventSummary, SubmissionDetail, SubmissionRuntimeDetail,
-};
+use crate::features::responses::types::SubmissionDetail;
 use crate::features::shared::status_badge_class;
 use crate::types::route_params::{SubmissionRouteParams, require_route_params};
 use crate::ui::empty_view;
 use crate::ui::{
     AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator,
-    DataTable, InfoListTable, PageHeader, Timestamp,
+    InfoListTable, PageHeader, Timestamp,
 };
 use crate::utils::metadata::metadata_label;
-use crate::utils::text::nonempty_text;
 
 use leptos::prelude::*;
 
@@ -209,92 +206,5 @@ fn ResponseDetailContent(detail: SubmissionDetail) -> impl IntoView {
                 </section>
             </div>
         </div>
-    }
-}
-
-#[component]
-/// Renders the response runtime card view.
-fn ResponseRuntimeCard(runtime: SubmissionRuntimeDetail) -> impl IntoView {
-    let current_position = runtime.current_step_position + 1;
-    let next_step = nonempty_text(runtime.next_step_title.as_deref(), "Final step");
-    let history = runtime.history.clone();
-
-    view! {
-        <section class="organization-detail-card">
-            <h3>"Workflow Runtime"</h3>
-            <InfoListTable>
-                <tr>
-                    <th scope="row">"Workflow"</th>
-                    <td>{runtime.workflow_name}</td>
-                </tr>
-                <tr>
-                    <th scope="row">"Current Step"</th>
-                    <td>{format!("{} of {}: {}", current_position, runtime.step_count, runtime.current_step_title)}</td>
-                </tr>
-                <tr>
-                    <th scope="row">"Next Step"</th>
-                    <td>{next_step}</td>
-                </tr>
-            </InfoListTable>
-            <div class="form-detail-attached-list">
-                {if history.is_empty() {
-                    view! { <p class="related-work-mobile-empty">"No runtime steps to display"</p> }.into_any()
-                } else {
-                    history
-                        .into_iter()
-                        .map(|step| {
-                            let status = step.status.clone();
-                            view! {
-                                <div class="forms-attached-sheet__item">
-                                    <span>{format!("Step {}: {}", step.position + 1, step.title)}</span>
-                                    <small>{format!("{} - {}", step.form_name, metadata_label(&status))}</small>
-                                </div>
-                            }
-                        })
-                        .collect_view()
-                        .into_any()
-                }}
-            </div>
-        </section>
-    }
-}
-
-#[component]
-/// Renders the response audit table view.
-fn ResponseAuditTable(events: Vec<SubmissionAuditEventSummary>) -> impl IntoView {
-    view! {
-        <DataTable>
-            <thead>
-                <tr>
-                    <th scope="col">"Event"</th>
-                    <th scope="col">"Account"</th>
-                    <th scope="col">"When"</th>
-                </tr>
-            </thead>
-            <tbody>
-                {if events.is_empty() {
-                    view! {
-                        <tr>
-                            <td class="data-table__empty" colspan="3">"No Audit Events to Display"</td>
-                        </tr>
-                    }
-                    .into_any()
-                } else {
-                    events
-                        .into_iter()
-                        .map(|event| {
-                            view! {
-                                <tr>
-                                    <th scope="row">{metadata_label(&event.event_type)}</th>
-                                    <td>{nonempty_text(event.account_email.as_deref(), "System")}</td>
-                                    <td><Timestamp value=event.created_at/></td>
-                                </tr>
-                            }
-                        })
-                        .collect_view()
-                        .into_any()
-                }}
-            </tbody>
-        </DataTable>
     }
 }
