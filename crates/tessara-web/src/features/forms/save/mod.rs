@@ -8,6 +8,8 @@ mod drafts;
 #[cfg(feature = "hydrate")]
 mod payloads;
 #[cfg(feature = "hydrate")]
+mod slugs;
+#[cfg(feature = "hydrate")]
 mod structure;
 mod update;
 

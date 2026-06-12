@@ -1,4 +1,4 @@
-//! Form-owned filtering and slug helpers.
+//! Form-owned node filtering helpers.
 
 use crate::features::forms::FormSummary;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -12,7 +12,6 @@ pub struct FormNodeFilterOption {
     pub(crate) depth: usize,
 }
 
-/// Handles the form node filter options behavior.
 pub(crate) fn form_node_filter_options(forms: &[FormSummary]) -> Vec<FormNodeFilterOption> {
     let mut options_by_id = BTreeMap::<String, FormNodeFilterOption>::new();
 
@@ -55,7 +54,6 @@ pub(crate) fn form_node_filter_options(forms: &[FormSummary]) -> Vec<FormNodeFil
     options
 }
 
-/// Handles the form node filter depth behavior.
 pub(crate) fn form_node_filter_depth(
     node_id: &str,
     options_by_id: &BTreeMap<String, FormNodeFilterOption>,
@@ -76,7 +74,6 @@ pub(crate) fn form_node_filter_depth(
         .unwrap_or(0)
 }
 
-/// Handles the form node filter path behavior.
 pub(crate) fn form_node_filter_path(
     node_id: &str,
     options_by_id: &BTreeMap<String, FormNodeFilterOption>,
@@ -107,7 +104,6 @@ pub(crate) fn form_node_filter_path(
         .unwrap_or_else(|| option.name.clone())
 }
 
-/// Handles the form matches node filter behavior.
 pub(crate) fn form_matches_node_filter(
     form: &FormSummary,
     selected_node_id: Option<&str>,
@@ -125,7 +121,6 @@ pub(crate) fn form_matches_node_filter(
     })
 }
 
-/// Handles the form node is descendant of selected behavior.
 pub(crate) fn form_node_is_descendant_of_selected(
     node_id: &str,
     selected_node_id: &str,
@@ -155,7 +150,6 @@ pub(crate) fn form_node_is_descendant_of_selected(
     false
 }
 
-/// Handles the visible form node filter options behavior.
 pub(crate) fn visible_form_node_filter_options(
     options: &[FormNodeFilterOption],
     selected_node_id: Option<&str>,
@@ -185,27 +179,6 @@ pub(crate) fn visible_form_node_filter_options(
         .collect()
 }
 
-/// Handles the indented node label behavior.
 pub(crate) fn indented_node_label(option: &FormNodeFilterOption) -> String {
     format!("{}{}", " ".repeat(option.depth), option.name)
-}
-
-#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
-/// Handles the existing form slugs behavior.
-#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
-pub(crate) fn existing_form_slugs(forms: &[FormSummary]) -> Vec<String> {
-    forms.iter().map(|form| form.slug.clone()).collect()
-}
-
-#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
-/// Handles the existing form slugs for update behavior.
-pub(crate) fn existing_form_slugs_for_update(
-    forms: &[FormSummary],
-    current_form_id: &str,
-) -> Vec<String> {
-    forms
-        .iter()
-        .filter(|form| form.id != current_form_id)
-        .map(|form| form.slug.clone())
-        .collect()
 }
