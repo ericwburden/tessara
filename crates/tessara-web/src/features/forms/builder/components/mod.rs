@@ -7,6 +7,7 @@ mod field_config_controls;
 pub(crate) mod field_config_sheet;
 pub(crate) mod field_tile;
 pub(crate) mod grid;
+mod grid_actions;
 mod grid_empty_cells;
 pub(crate) mod section;
 

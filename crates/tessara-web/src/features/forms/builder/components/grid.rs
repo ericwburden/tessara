@@ -4,15 +4,14 @@
 
 use leptos::prelude::*;
 
+use super::grid_actions::add_form_builder_field_from_grid_click;
 use super::grid_empty_cells::FormBuilderGridEmptyCells;
 use crate::features::forms::builder::FormBuilderFieldDraft;
 use crate::features::forms::builder::components::field_tile::FormBuilderGridTile;
 use crate::features::forms::builder::{
     FORM_BUILDER_COLUMN_COUNT, FormBuilderDragPreview, FormBuilderGridCell,
-    FormBuilderSectionLayout, blank_form_builder_field_at, clear_form_builder_drag_intent,
-    commit_form_builder_drag_preview, form_builder_add_tile_from_click_event,
+    FormBuilderSectionLayout, clear_form_builder_drag_intent, commit_form_builder_drag_preview,
     form_builder_grid_cell_from_drag_event, form_builder_grid_cell_from_pointer,
-    form_builder_occupancy_map, form_builder_section_fields, max_form_builder_new_field_width_at,
     schedule_form_builder_drag_preview, set_form_builder_drag_preview,
 };
 
@@ -138,38 +137,15 @@ pub(crate) fn FormBuilderGrid(
                 }
             }
             on:click=move |event| {
-                let Some((row, column)) = form_builder_add_tile_from_click_event(&event) else {
-                    return;
-                };
-                event.prevent_default();
-                if suppress_builder_field_click.get_untracked().is_some() {
-                    suppress_builder_field_click.set(None);
-                    return;
-                }
-                let fields = builder_fields.get_untracked();
-                let occupied_cells = {
-                    let section_fields = form_builder_section_fields(section_id, &fields);
-                    form_builder_occupancy_map(&section_fields)
-                };
-                if occupied_cells.contains(&(row, column)) {
-                    return;
-                }
-                let field_id = next_builder_field_id.get_untracked();
-                next_builder_field_id.set(field_id + 1);
-                let default_width = default_column_width
-                    .get_untracked()
-                    .clamp(1, FORM_BUILDER_COLUMN_COUNT);
-                let available_width =
-                    max_form_builder_new_field_width_at(section_id, row, column, &fields);
-                let new_field = blank_form_builder_field_at(
-                    field_id,
+                add_form_builder_field_from_grid_click(
+                    event,
                     section_id,
-                    row,
-                    column,
-                    default_width.min(available_width),
+                    default_column_width,
+                    builder_fields,
+                    active_builder_field,
+                    suppress_builder_field_click,
+                    next_builder_field_id,
                 );
-                builder_fields.update(|fields| fields.push(new_field));
-                active_builder_field.set(Some(field_id));
             }
         >
             <FormBuilderGridEmptyCells section_id grid_cells/>
