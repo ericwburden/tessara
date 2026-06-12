@@ -1,7 +1,8 @@
 //! Dataset editor page surface.
 
 use super::{
-    DatasetFieldsEditor, DatasetSourcesEditor, DatasetSqlPreviewPanel, DatasetVisibilityEditor,
+    DatasetEditorMessages, DatasetFieldsEditor, DatasetSourcesEditor, DatasetSqlPreviewPanel,
+    DatasetVisibilityEditor,
 };
 use crate::features::datasets::loaders::*;
 use crate::features::datasets::types::*;
@@ -74,9 +75,7 @@ pub(crate) fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView 
                 <PageHeader title>
                     <a class="button button--secondary" href="/datasets">"Back to Datasets"</a>
                 </PageHeader>
-                {move || load_error.get().map(|message| view! { <p class="form-status is-error">{message}</p> })}
-                {move || save_error.get().map(|message| view! { <p class="form-status is-error">{message}</p> })}
-                {move || save_message.get().map(|message| view! { <p class="form-status is-success">{message}</p> })}
+                <DatasetEditorMessages load_error save_error save_message/>
                 <form class="dataset-editor" on:submit=move |event| {
                     event.prevent_default();
                     save_dataset(
