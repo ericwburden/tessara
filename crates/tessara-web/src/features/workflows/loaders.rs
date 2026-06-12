@@ -9,7 +9,8 @@ use leptos::prelude::*;
 
 #[cfg(feature = "hydrate")]
 use super::api::{
-    WorkflowApiError, fetch_workflow_assignment_nodes, fetch_workflow_detail, fetch_workflows,
+    WorkflowApiError, fetch_workflow_assignment_nodes, fetch_workflow_detail,
+    fetch_workflow_editor_options, fetch_workflows,
 };
 #[cfg(feature = "hydrate")]
 use super::options::ordered_workflow_editor_options;
@@ -126,18 +127,22 @@ pub(crate) fn load_workflow_create_options(
             is_loading.set(true);
             message.set(None);
 
-            let node_types_response = gloo_net::http::Request::get("/api/node-types").send().await;
-            let nodes_response = gloo_net::http::Request::get("/api/nodes").send().await;
-            let forms_response = gloo_net::http::Request::get("/api/forms").send().await;
-            let workflows_response = gloo_net::http::Request::get("/api/workflows").send().await;
+            match fetch_workflow_editor_options().await {
+                Ok(loaded_options) => {
+                    let options = ordered_workflow_editor_options(
+                        loaded_options.node_types,
+                        loaded_options.organization_nodes,
+                        loaded_options.forms,
+                        loaded_options.workflows,
+                    );
 
-            match (
-                node_types_response,
-                nodes_response,
-                forms_response,
-                workflows_response,
-            ) {
-                (Ok(response), _, _, _) if response.status() == 401 => {
+                    node_types.set(options.node_types);
+                    organization_nodes.set(options.organization_nodes);
+                    forms.set(options.forms);
+                    workflows.set(options.workflows);
+                    is_loading.set(false);
+                }
+                Err(WorkflowApiError::Unauthorized) => {
                     node_types.set(Vec::new());
                     organization_nodes.set(Vec::new());
                     forms.set(Vec::new());
@@ -145,107 +150,12 @@ pub(crate) fn load_workflow_create_options(
                     is_loading.set(false);
                     redirect_to_login();
                 }
-                (_, Ok(response), _, _) if response.status() == 401 => {
+                Err(WorkflowApiError::Message(error)) => {
                     node_types.set(Vec::new());
                     organization_nodes.set(Vec::new());
                     forms.set(Vec::new());
                     workflows.set(Vec::new());
-                    is_loading.set(false);
-                    redirect_to_login();
-                }
-                (_, _, Ok(response), _) if response.status() == 401 => {
-                    node_types.set(Vec::new());
-                    organization_nodes.set(Vec::new());
-                    forms.set(Vec::new());
-                    workflows.set(Vec::new());
-                    is_loading.set(false);
-                    redirect_to_login();
-                }
-                (_, _, _, Ok(response)) if response.status() == 401 => {
-                    node_types.set(Vec::new());
-                    organization_nodes.set(Vec::new());
-                    forms.set(Vec::new());
-                    workflows.set(Vec::new());
-                    is_loading.set(false);
-                    redirect_to_login();
-                }
-                (
-                    Ok(node_types_response),
-                    Ok(nodes_response),
-                    Ok(forms_response),
-                    Ok(workflows_response),
-                ) if node_types_response.ok()
-                    && nodes_response.ok()
-                    && forms_response.ok()
-                    && workflows_response.ok() =>
-                {
-                    let loaded_node_types = node_types_response
-                        .json::<Vec<NodeTypeCatalogEntry>>()
-                        .await;
-                    let loaded_nodes = nodes_response.json::<Vec<OrganizationNode>>().await;
-                    let loaded_forms = forms_response.json::<Vec<FormSummary>>().await;
-                    let loaded_workflows = workflows_response.json::<Vec<WorkflowSummary>>().await;
-
-                    match (
-                        loaded_node_types,
-                        loaded_nodes,
-                        loaded_forms,
-                        loaded_workflows,
-                    ) {
-                        (
-                            Ok(loaded_node_types),
-                            Ok(loaded_nodes),
-                            Ok(loaded_forms),
-                            Ok(loaded_workflows),
-                        ) => {
-                            let options = ordered_workflow_editor_options(
-                                loaded_node_types,
-                                loaded_nodes,
-                                loaded_forms,
-                                loaded_workflows,
-                            );
-
-                            node_types.set(options.node_types);
-                            organization_nodes.set(options.organization_nodes);
-                            forms.set(options.forms);
-                            workflows.set(options.workflows);
-                            is_loading.set(false);
-                        }
-                        _ => {
-                            node_types.set(Vec::new());
-                            organization_nodes.set(Vec::new());
-                            forms.set(Vec::new());
-                            workflows.set(Vec::new());
-                            message.set(Some("Workflow options could not be read.".into()));
-                            is_loading.set(false);
-                        }
-                    }
-                }
-                (
-                    Ok(node_types_response),
-                    Ok(nodes_response),
-                    Ok(forms_response),
-                    Ok(workflows_response),
-                ) => {
-                    node_types.set(Vec::new());
-                    organization_nodes.set(Vec::new());
-                    forms.set(Vec::new());
-                    workflows.set(Vec::new());
-                    message.set(Some(format!(
-                        "Workflow options failed with status {} / {} / {} / {}.",
-                        node_types_response.status(),
-                        nodes_response.status(),
-                        forms_response.status(),
-                        workflows_response.status()
-                    )));
-                    is_loading.set(false);
-                }
-                _ => {
-                    node_types.set(Vec::new());
-                    organization_nodes.set(Vec::new());
-                    forms.set(Vec::new());
-                    workflows.set(Vec::new());
-                    message.set(Some("Could not reach the workflow option APIs.".into()));
+                    message.set(Some(error));
                     is_loading.set(false);
                 }
             }
