@@ -70,7 +70,6 @@ pub(crate) fn submit_update_workflow(
                             None
                         };
 
-                    let had_step_update = prepared_update.step_payload.is_some();
                     if let Some(step_payload) = prepared_update.step_payload {
                         let step_result = if version_is_draft {
                             if let Some(version_id) = version_id.clone() {
@@ -135,7 +134,6 @@ pub(crate) fn submit_update_workflow(
                         return;
                     }
 
-                    let _ = had_step_update;
                     navigate_to_workflow(&workflow_id);
                 }
                 Err(error) => {
