@@ -6,11 +6,11 @@ use crate::features::forms::save::api::{
     FormSaveApiError, create_form, create_initial_form_version, publish_form_version,
 };
 #[cfg(feature = "hydrate")]
-use crate::features::forms::save::drafts::prepare_create_form_save;
-#[cfg(feature = "hydrate")]
-use crate::features::forms::save::structure::{
+use crate::features::forms::save::create_structure::{
     FormStructureSaveError, create_form_fields_for_new_form, create_form_sections_for_new_form,
 };
+#[cfg(feature = "hydrate")]
+use crate::features::forms::save::drafts::prepare_create_form_save;
 use crate::features::forms::types::FormSummary;
 #[cfg(feature = "hydrate")]
 use crate::http::redirect_to_login;

@@ -4,6 +4,8 @@
 mod api;
 mod create;
 #[cfg(feature = "hydrate")]
+mod create_structure;
+#[cfg(feature = "hydrate")]
 mod drafts;
 #[cfg(feature = "hydrate")]
 mod payloads;
