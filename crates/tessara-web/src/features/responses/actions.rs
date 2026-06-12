@@ -5,16 +5,58 @@
 use crate::features::forms::RenderedForm;
 #[cfg(feature = "hydrate")]
 use crate::features::responses::api::{
-    save_submission_values_api, start_assignment_response, submit_submission_api,
+    ResponseApiError, save_submission_values_api, start_assignment_response, submit_submission_api,
 };
 #[cfg(feature = "hydrate")]
 use crate::features::responses::types::SaveSubmissionValuesPayload;
 #[cfg(feature = "hydrate")]
 use crate::features::responses::value_collection::collect_response_values;
 #[cfg(feature = "hydrate")]
-use crate::http::navigate_to_href;
+use crate::http::{navigate_to_href, redirect_to_login};
 use leptos::prelude::*;
 use std::collections::HashMap;
+
+#[cfg(feature = "hydrate")]
+fn prepare_submission_values_payload(
+    rendered_form: &RenderedForm,
+    text_values: &HashMap<String, String>,
+    boolean_values: &HashMap<String, bool>,
+) -> Result<SaveSubmissionValuesPayload, ResponseApiError> {
+    collect_response_values(rendered_form, text_values, boolean_values)
+        .map(|values| SaveSubmissionValuesPayload { values })
+        .map_err(ResponseApiError::message)
+}
+
+#[cfg(feature = "hydrate")]
+async fn save_response_draft(
+    submission_id: &str,
+    rendered_form: &RenderedForm,
+    text_values: &HashMap<String, String>,
+    boolean_values: &HashMap<String, bool>,
+) -> Result<(), ResponseApiError> {
+    let payload = prepare_submission_values_payload(rendered_form, text_values, boolean_values)?;
+    save_submission_values_api(submission_id, payload)
+        .await
+        .map(|_| ())
+}
+
+#[cfg(feature = "hydrate")]
+fn handle_response_action_error(
+    error: ResponseApiError,
+    is_saving: RwSignal<bool>,
+    message: RwSignal<Option<String>>,
+) {
+    match error {
+        ResponseApiError::Unauthorized => {
+            redirect_to_login();
+            is_saving.set(false);
+        }
+        ResponseApiError::Message(error) => {
+            message.set(Some(error));
+            is_saving.set(false);
+        }
+    }
+}
 
 pub(crate) fn start_assignment_response_and_navigate(
     workflow_assignment_id: String,
@@ -32,10 +74,7 @@ pub(crate) fn start_assignment_response_and_navigate(
                     navigate_to_href(&format!("/responses/{id}/edit"));
                 }
                 Ok(None) => {}
-                Err(error) => {
-                    message.set(Some(error));
-                    is_saving.set(false);
-                }
+                Err(error) => handle_response_action_error(error, is_saving, message),
             }
         });
     }
@@ -60,27 +99,19 @@ pub(crate) fn save_submission_values(
             is_saving.set(true);
             message.set(None);
 
-            let values =
-                match collect_response_values(&rendered_form, &text_values, &boolean_values) {
-                    Ok(values) => values,
-                    Err(error) => {
-                        message.set(Some(error));
-                        is_saving.set(false);
-                        return;
-                    }
-                };
-
-            match save_submission_values_api(&submission_id, SaveSubmissionValuesPayload { values })
-                .await
+            match save_response_draft(
+                &submission_id,
+                &rendered_form,
+                &text_values,
+                &boolean_values,
+            )
+            .await
             {
                 Ok(_) => {
                     message.set(Some("Draft saved.".into()));
                     is_saving.set(false);
                 }
-                Err(error) => {
-                    message.set(Some(error));
-                    is_saving.set(false);
-                }
+                Err(error) => handle_response_action_error(error, is_saving, message),
             }
         });
     }
@@ -112,30 +143,19 @@ pub(crate) fn submit_response_values(
             is_saving.set(true);
             message.set(None);
 
-            let values =
-                match collect_response_values(&rendered_form, &text_values, &boolean_values) {
-                    Ok(values) => values,
-                    Err(error) => {
-                        message.set(Some(error));
-                        is_saving.set(false);
-                        return;
-                    }
-                };
-
-            match save_submission_values_api(&submission_id, SaveSubmissionValuesPayload { values })
-                .await
+            match save_response_draft(
+                &submission_id,
+                &rendered_form,
+                &text_values,
+                &boolean_values,
+            )
+            .await
             {
                 Ok(_) => match submit_submission_api(&submission_id).await {
                     Ok(response) => navigate_to_href(&format!("/responses/{}", response.id)),
-                    Err(error) => {
-                        message.set(Some(error));
-                        is_saving.set(false);
-                    }
+                    Err(error) => handle_response_action_error(error, is_saving, message),
                 },
-                Err(error) => {
-                    message.set(Some(error));
-                    is_saving.set(false);
-                }
+                Err(error) => handle_response_action_error(error, is_saving, message),
             }
         });
     }
