@@ -2,11 +2,9 @@
 
 #[cfg(feature = "hydrate")]
 use crate::features::administration::{CreateNodePayload, UpdateNodePayload};
-#[cfg(feature = "hydrate")]
-use crate::features::organization::types::IdResponse;
 use crate::features::organization::types::NodeMetadataFieldSummary;
 #[cfg(feature = "hydrate")]
-use crate::http::redirect_to_login;
+use crate::http::navigate_to_href;
 #[cfg(feature = "hydrate")]
 use crate::utils::text::IntoNonemptyString;
 use leptos::prelude::*;
@@ -14,6 +12,8 @@ use std::collections::HashMap;
 
 #[cfg(feature = "hydrate")]
 use super::super::node_metadata::collect_node_metadata;
+#[cfg(feature = "hydrate")]
+use super::api::{create_node, update_node};
 
 /// Validates and submits a create-node request, then navigates to the created node.
 pub(crate) fn submit_create_node(
@@ -71,49 +71,12 @@ pub(crate) fn submit_create_node(
             is_saving.set(true);
             message.set(None);
 
-            let body = match serde_json::to_string(&payload) {
-                Ok(body) => body,
-                Err(_) => {
-                    message.set(Some("Create request could not be prepared.".into()));
-                    is_saving.set(false);
-                    return;
-                }
-            };
-
-            let response = gloo_net::http::Request::post("/api/admin/nodes")
-                .header("Content-Type", "application/json")
-                .body(body)
-                .expect("json request body should be valid")
-                .send()
-                .await;
-
-            match response {
-                Ok(response) if response.status() == 401 => {
-                    is_saving.set(false);
-                    redirect_to_login();
-                }
-                Ok(response) if response.ok() => match response.json::<IdResponse>().await {
-                    Ok(created) => {
-                        if let Some(window) = web_sys::window() {
-                            let _ = window
-                                .location()
-                                .set_href(&format!("/organization/{}", created.id));
-                        }
+            match create_node(payload).await {
+                Ok(created) => navigate_to_href(&format!("/organization/{}", created.id)),
+                Err(error) => {
+                    if error != "Authentication is required." {
+                        message.set(Some(error));
                     }
-                    Err(_) => {
-                        message.set(Some("Create response could not be read.".into()));
-                        is_saving.set(false);
-                    }
-                },
-                Ok(response) => {
-                    message.set(Some(format!(
-                        "Create failed with status {}.",
-                        response.status()
-                    )));
-                    is_saving.set(false);
-                }
-                Err(_) => {
-                    message.set(Some("Could not reach the create node API.".into()));
                     is_saving.set(false);
                 }
             }
@@ -184,49 +147,12 @@ pub(crate) fn submit_update_node(
             is_saving.set(true);
             message.set(None);
 
-            let body = match serde_json::to_string(&payload) {
-                Ok(body) => body,
-                Err(_) => {
-                    message.set(Some("Update request could not be prepared.".into()));
-                    is_saving.set(false);
-                    return;
-                }
-            };
-
-            let response = gloo_net::http::Request::put(&format!("/api/admin/nodes/{node_id}"))
-                .header("Content-Type", "application/json")
-                .body(body)
-                .expect("json request body should be valid")
-                .send()
-                .await;
-
-            match response {
-                Ok(response) if response.status() == 401 => {
-                    is_saving.set(false);
-                    redirect_to_login();
-                }
-                Ok(response) if response.ok() => match response.json::<IdResponse>().await {
-                    Ok(updated) => {
-                        if let Some(window) = web_sys::window() {
-                            let _ = window
-                                .location()
-                                .set_href(&format!("/organization/{}", updated.id));
-                        }
+            match update_node(&node_id, payload).await {
+                Ok(updated) => navigate_to_href(&format!("/organization/{}", updated.id)),
+                Err(error) => {
+                    if error != "Authentication is required." {
+                        message.set(Some(error));
                     }
-                    Err(_) => {
-                        message.set(Some("Update response could not be read.".into()));
-                        is_saving.set(false);
-                    }
-                },
-                Ok(response) => {
-                    message.set(Some(format!(
-                        "Update failed with status {}.",
-                        response.status()
-                    )));
-                    is_saving.set(false);
-                }
-                Err(_) => {
-                    message.set(Some("Could not reach the update node API.".into()));
                     is_saving.set(false);
                 }
             }

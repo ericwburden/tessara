@@ -157,12 +157,6 @@ pub(crate) struct UpdateNodeMetadataFieldRequest {
     pub(crate) required: bool,
 }
 
-#[derive(Debug, Deserialize)]
-#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
-pub(crate) struct IdResponse {
-    pub(crate) id: String,
-}
-
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 pub(crate) struct AdminRoleSummary {
     pub(crate) id: String,
