@@ -8,9 +8,9 @@ use crate::features::forms::builder::{
 #[cfg(feature = "hydrate")]
 use crate::features::forms::filtering::existing_form_slugs_for_update;
 #[cfg(feature = "hydrate")]
-use crate::features::forms::types::{
-    CreateFormFieldPayload, CreateFormSectionPayload, UpdateFormPayload,
-};
+use crate::features::forms::save::payloads::{form_field_payload, form_section_payload};
+#[cfg(feature = "hydrate")]
+use crate::features::forms::types::UpdateFormPayload;
 use crate::features::forms::types::{FormSummary, RenderedForm};
 #[cfg(feature = "hydrate")]
 use crate::features::shared::unique_slug_from_label;
@@ -208,11 +208,7 @@ pub(crate) fn submit_update_form(
 
             let mut section_ids = HashMap::new();
             for section in &prepared_sections {
-                let section_payload = CreateFormSectionPayload {
-                    title: section.title.clone(),
-                    position: section.position,
-                    description: section.description.clone(),
-                };
+                let section_payload = form_section_payload(section);
                 let section_body = match serde_json::to_string(&section_payload) {
                     Ok(body) => body,
                     Err(_) => {
@@ -275,18 +271,8 @@ pub(crate) fn submit_update_form(
                     is_saving.set(false);
                     return;
                 };
-                let field_payload = CreateFormFieldPayload {
-                    section_id: section_id.clone(),
-                    key: field.key.clone(),
-                    label: field.label.clone(),
-                    field_type: field.field_type.clone(),
-                    required: field.required,
-                    position: (index + 1) as i32,
-                    grid_row: field.grid_row,
-                    grid_column: field.grid_column,
-                    grid_width: field.grid_width,
-                    grid_height: field.grid_height,
-                };
+                let field_payload =
+                    form_field_payload(field, section_id.clone(), (index + 1) as i32);
                 let field_body = match serde_json::to_string(&field_payload) {
                     Ok(body) => body,
                     Err(_) => {
