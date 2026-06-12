@@ -2,13 +2,16 @@
 //!
 //! Keep placement, collision detection, resize bounds, and occupancy calculations here; visual rendering belongs in builder components.
 
+mod collision;
+
 use crate::features::forms::builder::FormBuilderFieldDraft;
 use crate::features::forms::builder::{
     FORM_BUILDER_COLUMN_COUNT, FormBuilderDragPreview, FormBuilderSectionDraft,
 };
+pub(crate) use collision::form_builder_field_has_collision;
+use collision::{form_builder_fields_overlap, form_builder_linear_grid_index};
 use std::collections::HashSet;
 
-/// Handles the blank form builder field at behavior.
 pub(crate) fn blank_form_builder_field_at(
     id: usize,
     section_id: usize,
@@ -46,7 +49,6 @@ pub(crate) struct FormBuilderSectionLayout {
     pub(crate) row_count: i32,
 }
 
-/// Handles the form builder section fields behavior.
 pub(crate) fn form_builder_section_fields(
     section_id: usize,
     fields: &[FormBuilderFieldDraft],
@@ -58,7 +60,6 @@ pub(crate) fn form_builder_section_fields(
         .collect()
 }
 
-/// Handles the form builder occupancy map behavior.
 pub(crate) fn form_builder_occupancy_map(fields: &[FormBuilderFieldDraft]) -> HashSet<(i32, i32)> {
     let mut occupied = HashSet::new();
 
@@ -78,7 +79,6 @@ pub(crate) fn form_builder_occupancy_map(fields: &[FormBuilderFieldDraft]) -> Ha
     occupied
 }
 
-/// Handles the form builder section layout behavior.
 pub(crate) fn form_builder_section_layout(
     section: &FormBuilderSectionDraft,
     fields: &[FormBuilderFieldDraft],
@@ -101,47 +101,6 @@ pub(crate) fn form_builder_section_layout(
     }
 }
 
-/// Handles the form builder fields overlap behavior.
-fn form_builder_fields_overlap(
-    left: &FormBuilderFieldDraft,
-    right: &FormBuilderFieldDraft,
-) -> bool {
-    if left.section_id != right.section_id || left.id == right.id {
-        return false;
-    }
-
-    let left_row_start = left.grid_row.max(1);
-    let left_row_end = left_row_start + left.grid_height.max(1) - 1;
-    let left_column_start = left.grid_column.max(1);
-    let left_column_end = left_column_start + left.grid_width.max(1) - 1;
-
-    let right_row_start = right.grid_row.max(1);
-    let right_row_end = right_row_start + right.grid_height.max(1) - 1;
-    let right_column_start = right.grid_column.max(1);
-    let right_column_end = right_column_start + right.grid_width.max(1) - 1;
-
-    left_row_start <= right_row_end
-        && left_row_end >= right_row_start
-        && left_column_start <= right_column_end
-        && left_column_end >= right_column_start
-}
-
-/// Handles the form builder field has collision behavior.
-pub(crate) fn form_builder_field_has_collision(
-    field: &FormBuilderFieldDraft,
-    fields: &[FormBuilderFieldDraft],
-) -> bool {
-    fields
-        .iter()
-        .any(|candidate| candidate.id != field.id && form_builder_fields_overlap(field, candidate))
-}
-
-/// Handles the form builder linear grid index behavior.
-fn form_builder_linear_grid_index(field: &FormBuilderFieldDraft, column_count: i32) -> i32 {
-    let column_count = column_count.max(1);
-    (field.grid_row.max(1) - 1) * column_count + field.grid_column.max(1) - 1
-}
-/// Handles the form builder reflow section fields behavior.
 pub(crate) fn form_builder_reflow_section_fields(
     fields: &[FormBuilderFieldDraft],
     preview: FormBuilderDragPreview,
