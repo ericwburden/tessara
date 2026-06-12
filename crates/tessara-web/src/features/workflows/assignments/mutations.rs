@@ -1,6 +1,10 @@
 //! Workflow assignment mutation orchestration.
 
 #[cfg(feature = "hydrate")]
+use crate::features::workflows::assignments::api::{
+    WorkflowAssignmentMutationError, create_workflow_assignments_bulk, update_workflow_assignment,
+};
+#[cfg(feature = "hydrate")]
 use crate::features::workflows::assignments::{
     BulkWorkflowAssignmentPayload, UpdateWorkflowAssignmentPayload, load_workflow_assignments,
 };
@@ -61,52 +65,19 @@ pub(crate) fn submit_workflow_assignment_bulk(
             is_saving.set(true);
             message.set(None);
 
-            let body = match serde_json::to_string(&payload) {
-                Ok(body) => body,
-                Err(_) => {
-                    message.set(Some("Assignment request could not be prepared.".into()));
+            match create_workflow_assignments_bulk(payload).await {
+                Ok(()) => {
+                    selected_account_ids.set(HashSet::new());
+                    selected_candidate_id.set(String::new());
+                    message.set(Some("Assignments created.".into()));
                     is_saving.set(false);
-                    return;
+                    load_workflow_assignments(assignments, assignments_loading, assignments_error);
                 }
-            };
-
-            let response = gloo_net::http::Request::post("/api/workflow-assignments/bulk")
-                .header("Content-Type", "application/json")
-                .body(body)
-                .map_err(|_| "Assignment request could not be prepared.".to_string());
-
-            match response {
-                Ok(request) => match request.send().await {
-                    Ok(response) if response.status() == 401 => {
-                        is_saving.set(false);
-                        redirect_to_login();
-                    }
-                    Ok(response) if response.ok() => {
-                        selected_account_ids.set(HashSet::new());
-                        selected_candidate_id.set(String::new());
-                        message.set(Some("Assignments created.".into()));
-                        is_saving.set(false);
-                        load_workflow_assignments(
-                            assignments,
-                            assignments_loading,
-                            assignments_error,
-                        );
-                    }
-                    Ok(response) => {
-                        message.set(Some(format!(
-                            "Create assignments failed with status {}.",
-                            response.status()
-                        )));
-                        is_saving.set(false);
-                    }
-                    Err(error) => {
-                        message.set(Some(format!(
-                            "Could not reach the assignments API: {error}"
-                        )));
-                        is_saving.set(false);
-                    }
-                },
-                Err(error) => {
+                Err(WorkflowAssignmentMutationError::Unauthorized) => {
+                    is_saving.set(false);
+                    redirect_to_login();
+                }
+                Err(WorkflowAssignmentMutationError::Message(error)) => {
                     message.set(Some(error));
                     is_saving.set(false);
                 }
@@ -151,46 +122,21 @@ pub(crate) fn toggle_workflow_assignment(
         leptos::task::spawn_local(async move {
             message.set(None);
             assignments_error.set(None);
-            let body = match serde_json::to_string(&payload) {
-                Ok(body) => body,
-                Err(_) => {
-                    message.set(Some("Update request could not be prepared.".into()));
-                    return;
-                }
-            };
-            let response =
-                gloo_net::http::Request::put(&format!("/api/workflow-assignments/{assignment_id}"))
-                    .header("Content-Type", "application/json")
-                    .body(body)
-                    .map_err(|_| "Update request could not be prepared.".to_string());
 
-            match response {
-                Ok(request) => match request.send().await {
-                    Ok(response) if response.status() == 401 => redirect_to_login(),
-                    Ok(response) if response.ok() => {
-                        assignments.update(|items| {
-                            if let Some(item) =
-                                items.iter_mut().find(|item| item.id == assignment_id)
-                            {
-                                item.is_active = next_is_active;
-                            }
-                        });
-                        assignments_loading.set(false);
-                        message.set(Some("Assignment updated.".into()));
-                    }
-                    Ok(response) => {
-                        message.set(Some(format!(
-                            "Update assignment failed with status {}.",
-                            response.status()
-                        )));
-                    }
-                    Err(error) => {
-                        message.set(Some(format!(
-                            "Could not reach the assignments API: {error}"
-                        )));
-                    }
-                },
-                Err(error) => message.set(Some(error)),
+            match update_workflow_assignment(&assignment_id, payload).await {
+                Ok(()) => {
+                    assignments.update(|items| {
+                        if let Some(item) = items.iter_mut().find(|item| item.id == assignment_id) {
+                            item.is_active = next_is_active;
+                        }
+                    });
+                    assignments_loading.set(false);
+                    message.set(Some("Assignment updated.".into()));
+                }
+                Err(WorkflowAssignmentMutationError::Unauthorized) => redirect_to_login(),
+                Err(WorkflowAssignmentMutationError::Message(error)) => {
+                    message.set(Some(error));
+                }
             }
         });
     }

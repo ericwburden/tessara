@@ -4,8 +4,8 @@
 
 #[cfg(feature = "hydrate")]
 use crate::features::workflows::assignments::types::{
-    PendingWorkflowWork, WorkflowAssigneeOption, WorkflowAssignmentCandidate,
-    WorkflowAssignmentSummary,
+    BulkWorkflowAssignmentPayload, PendingWorkflowWork, UpdateWorkflowAssignmentPayload,
+    WorkflowAssigneeOption, WorkflowAssignmentCandidate, WorkflowAssignmentSummary,
 };
 
 #[cfg(feature = "hydrate")]
@@ -16,6 +16,19 @@ pub(super) enum WorkflowAssignmentApiError {
 
 #[cfg(feature = "hydrate")]
 impl WorkflowAssignmentApiError {
+    fn message(message: impl Into<String>) -> Self {
+        Self::Message(message.into())
+    }
+}
+
+#[cfg(feature = "hydrate")]
+pub(super) enum WorkflowAssignmentMutationError {
+    Unauthorized,
+    Message(String),
+}
+
+#[cfg(feature = "hydrate")]
+impl WorkflowAssignmentMutationError {
     fn message(message: impl Into<String>) -> Self {
         Self::Message(message.into())
     }
@@ -45,6 +58,72 @@ pub(super) async fn fetch_pending_work()
         ))),
         Err(error) => Err(WorkflowAssignmentApiError::message(format!(
             "Unable to load assigned work: {error}"
+        ))),
+    }
+}
+
+#[cfg(feature = "hydrate")]
+pub(super) async fn create_workflow_assignments_bulk(
+    payload: BulkWorkflowAssignmentPayload,
+) -> Result<(), WorkflowAssignmentMutationError> {
+    let body = serde_json::to_string(&payload).map_err(|_| {
+        WorkflowAssignmentMutationError::message("Assignment request could not be prepared.")
+    })?;
+
+    let response = gloo_net::http::Request::post("/api/workflow-assignments/bulk")
+        .header("Content-Type", "application/json")
+        .body(body)
+        .map_err(|_| {
+            WorkflowAssignmentMutationError::message("Assignment request could not be prepared.")
+        })?
+        .send()
+        .await;
+
+    match response {
+        Ok(response) if response.status() == 401 => {
+            Err(WorkflowAssignmentMutationError::Unauthorized)
+        }
+        Ok(response) if response.ok() => Ok(()),
+        Ok(response) => Err(WorkflowAssignmentMutationError::message(format!(
+            "Create assignments failed with status {}.",
+            response.status()
+        ))),
+        Err(error) => Err(WorkflowAssignmentMutationError::message(format!(
+            "Could not reach the assignments API: {error}"
+        ))),
+    }
+}
+
+#[cfg(feature = "hydrate")]
+pub(super) async fn update_workflow_assignment(
+    assignment_id: &str,
+    payload: UpdateWorkflowAssignmentPayload,
+) -> Result<(), WorkflowAssignmentMutationError> {
+    let body = serde_json::to_string(&payload).map_err(|_| {
+        WorkflowAssignmentMutationError::message("Update request could not be prepared.")
+    })?;
+
+    let response =
+        gloo_net::http::Request::put(&format!("/api/workflow-assignments/{assignment_id}"))
+            .header("Content-Type", "application/json")
+            .body(body)
+            .map_err(|_| {
+                WorkflowAssignmentMutationError::message("Update request could not be prepared.")
+            })?
+            .send()
+            .await;
+
+    match response {
+        Ok(response) if response.status() == 401 => {
+            Err(WorkflowAssignmentMutationError::Unauthorized)
+        }
+        Ok(response) if response.ok() => Ok(()),
+        Ok(response) => Err(WorkflowAssignmentMutationError::message(format!(
+            "Update assignment failed with status {}.",
+            response.status()
+        ))),
+        Err(error) => Err(WorkflowAssignmentMutationError::message(format!(
+            "Could not reach the assignments API: {error}"
         ))),
     }
 }
