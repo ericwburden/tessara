@@ -8,6 +8,7 @@ pub(crate) mod builder;
 mod components;
 mod create;
 mod detail;
+mod detail_content;
 mod display;
 mod edit;
 mod editor_sections;
@@ -26,6 +27,7 @@ pub(in crate::features::forms) use attached_nodes::{
 };
 pub(crate) use create::FormsNewPage;
 pub(crate) use detail::FormsDetailPage;
+pub(in crate::features::forms) use detail_content::FormDetailContent;
 pub(crate) use display::{
     form_attached_nodes, form_attached_to_label, form_definition_scope_label,
     form_field_count_label, form_status_label, form_version_desc_sort_key,
