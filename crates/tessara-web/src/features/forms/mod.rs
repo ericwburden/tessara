@@ -44,7 +44,6 @@ pub(crate) use filtering::{
     FormNodeFilterOption, form_matches_node_filter, form_node_filter_options, indented_node_label,
     visible_form_node_filter_options,
 };
-pub(crate) use list::FormsList;
 pub(crate) use pages::FormsPage;
 pub(crate) use types::{
     FormDatasetSourceLink, FormDefinition, FormSummary, FormVersionSummary, FormWorkflowLink,

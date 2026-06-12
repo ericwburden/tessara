@@ -18,7 +18,7 @@ use leptos::prelude::*;
 use mobile_cards::FormsMobileCards;
 
 #[component]
-pub(crate) fn FormsList(
+pub(in crate::features::forms) fn FormsList(
     forms: Vec<FormSummary>,
     search: RwSignal<String>,
     status_filter: RwSignal<String>,

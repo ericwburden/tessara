@@ -2,13 +2,15 @@
 
 use crate::features::forms::loaders::load_forms;
 use crate::features::forms::{
-    FormSummary, FormsList, active_form_version, form_attached_to_label, form_matches_node_filter,
+    FormSummary, active_form_version, form_attached_to_label, form_matches_node_filter,
     form_node_filter_options, form_status_label, form_version_label,
 };
 use crate::features::shared::unique_filter_options;
 use crate::ui::{AppShell, Button, PageHeader};
 use crate::utils::text::text_matches;
 use leptos::prelude::*;
+
+use super::list::FormsList;
 
 #[component]
 pub fn FormsPage() -> impl IntoView {
