@@ -4,15 +4,15 @@ use crate::features::forms::builder::{FormBuilderFieldDraft, FormBuilderSectionD
 #[cfg(feature = "hydrate")]
 use crate::features::forms::save::drafts::prepare_create_form_save;
 #[cfg(feature = "hydrate")]
-use crate::features::forms::save::payloads::{form_field_payload, form_section_payload};
+use crate::features::forms::save::structure::{
+    FormStructureSaveError, create_form_fields_for_new_form, create_form_sections_for_new_form,
+};
 use crate::features::forms::types::FormSummary;
 #[cfg(feature = "hydrate")]
 use crate::features::organization::types::IdResponse;
 #[cfg(feature = "hydrate")]
 use crate::http::{redirect_to_login, send_json_id_request};
 use leptos::prelude::*;
-#[cfg(feature = "hydrate")]
-use std::collections::HashMap;
 
 #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
 /// Submits the submit create form request.
@@ -104,132 +104,43 @@ pub(crate) fn submit_create_form(
                                     }
                                 };
 
-                                let mut section_ids = HashMap::new();
-                                for section in &prepared_sections {
-                                    let section_payload = form_section_payload(section);
-                                    let section_body = match serde_json::to_string(&section_payload)
-                                    {
-                                        Ok(body) => body,
-                                        Err(_) => {
-                                            message.set(Some(format!(
-                                                "{} section request could not be prepared.",
-                                                section.title
-                                            )));
-                                            is_saving.set(false);
-                                            return;
-                                        }
-                                    };
-                                    let section_response = gloo_net::http::Request::post(&format!(
-                                        "/api/admin/form-versions/{}/sections",
-                                        created_version.id
-                                    ))
-                                    .header("Content-Type", "application/json")
-                                    .body(section_body)
-                                    .expect("json request body should be valid")
-                                    .send()
-                                    .await;
-
-                                    let created_section = match section_response {
-                                        Ok(response) if response.status() == 401 => {
-                                            is_saving.set(false);
-                                            redirect_to_login();
-                                            return;
-                                        }
-                                        Ok(response) if response.ok() => {
-                                            match response.json::<IdResponse>().await {
-                                                Ok(created_section) => created_section,
-                                                Err(_) => {
-                                                    message.set(Some(format!(
-                                                        "{} section response could not be read.",
-                                                        section.title
-                                                    )));
-                                                    is_saving.set(false);
-                                                    return;
-                                                }
-                                            }
-                                        }
-                                        Ok(response) => {
-                                            message.set(Some(format!(
-                                                "Form was created, but {} section setup failed with status {}.",
-                                                section.title,
-                                                response.status()
-                                            )));
-                                            is_saving.set(false);
-                                            return;
-                                        }
-                                        Err(_) => {
-                                            message.set(Some(format!(
-                                                "Form was created, but the {} section API could not be reached.",
-                                                section.title
-                                            )));
-                                            is_saving.set(false);
-                                            return;
-                                        }
-                                    };
-                                    section_ids.insert(section.id, created_section.id);
-                                }
-
-                                for (index, field) in prepared_fields.iter().enumerate() {
-                                    let Some(section_id) = section_ids.get(&field.section_id)
-                                    else {
-                                        message.set(Some(format!(
-                                            "{} field could not be matched to a section.",
-                                            field.label
-                                        )));
+                                let section_ids = match create_form_sections_for_new_form(
+                                    &created_version.id,
+                                    &prepared_sections,
+                                )
+                                .await
+                                {
+                                    Ok(section_ids) => section_ids,
+                                    Err(FormStructureSaveError::Unauthorized) => {
+                                        is_saving.set(false);
+                                        redirect_to_login();
+                                        return;
+                                    }
+                                    Err(FormStructureSaveError::Message(error)) => {
+                                        message.set(Some(error));
                                         is_saving.set(false);
                                         return;
-                                    };
-                                    let field_payload = form_field_payload(
-                                        field,
-                                        section_id.clone(),
-                                        (index + 1) as i32,
-                                    );
-                                    let field_body = match serde_json::to_string(&field_payload) {
-                                        Ok(body) => body,
-                                        Err(_) => {
-                                            message.set(Some(format!(
-                                                "{} field request could not be prepared.",
-                                                field.label
-                                            )));
-                                            is_saving.set(false);
-                                            return;
-                                        }
-                                    };
-                                    let field_response = gloo_net::http::Request::post(&format!(
-                                        "/api/admin/form-versions/{}/fields",
-                                        created_version.id
-                                    ))
-                                    .header("Content-Type", "application/json")
-                                    .body(field_body)
-                                    .expect("json request body should be valid")
-                                    .send()
-                                    .await;
+                                    }
+                                };
 
-                                    match field_response {
-                                        Ok(response) if response.status() == 401 => {
+                                if let Err(error) = create_form_fields_for_new_form(
+                                    &created_version.id,
+                                    &prepared_fields,
+                                    &section_ids,
+                                )
+                                .await
+                                {
+                                    match error {
+                                        FormStructureSaveError::Unauthorized => {
                                             is_saving.set(false);
                                             redirect_to_login();
-                                            return;
                                         }
-                                        Ok(response) if response.ok() => {}
-                                        Ok(response) => {
-                                            message.set(Some(format!(
-                                                "{} field setup failed with status {}.",
-                                                field.label,
-                                                response.status()
-                                            )));
+                                        FormStructureSaveError::Message(error) => {
+                                            message.set(Some(error));
                                             is_saving.set(false);
-                                            return;
-                                        }
-                                        Err(_) => {
-                                            message.set(Some(format!(
-                                                "{} field API could not be reached.",
-                                                field.label
-                                            )));
-                                            is_saving.set(false);
-                                            return;
                                         }
                                     }
+                                    return;
                                 }
 
                                 if publish_after_save {
