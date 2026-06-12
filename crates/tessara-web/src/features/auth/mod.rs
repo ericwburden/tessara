@@ -3,7 +3,6 @@
 //! Re-export only the pages, types, and helpers other modules need; keep Auth-specific implementation details in child modules.
 
 pub mod api;
-pub mod components;
 pub mod guards;
 pub mod types;
 

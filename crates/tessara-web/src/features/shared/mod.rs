@@ -3,7 +3,6 @@
 //! Re-export only the pages, types, and helpers other modules need; keep Shared-specific implementation details in child modules.
 
 mod display;
-mod helpers;
 mod placeholder;
 mod types;
 mod ui;
