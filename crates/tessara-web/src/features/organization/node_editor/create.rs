@@ -15,7 +15,7 @@ use super::{
     load_organization_create_options, parent_node_options, submit_create_node,
 };
 
-/// Renders the organization new page view.
+/// Route page for creating an organization node and seeding its metadata editor.
 #[component]
 pub(crate) fn OrganizationNewPage() -> impl IntoView {
     let node_types = RwSignal::new(Vec::<NodeTypeCatalogEntry>::new());

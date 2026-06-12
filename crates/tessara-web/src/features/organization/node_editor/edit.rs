@@ -16,7 +16,7 @@ use super::{
     submit_update_node,
 };
 
-/// Renders the organization edit page view.
+/// Route page for editing an organization node and its metadata values.
 #[component]
 pub(crate) fn OrganizationEditPage() -> impl IntoView {
     let params = require_route_params::<NodeRouteParams>();
