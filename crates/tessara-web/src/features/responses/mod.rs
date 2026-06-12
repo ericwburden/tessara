@@ -14,5 +14,5 @@ mod pages;
 mod start;
 pub(crate) mod types;
 pub(crate) mod value_collection;
-pub(crate) use actions::start_workflow_assignment_response;
+pub(crate) use actions::start_assignment_response_and_navigate;
 pub(crate) use pages::{ResponsesDetailPage, ResponsesEditPage, ResponsesNewPage, ResponsesPage};

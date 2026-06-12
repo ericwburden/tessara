@@ -2,7 +2,7 @@
 //!
 //! Keep the workflow/form launch flow for new responses here; response editing and detail presentation belong in sibling modules.
 
-use super::actions::start_workflow_assignment_response;
+use super::actions::start_assignment_response_and_navigate;
 use super::components::ResponseAssignmentStartForm;
 use super::loaders::load_response_start_options;
 use crate::features::responses::types::AssignmentResponseStartOptions;
@@ -40,7 +40,7 @@ pub(super) fn ResponsesNewPageContent() -> impl IntoView {
     Effect::new(move |_| {
         if let Some(workflow_assignment_id) = requested_workflow_assignment_id_for_effect.clone() {
             is_loading.set(false);
-            start_workflow_assignment_response(workflow_assignment_id, is_saving, message);
+            start_assignment_response_and_navigate(workflow_assignment_id, is_saving, message);
         } else {
             load_response_start_options(
                 options,

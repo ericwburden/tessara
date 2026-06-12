@@ -1,7 +1,7 @@
 //! Response start assignment form.
 
 use super::ResponseAssignmentStartFields;
-use crate::features::responses::actions::start_workflow_assignment_response;
+use crate::features::responses::actions::start_assignment_response_and_navigate;
 use crate::features::responses::display::{
     response_selected_assignment, response_start_can_submit,
 };
@@ -33,7 +33,7 @@ pub(crate) fn ResponseAssignmentStartForm(
                 }
 
                 if let Some(assignment) = response_selected_assignment(options, selected_assignment_index) {
-                    start_workflow_assignment_response(
+                    start_assignment_response_and_navigate(
                         assignment.workflow_assignment_id,
                         is_saving,
                         message,

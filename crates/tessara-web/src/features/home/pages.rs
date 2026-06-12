@@ -4,7 +4,7 @@
 
 use leptos::prelude::*;
 
-use crate::features::responses::start_workflow_assignment_response;
+use crate::features::responses::start_assignment_response_and_navigate;
 use crate::features::workflows::assignments::{PendingWorkflowWork, load_pending_work};
 use crate::features::workflows::workflow_revision_label_from_raw;
 use crate::ui::{AppShell, DataTable, PageHeader, TablePaginationFooter, Timestamp};
@@ -147,7 +147,7 @@ fn HomePendingWork(
                                                 type="button"
                                                 disabled=move || is_starting.get()
                                                 on:click=move |_| {
-                                                    start_workflow_assignment_response(
+                                                    start_assignment_response_and_navigate(
                                                         assignment_id.clone(),
                                                         is_starting,
                                                         message,

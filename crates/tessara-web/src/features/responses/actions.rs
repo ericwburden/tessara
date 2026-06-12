@@ -16,7 +16,7 @@ use crate::http::navigate_to_href;
 use leptos::prelude::*;
 use std::collections::HashMap;
 
-pub(crate) fn start_workflow_assignment_response(
+pub(crate) fn start_assignment_response_and_navigate(
     workflow_assignment_id: String,
     is_saving: RwSignal<bool>,
     message: RwSignal<Option<String>>,
