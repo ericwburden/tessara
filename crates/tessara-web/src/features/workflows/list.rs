@@ -2,6 +2,8 @@
 //!
 //! Keep collection tables, list filters, and list-page presentation here; detail/editor flows should stay in their dedicated modules.
 
+mod mobile_cards;
+
 use crate::features::organization::OrganizationNode;
 use crate::features::shared::{
     WorkflowAssignedUsersSheetData, WorkflowAvailableNodesSheetData, status_badge_class,
@@ -17,11 +19,11 @@ use crate::ui::{DataTable, TableFilterHeader, TablePaginationFooter};
 use crate::utils::pagination::pagination_page_start;
 use icons::Search;
 use leptos::prelude::*;
+use mobile_cards::WorkflowsMobileCards;
 
 pub(crate) use crate::features::workflows::pages::list::WorkflowsPage;
 
 #[component]
-/// Renders the workflows list view.
 pub(in crate::features::workflows) fn WorkflowsList(
     workflows: Vec<WorkflowSummary>,
     search: RwSignal<String>,
@@ -142,71 +144,14 @@ pub(in crate::features::workflows) fn WorkflowsList(
                     page_index=page_index
                 />
             </div>
-            <div class="forms-list-mobile-cards">
-                {move || if card_workflows.is_empty() {
-                    view! { <p class="forms-list-mobile-empty">"No Workflows to Display"</p> }.into_any()
-                } else {
-                    card_workflows
-                        .iter()
-                        .skip(pagination_page_start(total_count.get(), page_size.get(), page_index.get()))
-                        .take(page_size.get())
-                        .cloned()
-                        .map(|workflow| {
-                            let workflow_href = format!("/workflows/{}", workflow.id);
-                            let status_key = workflow_status_key(&workflow).to_string();
-                            let status_label = workflow_status_label(&workflow);
-                            let version_label = workflow_version_label(&workflow);
-                            let available_at = workflow_available_node_links(&workflow.available_nodes);
-                            let assigned_users = workflow_assigned_user_links(&workflow);
-                            let workflow_name = workflow.name.clone();
-                            let workflow_source = workflow.source.clone();
-                            view! {
-                                <article class="forms-list-mobile-card">
-                                    <div class="forms-list-mobile-card__header">
-                                        <div class="forms-list-mobile-card__title-row">
-                                            <h3><a href=workflow_href.clone()>{workflow.name}</a></h3>
-                                            <WorkflowSourceMarker source=workflow_source/>
-                                        </div>
-                                    </div>
-                                    <dl>
-                                        <div>
-                                            <dt>"Available at"</dt>
-                                            <dd>
-                                                <WorkflowAvailableNodesList
-                                                    nodes=available_at
-                                                    workflow_name=workflow_name.clone()
-                                                    workflow_href=workflow_href.clone()
-                                                    sheet=available_nodes_sheet
-                                                />
-                                            </dd>
-                                        </div>
-                                        <div>
-                                            <dt>"Active revision"</dt>
-                                            <dd>{version_label}</dd>
-                                        </div>
-                                        <div>
-                                            <dt>"Status"</dt>
-                                            <dd><span class=status_badge_class(&status_key)>{status_label}</span></dd>
-                                        </div>
-                                        <div>
-                                            <dt>"Active assignments"</dt>
-                                            <dd>
-                                                <WorkflowAssignedUsersList
-                                                    users=assigned_users
-                                                    workflow_name=workflow_name
-                                                    workflow_href=workflow_href
-                                                    sheet=assigned_users_sheet
-                                                />
-                                            </dd>
-                                        </div>
-                                    </dl>
-                                </article>
-                            }
-                        })
-                        .collect_view()
-                        .into_any()
-                }}
-            </div>
+            <WorkflowsMobileCards
+                workflows=card_workflows
+                total_count
+                page_size
+                page_index
+                available_nodes_sheet
+                assigned_users_sheet
+            />
             <WorkflowAvailableNodesSheet detail=available_nodes_sheet/>
             <WorkflowAssignedUsersSheet detail=assigned_users_sheet/>
         </div>
