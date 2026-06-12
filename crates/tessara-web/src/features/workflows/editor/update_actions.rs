@@ -6,14 +6,12 @@ use super::api::{
     update_workflow_revision_steps,
 };
 #[cfg(feature = "hydrate")]
-use super::{workflow_step_payloads_from_drafts, workflow_step_signature};
+use super::update_payloads::prepare_workflow_update;
 #[cfg(feature = "hydrate")]
 use crate::features::workflows::{
-    CreateWorkflowRevisionPayload, UpdateWorkflowPayload, UpdateWorkflowRevisionStepsPayload,
+    CreateWorkflowRevisionPayload, UpdateWorkflowRevisionStepsPayload,
 };
 use crate::features::workflows::{WorkflowSaveIntent, WorkflowStepDraft};
-#[cfg(feature = "hydrate")]
-use crate::utils::text::IntoNonemptyString;
 use leptos::prelude::*;
 use std::collections::HashSet;
 
@@ -39,60 +37,21 @@ pub(crate) fn submit_update_workflow(
             return;
         }
 
-        let workflow_name = name.get().trim().to_string();
-        if workflow_name.is_empty() {
-            message.set(Some("Workflow name is required.".into()));
-            return;
-        }
-
-        let workflow_slug = slug.get().trim().to_string();
-        if workflow_slug.is_empty() {
-            message.set(Some(
-                "Workflow slug is missing. Reload the workflow and try again.".into(),
-            ));
-            return;
-        }
-        let mut selected_available_node_ids =
-            available_node_ids.get().into_iter().collect::<Vec<_>>();
-        selected_available_node_ids.sort();
-        if selected_available_node_ids.is_empty() {
-            message.set(Some("Select at least one available node.".into()));
-            return;
-        }
-
-        let current_steps = steps.get();
-        let steps_changed = workflow_step_signature(&current_steps)
-            != workflow_step_signature(&original_steps.get_untracked());
-        if intent == WorkflowSaveIntent::Publish && !version_is_draft && !steps_changed {
-            message.set(Some(
-                "Make a workflow step change before publishing a new revision.".into(),
-            ));
-            return;
-        }
-
-        let step_payload = if steps_changed {
-            if current_steps.is_empty() {
-                message.set(Some("Add at least one workflow step.".into()));
+        let prepared_update = match prepare_workflow_update(
+            name.get(),
+            slug.get(),
+            available_node_ids.get(),
+            steps.get(),
+            &original_steps.get_untracked(),
+            description.get(),
+            version_is_draft,
+            intent,
+        ) {
+            Ok(prepared_update) => prepared_update,
+            Err(error) => {
+                message.set(Some(error));
                 return;
             }
-            if current_steps
-                .iter()
-                .any(|step| step.form_version_id.trim().is_empty())
-            {
-                message.set(Some("Select a form version for each workflow step.".into()));
-                return;
-            }
-
-            Some(workflow_step_payloads_from_drafts(current_steps))
-        } else {
-            None
-        };
-
-        let payload = UpdateWorkflowPayload {
-            available_node_ids: selected_available_node_ids,
-            name: workflow_name,
-            slug: workflow_slug,
-            description: description.get().trim().to_string().into_nonempty(),
         };
 
         leptos::task::spawn_local(async move {
@@ -100,7 +59,7 @@ pub(crate) fn submit_update_workflow(
             save_intent.set(Some(intent));
             message.set(None);
 
-            match update_workflow(&workflow_id, payload).await {
+            match update_workflow(&workflow_id, prepared_update.payload).await {
                 Ok(_) => {
                     let mut version_to_publish =
                         if intent == WorkflowSaveIntent::Publish && version_is_draft {
@@ -109,8 +68,8 @@ pub(crate) fn submit_update_workflow(
                             None
                         };
 
-                    let had_step_update = step_payload.is_some();
-                    if let Some(step_payload) = step_payload {
+                    let had_step_update = prepared_update.step_payload.is_some();
+                    if let Some(step_payload) = prepared_update.step_payload {
                         let step_result = if version_is_draft {
                             if let Some(version_id) = version_id.clone() {
                                 let update_payload = UpdateWorkflowRevisionStepsPayload {

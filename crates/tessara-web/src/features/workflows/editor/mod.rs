@@ -14,6 +14,8 @@ mod state;
 mod step_list;
 mod steps;
 mod update_actions;
+#[cfg(feature = "hydrate")]
+mod update_payloads;
 
 pub(in crate::features::workflows) use available_nodes_picker::WorkflowAvailableNodesPicker;
 pub(crate) use create::WorkflowsNewPage;
