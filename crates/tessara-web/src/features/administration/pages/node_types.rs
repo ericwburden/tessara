@@ -2,11 +2,11 @@
 //!
 //! Keep node type catalog, relationship editing, metadata fields, and scoped form displays here.
 
+mod state;
+
 use super::super::api::{load_admin_node_type_catalog, load_admin_node_type_detail};
 use super::super::components::{AdministrationNodeTypeEditor, AdministrationNodeTypesList};
-use crate::features::organization::{
-    NodeTypeCatalogEntry, NodeTypeDefinition, NodeTypeUpsertRequest,
-};
+use crate::features::organization::NodeTypeUpsertRequest;
 #[cfg(feature = "hydrate")]
 use crate::http::send_json_id_request;
 use crate::ui::{
@@ -16,24 +16,26 @@ use crate::ui::{
 use std::collections::HashSet;
 
 use leptos::prelude::*;
+use state::AdministrationNodeTypesPageState;
 
 #[component]
-/// Renders the administration node types page view.
 pub fn AdministrationNodeTypesPage() -> impl IntoView {
-    let node_types = RwSignal::new(Vec::<NodeTypeCatalogEntry>::new());
-    let selected_node_type_id = RwSignal::new(None::<String>);
-    let selected_detail = RwSignal::new(None::<NodeTypeDefinition>);
-    let search = RwSignal::new(String::new());
-    let is_loading = RwSignal::new(true);
-    let detail_loading = RwSignal::new(false);
-    let is_saving = RwSignal::new(false);
-    let is_creating = RwSignal::new(false);
-    let message = RwSignal::new(None::<String>);
-    let name = RwSignal::new(String::new());
-    let slug = RwSignal::new(String::new());
-    let plural_label = RwSignal::new(String::new());
-    let parent_node_type_ids = RwSignal::new(HashSet::<String>::new());
-    let child_node_type_ids = RwSignal::new(HashSet::<String>::new());
+    let AdministrationNodeTypesPageState {
+        node_types,
+        selected_node_type_id,
+        selected_detail,
+        search,
+        is_loading,
+        detail_loading,
+        is_saving,
+        is_creating,
+        message,
+        name,
+        slug,
+        plural_label,
+        parent_node_type_ids,
+        child_node_type_ids,
+    } = AdministrationNodeTypesPageState::new();
 
     load_admin_node_type_catalog(node_types, selected_node_type_id, is_loading, message, None);
 
