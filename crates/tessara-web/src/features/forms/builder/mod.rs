@@ -5,6 +5,7 @@
 mod components;
 mod display;
 mod drag;
+mod drag_dom;
 mod hydrate;
 mod layout;
 mod resize;
@@ -17,9 +18,11 @@ pub(crate) use components::FormBuilderCanvas;
 pub(crate) use display::{form_builder_field_default_label, form_builder_field_type_icon};
 pub(crate) use drag::{
     clear_form_builder_drag_intent, commit_form_builder_drag_preview,
+    schedule_form_builder_drag_preview, set_form_builder_drag_preview,
+};
+pub(crate) use drag_dom::{
     form_builder_add_tile_from_click_event, form_builder_grid_cell_from_drag_event,
-    form_builder_grid_cell_from_pointer, schedule_form_builder_drag_preview,
-    set_form_builder_drag_preview,
+    form_builder_grid_cell_from_pointer,
 };
 #[cfg(feature = "hydrate")]
 pub(crate) use hydrate::hydrate_form_builder_from_rendered;
