@@ -3,12 +3,15 @@
 #[cfg(feature = "hydrate")]
 use super::{workflow_step_payloads_from_drafts, workflow_step_signature};
 #[cfg(feature = "hydrate")]
+use crate::features::workflows::api::{
+    create_workflow_revision, publish_workflow_revision, update_workflow,
+    update_workflow_revision_steps,
+};
+#[cfg(feature = "hydrate")]
 use crate::features::workflows::{
     CreateWorkflowRevisionPayload, UpdateWorkflowPayload, UpdateWorkflowRevisionStepsPayload,
 };
 use crate::features::workflows::{WorkflowSaveIntent, WorkflowStepDraft};
-#[cfg(feature = "hydrate")]
-use crate::http::send_json_id_request;
 #[cfg(feature = "hydrate")]
 use crate::utils::text::IntoNonemptyString;
 use leptos::prelude::*;
@@ -97,24 +100,7 @@ pub(crate) fn submit_update_workflow(
             save_intent.set(Some(intent));
             message.set(None);
 
-            let workflow_body = match serde_json::to_string(&payload) {
-                Ok(body) => body,
-                Err(_) => {
-                    message.set(Some("Update request could not be prepared.".into()));
-                    is_saving.set(false);
-                    save_intent.set(None);
-                    return;
-                }
-            };
-
-            let workflow_url = format!("/api/workflows/{workflow_id}");
-            match send_json_id_request(
-                gloo_net::http::Request::put(&workflow_url),
-                Some(workflow_body),
-                "Update workflow",
-            )
-            .await
-            {
+            match update_workflow(&workflow_id, payload).await {
                 Ok(_) => {
                     let mut version_to_publish =
                         if intent == WorkflowSaveIntent::Publish && version_is_draft {
@@ -130,72 +116,18 @@ pub(crate) fn submit_update_workflow(
                                 let update_payload = UpdateWorkflowRevisionStepsPayload {
                                     steps: step_payload,
                                 };
-                                let step_body = match serde_json::to_string(&update_payload) {
-                                    Ok(body) => body,
-                                    Err(_) => {
-                                        message.set(Some(
-                                            "Workflow step update request could not be prepared."
-                                                .into(),
-                                        ));
-                                        is_saving.set(false);
-                                        save_intent.set(None);
-                                        return;
-                                    }
-                                };
-                                let steps_url =
-                                    format!("/api/workflow-versions/{version_id}/steps");
-                                send_json_id_request(
-                                    gloo_net::http::Request::put(&steps_url),
-                                    Some(step_body),
-                                    "Update workflow steps",
-                                )
-                                .await
+                                update_workflow_revision_steps(&version_id, update_payload).await
                             } else {
                                 let version_payload = CreateWorkflowRevisionPayload {
                                     steps: step_payload,
                                 };
-                                let version_body = match serde_json::to_string(&version_payload) {
-                                    Ok(body) => body,
-                                    Err(_) => {
-                                        message.set(Some(
-                                            "Workflow revision request could not be prepared."
-                                                .into(),
-                                        ));
-                                        is_saving.set(false);
-                                        save_intent.set(None);
-                                        return;
-                                    }
-                                };
-                                let version_url = format!("/api/workflows/{workflow_id}/versions");
-                                send_json_id_request(
-                                    gloo_net::http::Request::post(&version_url),
-                                    Some(version_body),
-                                    "Create workflow revision",
-                                )
-                                .await
+                                create_workflow_revision(&workflow_id, version_payload).await
                             }
                         } else {
                             let version_payload = CreateWorkflowRevisionPayload {
                                 steps: step_payload,
                             };
-                            let version_body = match serde_json::to_string(&version_payload) {
-                                Ok(body) => body,
-                                Err(_) => {
-                                    message.set(Some(
-                                        "Workflow revision request could not be prepared.".into(),
-                                    ));
-                                    is_saving.set(false);
-                                    save_intent.set(None);
-                                    return;
-                                }
-                            };
-                            let version_url = format!("/api/workflows/{workflow_id}/versions");
-                            send_json_id_request(
-                                gloo_net::http::Request::post(&version_url),
-                                Some(version_body),
-                                "Create workflow revision",
-                            )
-                            .await
+                            create_workflow_revision(&workflow_id, version_payload).await
                         };
 
                         let saved_version = match step_result {
@@ -217,15 +149,7 @@ pub(crate) fn submit_update_workflow(
 
                     if intent == WorkflowSaveIntent::Publish {
                         if let Some(version_id) = version_to_publish {
-                            let publish_url =
-                                format!("/api/workflow-versions/{version_id}/publish");
-                            match send_json_id_request(
-                                gloo_net::http::Request::post(&publish_url),
-                                None,
-                                "Publish workflow revision",
-                            )
-                            .await
-                            {
+                            match publish_workflow_revision(&version_id).await {
                                 Ok(_) => {
                                     if let Some(window) = web_sys::window() {
                                         let _ = window
