@@ -1,105 +1,33 @@
-//! Transport calls for the Forms feature.
-//!
-//! Keep endpoint requests and response parsing here; Leptos signal orchestration belongs in loaders and save actions.
+//! Form editor option transport.
 
 #[cfg(feature = "hydrate")]
-use super::versions::editable_form_definition_version;
+use super::FormsApiError;
+#[cfg(feature = "hydrate")]
+use crate::features::forms::versions::editable_form_definition_version;
 #[cfg(feature = "hydrate")]
 use crate::features::forms::{FormDefinition, FormSummary, RenderedForm};
 #[cfg(feature = "hydrate")]
 use crate::features::organization::NodeTypeCatalogEntry;
 
 #[cfg(feature = "hydrate")]
-pub(super) enum FormsApiError {
-    Unauthorized,
-    Message(String),
+pub(in crate::features::forms) struct FormCreateOptions {
+    pub(in crate::features::forms) node_types: Vec<NodeTypeCatalogEntry>,
+    pub(in crate::features::forms) existing_forms: Vec<FormSummary>,
 }
 
 #[cfg(feature = "hydrate")]
-pub(super) struct FormCreateOptions {
-    pub(super) node_types: Vec<NodeTypeCatalogEntry>,
-    pub(super) existing_forms: Vec<FormSummary>,
+pub(in crate::features::forms) struct FormEditOptions {
+    pub(in crate::features::forms) node_types: Vec<NodeTypeCatalogEntry>,
+    pub(in crate::features::forms) existing_forms: Vec<FormSummary>,
+    pub(in crate::features::forms) detail: FormDefinition,
+    pub(in crate::features::forms) rendered_form: Option<RenderedForm>,
+    pub(in crate::features::forms) edit_version_id: Option<String>,
+    pub(in crate::features::forms) edit_version_status: Option<String>,
 }
 
 #[cfg(feature = "hydrate")]
-pub(super) struct FormEditOptions {
-    pub(super) node_types: Vec<NodeTypeCatalogEntry>,
-    pub(super) existing_forms: Vec<FormSummary>,
-    pub(super) detail: FormDefinition,
-    pub(super) rendered_form: Option<RenderedForm>,
-    pub(super) edit_version_id: Option<String>,
-    pub(super) edit_version_status: Option<String>,
-}
-
-#[cfg(feature = "hydrate")]
-impl FormsApiError {
-    fn message(message: impl Into<String>) -> Self {
-        Self::Message(message.into())
-    }
-}
-
-#[cfg(feature = "hydrate")]
-pub(super) async fn fetch_forms() -> Result<Vec<FormSummary>, FormsApiError> {
-    match gloo_net::http::Request::get("/api/forms").send().await {
-        Ok(response) if response.status() == 401 => Err(FormsApiError::Unauthorized),
-        Ok(response) if response.ok() => response
-            .json::<Vec<FormSummary>>()
-            .await
-            .map_err(|error| FormsApiError::message(format!("Unable to parse forms: {error}"))),
-        Ok(response) => Err(FormsApiError::message(format!(
-            "Unable to load forms. Server returned {}.",
-            response.status()
-        ))),
-        Err(error) => Err(FormsApiError::message(format!(
-            "Unable to load forms: {error}"
-        ))),
-    }
-}
-
-#[cfg(feature = "hydrate")]
-pub(super) async fn fetch_form_detail(form_id: &str) -> Result<FormDefinition, FormsApiError> {
-    match gloo_net::http::Request::get(&format!("/api/forms/{form_id}"))
-        .send()
-        .await
-    {
-        Ok(response) if response.status() == 401 => Err(FormsApiError::Unauthorized),
-        Ok(response) if response.ok() => response.json::<FormDefinition>().await.map_err(|error| {
-            FormsApiError::message(format!("Unable to parse form detail: {error}"))
-        }),
-        Ok(response) => Err(FormsApiError::message(format!(
-            "Unable to load form detail. Server returned {}.",
-            response.status()
-        ))),
-        Err(error) => Err(FormsApiError::message(format!(
-            "Unable to load form detail: {error}"
-        ))),
-    }
-}
-
-#[cfg(feature = "hydrate")]
-pub(super) async fn fetch_rendered_form_version(
-    form_version_id: &str,
-) -> Result<RenderedForm, FormsApiError> {
-    match gloo_net::http::Request::get(&format!("/api/form-versions/{form_version_id}/render"))
-        .send()
-        .await
-    {
-        Ok(response) if response.status() == 401 => Err(FormsApiError::Unauthorized),
-        Ok(response) if response.ok() => response.json::<RenderedForm>().await.map_err(|error| {
-            FormsApiError::message(format!("Unable to parse rendered form: {error}"))
-        }),
-        Ok(response) => Err(FormsApiError::message(format!(
-            "Unable to load rendered form. Server returned {}.",
-            response.status()
-        ))),
-        Err(error) => Err(FormsApiError::message(format!(
-            "Unable to load rendered form: {error}"
-        ))),
-    }
-}
-
-#[cfg(feature = "hydrate")]
-pub(super) async fn fetch_form_create_options() -> Result<FormCreateOptions, FormsApiError> {
+pub(in crate::features::forms) async fn fetch_form_create_options()
+-> Result<FormCreateOptions, FormsApiError> {
     let node_types_response = gloo_net::http::Request::get("/api/node-types").send().await;
     let forms_response = gloo_net::http::Request::get("/api/forms").send().await;
 
@@ -134,7 +62,7 @@ pub(super) async fn fetch_form_create_options() -> Result<FormCreateOptions, For
 }
 
 #[cfg(feature = "hydrate")]
-pub(super) async fn fetch_form_edit_options(
+pub(in crate::features::forms) async fn fetch_form_edit_options(
     form_id: &str,
 ) -> Result<FormEditOptions, FormsApiError> {
     let node_types_response = gloo_net::http::Request::get("/api/node-types").send().await;
