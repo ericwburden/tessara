@@ -5,6 +5,7 @@
 mod api;
 mod components;
 mod create_form;
+mod detail_sheet;
 mod display;
 mod loaders;
 mod mutations;
@@ -14,6 +15,7 @@ pub(crate) mod types;
 pub(crate) use crate::features::workflows::pages::assignments::WorkflowAssignmentsPage;
 pub(in crate::features::workflows) use components::WorkflowAssignmentsList;
 pub(in crate::features::workflows) use create_form::WorkflowAssignmentCreateForm;
+pub(in crate::features::workflows) use detail_sheet::WorkflowAssignmentDetailSheet;
 pub(crate) use display::{
     workflow_assigned_user_links, workflow_assignee_label, workflow_assignment_candidate_key,
     workflow_assignment_revision_label, workflow_assignment_state, workflow_assignment_state_label,
