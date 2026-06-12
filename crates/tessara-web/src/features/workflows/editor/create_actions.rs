@@ -1,14 +1,14 @@
 //! Workflow creation save orchestration.
 
 #[cfg(feature = "hydrate")]
+use super::api::{create_initial_workflow_revision, create_workflow};
+#[cfg(feature = "hydrate")]
 use super::existing_workflow_slugs;
 #[cfg(feature = "hydrate")]
 use crate::features::shared::unique_slug_from_label;
 #[cfg(feature = "hydrate")]
 use crate::features::workflows::CreateWorkflowStepPayload;
 use crate::features::workflows::WorkflowStepDraft;
-#[cfg(feature = "hydrate")]
-use crate::features::workflows::api::{create_initial_workflow_revision, create_workflow};
 use crate::features::workflows::types::WorkflowSummary;
 #[cfg(feature = "hydrate")]
 use crate::features::workflows::{CreateWorkflowPayload, CreateWorkflowRevisionPayload};

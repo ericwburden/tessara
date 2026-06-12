@@ -2,6 +2,7 @@
 //!
 //! Keep form state, draft manipulation, and edit-page presentation here; transport payload submission belongs in API modules.
 
+mod api;
 mod available_nodes_picker;
 mod create;
 mod create_actions;

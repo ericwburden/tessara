@@ -1,12 +1,12 @@
 //! Workflow update and publish save orchestration.
 
 #[cfg(feature = "hydrate")]
-use super::{workflow_step_payloads_from_drafts, workflow_step_signature};
-#[cfg(feature = "hydrate")]
-use crate::features::workflows::api::{
+use super::api::{
     create_workflow_revision, publish_workflow_revision, update_workflow,
     update_workflow_revision_steps,
 };
+#[cfg(feature = "hydrate")]
+use super::{workflow_step_payloads_from_drafts, workflow_step_signature};
 #[cfg(feature = "hydrate")]
 use crate::features::workflows::{
     CreateWorkflowRevisionPayload, UpdateWorkflowPayload, UpdateWorkflowRevisionStepsPayload,
