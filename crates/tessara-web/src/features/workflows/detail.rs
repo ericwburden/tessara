@@ -3,6 +3,7 @@
 //! Keep read-focused panels and detail-page presentation here; route loading belongs in `pages`.
 
 mod cards;
+mod sections;
 
 use crate::features::workflows::types::WorkflowDefinition;
 use crate::features::workflows::{
@@ -10,11 +11,9 @@ use crate::features::workflows::{
     workflow_definition_status_label, workflow_definition_version_label, workflow_source_label,
 };
 use crate::utils::text::nonempty_text;
-use cards::{
-    WorkflowActiveRevisionCard, WorkflowAssignmentsSection, WorkflowDetailsCard,
-    WorkflowRevisionsSection, WorkflowStepsSection,
-};
+use cards::{WorkflowActiveRevisionCard, WorkflowDetailsCard};
 use leptos::prelude::*;
+use sections::{WorkflowAssignmentsSection, WorkflowRevisionsSection, WorkflowStepsSection};
 
 #[component]
 pub(in crate::features::workflows) fn WorkflowDetailContent(
