@@ -1,10 +1,9 @@
 //! Node type metadata field list and editor components.
 
+use super::node_type_metadata_field_actions::delete_node_type_metadata_field;
 use super::node_type_metadata_field_sheet::NodeTypeMetadataFieldSheet;
 use crate::features::organization::NodeMetadataFieldSummary;
 use crate::features::shared::status_badge_class;
-#[cfg(feature = "hydrate")]
-use crate::http::send_json_id_request;
 use crate::ui::{DataTable, DropdownMenu};
 use crate::utils::metadata::metadata_label;
 use icons::{Pencil, Plus, Search, Trash2};
@@ -162,31 +161,13 @@ pub(super) fn NodeTypeMetadataList(
                                                                         type="button"
                                                                         role="menuitem"
                                                                         on:click=move |_| {
-                                                                            #[cfg(feature = "hydrate")]
-                                                                            {
-                                                                                let field_id = delete_field.id.clone();
-                                                                                leptos::task::spawn_local(async move {
-                                                                                    field_message.set(None);
-                                                                                    match send_json_id_request(
-                                                                                        gloo_net::http::Request::delete(&format!(
-                                                                                            "/api/admin/node-metadata-fields/{field_id}"
-                                                                                        )),
-                                                                                        None,
-                                                                                        "Delete metadata field",
-                                                                                    )
-                                                                                    .await
-                                                                                    {
-                                                                                        Ok(_) => {
-                                                                                            sheet_open.set(false);
-                                                                                            clear_field_editor();
-                                                                                            on_metadata_changed();
-                                                                                        }
-                                                                                        Err(error) => field_message.set(Some(error)),
-                                                                                    }
-                                                                                });
-                                                                            }
-                                                                            #[cfg(not(feature = "hydrate"))]
-                                                                            let _ = &delete_field;
+                                                                            delete_node_type_metadata_field(
+                                                                                delete_field.id.clone(),
+                                                                                field_message,
+                                                                                sheet_open,
+                                                                                clear_field_editor,
+                                                                                on_metadata_changed,
+                                                                            );
                                                                         }
                                                                     >
                                                                         <Trash2 class="dropdown-menu__item-icon"/>
@@ -259,31 +240,13 @@ pub(super) fn NodeTypeMetadataList(
                                                             class="button button--compact button--secondary"
                                                             type="button"
                                                             on:click=move |_| {
-                                                                #[cfg(feature = "hydrate")]
-                                                                {
-                                                                    let field_id = delete_field.id.clone();
-                                                                    leptos::task::spawn_local(async move {
-                                                                        field_message.set(None);
-                                                                        match send_json_id_request(
-                                                                            gloo_net::http::Request::delete(&format!(
-                                                                                "/api/admin/node-metadata-fields/{field_id}"
-                                                                            )),
-                                                                            None,
-                                                                            "Delete metadata field",
-                                                                        )
-                                                                        .await
-                                                                        {
-                                                                            Ok(_) => {
-                                                                                sheet_open.set(false);
-                                                                                clear_field_editor();
-                                                                                on_metadata_changed();
-                                                                            }
-                                                                            Err(error) => field_message.set(Some(error)),
-                                                                        }
-                                                                    });
-                                                                }
-                                                                #[cfg(not(feature = "hydrate"))]
-                                                                let _ = &delete_field;
+                                                                delete_node_type_metadata_field(
+                                                                    delete_field.id.clone(),
+                                                                    field_message,
+                                                                    sheet_open,
+                                                                    clear_field_editor,
+                                                                    on_metadata_changed,
+                                                                );
                                                             }
                                                         >
                                                             "Delete Field"
