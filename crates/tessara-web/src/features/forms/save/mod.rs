@@ -1,5 +1,7 @@
 //! Form save orchestration entrypoints.
 
+#[cfg(feature = "hydrate")]
+mod api;
 mod create;
 #[cfg(feature = "hydrate")]
 mod drafts;

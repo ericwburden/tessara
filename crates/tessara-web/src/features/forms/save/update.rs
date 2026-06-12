@@ -2,12 +2,15 @@
 
 use crate::features::forms::builder::{FormBuilderFieldDraft, FormBuilderSectionDraft};
 #[cfg(feature = "hydrate")]
+use crate::features::forms::save::api::{
+    create_draft_form_version, delete_form_field, delete_form_section, publish_form_version,
+    update_form,
+};
+#[cfg(feature = "hydrate")]
 use crate::features::forms::save::drafts::prepare_update_form_save;
 #[cfg(feature = "hydrate")]
 use crate::features::forms::save::structure::{save_form_fields, save_form_sections};
 use crate::features::forms::types::{FormSummary, RenderedForm};
-#[cfg(feature = "hydrate")]
-use crate::http::send_json_id_request;
 use leptos::prelude::*;
 
 #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
@@ -61,22 +64,7 @@ pub(crate) fn submit_update_form(
             is_saving.set(true);
             message.set(None);
 
-            let body = match serde_json::to_string(&payload) {
-                Ok(body) => body,
-                Err(_) => {
-                    message.set(Some("Update request could not be prepared.".into()));
-                    is_saving.set(false);
-                    return;
-                }
-            };
-
-            if let Err(error) = send_json_id_request(
-                gloo_net::http::Request::put(&format!("/api/admin/forms/{form_id}")),
-                Some(body),
-                "Update form",
-            )
-            .await
-            {
+            if let Err(error) = update_form(&form_id, payload).await {
                 message.set(Some(error));
                 is_saving.set(false);
                 return;
@@ -92,13 +80,7 @@ pub(crate) fn submit_update_form(
                     }
                 }
             } else {
-                match send_json_id_request(
-                    gloo_net::http::Request::post(&format!("/api/admin/forms/{form_id}/versions")),
-                    Some("{}".into()),
-                    "Create draft version",
-                )
-                .await
-                {
+                match create_draft_form_version(&form_id).await {
                     Ok(created) => created.id,
                     Err(error) => {
                         message.set(Some(error));
@@ -110,15 +92,7 @@ pub(crate) fn submit_update_form(
 
             if update_existing_draft {
                 for field_id in original_field_ids.difference(&kept_field_ids) {
-                    if let Err(error) = send_json_id_request(
-                        gloo_net::http::Request::delete(&format!(
-                            "/api/admin/form-fields/{field_id}"
-                        )),
-                        None,
-                        "Delete form field",
-                    )
-                    .await
-                    {
+                    if let Err(error) = delete_form_field(field_id).await {
                         message.set(Some(error));
                         is_saving.set(false);
                         return;
@@ -126,15 +100,7 @@ pub(crate) fn submit_update_form(
                 }
 
                 for section_id in original_section_ids.difference(&kept_section_ids) {
-                    if let Err(error) = send_json_id_request(
-                        gloo_net::http::Request::delete(&format!(
-                            "/api/admin/form-sections/{section_id}"
-                        )),
-                        None,
-                        "Delete form section",
-                    )
-                    .await
-                    {
+                    if let Err(error) = delete_form_section(section_id).await {
                         message.set(Some(error));
                         is_saving.set(false);
                         return;
@@ -168,15 +134,7 @@ pub(crate) fn submit_update_form(
             }
 
             if publish_after_save {
-                if let Err(error) = send_json_id_request(
-                    gloo_net::http::Request::post(&format!(
-                        "/api/admin/form-versions/{version_id}/publish"
-                    )),
-                    None,
-                    "Publish form version",
-                )
-                .await
-                {
+                if let Err(error) = publish_form_version(&version_id).await {
                     message.set(Some(error));
                     is_saving.set(false);
                     return;
