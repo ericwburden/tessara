@@ -1,8 +1,8 @@
 //! Dataset editor page surface.
 
 use super::{
-    DatasetEditorMessages, DatasetFieldsEditor, DatasetSourcesEditor, DatasetSqlPreviewPanel,
-    DatasetVisibilityEditor,
+    DatasetEditorMessages, DatasetFieldsEditor, DatasetIdentitySection, DatasetSourcesEditor,
+    DatasetSqlPreviewPanel, DatasetVisibilityEditor,
 };
 use crate::features::datasets::actions::save_dataset;
 use crate::features::datasets::loaders::*;
@@ -93,19 +93,7 @@ pub(crate) fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView 
                         save_message,
                     );
                 }>
-                    <section class="route-panel__section dataset-editor-section">
-                        <h3>"Dataset Definition"</h3>
-                        <div class="form-grid">
-                            <label class="form-field">
-                                <span>"Name"</span>
-                                <input required prop:value=move || name.get() on:input=move |event| name.set(event_target_value(&event))/>
-                            </label>
-                            <label class="form-field">
-                                <span>"Slug"</span>
-                                <input required prop:value=move || slug.get() on:input=move |event| slug.set(event_target_value(&event))/>
-                            </label>
-                        </div>
-                    </section>
+                    <DatasetIdentitySection name slug/>
                     <DatasetSourcesEditor
                         sources
                         forms
