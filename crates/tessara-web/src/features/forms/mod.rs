@@ -5,6 +5,7 @@
 mod api;
 mod attached_nodes;
 pub(crate) mod builder;
+mod components;
 mod create;
 mod detail;
 mod display;
