@@ -9,7 +9,8 @@ use crate::features::forms::loaders::{
     load_form_create_options, load_form_edit_options, load_forms,
 };
 use crate::features::forms::{
-    FormDefinition, FormIdentityFields, FormSummary, FormsList, RenderedForm,
+    FormDefinition, FormEditableVersionSummary, FormIdentityFields, FormInitialVersionSummary,
+    FormSummary, FormsList, RenderedForm,
 };
 use crate::features::forms::{
     active_form_version, form_attached_to_label, form_status_label, form_version_label,
@@ -17,13 +18,13 @@ use crate::features::forms::{
 };
 use crate::features::forms::{form_matches_node_filter, form_node_filter_options};
 use crate::features::organization::NodeTypeCatalogEntry;
-use crate::features::shared::{status_badge_class, unique_filter_options};
+use crate::features::shared::unique_filter_options;
 use crate::types::route_params::{FormRouteParams, require_route_params};
 use crate::ui::{
     AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator,
-    Button, InfoListTable, InfoRow, PageHeader, empty_view,
+    Button, PageHeader, empty_view,
 };
-use crate::utils::text::{sentence_label, text_matches};
+use crate::utils::text::text_matches;
 use leptos::prelude::*;
 
 #[component]
@@ -208,18 +209,7 @@ pub fn FormsNewPage() -> impl IntoView {
                                     node_types=node_types
                                 />
 
-                                <section class="form-section">
-                                    <h3>"Initial Version"</h3>
-                                    <InfoListTable>
-                                        <InfoRow label="Status" value="Draft"/>
-                                        <tr>
-                                            <th scope="row">"Fields"</th>
-                                            <td>
-                                                {move || builder_field_count.get().to_string()}
-                                            </td>
-                                        </tr>
-                                    </InfoListTable>
-                                </section>
+                                <FormInitialVersionSummary builder_field_count=builder_field_count/>
 
                                 <FormBuilderCanvas state=FormBuilderEditorState {
                                     builder_sections,
@@ -402,35 +392,10 @@ pub fn FormsEditPage() -> impl IntoView {
                                         node_types=node_types
                                     />
 
-                                    <section class="form-section">
-                                        <h3>"Editable Version"</h3>
-                                        <InfoListTable>
-                                            <tr>
-                                                <th scope="row">"Status"</th>
-                                                <td>
-                                                    {move || {
-                                                        edit_version_status
-                                                            .get()
-                                                            .map(|status| {
-                                                                view! {
-                                                                    <span class=status_badge_class(&status)>
-                                                                        {sentence_label(&status)}
-                                                                    </span>
-                                                                }
-                                                                .into_any()
-                                                            })
-                                                            .unwrap_or_else(|| view! { <span>"Draft"</span> }.into_any())
-                                                    }}
-                                                </td>
-                                            </tr>
-                                            <tr>
-                                                <th scope="row">"Fields"</th>
-                                                <td>
-                                                    {move || builder_field_count.get().to_string()}
-                                                </td>
-                                            </tr>
-                                        </InfoListTable>
-                                    </section>
+                                    <FormEditableVersionSummary
+                                        edit_version_status=edit_version_status
+                                        builder_field_count=builder_field_count
+                                    />
 
                                     <FormBuilderCanvas state=FormBuilderEditorState {
                                         builder_sections,
