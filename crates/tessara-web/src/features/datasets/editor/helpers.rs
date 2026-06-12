@@ -16,19 +16,31 @@ pub(crate) fn operation_label(value: &str) -> &'static str {
     }
 }
 
-pub(crate) fn expression_label(sources: &[DatasetSourceDraft], operation: &str) -> String {
-    let aliases = sources
-        .iter()
-        .filter(|source| !source.source_alias.trim().is_empty())
-        .map(|source| source.source_alias.clone())
-        .collect::<Vec<_>>();
-    if aliases.is_empty() {
-        return "Choose at least one input".into();
-    }
-    aliases
-        .into_iter()
-        .reduce(|left, right| format!("({left}) {} ({right})", operation_label(operation)))
+pub(crate) fn expression_label(
+    sources: &[DatasetSourceDraft],
+    expression: &DatasetExpressionDraft,
+    operation: &str,
+) -> String {
+    expression_label_inner(sources, expression, operation)
         .unwrap_or_else(|| "Choose at least one input".into())
+}
+
+fn expression_label_inner(
+    sources: &[DatasetSourceDraft],
+    expression: &DatasetExpressionDraft,
+    operation: &str,
+) -> Option<String> {
+    match expression {
+        DatasetExpressionDraft::Source(index) => sources
+            .get(*index)
+            .map(|source| source.source_alias.trim().to_string())
+            .filter(|alias| !alias.is_empty()),
+        DatasetExpressionDraft::Operation { left, right } => {
+            let left = expression_label_inner(sources, left, operation)?;
+            let right = expression_label_inner(sources, right, operation)?;
+            Some(format!("({left}) {} ({right})", operation_label(operation)))
+        }
+    }
 }
 
 pub(crate) fn expression_button_class(is_active: bool, base: &'static str) -> String {

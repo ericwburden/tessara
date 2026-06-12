@@ -10,6 +10,7 @@ pub(super) fn dataset_payload_from_drafts(
     composition_mode: String,
     visibility_node_ids: Vec<String>,
     mut sources: Vec<DatasetSourceDraft>,
+    expression: DatasetExpressionDraft,
     fields: Vec<DatasetFieldDraft>,
     join_left_key: String,
     join_right_key: String,
@@ -38,9 +39,13 @@ pub(super) fn dataset_payload_from_drafts(
             position: index as i32,
         })
         .collect::<Vec<_>>();
-    let Some(definition_ast) =
-        build_expression_ast(&sources, &composition_mode, &join_left_key, &join_right_key)
-    else {
+    let Some(definition_ast) = build_expression_ast(
+        &sources,
+        &expression,
+        &composition_mode,
+        &join_left_key,
+        &join_right_key,
+    ) else {
         return Err("Choose at least one complete dataset input before saving.".into());
     };
     Ok(DatasetPayload {

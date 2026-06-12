@@ -39,6 +39,7 @@ pub(crate) fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView 
                     <DatasetIdentitySection name=state.name slug=state.slug/>
                     <DatasetSourcesEditor
                         sources=state.sources
+                        expression=state.expression
                         forms=state.forms
                         datasets=state.datasets
                         rendered_forms=state.rendered_forms
@@ -65,6 +66,7 @@ pub(crate) fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView 
                         composition_mode=state.composition_mode
                         visibility_node_ids=state.visibility_node_ids
                         sources=state.sources
+                        expression=state.expression
                         fields=state.fields
                         join_left_key=state.join_left_key
                         join_right_key=state.join_right_key

@@ -14,6 +14,7 @@ use std::collections::{BTreeMap, BTreeSet};
 #[component]
 pub(crate) fn DatasetSourcesEditor(
     sources: RwSignal<Vec<DatasetSourceDraft>>,
+    expression: RwSignal<DatasetExpressionDraft>,
     forms: RwSignal<Vec<DatasetFormOption>>,
     datasets: RwSignal<Vec<DatasetSummary>>,
     rendered_forms: RwSignal<BTreeMap<String, DatasetRenderedForm>>,
@@ -78,15 +79,22 @@ pub(crate) fn DatasetSourcesEditor(
                 <button class="button button--secondary button--compact" type="button" on:click=move |_| {
                     let next = sources.get().len() + 1;
                     sources.update(|items| items.push(DatasetSourceDraft { source_alias: format!("source_{next}"), ..DatasetSourceDraft::default() }));
+                    expression.update(|draft| {
+                        *draft = DatasetExpressionDraft::Operation {
+                            left: Box::new(draft.clone()),
+                            right: Box::new(DatasetExpressionDraft::Source(next - 1)),
+                        };
+                    });
                     designer_selection.set(DatasetDesignerSelection::Source(next - 1));
                     designer_sheet_open.set(true);
                 }>"Add Input"</button>
             </div>
             <div class="dataset-expression-workspace">
                 <div class="dataset-expression-canvas">
-                    <ExpressionPreview sources=sources composition_mode/>
+                    <ExpressionPreview sources=sources expression=expression composition_mode/>
                     <DatasetExpressionChain
                         sources
+                        expression
                         fields
                         composition_mode
                         designer_selection

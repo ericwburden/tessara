@@ -8,12 +8,13 @@ use leptos::prelude::*;
 #[component]
 pub(crate) fn ExpressionPreview(
     sources: RwSignal<Vec<DatasetSourceDraft>>,
+    expression: RwSignal<DatasetExpressionDraft>,
     composition_mode: RwSignal<String>,
 ) -> impl IntoView {
     view! {
         <div class="dataset-expression-preview">
             <span>"Expression"</span>
-            <code>{move || expression_label(&sources.get(), &composition_mode.get())}</code>
+            <code>{move || expression_label(&sources.get(), &expression.get(), &composition_mode.get())}</code>
         </div>
     }
 }
@@ -21,6 +22,7 @@ pub(crate) fn ExpressionPreview(
 #[component]
 pub(crate) fn DatasetExpressionChain(
     sources: RwSignal<Vec<DatasetSourceDraft>>,
+    expression: RwSignal<DatasetExpressionDraft>,
     fields: RwSignal<Vec<DatasetFieldDraft>>,
     composition_mode: RwSignal<String>,
     designer_selection: RwSignal<DatasetDesignerSelection>,
@@ -31,9 +33,12 @@ pub(crate) fn DatasetExpressionChain(
             <div class="dataset-expression-tree">
                 {move || {
                     let items = sources.get();
+                    let draft = expression.get();
                     expression_tree_view(
                         items,
+                        draft,
                         sources,
+                        expression,
                         fields,
                         composition_mode,
                         designer_selection,
@@ -50,6 +55,12 @@ pub(crate) fn DatasetExpressionChain(
                         source_alias: format!("source_{next}"),
                         ..DatasetSourceDraft::default()
                     }));
+                    expression.update(|draft| {
+                        *draft = DatasetExpressionDraft::Operation {
+                            left: Box::new(draft.clone()),
+                            right: Box::new(DatasetExpressionDraft::Source(next - 1)),
+                        };
+                    });
                     designer_selection.set(DatasetDesignerSelection::Source(next - 1));
                     designer_sheet_open.set(true);
                 }

@@ -4,7 +4,7 @@
 use super::super::api;
 #[cfg(feature = "hydrate")]
 use super::super::expressions::expression_to_editor_drafts;
-use super::super::types::{DatasetFieldDraft, DatasetSourceDraft};
+use super::super::types::{DatasetExpressionDraft, DatasetFieldDraft, DatasetSourceDraft};
 use leptos::prelude::*;
 use std::collections::BTreeSet;
 
@@ -16,6 +16,7 @@ pub(in crate::features::datasets) fn load_dataset_for_edit(
     composition_mode: RwSignal<String>,
     visibility_node_ids: RwSignal<BTreeSet<String>>,
     sources: RwSignal<Vec<DatasetSourceDraft>>,
+    expression: RwSignal<DatasetExpressionDraft>,
     fields: RwSignal<Vec<DatasetFieldDraft>>,
     join_left_key: RwSignal<String>,
     join_right_key: RwSignal<String>,
@@ -43,7 +44,8 @@ pub(in crate::features::datasets) fn load_dataset_for_edit(
                         ));
                     return;
                 };
-                let (source_drafts, root_operation, join_keys) = expression_to_editor_drafts(ast);
+                let (source_drafts, expression_draft, root_operation, join_keys) =
+                    expression_to_editor_drafts(ast);
                 if !root_operation.is_empty() {
                     composition_mode.set(root_operation);
                 }
@@ -56,6 +58,7 @@ pub(in crate::features::datasets) fn load_dataset_for_edit(
                 } else {
                     source_drafts
                 });
+                expression.set(expression_draft);
                 fields.set(
                     payload
                         .fields
@@ -84,6 +87,7 @@ pub(in crate::features::datasets) fn load_dataset_for_edit(
     _: RwSignal<String>,
     _: RwSignal<BTreeSet<String>>,
     _: RwSignal<Vec<DatasetSourceDraft>>,
+    _: RwSignal<DatasetExpressionDraft>,
     _: RwSignal<Vec<DatasetFieldDraft>>,
     _: RwSignal<String>,
     _: RwSignal<String>,

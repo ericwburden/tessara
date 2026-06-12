@@ -21,6 +21,15 @@ pub(in crate::features::datasets) struct DatasetFieldDraft {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub(in crate::features::datasets) enum DatasetExpressionDraft {
+    Source(usize),
+    Operation {
+        left: Box<DatasetExpressionDraft>,
+        right: Box<DatasetExpressionDraft>,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub(in crate::features::datasets) enum DatasetDesignerSelection {
     Operation,
     Source(usize),
@@ -39,5 +48,11 @@ impl Default for DatasetSourceDraft {
             dataset_revision_id: String::new(),
             selection_rule: "latest".into(),
         }
+    }
+}
+
+impl Default for DatasetExpressionDraft {
+    fn default() -> Self {
+        Self::Source(0)
     }
 }

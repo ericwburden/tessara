@@ -7,7 +7,9 @@ use leptos::prelude::*;
 
 pub(super) fn expression_tree_view(
     items: Vec<DatasetSourceDraft>,
+    expression: DatasetExpressionDraft,
     sources: RwSignal<Vec<DatasetSourceDraft>>,
+    expression_signal: RwSignal<DatasetExpressionDraft>,
     fields: RwSignal<Vec<DatasetFieldDraft>>,
     composition_mode: RwSignal<String>,
     designer_selection: RwSignal<DatasetDesignerSelection>,
@@ -18,12 +20,12 @@ pub(super) fn expression_tree_view(
             .into_any();
     }
 
-    expression_tree_range(
+    expression_tree_node(
         &items,
-        0,
-        items.len(),
+        &expression,
         0,
         sources,
+        expression_signal,
         fields,
         composition_mode,
         designer_selection,
@@ -31,51 +33,59 @@ pub(super) fn expression_tree_view(
     )
 }
 
-fn expression_tree_range(
+fn expression_tree_node(
     items: &[DatasetSourceDraft],
-    start: usize,
-    end: usize,
+    expression: &DatasetExpressionDraft,
     depth: usize,
     sources: RwSignal<Vec<DatasetSourceDraft>>,
+    expression_signal: RwSignal<DatasetExpressionDraft>,
     fields: RwSignal<Vec<DatasetFieldDraft>>,
     composition_mode: RwSignal<String>,
     designer_selection: RwSignal<DatasetDesignerSelection>,
     designer_sheet_open: RwSignal<bool>,
 ) -> AnyView {
-    if end.saturating_sub(start) <= 1 {
+    let DatasetExpressionDraft::Operation { left, right } = expression else {
+        let index = match expression {
+            DatasetExpressionDraft::Source(index) => *index,
+            DatasetExpressionDraft::Operation { .. } => unreachable!(),
+        };
+        let source_label = items
+            .get(index)
+            .map(|source| source.source_alias.clone())
+            .unwrap_or_else(|| "missing_source".into());
         return expression_source_panel(
-            start,
-            items[start].source_alias.clone(),
+            index,
+            source_label,
             sources,
+            expression_signal,
             fields,
             designer_selection,
             designer_sheet_open,
         );
-    }
+    };
 
-    let split = end - 1;
     let layout_class = if depth.is_multiple_of(2) {
         "dataset-expression-group dataset-expression-group--row"
     } else {
         "dataset-expression-group dataset-expression-group--column"
     };
-    let left = expression_tree_range(
+    let left = expression_tree_node(
         items,
-        start,
-        split,
+        left,
         depth + 1,
         sources,
+        expression_signal,
         fields,
         composition_mode,
         designer_selection,
         designer_sheet_open,
     );
-    let right = expression_tree_range(
+    let right = expression_tree_node(
         items,
-        split,
-        end,
+        right,
         depth + 1,
         sources,
+        expression_signal,
         fields,
         composition_mode,
         designer_selection,
@@ -108,6 +118,7 @@ fn expression_source_panel(
     index: usize,
     source_label: String,
     sources: RwSignal<Vec<DatasetSourceDraft>>,
+    expression: RwSignal<DatasetExpressionDraft>,
     fields: RwSignal<Vec<DatasetFieldDraft>>,
     designer_selection: RwSignal<DatasetDesignerSelection>,
     designer_sheet_open: RwSignal<bool>,
@@ -134,6 +145,10 @@ fn expression_source_panel(
                         if let Some(alias) = removed_alias {
                             fields.update(|items| items.retain(|field| field.source_alias != alias));
                         }
+                        expression.update(|draft| {
+                            *draft = remove_source_from_expression(draft, index)
+                                .unwrap_or_else(DatasetExpressionDraft::default);
+                        });
                         designer_selection.set(DatasetDesignerSelection::Operation);
                         designer_sheet_open.set(false);
                     }
@@ -158,15 +173,17 @@ fn expression_source_panel(
                 class="button button--secondary button--compact dataset-expression-nest-button"
                 type="button"
                 on:click=move |_| {
+                    let new_index = sources.get().len();
                     sources.update(|items| {
-                        let next = items.len() + 1;
-                        let insert_at = (index + 1).min(items.len());
-                        items.insert(insert_at, DatasetSourceDraft {
-                            source_alias: format!("source_{next}"),
+                        items.push(DatasetSourceDraft {
+                            source_alias: format!("source_{}", new_index + 1),
                             ..DatasetSourceDraft::default()
                         });
                     });
-                    designer_selection.set(DatasetDesignerSelection::Source(index + 1));
+                    expression.update(|draft| {
+                        replace_source_with_expression(draft, index, new_index);
+                    });
+                    designer_selection.set(DatasetDesignerSelection::Source(new_index));
                     designer_sheet_open.set(true);
                 }
             >
@@ -174,4 +191,50 @@ fn expression_source_panel(
             </button>
         </div>
     }.into_any()
+}
+
+fn replace_source_with_expression(
+    expression: &mut DatasetExpressionDraft,
+    source_index: usize,
+    new_source_index: usize,
+) -> bool {
+    match expression {
+        DatasetExpressionDraft::Source(index) if *index == source_index => {
+            *expression = DatasetExpressionDraft::Operation {
+                left: Box::new(DatasetExpressionDraft::Source(source_index)),
+                right: Box::new(DatasetExpressionDraft::Source(new_source_index)),
+            };
+            true
+        }
+        DatasetExpressionDraft::Source(_) => false,
+        DatasetExpressionDraft::Operation { left, right } => {
+            replace_source_with_expression(left, source_index, new_source_index)
+                || replace_source_with_expression(right, source_index, new_source_index)
+        }
+    }
+}
+
+fn remove_source_from_expression(
+    expression: &DatasetExpressionDraft,
+    removed_index: usize,
+) -> Option<DatasetExpressionDraft> {
+    match expression {
+        DatasetExpressionDraft::Source(index) if *index == removed_index => None,
+        DatasetExpressionDraft::Source(index) if *index > removed_index => {
+            Some(DatasetExpressionDraft::Source(index - 1))
+        }
+        DatasetExpressionDraft::Source(index) => Some(DatasetExpressionDraft::Source(*index)),
+        DatasetExpressionDraft::Operation { left, right } => {
+            let left = remove_source_from_expression(left, removed_index);
+            let right = remove_source_from_expression(right, removed_index);
+            match (left, right) {
+                (Some(left), Some(right)) => Some(DatasetExpressionDraft::Operation {
+                    left: Box::new(left),
+                    right: Box::new(right),
+                }),
+                (Some(remaining), None) | (None, Some(remaining)) => Some(remaining),
+                (None, None) => None,
+            }
+        }
+    }
 }

@@ -22,6 +22,7 @@ pub(crate) fn install_dataset_editor_loaders(
                 state.composition_mode,
                 state.visibility_node_ids,
                 state.sources,
+                state.expression,
                 state.fields,
                 state.join_left_key,
                 state.join_right_key,

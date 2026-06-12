@@ -4,10 +4,6 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-pub(in crate::features::datasets) use super::editor::{
-    DatasetDesignerSelection, DatasetFieldDraft, DatasetSourceDraft,
-};
-
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 pub(in crate::features::datasets) struct SessionAccount {
     pub(in crate::features::datasets) capabilities: Vec<String>,
