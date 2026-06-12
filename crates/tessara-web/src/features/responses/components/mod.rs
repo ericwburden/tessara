@@ -1,6 +1,7 @@
 //! Response feature components.
 
 mod audit_table;
+mod detail_content;
 mod edit_form;
 mod list;
 mod mobile_cards;
@@ -11,6 +12,7 @@ mod start_form;
 mod values_table;
 
 pub(super) use audit_table::ResponseAuditTable;
+pub(super) use detail_content::ResponseDetailContent;
 pub(super) use edit_form::ResponseEditForm;
 pub(super) use list::ResponsesList;
 pub(super) use mobile_cards::ResponseMobileCards;
