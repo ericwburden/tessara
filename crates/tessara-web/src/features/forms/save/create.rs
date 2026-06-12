@@ -2,6 +2,10 @@
 
 use crate::features::forms::builder::{FormBuilderFieldDraft, FormBuilderSectionDraft};
 #[cfg(feature = "hydrate")]
+use crate::features::forms::save::api::{
+    FormSaveApiError, create_form, create_initial_form_version, publish_form_version,
+};
+#[cfg(feature = "hydrate")]
 use crate::features::forms::save::drafts::prepare_create_form_save;
 #[cfg(feature = "hydrate")]
 use crate::features::forms::save::structure::{
@@ -9,7 +13,7 @@ use crate::features::forms::save::structure::{
 };
 use crate::features::forms::types::FormSummary;
 #[cfg(feature = "hydrate")]
-use crate::http::{IdResponse, redirect_to_login, send_json_id_request};
+use crate::http::redirect_to_login;
 use leptos::prelude::*;
 
 #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
@@ -51,149 +55,81 @@ pub(crate) fn submit_create_form(
             is_saving.set(true);
             message.set(None);
 
-            let body = match serde_json::to_string(&payload) {
-                Ok(body) => body,
-                Err(_) => {
-                    message.set(Some("Create request could not be prepared.".into()));
-                    is_saving.set(false);
-                    return;
-                }
-            };
+            match create_form(payload).await {
+                Ok(created) => {
+                    let created_version = match create_initial_form_version(&created.id).await {
+                        Ok(created_version) => created_version,
+                        Err(FormSaveApiError::Unauthorized) => {
+                            is_saving.set(false);
+                            redirect_to_login();
+                            return;
+                        }
+                        Err(FormSaveApiError::Message(error)) => {
+                            message.set(Some(error));
+                            is_saving.set(false);
+                            return;
+                        }
+                    };
 
-            let response = gloo_net::http::Request::post("/api/admin/forms")
-                .header("Content-Type", "application/json")
-                .body(body)
-                .expect("json request body should be valid")
-                .send()
-                .await;
+                    let section_ids = match create_form_sections_for_new_form(
+                        &created_version.id,
+                        &prepared_sections,
+                    )
+                    .await
+                    {
+                        Ok(section_ids) => section_ids,
+                        Err(FormStructureSaveError::Unauthorized) => {
+                            is_saving.set(false);
+                            redirect_to_login();
+                            return;
+                        }
+                        Err(FormStructureSaveError::Message(error)) => {
+                            message.set(Some(error));
+                            is_saving.set(false);
+                            return;
+                        }
+                    };
 
-            match response {
-                Ok(response) if response.status() == 401 => {
-                    is_saving.set(false);
-                    redirect_to_login();
-                }
-                Ok(response) if response.ok() => match response.json::<IdResponse>().await {
-                    Ok(created) => {
-                        let version_response = gloo_net::http::Request::post(&format!(
-                            "/api/admin/forms/{}/versions",
-                            created.id
-                        ))
-                        .header("Content-Type", "application/json")
-                        .body("{}")
-                        .expect("json request body should be valid")
-                        .send()
-                        .await;
-
-                        match version_response {
-                            Ok(response) if response.status() == 401 => {
+                    if let Err(error) = create_form_fields_for_new_form(
+                        &created_version.id,
+                        &prepared_fields,
+                        &section_ids,
+                    )
+                    .await
+                    {
+                        match error {
+                            FormStructureSaveError::Unauthorized => {
                                 is_saving.set(false);
                                 redirect_to_login();
                             }
-                            Ok(response) if response.ok() => {
-                                let created_version = match response.json::<IdResponse>().await {
-                                    Ok(created_version) => created_version,
-                                    Err(_) => {
-                                        message.set(Some(
-                                            "Form was created, but draft version response could not be read."
-                                                .into(),
-                                        ));
-                                        is_saving.set(false);
-                                        return;
-                                    }
-                                };
-
-                                let section_ids = match create_form_sections_for_new_form(
-                                    &created_version.id,
-                                    &prepared_sections,
-                                )
-                                .await
-                                {
-                                    Ok(section_ids) => section_ids,
-                                    Err(FormStructureSaveError::Unauthorized) => {
-                                        is_saving.set(false);
-                                        redirect_to_login();
-                                        return;
-                                    }
-                                    Err(FormStructureSaveError::Message(error)) => {
-                                        message.set(Some(error));
-                                        is_saving.set(false);
-                                        return;
-                                    }
-                                };
-
-                                if let Err(error) = create_form_fields_for_new_form(
-                                    &created_version.id,
-                                    &prepared_fields,
-                                    &section_ids,
-                                )
-                                .await
-                                {
-                                    match error {
-                                        FormStructureSaveError::Unauthorized => {
-                                            is_saving.set(false);
-                                            redirect_to_login();
-                                        }
-                                        FormStructureSaveError::Message(error) => {
-                                            message.set(Some(error));
-                                            is_saving.set(false);
-                                        }
-                                    }
-                                    return;
-                                }
-
-                                if publish_after_save {
-                                    if let Err(error) = send_json_id_request(
-                                        gloo_net::http::Request::post(&format!(
-                                            "/api/admin/form-versions/{}/publish",
-                                            created_version.id
-                                        )),
-                                        None,
-                                        "Publish form version",
-                                    )
-                                    .await
-                                    {
-                                        message.set(Some(error));
-                                        is_saving.set(false);
-                                        return;
-                                    }
-                                }
-
-                                if let Some(window) = web_sys::window() {
-                                    let _ = window
-                                        .location()
-                                        .set_href(&format!("/forms/{}", created.id));
-                                }
-                            }
-                            Ok(response) => {
-                                message.set(Some(format!(
-                                    "Form was created, but draft version setup failed with status {}.",
-                                    response.status()
-                                )));
-                                is_saving.set(false);
-                            }
-                            Err(_) => {
-                                message.set(Some(
-                                    "Form was created, but the draft version API could not be reached."
-                                        .into(),
-                                ));
+                            FormStructureSaveError::Message(error) => {
+                                message.set(Some(error));
                                 is_saving.set(false);
                             }
                         }
+                        return;
                     }
-                    Err(_) => {
-                        message.set(Some("Create response could not be read.".into()));
-                        is_saving.set(false);
+
+                    if publish_after_save {
+                        if let Err(error) = publish_form_version(&created_version.id).await {
+                            message.set(Some(error));
+                            is_saving.set(false);
+                            return;
+                        }
                     }
-                },
-                Ok(response) => {
-                    message.set(Some(format!(
-                        "Create failed with status {}.",
-                        response.status()
-                    )));
-                    is_saving.set(false);
+
+                    if let Some(window) = web_sys::window() {
+                        let _ = window
+                            .location()
+                            .set_href(&format!("/forms/{}", created.id));
+                    }
                 }
-                Err(_) => {
-                    message.set(Some("Could not reach the create form API.".into()));
+                Err(FormSaveApiError::Unauthorized) => {
+                    is_saving.set(false);
+                    redirect_to_login();
+                }
+                Err(FormSaveApiError::Message(error)) => {
+                    message.set(Some(error));
                     is_saving.set(false);
                 }
             }
