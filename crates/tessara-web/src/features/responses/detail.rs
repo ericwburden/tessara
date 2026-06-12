@@ -2,10 +2,10 @@
 //!
 //! Keep read-focused panels and detail-page presentation here; mutation workflows should live in editor or API modules.
 
+use super::components::ResponseValuesTable;
 use super::loaders::load_submission_detail;
-use crate::features::responses::display::response_value_label;
 use crate::features::responses::types::{
-    SubmissionAuditEventSummary, SubmissionDetail, SubmissionRuntimeDetail, SubmissionValueDetail,
+    SubmissionAuditEventSummary, SubmissionDetail, SubmissionRuntimeDetail,
 };
 use crate::features::shared::status_badge_class;
 use crate::types::route_params::{SubmissionRouteParams, require_route_params};
@@ -256,47 +256,6 @@ fn ResponseRuntimeCard(runtime: SubmissionRuntimeDetail) -> impl IntoView {
                 }}
             </div>
         </section>
-    }
-}
-
-#[component]
-/// Renders the response values table view.
-fn ResponseValuesTable(values: Vec<SubmissionValueDetail>) -> impl IntoView {
-    view! {
-        <DataTable>
-            <thead>
-                <tr>
-                    <th scope="col">"Field"</th>
-                    <th scope="col">"Type"</th>
-                    <th scope="col">"Value"</th>
-                </tr>
-            </thead>
-            <tbody>
-                {if values.is_empty() {
-                    view! {
-                        <tr>
-                            <td class="data-table__empty" colspan="3">"No Response Values to Display"</td>
-                        </tr>
-                    }
-                    .into_any()
-                } else {
-                    values
-                        .into_iter()
-                        .map(|value| {
-                            let rendered_value = response_value_label(value.value.as_ref());
-                            view! {
-                                <tr>
-                                    <th scope="row">{value.label}</th>
-                                    <td>{metadata_label(&value.field_type)}</td>
-                                    <td>{rendered_value}</td>
-                                </tr>
-                            }
-                        })
-                        .collect_view()
-                        .into_any()
-                }}
-            </tbody>
-        </DataTable>
     }
 }
 
