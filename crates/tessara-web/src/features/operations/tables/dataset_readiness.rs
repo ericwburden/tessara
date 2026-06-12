@@ -3,9 +3,11 @@
 use crate::features::operations::types::DatasetStatus;
 use crate::features::shared::unique_filter_options;
 use crate::ui::{DataTable, EmptyState, StatusBadge, TableFilterHeader, TablePaginationFooter};
-use crate::utils::{pagination::pagination_page_start, text::text_matches};
+use crate::utils::pagination::pagination_page_start;
 use icons::Search;
 use leptos::prelude::*;
+
+use super::dataset_readiness_filtering::filtered_dataset_readiness;
 
 #[component]
 pub(crate) fn DatasetReadinessTable(datasets: Vec<DatasetStatus>) -> impl IntoView {
@@ -17,25 +19,7 @@ pub(crate) fn DatasetReadinessTable(datasets: Vec<DatasetStatus>) -> impl IntoVi
     let status_options =
         unique_filter_options(datasets.iter().map(|dataset| dataset.readiness.clone()));
     let filtered_datasets = Memo::new(move |_| {
-        let query = search.get();
-        let selected_status = status_filter.get();
-        all_datasets
-            .iter()
-            .filter(|dataset| {
-                let matches_status =
-                    selected_status == "all" || dataset.readiness == selected_status;
-                matches_status
-                    && text_matches(
-                        &query,
-                        &[
-                            dataset.dataset_name.as_str(),
-                            dataset.readiness.as_str(),
-                            dataset.revision_status.as_str(),
-                        ],
-                    )
-            })
-            .cloned()
-            .collect::<Vec<_>>()
+        filtered_dataset_readiness(&all_datasets, &search.get(), &status_filter.get())
     });
     let total_count = Memo::new(move |_| filtered_datasets.get().len());
 

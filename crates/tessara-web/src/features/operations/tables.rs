@@ -1,6 +1,7 @@
 //! Table and summary component boundary for the Operations feature.
 
 mod dataset_readiness;
+mod dataset_readiness_filtering;
 mod summary;
 mod workflow_assignments;
 
