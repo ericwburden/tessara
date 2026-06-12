@@ -1,15 +1,17 @@
 //! Workflow assignment status table for Operations.
 
+mod filtering;
 mod mobile_card;
 mod row;
 
 use crate::features::operations::types::WorkflowAssignmentStatus;
 use crate::features::shared::unique_filter_options;
 use crate::ui::{DataTable, EmptyState, TableFilterHeader, TablePaginationFooter};
-use crate::utils::{pagination::pagination_page_start, text::text_matches};
+use crate::utils::pagination::pagination_page_start;
 use icons::Search;
 use leptos::prelude::*;
 
+use filtering::filtered_workflow_assignments;
 use mobile_card::WorkflowAssignmentMobileCard;
 use row::WorkflowAssignmentRow;
 
@@ -40,38 +42,13 @@ pub(crate) fn WorkflowAssignmentsTable(
             .map(|assignment| assignment.assignment_status.clone()),
     );
     let filtered_assignments = Memo::new(move |_| {
-        let query = search.get();
-        let selected_node = node_filter.get();
-        let selected_assignee = assignee_filter.get();
-        let selected_status = status_filter.get();
-        all_assignments
-            .iter()
-            .filter(|assignment| {
-                let matches_node = selected_node == "all" || assignment.node_name == selected_node;
-                let matches_assignee = selected_assignee == "all"
-                    || assignment.assignee_display_name == selected_assignee;
-                let matches_status =
-                    selected_status == "all" || assignment.assignment_status == selected_status;
-                matches_node
-                    && matches_assignee
-                    && matches_status
-                    && text_matches(
-                        &query,
-                        &[
-                            assignment.workflow_name.as_str(),
-                            assignment.node_name.as_str(),
-                            assignment.assignee_display_name.as_str(),
-                            assignment.assignee_email.as_str(),
-                            assignment.assignment_status.as_str(),
-                            assignment
-                                .current_step_title
-                                .as_deref()
-                                .unwrap_or("No active step"),
-                        ],
-                    )
-            })
-            .cloned()
-            .collect::<Vec<_>>()
+        filtered_workflow_assignments(
+            &all_assignments,
+            &search.get(),
+            &node_filter.get(),
+            &assignee_filter.get(),
+            &status_filter.get(),
+        )
     });
     let total_count = Memo::new(move |_| filtered_assignments.get().len());
 
