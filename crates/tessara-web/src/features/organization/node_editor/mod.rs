@@ -6,6 +6,7 @@ mod actions;
 #[cfg(feature = "hydrate")]
 mod api;
 mod create;
+mod create_form;
 mod edit;
 mod loaders;
 mod metadata_section;
@@ -19,6 +20,7 @@ pub(crate) use super::node_options::{
 };
 pub(crate) use actions::{submit_create_node, submit_update_node};
 pub(crate) use create::OrganizationNewPage;
+use create_form::OrganizationNodeCreateForm;
 pub(crate) use edit::OrganizationEditPage;
 pub(crate) use loaders::{
     load_node_type_metadata, load_organization_create_options, load_organization_edit_options,
