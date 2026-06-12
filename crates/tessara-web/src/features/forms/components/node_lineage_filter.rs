@@ -1,8 +1,7 @@
 //! Node lineage filter for forms lists.
 
-use crate::features::forms::{
-    FormNodeFilterOption, indented_node_label, visible_form_node_filter_options,
-};
+use super::node_lineage_filter_parts::{FormsNodeLineageOptions, FormsNodeLineageSelected};
+use crate::features::forms::{FormNodeFilterOption, visible_form_node_filter_options};
 
 use icons::{ChevronDown, ListFilter, Search};
 use leptos::prelude::*;
@@ -95,97 +94,21 @@ pub(crate) fn FormsNodeLineageFilter(
                         on:input=move |event| query.set(event_target_value(&event))
                     />
                 </label>
-                <div class="forms-node-filter__selected">
-                    {move || {
-                        let selected = selected_options();
-                        if selected.is_empty() {
-                            view! { <p class="forms-node-filter__empty">"No node selected"</p> }.into_any()
-                        } else {
-                            view! {
-                                <div class="forms-node-filter__chips">
-                                    {selected
-                                        .into_iter()
-                                        .map(|option| {
-                                            let option_id = option.id.clone();
-                                            let selected_node_id_for_chip = selected_node_id;
-                                            let query_for_chip = query;
-                                            view! {
-                                                <button
-                                                    class="forms-node-filter__chip"
-                                                    type="button"
-                                                    on:click=move |_| {
-                                                        selected_node_id_for_chip.set(Some(option_id.clone()));
-                                                        query_for_chip.set(String::new());
-                                                    }
-                                                >
-                                                    <span>{option.name}</span>
-                                                </button>
-                                            }
-                                        })
-                                        .collect_view()}
-                                </div>
-                            }
-                            .into_any()
-                        }
-                    }}
-                    {move || {
-                        if selected_node_id.get().is_some() {
-                            view! {
-                                <button
-                                    class="forms-node-filter__clear"
-                                    type="button"
-                                    on:click=move |_| {
-                                        selected_node_id.set(None);
-                                        query.set(String::new());
-                                    }
-                                >
-                                    "Clear node filter"
-                                </button>
-                            }
-                            .into_any()
-                        } else {
-                            view! { <span></span> }.into_any()
-                        }
-                    }}
-                </div>
-                <div class="forms-node-filter__options" role="listbox">
-                    {move || {
-                        let visible = visible_options();
-                        if visible.is_empty() {
-                            view! { <p class="forms-node-filter__empty">"No matching nodes"</p> }.into_any()
-                        } else {
-                            visible
-                                .into_iter()
-                                .map(|option| {
-                                    let option_id = option.id.clone();
-                                    let selected_node_id_for_option = selected_node_id;
-                                    let query_for_option = query;
-                                    let is_open_for_option = is_open;
-                                    let is_selected = selected_node_id
-                                        .get()
-                                        .as_deref()
-                                        .is_some_and(|selected| selected == option_id.as_str());
-                                    view! {
-                                        <button
-                                            class=if is_selected { "forms-node-filter__option is-active" } else { "forms-node-filter__option" }
-                                            type="button"
-                                            role="option"
-                                            aria-selected=is_selected.to_string()
-                                            on:click=move |_| {
-                                                selected_node_id_for_option.set(Some(option_id.clone()));
-                                                query_for_option.set(String::new());
-                                                is_open_for_option.set(false);
-                                            }
-                                        >
-                                            <span>{indented_node_label(&option)}</span>
-                                        </button>
-                                    }
-                                })
-                                .collect_view()
-                                .into_any()
-                        }
-                    }}
-                </div>
+                {move || view! {
+                    <FormsNodeLineageSelected
+                        selected_options=selected_options()
+                        selected_node_id
+                        query
+                    />
+                }}
+                {move || view! {
+                    <FormsNodeLineageOptions
+                        visible_options=visible_options()
+                        selected_node_id
+                        query
+                        is_open
+                    />
+                }}
             </div>
         </div>
     }
