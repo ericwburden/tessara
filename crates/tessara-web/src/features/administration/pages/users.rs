@@ -10,10 +10,9 @@ use super::super::components::{
     AdministrationUserAccessForm, AdministrationUserAccountForm, AdministrationUsersList,
 };
 use super::super::state::{
-    AdminUserAccessState, admin_user_role_filter_options, filtered_admin_users,
+    AdminUserAccessState, AdminUserEditState, admin_user_role_filter_options, filtered_admin_users,
 };
 use crate::features::administration::models::*;
-use crate::features::organization::AdminRoleSummary;
 use crate::types::AccountRouteParams;
 use crate::types::route_params::require_route_params;
 use crate::ui::{
@@ -191,31 +190,21 @@ pub fn AdministrationUserDetailPage() -> impl IntoView {
 pub fn AdministrationUserEditPage() -> impl IntoView {
     let params = require_route_params::<AccountRouteParams>();
     let account_id = params.account_id;
-    let detail = RwSignal::new(None::<AdminUserDetail>);
-    let roles = RwSignal::new(Vec::<AdminRoleSummary>::new());
-    let email = RwSignal::new(String::new());
-    let display_name = RwSignal::new(String::new());
-    let password = RwSignal::new(String::new());
-    let is_active = RwSignal::new(true);
-    let selected_role_ids = RwSignal::new(Vec::<String>::new());
-    let is_loading = RwSignal::new(true);
-    let is_saving = RwSignal::new(false);
-    let load_error = RwSignal::new(None::<String>);
-    let message = RwSignal::new(None::<String>);
+    let edit_state = AdminUserEditState::new();
 
     Effect::new({
         let account_id = account_id.clone();
         move |_| {
             load_admin_user_edit_context(
                 account_id.clone(),
-                detail,
-                roles,
-                email,
-                display_name,
-                is_active,
-                selected_role_ids,
-                is_loading,
-                load_error,
+                edit_state.detail,
+                edit_state.roles,
+                edit_state.email,
+                edit_state.display_name,
+                edit_state.is_active,
+                edit_state.selected_role_ids,
+                edit_state.is_loading,
+                edit_state.load_error,
             );
         }
     });
@@ -238,7 +227,7 @@ pub fn AdministrationUserEditPage() -> impl IntoView {
                 </Breadcrumb>
 
                 {move || {
-                    if is_loading.get() {
+                    if edit_state.is_loading.get() {
                         view! {
                             <section class="organization-state" aria-live="polite">
                                 <h3>"Loading user"</h3>
@@ -246,7 +235,7 @@ pub fn AdministrationUserEditPage() -> impl IntoView {
                             </section>
                         }
                         .into_any()
-                    } else if let Some(error) = load_error.get() {
+                    } else if let Some(error) = edit_state.load_error.get() {
                         view! {
                             <section class="organization-state is-error" role="alert">
                                 <h3>"User unavailable"</h3>
@@ -258,14 +247,14 @@ pub fn AdministrationUserEditPage() -> impl IntoView {
                         view! {
                             <AdministrationUserAccountForm
                                 account_id=account_id.clone()
-                                roles=roles
-                                email=email
-                                display_name=display_name
-                                password=password
-                                is_active=is_active
-                                selected_role_ids=selected_role_ids
-                                is_saving=is_saving
-                                message=message
+                                roles=edit_state.roles
+                                email=edit_state.email
+                                display_name=edit_state.display_name
+                                password=edit_state.password
+                                is_active=edit_state.is_active
+                                selected_role_ids=edit_state.selected_role_ids
+                                is_saving=edit_state.is_saving
+                                message=edit_state.message
                             />
                         }
                         .into_any()

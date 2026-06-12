@@ -1,7 +1,10 @@
 //! State helpers for Administration feature interactions.
 
 use super::display::{admin_user_role_names, admin_user_status_key};
-use super::models::{AdminCapabilitySummary, AdminUserAccessDetail, AdminUserSummary};
+use super::models::{
+    AdminCapabilitySummary, AdminUserAccessDetail, AdminUserDetail, AdminUserSummary,
+};
+use crate::features::organization::AdminRoleSummary;
 use crate::features::shared::unique_filter_options;
 use crate::utils::text::text_matches;
 use leptos::prelude::{RwSignal, Update};
@@ -25,6 +28,39 @@ impl AdminUserAccessState {
             capability_catalog: RwSignal::new(Vec::<AdminCapabilitySummary>::new()),
             selected_scope_node_ids: RwSignal::new(Vec::<String>::new()),
             selected_delegate_account_ids: RwSignal::new(Vec::<String>::new()),
+            is_loading: RwSignal::new(true),
+            is_saving: RwSignal::new(false),
+            load_error: RwSignal::new(None::<String>),
+            message: RwSignal::new(None::<String>),
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct AdminUserEditState {
+    pub(crate) detail: RwSignal<Option<AdminUserDetail>>,
+    pub(crate) roles: RwSignal<Vec<AdminRoleSummary>>,
+    pub(crate) email: RwSignal<String>,
+    pub(crate) display_name: RwSignal<String>,
+    pub(crate) password: RwSignal<String>,
+    pub(crate) is_active: RwSignal<bool>,
+    pub(crate) selected_role_ids: RwSignal<Vec<String>>,
+    pub(crate) is_loading: RwSignal<bool>,
+    pub(crate) is_saving: RwSignal<bool>,
+    pub(crate) load_error: RwSignal<Option<String>>,
+    pub(crate) message: RwSignal<Option<String>>,
+}
+
+impl AdminUserEditState {
+    pub(crate) fn new() -> Self {
+        Self {
+            detail: RwSignal::new(None::<AdminUserDetail>),
+            roles: RwSignal::new(Vec::<AdminRoleSummary>::new()),
+            email: RwSignal::new(String::new()),
+            display_name: RwSignal::new(String::new()),
+            password: RwSignal::new(String::new()),
+            is_active: RwSignal::new(true),
+            selected_role_ids: RwSignal::new(Vec::<String>::new()),
             is_loading: RwSignal::new(true),
             is_saving: RwSignal::new(false),
             load_error: RwSignal::new(None::<String>),
