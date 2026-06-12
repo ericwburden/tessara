@@ -8,6 +8,7 @@ mod api;
 mod create;
 mod edit;
 mod loaders;
+mod metadata_section;
 #[cfg(feature = "hydrate")]
 mod options;
 
@@ -21,3 +22,4 @@ pub(crate) use edit::OrganizationEditPage;
 pub(crate) use loaders::{
     load_node_type_metadata, load_organization_create_options, load_organization_edit_options,
 };
+use metadata_section::OrganizationNodeMetadataSection;

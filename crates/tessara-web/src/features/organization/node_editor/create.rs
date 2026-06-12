@@ -11,7 +11,7 @@ use leptos::prelude::*;
 use std::collections::HashMap;
 
 use super::{
-    MetadataFieldInput, available_node_types_for_parent, load_node_type_metadata,
+    OrganizationNodeMetadataSection, available_node_types_for_parent, load_node_type_metadata,
     load_organization_create_options, parent_node_options, submit_create_node,
 };
 
@@ -195,30 +195,11 @@ pub(crate) fn OrganizationNewPage() -> impl IntoView {
                                     </label>
                                 </div>
 
-                                <section class="form-section">
-                                    <h3>"Metadata"</h3>
-                                    {move || {
-                                        let fields = metadata_fields.get();
-                                        if fields.is_empty() {
-                                            view! { <p class="muted">"No metadata fields are configured for this node type."</p> }.into_any()
-                                        } else {
-                                            view! {
-                                                <div class="form-grid">
-                                                    {fields.into_iter().map(|field| {
-                                                        view! {
-                                                            <MetadataFieldInput
-                                                                field
-                                                                metadata_values
-                                                                metadata_booleans
-                                                            />
-                                                        }
-                                                    }).collect_view()}
-                                                </div>
-                                            }
-                                            .into_any()
-                                        }
-                                    }}
-                                </section>
+                                <OrganizationNodeMetadataSection
+                                    metadata_fields
+                                    metadata_values
+                                    metadata_booleans
+                                />
 
                                 {move || message.get().map(|message| view! {
                                     <p class="form-message" role="status">{message}</p>
