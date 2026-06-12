@@ -2,12 +2,11 @@
 
 use leptos::prelude::*;
 
-use crate::features::forms::builder::{
-    FORM_BUILDER_COLUMN_COUNT, FormBuilderFieldDraft, form_builder_field_default_label,
-    form_builder_field_has_collision, form_builder_layout_candidate,
-    valid_form_builder_layout_values,
+use crate::features::forms::builder::components::field_config_actions::{
+    update_field_key, update_field_label, update_field_layout_value, update_field_required,
+    update_field_type,
 };
-use crate::features::shared::slug_from_label;
+use crate::features::forms::builder::{FormBuilderFieldDraft, valid_form_builder_layout_values};
 
 #[component]
 pub(crate) fn FieldConfigControls(
@@ -30,15 +29,7 @@ pub(crate) fn FieldConfigControls(
                     autocomplete="off"
                     prop:value=field.label.clone()
                     on:input=move |event| {
-                        let next_label = event_target_value(&event);
-                        builder_fields.update(|fields| {
-                            if let Some(field) = fields.iter_mut().find(|field| field.id == field_id) {
-                                field.label = next_label.clone();
-                                if !field.key_was_edited {
-                                    field.key = slug_from_label(&next_label);
-                                }
-                            }
-                        });
+                        update_field_label(builder_fields, field_id, event_target_value(&event));
                     }
                 />
             </label>
@@ -51,13 +42,7 @@ pub(crate) fn FieldConfigControls(
                     autocomplete="off"
                     prop:value=field.key.clone()
                     on:input=move |event| {
-                        let next_key = slug_from_label(&event_target_value(&event));
-                        builder_fields.update(|fields| {
-                            if let Some(field) = fields.iter_mut().find(|field| field.id == field_id) {
-                                field.key = next_key.clone();
-                                field.key_was_edited = true;
-                            }
-                        });
+                        update_field_key(builder_fields, field_id, event_target_value(&event));
                     }
                 />
             </label>
@@ -68,30 +53,7 @@ pub(crate) fn FieldConfigControls(
                     id=format!("sheet-form-field-type-{field_id}")
                     prop:value=field.field_type.clone()
                     on:change=move |event| {
-                        let next_type = event_target_value(&event);
-                        builder_fields.update(|fields| {
-                            if let Some(position) = fields.iter().position(|field| field.id == field_id) {
-                                let mut next_field = fields[position].clone();
-                                next_field.field_type = next_type.clone();
-                                if next_type == "static_text" {
-                                    next_field.required = false;
-                                    if next_field.label.trim().is_empty() {
-                                        next_field.label = form_builder_field_default_label(&next_type, next_field.id);
-                                    }
-                                    if next_field.key.trim().is_empty() || !next_field.key_was_edited {
-                                        next_field.key = slug_from_label(&next_field.label);
-                                    }
-                                    let mut candidate = next_field.clone();
-                                    candidate.grid_width = candidate.grid_width.max(4);
-                                    if candidate.grid_column + candidate.grid_width - 1 <= FORM_BUILDER_COLUMN_COUNT
-                                        && !form_builder_field_has_collision(&candidate, fields)
-                                    {
-                                        next_field.grid_width = candidate.grid_width;
-                                    }
-                                }
-                                fields[position] = next_field;
-                            }
-                        });
+                        update_field_type(builder_fields, field_id, event_target_value(&event));
                     }
                 >
                     <option value="static_text">"Static text"</option>
@@ -110,13 +72,7 @@ pub(crate) fn FieldConfigControls(
                     prop:checked=field.required
                     disabled=field.field_type == "static_text"
                     on:change=move |event| {
-                        let checked = event_target_checked(&event);
-                        builder_fields.update(|fields| {
-                            if let Some(field) = fields.iter_mut().find(|field| field.id == field_id)
-                                && field.field_type != "static_text" {
-                                    field.required = checked;
-                                }
-                        });
+                        update_field_required(builder_fields, field_id, event_target_checked(&event));
                     }
                 />
                 <span>"Required"</span>
@@ -159,19 +115,7 @@ pub(crate) fn FieldConfigControls(
                                         .parse::<i32>()
                                         .unwrap_or(1)
                                         .clamp(1, max_value);
-                                    builder_fields.update(|fields| {
-                                        if let Some(position) = fields.iter().position(|field| field.id == field_id) {
-                                            let candidate = form_builder_layout_candidate(
-                                                &fields[position],
-                                                index,
-                                                value,
-                                            );
-
-                                            if !form_builder_field_has_collision(&candidate, fields) {
-                                                fields[position] = candidate;
-                                            }
-                                        }
-                                    });
+                                    update_field_layout_value(builder_fields, field_id, index, value);
                                 }
                             >
                                 {valid_values
