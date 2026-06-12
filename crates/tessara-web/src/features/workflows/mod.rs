@@ -2,6 +2,7 @@
 //!
 //! Re-export only the pages, types, and helpers other modules need; keep Workflows-specific implementation details in child modules.
 
+mod api;
 pub(crate) mod assignments;
 mod detail;
 mod detail_tables;

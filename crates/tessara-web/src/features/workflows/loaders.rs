@@ -9,6 +9,11 @@ use crate::features::workflows::types::{WorkflowDefinition, WorkflowSummary};
 use crate::http::redirect_to_login;
 use leptos::prelude::*;
 
+#[cfg(feature = "hydrate")]
+use super::api::{
+    WorkflowApiError, fetch_workflow_assignment_nodes, fetch_workflow_detail, fetch_workflows,
+};
+
 /// Loads workflow summaries.
 pub(crate) fn load_workflows(
     workflows: RwSignal<Vec<WorkflowSummary>>,
@@ -21,36 +26,19 @@ pub(crate) fn load_workflows(
             is_loading.set(true);
             load_error.set(None);
 
-            match gloo_net::http::Request::get("/api/workflows").send().await {
-                Ok(response) if response.status() == 401 => {
+            match fetch_workflows().await {
+                Ok(loaded_workflows) => {
+                    workflows.set(loaded_workflows);
+                    is_loading.set(false);
+                }
+                Err(WorkflowApiError::Unauthorized) => {
                     workflows.set(Vec::new());
                     is_loading.set(false);
                     redirect_to_login();
                 }
-                Ok(response) if response.ok() => {
-                    match response.json::<Vec<WorkflowSummary>>().await {
-                        Ok(loaded_workflows) => {
-                            workflows.set(loaded_workflows);
-                            is_loading.set(false);
-                        }
-                        Err(error) => {
-                            workflows.set(Vec::new());
-                            load_error.set(Some(format!("Unable to parse workflows: {error}")));
-                            is_loading.set(false);
-                        }
-                    }
-                }
-                Ok(response) => {
+                Err(WorkflowApiError::Message(error)) => {
                     workflows.set(Vec::new());
-                    load_error.set(Some(format!(
-                        "Unable to load workflows. Server returned {}.",
-                        response.status()
-                    )));
-                    is_loading.set(false);
-                }
-                Err(error) => {
-                    workflows.set(Vec::new());
-                    load_error.set(Some(format!("Unable to load workflows: {error}")));
+                    load_error.set(Some(error));
                     is_loading.set(false);
                 }
             }
@@ -68,17 +56,13 @@ pub(crate) fn load_workflow_assignment_nodes(nodes: RwSignal<Vec<OrganizationNod
     #[cfg(feature = "hydrate")]
     {
         leptos::task::spawn_local(async move {
-            match gloo_net::http::Request::get("/api/nodes").send().await {
-                Ok(response) if response.status() == 401 => {
+            match fetch_workflow_assignment_nodes().await {
+                Ok(loaded_nodes) => nodes.set(loaded_nodes),
+                Err(WorkflowApiError::Unauthorized) => {
                     nodes.set(Vec::new());
                     redirect_to_login();
                 }
-                Ok(response) if response.ok() => {
-                    if let Ok(loaded_nodes) = response.json::<Vec<OrganizationNode>>().await {
-                        nodes.set(loaded_nodes);
-                    }
-                }
-                _ => nodes.set(Vec::new()),
+                Err(WorkflowApiError::Message(_)) => nodes.set(Vec::new()),
             }
         });
     }
@@ -102,40 +86,19 @@ pub(crate) fn load_workflow_detail(
             is_loading.set(true);
             load_error.set(None);
 
-            match gloo_net::http::Request::get(&format!("/api/workflows/{workflow_id}"))
-                .send()
-                .await
-            {
-                Ok(response) if response.status() == 401 => {
+            match fetch_workflow_detail(&workflow_id).await {
+                Ok(workflow) => {
+                    detail.set(Some(workflow));
+                    is_loading.set(false);
+                }
+                Err(WorkflowApiError::Unauthorized) => {
                     detail.set(None);
                     is_loading.set(false);
                     redirect_to_login();
                 }
-                Ok(response) if response.ok() => {
-                    match response.json::<WorkflowDefinition>().await {
-                        Ok(workflow) => {
-                            detail.set(Some(workflow));
-                            is_loading.set(false);
-                        }
-                        Err(error) => {
-                            detail.set(None);
-                            load_error
-                                .set(Some(format!("Unable to parse workflow detail: {error}")));
-                            is_loading.set(false);
-                        }
-                    }
-                }
-                Ok(response) => {
+                Err(WorkflowApiError::Message(error)) => {
                     detail.set(None);
-                    load_error.set(Some(format!(
-                        "Unable to load workflow detail. Server returned {}.",
-                        response.status()
-                    )));
-                    is_loading.set(false);
-                }
-                Err(error) => {
-                    detail.set(None);
-                    load_error.set(Some(format!("Unable to load workflow detail: {error}")));
+                    load_error.set(Some(error));
                     is_loading.set(false);
                 }
             }
