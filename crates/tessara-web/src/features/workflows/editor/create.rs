@@ -8,15 +8,13 @@ use crate::ui::{
     AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator,
     PageHeader,
 };
-#[cfg(feature = "hydrate")]
-use crate::utils::url::current_search_param;
 use leptos::prelude::*;
 use std::collections::HashSet;
 
 use super::{
     WorkflowAvailabilitySection, WorkflowCreateStepsSection, WorkflowIdentityFields,
     add_workflow_step, can_submit_workflow_editor, prune_unavailable_workflow_steps,
-    submit_create_workflow,
+    seed_workflow_from_form_query, submit_create_workflow,
 };
 
 #[component]
@@ -47,48 +45,15 @@ pub(crate) fn WorkflowsNewPage() -> impl IntoView {
     });
 
     Effect::new(move |_| {
-        if is_loading.get() || seeded_from_form.get_untracked() {
-            return;
-        }
-
-        let form_id: Option<String> = {
-            #[cfg(feature = "hydrate")]
-            {
-                current_search_param("form_id")
-            }
-            #[cfg(not(feature = "hydrate"))]
-            {
-                None
-            }
-        };
-        let Some(form_id) = form_id else {
-            seeded_from_form.set(true);
-            return;
-        };
-
-        let available_forms = forms.get();
-        let Some(form) = available_forms.iter().find(|form| form.id == form_id) else {
-            seeded_from_form.set(true);
-            return;
-        };
-        let Some(version) = form
-            .versions
-            .iter()
-            .find(|version| version.status == "published")
-        else {
-            seeded_from_form.set(true);
-            return;
-        };
-
-        name.set(format!("{} Workflow", form.name));
-        description.set(format!("Workflow for {}.", form.name));
-        steps.set(vec![WorkflowStepDraft {
-            id: 1,
-            title: format!("{} Response", form.name),
-            form_version_id: version.id.clone(),
-        }]);
-        next_step_id.set(2);
-        seeded_from_form.set(true);
+        seed_workflow_from_form_query(
+            is_loading,
+            seeded_from_form,
+            forms,
+            name,
+            description,
+            steps,
+            next_step_id,
+        );
     });
 
     Effect::new(move |_| {

@@ -10,6 +10,7 @@ mod edit;
 mod edit_form;
 mod options;
 mod sections;
+mod seed;
 mod state;
 mod step_list;
 mod steps;
@@ -31,6 +32,7 @@ pub(in crate::features::workflows) use sections::{
     WorkflowActiveRevisionSection, WorkflowAvailabilitySection, WorkflowCreateStepsSection,
     WorkflowEditStepsSection, WorkflowIdentityFields,
 };
+pub(in crate::features::workflows) use seed::seed_workflow_from_form_query;
 pub(in crate::features::workflows) use state::{
     add_workflow_step, can_submit_workflow_editor, prune_unavailable_workflow_steps,
     workflow_edit_initial_state,
