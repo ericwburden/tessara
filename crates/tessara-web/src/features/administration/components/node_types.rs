@@ -6,10 +6,10 @@ use crate::features::shared::status_badge_class;
 use leptos::prelude::*;
 use std::collections::HashSet;
 
+use super::node_type_editor_options::{eligible_child_node_types, eligible_parent_node_types};
 use super::{NodeTypeDetailCollections, NodeTypeRelationshipPicker};
 
 #[component]
-/// Renders the administration node type editor view.
 pub(crate) fn AdministrationNodeTypeEditor(
     all_node_types: Vec<NodeTypeCatalogEntry>,
     selected_detail: Option<NodeTypeDefinition>,
@@ -63,18 +63,12 @@ pub(crate) fn AdministrationNodeTypeEditor(
         let current_id = current_id.clone();
         let descendant_ids = descendant_ids.clone();
         move || {
-            let selected_child_ids = child_node_type_ids.get();
-            let mut disqualified_parent_ids = descendant_ids.clone();
-            for child_id in &selected_child_ids {
-                disqualified_parent_ids.insert(child_id.clone());
-                disqualified_parent_ids.extend(node_type_descendant_ids(child_id, &all_node_types));
-            }
-            all_node_types
-                .iter()
-                .filter(|node_type| current_id.as_ref() != Some(&node_type.id))
-                .filter(|node_type| !disqualified_parent_ids.contains(&node_type.id))
-                .cloned()
-                .collect::<Vec<_>>()
+            eligible_parent_node_types(
+                &all_node_types,
+                current_id.as_ref(),
+                &descendant_ids,
+                &child_node_type_ids.get(),
+            )
         }
     };
     let child_picker_node_types = {
@@ -82,18 +76,12 @@ pub(crate) fn AdministrationNodeTypeEditor(
         let current_id = current_id.clone();
         let ancestor_ids = ancestor_ids.clone();
         move || {
-            let selected_parent_ids = parent_node_type_ids.get();
-            let mut disqualified_child_ids = ancestor_ids.clone();
-            for parent_id in &selected_parent_ids {
-                disqualified_child_ids.insert(parent_id.clone());
-                disqualified_child_ids.extend(node_type_ancestor_ids(parent_id, &all_node_types));
-            }
-            all_node_types
-                .iter()
-                .filter(|node_type| current_id.as_ref() != Some(&node_type.id))
-                .filter(|node_type| !disqualified_child_ids.contains(&node_type.id))
-                .cloned()
-                .collect::<Vec<_>>()
+            eligible_child_node_types(
+                &all_node_types,
+                current_id.as_ref(),
+                &ancestor_ids,
+                &parent_node_type_ids.get(),
+            )
         }
     };
 

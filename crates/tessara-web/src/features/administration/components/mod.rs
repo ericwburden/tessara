@@ -1,6 +1,7 @@
 //! Feature-local reusable Administration components.
 
 mod node_type_detail;
+mod node_type_editor_options;
 mod node_type_metadata_field_actions;
 mod node_type_metadata_field_sheet;
 mod node_type_metadata_field_table;
