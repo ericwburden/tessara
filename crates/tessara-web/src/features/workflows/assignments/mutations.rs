@@ -12,14 +12,12 @@ use crate::features::workflows::assignments::{
     WorkflowAssignmentCandidate, WorkflowAssignmentSummary,
 };
 #[cfg(feature = "hydrate")]
-use crate::features::workflows::workflow_assignment_candidate_key;
-#[cfg(feature = "hydrate")]
 use crate::http::redirect_to_login;
 use leptos::prelude::*;
 use std::collections::HashSet;
 
 #[cfg(feature = "hydrate")]
-use super::errors::WorkflowAssignmentMutationError;
+use super::{errors::WorkflowAssignmentMutationError, workflow_assignment_candidate_key};
 
 pub(crate) fn submit_workflow_assignment_bulk(
     selected_candidate_id: RwSignal<String>,
