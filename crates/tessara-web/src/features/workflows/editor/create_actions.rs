@@ -5,9 +5,13 @@ use super::api::{create_initial_workflow_revision, create_workflow};
 #[cfg(feature = "hydrate")]
 use super::existing_workflow_slugs;
 #[cfg(feature = "hydrate")]
-use crate::features::shared::unique_slug_from_label;
+use super::validation::{
+    validate_workflow_steps, validated_available_node_ids, validated_workflow_name,
+};
 #[cfg(feature = "hydrate")]
-use crate::features::workflows::CreateWorkflowStepPayload;
+use super::workflow_step_payloads_from_drafts;
+#[cfg(feature = "hydrate")]
+use crate::features::shared::unique_slug_from_label;
 use crate::features::workflows::WorkflowStepDraft;
 use crate::features::workflows::types::WorkflowSummary;
 #[cfg(feature = "hydrate")]
@@ -32,45 +36,28 @@ pub(crate) fn submit_create_workflow(
             return;
         }
 
-        let workflow_name = name.get().trim().to_string();
-        if workflow_name.is_empty() {
-            message.set(Some("Workflow name is required.".into()));
-            return;
-        }
-        let mut selected_available_node_ids =
-            available_node_ids.get().into_iter().collect::<Vec<_>>();
-        selected_available_node_ids.sort();
-        if selected_available_node_ids.is_empty() {
-            message.set(Some("Select at least one available node.".into()));
-            return;
-        }
+        let workflow_name = match validated_workflow_name(name.get()) {
+            Ok(workflow_name) => workflow_name,
+            Err(error) => {
+                message.set(Some(error));
+                return;
+            }
+        };
+        let selected_available_node_ids =
+            match validated_available_node_ids(available_node_ids.get()) {
+                Ok(selected_available_node_ids) => selected_available_node_ids,
+                Err(error) => {
+                    message.set(Some(error));
+                    return;
+                }
+            };
 
         let current_steps = steps.get();
-        if current_steps.is_empty() {
-            message.set(Some("Add at least one workflow step.".into()));
+        if let Err(error) = validate_workflow_steps(&current_steps) {
+            message.set(Some(error));
             return;
         }
-        if current_steps
-            .iter()
-            .any(|step| step.form_version_id.trim().is_empty())
-        {
-            message.set(Some("Select a form version for each workflow step.".into()));
-            return;
-        }
-
-        let workflow_steps = current_steps
-            .into_iter()
-            .enumerate()
-            .map(|(index, step)| CreateWorkflowStepPayload {
-                title: step
-                    .title
-                    .trim()
-                    .to_string()
-                    .into_nonempty()
-                    .unwrap_or_else(|| format!("Step {}", index + 1)),
-                form_version_id: step.form_version_id,
-            })
-            .collect::<Vec<_>>();
+        let workflow_steps = workflow_step_payloads_from_drafts(current_steps);
 
         let workflow_slug = unique_slug_from_label(
             &workflow_name,

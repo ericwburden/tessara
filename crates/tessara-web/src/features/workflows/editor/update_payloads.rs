@@ -1,5 +1,9 @@
 //! Payload preparation for workflow update actions.
 
+use super::validation::{
+    validate_workflow_steps, validated_available_node_ids, validated_workflow_name,
+    validated_workflow_slug,
+};
 use super::{workflow_step_payloads_from_drafts, workflow_step_signature};
 use crate::features::workflows::{
     CreateWorkflowStepPayload, UpdateWorkflowPayload, WorkflowSaveIntent, WorkflowStepDraft,
@@ -22,21 +26,9 @@ pub(super) fn prepare_workflow_update(
     version_is_draft: bool,
     intent: WorkflowSaveIntent,
 ) -> Result<PreparedWorkflowUpdate, String> {
-    let workflow_name = name.trim().to_string();
-    if workflow_name.is_empty() {
-        return Err("Workflow name is required.".into());
-    }
-
-    let workflow_slug = slug.trim().to_string();
-    if workflow_slug.is_empty() {
-        return Err("Workflow slug is missing. Reload the workflow and try again.".into());
-    }
-
-    let mut selected_available_node_ids = available_node_ids.into_iter().collect::<Vec<_>>();
-    selected_available_node_ids.sort();
-    if selected_available_node_ids.is_empty() {
-        return Err("Select at least one available node.".into());
-    }
+    let workflow_name = validated_workflow_name(name)?;
+    let workflow_slug = validated_workflow_slug(slug)?;
+    let selected_available_node_ids = validated_available_node_ids(available_node_ids)?;
 
     let steps_changed =
         workflow_step_signature(&current_steps) != workflow_step_signature(original_steps);
@@ -45,16 +37,7 @@ pub(super) fn prepare_workflow_update(
     }
 
     let step_payload = if steps_changed {
-        if current_steps.is_empty() {
-            return Err("Add at least one workflow step.".into());
-        }
-        if current_steps
-            .iter()
-            .any(|step| step.form_version_id.trim().is_empty())
-        {
-            return Err("Select a form version for each workflow step.".into());
-        }
-
+        validate_workflow_steps(&current_steps)?;
         Some(workflow_step_payloads_from_drafts(current_steps))
     } else {
         None
