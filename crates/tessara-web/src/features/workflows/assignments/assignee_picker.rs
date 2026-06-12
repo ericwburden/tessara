@@ -9,7 +9,6 @@ use leptos::prelude::*;
 use std::collections::HashSet;
 
 #[component]
-/// Renders the eligible assignee picker for workflow assignments.
 pub(in crate::features::workflows) fn WorkflowAssignmentAssigneePicker(
     assignees: RwSignal<Vec<WorkflowAssigneeOption>>,
     selected_candidate_id: RwSignal<String>,

@@ -10,7 +10,6 @@ use leptos::prelude::*;
 use std::collections::HashSet;
 
 #[component]
-/// Renders the workflow assignment creation form.
 pub(in crate::features::workflows) fn WorkflowAssignmentCreateForm(
     assignments: RwSignal<Vec<WorkflowAssignmentSummary>>,
     candidates: RwSignal<Vec<WorkflowAssignmentCandidate>>,

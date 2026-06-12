@@ -13,7 +13,6 @@ use leptos::portal::Portal;
 use leptos::prelude::*;
 
 #[component]
-/// Renders the workflow assignment detail sheet.
 pub(in crate::features::workflows) fn WorkflowAssignmentDetailSheet(
     assignment: WorkflowAssignmentSummary,
     on_close: impl Fn(leptos::ev::MouseEvent) + 'static + Copy + Send + Sync,

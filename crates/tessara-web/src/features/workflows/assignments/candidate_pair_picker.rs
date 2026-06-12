@@ -10,7 +10,6 @@ use node_list::WorkflowAssignmentNodePicker;
 use std::collections::HashSet;
 use workflow_list::WorkflowAssignmentWorkflowPicker;
 
-/// Renders the workflow-version and node pair picker for assignment creation.
 #[component]
 pub(in crate::features::workflows) fn WorkflowAssignmentCandidatePairPicker(
     candidates: RwSignal<Vec<WorkflowAssignmentCandidate>>,

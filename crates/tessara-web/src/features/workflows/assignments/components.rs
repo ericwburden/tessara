@@ -14,7 +14,6 @@ use icons::{PanelRight, Search, X};
 use leptos::prelude::*;
 
 #[component]
-/// Renders the workflow assignments list view.
 pub(in crate::features::workflows) fn WorkflowAssignmentsList(
     assignments: Vec<WorkflowAssignmentSummary>,
     search: RwSignal<String>,
