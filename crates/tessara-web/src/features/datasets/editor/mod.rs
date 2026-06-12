@@ -10,6 +10,7 @@ mod options;
 mod source_options;
 mod sources;
 mod sql_preview;
+mod state;
 mod surface;
 mod visibility;
 
@@ -21,5 +22,6 @@ pub(crate) use messages::DatasetEditorMessages;
 pub(crate) use options::DatasetDesignerOptionsSheet;
 pub(crate) use sources::DatasetSourcesEditor;
 pub(crate) use sql_preview::DatasetSqlPreviewPanel;
+pub(crate) use state::DatasetEditorState;
 pub(crate) use surface::DatasetEditorSurface;
 pub(crate) use visibility::DatasetVisibilityEditor;

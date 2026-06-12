@@ -1,15 +1,13 @@
 //! Dataset editor page surface.
 
 use super::{
-    DatasetEditorMessages, DatasetFieldsEditor, DatasetIdentitySection, DatasetSourcesEditor,
-    DatasetSqlPreviewPanel, DatasetVisibilityEditor,
+    DatasetEditorMessages, DatasetEditorState, DatasetFieldsEditor, DatasetIdentitySection,
+    DatasetSourcesEditor, DatasetSqlPreviewPanel, DatasetVisibilityEditor,
 };
 use crate::features::datasets::actions::save_dataset;
 use crate::features::datasets::loaders::*;
-use crate::features::datasets::types::*;
 use crate::ui::{AppShell, PageHeader};
 use leptos::prelude::*;
-use std::collections::{BTreeMap, BTreeSet};
 
 #[component]
 /// Renders the dataset editor surface view.
@@ -20,48 +18,27 @@ pub(crate) fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView 
     } else {
         "Create Dataset"
     };
-    let name = RwSignal::new(String::new());
-    let slug = RwSignal::new(String::new());
-    let composition_mode = RwSignal::new("union".to_string());
-    let visibility_node_ids = RwSignal::new(BTreeSet::<String>::new());
-    let sources = RwSignal::new(vec![DatasetSourceDraft::default()]);
-    let fields = RwSignal::new(Vec::<DatasetFieldDraft>::new());
-    let join_left_key = RwSignal::new(String::new());
-    let join_right_key = RwSignal::new(String::new());
-    let forms = RwSignal::new(Vec::<DatasetFormOption>::new());
-    let datasets = RwSignal::new(Vec::<DatasetSummary>::new());
-    let nodes = RwSignal::new(Vec::<NodeResponse>::new());
-    let rendered_forms = RwSignal::new(BTreeMap::<String, DatasetRenderedForm>::new());
-    let load_error = RwSignal::new(None::<String>);
-    let save_error = RwSignal::new(None::<String>);
-    let save_message = RwSignal::new(None::<String>);
-    let sql_preview = RwSignal::new(None::<String>);
-    let sql_preview_error = RwSignal::new(None::<String>);
-    let sql_preview_expanded = RwSignal::new(false);
-    let visibility_search = RwSignal::new(String::new());
-    let designer_selection = RwSignal::new(DatasetDesignerSelection::Operation);
-    let designer_sheet_open = RwSignal::new(false);
-    let auto_seeded_sources = RwSignal::new(BTreeSet::<String>::new());
+    let state = DatasetEditorState::new();
 
     Effect::new({
         let dataset_id = dataset_id.clone();
         move |_| {
-            load_forms(forms, load_error);
-            load_datasets(datasets, RwSignal::new(false), load_error);
-            load_nodes(nodes, load_error);
+            load_forms(state.forms, state.load_error);
+            load_datasets(state.datasets, RwSignal::new(false), state.load_error);
+            load_nodes(state.nodes, state.load_error);
             if let Some(dataset_id) = dataset_id.clone() {
                 load_dataset_for_edit(
                     dataset_id.clone(),
-                    name,
-                    slug,
-                    composition_mode,
-                    visibility_node_ids,
-                    sources,
-                    fields,
-                    join_left_key,
-                    join_right_key,
-                    sql_preview,
-                    load_error,
+                    state.name,
+                    state.slug,
+                    state.composition_mode,
+                    state.visibility_node_ids,
+                    state.sources,
+                    state.fields,
+                    state.join_left_key,
+                    state.join_right_key,
+                    state.sql_preview,
+                    state.load_error,
                 );
             }
         }
@@ -76,53 +53,68 @@ pub(crate) fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView 
                 <PageHeader title>
                     <a class="button button--secondary" href="/datasets">"Back to Datasets"</a>
                 </PageHeader>
-                <DatasetEditorMessages load_error save_error save_message/>
+                <DatasetEditorMessages
+                    load_error=state.load_error
+                    save_error=state.save_error
+                    save_message=state.save_message
+                />
                 <form class="dataset-editor" on:submit=move |event| {
                     event.prevent_default();
                     save_dataset(
                         save_dataset_id.clone(),
-                        name.get(),
-                        slug.get(),
-                        composition_mode.get(),
-                        visibility_node_ids.get().into_iter().collect(),
-                        sources.get(),
-                        fields.get(),
-                        join_left_key.get(),
-                        join_right_key.get(),
-                        save_error,
-                        save_message,
+                        state.name.get(),
+                        state.slug.get(),
+                        state.composition_mode.get(),
+                        state.visibility_node_ids.get().into_iter().collect(),
+                        state.sources.get(),
+                        state.fields.get(),
+                        state.join_left_key.get(),
+                        state.join_right_key.get(),
+                        state.save_error,
+                        state.save_message,
                     );
                 }>
-                    <DatasetIdentitySection name slug/>
+                    <DatasetIdentitySection name=state.name slug=state.slug/>
                     <DatasetSourcesEditor
-                        sources
-                        forms
-                        datasets
-                        rendered_forms
-                        composition_mode
-                        fields
-                        join_left_key
-                        join_right_key
-                        designer_selection
-                        designer_sheet_open
-                        auto_seeded_sources
+                        sources=state.sources
+                        forms=state.forms
+                        datasets=state.datasets
+                        rendered_forms=state.rendered_forms
+                        composition_mode=state.composition_mode
+                        fields=state.fields
+                        join_left_key=state.join_left_key
+                        join_right_key=state.join_right_key
+                        designer_selection=state.designer_selection
+                        designer_sheet_open=state.designer_sheet_open
+                        auto_seeded_sources=state.auto_seeded_sources
                     />
-                    <DatasetFieldsEditor fields sources forms rendered_forms designer_selection designer_sheet_open/>
+                    <DatasetFieldsEditor
+                        fields=state.fields
+                        sources=state.sources
+                        forms=state.forms
+                        rendered_forms=state.rendered_forms
+                        designer_selection=state.designer_selection
+                        designer_sheet_open=state.designer_sheet_open
+                    />
                     <DatasetSqlPreviewPanel
                         dataset_id=dataset_id.clone()
-                        name
-                        slug
-                        composition_mode
-                        visibility_node_ids
-                        sources
-                        fields
-                        join_left_key
-                        join_right_key
-                        sql_preview
-                        sql_preview_error
-                        expanded=sql_preview_expanded
+                        name=state.name
+                        slug=state.slug
+                        composition_mode=state.composition_mode
+                        visibility_node_ids=state.visibility_node_ids
+                        sources=state.sources
+                        fields=state.fields
+                        join_left_key=state.join_left_key
+                        join_right_key=state.join_right_key
+                        sql_preview=state.sql_preview
+                        sql_preview_error=state.sql_preview_error
+                        expanded=state.sql_preview_expanded
                     />
-                    <DatasetVisibilityEditor nodes visibility_node_ids visibility_search/>
+                    <DatasetVisibilityEditor
+                        nodes=state.nodes
+                        visibility_node_ids=state.visibility_node_ids
+                        visibility_search=state.visibility_search
+                    />
                     <div class="form-actions">
                         <button class="button" type="submit">{if is_edit { "Save Dataset" } else { "Create Dataset" }}</button>
                     </div>
