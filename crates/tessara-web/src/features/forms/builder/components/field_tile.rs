@@ -2,17 +2,18 @@
 //!
 //! Keep draggable field-card rendering and per-field resize handles here.
 
+mod resize_handles;
+
 use leptos::prelude::*;
+use resize_handles::FormBuilderFieldResizeHandles;
 
 use crate::features::forms::builder::FormBuilderFieldDraft;
 use crate::features::forms::builder::{
-    FormBuilderDragPreview, FormBuilderResizeAxis, clear_form_builder_drag_intent,
-    form_builder_field_default_label, form_builder_field_type_icon,
-    schedule_form_builder_drag_preview, start_form_builder_field_resize,
+    FormBuilderDragPreview, clear_form_builder_drag_intent, form_builder_field_default_label,
+    form_builder_field_type_icon, schedule_form_builder_drag_preview,
 };
 
 #[component]
-/// Renders the form builder grid tile view.
 pub(crate) fn FormBuilderGridTile(
     field_id: usize,
     section_id: usize,
@@ -172,34 +173,7 @@ pub(crate) fn FormBuilderGridTile(
                     <h5>{display_label}</h5>
                 </div>
             </button>
-            <span
-                class="form-builder-resize-handle form-builder-resize-handle--width"
-                title="Resize field width"
-                aria-hidden="true"
-                on:mousedown=move |event| {
-                    start_form_builder_field_resize(
-                        event,
-                        FormBuilderResizeAxis::Width,
-                        field_id,
-                        builder_fields,
-                        suppress_builder_field_click,
-                    );
-                }
-            ></span>
-            <span
-                class="form-builder-resize-handle form-builder-resize-handle--height"
-                title="Resize field height"
-                aria-hidden="true"
-                on:mousedown=move |event| {
-                    start_form_builder_field_resize(
-                        event,
-                        FormBuilderResizeAxis::Height,
-                        field_id,
-                        builder_fields,
-                        suppress_builder_field_click,
-                    );
-                }
-            ></span>
+            <FormBuilderFieldResizeHandles field_id builder_fields suppress_builder_field_click/>
         </div>
     }
 }
