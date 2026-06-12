@@ -6,7 +6,9 @@ use crate::features::forms::builder::{FormBuilderFieldDraft, FormBuilderResizeAx
 use leptos::prelude::*;
 
 #[cfg(feature = "hydrate")]
-use super::layout::{form_builder_field_has_collision, set_form_builder_field_size};
+use super::layout::form_builder_field_has_collision;
+#[cfg(feature = "hydrate")]
+use super::sizing::set_form_builder_field_size;
 #[cfg(feature = "hydrate")]
 use std::{cell::Cell, cell::RefCell, rc::Rc};
 #[cfg(feature = "hydrate")]

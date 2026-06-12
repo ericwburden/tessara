@@ -8,6 +8,7 @@ mod drag;
 mod hydrate;
 mod layout;
 mod resize;
+mod sizing;
 mod state;
 mod types;
 mod validation;
@@ -24,12 +25,14 @@ pub(crate) use drag::{
 pub(crate) use hydrate::hydrate_form_builder_from_rendered;
 pub(crate) use layout::{
     FormBuilderGridCell, FormBuilderSectionLayout, blank_form_builder_field_at,
-    form_builder_field_has_collision, form_builder_layout_candidate, form_builder_occupancy_map,
+    form_builder_field_has_collision, form_builder_occupancy_map,
     form_builder_reflow_section_fields, form_builder_section_fields, form_builder_section_layout,
-    max_form_builder_field_height, max_form_builder_field_width,
-    max_form_builder_new_field_width_at, valid_form_builder_layout_values,
 };
 pub(crate) use resize::start_form_builder_field_resize;
+pub(crate) use sizing::{
+    form_builder_layout_candidate, max_form_builder_field_height, max_form_builder_field_width,
+    max_form_builder_new_field_width_at, valid_form_builder_layout_values,
+};
 pub(crate) use state::{FormBuilderEditorState, new_form_builder_editor_state};
 pub(crate) use types::{
     FORM_BUILDER_COLUMN_COUNT, FormBuilderDragPreview, FormBuilderFieldDraft,
