@@ -4,8 +4,9 @@
 
 mod actions;
 mod available_nodes_picker;
+mod create;
+mod edit;
 mod options;
-mod pages;
 mod sections;
 mod state;
 mod step_list;
@@ -13,10 +14,11 @@ mod steps;
 
 pub(crate) use actions::{submit_create_workflow, submit_update_workflow};
 pub(in crate::features::workflows) use available_nodes_picker::WorkflowAvailableNodesPicker;
+pub(crate) use create::WorkflowsNewPage;
+pub(crate) use edit::WorkflowsEditPage;
 #[cfg(feature = "hydrate")]
 pub(crate) use options::existing_workflow_slugs;
 pub(crate) use options::workflow_form_version_options;
-pub(crate) use pages::{WorkflowsEditPage, WorkflowsNewPage};
 pub(in crate::features::workflows) use sections::{
     WorkflowActiveRevisionSection, WorkflowAvailabilitySection, WorkflowCreateStepsSection,
     WorkflowEditStepsSection, WorkflowIdentityFields,
