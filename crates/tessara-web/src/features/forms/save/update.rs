@@ -2,25 +2,15 @@
 
 use crate::features::forms::builder::{FormBuilderFieldDraft, FormBuilderSectionDraft};
 #[cfg(feature = "hydrate")]
-use crate::features::forms::builder::{
-    prepared_form_builder_fields, prepared_form_builder_sections,
-};
-#[cfg(feature = "hydrate")]
-use crate::features::forms::filtering::existing_form_slugs_for_update;
+use crate::features::forms::save::drafts::prepare_update_form_save;
 #[cfg(feature = "hydrate")]
 use crate::features::forms::save::payloads::{form_field_payload, form_section_payload};
-#[cfg(feature = "hydrate")]
-use crate::features::forms::types::UpdateFormPayload;
 use crate::features::forms::types::{FormSummary, RenderedForm};
 #[cfg(feature = "hydrate")]
-use crate::features::shared::unique_slug_from_label;
-#[cfg(feature = "hydrate")]
 use crate::http::send_json_id_request;
-#[cfg(feature = "hydrate")]
-use crate::utils::text::IntoNonemptyString;
 use leptos::prelude::*;
 #[cfg(feature = "hydrate")]
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
 /// Submits the submit update form request.
@@ -44,80 +34,28 @@ pub(crate) fn submit_update_form(
             return;
         }
 
-        let form_name = name.get().trim().to_string();
-        if form_name.is_empty() {
-            message.set(Some("Form name is required.".into()));
-            return;
-        }
-
-        let form_slug = unique_slug_from_label(
-            &form_name,
-            &existing_form_slugs_for_update(existing_forms.get_untracked().as_slice(), &form_id),
-        );
-        if form_slug.is_empty() {
-            message.set(Some("Form name must contain letters or numbers.".into()));
-            return;
-        }
-
-        let current_sections = sections.get_untracked();
-        let current_fields = fields.get_untracked();
-        let prepared_sections = match prepared_form_builder_sections(&current_sections) {
-            Ok(sections) => sections,
+        let prepared_save = match prepare_update_form_save(
+            &form_id,
+            name.get().trim().to_string(),
+            workflow_node_type_id.get().trim().to_string(),
+            &sections.get_untracked(),
+            &fields.get_untracked(),
+            existing_forms.get_untracked().as_slice(),
+            rendered_form.get_untracked(),
+        ) {
+            Ok(prepared_save) => prepared_save,
             Err(error) => {
                 message.set(Some(error));
                 return;
             }
         };
-        let prepared_fields = match prepared_form_builder_fields(&current_fields) {
-            Ok(fields) => fields,
-            Err(error) => {
-                message.set(Some(error));
-                return;
-            }
-        };
-        if prepared_fields.is_empty() {
-            message.set(Some("Add at least one field to the form builder.".into()));
-            return;
-        }
-
-        let payload = UpdateFormPayload {
-            name: form_name,
-            slug: form_slug,
-            scope_node_type_id: workflow_node_type_id
-                .get()
-                .trim()
-                .to_string()
-                .into_nonempty(),
-        };
-        let current_rendered_form = rendered_form.get_untracked();
-        let original_section_ids = current_rendered_form
-            .as_ref()
-            .map(|rendered| {
-                rendered
-                    .sections
-                    .iter()
-                    .map(|section| section.id.clone())
-                    .collect::<HashSet<_>>()
-            })
-            .unwrap_or_default();
-        let original_field_ids = current_rendered_form
-            .as_ref()
-            .map(|rendered| {
-                rendered
-                    .sections
-                    .iter()
-                    .flat_map(|section| section.fields.iter().map(|field| field.id.clone()))
-                    .collect::<HashSet<_>>()
-            })
-            .unwrap_or_default();
-        let kept_section_ids = prepared_sections
-            .iter()
-            .filter_map(|section| section.remote_id.clone())
-            .collect::<HashSet<_>>();
-        let kept_field_ids = prepared_fields
-            .iter()
-            .filter_map(|field| field.remote_id.clone())
-            .collect::<HashSet<_>>();
+        let payload = prepared_save.payload;
+        let prepared_sections = prepared_save.sections;
+        let prepared_fields = prepared_save.fields;
+        let original_section_ids = prepared_save.original_section_ids;
+        let original_field_ids = prepared_save.original_field_ids;
+        let kept_section_ids = prepared_save.kept_section_ids;
+        let kept_field_ids = prepared_save.kept_field_ids;
         let update_existing_draft = edit_version_status.get_untracked().as_deref() == Some("draft");
         let existing_version_id = edit_version_id.get_untracked();
 

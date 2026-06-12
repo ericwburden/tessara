@@ -2,24 +2,14 @@
 
 use crate::features::forms::builder::{FormBuilderFieldDraft, FormBuilderSectionDraft};
 #[cfg(feature = "hydrate")]
-use crate::features::forms::builder::{
-    prepared_form_builder_fields, prepared_form_builder_sections,
-};
-#[cfg(feature = "hydrate")]
-use crate::features::forms::filtering::existing_form_slugs;
+use crate::features::forms::save::drafts::prepare_create_form_save;
 #[cfg(feature = "hydrate")]
 use crate::features::forms::save::payloads::{form_field_payload, form_section_payload};
-#[cfg(feature = "hydrate")]
-use crate::features::forms::types::CreateFormPayload;
 use crate::features::forms::types::FormSummary;
 #[cfg(feature = "hydrate")]
 use crate::features::organization::types::IdResponse;
 #[cfg(feature = "hydrate")]
-use crate::features::shared::unique_slug_from_label;
-#[cfg(feature = "hydrate")]
 use crate::http::{redirect_to_login, send_json_id_request};
-#[cfg(feature = "hydrate")]
-use crate::utils::text::IntoNonemptyString;
 use leptos::prelude::*;
 #[cfg(feature = "hydrate")]
 use std::collections::HashMap;
@@ -42,50 +32,22 @@ pub(crate) fn submit_create_form(
             return;
         }
 
-        let form_name = name.get().trim().to_string();
-        if form_name.is_empty() {
-            message.set(Some("Form name is required.".into()));
-            return;
-        }
-
-        let form_slug = unique_slug_from_label(
-            &form_name,
-            &existing_form_slugs(existing_forms.get_untracked().as_slice()),
-        );
-        if form_slug.is_empty() {
-            message.set(Some("Form name must contain letters or numbers.".into()));
-            return;
-        }
-
-        let current_fields = fields.get_untracked();
-        let prepared_sections = match prepared_form_builder_sections(&sections.get_untracked()) {
-            Ok(sections) => sections,
+        let prepared_save = match prepare_create_form_save(
+            name.get().trim().to_string(),
+            workflow_node_type_id.get().trim().to_string(),
+            &sections.get_untracked(),
+            &fields.get_untracked(),
+            existing_forms.get_untracked().as_slice(),
+        ) {
+            Ok(prepared_save) => prepared_save,
             Err(error) => {
                 message.set(Some(error));
                 return;
             }
         };
-        let prepared_fields = match prepared_form_builder_fields(&current_fields) {
-            Ok(fields) => fields,
-            Err(error) => {
-                message.set(Some(error));
-                return;
-            }
-        };
-        if prepared_fields.is_empty() {
-            message.set(Some("Add at least one field to the form builder.".into()));
-            return;
-        }
-
-        let payload = CreateFormPayload {
-            name: form_name,
-            slug: form_slug,
-            scope_node_type_id: workflow_node_type_id
-                .get()
-                .trim()
-                .to_string()
-                .into_nonempty(),
-        };
+        let payload = prepared_save.payload;
+        let prepared_sections = prepared_save.sections;
+        let prepared_fields = prepared_save.fields;
 
         leptos::task::spawn_local(async move {
             is_saving.set(true);

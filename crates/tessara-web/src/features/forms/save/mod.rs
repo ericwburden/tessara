@@ -2,6 +2,8 @@
 
 mod create;
 #[cfg(feature = "hydrate")]
+mod drafts;
+#[cfg(feature = "hydrate")]
 mod payloads;
 mod update;
 
