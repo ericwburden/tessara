@@ -2,9 +2,13 @@
 //!
 //! Keep API response shapes, request payloads, and feature-local value objects here when they are owned by Datasets.
 
+mod editor;
+
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
+
+pub(super) use editor::{DatasetDesignerSelection, DatasetFieldDraft, DatasetSourceDraft};
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 pub(super) struct SessionAccount {
@@ -188,47 +192,4 @@ pub(super) struct DatasetFieldPayload {
     pub(super) source_alias: String,
     pub(super) source_field_key: String,
     pub(super) position: i32,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub(super) struct DatasetSourceDraft {
-    pub(super) input_kind: String,
-    pub(super) source_alias: String,
-    pub(super) form_id: String,
-    pub(super) form_version_id: String,
-    pub(super) form_version_major: Option<i32>,
-    pub(super) dataset_id: String,
-    pub(super) dataset_revision_id: String,
-    pub(super) selection_rule: String,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub(super) struct DatasetFieldDraft {
-    pub(super) key: String,
-    pub(super) label: String,
-    pub(super) source_alias: String,
-    pub(super) source_field_key: String,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub(super) enum DatasetDesignerSelection {
-    Operation,
-    Source(usize),
-    Field(usize),
-}
-
-impl Default for DatasetSourceDraft {
-    /// Handles the default behavior.
-    fn default() -> Self {
-        Self {
-            input_kind: "form".into(),
-            source_alias: "source_1".into(),
-            form_id: String::new(),
-            form_version_id: String::new(),
-            form_version_major: None,
-            dataset_id: String::new(),
-            dataset_revision_id: String::new(),
-            selection_rule: "latest".into(),
-        }
-    }
 }
