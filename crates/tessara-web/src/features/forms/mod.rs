@@ -7,6 +7,7 @@ mod attached_nodes;
 pub(crate) mod builder;
 mod detail;
 mod display;
+mod editor_sections;
 mod filtering;
 mod list;
 mod loaders;
@@ -22,6 +23,7 @@ pub(crate) use display::{
     form_field_count_label, form_status_label, form_version_desc_sort_key,
     rendered_field_layout_label, rendered_field_type_label,
 };
+pub(in crate::features::forms) use editor_sections::FormIdentityFields;
 pub(crate) use filtering::{
     FormNodeFilterOption, form_matches_node_filter, form_node_filter_options, indented_node_label,
     visible_form_node_filter_options,

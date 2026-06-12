@@ -8,7 +8,9 @@ use crate::features::forms::builder::{
 use crate::features::forms::loaders::{
     load_form_create_options, load_form_edit_options, load_forms,
 };
-use crate::features::forms::{FormDefinition, FormSummary, FormsList, RenderedForm};
+use crate::features::forms::{
+    FormDefinition, FormIdentityFields, FormSummary, FormsList, RenderedForm,
+};
 use crate::features::forms::{
     active_form_version, form_attached_to_label, form_status_label, form_version_label,
     submit_create_form, submit_update_form,
@@ -200,47 +202,11 @@ pub fn FormsNewPage() -> impl IntoView {
                                     );
                                 }
                             >
-                                <div class="form-grid">
-                                    <label class="form-field form-field--wide" for="form-name">
-                                        <span>"Form Name"</span>
-                                        <input
-                                            id="form-name"
-                                            type="text"
-                                            autocomplete="off"
-                                            prop:value=move || name.get()
-                                            on:input=move |event| name.set(event_target_value(&event))
-                                            required
-                                        />
-                                    </label>
-
-                                    <label class="form-field" for="form-scope-node-type">
-                                        <span>"Scope"</span>
-                                        <select
-                                            id="form-scope-node-type"
-                                            prop:value=move || workflow_node_type_id.get()
-                                            on:change=move |event| workflow_node_type_id.set(event_target_value(&event))
-                                        >
-                                            <option value="">"No scope"</option>
-                                            {move || {
-                                                let mut options = node_types.get();
-                                                options.sort_by(|left, right| {
-                                                    left.singular_label
-                                                        .cmp(&right.singular_label)
-                                                        .then(left.name.cmp(&right.name))
-                                                });
-                                                options
-                                                    .into_iter()
-                                                    .map(|node_type| {
-                                                        view! {
-                                                            <option value=node_type.id>{node_type.singular_label}</option>
-                                                        }
-                                                    })
-                                                    .collect_view()
-                                            }}
-                                        </select>
-                                    </label>
-
-                                </div>
+                                <FormIdentityFields
+                                    name=name
+                                    workflow_node_type_id=workflow_node_type_id
+                                    node_types=node_types
+                                />
 
                                 <section class="form-section">
                                     <h3>"Initial Version"</h3>
@@ -430,46 +396,11 @@ pub fn FormsEditPage() -> impl IntoView {
                                         );
                                     }
                                 >
-                                    <div class="form-grid">
-                                        <label class="form-field form-field--wide" for="form-name">
-                                            <span>"Form Name"</span>
-                                            <input
-                                                id="form-name"
-                                                type="text"
-                                                autocomplete="off"
-                                                prop:value=move || name.get()
-                                                on:input=move |event| name.set(event_target_value(&event))
-                                                required
-                                            />
-                                        </label>
-
-                                        <label class="form-field" for="form-scope-node-type">
-                                            <span>"Scope"</span>
-                                            <select
-                                                id="form-scope-node-type"
-                                                prop:value=move || workflow_node_type_id.get()
-                                                on:change=move |event| workflow_node_type_id.set(event_target_value(&event))
-                                            >
-                                                <option value="">"No scope"</option>
-                                                {move || {
-                                                    let mut options = node_types.get();
-                                                    options.sort_by(|left, right| {
-                                                        left.singular_label
-                                                            .cmp(&right.singular_label)
-                                                            .then(left.name.cmp(&right.name))
-                                                    });
-                                                    options
-                                                        .into_iter()
-                                                        .map(|node_type| {
-                                                            view! {
-                                                                <option value=node_type.id>{node_type.singular_label}</option>
-                                                            }
-                                                        })
-                                                        .collect_view()
-                                                }}
-                                            </select>
-                                        </label>
-                                    </div>
+                                    <FormIdentityFields
+                                        name=name
+                                        workflow_node_type_id=workflow_node_type_id
+                                        node_types=node_types
+                                    />
 
                                     <section class="form-section">
                                         <h3>"Editable Version"</h3>
