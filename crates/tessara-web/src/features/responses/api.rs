@@ -136,7 +136,7 @@ pub(super) async fn fetch_response_start_options(
 #[cfg(feature = "hydrate")]
 pub(super) async fn start_assignment_response(
     workflow_assignment_id: &str,
-) -> Result<Option<String>, ResponseApiError> {
+) -> Result<String, ResponseApiError> {
     let response = send_json_request::<serde_json::Value>(
         gloo_net::http::Request::post(&format!(
             "/api/workflow-assignments/{workflow_assignment_id}/start"
@@ -147,14 +147,19 @@ pub(super) async fn start_assignment_response(
     .await
     .map_err(ResponseApiError::from_transport_error)?;
 
-    Ok(response
+    response
         .get("id")
         .and_then(|value| value.as_str().map(str::to_owned))
         .or_else(|| {
             response
                 .get("id")
                 .and_then(|value| value.as_i64().map(|value| value.to_string()))
-        }))
+        })
+        .ok_or_else(|| {
+            ResponseApiError::message(
+                "Assigned response was started, but the response id was missing.",
+            )
+        })
 }
 
 #[cfg(feature = "hydrate")]

@@ -70,10 +70,9 @@ pub(crate) fn start_assignment_response_and_navigate(
             message.set(Some("Starting assigned response...".into()));
 
             match start_assignment_response(&workflow_assignment_id).await {
-                Ok(Some(id)) => {
+                Ok(id) => {
                     navigate_to_href(&format!("/responses/{id}/edit"));
                 }
-                Ok(None) => {}
                 Err(error) => handle_response_action_error(error, is_saving, message),
             }
         });
