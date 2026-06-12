@@ -2,6 +2,8 @@
 //!
 //! Keep collection tables, list filters, and list-page presentation here; detail/editor flows should stay in their dedicated modules.
 
+mod mobile_cards;
+
 use super::components::FormsNodeLineageFilter;
 use crate::features::forms::{
     FormNodeFilterOption, FormSummary, active_form_version, form_version_label,
@@ -13,9 +15,9 @@ use crate::ui::{DataTable, TableFilterHeader, TablePaginationFooter};
 use crate::utils::pagination::pagination_page_start;
 use icons::Search;
 use leptos::prelude::*;
+use mobile_cards::FormsMobileCards;
 
 #[component]
-/// Renders the forms list view.
 pub(crate) fn FormsList(
     forms: Vec<FormSummary>,
     search: RwSignal<String>,
@@ -138,66 +140,13 @@ pub(crate) fn FormsList(
                     page_index=page_index
                 />
             </div>
-            <div class="forms-list-mobile-cards">
-                {move || if card_forms.is_empty() {
-                    view! { <p class="forms-list-mobile-empty">"No Forms to Display"</p> }.into_any()
-                } else {
-                    card_forms
-                        .iter()
-                        .skip(pagination_page_start(total_count.get(), page_size.get(), page_index.get()))
-                        .take(page_size.get())
-                        .cloned()
-                        .map(|form| {
-                            let href = format!("/forms/{}", form.id);
-                            let active_version = active_form_version(&form);
-                            let status = active_version
-                                .map(|version| version.status.as_str())
-                                .unwrap_or("none");
-                            let name = form.name.clone();
-                            let attached_nodes = form_attached_nodes(active_version);
-                            let attached_nodes_form_name = name.clone();
-                            let version_label = form_version_label(active_version);
-                            let status_label = form_status_label(active_version);
-                            let field_count = form_field_count_label(active_version);
-                            view! {
-                                <article class="forms-list-mobile-card">
-                                    <div class="forms-list-mobile-card__header">
-                                        <div>
-                                            <h3><a href=href.clone()>{name}</a></h3>
-                                        </div>
-                                    </div>
-                                    <dl>
-                                        <div>
-                                            <dt>"Attached To"</dt>
-                                            <dd>
-                                                <FormsAttachedNodesList
-                                                    nodes=attached_nodes
-                                                    form_name=attached_nodes_form_name
-                                                    form_href=href
-                                                    sheet=attached_nodes_sheet
-                                                />
-                                            </dd>
-                                        </div>
-                                        <div>
-                                            <dt>"Active version"</dt>
-                                            <dd>{version_label}</dd>
-                                        </div>
-                                        <div>
-                                            <dt>"Status"</dt>
-                                            <dd><span class=status_badge_class(status)>{status_label}</span></dd>
-                                        </div>
-                                        <div>
-                                            <dt>"Fields"</dt>
-                                            <dd>{field_count}</dd>
-                                        </div>
-                                    </dl>
-                                </article>
-                            }
-                        })
-                        .collect_view()
-                        .into_any()
-                }}
-            </div>
+            <FormsMobileCards
+                forms=card_forms
+                total_count
+                page_size
+                page_index
+                attached_nodes_sheet
+            />
             <FormsAttachedNodesSheet detail=attached_nodes_sheet/>
         </div>
     }
