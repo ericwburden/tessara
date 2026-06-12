@@ -5,8 +5,10 @@
 mod api;
 mod attached_nodes;
 pub(crate) mod builder;
+mod create;
 mod detail;
 mod display;
+mod edit;
 mod editor_sections;
 mod filtering;
 mod list;
@@ -20,12 +22,14 @@ mod versions;
 pub(in crate::features::forms) use attached_nodes::{
     FormsAttachedNodesList, FormsAttachedNodesSheet,
 };
+pub(crate) use create::FormsNewPage;
 pub(crate) use detail::FormsDetailPage;
 pub(crate) use display::{
     form_attached_nodes, form_attached_to_label, form_definition_scope_label,
     form_field_count_label, form_status_label, form_version_desc_sort_key,
     rendered_field_layout_label, rendered_field_type_label,
 };
+pub(crate) use edit::FormsEditPage;
 pub(in crate::features::forms) use editor_sections::{
     FormEditableVersionSummary, FormIdentityFields, FormInitialVersionSummary,
 };
@@ -34,7 +38,7 @@ pub(crate) use filtering::{
     visible_form_node_filter_options,
 };
 pub(crate) use list::FormsList;
-pub(crate) use pages::{FormsEditPage, FormsNewPage, FormsPage};
+pub(crate) use pages::FormsPage;
 pub(crate) use save::{submit_create_form, submit_update_form};
 pub(crate) use types::{
     FormDatasetSourceLink, FormDefinition, FormSummary, FormVersionSummary, FormWorkflowLink,
