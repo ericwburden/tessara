@@ -3,36 +3,12 @@
 //! Keep endpoint requests and response parsing here; Leptos signal orchestration belongs in loaders.
 
 #[cfg(feature = "hydrate")]
+use super::errors::{WorkflowAssignmentApiError, WorkflowAssignmentMutationError};
+#[cfg(feature = "hydrate")]
 use crate::features::workflows::assignments::types::{
     BulkWorkflowAssignmentPayload, PendingWorkflowWork, UpdateWorkflowAssignmentPayload,
     WorkflowAssigneeOption, WorkflowAssignmentCandidate, WorkflowAssignmentSummary,
 };
-
-#[cfg(feature = "hydrate")]
-pub(super) enum WorkflowAssignmentApiError {
-    Unauthorized,
-    Message(String),
-}
-
-#[cfg(feature = "hydrate")]
-impl WorkflowAssignmentApiError {
-    fn message(message: impl Into<String>) -> Self {
-        Self::Message(message.into())
-    }
-}
-
-#[cfg(feature = "hydrate")]
-pub(super) enum WorkflowAssignmentMutationError {
-    Unauthorized,
-    Message(String),
-}
-
-#[cfg(feature = "hydrate")]
-impl WorkflowAssignmentMutationError {
-    fn message(message: impl Into<String>) -> Self {
-        Self::Message(message.into())
-    }
-}
 
 #[cfg(feature = "hydrate")]
 pub(super) async fn fetch_pending_work()

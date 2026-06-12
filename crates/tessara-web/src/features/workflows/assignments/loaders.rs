@@ -10,9 +10,11 @@ use leptos::prelude::*;
 
 #[cfg(feature = "hydrate")]
 use super::api::{
-    WorkflowAssignmentApiError, fetch_pending_work, fetch_workflow_assignment_assignees,
-    fetch_workflow_assignment_candidates, fetch_workflow_assignments,
+    fetch_pending_work, fetch_workflow_assignment_assignees, fetch_workflow_assignment_candidates,
+    fetch_workflow_assignments,
 };
+#[cfg(feature = "hydrate")]
+use super::errors::WorkflowAssignmentApiError;
 
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
 pub(crate) fn load_pending_work(

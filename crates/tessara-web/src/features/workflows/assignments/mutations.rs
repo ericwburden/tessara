@@ -2,7 +2,7 @@
 
 #[cfg(feature = "hydrate")]
 use crate::features::workflows::assignments::api::{
-    WorkflowAssignmentMutationError, create_workflow_assignments_bulk, update_workflow_assignment,
+    create_workflow_assignments_bulk, update_workflow_assignment,
 };
 #[cfg(feature = "hydrate")]
 use crate::features::workflows::assignments::{
@@ -18,7 +18,9 @@ use crate::http::redirect_to_login;
 use leptos::prelude::*;
 use std::collections::HashSet;
 
-/// Submits the submit workflow assignment bulk request.
+#[cfg(feature = "hydrate")]
+use super::errors::WorkflowAssignmentMutationError;
+
 pub(crate) fn submit_workflow_assignment_bulk(
     selected_candidate_id: RwSignal<String>,
     candidates: RwSignal<Vec<WorkflowAssignmentCandidate>>,
@@ -101,7 +103,6 @@ pub(crate) fn submit_workflow_assignment_bulk(
 }
 
 #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
-/// Toggles the toggle workflow assignment state.
 pub(crate) fn toggle_workflow_assignment(
     assignment: WorkflowAssignmentSummary,
     assignments: RwSignal<Vec<WorkflowAssignmentSummary>>,

@@ -9,6 +9,7 @@ mod components;
 mod create_form;
 mod detail_sheet;
 mod display;
+mod errors;
 mod loaders;
 mod mobile_cards;
 mod mutations;
