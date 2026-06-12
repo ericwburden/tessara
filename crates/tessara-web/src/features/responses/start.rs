@@ -3,11 +3,8 @@
 //! Keep the workflow/form launch flow for new responses here; response editing and detail presentation belong in sibling modules.
 
 use super::actions::start_workflow_assignment_response;
-use super::components::ResponseAssignmentStartFields;
+use super::components::ResponseAssignmentStartForm;
 use super::loaders::load_response_start_options;
-use crate::features::responses::display::{
-    response_selected_assignment, response_start_can_submit,
-};
 use crate::features::responses::types::AssignmentResponseStartOptions;
 use crate::ui::{
     AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator,
@@ -97,68 +94,14 @@ pub(super) fn ResponsesNewPageContent() -> impl IntoView {
                             .into_any()
                         } else if let Some(loaded_options) = options.get() {
                             view! {
-                                <form
-                                    class="native-form response-start-form"
-                                    on:submit=move |event| {
-                                        event.prevent_default();
-                                        if !response_start_can_submit(
-                                            options,
-                                            is_loading,
-                                            is_saving,
-                                            selected_assignment_index,
-                                        ) {
-                                            message.set(Some("Select assigned workflow work before starting a draft.".into()));
-                                            return;
-                                        }
-
-                                        if let Some(assignment) = response_selected_assignment(options, selected_assignment_index) {
-                                            start_workflow_assignment_response(
-                                                assignment.workflow_assignment_id,
-                                                is_saving,
-                                                message,
-                                            );
-                                        }
-                                    }
-                                >
-                                    <ResponseAssignmentStartFields
-                                        assignments=loaded_options.assignments
-                                        selected_assignment_index
-                                    />
-
-                                    {move || {
-                                        message
-                                            .get()
-                                            .map(|message| {
-                                                let class = if message.to_lowercase().contains("failed")
-                                                    || message.to_lowercase().contains("unable")
-                                                    || message.to_lowercase().contains("select")
-                                                {
-                                                    "form-message is-error"
-                                                } else {
-                                                    "form-message"
-                                                };
-                                                view! { <p class=class role="status">{message}</p> }
-                                            })
-                                    }}
-
-                                    <div class="form-actions">
-                                        <a class="button button--secondary" href="/responses">"Cancel"</a>
-                                        <button
-                                            class="button"
-                                            type="submit"
-                                            disabled=move || {
-                                                !response_start_can_submit(
-                                                    options,
-                                                    is_loading,
-                                                    is_saving,
-                                                    selected_assignment_index,
-                                                )
-                                            }
-                                        >
-                                            {move || if is_saving.get() { "Starting..." } else { "Start Draft" }}
-                                        </button>
-                                    </div>
-                                </form>
+                                <ResponseAssignmentStartForm
+                                    assignments=loaded_options.assignments
+                                    options
+                                    is_loading
+                                    is_saving
+                                    message
+                                    selected_assignment_index
+                                />
                             }
                             .into_any()
                         } else {
