@@ -16,6 +16,7 @@ mod loaders;
 mod mobile_cards;
 mod mutations;
 mod page_state;
+mod surface;
 mod table_row;
 pub(crate) mod types;
 
@@ -40,6 +41,7 @@ pub(crate) use loaders::{
 pub(in crate::features::workflows) use mobile_cards::WorkflowAssignmentMobileCards;
 pub(crate) use mutations::{submit_workflow_assignment_bulk, toggle_workflow_assignment};
 pub(in crate::features::workflows) use page_state::WorkflowAssignmentsPageState;
+pub(in crate::features::workflows) use surface::WorkflowAssignmentsSurface;
 pub(in crate::features::workflows) use table_row::WorkflowAssignmentTableRow;
 #[cfg(feature = "hydrate")]
 pub(crate) use types::{BulkWorkflowAssignmentPayload, UpdateWorkflowAssignmentPayload};
