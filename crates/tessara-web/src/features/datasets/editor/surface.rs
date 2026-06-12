@@ -1,12 +1,11 @@
 //! Dataset editor page surface.
 
-use super::{DatasetFieldsEditor, DatasetSourcesEditor, DatasetSqlPreviewPanel};
+use super::{
+    DatasetFieldsEditor, DatasetSourcesEditor, DatasetSqlPreviewPanel, DatasetVisibilityEditor,
+};
 use crate::features::datasets::loaders::*;
 use crate::features::datasets::types::*;
-use crate::features::datasets::validation::node_matches_visibility_query;
-use crate::ui::{AppShell, DataTable, PageHeader};
-use crate::utils::text::sentence_label;
-use icons::Search;
+use crate::ui::{AppShell, PageHeader};
 use leptos::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -135,73 +134,7 @@ pub(crate) fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView 
                         sql_preview_error
                         expanded=sql_preview_expanded
                     />
-                    <section class="route-panel__section dataset-editor-section">
-                        <div class="dataset-editor-section__header">
-                            <h3>"Visibility"</h3>
-                            <label class="searchable-data-table__search">
-                                <Search class="searchable-data-table__search-icon"/>
-                                <span class="sr-only">"Search visibility nodes"</span>
-                                <input
-                                    type="search"
-                                    placeholder="Search nodes"
-                                    prop:value=move || visibility_search.get()
-                                    on:input=move |event| visibility_search.set(event_target_value(&event))
-                                />
-                            </label>
-                        </div>
-                        <div class="table-wrap dataset-visibility-table">
-                            <DataTable>
-                                <thead>
-                                    <tr>
-                                        <th scope="col">"Visible"</th>
-                                        <th scope="col">"Node"</th>
-                                        <th scope="col">"Type"</th>
-                                        <th scope="col">"Parent"</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {move || {
-                                        let query = visibility_search.get();
-                                        let mut visible_nodes = nodes.get();
-                                        visible_nodes.sort_by(|left, right| {
-                                            left.node_type_name
-                                                .cmp(&right.node_type_name)
-                                                .then_with(|| left.parent_node_name.cmp(&right.parent_node_name))
-                                                .then_with(|| left.name.cmp(&right.name))
-                                        });
-                                        visible_nodes
-                                            .into_iter()
-                                            .filter(|node| node_matches_visibility_query(node, &query))
-                                            .map(|node| {
-                                                let node_id = node.id.clone();
-                                                let checked = visibility_node_ids.get().contains(&node_id);
-                                                view! {
-                                                    <tr>
-                                                        <td>
-                                                            <input
-                                                                type="checkbox"
-                                                                checked=checked
-                                                                aria-label=format!("Toggle visibility for {}", node.name)
-                                                                on:change=move |event| {
-                                                                    let is_checked = event_target_checked(&event);
-                                                                    visibility_node_ids.update(|ids| {
-                                                                        if is_checked { ids.insert(node_id.clone()); } else { ids.remove(&node_id); }
-                                                                    });
-                                                                }
-                                                            />
-                                                        </td>
-                                                        <th scope="row">{node.name}</th>
-                                                        <td>{sentence_label(&node.node_type_name)}</td>
-                                                        <td>{node.parent_node_name.unwrap_or_else(|| "Top-level".into())}</td>
-                                                    </tr>
-                                                }
-                                            })
-                                            .collect_view()
-                                    }}
-                                </tbody>
-                            </DataTable>
-                        </div>
-                    </section>
+                    <DatasetVisibilityEditor nodes visibility_node_ids visibility_search/>
                     <div class="form-actions">
                         <button class="button" type="submit">{if is_edit { "Save Dataset" } else { "Create Dataset" }}</button>
                     </div>

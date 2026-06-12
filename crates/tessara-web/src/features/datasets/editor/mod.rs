@@ -6,9 +6,11 @@ mod helpers;
 mod options;
 mod sources;
 mod surface;
+mod visibility;
 
 pub(crate) use expression::{DatasetExpressionChain, DatasetSqlPreviewPanel, ExpressionPreview};
 pub(crate) use fields::DatasetFieldsEditor;
 pub(crate) use options::DatasetDesignerOptionsSheet;
 pub(crate) use sources::DatasetSourcesEditor;
 pub(crate) use surface::DatasetEditorSurface;
+pub(crate) use visibility::DatasetVisibilityEditor;
