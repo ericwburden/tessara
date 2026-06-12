@@ -17,6 +17,9 @@ mod tables;
 pub(crate) mod types;
 mod versions;
 
+pub(in crate::features::forms) use attached_nodes::{
+    FormsAttachedNodesList, FormsAttachedNodesSheet,
+};
 pub(crate) use detail::FormsDetailPage;
 pub(crate) use display::{
     form_attached_nodes, form_attached_to_label, form_definition_scope_label,
