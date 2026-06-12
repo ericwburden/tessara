@@ -3,6 +3,7 @@
 //! Collect low-level builder UI widgets here so the builder canvas can compose sections, grids, field tiles, and configuration sheets through one boundary.
 
 pub(crate) mod canvas;
+mod field_config_controls;
 pub(crate) mod field_config_sheet;
 pub(crate) mod field_tile;
 pub(crate) mod grid;
