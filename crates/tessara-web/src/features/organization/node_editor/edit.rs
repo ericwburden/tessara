@@ -1,19 +1,15 @@
 //! Organization node edit page implementation.
 
-use crate::features::organization::types::{
-    NodeMetadataFieldSummary, NodeTypeCatalogEntry, OrganizationNode, OrganizationNodeDetail,
-};
 use crate::types::route_params::{NodeRouteParams, require_route_params};
 use crate::ui::{
     AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator,
     Button, EmptyState, PageHeader,
 };
 use leptos::prelude::*;
-use std::collections::HashMap;
 
 use super::{
-    OrganizationNodeMetadataSection, load_organization_edit_options, parent_node_options_for_edit,
-    submit_update_node,
+    OrganizationNodeEditState, OrganizationNodeMetadataSection, load_organization_edit_options,
+    parent_node_options_for_edit, submit_update_node,
 };
 
 /// Route page for editing an organization node and its metadata values.
@@ -21,17 +17,19 @@ use super::{
 pub(crate) fn OrganizationEditPage() -> impl IntoView {
     let params = require_route_params::<NodeRouteParams>();
     let node_id = params.node_id;
-    let node_types = RwSignal::new(Vec::<NodeTypeCatalogEntry>::new());
-    let nodes = RwSignal::new(Vec::<OrganizationNode>::new());
-    let detail = RwSignal::new(None::<OrganizationNodeDetail>);
-    let selected_parent_node_id = RwSignal::new(String::new());
-    let name = RwSignal::new(String::new());
-    let metadata_fields = RwSignal::new(Vec::<NodeMetadataFieldSummary>::new());
-    let metadata_values = RwSignal::new(HashMap::<String, String>::new());
-    let metadata_booleans = RwSignal::new(HashMap::<String, bool>::new());
-    let is_loading = RwSignal::new(true);
-    let is_saving = RwSignal::new(false);
-    let message = RwSignal::new(None::<String>);
+    let OrganizationNodeEditState {
+        node_types,
+        nodes,
+        detail,
+        selected_parent_node_id,
+        name,
+        metadata_fields,
+        metadata_values,
+        metadata_booleans,
+        is_loading,
+        is_saving,
+        message,
+    } = OrganizationNodeEditState::new();
 
     let load_node_id = node_id.clone();
     Effect::new(move |_| {

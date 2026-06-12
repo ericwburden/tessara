@@ -1,8 +1,5 @@
 //! Organization node create page implementation.
 
-use crate::features::organization::types::{
-    NodeMetadataFieldSummary, NodeTypeCatalogEntry, OrganizationNode,
-};
 use crate::ui::{
     AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator,
     Button, PageHeader,
@@ -11,24 +8,27 @@ use leptos::prelude::*;
 use std::collections::HashMap;
 
 use super::{
-    OrganizationNodeMetadataSection, available_node_types_for_parent, load_node_type_metadata,
-    load_organization_create_options, parent_node_options, submit_create_node,
+    OrganizationNodeCreateState, OrganizationNodeMetadataSection, available_node_types_for_parent,
+    load_node_type_metadata, load_organization_create_options, parent_node_options,
+    submit_create_node,
 };
 
 /// Route page for creating an organization node and seeding its metadata editor.
 #[component]
 pub(crate) fn OrganizationNewPage() -> impl IntoView {
-    let node_types = RwSignal::new(Vec::<NodeTypeCatalogEntry>::new());
-    let nodes = RwSignal::new(Vec::<OrganizationNode>::new());
-    let selected_node_type_id = RwSignal::new(String::new());
-    let selected_parent_node_id = RwSignal::new(String::new());
-    let name = RwSignal::new(String::new());
-    let metadata_fields = RwSignal::new(Vec::<NodeMetadataFieldSummary>::new());
-    let metadata_values = RwSignal::new(HashMap::<String, String>::new());
-    let metadata_booleans = RwSignal::new(HashMap::<String, bool>::new());
-    let is_loading = RwSignal::new(true);
-    let is_saving = RwSignal::new(false);
-    let message = RwSignal::new(None::<String>);
+    let OrganizationNodeCreateState {
+        node_types,
+        nodes,
+        selected_node_type_id,
+        selected_parent_node_id,
+        name,
+        metadata_fields,
+        metadata_values,
+        metadata_booleans,
+        is_loading,
+        is_saving,
+        message,
+    } = OrganizationNodeCreateState::new();
 
     Effect::new(move |_| {
         load_organization_create_options(
