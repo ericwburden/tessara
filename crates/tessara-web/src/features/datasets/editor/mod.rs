@@ -1,6 +1,7 @@
 //! Dataset editor helpers and feature-local editor logic.
 
 mod expression;
+mod expression_tree;
 mod field_options;
 mod fields;
 mod helpers;
