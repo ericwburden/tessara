@@ -2,8 +2,6 @@
 
 use crate::features::forms::FormSummary;
 use crate::features::organization::{NodeTypeCatalogEntry, OrganizationNode};
-#[cfg(feature = "hydrate")]
-use crate::features::shared::node_display_path;
 use crate::features::workflows::types::{WorkflowDefinition, WorkflowSummary};
 #[cfg(feature = "hydrate")]
 use crate::http::redirect_to_login;
@@ -13,6 +11,8 @@ use leptos::prelude::*;
 use super::api::{
     WorkflowApiError, fetch_workflow_assignment_nodes, fetch_workflow_detail, fetch_workflows,
 };
+#[cfg(feature = "hydrate")]
+use super::options::ordered_workflow_editor_options;
 
 /// Loads workflow summaries.
 pub(crate) fn load_workflows(
@@ -193,32 +193,22 @@ pub(crate) fn load_workflow_create_options(
                         loaded_workflows,
                     ) {
                         (
-                            Ok(mut loaded_node_types),
-                            Ok(mut loaded_nodes),
-                            Ok(mut loaded_forms),
-                            Ok(mut loaded_workflows),
+                            Ok(loaded_node_types),
+                            Ok(loaded_nodes),
+                            Ok(loaded_forms),
+                            Ok(loaded_workflows),
                         ) => {
-                            loaded_node_types.sort_by(|left, right| {
-                                left.singular_label
-                                    .cmp(&right.singular_label)
-                                    .then(left.name.cmp(&right.name))
-                            });
-                            loaded_forms.sort_by(|left, right| {
-                                left.name.cmp(&right.name).then(left.slug.cmp(&right.slug))
-                            });
-                            loaded_nodes.sort_by(|left, right| {
-                                node_display_path(left)
-                                    .cmp(&node_display_path(right))
-                                    .then(left.name.cmp(&right.name))
-                            });
-                            loaded_workflows.sort_by(|left, right| {
-                                left.name.cmp(&right.name).then(left.slug.cmp(&right.slug))
-                            });
+                            let options = ordered_workflow_editor_options(
+                                loaded_node_types,
+                                loaded_nodes,
+                                loaded_forms,
+                                loaded_workflows,
+                            );
 
-                            node_types.set(loaded_node_types);
-                            organization_nodes.set(loaded_nodes);
-                            forms.set(loaded_forms);
-                            workflows.set(loaded_workflows);
+                            node_types.set(options.node_types);
+                            organization_nodes.set(options.organization_nodes);
+                            forms.set(options.forms);
+                            workflows.set(options.workflows);
                             is_loading.set(false);
                         }
                         _ => {

@@ -11,6 +11,8 @@ mod editor;
 mod list;
 mod list_panels;
 mod loaders;
+#[cfg(feature = "hydrate")]
+mod options;
 mod pages;
 mod payloads;
 pub(crate) mod types;
