@@ -26,6 +26,7 @@ pub(in crate::features::workflows) use sections::{
 };
 pub(in crate::features::workflows) use state::{
     add_workflow_step, can_submit_workflow_editor, prune_unavailable_workflow_steps,
+    workflow_edit_initial_state,
 };
 pub(in crate::features::workflows) use step_list::WorkflowStepList;
 #[cfg(feature = "hydrate")]

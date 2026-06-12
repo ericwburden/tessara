@@ -6,9 +6,7 @@ use crate::features::workflows::types::{
     WorkflowDefinition, WorkflowSaveIntent, WorkflowStepDraft, WorkflowSummary,
 };
 use crate::features::workflows::{
-    active_workflow_definition_version, load_workflow_create_options, load_workflow_detail,
-    submit_update_workflow,
-    workflow_revision_label_from_raw as workflow_submission_workflow_revision_label_from_raw,
+    load_workflow_create_options, load_workflow_detail, submit_update_workflow,
     workflow_step_signature,
 };
 use crate::types::route_params::{WorkflowRouteParams, require_route_params};
@@ -16,7 +14,6 @@ use crate::ui::{
     AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator,
     PageHeader,
 };
-use crate::utils::text::sentence_label;
 #[cfg(feature = "hydrate")]
 use crate::utils::url::current_search_param;
 use leptos::prelude::*;
@@ -25,7 +22,7 @@ use std::collections::HashSet;
 use super::{
     WorkflowActiveRevisionSection, WorkflowAvailabilitySection, WorkflowEditStepsSection,
     WorkflowIdentityFields, add_workflow_step, can_submit_workflow_editor,
-    prune_unavailable_workflow_steps,
+    prune_unavailable_workflow_steps, workflow_edit_initial_state,
 };
 
 /// Renders the workflows edit page view.
@@ -83,17 +80,6 @@ pub(crate) fn WorkflowsEditPage() -> impl IntoView {
             return;
         };
 
-        name.set(workflow.name.clone());
-        slug.set(workflow.slug.clone());
-        available_node_ids.set(
-            workflow
-                .available_nodes
-                .iter()
-                .map(|node| node.id.clone())
-                .collect(),
-        );
-        description.set(workflow.description.clone());
-
         let requested_version_id = {
             #[cfg(feature = "hydrate")]
             {
@@ -104,57 +90,19 @@ pub(crate) fn WorkflowsEditPage() -> impl IntoView {
                 None::<String>
             }
         };
-        let edit_version = requested_version_id
-            .as_ref()
-            .and_then(|version_id| {
-                workflow
-                    .versions
-                    .iter()
-                    .find(|version| version.id == *version_id)
-                    .cloned()
-            })
-            .or_else(|| active_workflow_definition_version(&workflow).cloned());
+        let initial_state = workflow_edit_initial_state(&workflow, requested_version_id);
 
-        edit_version_id.set(edit_version.as_ref().map(|version| version.id.clone()));
-        edit_version_label.set(
-            edit_version
-                .as_ref()
-                .and_then(|version| version.workflow_revision_label.clone())
-                .as_deref()
-                .map(workflow_submission_workflow_revision_label_from_raw)
-                .unwrap_or_else(|| "-".to_string()),
-        );
-        edit_version_status.set(
-            edit_version
-                .as_ref()
-                .map(|version| sentence_label(&version.status))
-                .unwrap_or_else(|| "No revisions".to_string()),
-        );
-        version_is_draft.set(
-            edit_version
-                .as_ref()
-                .map(|version| version.status.eq_ignore_ascii_case("draft"))
-                .unwrap_or(false),
-        );
-
-        let mut step_summaries = edit_version
-            .as_ref()
-            .map(|version| version.steps.clone())
-            .unwrap_or_default();
-        step_summaries.sort_by_key(|step| step.position);
-        let draft_steps = step_summaries
-            .into_iter()
-            .enumerate()
-            .map(|(index, step)| WorkflowStepDraft {
-                id: index + 1,
-                title: step.title,
-                form_version_id: step.form_version_id,
-            })
-            .collect::<Vec<_>>();
-        let next_id = draft_steps.len() + 1;
-        original_steps.set(draft_steps.clone());
-        steps.set(draft_steps);
-        next_step_id.set(next_id);
+        name.set(initial_state.name);
+        slug.set(initial_state.slug);
+        available_node_ids.set(initial_state.available_node_ids);
+        description.set(initial_state.description);
+        edit_version_id.set(initial_state.edit_version_id);
+        edit_version_label.set(initial_state.edit_version_label);
+        edit_version_status.set(initial_state.edit_version_status);
+        version_is_draft.set(initial_state.version_is_draft);
+        original_steps.set(initial_state.steps.clone());
+        steps.set(initial_state.steps);
+        next_step_id.set(initial_state.next_step_id);
         initialized.set(true);
     });
 
