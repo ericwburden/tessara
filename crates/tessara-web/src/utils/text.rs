@@ -13,7 +13,6 @@ pub(crate) fn text_matches(query: &str, values: &[&str]) -> bool {
         .any(|value| value.to_lowercase().contains(&query))
 }
 
-/// Handles the nonempty text behavior.
 pub(crate) fn nonempty_text(value: Option<&str>, fallback: &'static str) -> String {
     value
         .map(str::trim)
@@ -24,18 +23,15 @@ pub(crate) fn nonempty_text(value: Option<&str>, fallback: &'static str) -> Stri
 
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
 pub(crate) trait IntoNonemptyString {
-    /// Handles the into nonempty behavior.
     fn into_nonempty(self) -> Option<String>;
 }
 
 impl IntoNonemptyString for String {
-    /// Handles the into nonempty behavior.
     fn into_nonempty(self) -> Option<String> {
         if self.is_empty() { None } else { Some(self) }
     }
 }
 
-/// Handles the sentence label behavior.
 pub(crate) fn sentence_label(value: &str) -> String {
     value
         .split('_')

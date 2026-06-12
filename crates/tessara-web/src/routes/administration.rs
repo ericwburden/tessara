@@ -14,7 +14,6 @@ use crate::features::administration::{
 
 use crate::routes::PRIMARY_SSR_MODE;
 
-/// Handles the administration routes behavior.
 pub fn administration_routes() -> impl MatchNestedRoutes + Clone {
     view! {
         <>

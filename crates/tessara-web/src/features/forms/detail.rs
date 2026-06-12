@@ -12,7 +12,6 @@ use crate::ui::{
 use leptos::prelude::*;
 
 #[component]
-/// Renders the forms detail page view.
 pub fn FormsDetailPage() -> impl IntoView {
     let params = require_route_params::<FormRouteParams>();
     let form_id = params.form_id;

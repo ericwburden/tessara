@@ -8,7 +8,6 @@ use icons::{ChevronDown, ListFilter, Search};
 use leptos::prelude::*;
 
 #[component]
-/// Renders the forms node lineage filter view.
 pub(crate) fn FormsNodeLineageFilter(
     options: Vec<FormNodeFilterOption>,
     selected_node_id: RwSignal<Option<String>>,

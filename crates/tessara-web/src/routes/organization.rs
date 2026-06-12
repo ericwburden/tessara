@@ -12,7 +12,6 @@ use crate::features::organization::{
 
 use crate::routes::PRIMARY_SSR_MODE;
 
-/// Handles the organization routes behavior.
 pub fn organization_routes() -> impl MatchNestedRoutes + Clone {
     view! {
         <>

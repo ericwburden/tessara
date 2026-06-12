@@ -13,7 +13,6 @@ use crate::features::workflows::{
 
 use crate::routes::PRIMARY_SSR_MODE;
 
-/// Handles the workflow routes behavior.
 pub fn workflow_routes() -> impl MatchNestedRoutes + Clone {
     view! {
         <>

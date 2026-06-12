@@ -8,7 +8,6 @@ use std::collections::BTreeSet;
 
 #[allow(clippy::too_many_arguments)]
 #[component]
-/// Renders the dataset sql preview panel view.
 pub(crate) fn DatasetSqlPreviewPanel(
     dataset_id: Option<String>,
     name: RwSignal<String>,

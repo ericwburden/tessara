@@ -8,7 +8,6 @@ use leptos::prelude::*;
 use std::collections::BTreeMap;
 
 #[component]
-/// Renders the dataset fields editor view.
 pub(crate) fn DatasetFieldsEditor(
     fields: RwSignal<Vec<DatasetFieldDraft>>,
     sources: RwSignal<Vec<DatasetSourceDraft>>,

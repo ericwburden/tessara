@@ -7,7 +7,6 @@ use icons::{
 };
 use leptos::prelude::*;
 
-/// Handles the form builder field default label behavior.
 pub(crate) fn form_builder_field_default_label(field_type: &str, id: usize) -> String {
     if field_type == "static_text" {
         "Static text".into()
@@ -16,7 +15,6 @@ pub(crate) fn form_builder_field_default_label(field_type: &str, id: usize) -> S
     }
 }
 
-/// Handles the form builder field type icon behavior.
 pub(crate) fn form_builder_field_type_icon(field_type: &str) -> AnyView {
     match field_type {
         "static_text" => view! { <TextQuote /> }.into_any(),

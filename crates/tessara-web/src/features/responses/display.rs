@@ -12,27 +12,22 @@ use crate::utils::text::nonempty_text;
 use leptos::prelude::*;
 use serde_json::Value;
 
-/// Handles the submission status key behavior.
 pub(crate) fn submission_status_key(submission: &SubmissionSummary) -> String {
     submission.status.trim().to_lowercase()
 }
 
-/// Handles the submission status label behavior.
 pub(crate) fn submission_status_label(submission: &SubmissionSummary) -> String {
     metadata_label(&submission.status)
 }
 
-/// Handles the submission workflow label behavior.
 pub(crate) fn submission_workflow_label(submission: &SubmissionSummary) -> String {
     nonempty_text(submission.workflow_name.as_deref(), "Standalone Response")
 }
 
-/// Handles the submission assignee label behavior.
 pub(crate) fn submission_assignee_label(submission: &SubmissionSummary) -> String {
     nonempty_text(submission.assigned_to_display_name.as_deref(), "Unassigned")
 }
 
-/// Handles the submission step label behavior.
 pub(crate) fn submission_step_label(submission: &SubmissionSummary) -> String {
     let title = nonempty_text(
         submission.current_workflow_step_title.as_deref(),
@@ -49,7 +44,6 @@ pub(crate) fn submission_step_label(submission: &SubmissionSummary) -> String {
     }
 }
 
-/// Handles the submission progress label behavior.
 pub(crate) fn submission_progress_label(submission: &SubmissionSummary) -> String {
     match (
         submission.workflow_steps_completed,
@@ -60,7 +54,6 @@ pub(crate) fn submission_progress_label(submission: &SubmissionSummary) -> Strin
     }
 }
 
-/// Handles the response selected assignment behavior.
 pub(crate) fn response_selected_assignment(
     options: RwSignal<Option<AssignmentResponseStartOptions>>,
     selected_assignment_index: RwSignal<String>,
@@ -71,7 +64,6 @@ pub(crate) fn response_selected_assignment(
         .and_then(|options| options.assignments.get(index).cloned())
 }
 
-/// Handles the response start can submit behavior.
 pub(crate) fn response_start_can_submit(
     options: RwSignal<Option<AssignmentResponseStartOptions>>,
     is_loading: RwSignal<bool>,
@@ -90,7 +82,6 @@ pub(crate) fn response_start_can_submit(
     }
 }
 
-/// Handles the response value label behavior.
 pub(crate) fn response_value_label(value: Option<&Value>) -> String {
     match value {
         None | Some(Value::Null) => "Missing".into(),
@@ -114,7 +105,6 @@ pub(crate) fn response_value_label(value: Option<&Value>) -> String {
     }
 }
 
-/// Handles the rendered form field layout style behavior.
 pub(crate) fn rendered_form_field_layout_style(field: &RenderedField) -> String {
     let width = field.grid_width.clamp(1, FORM_BUILDER_COLUMN_COUNT);
     let max_column = (FORM_BUILDER_COLUMN_COUNT - width + 1).max(1);
@@ -128,7 +118,6 @@ pub(crate) fn rendered_form_field_layout_style(field: &RenderedField) -> String 
     )
 }
 
-/// Handles the response field class behavior.
 pub(crate) fn response_field_class(field_type: &str) -> String {
     format!(
         "form-field response-form-field response-form-field--{}",

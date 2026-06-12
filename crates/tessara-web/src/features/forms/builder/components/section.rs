@@ -13,7 +13,6 @@ use crate::features::forms::builder::{
 };
 
 #[component]
-/// Renders the form builder section view.
 pub(crate) fn FormBuilderSection(
     section_id: usize,
     builder_sections: RwSignal<Vec<FormBuilderSectionDraft>>,

@@ -9,7 +9,6 @@ use icons::Search;
 use leptos::prelude::*;
 
 #[component]
-/// Renders the related responses table view.
 pub(crate) fn RelatedResponsesTable(responses: Vec<NodeSubmissionLink>) -> impl IntoView {
     let search = RwSignal::new(String::new());
     let status_filter = RwSignal::new("all".to_string());

@@ -11,7 +11,6 @@ use leptos::prelude::*;
 pub(crate) use detail::AdministrationRoleDetailPanel;
 
 #[component]
-/// Renders the administration roles list view.
 pub(crate) fn AdministrationRolesList(
     roles: Vec<AdminRoleSummary>,
     search: RwSignal<String>,

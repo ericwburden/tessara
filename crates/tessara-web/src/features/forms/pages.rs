@@ -10,7 +10,6 @@ use crate::ui::{AppShell, Button, PageHeader};
 use crate::utils::text::text_matches;
 use leptos::prelude::*;
 
-/// Renders the forms page view.
 #[component]
 pub fn FormsPage() -> impl IntoView {
     let forms = RwSignal::new(Vec::<FormSummary>::new());

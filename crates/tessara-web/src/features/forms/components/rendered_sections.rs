@@ -7,7 +7,6 @@ use crate::ui::{DataTable, empty_view};
 use leptos::prelude::*;
 
 #[component]
-/// Renders the rendered form sections view.
 pub(crate) fn RenderedFormSections(rendered_form: Option<RenderedForm>) -> impl IntoView {
     view! {
         <div class="form-detail-sections">

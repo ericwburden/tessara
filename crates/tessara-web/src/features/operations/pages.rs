@@ -10,7 +10,6 @@ use super::tables::{DatasetReadinessTable, OperationsSummaryPanel, WorkflowAssig
 use super::types::*;
 
 #[component]
-/// Renders the operations page view.
 pub fn OperationsPage() -> impl IntoView {
     let status = RwSignal::new(None::<OperationsStatus>);
     let is_loading = RwSignal::new(true);

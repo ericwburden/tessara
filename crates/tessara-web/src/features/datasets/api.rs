@@ -98,7 +98,6 @@ pub(super) async fn fetch_rendered_form(
 }
 
 #[cfg(feature = "hydrate")]
-/// Handles the save dataset payload behavior.
 pub(super) async fn save_dataset_payload(
     dataset_id: Option<&str>,
     payload: &DatasetPayload,
@@ -124,7 +123,6 @@ pub(super) async fn save_dataset_payload(
 }
 
 #[cfg(feature = "hydrate")]
-/// Handles the preview dataset sql payload behavior.
 pub(super) async fn preview_dataset_sql_payload(
     dataset_id: Option<&str>,
     payload: &DatasetPayload,

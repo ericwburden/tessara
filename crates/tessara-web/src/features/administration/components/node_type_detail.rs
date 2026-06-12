@@ -7,7 +7,6 @@ use crate::utils::pagination::pagination_page_start;
 use icons::Search;
 use leptos::prelude::*;
 
-/// Renders the node type scoped forms list view.
 #[component]
 pub(crate) fn NodeTypeScopedFormsList(forms: Vec<NodeTypeFormLink>) -> impl IntoView {
     let search = RwSignal::new(String::new());
@@ -88,7 +87,6 @@ pub(crate) fn NodeTypeScopedFormsList(forms: Vec<NodeTypeFormLink>) -> impl Into
     }
 }
 
-/// Renders the node type detail collections view.
 #[component]
 pub(crate) fn NodeTypeDetailCollections(
     detail: Option<NodeTypeDefinition>,

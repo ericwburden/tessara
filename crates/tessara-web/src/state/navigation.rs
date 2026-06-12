@@ -88,12 +88,10 @@ pub const NAV_ITEMS: [NavItem; 10] = [
     },
 ];
 
-/// Handles the nav item for route behavior.
 pub fn nav_item_for_route(route_key: &str) -> Option<&'static NavItem> {
     NAV_ITEMS.iter().find(|item| item.key == route_key)
 }
 
-/// Handles the nav item is allowed behavior.
 pub fn nav_item_is_allowed(item: &NavItem, capabilities: &[String]) -> bool {
     item.capabilities.is_empty()
         || capabilities
@@ -105,7 +103,6 @@ pub fn nav_item_is_allowed(item: &NavItem, capabilities: &[String]) -> bool {
             .any(|required| capabilities.iter().any(|capability| capability == required))
 }
 
-/// Handles the nav items for section behavior.
 pub fn nav_items_for_section(
     section: &'static str,
     capabilities: &[String],

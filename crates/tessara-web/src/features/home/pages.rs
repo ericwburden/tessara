@@ -12,7 +12,6 @@ use crate::utils::pagination::pagination_page_start;
 use crate::utils::text::nonempty_text;
 
 #[component]
-/// Renders the home page view.
 pub fn HomePage() -> impl IntoView {
     let pending_work = RwSignal::new(Vec::<PendingWorkflowWork>::new());
     let pending_work_loading = RwSignal::new(true);
@@ -69,7 +68,6 @@ pub fn HomePage() -> impl IntoView {
 }
 
 #[component]
-/// Renders the home pending work view.
 fn HomePendingWork(
     pending_work: Vec<PendingWorkflowWork>,
     is_starting: RwSignal<bool>,

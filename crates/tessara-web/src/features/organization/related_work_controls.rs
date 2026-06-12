@@ -5,7 +5,6 @@ use icons::ListFilter;
 use leptos::prelude::*;
 
 #[component]
-/// Renders the status filter header view.
 pub(crate) fn StatusFilterHeader(
     status_filter: RwSignal<String>,
     #[prop(optional)] compact_control: bool,
@@ -102,7 +101,6 @@ pub(crate) fn StatusFilterHeader(
     }
 }
 
-/// Handles the filter option class behavior.
 pub(crate) fn filter_option_class(current: &str, value: &str) -> &'static str {
     if current == value {
         "data-table-filter__option is-active"

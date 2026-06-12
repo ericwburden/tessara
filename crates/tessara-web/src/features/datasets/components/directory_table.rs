@@ -11,7 +11,6 @@ use icons::Search;
 use leptos::prelude::*;
 
 #[component]
-/// Renders the dataset directory table view.
 pub(crate) fn DatasetDirectoryTable(
     datasets: Vec<DatasetSummary>,
     search: RwSignal<String>,
@@ -76,7 +75,6 @@ pub(crate) fn DatasetDirectoryTable(
 }
 
 #[component]
-/// Renders the dataset summary row view.
 fn DatasetSummaryRow(dataset: DatasetSummary) -> impl IntoView {
     let href = format!("/datasets/{}", dataset.id);
     view! {
@@ -95,7 +93,6 @@ fn DatasetSummaryRow(dataset: DatasetSummary) -> impl IntoView {
 }
 
 #[component]
-/// Renders the dataset mobile cards view.
 fn DatasetMobileCards(
     datasets: Vec<DatasetSummary>,
     page_index: RwSignal<usize>,
@@ -133,7 +130,6 @@ fn DatasetMobileCards(
 }
 
 #[component]
-/// Renders the table pagination view.
 fn TablePagination(
     summary: String,
     page_count: usize,

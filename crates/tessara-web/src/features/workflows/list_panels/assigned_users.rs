@@ -9,7 +9,6 @@ use leptos::portal::Portal;
 use leptos::prelude::*;
 
 #[component]
-/// Renders the workflow assigned users list view.
 pub(in crate::features::workflows) fn WorkflowAssignedUsersList(
     users: Vec<FormAttachmentLink>,
     workflow_name: String,
@@ -51,7 +50,6 @@ pub(in crate::features::workflows) fn WorkflowAssignedUsersList(
 }
 
 #[component]
-/// Renders the workflow assigned users sheet view.
 pub(in crate::features::workflows) fn WorkflowAssignedUsersSheet(
     detail: RwSignal<Option<WorkflowAssignedUsersSheetData>>,
 ) -> impl IntoView {

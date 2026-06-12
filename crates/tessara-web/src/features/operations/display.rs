@@ -2,7 +2,6 @@
 
 use super::types::WorkflowAssignmentStatus;
 
-/// Handles the workflow revision label behavior.
 pub(crate) fn workflow_revision_label(instance: &WorkflowAssignmentStatus) -> String {
     format!(
         "Revision {}",
@@ -13,7 +12,6 @@ pub(crate) fn workflow_revision_label(instance: &WorkflowAssignmentStatus) -> St
     )
 }
 
-/// Handles the workflow assignment href behavior.
 pub(crate) fn workflow_assignment_href(instance: &WorkflowAssignmentStatus) -> String {
     format!(
         "/workflows/assignments?assignment_id={}",
@@ -21,7 +19,6 @@ pub(crate) fn workflow_assignment_href(instance: &WorkflowAssignmentStatus) -> S
     )
 }
 
-/// Handles the workflow step summary behavior.
 pub(crate) fn workflow_step_summary(instance: &WorkflowAssignmentStatus) -> String {
     format!(
         "{} of {} steps complete",
@@ -29,7 +26,6 @@ pub(crate) fn workflow_step_summary(instance: &WorkflowAssignmentStatus) -> Stri
     )
 }
 
-/// Handles the workflow response summary behavior.
 pub(crate) fn workflow_response_summary(instance: &WorkflowAssignmentStatus) -> String {
     format!(
         "{} draft / {} submitted",

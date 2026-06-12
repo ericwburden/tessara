@@ -10,7 +10,6 @@ use crate::features::components::{ComponentsDetailPage, ComponentsPage};
 
 use crate::routes::PRIMARY_SSR_MODE;
 
-/// Handles the component routes behavior.
 pub fn component_routes() -> impl MatchNestedRoutes + Clone {
     view! {
         <>

@@ -16,7 +16,6 @@ use crate::ui::empty_view;
 use icons::{Trash2, X};
 
 #[component]
-/// Renders the field config sheet view.
 pub(crate) fn FieldConfigSheet(
     active_builder_field: RwSignal<Option<usize>>,
     builder_sections: RwSignal<Vec<FormBuilderSectionDraft>>,

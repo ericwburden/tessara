@@ -73,7 +73,6 @@ pub(crate) fn build_organization_branches(
         .collect()
 }
 
-/// Handles the child create links behavior.
 pub(crate) fn child_create_links(
     parent_node_type_id: &str,
     node_types: &[NodeTypeCatalogEntry],
@@ -100,7 +99,6 @@ pub(crate) fn child_create_links(
 }
 
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
-/// Handles the visible child label behavior.
 pub(crate) fn visible_child_label(count: usize) -> String {
     match count {
         0 => "No visible children".to_string(),

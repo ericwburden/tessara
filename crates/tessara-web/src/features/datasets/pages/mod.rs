@@ -15,7 +15,6 @@ use super::permissions::can_manage_datasets;
 use super::types::*;
 
 #[component]
-/// Renders the datasets page view.
 pub fn DatasetsPage() -> impl IntoView {
     let datasets = RwSignal::new(Vec::<DatasetSummary>::new());
     let account = RwSignal::new(None::<SessionAccount>);
@@ -89,7 +88,6 @@ pub fn DatasetsPage() -> impl IntoView {
 }
 
 #[component]
-/// Renders the datasets detail page view.
 pub fn DatasetsDetailPage() -> impl IntoView {
     let params = require_route_params::<DatasetRouteParams>();
     let dataset_id = params.dataset_id;
@@ -97,7 +95,6 @@ pub fn DatasetsDetailPage() -> impl IntoView {
 }
 
 #[component]
-/// Renders the datasets edit page view.
 pub fn DatasetsEditPage() -> impl IntoView {
     let params = require_route_params::<DatasetRouteParams>();
     let dataset_id = params.dataset_id;
@@ -105,13 +102,11 @@ pub fn DatasetsEditPage() -> impl IntoView {
 }
 
 #[component]
-/// Renders the datasets new page view.
 pub fn DatasetsNewPage() -> impl IntoView {
     view! { <DatasetEditorSurface dataset_id=None/> }
 }
 
 #[component]
-/// Renders the datasets preview page view.
 pub fn DatasetsPreviewPage() -> impl IntoView {
     let params = require_route_params::<DatasetRouteParams>();
     let dataset_id = params.dataset_id;

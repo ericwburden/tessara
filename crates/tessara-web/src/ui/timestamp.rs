@@ -10,7 +10,6 @@ use js_sys::Date;
 use wasm_bindgen::JsValue;
 
 #[component]
-/// Renders the timestamp view.
 pub fn Timestamp(value: String) -> impl IntoView {
     let datetime = value.clone();
     let display_value = RwSignal::new(value.clone());

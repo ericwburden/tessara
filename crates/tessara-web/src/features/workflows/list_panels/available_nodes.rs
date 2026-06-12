@@ -9,7 +9,6 @@ use leptos::portal::Portal;
 use leptos::prelude::*;
 
 #[component]
-/// Renders the workflow available nodes list view.
 pub(in crate::features::workflows) fn WorkflowAvailableNodesList(
     nodes: Vec<FormAttachmentLink>,
     workflow_name: String,
@@ -51,7 +50,6 @@ pub(in crate::features::workflows) fn WorkflowAvailableNodesList(
 }
 
 #[component]
-/// Renders the workflow available nodes sheet view.
 pub(in crate::features::workflows) fn WorkflowAvailableNodesSheet(
     detail: RwSignal<Option<WorkflowAvailableNodesSheetData>>,
 ) -> impl IntoView {

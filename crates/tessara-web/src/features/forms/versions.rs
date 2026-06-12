@@ -62,7 +62,6 @@ pub(crate) fn form_version_sort_label(version: &FormVersionSummary) -> String {
 }
 
 #[component]
-/// Renders the form versions table view.
 pub(crate) fn FormVersionsTable(versions: Vec<FormVersionSummary>) -> impl IntoView {
     const DEFAULT_VISIBLE_FORM_VERSIONS: usize = 5;
 

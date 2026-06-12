@@ -10,7 +10,6 @@ use crate::utils::text::{nonempty_text, sentence_label};
 use icons::FileText;
 use leptos::prelude::*;
 
-/// Handles the workflow revision label from raw behavior.
 pub(crate) fn workflow_revision_label_from_raw(label: &str) -> String {
     let trimmed = label.trim();
     if trimmed.is_empty() {
@@ -43,7 +42,6 @@ pub(crate) fn workflow_assigned_users_label(workflow: &WorkflowSummary) -> Strin
     }
 }
 
-/// Handles the workflow revision label from option behavior.
 pub(crate) fn workflow_revision_label_from_option(label: Option<String>) -> String {
     label
         .as_deref()
@@ -51,7 +49,6 @@ pub(crate) fn workflow_revision_label_from_option(label: Option<String>) -> Stri
         .unwrap_or_else(|| "-".to_string())
 }
 
-/// Handles the workflow version label behavior.
 pub(crate) fn workflow_version_label(workflow: &WorkflowSummary) -> String {
     workflow
         .current_version_label
@@ -60,12 +57,10 @@ pub(crate) fn workflow_version_label(workflow: &WorkflowSummary) -> String {
         .unwrap_or_else(|| "-".to_string())
 }
 
-/// Handles the workflow status key behavior.
 pub(crate) fn workflow_status_key(workflow: &WorkflowSummary) -> &str {
     workflow.current_status.as_deref().unwrap_or("none")
 }
 
-/// Handles the workflow status label behavior.
 pub(crate) fn workflow_status_label(workflow: &WorkflowSummary) -> String {
     workflow
         .current_status
@@ -74,12 +69,10 @@ pub(crate) fn workflow_status_label(workflow: &WorkflowSummary) -> String {
         .unwrap_or_else(|| "No revisions".to_string())
 }
 
-/// Handles the workflow description label behavior.
 pub(crate) fn workflow_description_label(workflow: &WorkflowSummary) -> String {
     nonempty_text(Some(workflow.description.as_str()), "No description")
 }
 
-/// Handles the workflow available nodes label behavior.
 pub(crate) fn workflow_available_nodes_label(nodes: &[WorkflowAvailableNodeSummary]) -> String {
     match nodes.len() {
         1 => nodes[0].name.clone(),
@@ -92,7 +85,6 @@ pub(crate) fn workflow_available_nodes_label(nodes: &[WorkflowAvailableNodeSumma
     }
 }
 
-/// Handles the workflow source label behavior.
 pub(crate) fn workflow_source_label(source: &str) -> Option<&'static str> {
     if source == "generated_form" {
         Some("Generated single-form")
@@ -102,7 +94,6 @@ pub(crate) fn workflow_source_label(source: &str) -> Option<&'static str> {
 }
 
 #[component]
-/// Renders the workflow source marker view.
 pub(crate) fn WorkflowSourceMarker(source: String) -> impl IntoView {
     if source == "generated_form" {
         view! {
@@ -121,7 +112,6 @@ pub(crate) fn WorkflowSourceMarker(source: String) -> impl IntoView {
     }
 }
 
-/// Handles the active workflow definition version behavior.
 pub(crate) fn active_workflow_definition_version(
     workflow: &WorkflowDefinition,
 ) -> Option<&WorkflowVersionSummary> {
@@ -132,7 +122,6 @@ pub(crate) fn active_workflow_definition_version(
         .or_else(|| workflow.versions.first())
 }
 
-/// Handles the workflow definition version label behavior.
 pub(crate) fn workflow_definition_version_label(
     version: Option<&WorkflowVersionSummary>,
 ) -> String {
@@ -142,7 +131,6 @@ pub(crate) fn workflow_definition_version_label(
         .unwrap_or_else(|| "-".to_string())
 }
 
-/// Handles the workflow definition status label behavior.
 pub(crate) fn workflow_definition_status_label(version: Option<&WorkflowVersionSummary>) -> String {
     version
         .map(|version| sentence_label(&version.status))

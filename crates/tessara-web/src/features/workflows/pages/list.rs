@@ -18,7 +18,6 @@ use crate::utils::text::text_matches;
 use leptos::prelude::*;
 
 #[component]
-/// Renders the workflows page view.
 pub fn WorkflowsPage() -> impl IntoView {
     let workflows = RwSignal::new(Vec::<WorkflowSummary>::new());
     let organization_nodes = RwSignal::new(Vec::<OrganizationNode>::new());

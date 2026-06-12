@@ -5,7 +5,6 @@ use leptos::prelude::*;
 use std::collections::HashSet;
 
 #[component]
-/// Renders the node type relationship picker view.
 pub(crate) fn NodeTypeRelationshipPicker(
     title: &'static str,
     empty_message: &'static str,

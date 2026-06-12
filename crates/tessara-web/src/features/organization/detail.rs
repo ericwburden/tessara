@@ -11,7 +11,6 @@ use leptos::portal::Portal;
 use leptos::prelude::*;
 
 #[component]
-/// Renders the organization detail sheet view.
 pub(crate) fn OrganizationDetailSheet(
     detail: RwSignal<Option<OrganizationNodeDetail>>,
     is_loading: RwSignal<bool>,
@@ -79,7 +78,6 @@ pub(crate) fn OrganizationDetailSheet(
 }
 
 #[component]
-/// Renders the organization detail content view.
 pub(crate) fn OrganizationDetailContent(detail: OrganizationNodeDetail) -> impl IntoView {
     let metadata_rows = metadata_rows(&detail.metadata);
     let node_type = detail.node_type_singular_label.clone();
@@ -113,7 +111,6 @@ pub(crate) fn OrganizationDetailContent(detail: OrganizationNodeDetail) -> impl 
 }
 
 #[component]
-/// Renders the organization detail full content view.
 pub(crate) fn OrganizationDetailFullContent(detail: OrganizationNodeDetail) -> impl IntoView {
     let metadata_rows = metadata_rows(&detail.metadata);
     let node_type = detail.node_type_singular_label.clone();
@@ -151,7 +148,6 @@ pub(crate) fn OrganizationDetailFullContent(detail: OrganizationNodeDetail) -> i
 }
 
 #[component]
-/// Renders the dynamic info table view.
 pub(crate) fn DynamicInfoTable(rows: Vec<(String, String)>) -> impl IntoView {
     view! {
         <table class="info-list-table">

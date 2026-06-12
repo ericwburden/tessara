@@ -8,7 +8,6 @@ use leptos::portal::Portal;
 use leptos::prelude::*;
 
 #[component]
-/// Renders the admin role sheet view.
 pub(crate) fn AdminRoleSheet(
     is_open: RwSignal<bool>,
     editing_role_id: RwSignal<Option<String>>,

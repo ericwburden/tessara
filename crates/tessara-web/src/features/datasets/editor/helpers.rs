@@ -5,7 +5,6 @@ use std::collections::BTreeMap;
 
 use super::source_options::source_field_options;
 
-/// Handles the operation label behavior.
 pub(crate) fn operation_label(value: &str) -> &'static str {
     match value {
         "union" => "UNION",
@@ -17,7 +16,6 @@ pub(crate) fn operation_label(value: &str) -> &'static str {
     }
 }
 
-/// Handles the expression label behavior.
 pub(crate) fn expression_label(sources: &[DatasetSourceDraft], operation: &str) -> String {
     let aliases = sources
         .iter()
@@ -33,7 +31,6 @@ pub(crate) fn expression_label(sources: &[DatasetSourceDraft], operation: &str) 
         .unwrap_or_else(|| "Choose at least one input".into())
 }
 
-/// Handles the expression button class behavior.
 pub(crate) fn expression_button_class(is_active: bool, base: &'static str) -> String {
     if is_active {
         format!("{base} is-active")
@@ -42,7 +39,6 @@ pub(crate) fn expression_button_class(is_active: bool, base: &'static str) -> St
     }
 }
 
-/// Handles the field metadata behavior.
 pub(crate) fn field_metadata(
     field: &DatasetFieldDraft,
     sources: &[DatasetSourceDraft],
@@ -59,7 +55,6 @@ pub(crate) fn field_metadata(
         })
 }
 
-/// Handles the confirm action behavior.
 pub(crate) fn confirm_action(message: &str) -> bool {
     #[cfg(feature = "hydrate")]
     {
@@ -75,7 +70,6 @@ pub(crate) fn confirm_action(message: &str) -> bool {
     }
 }
 
-/// Handles the version label behavior.
 pub(crate) fn version_label(version: &DatasetFormVersionOption) -> String {
     version
         .version_label
@@ -83,12 +77,10 @@ pub(crate) fn version_label(version: &DatasetFormVersionOption) -> String {
         .unwrap_or_else(|| format!("Major {}", version.version_major.unwrap_or(1)))
 }
 
-/// Handles the join key option label behavior.
 pub(crate) fn join_key_option_label(field: &DatasetRenderedField) -> String {
     format!("{} ({})", truncate_field_label(&field.label), field.key)
 }
 
-/// Handles the truncate field label behavior.
 pub(crate) fn truncate_field_label(label: &str) -> String {
     const MAX_CHARS: usize = 32;
     let mut chars = label.chars();
@@ -100,7 +92,6 @@ pub(crate) fn truncate_field_label(label: &str) -> String {
     }
 }
 
-/// Handles the source seed key behavior.
 pub(crate) fn source_seed_key(index: usize, form_version_id: &str) -> String {
     format!("{index}:{form_version_id}")
 }

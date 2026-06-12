@@ -5,7 +5,6 @@
 use leptos::prelude::*;
 
 #[component]
-/// Renders the page header view.
 pub fn PageHeader(
     title: &'static str,
     #[prop(optional)] description: Option<&'static str>,

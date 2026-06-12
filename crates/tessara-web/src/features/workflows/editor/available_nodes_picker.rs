@@ -7,7 +7,6 @@ use leptos::prelude::*;
 use std::collections::HashSet;
 
 #[component]
-/// Renders the workflow available nodes picker view.
 pub(in crate::features::workflows) fn WorkflowAvailableNodesPicker(
     nodes: Vec<OrganizationNode>,
     selected_node_ids: RwSignal<HashSet<String>>,

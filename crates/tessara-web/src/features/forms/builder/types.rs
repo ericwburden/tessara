@@ -44,7 +44,6 @@ pub(crate) struct FormBuilderFieldDraft {
     pub(crate) key_was_edited: bool,
 }
 
-/// Handles the blank form builder section behavior.
 pub(crate) fn blank_form_builder_section(id: usize) -> FormBuilderSectionDraft {
     FormBuilderSectionDraft {
         id,

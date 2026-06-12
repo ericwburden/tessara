@@ -10,7 +10,6 @@ use crate::features::operations::OperationsPage;
 
 use crate::routes::PRIMARY_SSR_MODE;
 
-/// Handles the operation routes behavior.
 pub fn operation_routes() -> impl MatchNestedRoutes + Clone {
     view! {
         <>

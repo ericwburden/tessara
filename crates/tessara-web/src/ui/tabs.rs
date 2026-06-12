@@ -5,7 +5,6 @@
 use leptos::prelude::*;
 
 #[component]
-/// Renders the tabs view.
 pub fn Tabs(active: RwSignal<String>, children: Children) -> impl IntoView {
     view! {
         <div class="tabs" data-active=move || active.get()>
@@ -15,7 +14,6 @@ pub fn Tabs(active: RwSignal<String>, children: Children) -> impl IntoView {
 }
 
 #[component]
-/// Renders the tabs list view.
 pub fn TabsList(children: Children) -> impl IntoView {
     view! {
         <div class="tabs-list" role="tablist">
@@ -25,7 +23,6 @@ pub fn TabsList(children: Children) -> impl IntoView {
 }
 
 #[component]
-/// Renders the tabs trigger view.
 pub fn TabsTrigger(
     active: RwSignal<String>,
     value: &'static str,
@@ -51,7 +48,6 @@ pub fn TabsTrigger(
 }
 
 #[component]
-/// Renders the tabs content view.
 pub fn TabsContent(
     active: RwSignal<String>,
     value: &'static str,

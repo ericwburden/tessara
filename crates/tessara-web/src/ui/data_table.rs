@@ -6,7 +6,6 @@ use icons::Search;
 use leptos::prelude::*;
 
 #[component]
-/// Renders the data table view.
 pub fn DataTable(children: Children) -> impl IntoView {
     view! {
         <div class="table-wrap">
@@ -18,7 +17,6 @@ pub fn DataTable(children: Children) -> impl IntoView {
 }
 
 #[component]
-/// Renders the searchable data table view.
 pub fn SearchableDataTable(
     search_label: &'static str,
     placeholder: &'static str,

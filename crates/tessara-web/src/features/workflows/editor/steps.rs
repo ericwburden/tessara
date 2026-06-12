@@ -4,7 +4,6 @@ use crate::features::workflows::{CreateWorkflowStepPayload, WorkflowStepDraft};
 use crate::utils::text::IntoNonemptyString;
 
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
-/// Handles the workflow step payloads from drafts behavior.
 pub(crate) fn workflow_step_payloads_from_drafts(
     steps: Vec<WorkflowStepDraft>,
 ) -> Vec<CreateWorkflowStepPayload> {
@@ -24,7 +23,6 @@ pub(crate) fn workflow_step_payloads_from_drafts(
 }
 
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
-/// Handles the workflow step signature behavior.
 pub(crate) fn workflow_step_signature(steps: &[WorkflowStepDraft]) -> Vec<(String, String)> {
     steps
         .iter()
@@ -37,7 +35,6 @@ pub(crate) fn workflow_step_signature(steps: &[WorkflowStepDraft]) -> Vec<(Strin
         .collect()
 }
 
-/// Handles the workflow step title by id behavior.
 pub(crate) fn workflow_step_title_by_id(steps: &[WorkflowStepDraft], step_id: usize) -> String {
     steps
         .iter()
@@ -46,7 +43,6 @@ pub(crate) fn workflow_step_title_by_id(steps: &[WorkflowStepDraft], step_id: us
         .unwrap_or_default()
 }
 
-/// Handles the workflow step form version id by id behavior.
 pub(crate) fn workflow_step_form_version_id_by_id(
     steps: &[WorkflowStepDraft],
     step_id: usize,

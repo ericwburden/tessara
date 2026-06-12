@@ -15,7 +15,6 @@ use crate::ui::{
 use leptos::prelude::*;
 
 #[component]
-/// Renders the administration roles page view.
 pub fn AdministrationRolesPage() -> impl IntoView {
     let roles = RwSignal::new(Vec::<AdminRoleSummary>::new());
     let capabilities = RwSignal::new(Vec::<AdminCapabilitySummary>::new());

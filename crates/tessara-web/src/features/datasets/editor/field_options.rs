@@ -7,7 +7,6 @@ use leptos::prelude::*;
 use std::collections::BTreeMap;
 
 #[component]
-/// Renders the field options panel view.
 pub(crate) fn FieldOptionsPanel(
     index: usize,
     fields: RwSignal<Vec<DatasetFieldDraft>>,

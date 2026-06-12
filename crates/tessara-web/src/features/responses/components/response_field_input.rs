@@ -7,7 +7,6 @@ use leptos::prelude::*;
 use std::collections::HashMap;
 
 #[component]
-/// Renders the response field input view.
 pub(crate) fn ResponseFieldInput(
     field: RenderedField,
     text_values: RwSignal<HashMap<String, String>>,

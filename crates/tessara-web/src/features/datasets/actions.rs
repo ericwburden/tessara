@@ -9,7 +9,6 @@ use leptos::prelude::*;
 
 #[cfg(feature = "hydrate")]
 #[allow(clippy::too_many_arguments)]
-/// Handles the save dataset behavior.
 pub(super) fn save_dataset(
     dataset_id: Option<String>,
     name: String,
@@ -63,7 +62,6 @@ pub(super) fn save_dataset(
 
 #[cfg(not(feature = "hydrate"))]
 #[allow(clippy::too_many_arguments)]
-/// Handles the save dataset behavior.
 pub(super) fn save_dataset(
     _: Option<String>,
     _: String,
@@ -80,7 +78,6 @@ pub(super) fn save_dataset(
 }
 
 #[cfg(feature = "hydrate")]
-/// Handles the dataset payload from drafts behavior.
 pub(super) fn dataset_payload_from_drafts(
     name: String,
     slug: String,
@@ -133,7 +130,6 @@ pub(super) fn dataset_payload_from_drafts(
 
 #[cfg(feature = "hydrate")]
 #[allow(clippy::too_many_arguments)]
-/// Handles the preview dataset sql behavior.
 pub(super) fn preview_dataset_sql(
     dataset_id: Option<String>,
     name: String,
@@ -174,7 +170,6 @@ pub(super) fn preview_dataset_sql(
 
 #[cfg(not(feature = "hydrate"))]
 #[allow(clippy::too_many_arguments)]
-/// Handles the preview dataset sql behavior.
 pub(super) fn preview_dataset_sql(
     _: Option<String>,
     _: String,

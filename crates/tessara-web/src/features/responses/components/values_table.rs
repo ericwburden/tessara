@@ -7,7 +7,6 @@ use crate::utils::metadata::metadata_label;
 use leptos::prelude::*;
 
 #[component]
-/// Renders the response values table view.
 pub(crate) fn ResponseValuesTable(values: Vec<SubmissionValueDetail>) -> impl IntoView {
     view! {
         <DataTable>

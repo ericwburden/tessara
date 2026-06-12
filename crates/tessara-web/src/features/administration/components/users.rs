@@ -15,7 +15,6 @@ use icons::{PanelRight, Pencil, Search};
 use leptos::prelude::*;
 use mobile_cards::AdministrationUserMobileCards;
 
-/// Renders the administration users list view.
 #[component]
 pub(crate) fn AdministrationUsersList(
     users: Vec<AdminUserSummary>,

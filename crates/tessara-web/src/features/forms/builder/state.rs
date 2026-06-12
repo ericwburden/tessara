@@ -24,7 +24,6 @@ pub(crate) struct FormBuilderEditorState {
 }
 
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
-/// Handles the new form builder editor state behavior.
 pub(crate) fn new_form_builder_editor_state() -> FormBuilderEditorState {
     FormBuilderEditorState {
         builder_sections: RwSignal::new(vec![blank_form_builder_section(1)]),
@@ -41,7 +40,6 @@ pub(crate) fn new_form_builder_editor_state() -> FormBuilderEditorState {
     }
 }
 
-/// Handles the add form builder section to editor behavior.
 pub(crate) fn add_form_builder_section_to_editor(
     builder_sections: RwSignal<Vec<FormBuilderSectionDraft>>,
     next_builder_section_id: RwSignal<usize>,

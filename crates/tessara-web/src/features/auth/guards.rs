@@ -10,7 +10,6 @@ use crate::state::navigation;
 use leptos::task::spawn_local;
 
 #[cfg(feature = "hydrate")]
-/// Handles the require authenticated route behavior.
 pub fn require_authenticated_route(active_route: &'static str) {
     if active_route == "home" {
         return;
@@ -45,7 +44,6 @@ pub fn require_authenticated_route(active_route: &'static str) {
 }
 
 #[cfg(not(feature = "hydrate"))]
-/// Handles the require authenticated route behavior.
 pub fn require_authenticated_route(active_route: &'static str) {
     let _ = active_route;
 }

@@ -10,7 +10,6 @@ use crate::ui::{Tabs, TabsContent, TabsList, TabsTrigger};
 use leptos::prelude::*;
 
 #[component]
-/// Renders the related work summary view.
 pub(crate) fn RelatedWorkSummary(
     detail: OrganizationNodeDetail,
     #[prop(optional)] cards_only: bool,

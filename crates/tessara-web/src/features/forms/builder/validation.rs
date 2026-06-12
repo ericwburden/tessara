@@ -7,7 +7,6 @@ use crate::features::shared::slug_from_label;
 use std::collections::HashSet;
 
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
-/// Handles the prepared form builder sections behavior.
 pub(crate) fn prepared_form_builder_sections(
     sections: &[FormBuilderSectionDraft],
 ) -> Result<Vec<FormBuilderSectionDraft>, String> {
@@ -29,7 +28,6 @@ pub(crate) fn prepared_form_builder_sections(
 }
 
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
-/// Handles the prepared form builder fields behavior.
 pub(crate) fn prepared_form_builder_fields(
     fields: &[FormBuilderFieldDraft],
 ) -> Result<Vec<FormBuilderFieldDraft>, String> {

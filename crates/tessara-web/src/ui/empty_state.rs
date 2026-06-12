@@ -5,7 +5,6 @@
 use leptos::prelude::*;
 
 #[component]
-/// Renders the empty state view.
 pub fn EmptyState(title: &'static str, message: &'static str) -> impl IntoView {
     view! {
         <section class="empty-state">

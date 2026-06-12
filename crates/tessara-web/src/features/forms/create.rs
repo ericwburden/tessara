@@ -14,7 +14,6 @@ use crate::ui::{
 };
 use leptos::prelude::*;
 
-/// Renders the forms new page view.
 #[component]
 pub fn FormsNewPage() -> impl IntoView {
     let node_types = RwSignal::new(Vec::<NodeTypeCatalogEntry>::new());

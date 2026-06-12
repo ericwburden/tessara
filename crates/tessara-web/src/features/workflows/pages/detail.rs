@@ -13,7 +13,6 @@ use crate::ui::{
 use leptos::prelude::*;
 
 #[component]
-/// Renders the workflows detail page view.
 pub fn WorkflowsDetailPage() -> impl IntoView {
     let params = require_route_params::<WorkflowRouteParams>();
     let workflow_id = params.workflow_id;

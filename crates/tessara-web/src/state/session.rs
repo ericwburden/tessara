@@ -20,7 +20,6 @@ pub(crate) struct ShellSessionState {
 }
 
 #[cfg(feature = "hydrate")]
-/// Handles the shell session account behavior.
 pub(crate) fn shell_session_account() -> RwSignal<Option<ShellAccountSummary>> {
     use_context::<ShellSessionState>()
         .map(|state| state.shell_account)
@@ -28,13 +27,11 @@ pub(crate) fn shell_session_account() -> RwSignal<Option<ShellAccountSummary>> {
 }
 
 #[cfg(not(feature = "hydrate"))]
-/// Handles the shell session account behavior.
 pub(crate) fn shell_session_account() -> RwSignal<Option<ShellAccountSummary>> {
     RwSignal::new(None)
 }
 
 #[cfg(feature = "hydrate")]
-/// Handles the provide shell session behavior.
 pub(crate) fn provide_shell_session() -> RwSignal<Option<ShellAccountSummary>> {
     let shell_account = RwSignal::new(None::<ShellAccountSummary>);
     load_shell_account(shell_account);
@@ -43,7 +40,6 @@ pub(crate) fn provide_shell_session() -> RwSignal<Option<ShellAccountSummary>> {
 }
 
 #[cfg(not(feature = "hydrate"))]
-/// Handles the provide shell session behavior.
 pub(crate) fn provide_shell_session() -> RwSignal<Option<ShellAccountSummary>> {
     RwSignal::new(None)
 }

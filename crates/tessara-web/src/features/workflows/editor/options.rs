@@ -6,7 +6,6 @@ use crate::features::organization::NodeTypeCatalogEntry;
 use crate::features::workflows::types::WorkflowSummary;
 
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
-/// Handles the existing workflow slugs behavior.
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
 pub(crate) fn existing_workflow_slugs(workflows: &[WorkflowSummary]) -> Vec<String> {
     workflows
@@ -15,7 +14,6 @@ pub(crate) fn existing_workflow_slugs(workflows: &[WorkflowSummary]) -> Vec<Stri
         .collect()
 }
 
-/// Handles the workflow form is in scope behavior.
 pub(crate) fn workflow_form_is_in_scope(
     form: &FormSummary,
     node_types: &[NodeTypeCatalogEntry],
@@ -25,7 +23,6 @@ pub(crate) fn workflow_form_is_in_scope(
     true
 }
 
-/// Handles the workflow form version options behavior.
 pub(crate) fn workflow_form_version_options(
     forms: &[FormSummary],
     node_types: &[NodeTypeCatalogEntry],
@@ -61,7 +58,6 @@ pub(crate) fn workflow_form_version_options(
 }
 
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
-/// Handles the workflow step form label behavior.
 pub(crate) fn workflow_step_form_label(forms: &[FormSummary], form_version_id: &str) -> String {
     forms
         .iter()

@@ -8,7 +8,6 @@ use leptos::prelude::*;
 
 #[component]
 #[allow(unused_variables)]
-/// Renders the related dashboards table view.
 pub(crate) fn RelatedDashboardsTable(dashboards: Vec<NodeDashboardLink>) -> impl IntoView {
     let search = RwSignal::new(String::new());
     let page_size = RwSignal::new(10usize);

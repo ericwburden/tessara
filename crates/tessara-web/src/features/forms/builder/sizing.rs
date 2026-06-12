@@ -4,7 +4,6 @@ use crate::features::forms::builder::{
     FORM_BUILDER_COLUMN_COUNT, FormBuilderFieldDraft, form_builder_field_has_collision,
 };
 
-/// Handles the max form builder new field width at behavior.
 pub(crate) fn max_form_builder_new_field_width_at(
     section_id: usize,
     row: i32,
@@ -41,7 +40,6 @@ pub(crate) fn max_form_builder_new_field_width_at(
     width.max(1)
 }
 
-/// Handles the max form builder field width behavior.
 pub(crate) fn max_form_builder_field_width(
     field: &FormBuilderFieldDraft,
     fields: &[FormBuilderFieldDraft],
@@ -69,7 +67,6 @@ pub(crate) fn max_form_builder_field_width(
     width.max(1)
 }
 
-/// Handles the max form builder field height behavior.
 pub(crate) fn max_form_builder_field_height(
     field: &FormBuilderFieldDraft,
     fields: &[FormBuilderFieldDraft],
@@ -90,7 +87,6 @@ pub(crate) fn max_form_builder_field_height(
     height.max(1)
 }
 
-/// Handles the form builder layout candidate behavior.
 pub(crate) fn form_builder_layout_candidate(
     field: &FormBuilderFieldDraft,
     control_index: usize,
@@ -112,7 +108,6 @@ pub(crate) fn form_builder_layout_candidate(
     candidate
 }
 
-/// Handles the valid form builder layout values behavior.
 pub(crate) fn valid_form_builder_layout_values(
     field: &FormBuilderFieldDraft,
     fields: &[FormBuilderFieldDraft],
@@ -153,7 +148,6 @@ pub(crate) fn valid_form_builder_layout_values(
 }
 
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
-/// Handles the set form builder field size behavior.
 pub(crate) fn set_form_builder_field_size(
     fields: &mut [FormBuilderFieldDraft],
     field_id: usize,

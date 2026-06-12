@@ -12,7 +12,6 @@ use crate::utils::text::text_matches;
 use leptos::prelude::*;
 
 #[allow(non_snake_case)]
-/// Renders the responses page content view.
 pub(super) fn ResponsesPageContent() -> impl IntoView {
     let submissions = RwSignal::new(Vec::<SubmissionSummary>::new());
     let is_loading = RwSignal::new(true);

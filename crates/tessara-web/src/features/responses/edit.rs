@@ -16,7 +16,6 @@ use std::collections::HashMap;
 use leptos::prelude::*;
 
 #[component]
-/// Renders the responses edit page content view.
 pub(super) fn ResponsesEditPageContent() -> impl IntoView {
     let params = require_route_params::<SubmissionRouteParams>();
     let submission_id = params.submission_id;

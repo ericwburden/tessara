@@ -7,7 +7,6 @@ use crate::utils::text::text_matches;
 use leptos::prelude::*;
 
 #[component]
-/// Renders the related forms table view.
 pub(crate) fn RelatedFormsTable(forms: Vec<NodeFormLink>) -> impl IntoView {
     let search = RwSignal::new(String::new());
     let page_size = RwSignal::new(10usize);

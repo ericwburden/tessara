@@ -10,7 +10,6 @@ use crate::features::home::HomePage;
 
 use crate::routes::PRIMARY_SSR_MODE;
 
-/// Handles the home routes behavior.
 pub fn home_routes() -> impl MatchNestedRoutes + Clone {
     view! {
         <>

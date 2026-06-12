@@ -16,7 +16,6 @@ use crate::utils::url::current_search_param;
 use leptos::prelude::*;
 
 #[component]
-/// Renders the responses new page content view.
 pub(super) fn ResponsesNewPageContent() -> impl IntoView {
     let options = RwSignal::new(None::<AssignmentResponseStartOptions>);
     let is_loading = RwSignal::new(true);

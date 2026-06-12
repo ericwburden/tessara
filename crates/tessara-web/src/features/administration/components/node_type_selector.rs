@@ -5,7 +5,6 @@ use icons::{ChevronDown, ListFilter, Search};
 use leptos::prelude::*;
 
 #[component]
-/// Renders the administration node types list view.
 pub(crate) fn AdministrationNodeTypesList(
     node_types: Vec<NodeTypeCatalogEntry>,
     search: RwSignal<String>,

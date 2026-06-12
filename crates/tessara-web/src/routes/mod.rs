@@ -21,7 +21,6 @@ pub use not_found::NotFoundPage;
 
 pub const PRIMARY_SSR_MODE: SsrMode = SsrMode::InOrder;
 
-/// Handles the routes behavior.
 pub fn routes() -> impl leptos_router::MatchNestedRoutes + Clone {
     (
         home::home_routes(),

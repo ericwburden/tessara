@@ -10,7 +10,6 @@ use crate::features::login::LoginPage;
 
 use crate::routes::PRIMARY_SSR_MODE;
 
-/// Handles the login routes behavior.
 pub fn login_routes() -> impl MatchNestedRoutes + Clone {
     view! {
         <>

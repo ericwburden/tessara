@@ -12,7 +12,6 @@ use crate::features::datasets::{
 
 use crate::routes::PRIMARY_SSR_MODE;
 
-/// Handles the dataset routes behavior.
 pub fn dataset_routes() -> impl MatchNestedRoutes + Clone {
     view! {
         <>

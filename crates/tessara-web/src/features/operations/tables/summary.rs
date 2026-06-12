@@ -4,7 +4,6 @@ use crate::features::operations::types::{OperationsSummary, ReportingDataStatus}
 use leptos::prelude::*;
 
 #[component]
-/// Renders the operations summary panel view.
 pub(crate) fn OperationsSummaryPanel(
     summary: OperationsSummary,
     reporting_data: ReportingDataStatus,
@@ -22,7 +21,6 @@ pub(crate) fn OperationsSummaryPanel(
 }
 
 #[component]
-/// Renders the operations metric view.
 fn OperationsMetric(label: &'static str, value: String) -> impl IntoView {
     view! {
         <div class="metric-card">

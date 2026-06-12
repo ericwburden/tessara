@@ -12,7 +12,6 @@ use crate::ui::{Tabs, TabsList};
 use icons::Plus;
 
 #[component]
-/// Renders the form builder canvas view.
 pub(crate) fn FormBuilderCanvas(state: FormBuilderEditorState) -> impl IntoView {
     let FormBuilderEditorState {
         builder_sections,

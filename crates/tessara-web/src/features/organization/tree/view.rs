@@ -11,7 +11,6 @@ use icons::{ChevronDown, ChevronRight, PanelRight, Pencil, Plus};
 use leptos::prelude::*;
 use std::collections::HashSet;
 
-/// Handles the organization tree view behavior.
 pub(crate) fn organization_tree_view(
     nodes: Vec<OrganizationTreeNode>,
     node_types: Vec<NodeTypeCatalogEntry>,
@@ -44,7 +43,6 @@ pub(crate) fn organization_tree_view(
     .into_any()
 }
 
-/// Handles the organization branch view behavior.
 pub(crate) fn organization_branch_view(
     branch: OrganizationTreeNode,
     node_types: Vec<NodeTypeCatalogEntry>,

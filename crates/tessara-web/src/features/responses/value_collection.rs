@@ -8,7 +8,6 @@ use serde_json::Value;
 use std::collections::HashMap;
 
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
-/// Handles the response input value behavior.
 pub(crate) fn response_input_value(value: Option<&Value>) -> String {
     match value {
         Some(Value::String(value)) => value.clone(),
@@ -25,7 +24,6 @@ pub(crate) fn response_input_value(value: Option<&Value>) -> String {
 }
 
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
-/// Handles the submission value maps behavior.
 pub(crate) fn submission_value_maps(
     detail: &SubmissionDetail,
 ) -> (HashMap<String, String>, HashMap<String, bool>) {

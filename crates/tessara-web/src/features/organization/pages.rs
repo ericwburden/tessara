@@ -15,7 +15,6 @@ use leptos::prelude::*;
 use std::collections::HashSet;
 
 #[component]
-/// Renders the organization page view.
 pub fn OrganizationPage() -> impl IntoView {
     let tree = RwSignal::new(Vec::<OrganizationTreeNode>::new());
     let node_types = RwSignal::new(Vec::<NodeTypeCatalogEntry>::new());
@@ -89,7 +88,6 @@ pub fn OrganizationPage() -> impl IntoView {
 }
 
 #[component]
-/// Renders the organization detail page view.
 pub fn OrganizationDetailPage() -> impl IntoView {
     let params = require_route_params::<NodeRouteParams>();
     let node_id = params.node_id;

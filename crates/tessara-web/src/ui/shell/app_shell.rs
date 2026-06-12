@@ -8,7 +8,6 @@ use super::{sidebar::Sidebar, top_app_bar::TopAppBar};
 use crate::features::auth;
 
 #[component]
-/// Renders the app shell view.
 pub fn AppShell(
     active_route: &'static str,
     title: &'static str,

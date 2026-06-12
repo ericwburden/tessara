@@ -7,7 +7,6 @@ use leptos::portal::Portal;
 use leptos::prelude::*;
 use std::collections::BTreeMap;
 #[component]
-/// Renders the dataset designer options sheet view.
 pub(crate) fn DatasetDesignerOptionsSheet(
     selection: RwSignal<DatasetDesignerSelection>,
     is_open: RwSignal<bool>,

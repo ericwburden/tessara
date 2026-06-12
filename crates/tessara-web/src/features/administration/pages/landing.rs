@@ -5,7 +5,6 @@ use crate::ui::{AppShell, PageHeader};
 use leptos::prelude::*;
 
 #[component]
-/// Renders the administration page view.
 pub fn AdministrationPage() -> impl IntoView {
     view! {
         <AppShell active_route="administration" title="Administration">

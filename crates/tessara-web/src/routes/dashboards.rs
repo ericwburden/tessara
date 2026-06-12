@@ -12,7 +12,6 @@ use crate::features::dashboards::{
 
 use crate::routes::PRIMARY_SSR_MODE;
 
-/// Handles the dashboard routes behavior.
 pub fn dashboard_routes() -> impl MatchNestedRoutes + Clone {
     view! {
         <>

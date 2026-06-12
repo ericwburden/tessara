@@ -6,7 +6,6 @@ use icons::{LockKeyhole, Mail};
 use leptos::prelude::*;
 
 #[component]
-/// Renders the login page view.
 pub fn LoginPage() -> impl IntoView {
     let email = RwSignal::new(String::new());
     let password = RwSignal::new(String::new());

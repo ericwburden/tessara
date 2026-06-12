@@ -14,7 +14,6 @@ pub(crate) fn parent_node_options(nodes: &[OrganizationNode]) -> Vec<ParentNodeO
     options
 }
 
-/// Handles the parent node options for edit behavior.
 pub(crate) fn parent_node_options_for_edit(
     nodes: &[OrganizationNode],
     node_types: &[NodeTypeCatalogEntry],
@@ -45,7 +44,6 @@ pub(crate) fn parent_node_options_for_edit(
         .collect()
 }
 
-/// Handles the descendant node ids behavior.
 pub(crate) fn descendant_node_ids(nodes: &[OrganizationNode], root_id: &str) -> HashSet<String> {
     let mut descendants = HashSet::from([root_id.to_string()]);
     let mut changed = true;
@@ -72,7 +70,6 @@ pub(crate) fn descendant_node_ids(nodes: &[OrganizationNode], root_id: &str) -> 
     descendants
 }
 
-/// Handles the append parent node options behavior.
 pub(crate) fn append_parent_node_options(
     branches: &[OrganizationTreeNode],
     depth: usize,
@@ -96,7 +93,6 @@ pub(crate) fn append_parent_node_options(
     }
 }
 
-/// Handles the available node types for parent behavior.
 pub(crate) fn available_node_types_for_parent(
     parent_node_id: &str,
     node_types: &[NodeTypeCatalogEntry],

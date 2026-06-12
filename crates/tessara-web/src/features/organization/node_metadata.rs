@@ -6,7 +6,6 @@ use serde_json::Value;
 use std::collections::HashMap;
 
 #[component]
-/// Renders the metadata field input view.
 pub(crate) fn MetadataFieldInput(
     field: NodeMetadataFieldSummary,
     metadata_values: RwSignal<HashMap<String, String>>,
@@ -133,7 +132,6 @@ pub(crate) fn collect_node_metadata(
 }
 
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
-/// Handles the metadata input state behavior.
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
 /// Builds editable metadata input state from stored metadata values.
 pub(crate) fn metadata_input_state(
@@ -160,7 +158,6 @@ pub(crate) fn metadata_input_state(
 }
 
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
-/// Handles the metadata input value behavior.
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
 /// Converts a stored metadata value into an editable input string.
 pub(crate) fn metadata_input_value(value: &Value) -> String {

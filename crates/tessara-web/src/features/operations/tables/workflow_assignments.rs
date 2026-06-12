@@ -14,7 +14,6 @@ use mobile_card::WorkflowAssignmentMobileCard;
 use row::WorkflowAssignmentRow;
 
 #[component]
-/// Renders the workflow assignments table view.
 pub(crate) fn WorkflowAssignmentsTable(
     assignments: Vec<WorkflowAssignmentStatus>,
 ) -> impl IntoView {

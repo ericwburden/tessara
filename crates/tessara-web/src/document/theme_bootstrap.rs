@@ -5,7 +5,6 @@
 use crate::pipeline;
 pub(crate) use crate::state::theme::{DARK_THEME_COLOR, LIGHT_THEME_COLOR, STORAGE_KEY};
 
-/// Handles the stylesheet links behavior.
 pub(crate) fn stylesheet_links() -> String {
     format!(
         "<link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">\
@@ -16,7 +15,6 @@ pub(crate) fn stylesheet_links() -> String {
     )
 }
 
-/// Handles the bootstrap script behavior.
 pub(crate) fn bootstrap_script() -> String {
     format!(
         r#"(function() {{

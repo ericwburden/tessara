@@ -8,7 +8,6 @@ use icons::Search;
 use leptos::prelude::*;
 
 #[component]
-/// Renders the dataset readiness table view.
 pub(crate) fn DatasetReadinessTable(datasets: Vec<DatasetStatus>) -> impl IntoView {
     let all_datasets = datasets.clone();
     let search = RwSignal::new(String::new());
@@ -130,7 +129,6 @@ pub(crate) fn DatasetReadinessTable(datasets: Vec<DatasetStatus>) -> impl IntoVi
 }
 
 #[component]
-/// Renders the dataset readiness row view.
 fn DatasetReadinessRow(dataset: DatasetStatus) -> impl IntoView {
     let dataset_href = format!("/datasets/{}", dataset.dataset_id);
     view! {
@@ -148,7 +146,6 @@ fn DatasetReadinessRow(dataset: DatasetStatus) -> impl IntoView {
 }
 
 #[component]
-/// Renders the dataset readiness mobile card view.
 fn DatasetReadinessMobileCard(dataset: DatasetStatus) -> impl IntoView {
     let dataset_href = format!("/datasets/{}", dataset.dataset_id);
     view! {

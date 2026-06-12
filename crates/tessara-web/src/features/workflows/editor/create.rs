@@ -18,7 +18,6 @@ use super::{
     add_workflow_step, can_submit_workflow_editor, prune_unavailable_workflow_steps,
 };
 
-/// Renders the workflows new page view.
 #[component]
 pub(crate) fn WorkflowsNewPage() -> impl IntoView {
     let node_types = RwSignal::new(Vec::<NodeTypeCatalogEntry>::new());

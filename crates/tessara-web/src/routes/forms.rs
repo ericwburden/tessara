@@ -10,7 +10,6 @@ use crate::features::forms::{FormsDetailPage, FormsEditPage, FormsNewPage, Forms
 
 use crate::routes::PRIMARY_SSR_MODE;
 
-/// Handles the form routes behavior.
 pub fn form_routes() -> impl MatchNestedRoutes + Clone {
     view! {
         <>

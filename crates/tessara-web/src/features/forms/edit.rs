@@ -16,7 +16,6 @@ use crate::ui::{
 };
 use leptos::prelude::*;
 
-/// Renders the forms edit page view.
 #[component]
 pub fn FormsEditPage() -> impl IntoView {
     let params = require_route_params::<FormRouteParams>();

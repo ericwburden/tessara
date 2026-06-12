@@ -12,7 +12,6 @@ use leptos::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
 
 #[component]
-/// Renders the dataset sources editor view.
 pub(crate) fn DatasetSourcesEditor(
     sources: RwSignal<Vec<DatasetSourceDraft>>,
     forms: RwSignal<Vec<DatasetFormOption>>,

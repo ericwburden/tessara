@@ -18,7 +18,6 @@ use std::collections::HashSet;
 
 use super::{WorkflowEditForm, prune_unavailable_workflow_steps, workflow_edit_initial_state};
 
-/// Renders the workflows edit page view.
 #[component]
 pub(crate) fn WorkflowsEditPage() -> impl IntoView {
     let params = require_route_params::<WorkflowRouteParams>();

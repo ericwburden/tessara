@@ -12,7 +12,6 @@ use crate::features::responses::{
 
 use crate::routes::PRIMARY_SSR_MODE;
 
-/// Handles the response routes behavior.
 pub fn response_routes() -> impl MatchNestedRoutes + Clone {
     view! {
         <>
