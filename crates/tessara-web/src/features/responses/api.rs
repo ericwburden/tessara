@@ -5,14 +5,12 @@
 #[cfg(feature = "hydrate")]
 use crate::features::forms::RenderedForm;
 #[cfg(feature = "hydrate")]
-use crate::features::organization::IdResponse;
-#[cfg(feature = "hydrate")]
 use crate::features::responses::types::{
     AssignmentResponseStartOptions, SaveSubmissionValuesPayload, SubmissionDetail,
     SubmissionSummary,
 };
 #[cfg(feature = "hydrate")]
-use crate::http::send_json_request;
+use crate::http::{IdResponse, send_json_request};
 
 #[cfg(feature = "hydrate")]
 pub(super) enum ResponseApiError {
