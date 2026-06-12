@@ -4,6 +4,7 @@
 
 mod api;
 mod components;
+mod create_form;
 mod display;
 mod loaders;
 mod mutations;
@@ -12,6 +13,7 @@ pub(crate) mod types;
 
 pub(crate) use crate::features::workflows::pages::assignments::WorkflowAssignmentsPage;
 pub(in crate::features::workflows) use components::WorkflowAssignmentsList;
+pub(in crate::features::workflows) use create_form::WorkflowAssignmentCreateForm;
 pub(crate) use display::{
     workflow_assigned_user_links, workflow_assignee_label, workflow_assignment_candidate_key,
     workflow_assignment_revision_label, workflow_assignment_state, workflow_assignment_state_label,
@@ -23,11 +25,7 @@ pub(crate) use loaders::{
     load_workflow_assignments,
 };
 pub(crate) use mutations::{submit_workflow_assignment_bulk, toggle_workflow_assignment};
-pub(in crate::features::workflows) use state::{
-    assignee_filter_options, filtered_assignees, filtered_assignments, filtered_node_candidates,
-    filtered_workflow_candidates, selected_node_summary, selected_workflow_summary,
-    workflow_assignment_pair_is_valid,
-};
+pub(in crate::features::workflows) use state::{assignee_filter_options, filtered_assignments};
 #[cfg(feature = "hydrate")]
 pub(crate) use types::{BulkWorkflowAssignmentPayload, UpdateWorkflowAssignmentPayload};
 pub(crate) use types::{
