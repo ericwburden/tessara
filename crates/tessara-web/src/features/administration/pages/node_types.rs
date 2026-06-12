@@ -2,19 +2,18 @@
 //!
 //! Keep node type catalog, relationship editing, metadata fields, and scoped form displays here.
 
+mod actions;
 mod state;
 
 use super::super::api::{load_admin_node_type_catalog, load_admin_node_type_detail};
 use super::super::components::{AdministrationNodeTypeEditor, AdministrationNodeTypesList};
-use crate::features::organization::NodeTypeUpsertRequest;
-#[cfg(feature = "hydrate")]
-use crate::http::send_json_id_request;
 use crate::ui::{
     AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator,
     PageHeader,
 };
 use std::collections::HashSet;
 
+use actions::save_admin_node_type;
 use leptos::prelude::*;
 use state::AdministrationNodeTypesPageState;
 
@@ -93,70 +92,25 @@ pub fn AdministrationNodeTypesPage() -> impl IntoView {
         }
     };
 
+    let state_for_save = AdministrationNodeTypesPageState {
+        node_types,
+        selected_node_type_id,
+        selected_detail,
+        search,
+        is_loading,
+        detail_loading,
+        is_saving,
+        is_creating,
+        message,
+        name,
+        slug,
+        plural_label,
+        parent_node_type_ids,
+        child_node_type_ids,
+    };
     let save_node_type = move |event: leptos::ev::SubmitEvent| {
         event.prevent_default();
-        let trimmed_name = name.get().trim().to_string();
-        let trimmed_slug = slug.get().trim().to_string();
-        let trimmed_plural = plural_label.get().trim().to_string();
-        if trimmed_name.is_empty() || trimmed_slug.is_empty() {
-            message.set(Some("Name and slug are required.".into()));
-            return;
-        }
-
-        let request = NodeTypeUpsertRequest {
-            name: trimmed_name,
-            slug: trimmed_slug,
-            plural_label: if trimmed_plural.is_empty() {
-                None
-            } else {
-                Some(trimmed_plural)
-            },
-            parent_node_type_ids: parent_node_type_ids.get().into_iter().collect::<Vec<_>>(),
-            child_node_type_ids: child_node_type_ids.get().into_iter().collect::<Vec<_>>(),
-        };
-        let body = match serde_json::to_string(&request) {
-            Ok(body) => body,
-            Err(_) => {
-                message.set(Some("Node type request could not be prepared.".into()));
-                return;
-            }
-        };
-        let selected_id = selected_node_type_id.get_untracked();
-        let creating = is_creating.get_untracked() || selected_id.is_none();
-
-        #[cfg(feature = "hydrate")]
-        {
-            leptos::task::spawn_local(async move {
-                is_saving.set(true);
-                message.set(None);
-                let builder = if creating {
-                    gloo_net::http::Request::post("/api/admin/node-types")
-                } else if let Some(node_type_id) = selected_id {
-                    gloo_net::http::Request::put(&format!("/api/admin/node-types/{node_type_id}"))
-                } else {
-                    is_saving.set(false);
-                    message.set(Some("Select a node type before saving.".into()));
-                    return;
-                };
-
-                match send_json_id_request(builder, Some(body), "Save node type").await {
-                    Ok(response) => {
-                        is_creating.set(false);
-                        load_admin_node_type_catalog(
-                            node_types,
-                            selected_node_type_id,
-                            is_loading,
-                            message,
-                            Some(response.id),
-                        );
-                    }
-                    Err(error) => message.set(Some(error)),
-                }
-                is_saving.set(false);
-            });
-        }
-        #[cfg(not(feature = "hydrate"))]
-        let _ = (body, creating, is_saving);
+        save_admin_node_type(state_for_save);
     };
 
     view! {
