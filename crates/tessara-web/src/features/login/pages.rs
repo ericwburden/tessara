@@ -5,6 +5,8 @@
 use icons::{LockKeyhole, Mail};
 use leptos::prelude::*;
 
+use super::actions::submit_login;
+
 #[component]
 pub fn LoginPage() -> impl IntoView {
     let email = RwSignal::new(String::new());
@@ -14,8 +16,6 @@ pub fn LoginPage() -> impl IntoView {
 
     let submit = move |event: leptos::ev::SubmitEvent| {
         event.prevent_default();
-        error_message.set(None);
-        is_submitting.set(true);
         submit_login(
             email.get_untracked(),
             password.get_untracked(),
@@ -75,53 +75,5 @@ pub fn LoginPage() -> impl IntoView {
                 </form>
             </section>
         </main>
-    }
-}
-
-/// Submits the submit login request.
-fn submit_login(
-    email: String,
-    password: String,
-    error_message: RwSignal<Option<String>>,
-    is_submitting: RwSignal<bool>,
-) {
-    #[cfg(feature = "hydrate")]
-    {
-        leptos::task::spawn_local(async move {
-            let body = serde_json::json!({
-                "email": email,
-                "password": password,
-            })
-            .to_string();
-
-            let response = match gloo_net::http::Request::post("/api/auth/login")
-                .header("Content-Type", "application/json")
-                .body(body)
-            {
-                Ok(request) => request.send().await,
-                Err(error) => Err(error),
-            };
-
-            match response {
-                Ok(response) if response.ok() => {
-                    if let Some(window) = web_sys::window() {
-                        let _ = window.location().set_href("/");
-                    }
-                }
-                Ok(_) => {
-                    error_message.set(Some("Email or password did not match.".into()));
-                    is_submitting.set(false);
-                }
-                Err(_) => {
-                    error_message.set(Some("Could not reach Tessara. Try again.".into()));
-                    is_submitting.set(false);
-                }
-            }
-        });
-    }
-
-    #[cfg(not(feature = "hydrate"))]
-    {
-        let _ = (email, password, error_message, is_submitting);
     }
 }

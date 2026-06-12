@@ -2,6 +2,8 @@
 //!
 //! Re-export only the pages, types, and helpers other modules need; keep Login-specific implementation details in child modules.
 
+mod actions;
+mod api;
 mod pages;
 
 pub(crate) use pages::LoginPage;
