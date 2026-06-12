@@ -1,9 +1,4 @@
-//! Client-side API orchestration for the Workflows feature.
-//!
-//! Keep endpoint calls, request assembly, and response handling for Workflows screens here; pure DTOs and display formatting belong in sibling modules.
-
-mod display;
-mod loaders;
+//! Signal-aware loaders for workflow pages.
 
 use crate::features::forms::FormSummary;
 use crate::features::organization::{NodeTypeCatalogEntry, OrganizationNode};
@@ -14,10 +9,87 @@ use crate::features::workflows::types::{WorkflowDefinition, WorkflowSummary};
 use crate::http::redirect_to_login;
 use leptos::prelude::*;
 
-pub(crate) use display::workflow_assigned_users_label;
-pub(crate) use loaders::{load_workflow_assignment_nodes, load_workflows};
+/// Loads workflow summaries.
+pub(crate) fn load_workflows(
+    workflows: RwSignal<Vec<WorkflowSummary>>,
+    is_loading: RwSignal<bool>,
+    load_error: RwSignal<Option<String>>,
+) {
+    #[cfg(feature = "hydrate")]
+    {
+        leptos::task::spawn_local(async move {
+            is_loading.set(true);
+            load_error.set(None);
 
-/// Loads the load workflow detail data.
+            match gloo_net::http::Request::get("/api/workflows").send().await {
+                Ok(response) if response.status() == 401 => {
+                    workflows.set(Vec::new());
+                    is_loading.set(false);
+                    redirect_to_login();
+                }
+                Ok(response) if response.ok() => {
+                    match response.json::<Vec<WorkflowSummary>>().await {
+                        Ok(loaded_workflows) => {
+                            workflows.set(loaded_workflows);
+                            is_loading.set(false);
+                        }
+                        Err(error) => {
+                            workflows.set(Vec::new());
+                            load_error.set(Some(format!("Unable to parse workflows: {error}")));
+                            is_loading.set(false);
+                        }
+                    }
+                }
+                Ok(response) => {
+                    workflows.set(Vec::new());
+                    load_error.set(Some(format!(
+                        "Unable to load workflows. Server returned {}.",
+                        response.status()
+                    )));
+                    is_loading.set(false);
+                }
+                Err(error) => {
+                    workflows.set(Vec::new());
+                    load_error.set(Some(format!("Unable to load workflows: {error}")));
+                    is_loading.set(false);
+                }
+            }
+        });
+    }
+
+    #[cfg(not(feature = "hydrate"))]
+    {
+        let _ = (workflows, is_loading, load_error);
+    }
+}
+
+/// Loads organization nodes used by workflow assignment panels.
+pub(crate) fn load_workflow_assignment_nodes(nodes: RwSignal<Vec<OrganizationNode>>) {
+    #[cfg(feature = "hydrate")]
+    {
+        leptos::task::spawn_local(async move {
+            match gloo_net::http::Request::get("/api/nodes").send().await {
+                Ok(response) if response.status() == 401 => {
+                    nodes.set(Vec::new());
+                    redirect_to_login();
+                }
+                Ok(response) if response.ok() => {
+                    if let Ok(loaded_nodes) = response.json::<Vec<OrganizationNode>>().await {
+                        nodes.set(loaded_nodes);
+                    }
+                }
+                _ => nodes.set(Vec::new()),
+            }
+        });
+    }
+
+    #[cfg(not(feature = "hydrate"))]
+    {
+        let _ = nodes;
+    }
+}
+
+/// Loads workflow detail for detail and editor pages.
 pub(crate) fn load_workflow_detail(
     workflow_id: String,
     detail: RwSignal<Option<WorkflowDefinition>>,
@@ -76,7 +148,7 @@ pub(crate) fn load_workflow_detail(
     }
 }
 
-/// Loads the load workflow create options data.
+/// Loads selectable node types, nodes, forms, and workflows for workflow editors.
 pub(crate) fn load_workflow_create_options(
     node_types: RwSignal<Vec<NodeTypeCatalogEntry>>,
     organization_nodes: RwSignal<Vec<OrganizationNode>>,
@@ -238,23 +310,4 @@ pub(crate) fn load_workflow_create_options(
             message,
         );
     }
-}
-
-/// Handles the workflow revision label from raw behavior.
-pub(crate) fn workflow_revision_label_from_raw(label: &str) -> String {
-    let trimmed = label.trim();
-    if trimmed.is_empty() {
-        return "-".to_string();
-    }
-
-    if let Ok(revision) = trimmed.parse::<u64>() {
-        return revision.to_string();
-    }
-
-    trimmed
-        .split('.')
-        .next()
-        .and_then(|part| part.trim().parse::<u64>().ok())
-        .map(|revision| revision.to_string())
-        .unwrap_or_else(|| trimmed.to_string())
 }

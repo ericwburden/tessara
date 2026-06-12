@@ -3,11 +3,10 @@
 //! Keep read-focused panels and detail-page presentation here; mutation workflows should live in editor or API modules.
 
 use crate::features::shared::status_badge_class;
-use crate::features::workflows::api::load_workflow_detail;
 use crate::features::workflows::types::WorkflowDefinition;
 use crate::features::workflows::{
     WorkflowDetailAssignmentsTable, WorkflowStepsTable, WorkflowVersionsTable,
-    active_workflow_definition_version, workflow_available_nodes_label,
+    active_workflow_definition_version, load_workflow_detail, workflow_available_nodes_label,
     workflow_definition_status_label, workflow_definition_version_label, workflow_source_label,
 };
 use crate::types::route_params::WorkflowRouteParams;
