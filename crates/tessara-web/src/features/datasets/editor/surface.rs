@@ -3,14 +3,12 @@
 use super::{
     DatasetEditorMessages, DatasetEditorState, DatasetFieldsEditor, DatasetIdentitySection,
     DatasetSourcesEditor, DatasetSqlPreviewPanel, DatasetVisibilityEditor,
+    install_dataset_editor_loaders, submit_dataset_editor,
 };
-use crate::features::datasets::actions::save_dataset;
-use crate::features::datasets::loaders::*;
 use crate::ui::{AppShell, PageHeader};
 use leptos::prelude::*;
 
 #[component]
-/// Renders the dataset editor surface view.
 pub(crate) fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView {
     let is_edit = dataset_id.is_some();
     let title = if is_edit {
@@ -19,31 +17,7 @@ pub(crate) fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView 
         "Create Dataset"
     };
     let state = DatasetEditorState::new();
-
-    Effect::new({
-        let dataset_id = dataset_id.clone();
-        move |_| {
-            load_forms(state.forms, state.load_error);
-            load_datasets(state.datasets, RwSignal::new(false), state.load_error);
-            load_nodes(state.nodes, state.load_error);
-            if let Some(dataset_id) = dataset_id.clone() {
-                load_dataset_for_edit(
-                    dataset_id.clone(),
-                    state.name,
-                    state.slug,
-                    state.composition_mode,
-                    state.visibility_node_ids,
-                    state.sources,
-                    state.fields,
-                    state.join_left_key,
-                    state.join_right_key,
-                    state.sql_preview,
-                    state.load_error,
-                );
-            }
-        }
-    });
-
+    install_dataset_editor_loaders(dataset_id.clone(), state);
     let save_dataset_id = dataset_id.clone();
     let preview_dataset_id = dataset_id.clone();
 
@@ -60,19 +34,7 @@ pub(crate) fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView 
                 />
                 <form class="dataset-editor" on:submit=move |event| {
                     event.prevent_default();
-                    save_dataset(
-                        save_dataset_id.clone(),
-                        state.name.get(),
-                        state.slug.get(),
-                        state.composition_mode.get(),
-                        state.visibility_node_ids.get().into_iter().collect(),
-                        state.sources.get(),
-                        state.fields.get(),
-                        state.join_left_key.get(),
-                        state.join_right_key.get(),
-                        state.save_error,
-                        state.save_message,
-                    );
+                    submit_dataset_editor(save_dataset_id.clone(), state);
                 }>
                     <DatasetIdentitySection name=state.name slug=state.slug/>
                     <DatasetSourcesEditor
