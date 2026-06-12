@@ -1,6 +1,8 @@
 //! Workflow creation save orchestration.
 
 #[cfg(feature = "hydrate")]
+use super::action_helpers::{handle_workflow_editor_error, navigate_to_workflow};
+#[cfg(feature = "hydrate")]
 use super::api::{create_initial_workflow_revision, create_workflow};
 #[cfg(feature = "hydrate")]
 use super::payloads::prepare_workflow_create;
@@ -51,25 +53,15 @@ pub(crate) fn submit_create_workflow(
                     .await
                     {
                         Ok(_) => {
-                            if let Some(window) = web_sys::window() {
-                                let _ = window
-                                    .location()
-                                    .set_href(&format!("/workflows/{}", created.id));
-                            }
+                            navigate_to_workflow(&created.id);
                         }
                         Err(error) => {
-                            if error != "Authentication is required." {
-                                message.set(Some(error));
-                            }
-                            is_saving.set(false);
+                            handle_workflow_editor_error(error, is_saving, message, None);
                         }
                     }
                 }
                 Err(error) => {
-                    if error != "Authentication is required." {
-                        message.set(Some(error));
-                    }
-                    is_saving.set(false);
+                    handle_workflow_editor_error(error, is_saving, message, None);
                 }
             }
         });

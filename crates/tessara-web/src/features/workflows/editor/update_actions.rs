@@ -1,6 +1,8 @@
 //! Workflow update and publish save orchestration.
 
 #[cfg(feature = "hydrate")]
+use super::action_helpers::{handle_workflow_editor_error, navigate_to_workflow};
+#[cfg(feature = "hydrate")]
 use super::api::{
     create_workflow_revision, publish_workflow_revision, update_workflow,
     update_workflow_revision_steps,
@@ -92,11 +94,12 @@ pub(crate) fn submit_update_workflow(
                         let saved_version = match step_result {
                             Ok(body) => body,
                             Err(error) => {
-                                if error != "Authentication is required." {
-                                    message.set(Some(error));
-                                }
-                                is_saving.set(false);
-                                save_intent.set(None);
+                                handle_workflow_editor_error(
+                                    error,
+                                    is_saving,
+                                    message,
+                                    Some(save_intent),
+                                );
                                 return;
                             }
                         };
@@ -110,18 +113,15 @@ pub(crate) fn submit_update_workflow(
                         if let Some(version_id) = version_to_publish {
                             match publish_workflow_revision(&version_id).await {
                                 Ok(_) => {
-                                    if let Some(window) = web_sys::window() {
-                                        let _ = window
-                                            .location()
-                                            .set_href(&format!("/workflows/{workflow_id}"));
-                                    }
+                                    navigate_to_workflow(&workflow_id);
                                 }
                                 Err(error) => {
-                                    if error != "Authentication is required." {
-                                        message.set(Some(error));
-                                    }
-                                    is_saving.set(false);
-                                    save_intent.set(None);
+                                    handle_workflow_editor_error(
+                                        error,
+                                        is_saving,
+                                        message,
+                                        Some(save_intent),
+                                    );
                                 }
                             }
                             return;
@@ -135,24 +135,11 @@ pub(crate) fn submit_update_workflow(
                         return;
                     }
 
-                    if had_step_update {
-                        if let Some(window) = web_sys::window() {
-                            let _ = window
-                                .location()
-                                .set_href(&format!("/workflows/{workflow_id}"));
-                        }
-                    } else if let Some(window) = web_sys::window() {
-                        let _ = window
-                            .location()
-                            .set_href(&format!("/workflows/{workflow_id}"));
-                    }
+                    let _ = had_step_update;
+                    navigate_to_workflow(&workflow_id);
                 }
                 Err(error) => {
-                    if error != "Authentication is required." {
-                        message.set(Some(error));
-                    }
-                    is_saving.set(false);
-                    save_intent.set(None);
+                    handle_workflow_editor_error(error, is_saving, message, Some(save_intent));
                 }
             }
         });
