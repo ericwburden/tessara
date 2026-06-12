@@ -3,13 +3,13 @@
 use crate::features::forms::FormSummary;
 use crate::features::organization::{NodeTypeCatalogEntry, OrganizationNode};
 use crate::features::workflows::types::{WorkflowSaveIntent, WorkflowStepDraft};
-use crate::features::workflows::{submit_update_workflow, workflow_step_signature};
 use leptos::prelude::*;
 use std::collections::HashSet;
 
 use super::{
     WorkflowActiveRevisionSection, WorkflowAvailabilitySection, WorkflowEditStepsSection,
-    WorkflowIdentityFields, add_workflow_step, can_submit_workflow_editor,
+    WorkflowIdentityFields, add_workflow_step, can_submit_workflow_editor, submit_update_workflow,
+    workflow_step_signature,
 };
 
 #[allow(clippy::too_many_arguments)]

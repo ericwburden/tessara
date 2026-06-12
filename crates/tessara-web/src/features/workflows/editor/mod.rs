@@ -19,12 +19,12 @@ mod update_payloads;
 
 pub(in crate::features::workflows) use available_nodes_picker::WorkflowAvailableNodesPicker;
 pub(crate) use create::WorkflowsNewPage;
-pub(crate) use create_actions::submit_create_workflow;
+pub(in crate::features::workflows) use create_actions::submit_create_workflow;
 pub(crate) use edit::WorkflowsEditPage;
 pub(in crate::features::workflows) use edit_form::WorkflowEditForm;
 #[cfg(feature = "hydrate")]
 pub(crate) use options::existing_workflow_slugs;
-pub(crate) use options::workflow_form_version_options;
+pub(in crate::features::workflows) use options::workflow_form_version_options;
 pub(in crate::features::workflows) use sections::{
     WorkflowActiveRevisionSection, WorkflowAvailabilitySection, WorkflowCreateStepsSection,
     WorkflowEditStepsSection, WorkflowIdentityFields,
@@ -36,5 +36,5 @@ pub(in crate::features::workflows) use state::{
 pub(in crate::features::workflows) use step_list::WorkflowStepList;
 #[cfg(feature = "hydrate")]
 pub(in crate::features::workflows) use steps::workflow_step_payloads_from_drafts;
-pub(crate) use steps::workflow_step_signature;
-pub(crate) use update_actions::submit_update_workflow;
+pub(in crate::features::workflows) use steps::workflow_step_signature;
+pub(in crate::features::workflows) use update_actions::submit_update_workflow;

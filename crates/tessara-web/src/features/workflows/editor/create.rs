@@ -2,8 +2,8 @@
 
 use crate::features::forms::FormSummary;
 use crate::features::organization::{NodeTypeCatalogEntry, OrganizationNode};
+use crate::features::workflows::load_workflow_create_options;
 use crate::features::workflows::types::{WorkflowStepDraft, WorkflowSummary};
-use crate::features::workflows::{load_workflow_create_options, submit_create_workflow};
 use crate::ui::{
     AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator,
     PageHeader,
@@ -16,6 +16,7 @@ use std::collections::HashSet;
 use super::{
     WorkflowAvailabilitySection, WorkflowCreateStepsSection, WorkflowIdentityFields,
     add_workflow_step, can_submit_workflow_editor, prune_unavailable_workflow_steps,
+    submit_create_workflow,
 };
 
 #[component]

@@ -3,10 +3,9 @@
 use crate::features::forms::FormSummary;
 use crate::features::organization::NodeTypeCatalogEntry;
 use crate::features::workflows::types::WorkflowStepDraft;
-use crate::features::workflows::workflow_form_version_options;
 use leptos::prelude::*;
 
-use super::super::WorkflowStepList;
+use super::super::{WorkflowStepList, workflow_form_version_options};
 
 #[component]
 pub(in crate::features::workflows) fn WorkflowCreateStepsSection(
