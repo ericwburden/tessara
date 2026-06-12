@@ -11,6 +11,7 @@ mod detail;
 mod detail_content;
 mod display;
 mod edit;
+mod edit_form;
 mod editor_sections;
 mod filtering;
 mod list;
@@ -34,6 +35,7 @@ pub(crate) use display::{
     rendered_field_layout_label, rendered_field_type_label,
 };
 pub(crate) use edit::FormsEditPage;
+pub(in crate::features::forms) use edit_form::FormEditForm;
 pub(in crate::features::forms) use editor_sections::{
     FormEditableVersionSummary, FormIdentityFields, FormInitialVersionSummary,
 };
