@@ -7,7 +7,7 @@ use crate::features::operations::display::{
 use crate::features::operations::types::WorkflowAssignmentStatus;
 use crate::features::shared::unique_filter_options;
 use crate::ui::{
-    DataTable, EmptyState, FilterHeader, StatusBadge, TablePaginationFooter, Timestamp,
+    DataTable, EmptyState, StatusBadge, TableFilterHeader, TablePaginationFooter, Timestamp,
 };
 use crate::utils::{pagination::pagination_page_start, text::text_matches};
 use icons::Search;
@@ -110,7 +110,7 @@ pub(crate) fn WorkflowAssignmentsTable(
                                 <tr>
                                     <th scope="col">"Workflow"</th>
                                     <th scope="col">
-                                        <FilterHeader
+                                        <TableFilterHeader
                                             label="Node"
                                             all_label="All Nodes"
                                             filter=node_filter
@@ -119,7 +119,7 @@ pub(crate) fn WorkflowAssignmentsTable(
                                         />
                                     </th>
                                     <th scope="col">
-                                        <FilterHeader
+                                        <TableFilterHeader
                                             label="Assignee"
                                             all_label="All Assignees"
                                             filter=assignee_filter
@@ -128,7 +128,7 @@ pub(crate) fn WorkflowAssignmentsTable(
                                         />
                                     </th>
                                     <th class="data-table__cell--center" scope="col">
-                                        <FilterHeader
+                                        <TableFilterHeader
                                             label="Status"
                                             all_label="All Statuses"
                                             filter=status_filter

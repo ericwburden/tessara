@@ -9,8 +9,7 @@ use icons::{ListFilter, Search};
 use leptos::prelude::*;
 
 #[component]
-/// Renders the filter header view.
-pub(crate) fn FilterHeader(
+pub(crate) fn TableFilterHeader(
     label: &'static str,
     all_label: &'static str,
     filter: RwSignal<String>,

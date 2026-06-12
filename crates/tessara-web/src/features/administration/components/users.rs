@@ -7,7 +7,7 @@ use crate::features::administration::models::AdminUserSummary;
 use crate::features::shared::status_badge_class;
 #[cfg(feature = "hydrate")]
 use crate::http::navigate_to_href;
-use crate::ui::{DataTable, DropdownMenu, FilterHeader, TablePaginationFooter};
+use crate::ui::{DataTable, DropdownMenu, TableFilterHeader, TablePaginationFooter};
 use crate::utils::pagination::pagination_page_start;
 use icons::{PanelRight, Pencil, Search};
 use leptos::prelude::*;
@@ -52,7 +52,7 @@ pub(crate) fn AdministrationUsersList(
                         <tr>
                             <th scope="col">"User"</th>
                             <th scope="col">
-                                <FilterHeader
+                                <TableFilterHeader
                                     label="Role"
                                     all_label="All Roles"
                                     filter=role_filter
@@ -60,7 +60,7 @@ pub(crate) fn AdministrationUsersList(
                                 />
                             </th>
                             <th class="data-table__cell--center" scope="col">
-                                <FilterHeader
+                                <TableFilterHeader
                                     label="Status"
                                     all_label="All Statuses"
                                     filter=status_filter

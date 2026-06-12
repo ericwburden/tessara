@@ -4,7 +4,7 @@
 
 use leptos::prelude::{AnyView, Fragment};
 
-/// Handles the empty view behavior.
+/// Returns an empty Leptos view for conditional branches that render nothing.
 pub(crate) fn empty_view() -> AnyView {
     Fragment::new(Vec::<AnyView>::new()).into()
 }
@@ -32,7 +32,7 @@ pub(crate) use info_list::{InfoListTable, InfoRow};
 pub(crate) use page_header::*;
 pub(crate) use shell::AppShell;
 pub(crate) use status_badge::*;
-pub(crate) use table_filter::FilterHeader;
+pub(crate) use table_filter::TableFilterHeader;
 pub(crate) use table_pagination::TablePaginationFooter;
 pub(crate) use tabs::{Tabs, TabsContent, TabsList, TabsTrigger};
 pub(crate) use timestamp::*;

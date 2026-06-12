@@ -8,9 +8,7 @@ use crate::features::workflows::{
     toggle_workflow_assignment, workflow_assignment_state, workflow_assignment_state_label,
     workflow_assignment_status_key, workflow_assignment_status_label,
 };
-use crate::ui::{
-    DataTable, DropdownMenu, FilterHeader as SharedFilterHeader, TablePaginationFooter, Timestamp,
-};
+use crate::ui::{DataTable, DropdownMenu, TableFilterHeader, TablePaginationFooter, Timestamp};
 use crate::utils::pagination::pagination_page_start;
 use icons::{PanelRight, Search, X};
 use leptos::prelude::*;
@@ -69,7 +67,7 @@ pub(in crate::features::workflows) fn WorkflowAssignmentsList(
                         <tr>
                             <th scope="col">"Workflow"</th>
                             <th scope="col">
-                                <SharedFilterHeader
+                                <TableFilterHeader
                                     label="Assignee"
                                     all_label="All Assignees"
                                     filter=assignee_filter
@@ -78,7 +76,7 @@ pub(in crate::features::workflows) fn WorkflowAssignmentsList(
                                 />
                             </th>
                             <th class="data-table__cell--center" scope="col">
-                                <SharedFilterHeader
+                                <TableFilterHeader
                                     label="Work State"
                                     all_label="All States"
                                     filter=state_filter
@@ -86,7 +84,7 @@ pub(in crate::features::workflows) fn WorkflowAssignmentsList(
                                 />
                             </th>
                             <th class="data-table__cell--center" scope="col">
-                                <SharedFilterHeader
+                                <TableFilterHeader
                                     label="Status"
                                     all_label="All Statuses"
                                     filter=status_filter

@@ -9,8 +9,7 @@ use crate::features::shared::status_badge_class;
 #[cfg(feature = "hydrate")]
 use crate::http::navigate_to_href;
 use crate::ui::{
-    DataTable, DropdownMenu, FilterHeader as SharedFilterHeader, TablePaginationFooter, Timestamp,
-    empty_view,
+    DataTable, DropdownMenu, TableFilterHeader, TablePaginationFooter, Timestamp, empty_view,
 };
 use crate::utils::pagination::pagination_page_start;
 
@@ -67,7 +66,7 @@ pub(crate) fn ResponsesList(
                             <th scope="col">"Workflow"</th>
                             <th scope="col">"Node"</th>
                             <th scope="col">
-                                <SharedFilterHeader
+                                <TableFilterHeader
                                     label="Assignee"
                                     all_label="All Assignees"
                                     filter=assignee_filter
@@ -76,7 +75,7 @@ pub(crate) fn ResponsesList(
                                 />
                             </th>
                             <th class="data-table__cell--center" scope="col">
-                                <SharedFilterHeader
+                                <TableFilterHeader
                                     label="Status"
                                     all_label="All Statuses"
                                     filter=status_filter

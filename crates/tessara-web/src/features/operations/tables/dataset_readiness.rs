@@ -2,7 +2,7 @@
 
 use crate::features::operations::types::DatasetStatus;
 use crate::features::shared::unique_filter_options;
-use crate::ui::{DataTable, EmptyState, FilterHeader, StatusBadge, TablePaginationFooter};
+use crate::ui::{DataTable, EmptyState, StatusBadge, TableFilterHeader, TablePaginationFooter};
 use crate::utils::{pagination::pagination_page_start, text::text_matches};
 use icons::Search;
 use leptos::prelude::*;
@@ -74,7 +74,7 @@ pub(crate) fn DatasetReadinessTable(datasets: Vec<DatasetStatus>) -> impl IntoVi
                                 <tr>
                                     <th scope="col">"Dataset"</th>
                                     <th class="data-table__cell--center" scope="col">
-                                        <FilterHeader
+                                        <TableFilterHeader
                                             label="Status"
                                             all_label="All Statuses"
                                             filter=status_filter

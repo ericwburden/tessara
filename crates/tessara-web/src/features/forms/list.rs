@@ -9,7 +9,7 @@ use crate::features::forms::{
 use crate::features::forms::{FormsAttachedNodesList, FormsAttachedNodesSheet};
 use crate::features::forms::{form_attached_nodes, form_field_count_label, form_status_label};
 use crate::features::shared::{FormsAttachedNodesSheetData, status_badge_class};
-use crate::ui::{DataTable, FilterHeader as SharedFilterHeader, TablePaginationFooter};
+use crate::ui::{DataTable, TableFilterHeader, TablePaginationFooter};
 use crate::utils::pagination::pagination_page_start;
 use icons::Search;
 use leptos::prelude::*;
@@ -70,7 +70,7 @@ pub(crate) fn FormsList(
                         </th>
                         <th class="data-table__cell--center" scope="col">"Active version"</th>
                         <th class="data-table__cell--center" scope="col">
-                            <SharedFilterHeader
+                            <TableFilterHeader
                                 label="Status"
                                 all_label="All statuses"
                                 filter=status_filter

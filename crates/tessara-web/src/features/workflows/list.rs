@@ -13,8 +13,7 @@ use crate::features::workflows::{
     workflow_available_node_links, workflow_status_key, workflow_status_label,
     workflow_version_label,
 };
-use crate::ui::FilterHeader as SharedFilterHeader;
-use crate::ui::{DataTable, TablePaginationFooter};
+use crate::ui::{DataTable, TableFilterHeader, TablePaginationFooter};
 use crate::utils::pagination::pagination_page_start;
 use icons::Search;
 use leptos::prelude::*;
@@ -68,7 +67,7 @@ pub(in crate::features::workflows) fn WorkflowsList(
                             <th scope="col">"Available at"</th>
                             <th class="data-table__cell--center" scope="col">"Active revision"</th>
                             <th class="data-table__cell--center" scope="col">
-                                <SharedFilterHeader
+                                <TableFilterHeader
                                     label="Status"
                                     all_label="All statuses"
                                     filter=status_filter
