@@ -1,6 +1,6 @@
 //! Dataset editor expression and SQL preview components.
 
-use super::super::loaders::preview_dataset_sql;
+use super::super::actions::preview_dataset_sql;
 use super::super::types::*;
 use super::helpers::{confirm_action, expression_button_class, expression_label, operation_label};
 use crate::ui::EmptyState;

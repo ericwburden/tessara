@@ -4,6 +4,7 @@ use super::{
     DatasetEditorMessages, DatasetFieldsEditor, DatasetSourcesEditor, DatasetSqlPreviewPanel,
     DatasetVisibilityEditor,
 };
+use crate::features::datasets::actions::save_dataset;
 use crate::features::datasets::loaders::*;
 use crate::features::datasets::types::*;
 use crate::ui::{AppShell, PageHeader};
