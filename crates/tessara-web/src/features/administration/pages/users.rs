@@ -9,7 +9,9 @@ use super::super::api::{
 use super::super::components::{
     AdministrationUserAccessForm, AdministrationUserAccountForm, AdministrationUsersList,
 };
-use super::super::state::{admin_user_role_filter_options, filtered_admin_users};
+use super::super::state::{
+    AdminUserAccessState, admin_user_role_filter_options, filtered_admin_users,
+};
 use crate::features::administration::models::*;
 use crate::features::organization::AdminRoleSummary;
 use crate::types::AccountRouteParams;
@@ -103,30 +105,23 @@ pub fn AdministrationUsersPage() -> impl IntoView {
 pub fn AdministrationUserDetailPage() -> impl IntoView {
     let params = require_route_params::<AccountRouteParams>();
     let account_id = params.account_id;
-    let detail = RwSignal::new(None::<AdminUserAccessDetail>);
-    let capability_catalog = RwSignal::new(Vec::<AdminCapabilitySummary>::new());
-    let selected_scope_node_ids = RwSignal::new(Vec::<String>::new());
-    let selected_delegate_account_ids = RwSignal::new(Vec::<String>::new());
-    let is_loading = RwSignal::new(true);
-    let is_saving = RwSignal::new(false);
-    let load_error = RwSignal::new(None::<String>);
-    let message = RwSignal::new(None::<String>);
+    let access_state = AdminUserAccessState::new();
 
     Effect::new({
         let account_id = account_id.clone();
         move |_| {
             load_admin_user_access(
                 account_id.clone(),
-                detail,
-                selected_scope_node_ids,
-                selected_delegate_account_ids,
-                is_loading,
-                load_error,
+                access_state.detail,
+                access_state.selected_scope_node_ids,
+                access_state.selected_delegate_account_ids,
+                access_state.is_loading,
+                access_state.load_error,
             );
         }
     });
     Effect::new(move |_| {
-        load_admin_capability_catalog(capability_catalog);
+        load_admin_capability_catalog(access_state.capability_catalog);
     });
 
     view! {
@@ -147,7 +142,7 @@ pub fn AdministrationUserDetailPage() -> impl IntoView {
                 </Breadcrumb>
 
                 {move || {
-                    if is_loading.get() {
+                    if access_state.is_loading.get() {
                         view! {
                             <section class="organization-state" aria-live="polite">
                                 <h3>"Loading user"</h3>
@@ -155,7 +150,7 @@ pub fn AdministrationUserDetailPage() -> impl IntoView {
                             </section>
                         }
                         .into_any()
-                    } else if let Some(message) = load_error.get() {
+                    } else if let Some(message) = access_state.load_error.get() {
                         view! {
                             <section class="organization-state is-error" role="alert">
                                 <h3>"User unavailable"</h3>
@@ -163,16 +158,16 @@ pub fn AdministrationUserDetailPage() -> impl IntoView {
                             </section>
                         }
                         .into_any()
-                    } else if let Some(access) = detail.get() {
+                    } else if let Some(access) = access_state.detail.get() {
                         view! {
                             <AdministrationUserAccessForm
                                 account_id=account_id.clone()
                                 access=access
-                                capability_catalog=capability_catalog
-                                selected_scope_node_ids=selected_scope_node_ids
-                                selected_delegate_account_ids=selected_delegate_account_ids
-                                is_saving=is_saving
-                                message=message
+                                capability_catalog=access_state.capability_catalog
+                                selected_scope_node_ids=access_state.selected_scope_node_ids
+                                selected_delegate_account_ids=access_state.selected_delegate_account_ids
+                                is_saving=access_state.is_saving
+                                message=access_state.message
                             />
                         }
                         .into_any()

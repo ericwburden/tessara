@@ -1,10 +1,37 @@
 //! State helpers for Administration feature interactions.
 
 use super::display::{admin_user_role_names, admin_user_status_key};
-use super::models::AdminUserSummary;
+use super::models::{AdminCapabilitySummary, AdminUserAccessDetail, AdminUserSummary};
 use crate::features::shared::unique_filter_options;
 use crate::utils::text::text_matches;
 use leptos::prelude::{RwSignal, Update};
+
+#[derive(Clone, Copy)]
+pub(crate) struct AdminUserAccessState {
+    pub(crate) detail: RwSignal<Option<AdminUserAccessDetail>>,
+    pub(crate) capability_catalog: RwSignal<Vec<AdminCapabilitySummary>>,
+    pub(crate) selected_scope_node_ids: RwSignal<Vec<String>>,
+    pub(crate) selected_delegate_account_ids: RwSignal<Vec<String>>,
+    pub(crate) is_loading: RwSignal<bool>,
+    pub(crate) is_saving: RwSignal<bool>,
+    pub(crate) load_error: RwSignal<Option<String>>,
+    pub(crate) message: RwSignal<Option<String>>,
+}
+
+impl AdminUserAccessState {
+    pub(crate) fn new() -> Self {
+        Self {
+            detail: RwSignal::new(None::<AdminUserAccessDetail>),
+            capability_catalog: RwSignal::new(Vec::<AdminCapabilitySummary>::new()),
+            selected_scope_node_ids: RwSignal::new(Vec::<String>::new()),
+            selected_delegate_account_ids: RwSignal::new(Vec::<String>::new()),
+            is_loading: RwSignal::new(true),
+            is_saving: RwSignal::new(false),
+            load_error: RwSignal::new(None::<String>),
+            message: RwSignal::new(None::<String>),
+        }
+    }
+}
 
 pub(crate) fn filtered_admin_users(
     users: Vec<AdminUserSummary>,
