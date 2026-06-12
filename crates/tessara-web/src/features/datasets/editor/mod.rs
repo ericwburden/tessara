@@ -6,6 +6,7 @@ mod fields;
 mod helpers;
 mod messages;
 mod options;
+mod source_options;
 mod sources;
 mod surface;
 mod visibility;

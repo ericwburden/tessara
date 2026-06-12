@@ -4,9 +4,10 @@ use super::super::expressions::is_join_operation;
 use super::super::loaders::load_rendered_form;
 use super::super::types::*;
 use super::FieldOptionsPanel;
-use super::helpers::{
-    add_fields_from_source, find_version, first_published_version, join_key_option_label,
-    join_key_options_for_source_index, operation_label, published_versions_for_form, version_label,
+use super::helpers::{join_key_option_label, operation_label, version_label};
+use super::source_options::{
+    add_fields_from_source, find_version, first_published_version,
+    join_key_options_for_source_index, published_versions_for_form,
 };
 use icons::X;
 use leptos::portal::Portal;

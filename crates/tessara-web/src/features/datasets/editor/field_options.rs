@@ -1,7 +1,8 @@
 //! Dataset editor projected field options panel.
 
 use super::super::types::*;
-use super::helpers::{join_key_option_label, source_field_options_with_selected};
+use super::helpers::join_key_option_label;
+use super::source_options::source_field_options_with_selected;
 use leptos::prelude::*;
 use std::collections::BTreeMap;
 
