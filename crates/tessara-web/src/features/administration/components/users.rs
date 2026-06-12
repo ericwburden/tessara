@@ -1,5 +1,7 @@
 //! User list Administration components.
 
+mod mobile_cards;
+
 use super::super::display::{
     admin_user_role_names, admin_user_status_key, admin_user_status_label,
 };
@@ -11,6 +13,7 @@ use crate::ui::{DataTable, DropdownMenu, TableFilterHeader, TablePaginationFoote
 use crate::utils::pagination::pagination_page_start;
 use icons::{PanelRight, Pencil, Search};
 use leptos::prelude::*;
+use mobile_cards::AdministrationUserMobileCards;
 
 /// Renders the administration users list view.
 #[component]
@@ -22,7 +25,6 @@ pub(crate) fn AdministrationUsersList(
     role_options: Vec<String>,
 ) -> impl IntoView {
     let table_users = users.clone();
-    let card_users = users.clone();
     let page_size = RwSignal::new(10usize);
     let page_index = RwSignal::new(0usize);
     let total_count = users.len();
@@ -158,55 +160,7 @@ pub(crate) fn AdministrationUsersList(
                 />
             </div>
 
-            <div class="forms-list-mobile-cards administration-users-mobile-cards">
-                {move || {
-                    if card_users.is_empty() {
-                        view! { <p class="forms-list-mobile-empty">"No Users to Display"</p> }.into_any()
-                    } else {
-                        let total_count = card_users.len();
-                        let start = pagination_page_start(total_count, page_size.get(), page_index.get());
-                        card_users
-                            .iter()
-                            .skip(start)
-                            .take(page_size.get())
-                            .cloned()
-                            .map(|user| {
-                                let status_key = admin_user_status_key(&user);
-                                let status_label = admin_user_status_label(&user);
-                                let role_names = admin_user_role_names(&user);
-                                let detail_href = format!("/administration/users/{}", user.id);
-                                let edit_href = format!("/administration/users/{}/edit", user.id);
-                                view! {
-                                    <article class="forms-list-mobile-card administration-user-mobile-card">
-                                        <div class="forms-list-mobile-card__header">
-                                            <div>
-                                                <h3><a href=detail_href.clone()>{user.display_name}</a></h3>
-                                                <span>{user.email}</span>
-                                            </div>
-                                            <span class=status_badge_class(status_key)>{status_label}</span>
-                                        </div>
-                                        <dl>
-                                            <div>
-                                                <dt>"Roles"</dt>
-                                                <dd>{role_names}</dd>
-                                            </div>
-                                            <div>
-                                                <dt>"Role Count"</dt>
-                                                <dd>{user.roles.len()}</dd>
-                                            </div>
-                                        </dl>
-                                        <div class="workflow-assignment-mobile-card__actions">
-                                            <a class="button button--compact" href=detail_href>"View Details"</a>
-                                            <a class="button button--compact button--secondary" href=edit_href>"Edit Account"</a>
-                                        </div>
-                                    </article>
-                                }
-                            })
-                            .collect_view()
-                            .into_any()
-                    }
-                }}
-            </div>
+            <AdministrationUserMobileCards users page_size page_index/>
         </div>
     }
 }
