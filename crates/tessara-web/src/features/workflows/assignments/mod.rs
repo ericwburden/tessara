@@ -3,6 +3,7 @@
 //! Re-export assignment API helpers, display formatters, and DTOs from here while keeping the broader workflow feature independent of assignment internals.
 
 mod api;
+mod assignee_picker;
 mod components;
 mod create_form;
 mod detail_sheet;
@@ -13,6 +14,7 @@ mod state;
 pub(crate) mod types;
 
 pub(crate) use crate::features::workflows::pages::assignments::WorkflowAssignmentsPage;
+pub(in crate::features::workflows) use assignee_picker::WorkflowAssignmentAssigneePicker;
 pub(in crate::features::workflows) use components::WorkflowAssignmentsList;
 pub(in crate::features::workflows) use create_form::WorkflowAssignmentCreateForm;
 pub(in crate::features::workflows) use detail_sheet::WorkflowAssignmentDetailSheet;

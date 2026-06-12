@@ -1,14 +1,15 @@
 //! Workflow assignment creation form.
 
+use super::WorkflowAssignmentAssigneePicker;
 use super::state::{
-    filtered_assignees, filtered_node_candidates, filtered_workflow_candidates,
-    selected_node_summary, selected_workflow_summary, workflow_assignment_pair_is_valid,
+    filtered_node_candidates, filtered_workflow_candidates, selected_node_summary,
+    selected_workflow_summary, workflow_assignment_pair_is_valid,
 };
 use super::types::{
     WorkflowAssigneeOption, WorkflowAssignmentCandidate, WorkflowAssignmentSummary,
 };
 use crate::features::workflows::{
-    submit_workflow_assignment_bulk, workflow_assignee_label, workflow_assignment_revision_label,
+    submit_workflow_assignment_bulk, workflow_assignment_revision_label,
 };
 use crate::ui::empty_view;
 use icons::{Search, X};
@@ -72,7 +73,6 @@ pub(in crate::features::workflows) fn WorkflowAssignmentCreateForm(
         move || selected_workflow_summary(candidates.get(), &selected_workflow_version_id.get());
     let selected_node_summary =
         move || selected_node_summary(candidates.get(), &selected_node_id.get());
-    let filtered_assignees = move || filtered_assignees(assignees.get(), &assignee_search.get());
     let can_create = move || {
         !is_saving.get()
             && !selected_candidate_id.get().is_empty()
@@ -291,69 +291,14 @@ pub(in crate::features::workflows) fn WorkflowAssignmentCreateForm(
                         empty_view()
                     }
                 }}
-                <div class="workflow-assignee-picker">
-                    <h4>"Eligible Assignees"</h4>
-                    {move || if selected_candidate_id.get().is_empty() {
-                        empty_view()
-                    } else {
-                        view! {
-                            <label class="searchable-data-table__search searchable-data-table__control workflow-assignment-candidate-search">
-                                <Search class="searchable-data-table__control-icon"/>
-                                <span class="sr-only">"Search assignees"</span>
-                                <input
-                                    type="search"
-                                    placeholder="Search assignees"
-                                    prop:value=move || assignee_search.get()
-                                    on:input=move |event| assignee_search.set(event_target_value(&event))
-                                />
-                            </label>
-                        }.into_any()
-                    }}
-                    {move || {
-                        if selected_candidate_id.get().is_empty() {
-                            view! { <p class="workflow-assignee-picker__empty">"Select a candidate to load assignees."</p> }.into_any()
-                        } else if assignees_loading.get() {
-                            view! { <p class="workflow-assignee-picker__empty">"Loading assignees."</p> }.into_any()
-                        } else if let Some(message) = assignees_error.get() {
-                            view! { <p class="workflow-assignee-picker__empty">{message}</p> }.into_any()
-                        } else {
-                            let options = filtered_assignees();
-                            if options.is_empty() {
-                                view! { <p class="workflow-assignee-picker__empty">"No eligible assignees to display."</p> }.into_any()
-                            } else {
-                                options
-                                    .into_iter()
-                                    .map(|assignee| {
-                                        let account_id = assignee.account_id.clone();
-                                        let account_id_for_checked = account_id.clone();
-                                        let label = workflow_assignee_label(&assignee);
-                                        view! {
-                                            <label class="workflow-assignee-option">
-                                                <input
-                                                    type="checkbox"
-                                                    prop:checked=move || selected_account_ids.get().contains(&account_id_for_checked)
-                                                    on:change=move |event| {
-                                                        let is_checked = event_target_checked(&event);
-                                                        let account_id = account_id.clone();
-                                                        selected_account_ids.update(|selected| {
-                                                            if is_checked {
-                                                                selected.insert(account_id);
-                                                            } else {
-                                                                selected.remove(&account_id);
-                                                            }
-                                                        });
-                                                    }
-                                                />
-                                                <span>{label}</span>
-                                            </label>
-                                        }
-                                    })
-                                    .collect_view()
-                                    .into_any()
-                            }
-                        }
-                    }}
-                </div>
+                <WorkflowAssignmentAssigneePicker
+                    assignees
+                    selected_candidate_id
+                    selected_account_ids
+                    assignee_search
+                    assignees_loading
+                    assignees_error
+                />
                 <div class="form-actions">
                     <button class="button button--secondary" type="submit" disabled=move || !can_create()>
                         {move || if is_saving.get() { "Creating..." } else { "Create Assignments" }}
