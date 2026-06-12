@@ -10,6 +10,8 @@ mod editor;
 mod expressions;
 mod loaders;
 mod pages;
+#[cfg(feature = "hydrate")]
+mod payloads;
 mod permissions;
 mod types;
 mod validation;
