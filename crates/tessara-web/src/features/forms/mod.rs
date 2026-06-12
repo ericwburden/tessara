@@ -22,6 +22,7 @@ mod save;
 mod tables;
 pub(crate) mod types;
 mod versions;
+mod versions_table;
 
 pub(in crate::features::forms) use attached_nodes::{
     FormsAttachedNodesList, FormsAttachedNodesSheet,
@@ -51,6 +52,7 @@ pub(crate) use types::{
     RenderedField, RenderedForm,
 };
 pub(crate) use versions::{
-    FormVersionsTable, active_form_definition_version, active_form_version, form_version_label,
+    active_form_definition_version, active_form_version, form_version_label,
     form_version_sort_label,
 };
+pub(crate) use versions_table::FormVersionsTable;
