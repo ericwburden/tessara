@@ -7,6 +7,7 @@ mod available_nodes_picker;
 mod create;
 mod create_actions;
 mod edit;
+mod edit_form;
 mod options;
 mod sections;
 mod state;
@@ -18,6 +19,7 @@ pub(in crate::features::workflows) use available_nodes_picker::WorkflowAvailable
 pub(crate) use create::WorkflowsNewPage;
 pub(crate) use create_actions::submit_create_workflow;
 pub(crate) use edit::WorkflowsEditPage;
+pub(in crate::features::workflows) use edit_form::WorkflowEditForm;
 #[cfg(feature = "hydrate")]
 pub(crate) use options::existing_workflow_slugs;
 pub(crate) use options::workflow_form_version_options;

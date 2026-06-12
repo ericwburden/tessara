@@ -5,10 +5,7 @@ use crate::features::organization::{NodeTypeCatalogEntry, OrganizationNode};
 use crate::features::workflows::types::{
     WorkflowDefinition, WorkflowSaveIntent, WorkflowStepDraft, WorkflowSummary,
 };
-use crate::features::workflows::{
-    load_workflow_create_options, load_workflow_detail, submit_update_workflow,
-    workflow_step_signature,
-};
+use crate::features::workflows::{load_workflow_create_options, load_workflow_detail};
 use crate::types::route_params::{WorkflowRouteParams, require_route_params};
 use crate::ui::{
     AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator,
@@ -19,11 +16,7 @@ use crate::utils::url::current_search_param;
 use leptos::prelude::*;
 use std::collections::HashSet;
 
-use super::{
-    WorkflowActiveRevisionSection, WorkflowAvailabilitySection, WorkflowEditStepsSection,
-    WorkflowIdentityFields, add_workflow_step, can_submit_workflow_editor,
-    prune_unavailable_workflow_steps, workflow_edit_initial_state,
-};
+use super::{WorkflowEditForm, prune_unavailable_workflow_steps, workflow_edit_initial_state};
 
 /// Renders the workflows edit page view.
 #[component]
@@ -116,13 +109,6 @@ pub(crate) fn WorkflowsEditPage() -> impl IntoView {
         prune_unavailable_workflow_steps(&forms.get(), &node_types.get(), steps);
     });
 
-    let add_step = move |_| add_workflow_step(next_step_id, steps);
-
-    let can_submit = move || can_submit_workflow_editor(is_saving, name, available_node_ids, steps);
-    let has_step_changes = move || {
-        workflow_step_signature(&steps.get()) != workflow_step_signature(&original_steps.get())
-    };
-
     view! {
         <AppShell active_route="workflows" title="Workflows">
             <div class="app-page">
@@ -165,104 +151,27 @@ pub(crate) fn WorkflowsEditPage() -> impl IntoView {
                             }
                             .into_any()
                         } else {
-                            let workflow_id_for_href = workflow_id.clone();
-                            let workflow_id_for_submit = workflow_id.clone();
-                            let workflow_id_for_publish = workflow_id.clone();
-                            let workflow_href = format!("/workflows/{}", workflow_id_for_href);
                             view! {
-                                <form
-                                    class="native-form workflow-create-form"
-                                    on:submit=move |event| {
-                                        event.prevent_default();
-                                        submit_update_workflow(
-                                            workflow_id_for_submit.clone(),
-                                            edit_version_id.get_untracked(),
-                                            version_is_draft.get_untracked(),
-                                            name,
-                                            slug,
-                                            available_node_ids,
-                                            steps,
-                                            original_steps,
-                                            description,
-                                            is_saving,
-                                            save_intent,
-                                            message,
-                                            WorkflowSaveIntent::Draft,
-                                        );
-                                    }
-                                >
-                                    <WorkflowIdentityFields name=name description=description/>
-
-                                    <WorkflowAvailabilitySection
-                                        organization_nodes=organization_nodes
-                                        available_node_ids=available_node_ids
-                                    />
-
-                                    <WorkflowActiveRevisionSection
-                                        edit_version_label=edit_version_label
-                                        edit_version_status=edit_version_status
-                                    />
-
-                                    <WorkflowEditStepsSection
-                                        forms=forms
-                                        node_types=node_types
-                                        steps=steps
-                                        version_is_draft=version_is_draft
-                                        on_add_step=add_step
-                                    />
-
-                                    {move || message.get().map(|message| view! {
-                                        <p class="form-message" role="status">{message}</p>
-                                    })}
-
-                                    <div class="form-actions">
-                                        <a class="button" href=workflow_href>"Cancel"</a>
-                                        <button class="button button--secondary" type="submit" disabled=move || !can_submit()>
-                                            {move || {
-                                                if save_intent.get() == Some(WorkflowSaveIntent::Draft) {
-                                                    "Saving..."
-                                                } else if has_step_changes() {
-                                                    "Save as Draft"
-                                                } else {
-                                                    "Save Changes"
-                                                }
-                                            }}
-                                        </button>
-                                        <button
-                                            class="button button--secondary"
-                                            type="button"
-                                            disabled=move || {
-                                                !can_submit()
-                                                    || (!version_is_draft.get() && !has_step_changes())
-                                            }
-                                            on:click=move |_| {
-                                                submit_update_workflow(
-                                                    workflow_id_for_publish.clone(),
-                                                    edit_version_id.get_untracked(),
-                                                    version_is_draft.get_untracked(),
-                                                    name,
-                                                    slug,
-                                                    available_node_ids,
-                                                    steps,
-                                                    original_steps,
-                                                    description,
-                                                    is_saving,
-                                                    save_intent,
-                                                    message,
-                                                    WorkflowSaveIntent::Publish,
-                                                );
-                                            }
-                                        >
-                                            {move || {
-                                                if save_intent.get() == Some(WorkflowSaveIntent::Publish) {
-                                                    "Publishing..."
-                                                } else {
-                                                    "Save and Publish"
-                                                }
-                                            }}
-                                        </button>
-                                    </div>
-                                </form>
+                                <WorkflowEditForm
+                                    workflow_id=workflow_id.clone()
+                                    name
+                                    slug
+                                    available_node_ids
+                                    description
+                                    steps
+                                    original_steps
+                                    next_step_id
+                                    edit_version_id
+                                    edit_version_label
+                                    edit_version_status
+                                    version_is_draft
+                                    node_types
+                                    organization_nodes
+                                    forms
+                                    is_saving
+                                    save_intent
+                                    message
+                                />
                             }
                             .into_any()
                         }
