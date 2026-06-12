@@ -10,6 +10,7 @@ mod lifecycle;
 mod messages;
 mod operation_options;
 mod options;
+mod source_field_actions;
 mod source_options;
 mod source_options_panel;
 mod sources;

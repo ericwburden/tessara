@@ -3,9 +3,9 @@
 use super::super::loaders::load_rendered_form;
 use super::super::types::*;
 use super::helpers::source_seed_key;
+use super::source_field_actions::add_fields_from_source;
 use super::source_options::{
-    add_fields_from_source, first_published_version, published_versions_for_form,
-    resolved_form_version_id,
+    first_published_version, published_versions_for_form, resolved_form_version_id,
 };
 use super::{DatasetDesignerOptionsSheet, DatasetExpressionChain, ExpressionPreview};
 use leptos::prelude::*;

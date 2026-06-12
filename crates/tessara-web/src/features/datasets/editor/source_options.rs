@@ -1,7 +1,6 @@
 //! Source field and form-version option helpers for the dataset editor.
 
 use super::super::types::*;
-use leptos::prelude::*;
 use std::collections::BTreeMap;
 
 /// Finds the first published version for a form.
@@ -168,41 +167,4 @@ pub(crate) fn system_source_field_options() -> Vec<DatasetRenderedField> {
         field_type: field_type.into(),
     })
     .collect()
-}
-
-/// Adds projected fields from a source's available field options.
-pub(crate) fn add_fields_from_source(
-    index: usize,
-    sources: RwSignal<Vec<DatasetSourceDraft>>,
-    forms: RwSignal<Vec<DatasetFormOption>>,
-    rendered_forms: RwSignal<BTreeMap<String, DatasetRenderedForm>>,
-    fields: RwSignal<Vec<DatasetFieldDraft>>,
-) {
-    let source = sources.get().get(index).cloned();
-    if let Some(source) = source {
-        let options = source_field_options(
-            &sources.get(),
-            &forms.get(),
-            &rendered_forms.get(),
-            &source.source_alias,
-        );
-        fields.update(|items| {
-            for option in options {
-                let key = format!("{}_{}", source.source_alias, option.key);
-                if items.iter().any(|item| {
-                    item.key == key
-                        || (item.source_alias == source.source_alias
-                            && item.source_field_key == option.key)
-                }) {
-                    continue;
-                }
-                items.push(DatasetFieldDraft {
-                    key,
-                    label: option.label,
-                    source_alias: source.source_alias.clone(),
-                    source_field_key: option.key,
-                });
-            }
-        });
-    }
 }
