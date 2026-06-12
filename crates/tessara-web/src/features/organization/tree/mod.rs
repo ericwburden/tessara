@@ -1,5 +1,9 @@
 //! Organization tree helpers.
 
+#[cfg(feature = "hydrate")]
+mod api;
+#[cfg(feature = "hydrate")]
+mod errors;
 mod loaders;
 mod view;
 
@@ -12,7 +16,7 @@ use std::collections::{HashMap, HashSet};
 pub(crate) use loaders::{load_organization_detail, load_organization_tree};
 pub(crate) use view::organization_tree_view;
 
-/// Toggles the toggle organization branch state.
+/// Keeps only ancestors of the selected branch expanded, then toggles the selected node.
 pub(crate) fn toggle_organization_branch(
     expanded_nodes: RwSignal<HashSet<String>>,
     node_id: String,
@@ -30,7 +34,7 @@ pub(crate) fn toggle_organization_branch(
     });
 }
 
-/// Builds the build organization tree value.
+/// Builds a visible hierarchy, treating nodes whose parents are not visible as roots.
 pub(crate) fn build_organization_tree(nodes: Vec<OrganizationNode>) -> Vec<OrganizationTreeNode> {
     let visible_ids = nodes
         .iter()
@@ -57,7 +61,6 @@ pub(crate) fn build_organization_tree(nodes: Vec<OrganizationNode>) -> Vec<Organ
     build_organization_branches(None, &mut children_by_parent)
 }
 
-/// Builds the build organization branches value.
 pub(crate) fn build_organization_branches(
     parent_id: Option<String>,
     children_by_parent: &mut HashMap<Option<String>, Vec<OrganizationNode>>,
