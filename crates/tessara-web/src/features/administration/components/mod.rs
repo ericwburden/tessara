@@ -3,7 +3,9 @@
 mod node_type_detail;
 mod node_type_metadata_field_actions;
 mod node_type_metadata_field_sheet;
+mod node_type_metadata_field_table;
 mod node_type_metadata_fields;
+mod node_type_metadata_mobile_cards;
 mod node_type_relationships;
 mod node_type_selector;
 mod node_types;
