@@ -1,34 +1,23 @@
-//! Organization node creation and editing workflows.
-//!
-//! Keep node type selection, metadata input state, parent choices, and create/update submission helpers here.
+//! Signal-aware loaders for organization node editor pages.
 
 #[cfg(feature = "hydrate")]
-use crate::features::administration::{CreateNodePayload, UpdateNodePayload};
-#[cfg(feature = "hydrate")]
-use crate::features::organization::types::{IdResponse, NodeTypeDefinition};
+use crate::features::organization::types::NodeTypeDefinition;
 use crate::features::organization::types::{
     NodeMetadataFieldSummary, NodeTypeCatalogEntry, OrganizationNode, OrganizationNodeDetail,
 };
 #[cfg(feature = "hydrate")]
 use crate::http::redirect_to_login;
 #[cfg(feature = "hydrate")]
-use crate::utils::text::IntoNonemptyString;
-#[cfg(feature = "hydrate")]
 use crate::utils::url::current_search_param;
 use leptos::prelude::*;
 use std::collections::HashMap;
 
-mod pages;
-
-pub(crate) use super::node_metadata::MetadataFieldInput;
 #[cfg(feature = "hydrate")]
-use super::node_metadata::{collect_node_metadata, metadata_input_state};
-pub(crate) use super::node_options::{
-    available_node_types_for_parent, parent_node_options, parent_node_options_for_edit,
-};
-pub(crate) use pages::{OrganizationEditPage, OrganizationNewPage};
+use super::super::node_metadata::metadata_input_state;
+#[cfg(feature = "hydrate")]
+use super::super::node_options::available_node_types_for_parent;
 
-/// Loads the load organization create options data.
+/// Loads node types and visible nodes for the create-node page.
 pub(crate) fn load_organization_create_options(
     node_types: RwSignal<Vec<NodeTypeCatalogEntry>>,
     nodes: RwSignal<Vec<OrganizationNode>>,
@@ -128,7 +117,7 @@ pub(crate) fn load_organization_create_options(
     }
 }
 
-/// Loads the load node type metadata data.
+/// Loads metadata field definitions for the selected node type.
 pub(crate) fn load_node_type_metadata(
     node_type_id: String,
     metadata_fields: RwSignal<Vec<NodeMetadataFieldSummary>>,
@@ -185,127 +174,7 @@ pub(crate) fn load_node_type_metadata(
     }
 }
 
-/// Submits the submit create node request.
-pub(crate) fn submit_create_node(
-    selected_node_type_id: RwSignal<String>,
-    selected_parent_node_id: RwSignal<String>,
-    name: RwSignal<String>,
-    metadata_fields: RwSignal<Vec<NodeMetadataFieldSummary>>,
-    metadata_values: RwSignal<HashMap<String, String>>,
-    metadata_booleans: RwSignal<HashMap<String, bool>>,
-    is_saving: RwSignal<bool>,
-    message: RwSignal<Option<String>>,
-) {
-    #[cfg(feature = "hydrate")]
-    {
-        if is_saving.get() {
-            return;
-        }
-
-        let node_type_id = selected_node_type_id.get();
-        let node_name = name.get().trim().to_string();
-        if node_type_id.is_empty() {
-            message.set(Some("Select a node type before saving.".into()));
-            return;
-        }
-        if node_name.is_empty() {
-            message.set(Some("Name is required.".into()));
-            return;
-        }
-
-        let metadata = match collect_node_metadata(
-            &metadata_fields.get(),
-            &metadata_values.get(),
-            &metadata_booleans.get(),
-        ) {
-            Ok(metadata) => metadata,
-            Err(error) => {
-                message.set(Some(error));
-                return;
-            }
-        };
-
-        let parent_node_id = selected_parent_node_id
-            .get()
-            .trim()
-            .to_string()
-            .into_nonempty();
-        let payload = CreateNodePayload {
-            node_type_id,
-            parent_node_id,
-            name: node_name,
-            metadata,
-        };
-
-        leptos::task::spawn_local(async move {
-            is_saving.set(true);
-            message.set(None);
-
-            let body = match serde_json::to_string(&payload) {
-                Ok(body) => body,
-                Err(_) => {
-                    message.set(Some("Create request could not be prepared.".into()));
-                    is_saving.set(false);
-                    return;
-                }
-            };
-
-            let response = gloo_net::http::Request::post("/api/admin/nodes")
-                .header("Content-Type", "application/json")
-                .body(body)
-                .expect("json request body should be valid")
-                .send()
-                .await;
-
-            match response {
-                Ok(response) if response.status() == 401 => {
-                    is_saving.set(false);
-                    redirect_to_login();
-                }
-                Ok(response) if response.ok() => match response.json::<IdResponse>().await {
-                    Ok(created) => {
-                        if let Some(window) = web_sys::window() {
-                            let _ = window
-                                .location()
-                                .set_href(&format!("/organization/{}", created.id));
-                        }
-                    }
-                    Err(_) => {
-                        message.set(Some("Create response could not be read.".into()));
-                        is_saving.set(false);
-                    }
-                },
-                Ok(response) => {
-                    message.set(Some(format!(
-                        "Create failed with status {}.",
-                        response.status()
-                    )));
-                    is_saving.set(false);
-                }
-                Err(_) => {
-                    message.set(Some("Could not reach the create node API.".into()));
-                    is_saving.set(false);
-                }
-            }
-        });
-    }
-
-    #[cfg(not(feature = "hydrate"))]
-    {
-        let _ = (
-            selected_node_type_id,
-            selected_parent_node_id,
-            name,
-            metadata_fields,
-            metadata_values,
-            metadata_booleans,
-            is_saving,
-            message,
-        );
-    }
-}
-
-/// Loads the load organization edit options data.
+/// Loads the node detail, editable metadata state, and parent/type options.
 pub(crate) fn load_organization_edit_options(
     node_id: String,
     node_types: RwSignal<Vec<NodeTypeCatalogEntry>>,
@@ -441,119 +310,6 @@ pub(crate) fn load_organization_edit_options(
             metadata_values,
             metadata_booleans,
             is_loading,
-            message,
-        );
-    }
-}
-
-/// Submits the submit update node request.
-pub(crate) fn submit_update_node(
-    node_id: String,
-    selected_parent_node_id: RwSignal<String>,
-    name: RwSignal<String>,
-    metadata_fields: RwSignal<Vec<NodeMetadataFieldSummary>>,
-    metadata_values: RwSignal<HashMap<String, String>>,
-    metadata_booleans: RwSignal<HashMap<String, bool>>,
-    is_saving: RwSignal<bool>,
-    message: RwSignal<Option<String>>,
-) {
-    #[cfg(feature = "hydrate")]
-    {
-        if is_saving.get() {
-            return;
-        }
-
-        let node_name = name.get().trim().to_string();
-        if node_name.is_empty() {
-            message.set(Some("Name is required.".into()));
-            return;
-        }
-
-        let metadata = match collect_node_metadata(
-            &metadata_fields.get(),
-            &metadata_values.get(),
-            &metadata_booleans.get(),
-        ) {
-            Ok(metadata) => metadata,
-            Err(error) => {
-                message.set(Some(error));
-                return;
-            }
-        };
-
-        let payload = UpdateNodePayload {
-            parent_node_id: selected_parent_node_id
-                .get()
-                .trim()
-                .to_string()
-                .into_nonempty(),
-            name: node_name,
-            metadata,
-        };
-
-        leptos::task::spawn_local(async move {
-            is_saving.set(true);
-            message.set(None);
-
-            let body = match serde_json::to_string(&payload) {
-                Ok(body) => body,
-                Err(_) => {
-                    message.set(Some("Update request could not be prepared.".into()));
-                    is_saving.set(false);
-                    return;
-                }
-            };
-
-            let response = gloo_net::http::Request::put(&format!("/api/admin/nodes/{node_id}"))
-                .header("Content-Type", "application/json")
-                .body(body)
-                .expect("json request body should be valid")
-                .send()
-                .await;
-
-            match response {
-                Ok(response) if response.status() == 401 => {
-                    is_saving.set(false);
-                    redirect_to_login();
-                }
-                Ok(response) if response.ok() => match response.json::<IdResponse>().await {
-                    Ok(updated) => {
-                        if let Some(window) = web_sys::window() {
-                            let _ = window
-                                .location()
-                                .set_href(&format!("/organization/{}", updated.id));
-                        }
-                    }
-                    Err(_) => {
-                        message.set(Some("Update response could not be read.".into()));
-                        is_saving.set(false);
-                    }
-                },
-                Ok(response) => {
-                    message.set(Some(format!(
-                        "Update failed with status {}.",
-                        response.status()
-                    )));
-                    is_saving.set(false);
-                }
-                Err(_) => {
-                    message.set(Some("Could not reach the update node API.".into()));
-                    is_saving.set(false);
-                }
-            }
-        });
-    }
-
-    #[cfg(not(feature = "hydrate"))]
-    {
-        let _ = (
-            node_id,
-            selected_parent_node_id,
-            name,
-            metadata_fields,
-            metadata_values,
-            metadata_booleans,
-            is_saving,
             message,
         );
     }
