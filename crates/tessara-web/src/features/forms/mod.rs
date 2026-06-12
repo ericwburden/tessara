@@ -14,6 +14,7 @@ mod editor_sections;
 mod filtering;
 mod list;
 mod loaders;
+mod options_loader;
 mod pages;
 mod save;
 mod tables;

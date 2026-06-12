@@ -3,7 +3,7 @@
 use crate::features::forms::builder::{
     FormBuilderCanvas, FormBuilderEditorState, new_form_builder_editor_state,
 };
-use crate::features::forms::loaders::load_form_create_options;
+use crate::features::forms::options_loader::load_form_create_options;
 use crate::features::forms::{
     FormIdentityFields, FormInitialVersionSummary, FormSummary, submit_create_form,
 };
