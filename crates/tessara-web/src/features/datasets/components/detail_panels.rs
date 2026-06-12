@@ -1,14 +1,19 @@
 //! Dataset detail and preview components.
 
+mod summary;
+mod tables;
+
 use super::super::display::visibility_label;
 use super::super::loaders::{load_account, load_dataset_detail, load_dataset_table};
 use super::super::permissions::can_manage_datasets;
 use super::super::types::*;
-use crate::ui::{AppShell, DataTable, EmptyState, PageHeader, StatusBadge};
+use crate::ui::{AppShell, DataTable, EmptyState, PageHeader};
 use crate::utils::text::sentence_label;
 use leptos::prelude::*;
+use summary::{MetricCard, tab_class};
+use tables::{DatasetFieldsTable, DatasetSourcesTable, DatasetSqlPanel};
+
 #[component]
-/// Renders the dataset detail surface view.
 pub(crate) fn DatasetDetailSurface(dataset_id: String, edit: bool) -> impl IntoView {
     let dataset = RwSignal::new(None::<DatasetDefinition>);
     let table = RwSignal::new(None::<DatasetTable>);
@@ -85,79 +90,6 @@ pub(crate) fn DatasetDetailSurface(dataset_id: String, edit: bool) -> impl IntoV
 }
 
 #[component]
-/// Renders the metric card view.
-fn MetricCard(label: &'static str, value: String) -> impl IntoView {
-    view! {
-        <div class="metric-card">
-            <span>{label}</span>
-            <strong>{value}</strong>
-        </div>
-    }
-}
-
-#[component]
-/// Renders the dataset sources table view.
-fn DatasetSourcesTable(sources: Vec<DatasetSourceDefinition>) -> impl IntoView {
-    view! {
-        <section class="route-panel__section">
-            <h3>"Sources"</h3>
-            <DataTable>
-                <thead><tr><th>"Alias"</th><th>"Form"</th><th>"Major"</th><th>"Selection"</th></tr></thead>
-                <tbody>
-                    {sources.into_iter().map(|source| view! {
-                        <tr>
-                            <th scope="row">{source.source_alias}</th>
-                            <td>{source.form_name.unwrap_or_else(|| "Unavailable form".into())}</td>
-                            <td>{source.form_version_major.map(|value| value.to_string()).unwrap_or_else(|| "Current".into())}</td>
-                            <td><StatusBadge label=sentence_label(&source.selection_rule)/></td>
-                        </tr>
-                    }).collect_view()}
-                </tbody>
-            </DataTable>
-        </section>
-    }
-}
-
-#[component]
-/// Renders the dataset fields table view.
-fn DatasetFieldsTable(fields: Vec<DatasetFieldDefinition>) -> impl IntoView {
-    view! {
-        <section class="route-panel__section">
-            <h3>"Fields"</h3>
-            <DataTable>
-                <thead><tr><th>"Field"</th><th>"Source"</th><th>"Source Field"</th><th>"Type"</th></tr></thead>
-                <tbody>
-                    {fields.into_iter().map(|field| view! {
-                        <tr>
-                            <th scope="row">{field.label}<span class="data-table__secondary-text">{field.key}</span></th>
-                            <td>{field.source_alias}</td>
-                            <td>{field.source_field_key}</td>
-                            <td>{sentence_label(&field.field_type)}</td>
-                        </tr>
-                    }).collect_view()}
-                </tbody>
-            </DataTable>
-        </section>
-    }
-}
-
-#[component]
-/// Renders the dataset sql panel view.
-fn DatasetSqlPanel(sql: Option<String>) -> impl IntoView {
-    view! {
-        <section class="route-panel__section">
-            <h3>"Generated SQL"</h3>
-            {if let Some(sql) = sql {
-                view! { <pre class="dataset-sql-panel"><code>{sql}</code></pre> }.into_any()
-            } else {
-                view! { <EmptyState title="SQL unavailable" message="This dataset revision does not have generated SQL metadata."/> }.into_any()
-            }}
-        </section>
-    }
-}
-
-#[component]
-/// Renders the dataset preview table view.
 pub(crate) fn DatasetPreviewTable(
     dataset: DatasetDefinition,
     table: Option<DatasetTable>,
@@ -202,15 +134,4 @@ pub(crate) fn DatasetPreviewTable(
             </DataTable>
         </section>
     }.into_any()
-}
-
-/// Handles the tab class behavior.
-fn tab_class(active_tab: RwSignal<String>, value: &'static str) -> impl Fn() -> &'static str {
-    move || {
-        if active_tab.get() == value {
-            "tabs-trigger is-active"
-        } else {
-            "tabs-trigger"
-        }
-    }
 }
