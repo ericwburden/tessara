@@ -9,9 +9,7 @@ use crate::features::forms::save::structure::{
 };
 use crate::features::forms::types::FormSummary;
 #[cfg(feature = "hydrate")]
-use crate::features::organization::types::IdResponse;
-#[cfg(feature = "hydrate")]
-use crate::http::{redirect_to_login, send_json_id_request};
+use crate::http::{IdResponse, redirect_to_login, send_json_id_request};
 use leptos::prelude::*;
 
 #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
