@@ -4,7 +4,7 @@ use crate::features::forms::builder::{
     FORM_BUILDER_COLUMN_COUNT, FormBuilderFieldDraft, form_builder_field_default_label,
     form_builder_field_has_collision, form_builder_layout_candidate,
 };
-use crate::features::shared::slug_from_label;
+use crate::utils::slug::slug_from_label;
 use leptos::prelude::*;
 
 pub(in crate::features::forms::builder::components) fn update_field_label(

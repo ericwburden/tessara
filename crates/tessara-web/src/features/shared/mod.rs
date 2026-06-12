@@ -16,6 +16,4 @@ pub(crate) use types::{
 pub(crate) use ui::{node_count_label, node_display_path, user_count_label};
 
 mod filtering;
-#[cfg(feature = "hydrate")]
-pub(crate) use filtering::unique_slug_from_label;
-pub(crate) use filtering::{slug_from_label, unique_filter_options};
+pub(crate) use filtering::unique_filter_options;

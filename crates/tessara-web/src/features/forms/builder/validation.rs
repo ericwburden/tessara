@@ -3,7 +3,7 @@
 //! Keep draft-to-payload preparation and validation errors here so builder UI and submit flows share the same checks.
 
 use crate::features::forms::builder::{FormBuilderFieldDraft, FormBuilderSectionDraft};
-use crate::features::shared::slug_from_label;
+use crate::utils::slug::slug_from_label;
 use std::collections::HashSet;
 
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]

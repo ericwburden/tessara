@@ -10,12 +10,12 @@ use super::validation::{
 };
 #[cfg(feature = "hydrate")]
 use super::workflow_step_payloads_from_drafts;
-#[cfg(feature = "hydrate")]
-use crate::features::shared::unique_slug_from_label;
 use crate::features::workflows::WorkflowStepDraft;
 use crate::features::workflows::types::WorkflowSummary;
 #[cfg(feature = "hydrate")]
 use crate::features::workflows::{CreateWorkflowPayload, CreateWorkflowRevisionPayload};
+#[cfg(feature = "hydrate")]
+use crate::utils::slug::unique_slug_from_label;
 #[cfg(feature = "hydrate")]
 use crate::utils::text::IntoNonemptyString;
 use leptos::prelude::*;

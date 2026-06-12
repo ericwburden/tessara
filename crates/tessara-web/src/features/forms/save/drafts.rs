@@ -7,7 +7,7 @@ use crate::features::forms::builder::{
 use crate::features::forms::types::{
     CreateFormPayload, FormSummary, RenderedForm, UpdateFormPayload,
 };
-use crate::features::shared::unique_slug_from_label;
+use crate::utils::slug::unique_slug_from_label;
 use crate::utils::text::IntoNonemptyString;
 use std::collections::HashSet;
 
