@@ -9,7 +9,7 @@ use crate::utils::pagination::{
 };
 
 #[component]
-/// Renders the table pagination footer view.
+/// Renders shared pagination controls and a row-range summary for feature tables.
 pub(crate) fn TablePaginationFooter(
     aria_label: &'static str,
     item_label: &'static str,
@@ -82,7 +82,7 @@ pub(crate) fn TablePaginationFooter(
     }
 }
 
-/// Handles the table page summary behavior.
+/// Formats the visible row-range summary while preserving the empty-table copy.
 fn table_page_summary(
     total_count: usize,
     page_size: usize,

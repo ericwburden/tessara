@@ -14,7 +14,7 @@ pub(crate) fn unique_filter_options(values: impl IntoIterator<Item = String>) ->
     options
 }
 
-/// Handles the slug from label behavior.
+/// Converts a display label into a lowercase ASCII slug separated by hyphens.
 pub(crate) fn slug_from_label(label: &str) -> String {
     let mut slug = String::new();
     let mut last_was_dash = false;
@@ -41,7 +41,7 @@ pub(crate) fn slug_from_label(label: &str) -> String {
 }
 
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
-/// Handles the unique slug from label behavior.
+/// Builds a slug from a label and appends a numeric suffix when it already exists.
 pub(crate) fn unique_slug_from_label(label: &str, existing_slugs: &[String]) -> String {
     let base = slug_from_label(label);
     if base.is_empty() {

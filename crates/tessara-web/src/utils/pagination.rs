@@ -10,7 +10,7 @@ pub(crate) fn pagination_page_count(total_count: usize, page_size: usize) -> usi
     }
 }
 
-/// Handles the pagination current page behavior.
+/// Clamps a requested page index to the available page range.
 pub(crate) fn pagination_current_page(
     total_count: usize,
     page_size: usize,
@@ -19,7 +19,7 @@ pub(crate) fn pagination_current_page(
     page_index.min(pagination_page_count(total_count, page_size) - 1)
 }
 
-/// Handles the pagination page start behavior.
+/// Returns the zero-based row offset for the current page.
 pub(crate) fn pagination_page_start(
     total_count: usize,
     page_size: usize,
@@ -32,7 +32,7 @@ pub(crate) fn pagination_page_start(
     }
 }
 
-/// Handles the pagination page end behavior.
+/// Returns the exclusive row end offset for the current page.
 pub(crate) fn pagination_page_end(
     total_count: usize,
     page_size: usize,
