@@ -9,6 +9,8 @@ mod create_actions;
 mod edit;
 mod edit_form;
 mod options;
+#[cfg(feature = "hydrate")]
+mod payloads;
 mod sections;
 mod seed;
 mod state;

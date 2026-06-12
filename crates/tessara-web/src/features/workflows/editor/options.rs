@@ -6,7 +6,6 @@ use crate::features::organization::NodeTypeCatalogEntry;
 use crate::features::workflows::types::WorkflowSummary;
 
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
-#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
 pub(crate) fn existing_workflow_slugs(workflows: &[WorkflowSummary]) -> Vec<String> {
     workflows
         .iter()
