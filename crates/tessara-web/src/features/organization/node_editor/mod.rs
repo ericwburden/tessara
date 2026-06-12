@@ -6,6 +6,8 @@ mod actions;
 mod create;
 mod edit;
 mod loaders;
+#[cfg(feature = "hydrate")]
+mod options;
 
 pub(crate) use super::node_metadata::MetadataFieldInput;
 pub(crate) use super::node_options::{

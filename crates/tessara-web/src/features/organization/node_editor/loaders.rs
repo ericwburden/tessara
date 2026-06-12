@@ -15,7 +15,7 @@ use std::collections::HashMap;
 #[cfg(feature = "hydrate")]
 use super::super::node_metadata::metadata_input_state;
 #[cfg(feature = "hydrate")]
-use super::super::node_options::available_node_types_for_parent;
+use super::options::organization_create_selection;
 
 /// Loads node types and visible nodes for the create-node page.
 pub(crate) fn load_organization_create_options(
@@ -56,32 +56,17 @@ pub(crate) fn load_organization_create_options(
                             let requested_node_type_id = current_search_param("node_type_id");
                             let requested_parent_id = current_search_param("parent_node_id")
                                 .or_else(|| current_search_param("parent_id"));
-                            let selected_parent = requested_parent_id
-                                .filter(|requested| {
-                                    loaded_nodes.iter().any(|node| node.id == *requested)
-                                })
-                                .unwrap_or_default();
-                            let available_types = available_node_types_for_parent(
-                                &selected_parent,
+                            let selection = organization_create_selection(
+                                requested_node_type_id,
+                                requested_parent_id,
                                 &loaded_node_types,
                                 &loaded_nodes,
                             );
-                            let selected_type = requested_node_type_id
-                                .filter(|requested| {
-                                    available_types
-                                        .iter()
-                                        .any(|node_type| node_type.id == *requested)
-                                })
-                                .or_else(|| {
-                                    available_types
-                                        .first()
-                                        .map(|node_type| node_type.id.clone())
-                                });
 
                             nodes.set(loaded_nodes);
                             node_types.set(loaded_node_types);
-                            selected_node_type_id.set(selected_type.unwrap_or_default());
-                            selected_parent_node_id.set(selected_parent);
+                            selected_node_type_id.set(selection.node_type_id);
+                            selected_parent_node_id.set(selection.parent_node_id);
                             is_loading.set(false);
                         }
                         _ => {
