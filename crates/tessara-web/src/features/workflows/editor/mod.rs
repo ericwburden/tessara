@@ -2,19 +2,20 @@
 //!
 //! Keep form state, draft manipulation, and edit-page presentation here; transport payload submission belongs in API modules.
 
-mod actions;
 mod available_nodes_picker;
 mod create;
+mod create_actions;
 mod edit;
 mod options;
 mod sections;
 mod state;
 mod step_list;
 mod steps;
+mod update_actions;
 
-pub(crate) use actions::{submit_create_workflow, submit_update_workflow};
 pub(in crate::features::workflows) use available_nodes_picker::WorkflowAvailableNodesPicker;
 pub(crate) use create::WorkflowsNewPage;
+pub(crate) use create_actions::submit_create_workflow;
 pub(crate) use edit::WorkflowsEditPage;
 #[cfg(feature = "hydrate")]
 pub(crate) use options::existing_workflow_slugs;
@@ -30,3 +31,4 @@ pub(in crate::features::workflows) use step_list::WorkflowStepList;
 #[cfg(feature = "hydrate")]
 pub(in crate::features::workflows) use steps::workflow_step_payloads_from_drafts;
 pub(crate) use steps::workflow_step_signature;
+pub(crate) use update_actions::submit_update_workflow;
