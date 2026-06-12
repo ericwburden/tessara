@@ -5,8 +5,8 @@ mod mobile_card;
 mod row;
 
 use crate::features::operations::types::WorkflowAssignmentStatus;
-use crate::features::shared::unique_filter_options;
 use crate::ui::{DataTable, EmptyState, TableFilterHeader, TablePaginationFooter};
+use crate::utils::filtering::unique_filter_options;
 use crate::utils::pagination::pagination_page_start;
 use icons::Search;
 use leptos::prelude::*;

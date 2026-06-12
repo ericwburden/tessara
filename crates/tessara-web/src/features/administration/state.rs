@@ -5,7 +5,7 @@ use super::models::{
     AdminCapabilitySummary, AdminUserAccessDetail, AdminUserDetail, AdminUserSummary,
 };
 use crate::features::organization::AdminRoleSummary;
-use crate::features::shared::unique_filter_options;
+use crate::utils::filtering::unique_filter_options;
 use crate::utils::text::text_matches;
 use leptos::prelude::{RwSignal, Update};
 

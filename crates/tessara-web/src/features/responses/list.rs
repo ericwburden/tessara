@@ -6,8 +6,8 @@ use super::components::ResponsesList;
 use super::loaders::load_submissions;
 use crate::features::responses::display::{submission_assignee_label, submission_status_key};
 use crate::features::responses::types::SubmissionSummary;
-use crate::features::shared::unique_filter_options;
 use crate::ui::{AppShell, PageHeader};
+use crate::utils::filtering::unique_filter_options;
 use crate::utils::text::text_matches;
 use leptos::prelude::*;
 

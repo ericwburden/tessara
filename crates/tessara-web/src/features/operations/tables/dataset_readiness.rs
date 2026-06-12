@@ -1,8 +1,8 @@
 //! Dataset readiness table for Operations.
 
 use crate::features::operations::types::DatasetStatus;
-use crate::features::shared::unique_filter_options;
 use crate::ui::{DataTable, EmptyState, StatusBadge, TableFilterHeader, TablePaginationFooter};
+use crate::utils::filtering::unique_filter_options;
 use crate::utils::pagination::pagination_page_start;
 use icons::Search;
 use leptos::prelude::*;

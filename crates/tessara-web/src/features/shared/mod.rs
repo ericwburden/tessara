@@ -14,6 +14,3 @@ pub(crate) use types::{
     WorkflowAvailableNodesSheetData,
 };
 pub(crate) use ui::{node_count_label, node_display_path, user_count_label};
-
-mod filtering;
-pub(crate) use filtering::unique_filter_options;

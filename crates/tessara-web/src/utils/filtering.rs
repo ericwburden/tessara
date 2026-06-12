@@ -1,6 +1,4 @@
-//! Shared filtering and option helpers.
-//!
-//! Keep only reusable filtering logic here; product-owned filtering lives in the owning feature.
+//! Generic filtering helpers.
 
 pub(crate) fn unique_filter_options(values: impl IntoIterator<Item = String>) -> Vec<String> {
     let mut options = values

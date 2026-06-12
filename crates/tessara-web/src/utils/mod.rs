@@ -2,6 +2,7 @@
 //!
 //! Only expose general formatting, metadata, pagination, and text helpers here; domain-specific helpers should live with their owning feature.
 
+pub mod filtering;
 pub mod metadata;
 pub mod pagination;
 pub mod slug;

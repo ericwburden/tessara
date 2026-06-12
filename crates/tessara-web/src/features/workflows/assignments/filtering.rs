@@ -7,7 +7,7 @@ use super::display::{
 use super::types::{
     WorkflowAssigneeOption, WorkflowAssignmentCandidate, WorkflowAssignmentSummary,
 };
-use crate::features::shared::unique_filter_options;
+use crate::utils::filtering::unique_filter_options;
 use crate::utils::text::text_matches;
 use std::collections::HashSet;
 
