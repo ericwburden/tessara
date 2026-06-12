@@ -10,11 +10,12 @@ mod create_form;
 mod detail_sheet;
 mod display;
 mod errors;
+mod filtering;
 mod lifecycle;
 mod loaders;
 mod mobile_cards;
 mod mutations;
-mod state;
+mod page_state;
 pub(crate) mod types;
 
 pub(crate) use crate::features::workflows::pages::assignments::WorkflowAssignmentsPage;
@@ -29,6 +30,7 @@ pub(crate) use display::{
     workflow_assignment_status_key, workflow_assignment_status_label,
     workflow_available_node_links,
 };
+pub(in crate::features::workflows) use filtering::{assignee_filter_options, filtered_assignments};
 pub(in crate::features::workflows) use lifecycle::install_workflow_assignments_page_effects;
 pub(crate) use loaders::{
     load_pending_work, load_workflow_assignment_assignees, load_workflow_assignment_candidates,
@@ -36,9 +38,7 @@ pub(crate) use loaders::{
 };
 pub(in crate::features::workflows) use mobile_cards::WorkflowAssignmentMobileCards;
 pub(crate) use mutations::{submit_workflow_assignment_bulk, toggle_workflow_assignment};
-pub(in crate::features::workflows) use state::{
-    WorkflowAssignmentsPageState, assignee_filter_options, filtered_assignments,
-};
+pub(in crate::features::workflows) use page_state::WorkflowAssignmentsPageState;
 #[cfg(feature = "hydrate")]
 pub(crate) use types::{BulkWorkflowAssignmentPayload, UpdateWorkflowAssignmentPayload};
 pub(crate) use types::{

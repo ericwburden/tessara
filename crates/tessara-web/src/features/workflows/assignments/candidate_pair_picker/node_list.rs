@@ -1,6 +1,6 @@
 //! Node side of the assignment candidate pair picker.
 
-use super::super::state::{filtered_node_candidates, selected_node_summary};
+use super::super::filtering::{filtered_node_candidates, selected_node_summary};
 use super::super::types::WorkflowAssignmentCandidate;
 use icons::{Search, X};
 use leptos::prelude::*;

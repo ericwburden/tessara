@@ -1,6 +1,6 @@
 //! Workflow side of the assignment candidate pair picker.
 
-use super::super::state::{filtered_workflow_candidates, selected_workflow_summary};
+use super::super::filtering::{filtered_workflow_candidates, selected_workflow_summary};
 use super::super::types::WorkflowAssignmentCandidate;
 use crate::features::workflows::workflow_assignment_revision_label;
 use icons::{Search, X};

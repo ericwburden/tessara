@@ -3,7 +3,7 @@
 mod node_list;
 mod workflow_list;
 
-use super::state::workflow_assignment_pair_is_valid;
+use super::filtering::workflow_assignment_pair_is_valid;
 use super::types::WorkflowAssignmentCandidate;
 use leptos::prelude::*;
 use node_list::WorkflowAssignmentNodePicker;

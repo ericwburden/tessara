@@ -1,6 +1,6 @@
 //! Reactive lifecycle wiring for the workflow assignments page.
 
-use super::state::WorkflowAssignmentsPageState;
+use super::page_state::WorkflowAssignmentsPageState;
 use super::{
     load_workflow_assignment_assignees, load_workflow_assignment_candidates,
     load_workflow_assignments, workflow_assignment_candidate_key,

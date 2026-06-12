@@ -1,6 +1,6 @@
 //! Workflow assignment assignee picker.
 
-use super::state::filtered_assignees;
+use super::filtering::filtered_assignees;
 use super::types::WorkflowAssigneeOption;
 use crate::features::workflows::workflow_assignee_label;
 use crate::ui::empty_view;
