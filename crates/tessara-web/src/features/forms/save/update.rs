@@ -4,13 +4,11 @@ use crate::features::forms::builder::{FormBuilderFieldDraft, FormBuilderSectionD
 #[cfg(feature = "hydrate")]
 use crate::features::forms::save::drafts::prepare_update_form_save;
 #[cfg(feature = "hydrate")]
-use crate::features::forms::save::payloads::{form_field_payload, form_section_payload};
+use crate::features::forms::save::structure::{save_form_fields, save_form_sections};
 use crate::features::forms::types::{FormSummary, RenderedForm};
 #[cfg(feature = "hydrate")]
 use crate::http::send_json_id_request;
 use leptos::prelude::*;
-#[cfg(feature = "hydrate")]
-use std::collections::HashMap;
 
 #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
 /// Submits the submit update form request.
@@ -144,121 +142,29 @@ pub(crate) fn submit_update_form(
                 }
             }
 
-            let mut section_ids = HashMap::new();
-            for section in &prepared_sections {
-                let section_payload = form_section_payload(section);
-                let section_body = match serde_json::to_string(&section_payload) {
-                    Ok(body) => body,
-                    Err(_) => {
-                        message.set(Some(format!(
-                            "{} section request could not be prepared.",
-                            section.title
-                        )));
-                        is_saving.set(false);
-                        return;
-                    }
-                };
-
-                let request = if update_existing_draft {
-                    section
-                        .remote_id
-                        .as_ref()
-                        .map(|section_id| {
-                            (
-                                gloo_net::http::Request::put(&format!(
-                                    "/api/admin/form-sections/{section_id}"
-                                )),
-                                "Update form section",
-                            )
-                        })
-                        .unwrap_or_else(|| {
-                            (
-                                gloo_net::http::Request::post(&format!(
-                                    "/api/admin/form-versions/{version_id}/sections"
-                                )),
-                                "Create form section",
-                            )
-                        })
-                } else {
-                    (
-                        gloo_net::http::Request::post(&format!(
-                            "/api/admin/form-versions/{version_id}/sections"
-                        )),
-                        "Create form section",
-                    )
-                };
-
-                match send_json_id_request(request.0, Some(section_body), request.1).await {
-                    Ok(saved_section) => {
-                        section_ids.insert(section.id, saved_section.id);
-                    }
+            let section_ids =
+                match save_form_sections(&version_id, &prepared_sections, update_existing_draft)
+                    .await
+                {
+                    Ok(section_ids) => section_ids,
                     Err(error) => {
                         message.set(Some(error));
                         is_saving.set(false);
                         return;
                     }
-                }
-            }
-
-            for (index, field) in prepared_fields.iter().enumerate() {
-                let Some(section_id) = section_ids.get(&field.section_id) else {
-                    message.set(Some(format!(
-                        "{} field could not be matched to a section.",
-                        field.label
-                    )));
-                    is_saving.set(false);
-                    return;
-                };
-                let field_payload =
-                    form_field_payload(field, section_id.clone(), (index + 1) as i32);
-                let field_body = match serde_json::to_string(&field_payload) {
-                    Ok(body) => body,
-                    Err(_) => {
-                        message.set(Some(format!(
-                            "{} field request could not be prepared.",
-                            field.label
-                        )));
-                        is_saving.set(false);
-                        return;
-                    }
                 };
 
-                let request = if update_existing_draft {
-                    field
-                        .remote_id
-                        .as_ref()
-                        .map(|field_id| {
-                            (
-                                gloo_net::http::Request::put(&format!(
-                                    "/api/admin/form-fields/{field_id}"
-                                )),
-                                "Update form field",
-                            )
-                        })
-                        .unwrap_or_else(|| {
-                            (
-                                gloo_net::http::Request::post(&format!(
-                                    "/api/admin/form-versions/{version_id}/fields"
-                                )),
-                                "Create form field",
-                            )
-                        })
-                } else {
-                    (
-                        gloo_net::http::Request::post(&format!(
-                            "/api/admin/form-versions/{version_id}/fields"
-                        )),
-                        "Create form field",
-                    )
-                };
-
-                if let Err(error) =
-                    send_json_id_request(request.0, Some(field_body), request.1).await
-                {
-                    message.set(Some(error));
-                    is_saving.set(false);
-                    return;
-                }
+            if let Err(error) = save_form_fields(
+                &version_id,
+                &prepared_fields,
+                &section_ids,
+                update_existing_draft,
+            )
+            .await
+            {
+                message.set(Some(error));
+                is_saving.set(false);
+                return;
             }
 
             if publish_after_save {

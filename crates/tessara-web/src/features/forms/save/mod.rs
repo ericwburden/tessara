@@ -5,6 +5,8 @@ mod create;
 mod drafts;
 #[cfg(feature = "hydrate")]
 mod payloads;
+#[cfg(feature = "hydrate")]
+mod structure;
 mod update;
 
 pub(crate) use create::submit_create_form;
