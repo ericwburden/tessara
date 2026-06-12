@@ -24,6 +24,7 @@ pub(crate) use assignments::{
     workflow_assignment_status_key, workflow_assignment_status_label,
     workflow_available_node_links,
 };
+pub(in crate::features::workflows) use detail::WorkflowDetailContent;
 pub(crate) use detail::WorkflowsDetailPage;
 pub(in crate::features::workflows) use detail_tables::{
     WorkflowDetailAssignmentsTable, WorkflowStepsTable, WorkflowVersionsTable,
