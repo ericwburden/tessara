@@ -5,6 +5,7 @@ mod node_type_metadata_field_sheet;
 mod node_type_metadata_fields;
 mod node_type_relationships;
 mod node_types;
+mod role_sheet;
 mod roles;
 mod user_access;
 mod user_forms;
@@ -13,7 +14,8 @@ mod users;
 pub(crate) use node_type_detail::NodeTypeDetailCollections;
 pub(crate) use node_type_relationships::NodeTypeRelationshipPicker;
 pub(crate) use node_types::{AdministrationNodeTypeEditor, AdministrationNodeTypesList};
-pub(crate) use roles::{AdminRoleSheet, AdministrationRoleDetailPanel, AdministrationRolesList};
+pub(crate) use role_sheet::AdminRoleSheet;
+pub(crate) use roles::{AdministrationRoleDetailPanel, AdministrationRolesList};
 pub(crate) use user_access::{
     AdminCapabilityList, AdminDelegationChecklist, AdminDelegationList, AdminScopeNodeChecklist,
     AdminScopeNodeList,
