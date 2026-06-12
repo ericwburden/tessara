@@ -13,8 +13,7 @@ mod payloads;
 pub(crate) mod types;
 
 pub(crate) use api::{
-    load_workflow_assignment_nodes, load_workflows, submit_create_workflow, submit_update_workflow,
-    workflow_assigned_users_label,
+    load_workflow_assignment_nodes, load_workflows, workflow_assigned_users_label,
 };
 pub(crate) use assignments::{
     WorkflowAssignmentsPage, submit_workflow_assignment_bulk, toggle_workflow_assignment,
@@ -31,12 +30,11 @@ pub(crate) use display::{
     workflow_revision_label_from_raw, workflow_source_label, workflow_status_key,
     workflow_status_label, workflow_version_label,
 };
-#[cfg(feature = "hydrate")]
-pub(crate) use editor::existing_workflow_slugs;
-#[cfg(feature = "hydrate")]
-pub(in crate::features::workflows) use editor::workflow_step_payloads_from_drafts;
 pub(crate) use editor::workflow_step_signature;
-pub(crate) use editor::{WorkflowsEditPage, WorkflowsNewPage, workflow_form_version_options};
+pub(crate) use editor::{
+    WorkflowsEditPage, WorkflowsNewPage, submit_create_workflow, submit_update_workflow,
+    workflow_form_version_options,
+};
 pub(crate) use list::WorkflowsPage;
 pub(crate) use payloads::CreateWorkflowStepPayload;
 #[cfg(feature = "hydrate")]
