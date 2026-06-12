@@ -7,11 +7,11 @@ use crate::features::shared::unique_slug_from_label;
 #[cfg(feature = "hydrate")]
 use crate::features::workflows::CreateWorkflowStepPayload;
 use crate::features::workflows::WorkflowStepDraft;
+#[cfg(feature = "hydrate")]
+use crate::features::workflows::api::{create_initial_workflow_revision, create_workflow};
 use crate::features::workflows::types::WorkflowSummary;
 #[cfg(feature = "hydrate")]
 use crate::features::workflows::{CreateWorkflowPayload, CreateWorkflowRevisionPayload};
-#[cfg(feature = "hydrate")]
-use crate::http::send_json_id_request;
 #[cfg(feature = "hydrate")]
 use crate::utils::text::IntoNonemptyString;
 use leptos::prelude::*;
@@ -97,39 +97,9 @@ pub(crate) fn submit_create_workflow(
             is_saving.set(true);
             message.set(None);
 
-            let workflow_body = match serde_json::to_string(&payload) {
-                Ok(body) => body,
-                Err(_) => {
-                    message.set(Some("Create request could not be prepared.".into()));
-                    is_saving.set(false);
-                    return;
-                }
-            };
-            let version_body = match serde_json::to_string(&version_payload) {
-                Ok(body) => body,
-                Err(_) => {
-                    message.set(Some("Workflow step request could not be prepared.".into()));
-                    is_saving.set(false);
-                    return;
-                }
-            };
-
-            match send_json_id_request(
-                gloo_net::http::Request::post("/api/workflows"),
-                Some(workflow_body),
-                "Create workflow",
-            )
-            .await
-            {
+            match create_workflow(payload).await {
                 Ok(created) => {
-                    let version_url = format!("/api/workflows/{}/versions", created.id);
-                    match send_json_id_request(
-                        gloo_net::http::Request::post(&version_url),
-                        Some(version_body),
-                        "Create workflow steps",
-                    )
-                    .await
-                    {
+                    match create_initial_workflow_revision(&created.id, version_payload).await {
                         Ok(_) => {
                             if let Some(window) = web_sys::window() {
                                 let _ = window

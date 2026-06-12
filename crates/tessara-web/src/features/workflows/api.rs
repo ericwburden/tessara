@@ -8,7 +8,8 @@ use crate::features::organization::OrganizationNode;
 use crate::features::workflows::types::{WorkflowDefinition, WorkflowSummary};
 #[cfg(feature = "hydrate")]
 use crate::features::workflows::{
-    CreateWorkflowRevisionPayload, UpdateWorkflowPayload, UpdateWorkflowRevisionStepsPayload,
+    CreateWorkflowPayload, CreateWorkflowRevisionPayload, UpdateWorkflowPayload,
+    UpdateWorkflowRevisionStepsPayload,
 };
 #[cfg(feature = "hydrate")]
 use crate::http::{IdResponse, send_json_id_request};
@@ -113,6 +114,38 @@ pub(in crate::features::workflows) async fn update_workflow(
         gloo_net::http::Request::put(&workflow_url),
         Some(body),
         "Update workflow",
+    )
+    .await
+}
+
+#[cfg(feature = "hydrate")]
+pub(in crate::features::workflows) async fn create_workflow(
+    payload: CreateWorkflowPayload,
+) -> Result<IdResponse, String> {
+    let body = serde_json::to_string(&payload)
+        .map_err(|_| "Create request could not be prepared.".to_string())?;
+
+    send_json_id_request(
+        gloo_net::http::Request::post("/api/workflows"),
+        Some(body),
+        "Create workflow",
+    )
+    .await
+}
+
+#[cfg(feature = "hydrate")]
+pub(in crate::features::workflows) async fn create_initial_workflow_revision(
+    workflow_id: &str,
+    payload: CreateWorkflowRevisionPayload,
+) -> Result<IdResponse, String> {
+    let body = serde_json::to_string(&payload)
+        .map_err(|_| "Workflow step request could not be prepared.".to_string())?;
+    let version_url = format!("/api/workflows/{workflow_id}/versions");
+
+    send_json_id_request(
+        gloo_net::http::Request::post(&version_url),
+        Some(body),
+        "Create workflow steps",
     )
     .await
 }
