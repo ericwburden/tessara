@@ -1,65 +1,14 @@
-//! Workflow editor form sections.
+//! Workflow editor step sections.
 
 use crate::features::forms::FormSummary;
-use crate::features::organization::{NodeTypeCatalogEntry, OrganizationNode};
-use crate::features::shared::status_badge_class;
+use crate::features::organization::NodeTypeCatalogEntry;
 use crate::features::workflows::types::WorkflowStepDraft;
 use crate::features::workflows::workflow_form_version_options;
 use leptos::prelude::*;
-use std::collections::HashSet;
 
-use super::{WorkflowAvailableNodesPicker, WorkflowStepList};
-
-#[component]
-/// Renders the workflow identity editor fields.
-pub(in crate::features::workflows) fn WorkflowIdentityFields(
-    name: RwSignal<String>,
-    description: RwSignal<String>,
-) -> impl IntoView {
-    view! {
-        <div class="form-grid">
-            <label class="form-field">
-                <span>"Workflow Name"</span>
-                <input
-                    type="text"
-                    value=move || name.get()
-                    on:input=move |event| {
-                        name.set(event_target_value(&event));
-                    }
-                />
-            </label>
-            <label class="form-field">
-                <span>"Description"</span>
-                <textarea
-                    prop:value=move || description.get()
-                    on:input=move |event| {
-                        description.set(event_target_value(&event));
-                    }
-                ></textarea>
-            </label>
-        </div>
-    }
-}
+use super::super::WorkflowStepList;
 
 #[component]
-/// Renders the workflow availability editor section.
-pub(in crate::features::workflows) fn WorkflowAvailabilitySection(
-    organization_nodes: RwSignal<Vec<OrganizationNode>>,
-    available_node_ids: RwSignal<HashSet<String>>,
-) -> impl IntoView {
-    view! {
-        <section class="form-section">
-            <h3>"Available At"</h3>
-            <WorkflowAvailableNodesPicker
-                nodes=organization_nodes.get()
-                selected_node_ids=available_node_ids
-            />
-        </section>
-    }
-}
-
-#[component]
-/// Renders the create workflow steps editor section.
 pub(in crate::features::workflows) fn WorkflowCreateStepsSection(
     forms: RwSignal<Vec<FormSummary>>,
     node_types: RwSignal<Vec<NodeTypeCatalogEntry>>,
@@ -121,36 +70,6 @@ pub(in crate::features::workflows) fn WorkflowCreateStepsSection(
 }
 
 #[component]
-/// Renders the edit workflow active revision section.
-pub(in crate::features::workflows) fn WorkflowActiveRevisionSection(
-    edit_version_label: RwSignal<String>,
-    edit_version_status: RwSignal<String>,
-) -> impl IntoView {
-    view! {
-        <section class="form-section">
-            <h3>"Active Revision"</h3>
-            <table class="info-list-table">
-                <tbody>
-                    <tr>
-                        <th scope="row">"Revision"</th>
-                        <td>{move || edit_version_label.get()}</td>
-                    </tr>
-                    <tr>
-                        <th scope="row">"Status"</th>
-                        <td>{move || {
-                            let status = edit_version_status.get();
-                            let key = status.to_lowercase().replace(' ', "-");
-                            view! { <span class=status_badge_class(&key)>{status}</span> }
-                        }}</td>
-                    </tr>
-                </tbody>
-            </table>
-        </section>
-    }
-}
-
-#[component]
-/// Renders the edit workflow steps editor section.
 pub(in crate::features::workflows) fn WorkflowEditStepsSection(
     forms: RwSignal<Vec<FormSummary>>,
     node_types: RwSignal<Vec<NodeTypeCatalogEntry>>,
