@@ -17,7 +17,6 @@ pub(crate) fn SourceOptionsPanel(
     datasets: RwSignal<Vec<DatasetSummary>>,
     rendered_forms: RwSignal<BTreeMap<String, DatasetRenderedForm>>,
     fields: RwSignal<Vec<DatasetFieldDraft>>,
-    composition_mode: RwSignal<String>,
 ) -> impl IntoView {
     view! {
         {move || sources.get().get(index).cloned().map(|source| {
@@ -125,11 +124,7 @@ pub(crate) fn SourceOptionsPanel(
                                     }>
                                         <option value="latest">"Latest"</option>
                                         <option value="earliest">"Earliest"</option>
-                                        {move || if composition_mode.get() == "union" {
-                                            view! { <option value="all">"All"</option> }.into_any()
-                                        } else {
-                                            view! { <span></span> }.into_any()
-                                        }}
+                                        <option value="all">"All"</option>
                                     </select>
                                 </label>
                                 <button class="button button--secondary" type="button" on:click=move |_| add_fields_from_source(index, sources, forms, rendered_forms, fields)>"Add Fields From Source"</button>

@@ -25,11 +25,11 @@ pub(crate) fn OperationOptionsPanel(
         <div class="dataset-options-sheet__content">
             <header class="dataset-options-sheet__header">
                 <span>"Operation"</span>
-                <h4>{move || operation_label(&operation_at_path(&expression.get(), &header_path).unwrap_or_else(|| composition_mode.get()))}</h4>
+                <h4>{move || operation_label(&operation_at_path(&expression.get(), &header_path).unwrap_or_default())}</h4>
             </header>
             <label class="form-field">
                 <span>"Operation"</span>
-                <select prop:value=move || operation_at_path(&expression.get(), &select_path).unwrap_or_else(|| composition_mode.get()) on:change=move |event| {
+                <select prop:value=move || operation_at_path(&expression.get(), &select_path).unwrap_or_default() on:change=move |event| {
                     let value = event_target_value(&event);
                     expression.update(|draft| {
                         let _ = set_operation_at_path(draft, &path, &value);
@@ -45,7 +45,7 @@ pub(crate) fn OperationOptionsPanel(
                     <option value="outer_join">"Outer Join"</option>
                 </select>
             </label>
-            {move || if is_join_operation(&operation_at_path(&expression.get(), &join_path).unwrap_or_else(|| composition_mode.get())) {
+            {move || if operation_at_path(&expression.get(), &join_path).is_some_and(|operation| is_join_operation(&operation)) {
                 let left_options = join_key_options_for_source_index(
                     &sources.get(),
                     &forms.get(),

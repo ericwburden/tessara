@@ -52,7 +52,6 @@ pub(crate) fn DatasetDesignerOptionsSheet(
                                     datasets
                                     rendered_forms
                                     fields
-                                    composition_mode
                                 />
                             }.into_any(),
                             DatasetDesignerSelection::Field(index) => view! {

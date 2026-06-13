@@ -7,7 +7,6 @@ use super::types::*;
 pub(super) fn dataset_payload_from_drafts(
     name: String,
     slug: String,
-    composition_mode: String,
     visibility_node_ids: Vec<String>,
     mut sources: Vec<DatasetSourceDraft>,
     expression: DatasetExpressionDraft,
@@ -16,7 +15,7 @@ pub(super) fn dataset_payload_from_drafts(
     join_right_key: String,
 ) -> Result<DatasetPayload, String> {
     let root_composition_mode =
-        root_expression_operation(&expression).unwrap_or_else(|| composition_mode.clone());
+        root_expression_operation(&expression).unwrap_or_else(|| "union".into());
     if expression_uses_join(&expression) {
         for source in &mut sources {
             if source.selection_rule == "all" {
@@ -41,13 +40,9 @@ pub(super) fn dataset_payload_from_drafts(
             position: index as i32,
         })
         .collect::<Vec<_>>();
-    let Some(definition_ast) = build_expression_ast(
-        &sources,
-        &expression,
-        &root_composition_mode,
-        &join_left_key,
-        &join_right_key,
-    ) else {
+    let Some(definition_ast) =
+        build_expression_ast(&sources, &expression, &join_left_key, &join_right_key)
+    else {
         return Err("Choose at least one complete dataset input before saving.".into());
     };
     Ok(DatasetPayload {

@@ -13,7 +13,6 @@ pub(super) fn save_dataset(
     dataset_id: Option<String>,
     name: String,
     slug: String,
-    composition_mode: String,
     visibility_node_ids: Vec<String>,
     sources: Vec<DatasetSourceDraft>,
     expression: DatasetExpressionDraft,
@@ -29,7 +28,6 @@ pub(super) fn save_dataset(
         let payload = match dataset_payload_from_drafts(
             name,
             slug,
-            composition_mode,
             visibility_node_ids,
             sources,
             expression,
@@ -68,7 +66,6 @@ pub(super) fn save_dataset(
     _: Option<String>,
     _: String,
     _: String,
-    _: String,
     _: Vec<String>,
     _: Vec<DatasetSourceDraft>,
     _: DatasetExpressionDraft,
@@ -86,7 +83,6 @@ pub(super) fn preview_dataset_sql(
     dataset_id: Option<String>,
     name: String,
     slug: String,
-    composition_mode: String,
     visibility_node_ids: Vec<String>,
     sources: Vec<DatasetSourceDraft>,
     expression: DatasetExpressionDraft,
@@ -101,7 +97,6 @@ pub(super) fn preview_dataset_sql(
         let payload = match dataset_payload_from_drafts(
             name,
             slug,
-            composition_mode,
             visibility_node_ids,
             sources,
             expression,
@@ -126,7 +121,6 @@ pub(super) fn preview_dataset_sql(
 #[allow(clippy::too_many_arguments)]
 pub(super) fn preview_dataset_sql(
     _: Option<String>,
-    _: String,
     _: String,
     _: String,
     _: Vec<String>,

@@ -63,7 +63,6 @@ pub(crate) fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView 
                         dataset_id=dataset_id.clone()
                         name=state.name
                         slug=state.slug
-                        composition_mode=state.composition_mode
                         visibility_node_ids=state.visibility_node_ids
                         sources=state.sources
                         expression=state.expression

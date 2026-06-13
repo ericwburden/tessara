@@ -81,7 +81,7 @@ pub(crate) fn DatasetSourcesEditor(
                     sources.update(|items| items.push(DatasetSourceDraft { source_alias: format!("source_{next}"), ..DatasetSourceDraft::default() }));
                     expression.update(|draft| {
                         *draft = DatasetExpressionDraft::Operation {
-                            operation: composition_mode.get(),
+                            operation: "union".into(),
                             left: Box::new(draft.clone()),
                             right: Box::new(DatasetExpressionDraft::Source(next - 1)),
                         };
@@ -92,12 +92,11 @@ pub(crate) fn DatasetSourcesEditor(
             </div>
             <div class="dataset-expression-workspace">
                 <div class="dataset-expression-canvas">
-                    <ExpressionPreview sources=sources expression=expression composition_mode/>
+                    <ExpressionPreview sources=sources expression=expression/>
                     <DatasetExpressionChain
                         sources
                         expression
                         fields
-                        composition_mode
                         designer_selection
                         designer_sheet_open
                     />

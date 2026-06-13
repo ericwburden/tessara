@@ -102,14 +102,12 @@ fn collect_expression_drafts(
 pub(crate) fn build_expression_ast(
     sources: &[DatasetSourceDraft],
     expression: &DatasetExpressionDraft,
-    fallback_operation: &str,
     join_left_key: &str,
     join_right_key: &str,
 ) -> Option<DatasetExpressionPayload> {
     expression_to_payload(
         expression,
         sources,
-        fallback_operation,
         join_left_key.trim(),
         join_right_key.trim(),
     )
@@ -118,7 +116,6 @@ pub(crate) fn build_expression_ast(
 fn expression_to_payload(
     expression: &DatasetExpressionDraft,
     sources: &[DatasetSourceDraft],
-    fallback_operation: &str,
     join_left_key: &str,
     join_right_key: &str,
 ) -> Option<DatasetExpressionPayload> {
@@ -129,31 +126,17 @@ fn expression_to_payload(
             left,
             right,
         } => {
-            let node_operation = if operation.trim().is_empty() {
-                fallback_operation
-            } else {
-                operation
-            };
-            let left = expression_to_payload(
-                left,
-                sources,
-                fallback_operation,
-                join_left_key,
-                join_right_key,
-            )?;
-            let right = expression_to_payload(
-                right,
-                sources,
-                fallback_operation,
-                join_left_key,
-                join_right_key,
-            )?;
+            if operation.trim().is_empty() {
+                return None;
+            }
+            let left = expression_to_payload(left, sources, join_left_key, join_right_key)?;
+            let right = expression_to_payload(right, sources, join_left_key, join_right_key)?;
             Some(DatasetExpressionPayload::Operation {
                 alias: "result".into(),
-                operation: node_operation.into(),
+                operation: operation.into(),
                 left: Box::new(left),
                 right: Box::new(right),
-                join_keys: if is_join_operation(node_operation)
+                join_keys: if is_join_operation(operation)
                     && !join_left_key.is_empty()
                     && !join_right_key.is_empty()
                 {
@@ -254,7 +237,7 @@ mod tests {
         };
 
         let Some(DatasetExpressionPayload::Operation { left, right, .. }) =
-            build_expression_ast(&sources, &expression, "union", "", "")
+            build_expression_ast(&sources, &expression, "", "")
         else {
             panic!("expected root operation");
         };
@@ -300,7 +283,7 @@ mod tests {
 
         let Some(DatasetExpressionPayload::Operation {
             operation, right, ..
-        }) = build_expression_ast(&sources, &expression, "outer_join", "", "")
+        }) = build_expression_ast(&sources, &expression, "", "")
         else {
             panic!("expected root operation");
         };

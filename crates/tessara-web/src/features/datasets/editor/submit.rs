@@ -9,7 +9,6 @@ pub(crate) fn submit_dataset_editor(dataset_id: Option<String>, state: DatasetEd
         dataset_id,
         state.name.get(),
         state.slug.get(),
-        state.composition_mode.get(),
         state.visibility_node_ids.get().into_iter().collect(),
         state.sources.get(),
         state.expression.get(),

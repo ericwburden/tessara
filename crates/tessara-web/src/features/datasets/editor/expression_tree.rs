@@ -11,7 +11,6 @@ pub(super) fn expression_tree_view(
     sources: RwSignal<Vec<DatasetSourceDraft>>,
     expression_signal: RwSignal<DatasetExpressionDraft>,
     fields: RwSignal<Vec<DatasetFieldDraft>>,
-    composition_mode: RwSignal<String>,
     designer_selection: RwSignal<DatasetDesignerSelection>,
     designer_sheet_open: RwSignal<bool>,
 ) -> AnyView {
@@ -28,7 +27,6 @@ pub(super) fn expression_tree_view(
         sources,
         expression_signal,
         fields,
-        composition_mode,
         designer_selection,
         designer_sheet_open,
     )
@@ -42,7 +40,6 @@ fn expression_tree_node(
     sources: RwSignal<Vec<DatasetSourceDraft>>,
     expression_signal: RwSignal<DatasetExpressionDraft>,
     fields: RwSignal<Vec<DatasetFieldDraft>>,
-    composition_mode: RwSignal<String>,
     designer_selection: RwSignal<DatasetDesignerSelection>,
     designer_sheet_open: RwSignal<bool>,
 ) -> AnyView {
@@ -66,7 +63,6 @@ fn expression_tree_node(
             sources,
             expression_signal,
             fields,
-            composition_mode,
             designer_selection,
             designer_sheet_open,
         );
@@ -89,7 +85,6 @@ fn expression_tree_node(
         sources,
         expression_signal,
         fields,
-        composition_mode,
         designer_selection,
         designer_sheet_open,
     );
@@ -101,7 +96,6 @@ fn expression_tree_node(
         sources,
         expression_signal,
         fields,
-        composition_mode,
         designer_selection,
         designer_sheet_open,
     );
@@ -137,7 +131,6 @@ fn expression_source_panel(
     sources: RwSignal<Vec<DatasetSourceDraft>>,
     expression: RwSignal<DatasetExpressionDraft>,
     fields: RwSignal<Vec<DatasetFieldDraft>>,
-    composition_mode: RwSignal<String>,
     designer_selection: RwSignal<DatasetDesignerSelection>,
     designer_sheet_open: RwSignal<bool>,
 ) -> AnyView {
@@ -199,7 +192,7 @@ fn expression_source_panel(
                         });
                     });
                     expression.update(|draft| {
-                        replace_source_with_expression(draft, index, new_index, &composition_mode.get());
+                        replace_source_with_expression(draft, index, new_index);
                     });
                     designer_selection.set(DatasetDesignerSelection::Source(new_index));
                     designer_sheet_open.set(true);
@@ -215,12 +208,11 @@ fn replace_source_with_expression(
     expression: &mut DatasetExpressionDraft,
     source_index: usize,
     new_source_index: usize,
-    operation: &str,
 ) -> bool {
     match expression {
         DatasetExpressionDraft::Source(index) if *index == source_index => {
             *expression = DatasetExpressionDraft::Operation {
-                operation: operation.into(),
+                operation: "union".into(),
                 left: Box::new(DatasetExpressionDraft::Source(source_index)),
                 right: Box::new(DatasetExpressionDraft::Source(new_source_index)),
             };
@@ -228,8 +220,8 @@ fn replace_source_with_expression(
         }
         DatasetExpressionDraft::Source(_) => false,
         DatasetExpressionDraft::Operation { left, right, .. } => {
-            replace_source_with_expression(left, source_index, new_source_index, operation)
-                || replace_source_with_expression(right, source_index, new_source_index, operation)
+            replace_source_with_expression(left, source_index, new_source_index)
+                || replace_source_with_expression(right, source_index, new_source_index)
         }
     }
 }

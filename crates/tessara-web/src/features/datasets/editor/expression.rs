@@ -9,12 +9,11 @@ use leptos::prelude::*;
 pub(crate) fn ExpressionPreview(
     sources: RwSignal<Vec<DatasetSourceDraft>>,
     expression: RwSignal<DatasetExpressionDraft>,
-    composition_mode: RwSignal<String>,
 ) -> impl IntoView {
     view! {
         <div class="dataset-expression-preview">
             <span>"Expression"</span>
-            <code>{move || expression_label(&sources.get(), &expression.get(), &composition_mode.get())}</code>
+            <code>{move || expression_label(&sources.get(), &expression.get())}</code>
         </div>
     }
 }
@@ -24,7 +23,6 @@ pub(crate) fn DatasetExpressionChain(
     sources: RwSignal<Vec<DatasetSourceDraft>>,
     expression: RwSignal<DatasetExpressionDraft>,
     fields: RwSignal<Vec<DatasetFieldDraft>>,
-    composition_mode: RwSignal<String>,
     designer_selection: RwSignal<DatasetDesignerSelection>,
     designer_sheet_open: RwSignal<bool>,
 ) -> impl IntoView {
@@ -40,7 +38,6 @@ pub(crate) fn DatasetExpressionChain(
                         sources,
                         expression,
                         fields,
-                        composition_mode,
                         designer_selection,
                         designer_sheet_open,
                     )
@@ -57,7 +54,7 @@ pub(crate) fn DatasetExpressionChain(
                     }));
                     expression.update(|draft| {
                         *draft = DatasetExpressionDraft::Operation {
-                            operation: composition_mode.get(),
+                            operation: "union".into(),
                             left: Box::new(draft.clone()),
                             right: Box::new(DatasetExpressionDraft::Source(next - 1)),
                         };
