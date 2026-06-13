@@ -132,6 +132,7 @@ pub(in crate::features::datasets) struct DatasetRenderedField {
 pub(in crate::features::datasets) struct NodeResponse {
     pub(in crate::features::datasets) id: String,
     pub(in crate::features::datasets) node_type_name: String,
+    pub(in crate::features::datasets) parent_node_id: Option<String>,
     pub(in crate::features::datasets) parent_node_name: Option<String>,
     pub(in crate::features::datasets) name: String,
 }

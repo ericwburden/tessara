@@ -2,7 +2,7 @@
 
 use super::super::types::*;
 use super::source_field_actions::canonical_field_key;
-use super::source_options::source_field_options;
+use super::source_options::{source_display_name, source_field_options};
 use crate::ui::DataTable;
 use crate::utils::text::sentence_label;
 use leptos::prelude::*;
@@ -13,6 +13,7 @@ pub(crate) fn DatasetFieldsEditor(
     fields: RwSignal<Vec<DatasetFieldDraft>>,
     sources: RwSignal<Vec<DatasetSourceDraft>>,
     forms: RwSignal<Vec<DatasetFormOption>>,
+    datasets: RwSignal<Vec<DatasetSummary>>,
     rendered_forms: RwSignal<BTreeMap<String, DatasetRenderedForm>>,
 ) -> impl IntoView {
     view! {
@@ -30,18 +31,59 @@ pub(crate) fn DatasetFieldsEditor(
                             &rendered_forms.get(),
                             &source_alias,
                         );
+                        let all_count = source_options.len();
+                        let all_included = all_count > 0
+                            && source_options.iter().all(|option| {
+                                fields.get().iter().any(|field| {
+                                    field.source_alias == source_alias && field.source_field_key == option.key
+                                })
+                            });
                         let included_count = fields.get().iter().filter(|field| field.source_alias == source_alias).count();
+                        let source_heading = source_display_name(&source, &forms.get(), &datasets.get());
+                        let source_alias_for_all = source_alias.clone();
+                        let source_options_for_all = source_options.clone();
                         view! {
                             <details class="dataset-field-picker__source" open=source_index == 0>
                                 <summary class="dataset-field-picker__summary">
-                                    <span>{source_alias.clone()}</span>
-                                    <small>{format!("{included_count} of {} fields included", source_options.len())}</small>
+                                    <span>{format!("{} ({})", source_alias.clone(), source_heading)}</span>
+                                    <small>{format!("{included_count} of {all_count} fields included")}</small>
                                 </summary>
                                 <div class="table-wrap dataset-fields-table dataset-field-picker__table">
                                     <DataTable>
                                         <thead>
                                             <tr>
-                                                <th scope="col">"Include?"</th>
+                                                <th scope="col">
+                                                    <label class="dataset-field-picker__include-all">
+                                                        <input
+                                                            aria-label=format!("Include all fields from {}", source_alias)
+                                                            type="checkbox"
+                                                            prop:checked=all_included
+                                                            on:change=move |event| {
+                                                                let is_checked = event_target_checked(&event);
+                                                                fields.update(|items| {
+                                                                    if is_checked {
+                                                                        for option in &source_options_for_all {
+                                                                            if !items.iter().any(|field| {
+                                                                                field.source_alias == source_alias_for_all
+                                                                                    && field.source_field_key == option.key
+                                                                            }) {
+                                                                                items.push(DatasetFieldDraft {
+                                                                                    key: canonical_field_key(&source_alias_for_all, &option.key),
+                                                                                    label: option.label.clone(),
+                                                                                    source_alias: source_alias_for_all.clone(),
+                                                                                    source_field_key: option.key.clone(),
+                                                                                });
+                                                                            }
+                                                                        }
+                                                                    } else {
+                                                                        items.retain(|field| field.source_alias != source_alias_for_all);
+                                                                    }
+                                                                });
+                                                            }
+                                                        />
+                                                        <span>"Include?"</span>
+                                                    </label>
+                                                </th>
                                                 <th scope="col">"Display Label"</th>
                                                 <th scope="col">"Form Label"</th>
                                                 <th scope="col">"Field Name"</th>
@@ -118,7 +160,6 @@ pub(crate) fn DatasetFieldsEditor(
                                                         <td>{option.label}</td>
                                                         <td>
                                                             <code>{field_key}</code>
-                                                            <span class="data-table__secondary-text">{option_key}</span>
                                                         </td>
                                                         <td>{sentence_label(&option.field_type)}</td>
                                                     </tr>

@@ -26,6 +26,8 @@ pub(crate) use lifecycle::install_dataset_editor_loaders;
 pub(crate) use messages::DatasetEditorMessages;
 pub(crate) use operation_options::OperationOptionsPanel;
 pub(crate) use options::DatasetDesignerOptionsSheet;
+#[cfg(feature = "hydrate")]
+pub(crate) use source_field_actions::canonical_field_key;
 pub(crate) use source_options_panel::SourceOptionsPanel;
 pub(crate) use sources::DatasetSourcesEditor;
 pub(crate) use sql_preview::DatasetSqlPreviewPanel;

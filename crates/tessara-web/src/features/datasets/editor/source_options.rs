@@ -79,6 +79,26 @@ pub(crate) fn source_field_options(
     options
 }
 
+pub(crate) fn source_display_name(
+    source: &DatasetSourceDraft,
+    forms: &[DatasetFormOption],
+    datasets: &[DatasetSummary],
+) -> String {
+    if source.input_kind == "dataset" {
+        return datasets
+            .iter()
+            .find(|dataset| dataset.id == source.dataset_id)
+            .map(|dataset| dataset.name.clone())
+            .unwrap_or_else(|| "Dataset input".into());
+    }
+
+    forms
+        .iter()
+        .find(|form| form.id == source.form_id)
+        .map(|form| form.name.clone())
+        .unwrap_or_else(|| "Form input".into())
+}
+
 /// Returns join key field options for a source index.
 pub(crate) fn join_key_options_for_source_index(
     sources: &[DatasetSourceDraft],

@@ -1,5 +1,6 @@
 //! Payload preparation helpers for dataset mutations.
 
+use super::editor::canonical_field_key;
 use super::expressions::{build_expression_ast, expression_uses_join, root_expression_operation};
 use super::types::*;
 
@@ -33,7 +34,7 @@ pub(super) fn dataset_payload_from_drafts(
                 && !field.source_field_key.trim().is_empty()
         })
         .map(|(index, field)| DatasetFieldPayload {
-            key: field.key,
+            key: canonical_field_key(&field.source_alias, &field.source_field_key),
             label: field.label,
             source_alias: field.source_alias,
             source_field_key: field.source_field_key,

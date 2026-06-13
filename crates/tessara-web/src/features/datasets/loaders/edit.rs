@@ -29,7 +29,7 @@ pub(in crate::features::datasets) fn load_dataset_for_edit(
                 name.set(payload.name);
                 slug.set(payload.slug);
                 composition_mode.set(payload.composition_mode);
-                sql_preview.set(payload.generated_sql.clone());
+                sql_preview.set(None);
                 visibility_node_ids.set(
                     payload
                         .visibility_nodes

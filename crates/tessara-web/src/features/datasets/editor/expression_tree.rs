@@ -2,7 +2,7 @@
 
 use super::super::types::*;
 use super::helpers::{confirm_action, expression_button_class, operation_label};
-use icons::X;
+use icons::{RefreshCcw, X};
 use leptos::prelude::*;
 
 pub(super) fn expression_tree_view(
@@ -100,25 +100,41 @@ fn expression_tree_node(
         designer_sheet_open,
     );
     let button_path = operation_path.clone();
+    let reverse_path = operation_path.clone();
     let selected_path = operation_path.clone();
     let label = operation_label(operation);
 
     view! {
         <div class=layout_class>
             {left}
-            <button
-                class=move || expression_button_class(
-                    designer_selection.get() == DatasetDesignerSelection::Operation(selected_path.clone()),
-                    "dataset-expression-button dataset-expression-button--operation",
-                )
-                type="button"
-                on:click=move |_| {
-                    designer_selection.set(DatasetDesignerSelection::Operation(button_path.clone()));
-                    designer_sheet_open.set(true);
-                }
-            >
-                {label}
-            </button>
+            <span class="dataset-expression-operation-stack">
+                <button
+                    class=move || expression_button_class(
+                        designer_selection.get() == DatasetDesignerSelection::Operation(selected_path.clone()),
+                        "dataset-expression-button dataset-expression-button--operation",
+                    )
+                    type="button"
+                    on:click=move |_| {
+                        designer_selection.set(DatasetDesignerSelection::Operation(button_path.clone()));
+                        designer_sheet_open.set(true);
+                    }
+                >
+                    {label}
+                </button>
+                <button
+                    class="icon-button dataset-expression-reverse"
+                    type="button"
+                    aria-label="Reverse expression sides"
+                    title="Reverse expression sides"
+                    on:click=move |_| {
+                        expression_signal.update(|draft| {
+                            let _ = reverse_expression_at_path(draft, &reverse_path);
+                        });
+                    }
+                >
+                    <RefreshCcw class="icon-button__icon"/>
+                </button>
+            </span>
             {right}
         </div>
     }
@@ -223,6 +239,22 @@ fn replace_source_with_expression(
             replace_source_with_expression(left, source_index, new_source_index)
                 || replace_source_with_expression(right, source_index, new_source_index)
         }
+    }
+}
+
+fn reverse_expression_at_path(expression: &mut DatasetExpressionDraft, path: &[bool]) -> bool {
+    match (expression, path.split_first()) {
+        (DatasetExpressionDraft::Operation { left, right, .. }, None) => {
+            std::mem::swap(left, right);
+            true
+        }
+        (DatasetExpressionDraft::Operation { left, .. }, Some((false, rest))) => {
+            reverse_expression_at_path(left, rest)
+        }
+        (DatasetExpressionDraft::Operation { right, .. }, Some((true, rest))) => {
+            reverse_expression_at_path(right, rest)
+        }
+        _ => false,
     }
 }
 

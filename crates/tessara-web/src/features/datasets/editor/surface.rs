@@ -55,6 +55,7 @@ pub(crate) fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView 
                         fields=state.fields
                         sources=state.sources
                         forms=state.forms
+                        datasets=state.datasets
                         rendered_forms=state.rendered_forms
                     />
                     <DatasetSqlPreviewPanel

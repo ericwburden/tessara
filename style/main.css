@@ -1718,6 +1718,19 @@ input {
   white-space: nowrap;
 }
 
+.dataset-expression-operation-stack {
+  display: inline-grid;
+  justify-items: center;
+  align-self: center;
+  gap: 0.35rem;
+}
+
+.dataset-expression-reverse {
+  width: 2rem;
+  min-width: 2rem;
+  min-height: 2rem;
+}
+
 .dataset-expression-button {
   cursor: pointer;
 }
@@ -1808,8 +1821,7 @@ input {
   padding: 1rem;
 }
 
-.dataset-fields-table .data-table,
-.dataset-visibility-table .data-table {
+.dataset-fields-table .data-table {
   min-width: 48rem;
 }
 
@@ -1819,10 +1831,10 @@ input {
 }
 
 .dataset-field-picker__source {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  background: var(--color-surface-soft);
-  overflow: hidden;
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+  background: transparent;
+  padding-bottom: 0.75rem;
 }
 
 .dataset-field-picker__summary {
@@ -1846,8 +1858,67 @@ input {
   border-top: 1px solid var(--color-border);
 }
 
+.dataset-field-picker__include-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
 .dataset-field-picker__label-input {
   width: min(18rem, 100%);
+}
+
+.dataset-visibility-tree {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.dataset-visibility-branch {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.dataset-visibility-node {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: center;
+  margin-left: calc(var(--visibility-depth, 0) * 1.4rem);
+  border-top: 1px solid var(--color-border);
+  padding: 0.75rem 0;
+}
+
+.dataset-visibility-node.is-selected {
+  background: color-mix(in srgb, var(--semantic-primary) 10%, transparent);
+}
+
+.dataset-visibility-node__copy {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.dataset-visibility-node__copy strong,
+.dataset-visibility-node__copy span {
+  overflow-wrap: anywhere;
+}
+
+.dataset-visibility-node__copy span {
+  color: var(--color-muted);
+  font-size: 0.84rem;
+  font-weight: 750;
+}
+
+.dataset-visibility-node__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.4rem;
+}
+
+.dataset-visibility-children {
+  display: grid;
+  gap: 0.35rem;
 }
 
 .dataset-fields-table tr.is-selected {
