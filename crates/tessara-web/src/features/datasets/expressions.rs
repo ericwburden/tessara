@@ -85,6 +85,7 @@ fn collect_expression_drafts(
                 *join_keys = node_join_keys.clone();
             }
             Some(DatasetExpressionDraft::Operation {
+                operation: node_operation.clone(),
                 left: Box::new(collect_expression_drafts(
                     left, sources, operation, join_keys,
                 )?),
@@ -101,14 +102,14 @@ fn collect_expression_drafts(
 pub(crate) fn build_expression_ast(
     sources: &[DatasetSourceDraft],
     expression: &DatasetExpressionDraft,
-    operation: &str,
+    fallback_operation: &str,
     join_left_key: &str,
     join_right_key: &str,
 ) -> Option<DatasetExpressionPayload> {
     expression_to_payload(
         expression,
         sources,
-        operation,
+        fallback_operation,
         join_left_key.trim(),
         join_right_key.trim(),
     )
@@ -117,23 +118,42 @@ pub(crate) fn build_expression_ast(
 fn expression_to_payload(
     expression: &DatasetExpressionDraft,
     sources: &[DatasetSourceDraft],
-    operation: &str,
+    fallback_operation: &str,
     join_left_key: &str,
     join_right_key: &str,
 ) -> Option<DatasetExpressionPayload> {
     match expression {
         DatasetExpressionDraft::Source(index) => sources.get(*index).and_then(source_expression),
-        DatasetExpressionDraft::Operation { left, right } => {
-            let left =
-                expression_to_payload(left, sources, operation, join_left_key, join_right_key)?;
-            let right =
-                expression_to_payload(right, sources, operation, join_left_key, join_right_key)?;
+        DatasetExpressionDraft::Operation {
+            operation,
+            left,
+            right,
+        } => {
+            let node_operation = if operation.trim().is_empty() {
+                fallback_operation
+            } else {
+                operation
+            };
+            let left = expression_to_payload(
+                left,
+                sources,
+                fallback_operation,
+                join_left_key,
+                join_right_key,
+            )?;
+            let right = expression_to_payload(
+                right,
+                sources,
+                fallback_operation,
+                join_left_key,
+                join_right_key,
+            )?;
             Some(DatasetExpressionPayload::Operation {
                 alias: "result".into(),
-                operation: operation.into(),
+                operation: node_operation.into(),
                 left: Box::new(left),
                 right: Box::new(right),
-                join_keys: if is_join_operation(operation)
+                join_keys: if is_join_operation(node_operation)
                     && !join_left_key.is_empty()
                     && !join_right_key.is_empty()
                 {
@@ -145,6 +165,32 @@ fn expression_to_payload(
                     Vec::new()
                 },
             })
+        }
+    }
+}
+
+#[allow(dead_code)]
+pub(crate) fn root_expression_operation(expression: &DatasetExpressionDraft) -> Option<String> {
+    match expression {
+        DatasetExpressionDraft::Operation { operation, .. } if !operation.trim().is_empty() => {
+            Some(operation.clone())
+        }
+        _ => None,
+    }
+}
+
+#[allow(dead_code)]
+pub(crate) fn expression_uses_join(expression: &DatasetExpressionDraft) -> bool {
+    match expression {
+        DatasetExpressionDraft::Source(_) => false,
+        DatasetExpressionDraft::Operation {
+            operation,
+            left,
+            right,
+        } => {
+            is_join_operation(operation)
+                || expression_uses_join(left)
+                || expression_uses_join(right)
         }
     }
 }
@@ -198,8 +244,10 @@ mod tests {
             form_source("source_3", "source-3-form"),
         ];
         let expression = DatasetExpressionDraft::Operation {
+            operation: "union".into(),
             left: Box::new(DatasetExpressionDraft::Source(0)),
             right: Box::new(DatasetExpressionDraft::Operation {
+                operation: "union".into(),
                 left: Box::new(DatasetExpressionDraft::Source(1)),
                 right: Box::new(DatasetExpressionDraft::Source(2)),
             }),
@@ -231,5 +279,40 @@ mod tests {
             nested_right.as_ref(),
             DatasetExpressionPayload::Form { alias, .. } if alias == "source_3"
         ));
+    }
+
+    #[test]
+    fn build_expression_ast_preserves_independent_operation_types() {
+        let sources = vec![
+            form_source("program", "program-form"),
+            form_source("source_2", "source-2-form"),
+            form_source("source_3", "source-3-form"),
+        ];
+        let expression = DatasetExpressionDraft::Operation {
+            operation: "union".into(),
+            left: Box::new(DatasetExpressionDraft::Source(0)),
+            right: Box::new(DatasetExpressionDraft::Operation {
+                operation: "union_all".into(),
+                left: Box::new(DatasetExpressionDraft::Source(1)),
+                right: Box::new(DatasetExpressionDraft::Source(2)),
+            }),
+        };
+
+        let Some(DatasetExpressionPayload::Operation {
+            operation, right, ..
+        }) = build_expression_ast(&sources, &expression, "outer_join", "", "")
+        else {
+            panic!("expected root operation");
+        };
+
+        assert_eq!(operation, "union");
+        let DatasetExpressionPayload::Operation {
+            operation: nested_operation,
+            ..
+        } = right.as_ref()
+        else {
+            panic!("expected nested right operation");
+        };
+        assert_eq!(nested_operation, "union_all");
     }
 }

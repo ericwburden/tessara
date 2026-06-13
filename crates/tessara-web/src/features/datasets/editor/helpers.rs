@@ -19,26 +19,38 @@ pub(crate) fn operation_label(value: &str) -> &'static str {
 pub(crate) fn expression_label(
     sources: &[DatasetSourceDraft],
     expression: &DatasetExpressionDraft,
-    operation: &str,
+    fallback_operation: &str,
 ) -> String {
-    expression_label_inner(sources, expression, operation)
+    expression_label_inner(sources, expression, fallback_operation)
         .unwrap_or_else(|| "Choose at least one input".into())
 }
 
 fn expression_label_inner(
     sources: &[DatasetSourceDraft],
     expression: &DatasetExpressionDraft,
-    operation: &str,
+    fallback_operation: &str,
 ) -> Option<String> {
     match expression {
         DatasetExpressionDraft::Source(index) => sources
             .get(*index)
             .map(|source| source.source_alias.trim().to_string())
             .filter(|alias| !alias.is_empty()),
-        DatasetExpressionDraft::Operation { left, right } => {
-            let left = expression_label_inner(sources, left, operation)?;
-            let right = expression_label_inner(sources, right, operation)?;
-            Some(format!("({left}) {} ({right})", operation_label(operation)))
+        DatasetExpressionDraft::Operation {
+            operation,
+            left,
+            right,
+        } => {
+            let node_operation = if operation.trim().is_empty() {
+                fallback_operation
+            } else {
+                operation
+            };
+            let left = expression_label_inner(sources, left, node_operation)?;
+            let right = expression_label_inner(sources, right, node_operation)?;
+            Some(format!(
+                "({left}) {} ({right})",
+                operation_label(node_operation)
+            ))
         }
     }
 }

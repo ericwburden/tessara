@@ -11,6 +11,7 @@ pub(crate) fn DatasetDesignerOptionsSheet(
     selection: RwSignal<DatasetDesignerSelection>,
     is_open: RwSignal<bool>,
     sources: RwSignal<Vec<DatasetSourceDraft>>,
+    expression: RwSignal<DatasetExpressionDraft>,
     forms: RwSignal<Vec<DatasetFormOption>>,
     datasets: RwSignal<Vec<DatasetSummary>>,
     rendered_forms: RwSignal<BTreeMap<String, DatasetRenderedForm>>,
@@ -31,9 +32,11 @@ pub(crate) fn DatasetDesignerOptionsSheet(
                             </button>
                         </div>
                         {move || match selection.get() {
-                            DatasetDesignerSelection::Operation => view! {
+                            DatasetDesignerSelection::Operation(path) => view! {
                                 <OperationOptionsPanel
+                                    path
                                     sources
+                                    expression
                                     forms
                                     rendered_forms
                                     composition_mode

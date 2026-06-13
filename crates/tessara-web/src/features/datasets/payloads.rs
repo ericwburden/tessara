@@ -1,6 +1,6 @@
 //! Payload preparation helpers for dataset mutations.
 
-use super::expressions::{build_expression_ast, is_join_operation};
+use super::expressions::{build_expression_ast, expression_uses_join, root_expression_operation};
 use super::types::*;
 
 #[cfg(feature = "hydrate")]
@@ -15,7 +15,9 @@ pub(super) fn dataset_payload_from_drafts(
     join_left_key: String,
     join_right_key: String,
 ) -> Result<DatasetPayload, String> {
-    if is_join_operation(&composition_mode) {
+    let root_composition_mode =
+        root_expression_operation(&expression).unwrap_or_else(|| composition_mode.clone());
+    if expression_uses_join(&expression) {
         for source in &mut sources {
             if source.selection_rule == "all" {
                 source.selection_rule = "latest".into();
@@ -42,7 +44,7 @@ pub(super) fn dataset_payload_from_drafts(
     let Some(definition_ast) = build_expression_ast(
         &sources,
         &expression,
-        &composition_mode,
+        &root_composition_mode,
         &join_left_key,
         &join_right_key,
     ) else {
@@ -52,7 +54,7 @@ pub(super) fn dataset_payload_from_drafts(
         name,
         slug,
         grain: "submission".into(),
-        composition_mode,
+        composition_mode: root_composition_mode,
         visibility_node_ids,
         definition_ast,
         fields: field_payloads,

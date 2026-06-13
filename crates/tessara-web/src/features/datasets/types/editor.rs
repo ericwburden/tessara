@@ -24,6 +24,7 @@ pub(in crate::features::datasets) struct DatasetFieldDraft {
 pub(in crate::features::datasets) enum DatasetExpressionDraft {
     Source(usize),
     Operation {
+        operation: String,
         left: Box<DatasetExpressionDraft>,
         right: Box<DatasetExpressionDraft>,
     },
@@ -31,7 +32,7 @@ pub(in crate::features::datasets) enum DatasetExpressionDraft {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(in crate::features::datasets) enum DatasetDesignerSelection {
-    Operation,
+    Operation(Vec<bool>),
     Source(usize),
     Field(usize),
 }

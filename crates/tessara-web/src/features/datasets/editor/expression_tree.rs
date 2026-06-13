@@ -23,6 +23,7 @@ pub(super) fn expression_tree_view(
     expression_tree_node(
         &items,
         &expression,
+        Vec::new(),
         0,
         sources,
         expression_signal,
@@ -36,6 +37,7 @@ pub(super) fn expression_tree_view(
 fn expression_tree_node(
     items: &[DatasetSourceDraft],
     expression: &DatasetExpressionDraft,
+    operation_path: Vec<bool>,
     depth: usize,
     sources: RwSignal<Vec<DatasetSourceDraft>>,
     expression_signal: RwSignal<DatasetExpressionDraft>,
@@ -44,7 +46,12 @@ fn expression_tree_node(
     designer_selection: RwSignal<DatasetDesignerSelection>,
     designer_sheet_open: RwSignal<bool>,
 ) -> AnyView {
-    let DatasetExpressionDraft::Operation { left, right } = expression else {
+    let DatasetExpressionDraft::Operation {
+        operation,
+        left,
+        right,
+    } = expression
+    else {
         let index = match expression {
             DatasetExpressionDraft::Source(index) => *index,
             DatasetExpressionDraft::Operation { .. } => unreachable!(),
@@ -59,6 +66,7 @@ fn expression_tree_node(
             sources,
             expression_signal,
             fields,
+            composition_mode,
             designer_selection,
             designer_sheet_open,
         );
@@ -69,9 +77,14 @@ fn expression_tree_node(
     } else {
         "dataset-expression-group dataset-expression-group--column"
     };
+    let mut left_path = operation_path.clone();
+    left_path.push(false);
+    let mut right_path = operation_path.clone();
+    right_path.push(true);
     let left = expression_tree_node(
         items,
         left,
+        left_path,
         depth + 1,
         sources,
         expression_signal,
@@ -83,6 +96,7 @@ fn expression_tree_node(
     let right = expression_tree_node(
         items,
         right,
+        right_path,
         depth + 1,
         sources,
         expression_signal,
@@ -91,22 +105,25 @@ fn expression_tree_node(
         designer_selection,
         designer_sheet_open,
     );
+    let button_path = operation_path.clone();
+    let selected_path = operation_path.clone();
+    let label = operation_label(operation);
 
     view! {
         <div class=layout_class>
             {left}
             <button
                 class=move || expression_button_class(
-                    designer_selection.get() == DatasetDesignerSelection::Operation,
+                    designer_selection.get() == DatasetDesignerSelection::Operation(selected_path.clone()),
                     "dataset-expression-button dataset-expression-button--operation",
                 )
                 type="button"
                 on:click=move |_| {
-                    designer_selection.set(DatasetDesignerSelection::Operation);
+                    designer_selection.set(DatasetDesignerSelection::Operation(button_path.clone()));
                     designer_sheet_open.set(true);
                 }
             >
-                {operation_label(&composition_mode.get())}
+                {label}
             </button>
             {right}
         </div>
@@ -120,6 +137,7 @@ fn expression_source_panel(
     sources: RwSignal<Vec<DatasetSourceDraft>>,
     expression: RwSignal<DatasetExpressionDraft>,
     fields: RwSignal<Vec<DatasetFieldDraft>>,
+    composition_mode: RwSignal<String>,
     designer_selection: RwSignal<DatasetDesignerSelection>,
     designer_sheet_open: RwSignal<bool>,
 ) -> AnyView {
@@ -149,7 +167,7 @@ fn expression_source_panel(
                             *draft = remove_source_from_expression(draft, index)
                                 .unwrap_or_else(DatasetExpressionDraft::default);
                         });
-                        designer_selection.set(DatasetDesignerSelection::Operation);
+                        designer_selection.set(DatasetDesignerSelection::Operation(Vec::new()));
                         designer_sheet_open.set(false);
                     }
                 }
@@ -181,7 +199,7 @@ fn expression_source_panel(
                         });
                     });
                     expression.update(|draft| {
-                        replace_source_with_expression(draft, index, new_index);
+                        replace_source_with_expression(draft, index, new_index, &composition_mode.get());
                     });
                     designer_selection.set(DatasetDesignerSelection::Source(new_index));
                     designer_sheet_open.set(true);
@@ -197,19 +215,21 @@ fn replace_source_with_expression(
     expression: &mut DatasetExpressionDraft,
     source_index: usize,
     new_source_index: usize,
+    operation: &str,
 ) -> bool {
     match expression {
         DatasetExpressionDraft::Source(index) if *index == source_index => {
             *expression = DatasetExpressionDraft::Operation {
+                operation: operation.into(),
                 left: Box::new(DatasetExpressionDraft::Source(source_index)),
                 right: Box::new(DatasetExpressionDraft::Source(new_source_index)),
             };
             true
         }
         DatasetExpressionDraft::Source(_) => false,
-        DatasetExpressionDraft::Operation { left, right } => {
-            replace_source_with_expression(left, source_index, new_source_index)
-                || replace_source_with_expression(right, source_index, new_source_index)
+        DatasetExpressionDraft::Operation { left, right, .. } => {
+            replace_source_with_expression(left, source_index, new_source_index, operation)
+                || replace_source_with_expression(right, source_index, new_source_index, operation)
         }
     }
 }
@@ -224,11 +244,16 @@ fn remove_source_from_expression(
             Some(DatasetExpressionDraft::Source(index - 1))
         }
         DatasetExpressionDraft::Source(index) => Some(DatasetExpressionDraft::Source(*index)),
-        DatasetExpressionDraft::Operation { left, right } => {
+        DatasetExpressionDraft::Operation {
+            operation,
+            left,
+            right,
+        } => {
             let left = remove_source_from_expression(left, removed_index);
             let right = remove_source_from_expression(right, removed_index);
             match (left, right) {
                 (Some(left), Some(right)) => Some(DatasetExpressionDraft::Operation {
+                    operation: operation.clone(),
                     left: Box::new(left),
                     right: Box::new(right),
                 }),

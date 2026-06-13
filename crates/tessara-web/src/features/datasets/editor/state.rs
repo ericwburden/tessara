@@ -57,7 +57,7 @@ impl DatasetEditorState {
             sql_preview_error: RwSignal::new(None::<String>),
             sql_preview_expanded: RwSignal::new(false),
             visibility_search: RwSignal::new(String::new()),
-            designer_selection: RwSignal::new(DatasetDesignerSelection::Operation),
+            designer_selection: RwSignal::new(DatasetDesignerSelection::Operation(Vec::new())),
             designer_sheet_open: RwSignal::new(false),
             auto_seeded_sources: RwSignal::new(BTreeSet::<String>::new()),
         }

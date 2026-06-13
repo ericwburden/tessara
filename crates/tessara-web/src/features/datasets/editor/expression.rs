@@ -57,6 +57,7 @@ pub(crate) fn DatasetExpressionChain(
                     }));
                     expression.update(|draft| {
                         *draft = DatasetExpressionDraft::Operation {
+                            operation: composition_mode.get(),
                             left: Box::new(draft.clone()),
                             right: Box::new(DatasetExpressionDraft::Source(next - 1)),
                         };

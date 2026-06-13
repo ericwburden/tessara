@@ -81,6 +81,7 @@ pub(crate) fn DatasetSourcesEditor(
                     sources.update(|items| items.push(DatasetSourceDraft { source_alias: format!("source_{next}"), ..DatasetSourceDraft::default() }));
                     expression.update(|draft| {
                         *draft = DatasetExpressionDraft::Operation {
+                            operation: composition_mode.get(),
                             left: Box::new(draft.clone()),
                             right: Box::new(DatasetExpressionDraft::Source(next - 1)),
                         };
@@ -105,6 +106,7 @@ pub(crate) fn DatasetSourcesEditor(
                     selection=designer_selection
                     is_open=designer_sheet_open
                     sources
+                    expression
                     forms
                     datasets
                     rendered_forms

@@ -77,7 +77,7 @@ pub(crate) fn DatasetFieldsEditor(
                                                             items.remove(index);
                                                         }
                                                     });
-                                                    designer_selection.set(DatasetDesignerSelection::Operation);
+                                                    designer_selection.set(DatasetDesignerSelection::Operation(Vec::new()));
                                                 }
                                             }
                                         >
