@@ -3,7 +3,7 @@
 use crate::features::datasets::types::NodeResponse;
 use crate::features::datasets::validation::node_matches_visibility_query;
 use crate::utils::text::sentence_label;
-use icons::{ArrowUp, ChevronDown, CircleDot, Search};
+use icons::{ArrowUp, ChevronDown, ChevronRight, CircleDot, Search};
 use leptos::prelude::*;
 use std::collections::{BTreeSet, HashMap};
 
@@ -13,6 +13,7 @@ pub(crate) fn DatasetVisibilityEditor(
     nodes: RwSignal<Vec<NodeResponse>>,
     visibility_node_ids: RwSignal<BTreeSet<String>>,
     visibility_search: RwSignal<String>,
+    expanded_node_ids: RwSignal<BTreeSet<String>>,
 ) -> impl IntoView {
     view! {
         <section class="route-panel__section dataset-editor-section">
@@ -41,6 +42,8 @@ pub(crate) fn DatasetVisibilityEditor(
                             visible_nodes.clone(),
                             all_nodes.clone(),
                             visibility_node_ids,
+                            expanded_node_ids,
+                            !query.trim().is_empty(),
                             0,
                         )
                     }).collect_view()
@@ -55,16 +58,23 @@ fn visibility_tree_branch(
     visible_nodes: Vec<NodeResponse>,
     all_nodes: Vec<NodeResponse>,
     visibility_node_ids: RwSignal<BTreeSet<String>>,
+    expanded_node_ids: RwSignal<BTreeSet<String>>,
+    force_expanded: bool,
     depth: usize,
 ) -> AnyView {
-    let node_id = node.id.clone();
     let node_id_for_class = node.id.clone();
+    let node_id_for_toggle = node.id.clone();
+    let node_id_for_expanded = node.id.clone();
     let node_id_for_pressed = node.id.clone();
+    let node_id_for_select = node.id.clone();
+    let node_id_for_children = node.id.clone();
     let parents_node = node.clone();
     let descendants_node = node.clone();
     let all_nodes_for_parents = all_nodes.clone();
     let all_nodes_for_descendants = all_nodes.clone();
     let children = child_nodes(&visible_nodes, &node.id);
+    let has_children = !children.is_empty();
+    let child_count = children.len();
     view! {
         <section class="dataset-visibility-branch" style=format!("--visibility-depth: {depth};")>
             <div class=move || {
@@ -74,14 +84,54 @@ fn visibility_tree_branch(
                     "dataset-visibility-node"
                 }
             }>
-                <span class="dataset-visibility-node__copy">
-                    <strong>{node.name.clone()}</strong>
-                    <span>{format!(
-                        "{} · {}",
-                        sentence_label(&node.node_type_name),
-                        node.parent_node_name.clone().unwrap_or_else(|| "Top-level".into()),
-                    )}</span>
-                </span>
+                <button
+                    class="dataset-visibility-node__main"
+                    type="button"
+                    aria-expanded=move || {
+                        (has_children && (force_expanded || expanded_node_ids.get().contains(&node_id_for_expanded))).to_string()
+                    }
+                    disabled=!has_children
+                    on:click=move |_| {
+                        if has_children {
+                            expanded_node_ids.update(|ids| {
+                                if ids.contains(&node_id_for_toggle) {
+                                    ids.remove(&node_id_for_toggle);
+                                } else {
+                                    ids.insert(node_id_for_toggle.clone());
+                                }
+                            });
+                        }
+                    }
+                >
+                    <span class="dataset-visibility-node__toggle" aria-hidden="true">
+                        {move || if has_children {
+                            if force_expanded || expanded_node_ids.get().contains(&node.id) {
+                                view! { <ChevronDown class="dataset-visibility-node__toggle-icon"/> }.into_any()
+                            } else {
+                                view! { <ChevronRight class="dataset-visibility-node__toggle-icon"/> }.into_any()
+                            }
+                        } else {
+                            view! { <span class="dataset-visibility-node__toggle-placeholder"></span> }.into_any()
+                        }}
+                    </span>
+                    <span class="dataset-visibility-node__copy">
+                        <strong>{node.name.clone()}</strong>
+                        <span>{format!(
+                            "{} · {}",
+                            sentence_label(&node.node_type_name),
+                            node.parent_node_name.clone().unwrap_or_else(|| "Top-level".into()),
+                        )}</span>
+                    </span>
+                    <span class="dataset-visibility-node__count">
+                        {if child_count == 0 {
+                            "No visible children".to_string()
+                        } else if child_count == 1 {
+                            "1 visible child".to_string()
+                        } else {
+                            format!("{child_count} visible children")
+                        }}
+                    </span>
+                </button>
                 <span class="dataset-visibility-node__actions">
                     <button
                         class="icon-button dataset-visibility-node-action"
@@ -91,10 +141,10 @@ fn visibility_tree_branch(
                         title="Toggle this node"
                         on:click=move |_| {
                             visibility_node_ids.update(|ids| {
-                                if ids.contains(&node_id) {
-                                    ids.remove(&node_id);
+                                if ids.contains(&node_id_for_select) {
+                                    ids.remove(&node_id_for_select);
                                 } else {
-                                    ids.insert(node_id.clone());
+                                    ids.insert(node_id_for_select.clone());
                                 }
                             });
                         }
@@ -135,17 +185,21 @@ fn visibility_tree_branch(
                     </button>
                 </span>
             </div>
-            <div class="dataset-visibility-children" role="group">
-                {children.into_iter().map(|child| {
-                    visibility_tree_branch(
-                        child,
-                        visible_nodes.clone(),
-                        all_nodes.clone(),
-                        visibility_node_ids,
-                        depth + 1,
-                    )
-                }).collect_view()}
-            </div>
+            <Show when=move || has_children && (force_expanded || expanded_node_ids.get().contains(&node_id_for_children))>
+                <div class="dataset-visibility-children" role="group">
+                    {children.clone().into_iter().map(|child| {
+                        visibility_tree_branch(
+                            child,
+                            visible_nodes.clone(),
+                            all_nodes.clone(),
+                            visibility_node_ids,
+                            expanded_node_ids,
+                            force_expanded,
+                            depth + 1,
+                        )
+                    }).collect_view()}
+                </div>
+            </Show>
         </section>
     }
     .into_any()

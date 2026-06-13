@@ -1882,7 +1882,7 @@ input {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 0.75rem;
-  align-items: start;
+  align-items: stretch;
   margin-left: calc(var(--visibility-depth, 0) * 1.4rem);
   border-top: 1px solid var(--color-border);
   padding: 0.75rem 0;
@@ -1890,6 +1890,37 @@ input {
 
 .dataset-visibility-node.is-selected {
   background: color-mix(in srgb, var(--semantic-primary) 10%, transparent);
+}
+
+.dataset-visibility-node__main {
+  display: grid;
+  grid-template-columns: 1.65rem minmax(0, 1fr) auto;
+  gap: 0.55rem;
+  align-items: center;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+}
+
+.dataset-visibility-node__main:disabled {
+  cursor: default;
+}
+
+.dataset-visibility-node__toggle {
+  display: inline-grid;
+  place-items: center;
+  color: var(--color-muted);
+}
+
+.dataset-visibility-node__toggle-icon,
+.dataset-visibility-node__toggle-placeholder {
+  width: 1rem;
+  height: 1rem;
 }
 
 .dataset-visibility-node__copy {
@@ -1909,6 +1940,13 @@ input {
   font-weight: 750;
 }
 
+.dataset-visibility-node__count {
+  color: var(--color-muted);
+  font-size: 0.76rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
 .dataset-visibility-node__actions {
   display: grid;
   gap: 0.4rem;
@@ -1924,6 +1962,17 @@ input {
 .dataset-visibility-children {
   display: grid;
   gap: 0.35rem;
+}
+
+@media (max-width: 720px) {
+  .dataset-visibility-node__main {
+    grid-template-columns: 1.4rem minmax(0, 1fr);
+  }
+
+  .dataset-visibility-node__count {
+    grid-column: 2;
+    white-space: normal;
+  }
 }
 
 .dataset-fields-table tr.is-selected {

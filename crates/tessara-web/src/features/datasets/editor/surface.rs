@@ -76,6 +76,7 @@ pub(crate) fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView 
                         nodes=state.nodes
                         visibility_node_ids=state.visibility_node_ids
                         visibility_search=state.visibility_search
+                        expanded_node_ids=state.visibility_expanded_node_ids
                     />
                     <div class="form-actions">
                         <button class="button" type="submit">{if is_edit { "Save Dataset" } else { "Create Dataset" }}</button>
