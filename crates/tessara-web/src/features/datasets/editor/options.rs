@@ -1,7 +1,7 @@
 //! Dataset editor designer option sheet components.
 
 use super::super::types::*;
-use super::{FieldOptionsPanel, OperationOptionsPanel, SourceOptionsPanel};
+use super::{OperationOptionsPanel, SourceOptionsPanel};
 use icons::X;
 use leptos::portal::Portal;
 use leptos::prelude::*;
@@ -16,7 +16,6 @@ pub(crate) fn DatasetDesignerOptionsSheet(
     datasets: RwSignal<Vec<DatasetSummary>>,
     rendered_forms: RwSignal<BTreeMap<String, DatasetRenderedForm>>,
     composition_mode: RwSignal<String>,
-    fields: RwSignal<Vec<DatasetFieldDraft>>,
     join_left_key: RwSignal<String>,
     join_right_key: RwSignal<String>,
 ) -> impl IntoView {
@@ -50,16 +49,6 @@ pub(crate) fn DatasetDesignerOptionsSheet(
                                     sources
                                     forms
                                     datasets
-                                    rendered_forms
-                                    fields
-                                />
-                            }.into_any(),
-                            DatasetDesignerSelection::Field(index) => view! {
-                                <FieldOptionsPanel
-                                    index
-                                    fields
-                                    sources
-                                    forms
                                     rendered_forms
                                 />
                             }.into_any(),

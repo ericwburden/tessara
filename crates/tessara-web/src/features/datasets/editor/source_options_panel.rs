@@ -3,7 +3,6 @@
 use super::super::loaders::load_rendered_form;
 use super::super::types::*;
 use super::helpers::version_label;
-use super::source_field_actions::add_fields_from_source;
 use super::source_options::{find_version, first_published_version, published_versions_for_form};
 use leptos::prelude::*;
 use std::collections::BTreeMap;
@@ -16,7 +15,6 @@ pub(crate) fn SourceOptionsPanel(
     forms: RwSignal<Vec<DatasetFormOption>>,
     datasets: RwSignal<Vec<DatasetSummary>>,
     rendered_forms: RwSignal<BTreeMap<String, DatasetRenderedForm>>,
-    fields: RwSignal<Vec<DatasetFieldDraft>>,
 ) -> impl IntoView {
     view! {
         {move || sources.get().get(index).cloned().map(|source| {
@@ -127,7 +125,6 @@ pub(crate) fn SourceOptionsPanel(
                                         <option value="all">"All"</option>
                                     </select>
                                 </label>
-                                <button class="button button--secondary" type="button" on:click=move |_| add_fields_from_source(index, sources, forms, rendered_forms, fields)>"Add Fields From Source"</button>
                             }.into_any()
                         }}
                     </div>

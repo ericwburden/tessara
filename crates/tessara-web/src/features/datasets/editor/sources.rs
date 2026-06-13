@@ -110,7 +110,6 @@ pub(crate) fn DatasetSourcesEditor(
                     datasets
                     rendered_forms
                     composition_mode
-                    fields
                     join_left_key
                     join_right_key
                 />

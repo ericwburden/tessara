@@ -24,7 +24,7 @@ pub(crate) fn add_fields_from_source(
         );
         fields.update(|items| {
             for option in options {
-                let key = format!("{}_{}", source.source_alias, option.key);
+                let key = canonical_field_key(&source.source_alias, &option.key);
                 if items.iter().any(|item| {
                     item.key == key
                         || (item.source_alias == source.source_alias
@@ -40,5 +40,14 @@ pub(crate) fn add_fields_from_source(
                 });
             }
         });
+    }
+}
+
+pub(crate) fn canonical_field_key(source_alias: &str, source_field_key: &str) -> String {
+    let field_key = source_field_key.trim_start_matches('_');
+    if field_key.is_empty() {
+        source_alias.into()
+    } else {
+        format!("{source_alias}__{field_key}")
     }
 }

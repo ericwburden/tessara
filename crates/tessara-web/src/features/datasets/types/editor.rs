@@ -34,7 +34,6 @@ pub(in crate::features::datasets) enum DatasetExpressionDraft {
 pub(in crate::features::datasets) enum DatasetDesignerSelection {
     Operation(Vec<bool>),
     Source(usize),
-    Field(usize),
 }
 
 impl Default for DatasetSourceDraft {

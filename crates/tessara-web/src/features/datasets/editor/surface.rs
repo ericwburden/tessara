@@ -56,8 +56,6 @@ pub(crate) fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView 
                         sources=state.sources
                         forms=state.forms
                         rendered_forms=state.rendered_forms
-                        designer_selection=state.designer_selection
-                        designer_sheet_open=state.designer_sheet_open
                     />
                     <DatasetSqlPreviewPanel
                         dataset_id=dataset_id.clone()

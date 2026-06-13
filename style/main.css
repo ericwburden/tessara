@@ -1813,6 +1813,43 @@ input {
   min-width: 48rem;
 }
 
+.dataset-field-picker {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.dataset-field-picker__source {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface-soft);
+  overflow: hidden;
+}
+
+.dataset-field-picker__summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.8rem 0.9rem;
+  cursor: pointer;
+  color: var(--color-text);
+  font-weight: 850;
+}
+
+.dataset-field-picker__summary small {
+  color: var(--color-muted);
+  font-size: 0.78rem;
+  font-weight: 750;
+}
+
+.dataset-field-picker__table {
+  border-top: 1px solid var(--color-border);
+}
+
+.dataset-field-picker__label-input {
+  width: min(18rem, 100%);
+}
+
 .dataset-fields-table tr.is-selected {
   background: var(--semantic-primary-soft);
 }

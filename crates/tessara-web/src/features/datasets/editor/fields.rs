@@ -1,7 +1,8 @@
-//! Dataset editor projected field components.
+//! Dataset editor projected field picker.
 
 use super::super::types::*;
-use super::helpers::{confirm_action, field_metadata};
+use super::source_field_actions::canonical_field_key;
+use super::source_options::source_field_options;
 use crate::ui::DataTable;
 use crate::utils::text::sentence_label;
 use leptos::prelude::*;
@@ -13,82 +14,123 @@ pub(crate) fn DatasetFieldsEditor(
     sources: RwSignal<Vec<DatasetSourceDraft>>,
     forms: RwSignal<Vec<DatasetFormOption>>,
     rendered_forms: RwSignal<BTreeMap<String, DatasetRenderedForm>>,
-    designer_selection: RwSignal<DatasetDesignerSelection>,
-    designer_sheet_open: RwSignal<bool>,
 ) -> impl IntoView {
     view! {
         <section class="route-panel__section dataset-editor-section">
             <div class="dataset-editor-section__header">
                 <h3>"Fields"</h3>
-                <button class="button button--secondary button--compact" type="button" on:click=move |_| {
-                    let next = fields.get().len() + 1;
-                    fields.update(|items| items.push(DatasetFieldDraft {
-                        key: format!("field_{next}"),
-                        label: format!("Field {next}"),
-                        source_alias: sources.get().first().map(|source| source.source_alias.clone()).unwrap_or_default(),
-                        source_field_key: String::new(),
-                    }));
-                    designer_selection.set(DatasetDesignerSelection::Field(next - 1));
-                    designer_sheet_open.set(true);
-                }>"Add Field"</button>
             </div>
-            <div class="table-wrap dataset-fields-table">
-                <DataTable>
-                    <thead>
-                        <tr>
-                            <th scope="col">"Source"</th>
-                            <th scope="col">"Field"</th>
-                            <th scope="col">"Form Field Label"</th>
-                            <th scope="col">"Source Field"</th>
-                            <th scope="col">"Data Type"</th>
-                            <th scope="col">"Remove"</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {move || fields.get().into_iter().enumerate().map(|(index, field)| {
-                            let metadata = field_metadata(&field, &sources.get(), &forms.get(), &rendered_forms.get());
-                            view! {
-                                <tr class=move || if designer_selection.get() == DatasetDesignerSelection::Field(index) { "is-selected" } else { "" }>
-                                    <td>{field.source_alias.clone()}</td>
-                                    <th scope="row">
-                                        <button
-                                            class="link-button"
-                                            type="button"
-                                            on:click=move |_| {
-                                                designer_selection.set(DatasetDesignerSelection::Field(index));
-                                                designer_sheet_open.set(true);
-                                            }
-                                        >
-                                            {field.label.clone()}
-                                        </button>
-                                        <span class="data-table__secondary-text">{field.key.clone()}</span>
-                                    </th>
-                                    <td>{metadata.label}</td>
-                                    <td>{field.source_field_key.clone()}</td>
-                                    <td>{sentence_label(&metadata.field_type)}</td>
-                                    <td>
-                                        <button
-                                            class="button button--secondary button--compact"
-                                            type="button"
-                                            on:click=move |_| {
-                                                if confirm_action("Remove this projected field?") {
-                                                    fields.update(|items| {
-                                                        if index < items.len() {
-                                                            items.remove(index);
-                                                        }
-                                                    });
-                                                    designer_selection.set(DatasetDesignerSelection::Operation(Vec::new()));
+            <div class="dataset-field-picker">
+                {move || {
+                    sources.get().into_iter().enumerate().map(|(source_index, source)| {
+                        let source_alias = source.source_alias.clone();
+                        let source_options = source_field_options(
+                            &sources.get(),
+                            &forms.get(),
+                            &rendered_forms.get(),
+                            &source_alias,
+                        );
+                        let included_count = fields.get().iter().filter(|field| field.source_alias == source_alias).count();
+                        view! {
+                            <details class="dataset-field-picker__source" open=source_index == 0>
+                                <summary class="dataset-field-picker__summary">
+                                    <span>{source_alias.clone()}</span>
+                                    <small>{format!("{included_count} of {} fields included", source_options.len())}</small>
+                                </summary>
+                                <div class="table-wrap dataset-fields-table dataset-field-picker__table">
+                                    <DataTable>
+                                        <thead>
+                                            <tr>
+                                                <th scope="col">"Include?"</th>
+                                                <th scope="col">"Display Label"</th>
+                                                <th scope="col">"Form Label"</th>
+                                                <th scope="col">"Field Name"</th>
+                                                <th scope="col">"Data Type"</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {source_options.into_iter().map(|option| {
+                                                let option_key = option.key.clone();
+                                                let field_key = canonical_field_key(&source_alias, &option_key);
+                                                let projected = fields.get().into_iter().find(|field| {
+                                                    field.source_alias == source_alias && field.source_field_key == option_key
+                                                });
+                                                let included = projected.is_some();
+                                                let display_label = projected
+                                                    .as_ref()
+                                                    .map(|field| field.label.clone())
+                                                    .unwrap_or_else(|| option.label.clone());
+                                                let source_alias_for_include = source_alias.clone();
+                                                let source_alias_for_label = source_alias.clone();
+                                                let option_key_for_include = option_key.clone();
+                                                let option_key_for_label = option_key.clone();
+                                                let option_label_for_include = option.label.clone();
+                                                let field_key_for_include = field_key.clone();
+                                                view! {
+                                                    <tr>
+                                                        <td>
+                                                            <input
+                                                                aria-label=format!("Include {}", option.label)
+                                                                type="checkbox"
+                                                                prop:checked=included
+                                                                on:change=move |event| {
+                                                                    let is_checked = event_target_checked(&event);
+                                                                    fields.update(|items| {
+                                                                        let existing_index = items.iter().position(|field| {
+                                                                            field.source_alias == source_alias_for_include
+                                                                                && field.source_field_key == option_key_for_include
+                                                                        });
+                                                                        match (is_checked, existing_index) {
+                                                                            (true, None) => items.push(DatasetFieldDraft {
+                                                                                key: field_key_for_include.clone(),
+                                                                                label: option_label_for_include.clone(),
+                                                                                source_alias: source_alias_for_include.clone(),
+                                                                                source_field_key: option_key_for_include.clone(),
+                                                                            }),
+                                                                            (false, Some(index)) => {
+                                                                                items.remove(index);
+                                                                            }
+                                                                            _ => {}
+                                                                        }
+                                                                    });
+                                                                }
+                                                            />
+                                                        </td>
+                                                        <td>
+                                                            <input
+                                                                aria-label=format!("Display label for {}", option.label)
+                                                                class="dataset-field-picker__label-input"
+                                                                disabled=!included
+                                                                prop:value=display_label
+                                                                on:input=move |event| {
+                                                                    let value = event_target_value(&event);
+                                                                    fields.update(|items| {
+                                                                        if let Some(field) = items.iter_mut().find(|field| {
+                                                                            field.source_alias == source_alias_for_label
+                                                                                && field.source_field_key == option_key_for_label
+                                                                        }) {
+                                                                            field.label = value;
+                                                                        }
+                                                                    });
+                                                                }
+                                                            />
+                                                        </td>
+                                                        <td>{option.label}</td>
+                                                        <td>
+                                                            <code>{field_key}</code>
+                                                            <span class="data-table__secondary-text">{option_key}</span>
+                                                        </td>
+                                                        <td>{sentence_label(&option.field_type)}</td>
+                                                    </tr>
                                                 }
-                                            }
-                                        >
-                                            "Remove"
-                                        </button>
-                                    </td>
-                                </tr>
-                            }
-                        }).collect_view()}
-                    </tbody>
-                </DataTable>
+                                            }).collect_view()}
+                                        </tbody>
+                                    </DataTable>
+                                </div>
+                            </details>
+                        }
+                    }).collect_view()
+                }}
             </div>
         </section>
     }

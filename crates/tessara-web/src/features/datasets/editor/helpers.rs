@@ -1,9 +1,6 @@
 //! Editor helper functions for Datasets feature screens.
 
 use super::super::types::*;
-use std::collections::BTreeMap;
-
-use super::source_options::source_field_options;
 
 pub(crate) fn operation_label(value: &str) -> &'static str {
     match value {
@@ -51,22 +48,6 @@ pub(crate) fn expression_button_class(is_active: bool, base: &'static str) -> St
     } else {
         base.into()
     }
-}
-
-pub(crate) fn field_metadata(
-    field: &DatasetFieldDraft,
-    sources: &[DatasetSourceDraft],
-    forms: &[DatasetFormOption],
-    rendered_forms: &BTreeMap<String, DatasetRenderedForm>,
-) -> DatasetRenderedField {
-    source_field_options(sources, forms, rendered_forms, &field.source_alias)
-        .into_iter()
-        .find(|option| option.key == field.source_field_key)
-        .unwrap_or_else(|| DatasetRenderedField {
-            key: field.source_field_key.clone(),
-            label: "Unknown field".into(),
-            field_type: String::new(),
-        })
 }
 
 pub(crate) fn confirm_action(message: &str) -> bool {

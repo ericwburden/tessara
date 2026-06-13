@@ -2,7 +2,6 @@
 
 mod expression;
 mod expression_tree;
-mod field_options;
 mod fields;
 mod helpers;
 mod identity;
@@ -21,7 +20,6 @@ mod surface;
 mod visibility;
 
 pub(crate) use expression::{DatasetExpressionChain, ExpressionPreview};
-pub(crate) use field_options::FieldOptionsPanel;
 pub(crate) use fields::DatasetFieldsEditor;
 pub(crate) use identity::DatasetIdentitySection;
 pub(crate) use lifecycle::install_dataset_editor_loaders;

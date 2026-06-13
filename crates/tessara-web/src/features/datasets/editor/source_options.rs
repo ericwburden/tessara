@@ -79,27 +79,6 @@ pub(crate) fn source_field_options(
     options
 }
 
-/// Returns source field options while preserving an unknown selected key.
-pub(crate) fn source_field_options_with_selected(
-    sources: &[DatasetSourceDraft],
-    forms: &[DatasetFormOption],
-    rendered_forms: &BTreeMap<String, DatasetRenderedForm>,
-    source_alias: &str,
-    selected_key: &str,
-) -> Vec<DatasetRenderedField> {
-    let mut options = source_field_options(sources, forms, rendered_forms, source_alias);
-
-    if !selected_key.is_empty() && !options.iter().any(|option| option.key == selected_key) {
-        options.push(DatasetRenderedField {
-            key: selected_key.to_string(),
-            label: "Unknown field".into(),
-            field_type: String::new(),
-        });
-    }
-
-    options
-}
-
 /// Returns join key field options for a source index.
 pub(crate) fn join_key_options_for_source_index(
     sources: &[DatasetSourceDraft],
