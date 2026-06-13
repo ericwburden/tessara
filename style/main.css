@@ -1882,7 +1882,7 @@ input {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 0.75rem;
-  align-items: center;
+  align-items: start;
   margin-left: calc(var(--visibility-depth, 0) * 1.4rem);
   border-top: 1px solid var(--color-border);
   padding: 0.75rem 0;
@@ -1910,10 +1910,15 @@ input {
 }
 
 .dataset-visibility-node__actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+  display: grid;
   gap: 0.4rem;
+  justify-items: center;
+}
+
+.dataset-visibility-node-action {
+  width: 2.25rem;
+  min-width: 2.25rem;
+  min-height: 2.25rem;
 }
 
 .dataset-visibility-children {

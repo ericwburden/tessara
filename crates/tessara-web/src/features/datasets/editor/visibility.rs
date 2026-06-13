@@ -3,7 +3,7 @@
 use crate::features::datasets::types::NodeResponse;
 use crate::features::datasets::validation::node_matches_visibility_query;
 use crate::utils::text::sentence_label;
-use icons::Search;
+use icons::{ArrowUp, ChevronDown, CircleDot, Search};
 use leptos::prelude::*;
 use std::collections::{BTreeSet, HashMap};
 
@@ -84,9 +84,11 @@ fn visibility_tree_branch(
                 </span>
                 <span class="dataset-visibility-node__actions">
                     <button
-                        class="button button--secondary button--compact"
+                        class="icon-button dataset-visibility-node-action"
                         type="button"
+                        aria-label="Toggle this node"
                         aria-pressed=move || visibility_node_ids.get().contains(&node_id_for_pressed).to_string()
+                        title="Toggle this node"
                         on:click=move |_| {
                             visibility_node_ids.update(|ids| {
                                 if ids.contains(&node_id) {
@@ -97,11 +99,13 @@ fn visibility_tree_branch(
                             });
                         }
                     >
-                        "Node"
+                        <CircleDot class="icon-button__icon"/>
                     </button>
                     <button
-                        class="button button--secondary button--compact"
+                        class="icon-button dataset-visibility-node-action"
                         type="button"
+                        aria-label="Select node and parents"
+                        title="Select node and parents"
                         on:click=move |_| {
                             let ids = node_and_parent_ids(&all_nodes_for_parents, &parents_node);
                             visibility_node_ids.update(|selected| {
@@ -111,11 +115,13 @@ fn visibility_tree_branch(
                             });
                         }
                     >
-                        "+ Parents"
+                        <ArrowUp class="icon-button__icon"/>
                     </button>
                     <button
-                        class="button button--secondary button--compact"
+                        class="icon-button dataset-visibility-node-action"
                         type="button"
+                        aria-label="Select node and descendants"
+                        title="Select node and descendants"
                         on:click=move |_| {
                             let ids = node_and_descendant_ids(&all_nodes_for_descendants, &descendants_node);
                             visibility_node_ids.update(|selected| {
@@ -125,7 +131,7 @@ fn visibility_tree_branch(
                             });
                         }
                     >
-                        "+ Descendants"
+                        <ChevronDown class="icon-button__icon"/>
                     </button>
                 </span>
             </div>
