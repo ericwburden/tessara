@@ -3,7 +3,9 @@
 use crate::features::datasets::types::NodeResponse;
 use crate::features::datasets::validation::node_matches_visibility_query;
 use crate::utils::text::sentence_label;
-use icons::{ArrowUp, ChevronDown, ChevronRight, CircleDot, Search};
+use icons::{
+    ArrowBigDownDash, ArrowBigUpDash, ChevronDown, ChevronRight, Search, Square, SquareCheckBig,
+};
 use leptos::prelude::*;
 use std::collections::{BTreeSet, HashMap};
 
@@ -65,8 +67,6 @@ fn visibility_tree_branch(
     let node_id_for_class = node.id.clone();
     let node_id_for_toggle = node.id.clone();
     let node_id_for_expanded = node.id.clone();
-    let node_id_for_pressed = node.id.clone();
-    let node_id_for_select = node.id.clone();
     let node_id_for_children = node.id.clone();
     let parents_node = node.clone();
     let descendants_node = node.clone();
@@ -75,6 +75,19 @@ fn visibility_tree_branch(
     let children = child_nodes(&visible_nodes, &node.id);
     let has_children = !children.is_empty();
     let child_count = children.len();
+    let node_scope = vec![node.id.clone()];
+    let parent_scope = node_and_parent_ids(&all_nodes_for_parents, &parents_node);
+    let descendant_scope = node_and_descendant_ids(&all_nodes_for_descendants, &descendants_node);
+    let node_scope_for_class = node_scope.clone();
+    let node_scope_for_pressed = node_scope.clone();
+    let node_scope_for_icon = node_scope.clone();
+    let node_scope_for_click = node_scope.clone();
+    let parent_scope_for_class = parent_scope.clone();
+    let parent_scope_for_pressed = parent_scope.clone();
+    let parent_scope_for_click = parent_scope.clone();
+    let descendant_scope_for_class = descendant_scope.clone();
+    let descendant_scope_for_pressed = descendant_scope.clone();
+    let descendant_scope_for_click = descendant_scope.clone();
     view! {
         <section class="dataset-visibility-branch" style=format!("--visibility-depth: {depth};")>
             <div class=move || {
@@ -134,54 +147,52 @@ fn visibility_tree_branch(
                 </button>
                 <span class="dataset-visibility-node__actions">
                     <button
-                        class="icon-button dataset-visibility-node-action"
+                        class=move || visibility_action_class(
+                            scope_is_selected(&visibility_node_ids.get(), &node_scope_for_class)
+                        )
                         type="button"
                         aria-label="Toggle this node"
-                        aria-pressed=move || visibility_node_ids.get().contains(&node_id_for_pressed).to_string()
+                        aria-pressed=move || scope_is_selected(&visibility_node_ids.get(), &node_scope_for_pressed).to_string()
                         title="Toggle this node"
                         on:click=move |_| {
-                            visibility_node_ids.update(|ids| {
-                                if ids.contains(&node_id_for_select) {
-                                    ids.remove(&node_id_for_select);
-                                } else {
-                                    ids.insert(node_id_for_select.clone());
-                                }
-                            });
+                            visibility_node_ids.update(|selected| toggle_visibility_scope(selected, &node_scope_for_click));
                         }
                     >
-                        <CircleDot class="icon-button__icon"/>
+                        {move || {
+                            if scope_is_selected(&visibility_node_ids.get(), &node_scope_for_icon) {
+                                view! { <SquareCheckBig class="icon-button__icon"/> }.into_any()
+                            } else {
+                                view! { <Square class="icon-button__icon"/> }.into_any()
+                            }
+                        }}
                     </button>
                     <button
-                        class="icon-button dataset-visibility-node-action"
+                        class=move || visibility_action_class(
+                            scope_is_selected(&visibility_node_ids.get(), &parent_scope_for_class)
+                        )
                         type="button"
-                        aria-label="Select node and parents"
-                        title="Select node and parents"
+                        aria-label="Toggle node and parents"
+                        aria-pressed=move || scope_is_selected(&visibility_node_ids.get(), &parent_scope_for_pressed).to_string()
+                        title="Toggle node and parents"
                         on:click=move |_| {
-                            let ids = node_and_parent_ids(&all_nodes_for_parents, &parents_node);
-                            visibility_node_ids.update(|selected| {
-                                for id in ids {
-                                    selected.insert(id);
-                                }
-                            });
+                            visibility_node_ids.update(|selected| toggle_visibility_scope(selected, &parent_scope_for_click));
                         }
                     >
-                        <ArrowUp class="icon-button__icon"/>
+                        <ArrowBigUpDash class="icon-button__icon"/>
                     </button>
                     <button
-                        class="icon-button dataset-visibility-node-action"
+                        class=move || visibility_action_class(
+                            scope_is_selected(&visibility_node_ids.get(), &descendant_scope_for_class)
+                        )
                         type="button"
-                        aria-label="Select node and descendants"
-                        title="Select node and descendants"
+                        aria-label="Toggle node and descendants"
+                        aria-pressed=move || scope_is_selected(&visibility_node_ids.get(), &descendant_scope_for_pressed).to_string()
+                        title="Toggle node and descendants"
                         on:click=move |_| {
-                            let ids = node_and_descendant_ids(&all_nodes_for_descendants, &descendants_node);
-                            visibility_node_ids.update(|selected| {
-                                for id in ids {
-                                    selected.insert(id);
-                                }
-                            });
+                            visibility_node_ids.update(|selected| toggle_visibility_scope(selected, &descendant_scope_for_click));
                         }
                     >
-                        <ChevronDown class="icon-button__icon"/>
+                        <ArrowBigDownDash class="icon-button__icon"/>
                     </button>
                 </span>
             </div>
@@ -203,6 +214,30 @@ fn visibility_tree_branch(
         </section>
     }
     .into_any()
+}
+
+fn visibility_action_class(scope_selected: bool) -> &'static str {
+    if scope_selected {
+        "icon-button icon-button--danger dataset-visibility-node-action"
+    } else {
+        "icon-button dataset-visibility-node-action"
+    }
+}
+
+fn scope_is_selected(selected: &BTreeSet<String>, scope: &[String]) -> bool {
+    !scope.is_empty() && scope.iter().all(|id| selected.contains(id))
+}
+
+fn toggle_visibility_scope(selected: &mut BTreeSet<String>, scope: &[String]) {
+    if scope_is_selected(selected, scope) {
+        for id in scope {
+            selected.remove(id);
+        }
+    } else {
+        for id in scope {
+            selected.insert(id.clone());
+        }
+    }
 }
 
 fn sorted_nodes(mut nodes: Vec<NodeResponse>) -> Vec<NodeResponse> {
