@@ -5,7 +5,10 @@ use super::{
     DatasetSourcesEditor, DatasetSqlPreviewPanel, DatasetVisibilityEditor,
     install_dataset_editor_loaders, submit_dataset_editor,
 };
-use crate::ui::{AppShell, PageHeader};
+use crate::ui::{
+    AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator,
+    PageHeader,
+};
 use leptos::prelude::*;
 
 #[component]
@@ -24,9 +27,16 @@ pub(crate) fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView 
     view! {
         <AppShell active_route="datasets" title=title>
             <section class="route-panel datasets-page">
-                <PageHeader title>
-                    <a class="button button--secondary" href="/datasets">"Back to Datasets"</a>
-                </PageHeader>
+                <Breadcrumb>
+                    <BreadcrumbItem>
+                        <BreadcrumbLink href="/datasets">"Datasets"</BreadcrumbLink>
+                    </BreadcrumbItem>
+                    <BreadcrumbSeparator/>
+                    <BreadcrumbItem>
+                        <BreadcrumbPage>{title}</BreadcrumbPage>
+                    </BreadcrumbItem>
+                </Breadcrumb>
+                <PageHeader title/>
                 <DatasetEditorMessages
                     load_error=state.load_error
                     save_error=state.save_error
@@ -79,14 +89,12 @@ pub(crate) fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView 
                         expanded_node_ids=state.visibility_expanded_node_ids
                     />
                     <div class="form-actions">
+                        {move || preview_dataset_id.clone().map(|id| view! {
+                            <a class="button button--secondary" href=format!("/datasets/{id}/preview") target="_blank" rel="noopener">"Open Preview"</a>
+                        })}
                         <button class="button" type="submit">{if is_edit { "Save Dataset" } else { "Create Dataset" }}</button>
                     </div>
                 </form>
-                {move || preview_dataset_id.clone().map(|id| view! {
-                    <section class="route-panel__section dataset-editor-preview-link">
-                        <a class="button button--secondary" href=format!("/datasets/{id}/preview") target="_blank" rel="noopener">"Open Preview"</a>
-                    </section>
-                })}
             </section>
         </AppShell>
     }

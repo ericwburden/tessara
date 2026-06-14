@@ -116,17 +116,6 @@ fn visibility_tree_branch(
                         }
                     }
                 >
-                    <span class="dataset-visibility-node__toggle" aria-hidden="true">
-                        {move || if has_children {
-                            if force_expanded || expanded_node_ids.get().contains(&node.id) {
-                                view! { <ChevronDown class="dataset-visibility-node__toggle-icon"/> }.into_any()
-                            } else {
-                                view! { <ChevronRight class="dataset-visibility-node__toggle-icon"/> }.into_any()
-                            }
-                        } else {
-                            view! { <span class="dataset-visibility-node__toggle-placeholder"></span> }.into_any()
-                        }}
-                    </span>
                     <span class="dataset-visibility-node__copy">
                         <strong>{node.name.clone()}</strong>
                         <span>{format!(
@@ -142,6 +131,17 @@ fn visibility_tree_branch(
                             "1 visible child".to_string()
                         } else {
                             format!("{child_count} visible children")
+                        }}
+                    </span>
+                    <span class="dataset-visibility-node__toggle" aria-hidden="true">
+                        {move || if has_children {
+                            if force_expanded || expanded_node_ids.get().contains(&node.id) {
+                                view! { <ChevronDown class="dataset-visibility-node__toggle-icon"/> }.into_any()
+                            } else {
+                                view! { <ChevronRight class="dataset-visibility-node__toggle-icon"/> }.into_any()
+                            }
+                        } else {
+                            view! { <span class="dataset-visibility-node__toggle-placeholder"></span> }.into_any()
                         }}
                     </span>
                 </button>

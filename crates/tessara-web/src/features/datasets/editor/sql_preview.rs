@@ -3,6 +3,7 @@
 use super::super::actions::preview_dataset_sql;
 use super::super::types::*;
 use crate::ui::EmptyState;
+use icons::ChevronsUpDown;
 use leptos::prelude::*;
 use std::collections::BTreeSet;
 
@@ -22,30 +23,39 @@ pub(crate) fn DatasetSqlPreviewPanel(
     sql_preview_error: RwSignal<Option<String>>,
     expanded: RwSignal<bool>,
 ) -> impl IntoView {
+    Effect::new(move |_| {
+        if expanded.get() {
+            preview_dataset_sql(
+                dataset_id.clone(),
+                name.get(),
+                slug.get(),
+                visibility_node_ids.get().into_iter().collect(),
+                sources.get(),
+                expression.get(),
+                fields.get(),
+                join_left_key.get(),
+                join_right_key.get(),
+                sql_preview,
+                sql_preview_error,
+            );
+        }
+    });
+
     view! {
         <section class="route-panel__section dataset-editor-section">
             <div class="dataset-editor-section__header">
                 <h3>"Generated SQL"</h3>
                 <div class="dataset-editor-section__actions">
-                    <button class="button button--secondary button--compact" type="button" on:click=move |_| expanded.update(|value| *value = !*value)>
-                        {move || if expanded.get() { "Hide SQL" } else { "Show SQL" }}
+                    <button
+                        class="icon-button icon-button--control dataset-sql-toggle"
+                        type="button"
+                        aria-label="Toggle generated SQL"
+                        aria-expanded=move || expanded.get().to_string()
+                        title="Toggle generated SQL"
+                        on:click=move |_| expanded.update(|value| *value = !*value)
+                    >
+                        <ChevronsUpDown class="icon-button__icon"/>
                     </button>
-                    <button class="button button--secondary button--compact" type="button" on:click=move |_| {
-                        expanded.set(true);
-                        preview_dataset_sql(
-                            dataset_id.clone(),
-                            name.get(),
-                            slug.get(),
-                            visibility_node_ids.get().into_iter().collect(),
-                            sources.get(),
-                            expression.get(),
-                            fields.get(),
-                            join_left_key.get(),
-                            join_right_key.get(),
-                            sql_preview,
-                            sql_preview_error,
-                        );
-                    }>"Preview SQL"</button>
                 </div>
             </div>
             <Show when=move || expanded.get()>
@@ -53,7 +63,7 @@ pub(crate) fn DatasetSqlPreviewPanel(
                 {move || if let Some(sql) = sql_preview.get() {
                     view! { <pre class="dataset-sql-panel"><code>{sql}</code></pre> }.into_any()
                 } else {
-                    view! { <EmptyState title="SQL preview unavailable" message="Preview SQL to compile the current dataset definition without saving."/> }.into_any()
+                    view! { <EmptyState title="SQL preview unavailable" message="Open this panel to compile the current dataset definition without saving."/> }.into_any()
                 }}
             </Show>
         </section>

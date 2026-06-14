@@ -5,6 +5,7 @@ use super::source_field_actions::canonical_field_key;
 use super::source_options::{source_display_name, source_field_options};
 use crate::ui::DataTable;
 use crate::utils::text::sentence_label;
+use icons::ChevronDown;
 use leptos::prelude::*;
 use std::collections::BTreeMap;
 
@@ -45,8 +46,11 @@ pub(crate) fn DatasetFieldsEditor(
                         view! {
                             <details class="dataset-field-picker__source" open=source_index == 0>
                                 <summary class="dataset-field-picker__summary">
-                                    <span>{format!("{} ({})", source_alias.clone(), source_heading)}</span>
-                                    <small>{format!("{included_count} of {all_count} fields included")}</small>
+                                    <span class="dataset-field-picker__summary-title">{format!("{} ({})", source_alias.clone(), source_heading)}</span>
+                                    <span class="dataset-field-picker__summary-meta">
+                                        <small>{format!("{included_count} of {all_count} fields included")}</small>
+                                        <ChevronDown class="dataset-field-picker__summary-icon"/>
+                                    </span>
                                 </summary>
                                 <div class="table-wrap dataset-fields-table dataset-field-picker__table">
                                     <DataTable>
