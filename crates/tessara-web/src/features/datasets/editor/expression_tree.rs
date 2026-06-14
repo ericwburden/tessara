@@ -2,7 +2,7 @@
 
 use super::super::types::*;
 use super::helpers::{confirm_action, expression_button_class, operation_label};
-use icons::{RefreshCcw, X};
+use icons::{RefreshCcw, TableColumnsSplit, X};
 use leptos::prelude::*;
 
 pub(super) fn expression_tree_view(
@@ -153,69 +153,73 @@ fn expression_source_panel(
     let remove_label = source_label.clone();
     view! {
         <div class="dataset-expression-panel">
-            <button
-                class="icon-button icon-button--danger dataset-expression-remove"
-                type="button"
-                aria-label=format!("Remove input {}", remove_label)
-                title="Remove input"
-                on:click=move |_| {
-                    if confirm_action("Remove this dataset input and its projected fields?") {
-                        let removed_alias = sources.get().get(index).map(|source| source.source_alias.clone());
-                        sources.update(|items| {
-                            if index < items.len() {
-                                items.remove(index);
-                            }
-                            if items.is_empty() {
-                                items.push(DatasetSourceDraft::default());
-                            }
-                        });
-                        if let Some(alias) = removed_alias {
-                            fields.update(|items| items.retain(|field| field.source_alias != alias));
-                        }
-                        expression.update(|draft| {
-                            *draft = remove_source_from_expression(draft, index)
-                                .unwrap_or_else(DatasetExpressionDraft::default);
-                        });
-                        designer_selection.set(DatasetDesignerSelection::Operation(Vec::new()));
-                        designer_sheet_open.set(false);
+            <div class="dataset-expression-panel__controls">
+                <button
+                    class=move || expression_button_class(
+                        designer_selection.get() == DatasetDesignerSelection::Source(index),
+                        "dataset-expression-button dataset-expression-button--source",
+                    )
+                    type="button"
+                    on:click=move |_| {
+                        designer_selection.set(DatasetDesignerSelection::Source(index));
+                        designer_sheet_open.set(true);
                     }
-                }
-            >
-                <X class="icon-button__icon"/>
-            </button>
-            <button
-                class=move || expression_button_class(
-                    designer_selection.get() == DatasetDesignerSelection::Source(index),
-                    "dataset-expression-button dataset-expression-button--source",
-                )
-                type="button"
-                on:click=move |_| {
-                    designer_selection.set(DatasetDesignerSelection::Source(index));
-                    designer_sheet_open.set(true);
-                }
-            >
-                {source_label.clone()}
-            </button>
-            <button
-                class="button button--secondary button--compact dataset-expression-nest-button"
-                type="button"
-                on:click=move |_| {
-                    let new_index = sources.get().len();
-                    sources.update(|items| {
-                        items.push(DatasetSourceDraft {
-                            source_alias: format!("source_{}", new_index + 1),
-                            ..DatasetSourceDraft::default()
+                >
+                    {source_label.clone()}
+                </button>
+                <button
+                    class="icon-button dataset-expression-nest-button"
+                    type="button"
+                    aria-label=format!("Convert {} to expression", source_label)
+                    title="Convert to expression"
+                    on:click=move |_| {
+                        let new_index = sources.get().len();
+                        sources.update(|items| {
+                            items.push(DatasetSourceDraft {
+                                source_alias: format!("source_{}", new_index + 1),
+                                ..DatasetSourceDraft::default()
+                            });
                         });
-                    });
-                    expression.update(|draft| {
-                        replace_source_with_expression(draft, index, new_index);
-                    });
-                    designer_selection.set(DatasetDesignerSelection::Source(new_index));
-                    designer_sheet_open.set(true);
-                }
-            >
-                "Convert To Expression"
-            </button>
+                        expression.update(|draft| {
+                            replace_source_with_expression(draft, index, new_index);
+                        });
+                        designer_selection.set(DatasetDesignerSelection::Source(new_index));
+                        designer_sheet_open.set(true);
+                    }
+                >
+                    <TableColumnsSplit class="icon-button__icon"/>
+                </button>
+                <button
+                    class="icon-button icon-button--danger dataset-expression-remove"
+                    type="button"
+                    aria-label=format!("Remove input {}", remove_label)
+                    title="Remove input"
+                    on:click=move |_| {
+                        if confirm_action("Remove this dataset input and its projected fields?") {
+                            let removed_alias = sources.get().get(index).map(|source| source.source_alias.clone());
+                            sources.update(|items| {
+                                if index < items.len() {
+                                    items.remove(index);
+                                }
+                                if items.is_empty() {
+                                    items.push(DatasetSourceDraft::default());
+                                }
+                            });
+                            if let Some(alias) = removed_alias {
+                                fields.update(|items| items.retain(|field| field.source_alias != alias));
+                            }
+                            expression.update(|draft| {
+                                *draft = remove_source_from_expression(draft, index)
+                                    .unwrap_or_else(DatasetExpressionDraft::default);
+                            });
+                            designer_selection.set(DatasetDesignerSelection::Operation(Vec::new()));
+                            designer_sheet_open.set(false);
+                        }
+                    }
+                >
+                    <X class="icon-button__icon"/>
+                </button>
+            </div>
         </div>
     }.into_any()
 }

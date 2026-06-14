@@ -1671,23 +1671,31 @@ input {
 }
 
 .dataset-expression-panel {
-  position: relative;
   display: grid;
-  gap: 0.55rem;
-  min-width: 10rem;
+  min-width: 12rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
   background: var(--color-table-row);
-  padding: 0.65rem 0.65rem 0.65rem 0.65rem;
+  padding: 0.55rem;
 }
 
-.dataset-expression-remove {
-  position: absolute;
-  top: -0.55rem;
-  right: -0.55rem;
-  width: 1.8rem;
-  min-width: 1.8rem;
-  min-height: 1.8rem;
+.dataset-expression-panel__controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.dataset-expression-panel__controls .dataset-expression-button--source {
+  min-height: 2.25rem;
+  padding: 0.45rem 0.65rem;
+}
+
+.dataset-expression-remove,
+.dataset-expression-nest-button {
+  width: 2.25rem;
+  min-width: 2.25rem;
+  min-height: 2.25rem;
 }
 
 .dataset-expression-button,
@@ -1735,7 +1743,6 @@ input {
   cursor: pointer;
 }
 
-.dataset-expression-nest-button,
 .dataset-expression-chain-add {
   white-space: nowrap;
 }
