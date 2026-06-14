@@ -74,7 +74,7 @@ fn visibility_tree_branch(
     let all_nodes_for_descendants = all_nodes.clone();
     let children = child_nodes(&visible_nodes, &node.id);
     let has_children = !children.is_empty();
-    let child_count = children.len();
+    let children_for_selected_count = children.clone();
     let node_scope = vec![node.id.clone()];
     let parent_scope = node_and_parent_ids(&all_nodes_for_parents, &parents_node);
     let descendant_scope = node_and_descendant_ids(&all_nodes_for_descendants, &descendants_node);
@@ -125,12 +125,18 @@ fn visibility_tree_branch(
                         )}</span>
                     </span>
                     <span class="dataset-visibility-node__count">
-                        {if child_count == 0 {
-                            "No visible children".to_string()
-                        } else if child_count == 1 {
-                            "1 visible child".to_string()
-                        } else {
-                            format!("{child_count} visible children")
+                        {move || {
+                            let selected_count = selected_direct_child_count(
+                                &children_for_selected_count,
+                                &visibility_node_ids.get(),
+                            );
+                            if selected_count == 0 {
+                                "No selected children".to_string()
+                            } else if selected_count == 1 {
+                                "1 selected child".to_string()
+                            } else {
+                                format!("{selected_count} selected children")
+                            }
                         }}
                     </span>
                     <span class="dataset-visibility-node__toggle" aria-hidden="true">
@@ -238,6 +244,13 @@ fn toggle_visibility_scope(selected: &mut BTreeSet<String>, scope: &[String]) {
             selected.insert(id.clone());
         }
     }
+}
+
+fn selected_direct_child_count(children: &[NodeResponse], selected: &BTreeSet<String>) -> usize {
+    children
+        .iter()
+        .filter(|child| selected.contains(&child.id))
+        .count()
 }
 
 fn sorted_nodes(mut nodes: Vec<NodeResponse>) -> Vec<NodeResponse> {
