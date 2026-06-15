@@ -178,13 +178,18 @@ pub(in crate::features::datasets) struct DatasetAggregationMetricPayload {
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub(in crate::features::datasets) struct DatasetRowPickerPayload {
     pub(in crate::features::datasets) sort_fields: Vec<DatasetRowPickerSortPayload>,
+    #[serde(default = "default_row_picker_direction")]
+    pub(in crate::features::datasets) direction: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub(in crate::features::datasets) struct DatasetRowPickerSortPayload {
     pub(in crate::features::datasets) field_key: String,
-    pub(in crate::features::datasets) direction: String,
     pub(in crate::features::datasets) position: i32,
+}
+
+fn default_row_picker_direction() -> String {
+    "lowest".into()
 }
 
 #[allow(dead_code)]

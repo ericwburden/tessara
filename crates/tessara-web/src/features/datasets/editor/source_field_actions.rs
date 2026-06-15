@@ -37,6 +37,7 @@ pub(crate) fn add_fields_from_source(
                     label: option.label,
                     source_alias: source.source_alias.clone(),
                     source_field_key: option.key,
+                    field_type: option.field_type,
                 });
             }
         });

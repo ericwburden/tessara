@@ -76,6 +76,7 @@ pub(crate) fn DatasetFieldsEditor(
                                                                                     label: option.label.clone(),
                                                                                     source_alias: source_alias_for_all.clone(),
                                                                                     source_field_key: option.key.clone(),
+                                                                                    field_type: option.field_type.clone(),
                                                                                 });
                                                                             }
                                                                         }
@@ -111,6 +112,7 @@ pub(crate) fn DatasetFieldsEditor(
                                                 let option_key_for_include = option_key.clone();
                                                 let option_key_for_label = option_key.clone();
                                                 let option_label_for_include = option.label.clone();
+                                                let option_field_type_for_include = option.field_type.clone();
                                                 let field_key_for_include = field_key.clone();
                                                 view! {
                                                     <tr>
@@ -132,6 +134,7 @@ pub(crate) fn DatasetFieldsEditor(
                                                                                 label: option_label_for_include.clone(),
                                                                                 source_alias: source_alias_for_include.clone(),
                                                                                 source_field_key: option_key_for_include.clone(),
+                                                                                field_type: option_field_type_for_include.clone(),
                                                                             }),
                                                                             (false, Some(index)) => {
                                                                                 items.remove(index);

@@ -75,9 +75,9 @@ pub(crate) fn DatasetAggregationEditor(
                                     } else {
                                         vec![DatasetRowPickerSortDraft {
                                             field_key: sort_field,
-                                            direction: "lowest".into(),
                                         }]
                                     },
+                                    direction: "lowest".into(),
                                 });
                             });
                         }
@@ -243,22 +243,43 @@ pub(crate) fn DatasetAggregationEditor(
                                                 aggregation.update(|draft| {
                                                     let row_picker = draft.row_picker.get_or_insert_with(|| DatasetRowPickerDraft {
                                                         sort_fields: Vec::new(),
+                                                        direction: "lowest".into(),
                                                     });
                                                     row_picker.sort_fields.push(DatasetRowPickerSortDraft {
                                                         field_key,
-                                                        direction: "lowest".into(),
                                                     });
                                                 });
                                             }
                                         >"Add Sort Field"</button>
                                     </div>
+                                    <label class="form-field dataset-row-picker-direction">
+                                        <span>"Direction"</span>
+                                        <select
+                                            prop:value=move || aggregation
+                                                .get()
+                                                .row_picker
+                                                .map(|picker| picker.direction)
+                                                .unwrap_or_else(|| "lowest".into())
+                                            on:change=move |event| {
+                                                let value = event_target_value(&event);
+                                                aggregation.update(|draft| {
+                                                    let row_picker = draft.row_picker.get_or_insert_with(|| DatasetRowPickerDraft {
+                                                        sort_fields: Vec::new(),
+                                                        direction: "lowest".into(),
+                                                    });
+                                                    row_picker.direction = value;
+                                                });
+                                            }
+                                        >
+                                            <option value="lowest">"Lowest / earliest first"</option>
+                                            <option value="highest">"Highest / latest first"</option>
+                                        </select>
+                                    </label>
                                     <div class="table-wrap dataset-row-picker-table">
                                         <DataTable>
                                             <thead>
                                                 <tr>
-                                                    <th>"Order"</th>
                                                     <th>"Sort Field"</th>
-                                                    <th>"Direction"</th>
                                                     <th>"Remove"</th>
                                                 </tr>
                                             </thead>
@@ -274,7 +295,6 @@ pub(crate) fn DatasetAggregationEditor(
                                                         let current_field = sort.field_key.clone();
                                                         view! {
                                                             <tr>
-                                                                <td>{index + 1}</td>
                                                                 <td>
                                                                     <select
                                                                         prop:value=sort.field_key
@@ -303,24 +323,6 @@ pub(crate) fn DatasetAggregationEditor(
                                                                                 })
                                                                                 .collect_view()
                                                                         }}
-                                                                    </select>
-                                                                </td>
-                                                                <td>
-                                                                    <select
-                                                                        prop:value=sort.direction
-                                                                        on:change=move |event| {
-                                                                            let value = event_target_value(&event);
-                                                                            aggregation.update(|draft| {
-                                                                                if let Some(row_picker) = &mut draft.row_picker {
-                                                                                    if let Some(sort) = row_picker.sort_fields.get_mut(index) {
-                                                                                        sort.direction = value;
-                                                                                    }
-                                                                                }
-                                                                            });
-                                                                        }
-                                                                    >
-                                                                        <option value="lowest">"Lowest / earliest first"</option>
-                                                                        <option value="highest">"Highest / latest first"</option>
                                                                     </select>
                                                                 </td>
                                                                 <td>
@@ -367,8 +369,9 @@ pub(crate) fn DatasetAggregationEditor(
                             on:click=move |_| {
                                 aggregation.update(|draft| {
                                     draft.row_picker = None;
-                                    let next = draft.metrics.len() + 1;
+                                    let next = next_metric_id(&draft.metrics);
                                     draft.metrics.push(DatasetAggregationMetricDraft {
+                                        id: next,
                                         key: format!("metric_{next}"),
                                         label: format!("Metric {next}"),
                                         function: "count_rows".into(),
@@ -390,97 +393,151 @@ pub(crate) fn DatasetAggregationEditor(
                                 </tr>
                             </thead>
                             <tbody>
-                                {move || aggregation.get().metrics.into_iter().enumerate().map(|(index, metric)| {
-                                    view! {
-                                        <tr>
-                                            <td>
-                                                <select
-                                                    disabled=move || !aggregation_enabled()
-                                                    prop:value=metric.function.clone()
-                                                    on:change=move |event| {
-                                                        let value = event_target_value(&event);
-                                                        aggregation.update(|draft| {
-                                                            if let Some(metric) = draft.metrics.get_mut(index) {
-                                                                metric.function = value;
-                                                                if metric.function == "count_rows" {
-                                                                    metric.source_field_key.clear();
+                                <For
+                                    each=move || aggregation.get().metrics
+                                    key=|metric| metric.id
+                                    children=move |metric| {
+                                        let metric_id = metric.id;
+                                        view! {
+                                            <tr>
+                                                <td>
+                                                    <select
+                                                        disabled=move || !aggregation_enabled()
+                                                        prop:value=move || aggregation
+                                                            .get()
+                                                            .metrics
+                                                            .into_iter()
+                                                            .find(|metric| metric.id == metric_id)
+                                                            .map(|metric| metric.function)
+                                                            .unwrap_or_else(|| "count_rows".into())
+                                                        on:change=move |event| {
+                                                            let value = event_target_value(&event);
+                                                            aggregation.update(|draft| {
+                                                                if let Some(metric) = draft.metrics.iter_mut().find(|metric| metric.id == metric_id) {
+                                                                    metric.function = value;
+                                                                    if metric.function == "count_rows"
+                                                                        || !metric_source_field_is_allowed(
+                                                                            &metric.function,
+                                                                            &metric.source_field_key,
+                                                                            &projected_fields(),
+                                                                        )
+                                                                    {
+                                                                        metric.source_field_key.clear();
+                                                                    }
                                                                 }
-                                                            }
-                                                        });
-                                                    }
-                                                >
-                                                    <option value="count_rows">"Count rows"</option>
-                                                    <option value="count_values">"Count values present"</option>
-                                                    <option value="sum">"Sum"</option>
-                                                    <option value="average">"Average"</option>
-                                                    <option value="min">"Min"</option>
-                                                    <option value="max">"Max"</option>
-                                                </select>
-                                            </td>
-                                            <td>
-                                                <select
-                                                    disabled=move || !aggregation_enabled() || metric.function == "count_rows"
-                                                    prop:value=metric.source_field_key.clone()
-                                                    on:change=move |event| {
-                                                        let value = event_target_value(&event);
-                                                        aggregation.update(|draft| {
-                                                            if let Some(metric) = draft.metrics.get_mut(index) {
-                                                                metric.source_field_key = value;
-                                                            }
-                                                        });
-                                                    }
-                                                >
-                                                    <option value="">"Select field"</option>
-                                                    {move || projected_fields().into_iter().map(|field| {
-                                                        view! { <option value=field.key>{field_option_label(&field)}</option> }
-                                                    }).collect_view()}
-                                                </select>
-                                            </td>
-                                            <td>
-                                                <input
-                                                    disabled=move || !aggregation_enabled()
-                                                    prop:value=metric.key
-                                                    on:input=move |event| {
-                                                        let value = event_target_value(&event);
-                                                        aggregation.update(|draft| {
-                                                            if let Some(metric) = draft.metrics.get_mut(index) {
-                                                                metric.key = value;
-                                                            }
-                                                        });
-                                                    }
-                                                />
-                                            </td>
-                                            <td>
-                                                <input
-                                                    disabled=move || !aggregation_enabled()
-                                                    prop:value=metric.label
-                                                    on:input=move |event| {
-                                                        let value = event_target_value(&event);
-                                                        aggregation.update(|draft| {
-                                                            if let Some(metric) = draft.metrics.get_mut(index) {
-                                                                metric.label = value;
-                                                            }
-                                                        });
-                                                    }
-                                                />
-                                            </td>
-                                            <td>
-                                                <button
-                                                    class="button button--secondary button--compact"
-                                                    disabled=move || !aggregation_enabled()
-                                                    type="button"
-                                                    on:click=move |_| {
-                                                        aggregation.update(|draft| {
-                                                            if index < draft.metrics.len() {
-                                                                draft.metrics.remove(index);
-                                                            }
-                                                        });
-                                                    }
-                                                >"Remove"</button>
-                                            </td>
-                                        </tr>
+                                                            });
+                                                        }
+                                                    >
+                                                        <option value="count_rows">"Count rows"</option>
+                                                        <option value="count_values">"Count values present"</option>
+                                                        <option value="sum">"Sum"</option>
+                                                        <option value="average">"Average"</option>
+                                                        <option value="min">"Min"</option>
+                                                        <option value="max">"Max"</option>
+                                                    </select>
+                                                </td>
+                                                <td>
+                                                    <select
+                                                        disabled=move || {
+                                                            !aggregation_enabled()
+                                                                || aggregation
+                                                                    .get()
+                                                                    .metrics
+                                                                    .into_iter()
+                                                                    .find(|metric| metric.id == metric_id)
+                                                                    .map(|metric| metric.function == "count_rows")
+                                                                    .unwrap_or(true)
+                                                        }
+                                                        prop:value=move || aggregation
+                                                            .get()
+                                                            .metrics
+                                                            .into_iter()
+                                                            .find(|metric| metric.id == metric_id)
+                                                            .map(|metric| metric.source_field_key)
+                                                            .unwrap_or_default()
+                                                        on:change=move |event| {
+                                                            let value = event_target_value(&event);
+                                                            aggregation.update(|draft| {
+                                                                if let Some(metric) = draft.metrics.iter_mut().find(|metric| metric.id == metric_id) {
+                                                                    metric.source_field_key = value;
+                                                                }
+                                                            });
+                                                        }
+                                                    >
+                                                        <option value="">"Select field"</option>
+                                                        {move || {
+                                                            let function = aggregation
+                                                                .get()
+                                                                .metrics
+                                                                .into_iter()
+                                                                .find(|metric| metric.id == metric_id)
+                                                                .map(|metric| metric.function)
+                                                                .unwrap_or_else(|| "count_rows".into());
+                                                            eligible_metric_fields(&function, &projected_fields())
+                                                                .into_iter()
+                                                                .map(|field| {
+                                                                    view! { <option value=field.key>{field_option_label(&field)}</option> }
+                                                                })
+                                                                .collect_view()
+                                                        }}
+                                                    </select>
+                                                </td>
+                                                <td>
+                                                    <input
+                                                        disabled=move || !aggregation_enabled()
+                                                        prop:value=move || aggregation
+                                                            .get()
+                                                            .metrics
+                                                            .into_iter()
+                                                            .find(|metric| metric.id == metric_id)
+                                                            .map(|metric| metric.key)
+                                                            .unwrap_or_default()
+                                                        on:input=move |event| {
+                                                            let value = event_target_value(&event);
+                                                            aggregation.update(|draft| {
+                                                                if let Some(metric) = draft.metrics.iter_mut().find(|metric| metric.id == metric_id) {
+                                                                    metric.key = value;
+                                                                }
+                                                            });
+                                                        }
+                                                    />
+                                                </td>
+                                                <td>
+                                                    <input
+                                                        disabled=move || !aggregation_enabled()
+                                                        prop:value=move || aggregation
+                                                            .get()
+                                                            .metrics
+                                                            .into_iter()
+                                                            .find(|metric| metric.id == metric_id)
+                                                            .map(|metric| metric.label)
+                                                            .unwrap_or_default()
+                                                        on:input=move |event| {
+                                                            let value = event_target_value(&event);
+                                                            aggregation.update(|draft| {
+                                                                if let Some(metric) = draft.metrics.iter_mut().find(|metric| metric.id == metric_id) {
+                                                                    metric.label = value;
+                                                                }
+                                                            });
+                                                        }
+                                                    />
+                                                </td>
+                                                <td>
+                                                    <button
+                                                        class="button button--secondary button--compact"
+                                                        disabled=move || !aggregation_enabled()
+                                                        type="button"
+                                                        on:click=move |_| {
+                                                            aggregation.update(|draft| {
+                                                                draft.metrics.retain(|metric| metric.id != metric_id);
+                                                            });
+                                                        }
+                                                    >"Remove"</button>
+                                                </td>
+                                            </tr>
+                                        }
                                     }
-                                }).collect_view()}
+                                />
                             </tbody>
                         </DataTable>
                     </div>
@@ -494,6 +551,41 @@ pub(crate) fn DatasetAggregationEditor(
 
 fn field_option_label(field: &DatasetFieldDraft) -> String {
     format!("{} ({})", field.label, field.key)
+}
+
+fn next_metric_id(metrics: &[DatasetAggregationMetricDraft]) -> u64 {
+    metrics.iter().map(|metric| metric.id).max().unwrap_or(0) + 1
+}
+
+fn eligible_metric_fields(function: &str, fields: &[DatasetFieldDraft]) -> Vec<DatasetFieldDraft> {
+    fields
+        .iter()
+        .filter(|field| metric_field_type_is_allowed(function, &field.field_type))
+        .cloned()
+        .collect()
+}
+
+fn metric_source_field_is_allowed(
+    function: &str,
+    source_field_key: &str,
+    fields: &[DatasetFieldDraft],
+) -> bool {
+    if source_field_key.trim().is_empty() {
+        return false;
+    }
+    fields.iter().any(|field| {
+        field.key == source_field_key && metric_field_type_is_allowed(function, &field.field_type)
+    })
+}
+
+fn metric_field_type_is_allowed(function: &str, field_type: &str) -> bool {
+    match function {
+        "count_rows" => false,
+        "count_values" => true,
+        "sum" | "average" => field_type == "number",
+        "min" | "max" => matches!(field_type, "number" | "date" | "datetime" | "timestamp"),
+        _ => false,
+    }
 }
 
 fn first_available_sort_field(

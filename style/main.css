@@ -1867,7 +1867,7 @@ input {
 .dataset-aggregation-layout {
   display: grid;
   gap: 1rem;
-  grid-template-columns: minmax(0, 1fr) minmax(min(24rem, 100%), 0.9fr);
+  grid-template-columns: minmax(0, 1fr);
   align-items: start;
 }
 
@@ -2050,6 +2050,10 @@ input {
   align-self: start;
 }
 
+.dataset-row-picker-direction {
+  max-width: 20rem;
+}
+
 .dataset-aggregation-selected-list ul {
   display: grid;
   gap: 0.5rem;
@@ -2100,7 +2104,7 @@ input {
 }
 
 .dataset-row-picker-table .data-table {
-  min-width: 34rem;
+  min-width: 28rem;
 }
 
 .dataset-row-picker-table select {

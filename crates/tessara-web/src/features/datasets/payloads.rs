@@ -96,14 +96,16 @@ fn aggregation_payload_from_draft(
             .filter(|(_, sort)| !sort.field_key.trim().is_empty())
             .map(|(index, sort)| DatasetRowPickerSortPayload {
                 field_key: sort.field_key,
-                direction: sort.direction,
                 position: index as i32,
             })
             .collect::<Vec<_>>();
         if sort_fields.is_empty() {
             None
         } else {
-            Some(DatasetRowPickerPayload { sort_fields })
+            Some(DatasetRowPickerPayload {
+                sort_fields,
+                direction: row_picker.direction,
+            })
         }
     });
     let group_fields = aggregation

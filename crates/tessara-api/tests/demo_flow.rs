@@ -387,9 +387,9 @@ async fn admin_dataset_query_designer_materializes_generated_sql() {
             "row_picker": {
                 "sort_fields": [{
                     "field_key": field_key,
-                    "direction": "lowest",
                     "position": 0
-                }]
+                }],
+                "direction": "lowest"
             }
         }
     });
@@ -476,11 +476,33 @@ async fn admin_dataset_query_designer_materializes_generated_sql() {
             "POST",
             "/api/admin/datasets/sql-preview",
             &admin_token,
-            Some(invalid_average_payload),
+            Some(invalid_average_payload.clone()),
         ),
     )
     .await;
     assert_eq!(invalid_status, StatusCode::BAD_REQUEST);
+
+    let mut invalid_max_payload = invalid_average_payload.clone();
+    invalid_max_payload["name"] = json!("Invalid Max Dataset");
+    invalid_max_payload["slug"] = json!("invalid-max-dataset");
+    invalid_max_payload["aggregation"]["metrics"] = json!([{
+        "key": "max_text",
+        "label": "Max Text",
+        "function": "max",
+        "source_field_key": field_key,
+        "position": 0
+    }]);
+    let invalid_max_status = request_status(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/datasets/sql-preview",
+            &admin_token,
+            Some(invalid_max_payload),
+        ),
+    )
+    .await;
+    assert_eq!(invalid_max_status, StatusCode::BAD_REQUEST);
 }
 
 async fn test_app() -> Option<axum::Router> {

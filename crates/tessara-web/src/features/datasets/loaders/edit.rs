@@ -74,6 +74,7 @@ pub(in crate::features::datasets) fn load_dataset_for_edit(
                         label: field.label,
                         source_alias: field.source_alias,
                         source_field_key: field.source_field_key,
+                        field_type: field.field_type,
                     })
                     .collect::<Vec<_>>();
                 fields.set(field_drafts.clone());
@@ -86,7 +87,9 @@ pub(in crate::features::datasets) fn load_dataset_for_edit(
                             metrics: aggregation
                                 .metrics
                                 .into_iter()
-                                .map(|metric| DatasetAggregationMetricDraft {
+                                .enumerate()
+                                .map(|(index, metric)| DatasetAggregationMetricDraft {
+                                    id: index as u64 + 1,
                                     key: metric.key,
                                     label: metric.label,
                                     function: metric.function,
@@ -100,9 +103,9 @@ pub(in crate::features::datasets) fn load_dataset_for_edit(
                                         .into_iter()
                                         .map(|sort| DatasetRowPickerSortDraft {
                                             field_key: sort.field_key,
-                                            direction: sort.direction,
                                         })
                                         .collect(),
+                                    direction: row_picker.direction,
                                 }
                             }),
                         })

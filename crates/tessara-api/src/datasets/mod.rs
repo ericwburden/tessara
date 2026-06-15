@@ -1150,7 +1150,7 @@ impl<'a> QueryCompiler<'a> {
                 .sort_fields
                 .iter()
                 .map(|sort| {
-                    let direction = if sort.direction == "highest" {
+                    let direction = if row_picker.direction == "highest" {
                         "DESC"
                     } else {
                         "ASC"
@@ -1286,6 +1286,11 @@ fn validate_dataset_aggregation(
             row_picker
                 .sort_fields
                 .sort_by_key(|sort| (sort.position, sort.field_key.clone()));
+            if !matches!(row_picker.direction.as_str(), "lowest" | "highest") {
+                return Err(ApiError::BadRequest(
+                    "row picker direction must be 'lowest' or 'highest'".into(),
+                ));
+            }
             let mut seen_sort_fields = BTreeSet::new();
             for sort in &row_picker.sort_fields {
                 require_text("row picker sort field", &sort.field_key)?;
@@ -1300,11 +1305,6 @@ fn validate_dataset_aggregation(
                         "row picker sort field '{}' is duplicated",
                         sort.field_key
                     )));
-                }
-                if !matches!(sort.direction.as_str(), "lowest" | "highest") {
-                    return Err(ApiError::BadRequest(
-                        "row picker direction must be 'lowest' or 'highest'".into(),
-                    ));
                 }
             }
             Ok(row_picker)
@@ -1408,10 +1408,7 @@ impl AggregationFunction {
         let allowed = match self {
             Self::Sum | Self::Average => matches!(field_type, "number"),
             Self::Min | Self::Max => {
-                matches!(
-                    field_type,
-                    "number" | "date" | "text" | "single_choice" | "multi_choice" | "boolean"
-                )
+                matches!(field_type, "number" | "date" | "datetime" | "timestamp")
             }
             Self::CountRows | Self::CountValues => true,
         };

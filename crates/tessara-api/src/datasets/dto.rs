@@ -46,14 +46,19 @@ pub struct DatasetAggregationMetricRequest {
 pub struct DatasetRowPickerRequest {
     #[serde(default)]
     pub(crate) sort_fields: Vec<DatasetRowPickerSortRequest>,
+    #[serde(default = "default_row_picker_direction")]
+    pub(crate) direction: String,
 }
 
 /// One ordered sort criterion for representative row selection.
 #[derive(Clone, Deserialize, Serialize)]
 pub struct DatasetRowPickerSortRequest {
     pub(crate) field_key: String,
-    pub(crate) direction: String,
     pub(crate) position: i32,
+}
+
+fn default_row_picker_direction() -> String {
+    "lowest".into()
 }
 
 /// Recursive visual dataset query expression.

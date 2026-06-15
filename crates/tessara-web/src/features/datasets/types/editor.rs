@@ -18,6 +18,7 @@ pub(in crate::features::datasets) struct DatasetFieldDraft {
     pub(in crate::features::datasets) label: String,
     pub(in crate::features::datasets) source_alias: String,
     pub(in crate::features::datasets) source_field_key: String,
+    pub(in crate::features::datasets) field_type: String,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -30,6 +31,7 @@ pub(in crate::features::datasets) struct DatasetAggregationDraft {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(in crate::features::datasets) struct DatasetAggregationMetricDraft {
+    pub(in crate::features::datasets) id: u64,
     pub(in crate::features::datasets) key: String,
     pub(in crate::features::datasets) label: String,
     pub(in crate::features::datasets) function: String,
@@ -39,12 +41,12 @@ pub(in crate::features::datasets) struct DatasetAggregationMetricDraft {
 #[derive(Clone, Debug, PartialEq)]
 pub(in crate::features::datasets) struct DatasetRowPickerDraft {
     pub(in crate::features::datasets) sort_fields: Vec<DatasetRowPickerSortDraft>,
+    pub(in crate::features::datasets) direction: String,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub(in crate::features::datasets) struct DatasetRowPickerSortDraft {
     pub(in crate::features::datasets) field_key: String,
-    pub(in crate::features::datasets) direction: String,
 }
 
 #[derive(Clone, Debug, PartialEq)]
