@@ -1408,7 +1408,10 @@ impl AggregationFunction {
         let allowed = match self {
             Self::Sum | Self::Average => matches!(field_type, "number"),
             Self::Min | Self::Max => {
-                matches!(field_type, "number" | "date" | "datetime" | "timestamp")
+                matches!(
+                    field_type,
+                    "number" | "date" | "datetime" | "timestamp" | "single_choice" | "multi_choice"
+                )
             }
             Self::CountRows | Self::CountValues => true,
         };

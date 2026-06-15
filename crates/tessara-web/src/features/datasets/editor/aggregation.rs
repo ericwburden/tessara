@@ -12,6 +12,8 @@ pub(crate) fn DatasetAggregationEditor(
 ) -> impl IntoView {
     let group_picker_open = RwSignal::new(false);
     let group_picker_search = RwSignal::new(String::new());
+    let sort_picker_open = RwSignal::new(false);
+    let sort_picker_search = RwSignal::new(String::new());
     let projected_fields = move || fields.get();
     let group_fields = move || aggregation.get().group_fields;
     let aggregation_enabled = move || aggregation.get().enabled;
@@ -21,6 +23,27 @@ pub(crate) fn DatasetAggregationEditor(
         projected_fields()
             .into_iter()
             .filter(|field| selected.contains(&field.key))
+            .collect::<Vec<_>>()
+    };
+    let sort_fields = move || {
+        aggregation
+            .get()
+            .row_picker
+            .map(|picker| picker.sort_fields)
+            .unwrap_or_default()
+    };
+    let selected_sort_fields = move || {
+        let selected = sort_fields();
+        projected_fields()
+            .into_iter()
+            .filter(|field| selected.iter().any(|sort| sort.field_key == field.key))
+            .collect::<Vec<_>>()
+    };
+    let available_sort_fields = move || {
+        let selected = sort_fields();
+        projected_fields()
+            .into_iter()
+            .filter(|field| !selected.iter().any(|sort| sort.field_key == field.key))
             .collect::<Vec<_>>()
     };
     let available_group_fields = move || {
@@ -225,33 +248,7 @@ pub(crate) fn DatasetAggregationEditor(
                             view! {
                                 <section class="dataset-aggregation-panel dataset-aggregation-panel--row">
                                     <h4>"Pick Whole Row"</h4>
-                                    <div class="dataset-editor-section__header dataset-editor-section__header--compact">
-                                        <span class="muted">"Sort fields are applied in order."</span>
-                                        <button
-                                            class="button button--secondary button--compact"
-                                            type="button"
-                                            on:click=move |_| {
-                                                let current = aggregation
-                                                    .get()
-                                                    .row_picker
-                                                    .map(|picker| picker.sort_fields)
-                                                    .unwrap_or_default();
-                                                let field_key = first_available_sort_field(&projected_fields(), &current);
-                                                if field_key.is_empty() {
-                                                    return;
-                                                }
-                                                aggregation.update(|draft| {
-                                                    let row_picker = draft.row_picker.get_or_insert_with(|| DatasetRowPickerDraft {
-                                                        sort_fields: Vec::new(),
-                                                        direction: "lowest".into(),
-                                                    });
-                                                    row_picker.sort_fields.push(DatasetRowPickerSortDraft {
-                                                        field_key,
-                                                    });
-                                                });
-                                            }
-                                        >"Add Sort Field"</button>
-                                    </div>
+                                    <p class="muted">"Sort fields are applied in order."</p>
                                     <label class="form-field dataset-row-picker-direction">
                                         <span>"Direction"</span>
                                         <select
@@ -275,78 +272,127 @@ pub(crate) fn DatasetAggregationEditor(
                                             <option value="highest">"Highest / latest first"</option>
                                         </select>
                                     </label>
-                                    <div class="table-wrap dataset-row-picker-table">
-                                        <DataTable>
-                                            <thead>
-                                                <tr>
-                                                    <th>"Sort Field"</th>
-                                                    <th>"Remove"</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {move || {
-                                                    let sort_fields = aggregation
-                                                        .get()
-                                                        .row_picker
-                                                        .map(|picker| picker.sort_fields)
-                                                        .unwrap_or_default();
-                                                    let sort_count = sort_fields.len();
-                                                    sort_fields.into_iter().enumerate().map(|(index, sort)| {
-                                                        let current_field = sort.field_key.clone();
-                                                        view! {
-                                                            <tr>
-                                                                <td>
-                                                                    <select
-                                                                        prop:value=sort.field_key
-                                                                        on:change=move |event| {
-                                                                            let value = event_target_value(&event);
-                                                                            aggregation.update(|draft| {
-                                                                                if let Some(row_picker) = &mut draft.row_picker {
-                                                                                    if let Some(sort) = row_picker.sort_fields.get_mut(index) {
-                                                                                        sort.field_key = value;
-                                                                                    }
+                                    <div class="form-field">
+                                        <span>"Add Sort Field"</span>
+                                        <div class=move || if sort_picker_open.get() { "dataset-combobox is-open" } else { "dataset-combobox" }>
+                                            <button
+                                                class="dataset-combobox__trigger"
+                                                type="button"
+                                                aria-haspopup="listbox"
+                                                aria-expanded=move || sort_picker_open.get().to_string()
+                                                on:click=move |_| sort_picker_open.update(|open| *open = !*open)
+                                            >
+                                                <span class="truncate">"Select field..."</span>
+                                                <ChevronsUpDown class="dataset-combobox__trigger-icon"/>
+                                            </button>
+                                            <button
+                                                class="dataset-combobox__scrim"
+                                                type="button"
+                                                aria-label="Close sort field picker"
+                                                on:click=move |_| sort_picker_open.set(false)
+                                            ></button>
+                                            <div class="dataset-combobox__content blurred-surface">
+                                                <div class="dataset-combobox__search">
+                                                    <Search class="dataset-combobox__search-icon"/>
+                                                    <input
+                                                        class="dataset-combobox__input"
+                                                        type="search"
+                                                        placeholder="Search fields..."
+                                                        prop:value=move || sort_picker_search.get()
+                                                        on:input=move |event| sort_picker_search.set(event_target_value(&event))
+                                                    />
+                                                </div>
+                                                <div class="dataset-combobox__list" role="listbox">
+                                                    {move || {
+                                                        let query = sort_picker_search.get().trim().to_lowercase();
+                                                        let fields = available_sort_fields()
+                                                            .into_iter()
+                                                            .filter(|field| {
+                                                                if query.is_empty() {
+                                                                    true
+                                                                } else {
+                                                                    field_option_label(field).to_lowercase().contains(&query)
+                                                                }
+                                                            })
+                                                            .collect::<Vec<_>>();
+                                                        if fields.is_empty() {
+                                                            view! {
+                                                                <div class="dataset-combobox__empty">"No fields found."</div>
+                                                            }.into_any()
+                                                        } else {
+                                                            view! {
+                                                                <div class="dataset-combobox__group">
+                                                                    {fields.into_iter().map(|field| {
+                                                                        let field_key = field.key.clone();
+                                                                        let label = field_option_label(&field);
+                                                                        view! {
+                                                                            <button
+                                                                                class="dataset-combobox__item"
+                                                                                type="button"
+                                                                                role="option"
+                                                                                on:click=move |_| {
+                                                                                    aggregation.update(|draft| {
+                                                                                        let row_picker = draft.row_picker.get_or_insert_with(|| DatasetRowPickerDraft {
+                                                                                            sort_fields: Vec::new(),
+                                                                                            direction: "lowest".into(),
+                                                                                        });
+                                                                                        if !row_picker.sort_fields.iter().any(|sort| sort.field_key == field_key) {
+                                                                                            row_picker.sort_fields.push(DatasetRowPickerSortDraft {
+                                                                                                field_key: field_key.clone(),
+                                                                                            });
+                                                                                        }
+                                                                                    });
+                                                                                    sort_picker_search.set(String::new());
+                                                                                    sort_picker_open.set(false);
                                                                                 }
-                                                                            });
+                                                                            >
+                                                                                {label}
+                                                                            </button>
                                                                         }
-                                                                    >
-                                                                        {move || {
-                                                                            let selected = aggregation
-                                                                                .get()
-                                                                                .row_picker
-                                                                                .map(|picker| picker.sort_fields.into_iter().map(|sort| sort.field_key).collect::<Vec<_>>())
-                                                                                .unwrap_or_default();
-                                                                            projected_fields()
-                                                                                .into_iter()
-                                                                                .filter(|field| field.key == current_field || !selected.contains(&field.key))
-                                                                                .map(|field| {
-                                                                                    view! { <option value=field.key>{field_option_label(&field)}</option> }
-                                                                                })
-                                                                                .collect_view()
-                                                                        }}
-                                                                    </select>
-                                                                </td>
-                                                                <td>
+                                                                    }).collect_view()}
+                                                                </div>
+                                                            }.into_any()
+                                                        }
+                                                    }}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="dataset-aggregation-selected-list">
+                                        {move || {
+                                            let selected = selected_sort_fields();
+                                            if selected.is_empty() {
+                                                view! { <p class="muted">"No sort fields selected."</p> }.into_any()
+                                            } else {
+                                                view! {
+                                                    <ul>
+                                                        {selected.into_iter().map(|field| {
+                                                            let field_key = field.key.clone();
+                                                            let field_key_for_remove = field_key.clone();
+                                                            view! {
+                                                                <li>
+                                                                    <span>
+                                                                        <strong>{field.label}</strong>
+                                                                        <code>{field_key}</code>
+                                                                    </span>
                                                                     <button
                                                                         class="button button--secondary button--compact"
-                                                                        disabled=sort_count <= 1
                                                                         type="button"
                                                                         on:click=move |_| {
                                                                             aggregation.update(|draft| {
                                                                                 if let Some(row_picker) = &mut draft.row_picker {
-                                                                                    if row_picker.sort_fields.len() > 1 && index < row_picker.sort_fields.len() {
-                                                                                        row_picker.sort_fields.remove(index);
-                                                                                    }
+                                                                                    row_picker.sort_fields.retain(|sort| sort.field_key != field_key_for_remove);
                                                                                 }
                                                                             });
                                                                         }
                                                                     >"Remove"</button>
-                                                                </td>
-                                                            </tr>
-                                                        }
-                                                    }).collect_view()
-                                                }}
-                                            </tbody>
-                                        </DataTable>
+                                                                </li>
+                                                            }
+                                                        }).collect_view()}
+                                                    </ul>
+                                                }.into_any()
+                                            }
+                                        }}
                                     </div>
                                 </section>
                             }.into_any()
@@ -398,6 +444,8 @@ pub(crate) fn DatasetAggregationEditor(
                                     key=|metric| metric.id
                                     children=move |metric| {
                                         let metric_id = metric.id;
+                                        let initial_key = metric.key.clone();
+                                        let initial_label = metric.label.clone();
                                         view! {
                                             <tr>
                                                 <td>
@@ -485,14 +533,8 @@ pub(crate) fn DatasetAggregationEditor(
                                                 <td>
                                                     <input
                                                         disabled=move || !aggregation_enabled()
-                                                        prop:value=move || aggregation
-                                                            .get()
-                                                            .metrics
-                                                            .into_iter()
-                                                            .find(|metric| metric.id == metric_id)
-                                                            .map(|metric| metric.key)
-                                                            .unwrap_or_default()
-                                                        on:input=move |event| {
+                                                        value=initial_key
+                                                        on:change=move |event| {
                                                             let value = event_target_value(&event);
                                                             aggregation.update(|draft| {
                                                                 if let Some(metric) = draft.metrics.iter_mut().find(|metric| metric.id == metric_id) {
@@ -505,14 +547,8 @@ pub(crate) fn DatasetAggregationEditor(
                                                 <td>
                                                     <input
                                                         disabled=move || !aggregation_enabled()
-                                                        prop:value=move || aggregation
-                                                            .get()
-                                                            .metrics
-                                                            .into_iter()
-                                                            .find(|metric| metric.id == metric_id)
-                                                            .map(|metric| metric.label)
-                                                            .unwrap_or_default()
-                                                        on:input=move |event| {
+                                                        value=initial_label
+                                                        on:change=move |event| {
                                                             let value = event_target_value(&event);
                                                             aggregation.update(|draft| {
                                                                 if let Some(metric) = draft.metrics.iter_mut().find(|metric| metric.id == metric_id) {
@@ -583,7 +619,10 @@ fn metric_field_type_is_allowed(function: &str, field_type: &str) -> bool {
         "count_rows" => false,
         "count_values" => true,
         "sum" | "average" => field_type == "number",
-        "min" | "max" => matches!(field_type, "number" | "date" | "datetime" | "timestamp"),
+        "min" | "max" => matches!(
+            field_type,
+            "number" | "date" | "datetime" | "timestamp" | "single_choice" | "multi_choice"
+        ),
         _ => false,
     }
 }
