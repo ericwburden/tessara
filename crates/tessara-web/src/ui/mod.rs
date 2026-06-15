@@ -11,6 +11,7 @@ pub(crate) fn empty_view() -> AnyView {
 
 mod breadcrumb;
 mod button;
+mod combobox;
 mod data_table;
 pub mod dropdown;
 mod empty_state;
@@ -26,6 +27,7 @@ mod timestamp;
 
 pub(crate) use breadcrumb::*;
 pub(crate) use button::*;
+pub(crate) use combobox::{Combobox, ComboboxOption};
 pub(crate) use data_table::{DataTable, SearchableDataTable};
 pub(crate) use dropdown::DropdownMenu;
 pub(crate) use empty_state::*;

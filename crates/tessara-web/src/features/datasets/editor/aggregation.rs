@@ -1,8 +1,7 @@
 //! Dataset editor aggregation controls.
 
 use super::super::types::*;
-use crate::ui::{DataTable, SegmentedToggle, SegmentedToggleOption};
-use icons::{ChevronsUpDown, Search};
+use crate::ui::{Combobox, ComboboxOption, DataTable, SegmentedToggle, SegmentedToggleOption};
 use leptos::prelude::*;
 
 #[component]
@@ -10,12 +9,6 @@ pub(crate) fn DatasetAggregationEditor(
     fields: RwSignal<Vec<DatasetFieldDraft>>,
     aggregation: RwSignal<DatasetAggregationDraft>,
 ) -> impl IntoView {
-    let group_picker_open = RwSignal::new(false);
-    let group_picker_search = RwSignal::new(String::new());
-    let group_search_input = NodeRef::<leptos::html::Input>::new();
-    let sort_picker_open = RwSignal::new(false);
-    let sort_picker_search = RwSignal::new(String::new());
-    let sort_search_input = NodeRef::<leptos::html::Input>::new();
     let projected_fields = move || fields.get();
     let group_fields = move || aggregation.get().group_fields;
     let aggregation_enabled = move || aggregation.get().enabled;
@@ -73,21 +66,10 @@ pub(crate) fn DatasetAggregationEditor(
             .map(|picker| picker.direction)
             .unwrap_or_else(|| "lowest".into())
     });
-
-    Effect::new(move |_| {
-        if group_picker_open.get() {
-            if let Some(input) = group_search_input.get() {
-                let _ = input.focus();
-            }
-        }
-    });
-    Effect::new(move |_| {
-        if sort_picker_open.get() {
-            if let Some(input) = sort_search_input.get() {
-                let _ = input.focus();
-            }
-        }
-    });
+    let available_group_options =
+        Signal::derive(move || field_combobox_options(available_group_fields()));
+    let available_sort_options =
+        Signal::derive(move || field_combobox_options(available_sort_fields()));
 
     view! {
         <section class="route-panel__section dataset-editor-section dataset-aggregation-section">
@@ -149,84 +131,20 @@ pub(crate) fn DatasetAggregationEditor(
                             <h4>"Grouping"</h4>
                             <div class="form-field">
                                 <span>"Add Group Field"</span>
-                                <div class=move || if group_picker_open.get() { "dataset-combobox is-open" } else { "dataset-combobox" }>
-                                    <button
-                                        class="dataset-combobox__trigger"
-                                        type="button"
-                                        aria-haspopup="listbox"
-                                        aria-expanded=move || group_picker_open.get().to_string()
-                                        on:click=move |_| group_picker_open.update(|open| *open = !*open)
-                                    >
-                                        <span class="truncate">"Select field..."</span>
-                                        <ChevronsUpDown class="dataset-combobox__trigger-icon"/>
-                                    </button>
-                                    <button
-                                        class="dataset-combobox__scrim"
-                                        type="button"
-                                        aria-label="Close group field picker"
-                                        on:click=move |_| group_picker_open.set(false)
-                                    ></button>
-                                    <div class="dataset-combobox__content blurred-surface">
-                                        <div class="dataset-combobox__search">
-                                            <Search class="dataset-combobox__search-icon"/>
-                                            <input
-                                                class="dataset-combobox__input"
-                                                type="search"
-                                                placeholder="Search fields..."
-                                                node_ref=group_search_input
-                                                prop:value=move || group_picker_search.get()
-                                                on:input=move |event| group_picker_search.set(event_target_value(&event))
-                                            />
-                                        </div>
-                                        <div class="dataset-combobox__list" role="listbox">
-                                            {move || {
-                                                let query = group_picker_search.get().trim().to_lowercase();
-                                                let fields = available_group_fields()
-                                                    .into_iter()
-                                                    .filter(|field| {
-                                                        if query.is_empty() {
-                                                            true
-                                                        } else {
-                                                            field_option_label(field).to_lowercase().contains(&query)
-                                                        }
-                                                    })
-                                                    .collect::<Vec<_>>();
-                                                if fields.is_empty() {
-                                                    view! {
-                                                        <div class="dataset-combobox__empty">"No fields found."</div>
-                                                    }.into_any()
-                                                } else {
-                                                    view! {
-                                                        <div class="dataset-combobox__group">
-                                                            {fields.into_iter().map(|field| {
-                                                                let field_key = field.key.clone();
-                                                                let label = field_option_label(&field);
-                                                                view! {
-                                                                    <button
-                                                                        class="dataset-combobox__item"
-                                                                        type="button"
-                                                                        role="option"
-                                                                        on:click=move |_| {
-                                                                            aggregation.update(|draft| {
-                                                                                if !draft.group_fields.contains(&field_key) {
-                                                                                    draft.group_fields.push(field_key.clone());
-                                                                                }
-                                                                            });
-                                                                            group_picker_search.set(String::new());
-                                                                            group_picker_open.set(false);
-                                                                        }
-                                                                    >
-                                                                        {label}
-                                                                    </button>
-                                                                }
-                                                            }).collect_view()}
-                                                        </div>
-                                                    }.into_any()
-                                                }
-                                            }}
-                                        </div>
-                                    </div>
-                                </div>
+                                <Combobox
+                                    options=available_group_options
+                                    placeholder="Select field..."
+                                    search_placeholder="Search fields..."
+                                    empty_label="No fields found."
+                                    aria_label="Add group field"
+                                    on_select=Callback::new(move |field_key: String| {
+                                        aggregation.update(|draft| {
+                                            if !draft.group_fields.contains(&field_key) {
+                                                draft.group_fields.push(field_key);
+                                            }
+                                        });
+                                    })
+                                />
                             </div>
                             <div class="dataset-aggregation-selected-list">
                                 {move || {
@@ -291,90 +209,26 @@ pub(crate) fn DatasetAggregationEditor(
                                     </div>
                                     <div class="form-field">
                                         <span>"Add Sort Field"</span>
-                                        <div class=move || if sort_picker_open.get() { "dataset-combobox is-open" } else { "dataset-combobox" }>
-                                            <button
-                                                class="dataset-combobox__trigger"
-                                                type="button"
-                                                aria-haspopup="listbox"
-                                                aria-expanded=move || sort_picker_open.get().to_string()
-                                                on:click=move |_| sort_picker_open.update(|open| *open = !*open)
-                                            >
-                                                <span class="truncate">"Select field..."</span>
-                                                <ChevronsUpDown class="dataset-combobox__trigger-icon"/>
-                                            </button>
-                                            <button
-                                                class="dataset-combobox__scrim"
-                                                type="button"
-                                                aria-label="Close sort field picker"
-                                                on:click=move |_| sort_picker_open.set(false)
-                                            ></button>
-                                            <div class="dataset-combobox__content blurred-surface">
-                                                <div class="dataset-combobox__search">
-                                                    <Search class="dataset-combobox__search-icon"/>
-                                                    <input
-                                                        class="dataset-combobox__input"
-                                                        type="search"
-                                                        placeholder="Search fields..."
-                                                        node_ref=sort_search_input
-                                                        prop:value=move || sort_picker_search.get()
-                                                        on:input=move |event| sort_picker_search.set(event_target_value(&event))
-                                                    />
-                                                </div>
-                                                <div class="dataset-combobox__list" role="listbox">
-                                                    {move || {
-                                                        let query = sort_picker_search.get().trim().to_lowercase();
-                                                        let fields = available_sort_fields()
-                                                            .into_iter()
-                                                            .filter(|field| {
-                                                                if query.is_empty() {
-                                                                    true
-                                                                } else {
-                                                                    field_option_label(field).to_lowercase().contains(&query)
-                                                                }
-                                                            })
-                                                            .collect::<Vec<_>>();
-                                                        if fields.is_empty() {
-                                                            view! {
-                                                                <div class="dataset-combobox__empty">"No fields found."</div>
-                                                            }.into_any()
-                                                        } else {
-                                                            view! {
-                                                                <div class="dataset-combobox__group">
-                                                                    {fields.into_iter().map(|field| {
-                                                                        let field_key = field.key.clone();
-                                                                        let label = field_option_label(&field);
-                                                                        view! {
-                                                                            <button
-                                                                                class="dataset-combobox__item"
-                                                                                type="button"
-                                                                                role="option"
-                                                                                on:click=move |_| {
-                                                                                    aggregation.update(|draft| {
-                                                                                        let row_picker = draft.row_picker.get_or_insert_with(|| DatasetRowPickerDraft {
-                                                                                            sort_fields: Vec::new(),
-                                                                                            direction: "lowest".into(),
-                                                                                        });
-                                                                                        if !row_picker.sort_fields.iter().any(|sort| sort.field_key == field_key) {
-                                                                                            row_picker.sort_fields.push(DatasetRowPickerSortDraft {
-                                                                                                field_key: field_key.clone(),
-                                                                                            });
-                                                                                        }
-                                                                                    });
-                                                                                    sort_picker_search.set(String::new());
-                                                                                    sort_picker_open.set(false);
-                                                                                }
-                                                                            >
-                                                                                {label}
-                                                                            </button>
-                                                                        }
-                                                                    }).collect_view()}
-                                                                </div>
-                                                            }.into_any()
-                                                        }
-                                                    }}
-                                                </div>
-                                            </div>
-                                        </div>
+                                        <Combobox
+                                            options=available_sort_options
+                                            placeholder="Select field..."
+                                            search_placeholder="Search fields..."
+                                            empty_label="No fields found."
+                                            aria_label="Add sort field"
+                                            on_select=Callback::new(move |field_key: String| {
+                                                aggregation.update(|draft| {
+                                                    let row_picker = draft.row_picker.get_or_insert_with(|| DatasetRowPickerDraft {
+                                                        sort_fields: Vec::new(),
+                                                        direction: "lowest".into(),
+                                                    });
+                                                    if !row_picker.sort_fields.iter().any(|sort| sort.field_key == field_key) {
+                                                        row_picker.sort_fields.push(DatasetRowPickerSortDraft {
+                                                            field_key,
+                                                        });
+                                                    }
+                                                });
+                                            })
+                                        />
                                     </div>
                                     <div class="dataset-aggregation-selected-list">
                                         {move || {
@@ -611,6 +465,16 @@ pub(crate) fn DatasetAggregationEditor(
 
 fn field_option_label(field: &DatasetFieldDraft) -> String {
     format!("{} ({})", field.label, field.key)
+}
+
+fn field_combobox_options(fields: Vec<DatasetFieldDraft>) -> Vec<ComboboxOption> {
+    fields
+        .into_iter()
+        .map(|field| ComboboxOption {
+            label: field_option_label(&field),
+            value: field.key,
+        })
+        .collect()
 }
 
 fn next_metric_id(metrics: &[DatasetAggregationMetricDraft]) -> u64 {

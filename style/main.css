@@ -1900,12 +1900,12 @@ input {
   width: 100%;
 }
 
-.dataset-combobox {
+.combobox {
   position: relative;
   width: 100%;
 }
 
-.dataset-combobox__trigger {
+.combobox__trigger {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1922,14 +1922,14 @@ input {
   text-align: left;
 }
 
-.dataset-combobox__trigger-icon {
+.combobox__trigger-icon {
   width: 1rem;
   height: 1rem;
   color: var(--color-muted);
   flex: 0 0 auto;
 }
 
-.dataset-combobox__scrim {
+.combobox__scrim {
   display: none;
   position: fixed;
   inset: 0;
@@ -1939,11 +1939,11 @@ input {
   padding: 0;
 }
 
-.dataset-combobox.is-open .dataset-combobox__scrim {
+.combobox.is-open .combobox__scrim {
   display: block;
 }
 
-.dataset-combobox__content {
+.combobox__content {
   display: none;
   position: absolute;
   top: calc(100% + 0.35rem);
@@ -1957,11 +1957,11 @@ input {
   box-shadow: var(--shadow);
 }
 
-.dataset-combobox.is-open .dataset-combobox__content {
+.combobox.is-open .combobox__content {
   display: block;
 }
 
-.dataset-combobox__search {
+.combobox__search {
   display: flex;
   align-items: center;
   gap: 0.55rem;
@@ -1969,14 +1969,14 @@ input {
   padding: 0.55rem 0.7rem;
 }
 
-.dataset-combobox__search-icon {
+.combobox__search-icon {
   width: 1rem;
   height: 1rem;
   color: var(--color-muted);
   flex: 0 0 auto;
 }
 
-.dataset-combobox__input {
+.combobox__input {
   min-height: 2rem;
   width: 100%;
   border: 0;
@@ -1987,13 +1987,13 @@ input {
   padding: 0;
 }
 
-.dataset-combobox__list {
+.combobox__list {
   max-height: 16rem;
   overflow: auto;
   padding: 0.3rem;
 }
 
-.dataset-combobox__item {
+.combobox__item {
   width: 100%;
   border: 0;
   border-radius: 6px;
@@ -2006,13 +2006,13 @@ input {
   text-align: left;
 }
 
-.dataset-combobox__item:hover,
-.dataset-combobox__item:focus-visible {
+.combobox__item:hover,
+.combobox__item:focus-visible {
   background: var(--semantic-info-soft);
   outline: none;
 }
 
-.dataset-combobox__empty {
+.combobox__empty {
   color: var(--color-muted);
   padding: 0.75rem;
 }
@@ -4717,3 +4717,4 @@ input {
   }
 
 }
+
