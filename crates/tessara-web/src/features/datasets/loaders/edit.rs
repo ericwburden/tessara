@@ -64,39 +64,48 @@ pub(in crate::features::datasets) fn load_dataset_for_edit(
                     source_drafts
                 });
                 expression.set(expression_draft);
-                fields.set(
-                    payload
-                        .fields
-                        .into_iter()
-                        .map(|field| DatasetFieldDraft {
-                            key: field.key,
-                            label: field.label,
-                            source_alias: field.source_alias,
-                            source_field_key: field.source_field_key,
-                        })
-                        .collect(),
-                );
+                let field_drafts = payload
+                    .fields
+                    .into_iter()
+                    .map(|field| DatasetFieldDraft {
+                        key: field.key,
+                        label: field.label,
+                        source_alias: field.source_alias,
+                        source_field_key: field.source_field_key,
+                    })
+                    .collect::<Vec<_>>();
+                fields.set(field_drafts.clone());
                 aggregation.set(
                     payload
                         .aggregation
-                        .map(|aggregation| DatasetAggregationDraft {
-                            group_fields: aggregation.group_fields,
-                            metrics: aggregation
-                                .metrics
-                                .into_iter()
-                                .map(|metric| DatasetAggregationMetricDraft {
-                                    key: metric.key,
-                                    label: metric.label,
-                                    function: metric.function,
-                                    source_field_key: metric.source_field_key.unwrap_or_default(),
+                        .map(|aggregation| {
+                            let has_node_grouping = aggregation.group_fields.iter().any(|key| {
+                                field_drafts.iter().any(|field| {
+                                    field.key == *key && field.source_field_key == "__node_id"
                                 })
-                                .collect(),
-                            row_picker: aggregation.row_picker.map(|row_picker| {
-                                DatasetRowPickerDraft {
-                                    sort_field_key: row_picker.sort_field_key,
-                                    direction: row_picker.direction,
-                                }
-                            }),
+                            });
+                            DatasetAggregationDraft {
+                                group_fields: aggregation.group_fields,
+                                metrics: aggregation
+                                    .metrics
+                                    .into_iter()
+                                    .map(|metric| DatasetAggregationMetricDraft {
+                                        key: metric.key,
+                                        label: metric.label,
+                                        function: metric.function,
+                                        source_field_key: metric
+                                            .source_field_key
+                                            .unwrap_or_default(),
+                                    })
+                                    .collect(),
+                                row_picker: aggregation.row_picker.map(|row_picker| {
+                                    DatasetRowPickerDraft {
+                                        sort_field_key: row_picker.sort_field_key,
+                                        direction: row_picker.direction,
+                                    }
+                                }),
+                                node_grouping_manually_removed: !has_node_grouping,
+                            }
                         })
                         .unwrap_or_default(),
                 );
