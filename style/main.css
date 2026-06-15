@@ -1884,8 +1884,8 @@ input {
 .dataset-aggregation-top-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
+  justify-content: flex-start;
+  gap: 1.25rem;
 }
 
 .dataset-aggregation-top-row__label {
@@ -2017,7 +2017,7 @@ input {
   padding: 0.75rem;
 }
 
-.dataset-aggregation-mode {
+.segmented-toggle {
   display: inline-grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.2rem;
@@ -2028,12 +2028,12 @@ input {
   background: var(--color-control);
 }
 
-.dataset-aggregation-mode--direction {
+.segmented-toggle--direction {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   width: min(32rem, 100%);
 }
 
-.dataset-aggregation-mode__option {
+.segmented-toggle__option {
   border: 0;
   border-radius: 999px;
   background: transparent;
@@ -2045,12 +2045,12 @@ input {
   padding: 0.4rem 0.8rem;
 }
 
-.dataset-aggregation-mode__option.is-active {
+.segmented-toggle__option.is-active {
   background: var(--semantic-primary);
   color: var(--semantic-primary-foreground);
 }
 
-.dataset-aggregation-mode__option:disabled {
+.segmented-toggle__option:disabled {
   cursor: not-allowed;
   opacity: 0.55;
 }
@@ -2061,7 +2061,14 @@ input {
 }
 
 .dataset-row-picker-direction {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
   max-width: none;
+}
+
+.dataset-row-picker-direction > span {
+  flex: 0 0 auto;
 }
 
 .dataset-aggregation-selected-list ul {
@@ -2111,6 +2118,10 @@ input {
 .dataset-aggregation-table select,
 .dataset-aggregation-table input {
   width: 100%;
+}
+
+.dataset-aggregation-panel--metrics {
+  margin-top: 1rem;
 }
 
 .dataset-row-picker-table .data-table {
@@ -3019,7 +3030,8 @@ input {
 
 .form-field input,
 .form-field select,
-.form-field textarea {
+.form-field textarea,
+.form-control {
   width: 100%;
   min-height: 2.65rem;
   border: 1px solid var(--color-border);
@@ -3048,7 +3060,8 @@ input {
 
 .form-field input:focus,
 .form-field select:focus,
-.form-field textarea:focus {
+.form-field textarea:focus,
+.form-control:focus {
   border-color: var(--semantic-primary-border);
   outline: 2px solid var(--color-focus);
   outline-offset: 1px;
