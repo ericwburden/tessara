@@ -44,8 +44,16 @@ pub struct DatasetAggregationMetricRequest {
 /// Selects one representative projected row per aggregation group.
 #[derive(Clone, Deserialize, Serialize)]
 pub struct DatasetRowPickerRequest {
-    pub(crate) sort_field_key: String,
+    #[serde(default)]
+    pub(crate) sort_fields: Vec<DatasetRowPickerSortRequest>,
+}
+
+/// One ordered sort criterion for representative row selection.
+#[derive(Clone, Deserialize, Serialize)]
+pub struct DatasetRowPickerSortRequest {
+    pub(crate) field_key: String,
     pub(crate) direction: String,
+    pub(crate) position: i32,
 }
 
 /// Recursive visual dataset query expression.

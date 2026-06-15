@@ -1162,25 +1162,36 @@ impl<'a> QueryCompiler<'a> {
             "'Aggregated dataset'"
         };
         let source = if let Some(row_picker) = &aggregation.row_picker {
-            let direction = if row_picker.direction == "highest" {
-                "DESC"
-            } else {
-                "ASC"
-            };
             let partition = if all_group_columns.is_empty() {
                 String::new()
             } else {
                 format!("PARTITION BY {}", all_group_columns.join(", "))
             };
+            let order_by = row_picker
+                .sort_fields
+                .iter()
+                .map(|sort| {
+                    let direction = if sort.direction == "highest" {
+                        "DESC"
+                    } else {
+                        "ASC"
+                    };
+                    format!(
+                        "{} {direction} NULLS LAST",
+                        quote_identifier(&sort.field_key)
+                    )
+                })
+                .chain(std::iter::once("__row_id".to_string()))
+                .collect::<Vec<_>>()
+                .join(", ");
             format!(
                 r#"(SELECT
                 selected_fields.*,
                 ROW_NUMBER() OVER (
                     {partition}
-                    ORDER BY {} {direction} NULLS LAST, __row_id
+                    ORDER BY {order_by}
                 ) AS __pick_rank
-            FROM selected_fields)"#,
-                quote_identifier(&row_picker.sort_field_key)
+            FROM selected_fields)"#
             )
         } else {
             "selected_fields".to_string()
@@ -1287,18 +1298,35 @@ fn validate_dataset_aggregation(
     }
     let row_picker = request
         .row_picker
-        .map(|row_picker| {
-            require_text("row picker sort field", &row_picker.sort_field_key)?;
-            if !field_by_key.contains_key(row_picker.sort_field_key.as_str()) {
-                return Err(ApiError::BadRequest(format!(
-                    "row picker sort field '{}' is not projected",
-                    row_picker.sort_field_key
-                )));
-            }
-            if !matches!(row_picker.direction.as_str(), "lowest" | "highest") {
+        .map(|mut row_picker| {
+            if row_picker.sort_fields.is_empty() {
                 return Err(ApiError::BadRequest(
-                    "row picker direction must be 'lowest' or 'highest'".into(),
+                    "row picker requires at least one sort field".into(),
                 ));
+            }
+            row_picker
+                .sort_fields
+                .sort_by_key(|sort| (sort.position, sort.field_key.clone()));
+            let mut seen_sort_fields = BTreeSet::new();
+            for sort in &row_picker.sort_fields {
+                require_text("row picker sort field", &sort.field_key)?;
+                if !field_by_key.contains_key(sort.field_key.as_str()) {
+                    return Err(ApiError::BadRequest(format!(
+                        "row picker sort field '{}' is not projected",
+                        sort.field_key
+                    )));
+                }
+                if !seen_sort_fields.insert(sort.field_key.clone()) {
+                    return Err(ApiError::BadRequest(format!(
+                        "row picker sort field '{}' is duplicated",
+                        sort.field_key
+                    )));
+                }
+                if !matches!(sort.direction.as_str(), "lowest" | "highest") {
+                    return Err(ApiError::BadRequest(
+                        "row picker direction must be 'lowest' or 'highest'".into(),
+                    ));
+                }
             }
             Ok(row_picker)
         })

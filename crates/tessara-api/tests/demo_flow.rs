@@ -344,8 +344,11 @@ async fn admin_dataset_query_designer_materializes_generated_sql() {
                 "position": 0
             }],
             "row_picker": {
-                "sort_field_key": field_key,
-                "direction": "lowest"
+                "sort_fields": [{
+                    "field_key": field_key,
+                    "direction": "lowest",
+                    "position": 0
+                }]
             }
         }
     });

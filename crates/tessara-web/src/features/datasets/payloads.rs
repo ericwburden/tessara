@@ -89,13 +89,21 @@ fn aggregation_payload_from_draft(
         })
         .collect::<Vec<_>>();
     let row_picker = aggregation.row_picker.and_then(|row_picker| {
-        if row_picker.sort_field_key.trim().is_empty() {
+        let sort_fields = row_picker
+            .sort_fields
+            .into_iter()
+            .enumerate()
+            .filter(|(_, sort)| !sort.field_key.trim().is_empty())
+            .map(|(index, sort)| DatasetRowPickerSortPayload {
+                field_key: sort.field_key,
+                direction: sort.direction,
+                position: index as i32,
+            })
+            .collect::<Vec<_>>();
+        if sort_fields.is_empty() {
             None
         } else {
-            Some(DatasetRowPickerPayload {
-                sort_field_key: row_picker.sort_field_key,
-                direction: row_picker.direction,
-            })
+            Some(DatasetRowPickerPayload { sort_fields })
         }
     });
     let group_fields = aggregation

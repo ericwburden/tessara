@@ -8,7 +8,9 @@ use super::super::types::{
     DatasetAggregationDraft, DatasetExpressionDraft, DatasetFieldDraft, DatasetSourceDraft,
 };
 #[cfg(feature = "hydrate")]
-use super::super::types::{DatasetAggregationMetricDraft, DatasetRowPickerDraft};
+use super::super::types::{
+    DatasetAggregationMetricDraft, DatasetRowPickerDraft, DatasetRowPickerSortDraft,
+};
 use leptos::prelude::*;
 use std::collections::BTreeSet;
 
@@ -101,8 +103,14 @@ pub(in crate::features::datasets) fn load_dataset_for_edit(
                                     .collect(),
                                 row_picker: aggregation.row_picker.map(|row_picker| {
                                     DatasetRowPickerDraft {
-                                        sort_field_key: row_picker.sort_field_key,
-                                        direction: row_picker.direction,
+                                        sort_fields: row_picker
+                                            .sort_fields
+                                            .into_iter()
+                                            .map(|sort| DatasetRowPickerSortDraft {
+                                                field_key: sort.field_key,
+                                                direction: sort.direction,
+                                            })
+                                            .collect(),
                                     }
                                 }),
                                 node_grouping_manually_removed: !has_node_grouping,
