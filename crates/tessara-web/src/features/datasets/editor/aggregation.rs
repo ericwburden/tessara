@@ -15,30 +15,6 @@ pub(crate) fn DatasetAggregationEditor(
     let projected_fields = move || fields.get();
     let group_fields = move || aggregation.get().group_fields;
     let aggregation_enabled = move || aggregation.get().enabled;
-    let node_field_key = move || {
-        projected_fields()
-            .into_iter()
-            .find(|field| field.source_field_key == "__node_id")
-            .map(|field| field.key)
-    };
-    let node_grouped = move || {
-        node_field_key().is_some_and(|node_key| aggregation.get().group_fields.contains(&node_key))
-    };
-
-    Effect::new(move |_| {
-        let Some(node_key) = node_field_key() else {
-            return;
-        };
-        let draft = aggregation.get();
-        if draft.enabled
-            && !draft.node_grouping_manually_removed
-            && !draft.group_fields.contains(&node_key)
-        {
-            aggregation.update(|draft| {
-                draft.group_fields.insert(0, node_key);
-            });
-        }
-    });
 
     let selected_group_fields = move || {
         let selected = group_fields();
@@ -82,7 +58,6 @@ pub(crate) fn DatasetAggregationEditor(
                                 draft.group_fields.clear();
                                 draft.metrics.clear();
                                 draft.row_picker = None;
-                                draft.node_grouping_manually_removed = false;
                             });
                         }
                     >"None"</button>
@@ -122,12 +97,6 @@ pub(crate) fn DatasetAggregationEditor(
             {move || if !aggregation_enabled() {
                 view! {
                     <p class="muted">"Aggregation is off. Rows pass through with the selected fields unchanged."</p>
-                }.into_any()
-            } else if !node_grouped() {
-                view! {
-                    <p class="form-status is-warning">
-                        "Attached Node ID is not grouped, so row-based visibility will not be applied to the materialized rows. Dataset visibility controls access to every aggregated row."
-                    </p>
                 }.into_any()
             } else {
                 view! { <span></span> }.into_any()
@@ -200,9 +169,6 @@ pub(crate) fn DatasetAggregationEditor(
                                                                                 if !draft.group_fields.contains(&field_key) {
                                                                                     draft.group_fields.push(field_key.clone());
                                                                                 }
-                                                                                if node_field_key().is_some_and(|node_key| node_key == field_key) {
-                                                                                    draft.node_grouping_manually_removed = false;
-                                                                                }
                                                                             });
                                                                             group_picker_search.set(String::new());
                                                                             group_picker_open.set(false);
@@ -243,9 +209,6 @@ pub(crate) fn DatasetAggregationEditor(
                                                                 on:click=move |_| {
                                                                     aggregation.update(|draft| {
                                                                         draft.group_fields.retain(|key| key != &field_key_for_remove);
-                                                                        if node_field_key().is_some_and(|node_key| node_key == field_key_for_remove) {
-                                                                            draft.node_grouping_manually_removed = true;
-                                                                        }
                                                                     });
                                                                 }
                                                             >"Remove"</button>

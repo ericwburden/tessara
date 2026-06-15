@@ -80,41 +80,31 @@ pub(in crate::features::datasets) fn load_dataset_for_edit(
                 aggregation.set(
                     payload
                         .aggregation
-                        .map(|aggregation| {
-                            let has_node_grouping = aggregation.group_fields.iter().any(|key| {
-                                field_drafts.iter().any(|field| {
-                                    field.key == *key && field.source_field_key == "__node_id"
+                        .map(|aggregation| DatasetAggregationDraft {
+                            enabled: true,
+                            group_fields: aggregation.group_fields,
+                            metrics: aggregation
+                                .metrics
+                                .into_iter()
+                                .map(|metric| DatasetAggregationMetricDraft {
+                                    key: metric.key,
+                                    label: metric.label,
+                                    function: metric.function,
+                                    source_field_key: metric.source_field_key.unwrap_or_default(),
                                 })
-                            });
-                            DatasetAggregationDraft {
-                                enabled: true,
-                                group_fields: aggregation.group_fields,
-                                metrics: aggregation
-                                    .metrics
-                                    .into_iter()
-                                    .map(|metric| DatasetAggregationMetricDraft {
-                                        key: metric.key,
-                                        label: metric.label,
-                                        function: metric.function,
-                                        source_field_key: metric
-                                            .source_field_key
-                                            .unwrap_or_default(),
-                                    })
-                                    .collect(),
-                                row_picker: aggregation.row_picker.map(|row_picker| {
-                                    DatasetRowPickerDraft {
-                                        sort_fields: row_picker
-                                            .sort_fields
-                                            .into_iter()
-                                            .map(|sort| DatasetRowPickerSortDraft {
-                                                field_key: sort.field_key,
-                                                direction: sort.direction,
-                                            })
-                                            .collect(),
-                                    }
-                                }),
-                                node_grouping_manually_removed: !has_node_grouping,
-                            }
+                                .collect(),
+                            row_picker: aggregation.row_picker.map(|row_picker| {
+                                DatasetRowPickerDraft {
+                                    sort_fields: row_picker
+                                        .sort_fields
+                                        .into_iter()
+                                        .map(|sort| DatasetRowPickerSortDraft {
+                                            field_key: sort.field_key,
+                                            direction: sort.direction,
+                                        })
+                                        .collect(),
+                                }
+                            }),
                         })
                         .unwrap_or_default(),
                 );

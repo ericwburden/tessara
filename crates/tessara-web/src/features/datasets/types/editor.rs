@@ -26,7 +26,6 @@ pub(in crate::features::datasets) struct DatasetAggregationDraft {
     pub(in crate::features::datasets) group_fields: Vec<String>,
     pub(in crate::features::datasets) metrics: Vec<DatasetAggregationMetricDraft>,
     pub(in crate::features::datasets) row_picker: Option<DatasetRowPickerDraft>,
-    pub(in crate::features::datasets) node_grouping_manually_removed: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -92,7 +91,6 @@ impl Default for DatasetAggregationDraft {
             group_fields: Vec::new(),
             metrics: Vec::new(),
             row_picker: None,
-            node_grouping_manually_removed: false,
         }
     }
 }

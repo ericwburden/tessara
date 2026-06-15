@@ -102,7 +102,6 @@ struct ValidatedAggregation {
     group_fields: Vec<String>,
     metrics: Vec<ValidatedAggregationMetric>,
     row_picker: Option<DatasetRowPickerRequest>,
-    scope_mode: AggregationScopeMode,
 }
 
 #[derive(Clone)]
@@ -113,12 +112,6 @@ struct ValidatedAggregationMetric {
     source_field_key: Option<String>,
     field_type: String,
     position: i32,
-}
-
-#[derive(Clone, Copy, Eq, PartialEq)]
-enum AggregationScopeMode {
-    RowScoped,
-    DatasetScoped,
 }
 
 #[derive(Clone, Copy)]
@@ -619,13 +612,11 @@ pub async fn run_dataset_table(
     let boundary = auth::capability_boundary(&state.pool, &account, "datasets:read").await?;
     require_dataset_visible_for_boundary(&state.pool, dataset_id, &boundary, "datasets:read")
         .await?;
-    let node_filter = match boundary {
-        auth::CapabilityBoundary::Global => None,
-        auth::CapabilityBoundary::Scoped(scope_ids) => Some(scope_ids),
+    match boundary {
+        auth::CapabilityBoundary::Global | auth::CapabilityBoundary::Scoped(_) => {}
         auth::CapabilityBoundary::None => return Err(ApiError::Forbidden("datasets:read".into())),
-    };
-    let table_rows =
-        load_dataset_table_rows(&state.pool, dataset_id, node_filter.as_deref()).await?;
+    }
+    let table_rows = load_dataset_table_rows(&state.pool, dataset_id).await?;
 
     Ok(Json(DatasetTable {
         dataset_id,
@@ -1124,11 +1115,7 @@ impl<'a> QueryCompiler<'a> {
             .iter()
             .map(|field| quote_identifier(field))
             .collect::<Vec<_>>();
-        let internal_group_columns = if aggregation.scope_mode == AggregationScopeMode::RowScoped {
-            vec!["__node_id".to_string(), "__node_name".to_string()]
-        } else {
-            Vec::new()
-        };
+        let internal_group_columns = Vec::<String>::new();
         let all_group_columns = internal_group_columns
             .iter()
             .cloned()
@@ -1151,16 +1138,8 @@ impl<'a> QueryCompiler<'a> {
                     .join(", ")
             )
         };
-        let node_id = if aggregation.scope_mode == AggregationScopeMode::RowScoped {
-            "__node_id"
-        } else {
-            "NULL::uuid"
-        };
-        let node_name = if aggregation.scope_mode == AggregationScopeMode::RowScoped {
-            "__node_name"
-        } else {
-            "'Aggregated dataset'"
-        };
+        let node_id = "NULL::uuid";
+        let node_name = "'Aggregated dataset'";
         let source = if let Some(row_picker) = &aggregation.row_picker {
             let partition = if all_group_columns.is_empty() {
                 String::new()
@@ -1331,20 +1310,10 @@ fn validate_dataset_aggregation(
             Ok(row_picker)
         })
         .transpose()?;
-    let scope_mode = if group_fields.iter().any(|key| {
-        field_by_key
-            .get(key.as_str())
-            .is_some_and(|field| field.source_field_key == "__node_id")
-    }) {
-        AggregationScopeMode::RowScoped
-    } else {
-        AggregationScopeMode::DatasetScoped
-    };
     Ok(Some(ValidatedAggregation {
         group_fields,
         metrics,
         row_picker,
-        scope_mode,
     }))
 }
 
@@ -1465,15 +1434,6 @@ impl AggregationFunction {
     }
 }
 
-impl AggregationScopeMode {
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::RowScoped => "row_scoped",
-            Self::DatasetScoped => "dataset_scoped",
-        }
-    }
-}
-
 fn aggregation_response_from_validated(
     aggregation: Option<DatasetAggregationRequest>,
     validated: Option<ValidatedAggregation>,
@@ -1484,7 +1444,6 @@ fn aggregation_response_from_validated(
         group_fields: validated.group_fields,
         metrics: request.metrics,
         row_picker: request.row_picker,
-        scope_mode: validated.scope_mode.as_str().into(),
     })
 }
 
@@ -1791,19 +1750,17 @@ fn system_source_field_type(source_field_key: &str) -> Option<&'static str> {
 pub(crate) async fn load_dataset_table_rows(
     pool: &sqlx::PgPool,
     dataset_id: Uuid,
-    node_filter: Option<&[Uuid]>,
 ) -> ApiResult<Vec<DatasetTableRow>> {
-    load_materialized_dataset_table_rows(pool, dataset_id, node_filter).await
+    load_materialized_dataset_table_rows(pool, dataset_id).await
 }
 
 async fn load_materialized_dataset_table_rows(
     pool: &sqlx::PgPool,
     dataset_id: Uuid,
-    node_filter: Option<&[Uuid]>,
 ) -> ApiResult<Vec<DatasetTableRow>> {
     let Some(row) = sqlx::query(
         r#"
-        SELECT materialized_schema, materialized_table, aggregation
+        SELECT materialized_schema, materialized_table
         FROM dataset_revisions
         WHERE dataset_id = $1
           AND status = 'published'::dataset_revision_status
@@ -1820,40 +1777,12 @@ async fn load_materialized_dataset_table_rows(
     };
     let schema: String = row.try_get("materialized_schema")?;
     let table: String = row.try_get("materialized_table")?;
-    let aggregation_request = row
-        .try_get::<Option<serde_json::Value>, _>("aggregation")?
-        .map(serde_json::from_value::<DatasetAggregationRequest>)
-        .transpose()
-        .map_err(|error| {
-            ApiError::Internal(anyhow::anyhow!(
-                "stored dataset aggregation is invalid: {error}"
-            ))
-        })?;
-    let aggregation_scope = if let Some(aggregation) = aggregation_request.as_ref() {
-        Some(aggregation_scope_mode_for_dataset(pool, dataset_id, aggregation).await?)
-    } else {
-        None
-    };
-    let effective_node_filter = if aggregation_scope == Some(AggregationScopeMode::DatasetScoped) {
-        None
-    } else {
-        node_filter
-    };
     let full_name = format!("{}.{}", quote_identifier(&schema), quote_identifier(&table));
-    let rows = if let Some(node_filter) = effective_node_filter {
-        sqlx::query(&format!(
-            "SELECT * FROM {full_name} WHERE __node_id = ANY($1) ORDER BY __row_id LIMIT 200"
-        ))
-        .bind(node_filter)
-        .fetch_all(pool)
-        .await?
-    } else {
-        sqlx::query(&format!(
-            "SELECT * FROM {full_name} ORDER BY __row_id LIMIT 200"
-        ))
-        .fetch_all(pool)
-        .await?
-    };
+    let rows = sqlx::query(&format!(
+        "SELECT * FROM {full_name} ORDER BY __row_id LIMIT 200"
+    ))
+    .fetch_all(pool)
+    .await?;
     let mut table_rows = Vec::new();
     for row in rows {
         let submission_id: String = row.try_get("__row_id")?;
@@ -1875,42 +1804,6 @@ async fn load_materialized_dataset_table_rows(
         });
     }
     Ok(table_rows)
-}
-
-async fn aggregation_scope_mode_for_dataset(
-    pool: &sqlx::PgPool,
-    dataset_id: Uuid,
-    aggregation: &DatasetAggregationRequest,
-) -> ApiResult<AggregationScopeMode> {
-    let active = !aggregation.group_fields.is_empty()
-        || !aggregation.metrics.is_empty()
-        || aggregation.row_picker.is_some();
-    if !active {
-        return Ok(AggregationScopeMode::RowScoped);
-    }
-    if aggregation.group_fields.is_empty() {
-        return Ok(AggregationScopeMode::DatasetScoped);
-    }
-    let group_field_rows = sqlx::query(
-        r#"
-        SELECT key, source_field_key
-        FROM dataset_fields
-        WHERE dataset_id = $1
-          AND key = ANY($2)
-        "#,
-    )
-    .bind(dataset_id)
-    .bind(&aggregation.group_fields)
-    .fetch_all(pool)
-    .await?;
-    if group_field_rows.iter().any(|row| {
-        row.try_get::<String, _>("source_field_key")
-            .is_ok_and(|source_field_key| source_field_key == "__node_id")
-    }) {
-        Ok(AggregationScopeMode::RowScoped)
-    } else {
-        Ok(AggregationScopeMode::DatasetScoped)
-    }
 }
 
 fn default_dataset_composition_mode() -> String {

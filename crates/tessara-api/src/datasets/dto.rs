@@ -136,13 +136,12 @@ pub struct DatasetDefinition {
     pub(crate) output_fields: Vec<DatasetFieldDefinition>,
 }
 
-/// Stored aggregation plus server-derived scope behavior.
+/// Stored aggregation definition.
 #[derive(Serialize)]
 pub struct DatasetAggregationResponse {
     pub(crate) group_fields: Vec<String>,
     pub(crate) metrics: Vec<DatasetAggregationMetricRequest>,
     pub(crate) row_picker: Option<DatasetRowPickerRequest>,
-    pub(crate) scope_mode: String,
 }
 
 /// Organization node that makes a dataset visible.

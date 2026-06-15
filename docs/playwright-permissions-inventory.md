@@ -34,7 +34,7 @@ The target access model for browser behavior is capability + scope + ownership: 
 | Forms | Covered for scoped list/detail visibility, direct out-of-scope denial, create/edit route checks, and scoped manage API containment | Deeper drag/drop form-builder authoring interactions can be added as UI-specific coverage. |
 | Workflows | Covered for scoped candidates, assignees, assignment creation denial, assignment list filtering, start denial/allowance, create/detail/edit route checks, and scoped manage API containment | More detailed revision authoring UI interactions can be added as the workflow editor matures. |
 | Submissions | Covered for scoped management, own response ownership, delegated work, unrelated out-of-scope denial, and response edit route ownership denial/allowance | Deeper response save/submit UI paths can be added with a purpose-built form fixture. |
-| Datasets | Covered for visibility-scope list/detail | Dataset table row filtering once the table UI and API behavior are settled. |
+| Datasets | Covered for visibility-scope list/detail/table access | Explicit dataset restriction filters/rules once advanced authoring supports them. |
 | Components | Covered for dataset-revision-inherited list/detail visibility | UI-level component rendering/inspection checks as component screens mature. |
 | Dashboards | Covered for visibility-scope list/detail, create/edit placeholder routes, and scoped manage API containment | UI-level dashboard component compatibility checks as dashboard authoring/viewing matures. |
 
@@ -45,5 +45,5 @@ The Playwright specs should carry TODO comments for these scenarios without addi
 - Forms: admin create/publish/read; scoped operator list/read overlap; direct out-of-scope form read denial; future scoped create/edit containment.
 - Workflows: scoped operator sees overlapping available-node workflows; cannot assign/start out-of-scope workflow work; candidates and assignees are scope-filtered.
 - Submissions: respondent own work; delegate delegated work; delegator/delegate context remains ownership/delegation-based; scoped operator can review only in-scope submissions.
-- Datasets/components/dashboards: dataset visibility and row filtering; component visibility inherited from dataset revision; dashboard visibility and component compatibility.
+- Datasets/components/dashboards: dataset visibility and future explicit restriction rules; component visibility inherited from dataset revision; dashboard visibility and component compatibility.
 - Administration: admin-only admin routes; future New User Screen; non-admin users cannot see Administration nav or load admin routes.

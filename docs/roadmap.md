@@ -536,14 +536,15 @@ This section records the completed foundation sequence that led to the current n
 - dataset and reporting work following bounded-context backend structure on touch
 - query planning and execution concerns moving behind clearer dataset and reporting service boundaries
 - pagination, limits, and guardrails added to dataset and reporting list and execution surfaces where touched
-- scoped analytical execution guarantees for every dataset preview or derived dataset surface touched here, including negative coverage that scoped operators cannot see out-of-scope rows
+- dataset visibility guarantees for every dataset preview surface touched here, including negative coverage that no-access users cannot read dataset APIs
 - row filters and calculated fields are intentionally deferred to the follow-on advanced authoring slice
+- explicit dataset restriction filters/rules, including future row-level node restrictions and custom capability hooks, are intentionally deferred
 
 **Application UI delivered this sprint:**
 
 - usable dataset authoring screens in the application
 
-**User-testable exit condition:** a tester can create, inspect, edit, and preview datasets through app UI, while scoped operators only see dataset rows and metadata inside their effective scope.
+**User-testable exit condition:** a tester can create, inspect, edit, and preview datasets through app UI, while scoped operators can read the full materialized output for datasets visible to their effective scope.
 
 ### Sprint 3B: Dataset Advanced Authoring Slice
 
@@ -552,6 +553,7 @@ This section records the completed foundation sequence that led to the current n
 **Build:**
 
 - row filter authoring for dataset sources or dataset output, with clear UI validation and preview behavior
+- explicit dataset restriction filters/rules, including possible row-level node restrictions and custom capabilities, so richer access behavior is deliberately authored instead of implied by system metadata
 - calculated field authoring for v1-safe expressions over selected source fields
 - typed validation and error states for invalid filters, missing field references, and unsupported calculated-field expressions
 - preview execution that applies filters and calculated fields consistently with saved definitions
@@ -560,7 +562,7 @@ This section records the completed foundation sequence that led to the current n
 
 - dataset edit screens expose row filters and calculated fields without changing the basic Sprint 3A authoring workflow
 
-**User-testable exit condition:** a tester can add a row filter and calculated field to a dataset, preview the resulting rows, save the definition, and verify scoped readers see only permitted filtered output.
+**User-testable exit condition:** a tester can add a row filter and calculated field to a dataset, preview the resulting rows, save the definition, and verify any explicit restriction rules behave as authored.
 
 ### Sprint 3C: Dataset Revision And Compatibility Slice
 
@@ -649,19 +651,19 @@ This section records the completed foundation sequence that led to the current n
 
 **Build:**
 
-- enforce scoped row visibility for dataset previews, component execution, and dashboard viewing
+- enforce explicit scoped restriction rules for dataset previews, component execution, and dashboard viewing when such rules are authored
 - apply scoped metadata visibility to datasets, dataset revisions, component versions, dashboard composition, and linked presentation assets
-- add negative regression coverage proving scoped operators cannot see out-of-scope rows, linked entities, component metadata, or dashboard contents
+- add negative regression coverage proving scoped operators cannot see rows, linked entities, component metadata, or dashboard contents blocked by explicit visibility or restriction rules
 - keep any retained deprecated analytical endpoints adapter-only and align their authorization with the canonical dataset, component, and dashboard contracts when touched
 - move touched dataset, component, and dashboard execution paths toward bounded-context service and repository boundaries
-- preserve clear empty and forbidden states when scope removes rows or linked assets
+- preserve clear empty and forbidden states when explicit visibility or restriction rules remove rows or linked assets
 
 **Application UI delivered this sprint:**
 
 - existing Dataset, Component, and Dashboard surfaces remain usable with corrected scoped behavior
 - operators receive understandable scoped empty states rather than leaked metadata or raw authorization failures
 
-**User-testable exit condition:** a scoped operator can preview datasets, run/view components, and view dashboards without seeing out-of-scope rows or metadata, while an admin still sees the full seeded analytical set.
+**User-testable exit condition:** a scoped operator can preview datasets, run/view components, and view dashboards according to authored visibility and restriction rules, while an admin still sees the full seeded analytical set.
 
 ### Sprint 5C: Upgrade And Stale Dependency Slice
 

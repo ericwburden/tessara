@@ -2,7 +2,7 @@
 
 ## Sprint Summary
 
-Sprint 3A replaces the native `/datasets` placeholders with practical v1 Dataset Authoring: directory, detail, create, edit, and preview flows backed by the existing dataset APIs. Authoring is admin-only for this slice; scoped users with `datasets:read` can browse and preview only visible datasets.
+Sprint 3A replaces the native `/datasets` placeholders with practical v1 Dataset Authoring: directory, detail, create, edit, and preview flows backed by the existing dataset APIs. Authoring is admin-only for this slice; scoped users with `datasets:read` can browse and preview visible datasets.
 
 ## Sprint Specifications
 
@@ -10,13 +10,14 @@ Sprint 3A replaces the native `/datasets` placeholders with practical v1 Dataset
 - Reuse existing dataset APIs for list/detail/table/create/update; do not add delete UI.
 - Create/edit supports submission-grain datasets, union/join composition, published-form sources, `all/latest/earliest` source selection, visibility nodes, and exposed source-field mappings.
 - Detail/edit screens show metadata, visibility nodes, source and field tables, and a dataset preview table.
+- Dataset Visibility selections are the dataset read gate. Materialized rows are not implicitly filtered by `__node_id`; `__node_id` remains available as normal system metadata for grouping, joins, debugging, and future explicit restriction rules.
 - Tighten `/api/form-versions/{id}/render` so form field metadata requires readable form access.
-- Defer row filters, calculated fields, dataset revision history, compatibility findings, component authoring, and dashboard work.
+- Defer row filters, calculated fields, explicit dataset restriction filters/rules, dataset revision history, compatibility findings, component authoring, and dashboard work.
 
 ## Acceptance Criteria
 
 - Admin can create a dataset, open detail, preview rows, edit the definition, and see the updated definition.
-- Scoped readers see only in-scope datasets and in-scope preview rows.
+- Scoped readers see only datasets visible to their scope, and can read the full materialized output for those datasets.
 - No-capability users cannot see dataset navigation and cannot fetch dataset APIs.
 - Dataset directory and preview surfaces use standard searchable/paginated table behavior and mobile cards.
 - Existing Operations dataset links continue to land on real dataset detail pages.
@@ -26,7 +27,7 @@ Sprint 3A replaces the native `/datasets` placeholders with practical v1 Dataset
 - Sign in as admin and verify `/datasets`, `/datasets/new`, `/datasets/{id}`, and `/datasets/{id}/edit`.
 - Create a dataset from a published form, add fields, save it, and confirm preview rows render.
 - Edit the dataset name/source/fields and confirm detail reflects the update.
-- Sign in as scoped operator and verify only scoped datasets and rows are visible.
+- Sign in as scoped operator and verify only visible datasets are listed, and visible dataset previews include their full materialized output.
 - Sign in as no-access user and verify dataset navigation/data access is unavailable.
 
 ## Automated Test Plan

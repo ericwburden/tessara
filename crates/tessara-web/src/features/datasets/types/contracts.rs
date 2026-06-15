@@ -50,7 +50,6 @@ pub(in crate::features::datasets) struct DatasetAggregationResponse {
     pub(in crate::features::datasets) group_fields: Vec<String>,
     pub(in crate::features::datasets) metrics: Vec<DatasetAggregationMetricPayload>,
     pub(in crate::features::datasets) row_picker: Option<DatasetRowPickerPayload>,
-    pub(in crate::features::datasets) scope_mode: String,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]

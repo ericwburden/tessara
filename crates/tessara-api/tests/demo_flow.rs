@@ -193,9 +193,9 @@ async fn admin_dataset_query_designer_materializes_generated_sql() {
     let form_version_id = seed["form_version_id"]
         .as_str()
         .expect("seed form version id");
-    let visibility_node_id = seed["partner_node_id"]
+    let visibility_node_id = seed["program_node_id"]
         .as_str()
-        .expect("seed partner node id");
+        .expect("seed program node id");
     let rendered_form = request_json(
         app.clone(),
         authorized_request(
@@ -304,6 +304,47 @@ async fn admin_dataset_query_designer_materializes_generated_sql() {
             .iter()
             .any(|row| row["values"].get(field_key).is_some())
     );
+    let operator_token = login_token_for(
+        app.clone(),
+        "operator@tessara.local",
+        "tessara-dev-operator",
+    )
+    .await;
+    let operator_table = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/datasets/{dataset_id}/table"),
+            &operator_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(
+        operator_table["rows"]
+            .as_array()
+            .expect("operator preview rows")
+            .len(),
+        table["rows"].as_array().expect("admin preview rows").len(),
+        "scoped readers with dataset visibility should see the full materialized dataset output"
+    );
+    let respondent_token = login_token_for(
+        app.clone(),
+        "respondent@tessara.local",
+        "tessara-dev-respondent",
+    )
+    .await;
+    let respondent_table_status = request_status(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/datasets/{dataset_id}/table"),
+            &respondent_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(respondent_table_status, StatusCode::FORBIDDEN);
 
     let aggregation_payload = json!({
         "name": "Query Designer Aggregated Dataset",
@@ -365,7 +406,7 @@ async fn admin_dataset_query_designer_materializes_generated_sql() {
     assert!(
         preview["generated_sql"]
             .as_str()
-            .is_some_and(|sql| sql.contains("GROUP BY __node_id, __node_name"))
+            .is_some_and(|sql| sql.contains("GROUP BY \"node_id\""))
     );
     let mut invalid_average_payload = aggregation_payload.clone();
     let created_aggregation = request_json(
@@ -391,9 +432,9 @@ async fn admin_dataset_query_designer_materializes_generated_sql() {
         ),
     )
     .await;
-    assert_eq!(
-        aggregated_detail["aggregation"]["scope_mode"].as_str(),
-        Some("row_scoped")
+    assert!(
+        aggregated_detail["aggregation"].get("scope_mode").is_none(),
+        "dataset aggregation should not expose implicit row-scope mode"
     );
     assert!(
         aggregated_detail["output_fields"]
