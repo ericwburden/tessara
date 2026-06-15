@@ -43,21 +43,15 @@ pub(crate) fn DatasetSqlPreviewPanel(
 
     view! {
         <section class="route-panel__section dataset-editor-section">
-            <div class="dataset-editor-section__header">
+            <button
+                class="dataset-editor-section__header dataset-sql-header"
+                type="button"
+                aria-expanded=move || expanded.get().to_string()
+                on:click=move |_| expanded.update(|value| *value = !*value)
+            >
                 <h3>"Generated SQL"</h3>
-                <div class="dataset-editor-section__actions">
-                    <button
-                        class="icon-button icon-button--control dataset-sql-toggle"
-                        type="button"
-                        aria-label="Toggle generated SQL"
-                        aria-expanded=move || expanded.get().to_string()
-                        title="Toggle generated SQL"
-                        on:click=move |_| expanded.update(|value| *value = !*value)
-                    >
-                        <ChevronsUpDown class="icon-button__icon"/>
-                    </button>
-                </div>
-            </div>
+                <ChevronsUpDown class="dataset-sql-header__icon"/>
+            </button>
             <Show when=move || expanded.get()>
                 {move || sql_preview_error.get().map(|message| view! { <p class="form-status is-error">{message}</p> })}
                 {move || if let Some(sql) = sql_preview.get() {

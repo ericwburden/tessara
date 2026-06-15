@@ -42,7 +42,7 @@ pub(crate) fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView 
                     save_error=state.save_error
                     save_message=state.save_message
                 />
-                <form class="dataset-editor" on:submit=move |event| {
+                <form id="dataset-editor-form" class="dataset-editor" on:submit=move |event| {
                     event.prevent_default();
                     submit_dataset_editor(save_dataset_id.clone(), state);
                 }>
@@ -88,13 +88,29 @@ pub(crate) fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView 
                         visibility_search=state.visibility_search
                         expanded_node_ids=state.visibility_expanded_node_ids
                     />
-                    <div class="form-actions">
-                        {move || preview_dataset_id.clone().map(|id| view! {
-                            <a class="button button--secondary" href=format!("/datasets/{id}/preview") target="_blank" rel="noopener">"Open Preview"</a>
-                        })}
-                        <button class="button" type="submit">{if is_edit { "Save Dataset" } else { "Create Dataset" }}</button>
-                    </div>
                 </form>
+                <div class="form-actions">
+                    {move || preview_dataset_id.clone().map(|id| {
+                        let preview_url = format!("/datasets/{id}");
+                        view! {
+                            <button
+                                class="button button--secondary"
+                                type="button"
+                                onclick=format!("window.location.href='/datasets/{id}';")
+                                on:click=move |_| {
+                                    if let Some(window) = web_sys::window() {
+                                        let _ = window.location().set_href(&preview_url);
+                                    }
+                                }
+                            >
+                                "Open Preview"
+                            </button>
+                        }
+                    })}
+                    <button class="button" type="submit" form="dataset-editor-form">
+                        {if is_edit { "Save Dataset" } else { "Create Dataset" }}
+                    </button>
+                </div>
             </section>
         </AppShell>
     }

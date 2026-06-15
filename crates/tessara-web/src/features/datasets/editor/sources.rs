@@ -76,19 +76,6 @@ pub(crate) fn DatasetSourcesEditor(
         <section class="route-panel__section dataset-editor-section">
             <div class="dataset-editor-section__header">
                 <h3>"Operation Designer"</h3>
-                <button class="button button--secondary button--compact" type="button" on:click=move |_| {
-                    let next = sources.get().len() + 1;
-                    sources.update(|items| items.push(DatasetSourceDraft { source_alias: format!("source_{next}"), ..DatasetSourceDraft::default() }));
-                    expression.update(|draft| {
-                        *draft = DatasetExpressionDraft::Operation {
-                            operation: "union".into(),
-                            left: Box::new(draft.clone()),
-                            right: Box::new(DatasetExpressionDraft::Source(next - 1)),
-                        };
-                    });
-                    designer_selection.set(DatasetDesignerSelection::Source(next - 1));
-                    designer_sheet_open.set(true);
-                }>"Add Input"</button>
             </div>
             <div class="dataset-expression-workspace">
                 <div class="dataset-expression-canvas">

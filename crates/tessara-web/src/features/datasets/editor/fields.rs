@@ -24,7 +24,7 @@ pub(crate) fn DatasetFieldsEditor(
             </div>
             <div class="dataset-field-picker">
                 {move || {
-                    sources.get().into_iter().enumerate().map(|(source_index, source)| {
+                    sources.get().into_iter().map(|source| {
                         let source_alias = source.source_alias.clone();
                         let source_options = source_field_options(
                             &sources.get(),
@@ -44,7 +44,7 @@ pub(crate) fn DatasetFieldsEditor(
                         let source_alias_for_all = source_alias.clone();
                         let source_options_for_all = source_options.clone();
                         view! {
-                            <details class="dataset-field-picker__source" open=source_index == 0>
+                            <details class="dataset-field-picker__source">
                                 <summary class="dataset-field-picker__summary">
                                     <span class="dataset-field-picker__summary-title">{format!("{} ({})", source_alias.clone(), source_heading)}</span>
                                     <span class="dataset-field-picker__summary-meta">

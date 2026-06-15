@@ -21,8 +21,8 @@ pub(crate) fn DatasetVisibilityEditor(
         <section class="route-panel__section dataset-editor-section">
             <div class="dataset-editor-section__header">
                 <h3>"Visibility"</h3>
-                <label class="searchable-data-table__search">
-                    <Search class="searchable-data-table__search-icon"/>
+                <label class="searchable-data-table__search searchable-data-table__control">
+                    <Search class="searchable-data-table__control-icon"/>
                     <span class="sr-only">"Search visibility nodes"</span>
                     <input
                         type="search"
@@ -46,6 +46,7 @@ pub(crate) fn DatasetVisibilityEditor(
                             visibility_node_ids,
                             expanded_node_ids,
                             !query.trim().is_empty(),
+                            query.clone(),
                             0,
                         )
                     }).collect_view()
@@ -62,6 +63,7 @@ fn visibility_tree_branch(
     visibility_node_ids: RwSignal<BTreeSet<String>>,
     expanded_node_ids: RwSignal<BTreeSet<String>>,
     force_expanded: bool,
+    query: String,
     depth: usize,
 ) -> AnyView {
     let node_id_for_class = node.id.clone();
@@ -88,14 +90,14 @@ fn visibility_tree_branch(
     let descendant_scope_for_class = descendant_scope.clone();
     let descendant_scope_for_pressed = descendant_scope.clone();
     let descendant_scope_for_click = descendant_scope.clone();
+    let is_search_match = !query.trim().is_empty() && node_matches_visibility_query(&node, &query);
     view! {
         <section class="dataset-visibility-branch" style=format!("--visibility-depth: {depth};")>
             <div class=move || {
-                if visibility_node_ids.get().contains(&node_id_for_class) {
-                    "dataset-visibility-node is-selected"
-                } else {
-                    "dataset-visibility-node"
-                }
+                visibility_node_class(
+                    visibility_node_ids.get().contains(&node_id_for_class),
+                    is_search_match,
+                )
             }>
                 <button
                     class="dataset-visibility-node__main"
@@ -212,6 +214,7 @@ fn visibility_tree_branch(
                             visibility_node_ids,
                             expanded_node_ids,
                             force_expanded,
+                            query.clone(),
                             depth + 1,
                         )
                     }).collect_view()}
@@ -220,6 +223,15 @@ fn visibility_tree_branch(
         </section>
     }
     .into_any()
+}
+
+fn visibility_node_class(is_selected: bool, is_search_match: bool) -> &'static str {
+    match (is_selected, is_search_match) {
+        (true, true) => "dataset-visibility-node is-selected is-search-match",
+        (true, false) => "dataset-visibility-node is-selected",
+        (false, true) => "dataset-visibility-node is-search-match",
+        (false, false) => "dataset-visibility-node",
+    }
 }
 
 fn visibility_action_class(scope_selected: bool) -> &'static str {

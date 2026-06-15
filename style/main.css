@@ -626,6 +626,20 @@ input {
   line-height: 1;
 }
 
+.metric-card--button {
+  width: 100%;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.metric-card--button:hover,
+.metric-card--button:focus-visible {
+  border-color: var(--semantic-primary-border);
+  background: var(--semantic-primary-soft);
+}
+
 .info-list-table {
   width: 100%;
   border-collapse: collapse;
@@ -1828,6 +1842,24 @@ input {
   padding: 1rem;
 }
 
+.dataset-sql-header {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  text-align: left;
+}
+
+.dataset-sql-header__icon {
+  width: 1.1rem;
+  height: 1.1rem;
+  color: var(--color-muted);
+  pointer-events: none;
+}
+
 .dataset-fields-table .data-table {
   min-width: 48rem;
 }
@@ -1923,11 +1955,24 @@ input {
   align-items: stretch;
   margin-left: calc(var(--visibility-depth, 0) * 1.4rem);
   border-top: 1px solid var(--color-border);
-  padding: 0.75rem 0;
+  padding: 0.75rem 0.85rem;
 }
 
 .dataset-visibility-node.is-selected {
   background: color-mix(in srgb, var(--semantic-primary) 10%, transparent);
+}
+
+.dataset-visibility-node.is-search-match {
+  border-color: var(--semantic-info-border);
+  background: var(--semantic-info-soft);
+}
+
+.dataset-visibility-node.is-selected.is-search-match {
+  background: color-mix(
+    in srgb,
+    var(--semantic-info-soft) 62%,
+    var(--semantic-primary-soft)
+  );
 }
 
 .dataset-visibility-node__main {
@@ -3610,6 +3655,35 @@ input {
   border-radius: var(--radius);
   background: var(--semantic-danger-soft);
   padding: 1rem 3rem 1rem 1rem;
+}
+
+.dataset-visibility-sheet__list {
+  display: grid;
+  gap: 0;
+}
+
+.dataset-visibility-sheet__node {
+  display: grid;
+  gap: 0.25rem;
+  border-top: 1px solid var(--color-border);
+  padding: 0.75rem 0;
+}
+
+.dataset-visibility-sheet__node:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.dataset-visibility-sheet__node strong {
+  color: var(--color-text);
+  font-family: var(--font-heading);
+  line-height: 1.25;
+}
+
+.dataset-visibility-sheet__node span {
+  color: var(--color-muted);
+  font-size: 0.84rem;
+  line-height: 1.35;
 }
 
 .related-work-summary {
