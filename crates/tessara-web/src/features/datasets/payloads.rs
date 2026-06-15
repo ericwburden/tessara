@@ -63,6 +63,10 @@ pub(super) fn dataset_payload_from_drafts(
 fn aggregation_payload_from_draft(
     aggregation: DatasetAggregationDraft,
 ) -> Option<DatasetAggregationPayload> {
+    if !aggregation.enabled {
+        return None;
+    }
+
     let metrics = aggregation
         .metrics
         .into_iter()

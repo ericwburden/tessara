@@ -22,6 +22,7 @@ pub(in crate::features::datasets) struct DatasetFieldDraft {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(in crate::features::datasets) struct DatasetAggregationDraft {
+    pub(in crate::features::datasets) enabled: bool,
     pub(in crate::features::datasets) group_fields: Vec<String>,
     pub(in crate::features::datasets) metrics: Vec<DatasetAggregationMetricDraft>,
     pub(in crate::features::datasets) row_picker: Option<DatasetRowPickerDraft>,
@@ -82,6 +83,7 @@ impl Default for DatasetExpressionDraft {
 impl Default for DatasetAggregationDraft {
     fn default() -> Self {
         Self {
+            enabled: false,
             group_fields: Vec::new(),
             metrics: Vec::new(),
             row_picker: None,

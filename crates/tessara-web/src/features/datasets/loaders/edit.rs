@@ -85,6 +85,7 @@ pub(in crate::features::datasets) fn load_dataset_for_edit(
                                 })
                             });
                             DatasetAggregationDraft {
+                                enabled: true,
                                 group_fields: aggregation.group_fields,
                                 metrics: aggregation
                                     .metrics

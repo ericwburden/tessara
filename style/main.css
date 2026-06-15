@@ -1867,7 +1867,7 @@ input {
 .dataset-aggregation-layout {
   display: grid;
   gap: 1rem;
-  grid-template-columns: repeat(auto-fit, minmax(min(24rem, 100%), 1fr));
+  grid-template-columns: minmax(0, 1fr) minmax(min(24rem, 100%), 0.9fr);
   align-items: start;
 }
 
@@ -1877,10 +1877,50 @@ input {
   min-width: 0;
 }
 
+.dataset-aggregation-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: fit-content;
+  font-weight: 800;
+}
+
+.dataset-aggregation-panel .form-field,
+.dataset-aggregation-field-picker {
+  width: 100%;
+}
+
 .dataset-aggregation-mode {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.2rem;
+  width: min(22rem, 100%);
+  padding: 0.25rem;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface-strong);
+}
+
+.dataset-aggregation-mode__option {
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-muted);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+  min-height: 2.1rem;
+  padding: 0.4rem 0.8rem;
+}
+
+.dataset-aggregation-mode__option.is-active {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.dataset-aggregation-mode__option:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .dataset-aggregation-selected-list ul {
@@ -1902,8 +1942,9 @@ input {
 }
 
 .dataset-aggregation-selected-list li > span {
-  display: grid;
-  gap: 0.2rem;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.5rem;
   min-width: 0;
 }
 
