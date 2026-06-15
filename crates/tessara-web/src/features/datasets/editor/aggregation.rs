@@ -88,18 +88,11 @@ pub(crate) fn DatasetAggregationEditor(
                         class=move || if aggregation_mode() == "row" { "dataset-aggregation-mode__option is-active" } else { "dataset-aggregation-mode__option" }
                         type="button"
                         on:click=move |_| {
-                            let sort_field = first_available_sort_field(&projected_fields(), &[]);
                             aggregation.update(|draft| {
                                 draft.enabled = true;
                                 draft.metrics.clear();
                                 draft.row_picker = Some(DatasetRowPickerDraft {
-                                    sort_fields: if sort_field.is_empty() {
-                                        Vec::new()
-                                    } else {
-                                        vec![DatasetRowPickerSortDraft {
-                                            field_key: sort_field,
-                                        }]
-                                    },
+                                    sort_fields: Vec::new(),
                                     direction: "lowest".into(),
                                 });
                             });
@@ -213,7 +206,7 @@ pub(crate) fn DatasetAggregationEditor(
                                 {move || {
                                     let selected = selected_group_fields();
                                     if selected.is_empty() {
-                                        view! { <p class="muted">"No group fields selected."</p> }.into_any()
+                                        view! { <span></span> }.into_any()
                                     } else {
                                         view! {
                                             <ul>
@@ -249,29 +242,45 @@ pub(crate) fn DatasetAggregationEditor(
                                 <section class="dataset-aggregation-panel dataset-aggregation-panel--row">
                                     <h4>"Pick Whole Row"</h4>
                                     <p class="muted">"Sort fields are applied in order."</p>
-                                    <label class="form-field dataset-row-picker-direction">
+                                    <div class="form-field dataset-row-picker-direction">
                                         <span>"Direction"</span>
-                                        <select
-                                            prop:value=move || aggregation
-                                                .get()
-                                                .row_picker
-                                                .map(|picker| picker.direction)
-                                                .unwrap_or_else(|| "lowest".into())
-                                            on:change=move |event| {
-                                                let value = event_target_value(&event);
-                                                aggregation.update(|draft| {
-                                                    let row_picker = draft.row_picker.get_or_insert_with(|| DatasetRowPickerDraft {
-                                                        sort_fields: Vec::new(),
-                                                        direction: "lowest".into(),
+                                        <div class="dataset-aggregation-mode dataset-aggregation-mode--direction" role="group" aria-label="Sort direction">
+                                            <button
+                                                class=move || if aggregation
+                                                    .get()
+                                                    .row_picker
+                                                    .map(|picker| picker.direction == "lowest")
+                                                    .unwrap_or(true) { "dataset-aggregation-mode__option is-active" } else { "dataset-aggregation-mode__option" }
+                                                type="button"
+                                                on:click=move |_| {
+                                                    aggregation.update(|draft| {
+                                                        let row_picker = draft.row_picker.get_or_insert_with(|| DatasetRowPickerDraft {
+                                                            sort_fields: Vec::new(),
+                                                            direction: "lowest".into(),
+                                                        });
+                                                        row_picker.direction = "lowest".into();
                                                     });
-                                                    row_picker.direction = value;
-                                                });
-                                            }
-                                        >
-                                            <option value="lowest">"Lowest / earliest first"</option>
-                                            <option value="highest">"Highest / latest first"</option>
-                                        </select>
-                                    </label>
+                                                }
+                                            >"Lowest / earliest first"</button>
+                                            <button
+                                                class=move || if aggregation
+                                                    .get()
+                                                    .row_picker
+                                                    .map(|picker| picker.direction == "highest")
+                                                    .unwrap_or(false) { "dataset-aggregation-mode__option is-active" } else { "dataset-aggregation-mode__option" }
+                                                type="button"
+                                                on:click=move |_| {
+                                                    aggregation.update(|draft| {
+                                                        let row_picker = draft.row_picker.get_or_insert_with(|| DatasetRowPickerDraft {
+                                                            sort_fields: Vec::new(),
+                                                            direction: "lowest".into(),
+                                                        });
+                                                        row_picker.direction = "highest".into();
+                                                    });
+                                                }
+                                            >"Highest / latest first"</button>
+                                        </div>
+                                    </div>
                                     <div class="form-field">
                                         <span>"Add Sort Field"</span>
                                         <div class=move || if sort_picker_open.get() { "dataset-combobox is-open" } else { "dataset-combobox" }>
@@ -362,7 +371,7 @@ pub(crate) fn DatasetAggregationEditor(
                                         {move || {
                                             let selected = selected_sort_fields();
                                             if selected.is_empty() {
-                                                view! { <p class="muted">"No sort fields selected."</p> }.into_any()
+                                                view! { <span></span> }.into_any()
                                             } else {
                                                 view! {
                                                     <ul>
@@ -625,16 +634,4 @@ fn metric_field_type_is_allowed(function: &str, field_type: &str) -> bool {
         ),
         _ => false,
     }
-}
-
-fn first_available_sort_field(
-    fields: &[DatasetFieldDraft],
-    selected: &[DatasetRowPickerSortDraft],
-) -> String {
-    fields
-        .iter()
-        .find(|field| !selected.iter().any(|sort| sort.field_key == field.key))
-        .or_else(|| fields.first())
-        .map(|field| field.key.clone())
-        .unwrap_or_default()
 }

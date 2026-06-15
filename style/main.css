@@ -1875,6 +1875,10 @@ input {
   display: grid;
   gap: 0.75rem;
   min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--color-control) 42%, transparent);
+  padding: 0.9rem;
 }
 
 .dataset-aggregation-top-row {
@@ -2024,6 +2028,11 @@ input {
   background: var(--color-control);
 }
 
+.dataset-aggregation-mode--direction {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: min(32rem, 100%);
+}
+
 .dataset-aggregation-mode__option {
   border: 0;
   border-radius: 999px;
@@ -2048,10 +2057,11 @@ input {
 
 .dataset-aggregation-panel--row {
   align-self: start;
+  margin-top: 0.35rem;
 }
 
 .dataset-row-picker-direction {
-  max-width: 20rem;
+  max-width: none;
 }
 
 .dataset-aggregation-selected-list ul {
