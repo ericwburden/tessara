@@ -1,5 +1,6 @@
 //! Dataset editor helpers and feature-local editor logic.
 
+mod aggregation;
 mod expression;
 mod expression_tree;
 mod fields;
@@ -19,6 +20,7 @@ mod submit;
 mod surface;
 mod visibility;
 
+pub(crate) use aggregation::DatasetAggregationEditor;
 pub(crate) use expression::{DatasetExpressionChain, ExpressionPreview};
 pub(crate) use fields::DatasetFieldsEditor;
 pub(crate) use identity::DatasetIdentitySection;

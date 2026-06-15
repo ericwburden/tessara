@@ -12,6 +12,7 @@ pub(super) fn dataset_payload_from_drafts(
     mut sources: Vec<DatasetSourceDraft>,
     expression: DatasetExpressionDraft,
     fields: Vec<DatasetFieldDraft>,
+    aggregation: DatasetAggregationDraft,
     join_left_key: String,
     join_right_key: String,
 ) -> Result<DatasetPayload, String> {
@@ -53,6 +54,58 @@ pub(super) fn dataset_payload_from_drafts(
         composition_mode: root_composition_mode,
         visibility_node_ids,
         definition_ast,
+        aggregation: aggregation_payload_from_draft(aggregation),
         fields: field_payloads,
     })
+}
+
+#[cfg(feature = "hydrate")]
+fn aggregation_payload_from_draft(
+    aggregation: DatasetAggregationDraft,
+) -> Option<DatasetAggregationPayload> {
+    let metrics = aggregation
+        .metrics
+        .into_iter()
+        .enumerate()
+        .filter(|(_, metric)| {
+            !metric.key.trim().is_empty()
+                && !metric.label.trim().is_empty()
+                && !metric.function.trim().is_empty()
+        })
+        .map(|(index, metric)| DatasetAggregationMetricPayload {
+            key: metric.key,
+            label: metric.label,
+            function: metric.function,
+            source_field_key: if metric.source_field_key.trim().is_empty() {
+                None
+            } else {
+                Some(metric.source_field_key)
+            },
+            position: index as i32,
+        })
+        .collect::<Vec<_>>();
+    let row_picker = aggregation.row_picker.and_then(|row_picker| {
+        if row_picker.sort_field_key.trim().is_empty() {
+            None
+        } else {
+            Some(DatasetRowPickerPayload {
+                sort_field_key: row_picker.sort_field_key,
+                direction: row_picker.direction,
+            })
+        }
+    });
+    let group_fields = aggregation
+        .group_fields
+        .into_iter()
+        .filter(|field| !field.trim().is_empty())
+        .collect::<Vec<_>>();
+    if group_fields.is_empty() && metrics.is_empty() && row_picker.is_none() {
+        None
+    } else {
+        Some(DatasetAggregationPayload {
+            group_fields,
+            metrics,
+            row_picker,
+        })
+    }
 }

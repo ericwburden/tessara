@@ -80,7 +80,7 @@ pub(crate) fn DatasetDetailSurface(dataset_id: String, edit: bool) -> impl IntoV
                                 } else if active_tab.get() == "sql" {
                                     view! { <DatasetSqlPanel sql=tab_dataset.generated_sql.clone()/> }.into_any()
                                 } else {
-                                    view! { <DatasetFieldsTable fields=tab_dataset.fields.clone()/> }.into_any()
+                                    view! { <DatasetFieldsTable fields=detail_output_fields(&tab_dataset) /> }.into_any()
                                 }}
                             </div>
                             <DatasetVisibilitySheet nodes=visibility_nodes open=visibility_sheet_open/>
@@ -158,7 +158,7 @@ pub(crate) fn DatasetPreviewTable(
     if table.rows.is_empty() {
         return view! { <EmptyState title="No preview rows" message="This dataset has no submitted response rows available for preview."/> }.into_any();
     }
-    let fields = dataset.fields;
+    let fields = detail_output_fields(&dataset);
     view! {
         <section class="route-panel__section">
             <h3>"Preview"</h3>
@@ -184,4 +184,12 @@ pub(crate) fn DatasetPreviewTable(
             </DataTable>
         </section>
     }.into_any()
+}
+
+fn detail_output_fields(dataset: &DatasetDefinition) -> Vec<DatasetFieldDefinition> {
+    if dataset.output_fields.is_empty() {
+        dataset.fields.clone()
+    } else {
+        dataset.output_fields.clone()
+    }
 }

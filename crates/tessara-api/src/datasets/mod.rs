@@ -25,9 +25,10 @@ use uuid::Uuid;
 mod dto;
 
 pub use dto::{
-    CreateDatasetFieldRequest, CreateDatasetRequest, DatasetDefinition, DatasetExpressionRequest,
-    DatasetFieldDefinition, DatasetSourceDefinition, DatasetSqlPreview, DatasetSummary,
-    DatasetTable, DatasetTableRow, DatasetVisibilityNodeSummary,
+    CreateDatasetFieldRequest, CreateDatasetRequest, DatasetAggregationRequest,
+    DatasetAggregationResponse, DatasetDefinition, DatasetExpressionRequest,
+    DatasetFieldDefinition, DatasetRowPickerRequest, DatasetSourceDefinition, DatasetSqlPreview,
+    DatasetSummary, DatasetTable, DatasetTableRow, DatasetVisibilityNodeSummary,
 };
 
 use crate::{
@@ -66,6 +67,7 @@ struct ValidatedDatasetSource {
 
 #[derive(Clone)]
 struct ValidatedDatasetField {
+    id: Option<Uuid>,
     key: String,
     label: String,
     source_alias: String,
@@ -76,6 +78,7 @@ struct ValidatedDatasetField {
 
 struct CompiledDataset {
     definition_ast: DatasetExpressionRequest,
+    aggregation: Option<DatasetAggregationRequest>,
     generated_sql: String,
     sources: Vec<ValidatedDatasetSource>,
     fields: Vec<ValidatedDatasetField>,
@@ -86,11 +89,46 @@ struct QueryCompiler<'a> {
     account: &'a auth::AccountContext,
     dataset_id: Option<Uuid>,
     output_fields: &'a [CreateDatasetFieldRequest],
+    aggregation: Option<ValidatedAggregation>,
     field_keys: Vec<String>,
     ctes: Vec<String>,
     cte_index: usize,
     aliases: BTreeSet<String>,
     sources: Vec<ValidatedDatasetSource>,
+}
+
+#[derive(Clone)]
+struct ValidatedAggregation {
+    group_fields: Vec<String>,
+    metrics: Vec<ValidatedAggregationMetric>,
+    row_picker: Option<DatasetRowPickerRequest>,
+    scope_mode: AggregationScopeMode,
+}
+
+#[derive(Clone)]
+struct ValidatedAggregationMetric {
+    key: String,
+    label: String,
+    function: AggregationFunction,
+    source_field_key: Option<String>,
+    field_type: String,
+    position: i32,
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum AggregationScopeMode {
+    RowScoped,
+    DatasetScoped,
+}
+
+#[derive(Clone, Copy)]
+enum AggregationFunction {
+    CountRows,
+    CountValues,
+    Sum,
+    Average,
+    Min,
+    Max,
 }
 
 struct CompiledExpression {
@@ -446,6 +484,7 @@ pub async fn get_dataset(
         SELECT datasets.id, current_revisions.id AS current_revision_id,
                datasets.name, datasets.slug, datasets.grain, datasets.composition_mode,
                current_revisions.definition_ast,
+               current_revisions.aggregation,
                current_revisions.generated_sql,
                current_revisions.materialized_schema,
                current_revisions.materialized_table,
@@ -498,6 +537,31 @@ pub async fn get_dataset(
 
     let visibility_nodes =
         load_dataset_visibility_nodes(&state.pool, &[dataset_id], visible_node_filter).await?;
+    let aggregation_request = dataset
+        .try_get::<Option<serde_json::Value>, _>("aggregation")?
+        .map(serde_json::from_value::<DatasetAggregationRequest>)
+        .transpose()
+        .map_err(|error| {
+            ApiError::Internal(anyhow::anyhow!(
+                "stored dataset aggregation is invalid: {error}"
+            ))
+        })?;
+    let fields = field_rows
+        .into_iter()
+        .map(|row| {
+            Ok(ValidatedDatasetField {
+                id: row.try_get("id")?,
+                key: row.try_get("key")?,
+                label: row.try_get("label")?,
+                source_alias: row.try_get("source_alias")?,
+                source_field_key: row.try_get("source_field_key")?,
+                field_type: row.try_get("field_type")?,
+                position: row.try_get("position")?,
+            })
+        })
+        .collect::<Result<Vec<_>, sqlx::Error>>()?;
+    let aggregation = validate_dataset_aggregation(aggregation_request.clone(), &fields)?;
+    let output_fields = output_fields_for_dataset(&fields, aggregation.as_ref());
 
     Ok(Json(DatasetDefinition {
         id: dataset.try_get("id")?,
@@ -515,6 +579,7 @@ pub async fn get_dataset(
                     "stored dataset definition is invalid: {error}"
                 ))
             })?,
+        aggregation: aggregation_response_from_validated(aggregation_request, aggregation),
         generated_sql: dataset.try_get("generated_sql")?,
         materialized_schema: dataset.try_get("materialized_schema")?,
         materialized_table: dataset.try_get("materialized_table")?,
@@ -539,20 +604,8 @@ pub async fn get_dataset(
                 })
             })
             .collect::<Result<Vec<_>, sqlx::Error>>()?,
-        fields: field_rows
-            .into_iter()
-            .map(|row| {
-                Ok(DatasetFieldDefinition {
-                    id: row.try_get("id")?,
-                    key: row.try_get("key")?,
-                    label: row.try_get("label")?,
-                    source_alias: row.try_get("source_alias")?,
-                    source_field_key: row.try_get("source_field_key")?,
-                    field_type: row.try_get("field_type")?,
-                    position: row.try_get("position")?,
-                })
-            })
-            .collect::<Result<Vec<_>, sqlx::Error>>()?,
+        fields: fields.iter().map(dataset_field_definition).collect(),
+        output_fields: output_fields.iter().map(dataset_field_definition).collect(),
     }))
 }
 
@@ -607,6 +660,7 @@ async fn compile_dataset_definition(
         account,
         dataset_id,
         output_fields: field_requests,
+        aggregation: None,
         field_keys: field_requests
             .iter()
             .map(|field| field.key.clone())
@@ -617,10 +671,13 @@ async fn compile_dataset_definition(
         sources: Vec::new(),
     };
     let root = compiler.compile_expression(&ast).await?;
-    let generated_sql = compiler.final_sql(&root);
     let fields = validate_dataset_fields(pool, &compiler.sources, field_requests.to_vec()).await?;
+    let aggregation = validate_dataset_aggregation(payload.aggregation.clone(), &fields)?;
+    compiler.aggregation = aggregation.clone();
+    let generated_sql = compiler.final_sql(&root);
     Ok(CompiledDataset {
         definition_ast: ast,
+        aggregation: payload.aggregation.clone(),
         generated_sql,
         sources: compiler.sources,
         fields,
@@ -987,18 +1044,431 @@ impl<'a> QueryCompiler<'a> {
             .map(|field| quote_identifier(field))
             .collect::<Vec<_>>()
             .join(",\n    ");
-        format!(
-            r#"WITH
-        {}
-        SELECT
+        let selected_cte = format!(
+            r#"selected_fields AS (
+            SELECT
+                __row_id,
+                __node_id,
+                __node_name,
+                {field_select}
+            FROM {}
+        )"#,
+            quote_identifier(&root.cte_name)
+        );
+        let mut ctes = self.ctes.clone();
+        ctes.push(selected_cte);
+
+        let final_select = self
+            .aggregation
+            .as_ref()
+            .map(|aggregation| self.aggregation_sql(aggregation))
+            .unwrap_or_else(|| {
+                format!(
+                    r#"SELECT
             __row_id,
             __node_id,
             __node_name,
             {field_select}
-        FROM {}"#,
-            self.ctes.join(",\n        "),
-            quote_identifier(&root.cte_name)
+        FROM selected_fields"#
+                )
+            });
+
+        format!(
+            r#"WITH
+        {}
+        {final_select}"#,
+            ctes.join(",\n        ")
         )
+    }
+
+    fn aggregation_sql(&self, aggregation: &ValidatedAggregation) -> String {
+        let group_selects = aggregation
+            .group_fields
+            .iter()
+            .map(|field| {
+                let quoted = quote_identifier(field);
+                format!("{quoted} AS {quoted}")
+            })
+            .collect::<Vec<_>>();
+        let metric_selects = aggregation
+            .metrics
+            .iter()
+            .map(aggregation_metric_sql)
+            .collect::<Vec<_>>();
+        let row_pick_selects = aggregation
+            .row_picker
+            .as_ref()
+            .map(|_| {
+                self.field_keys
+                    .iter()
+                    .filter(|field| !aggregation.group_fields.contains(field))
+                    .map(|field| {
+                        let quoted = quote_identifier(field);
+                        format!("MAX({quoted}) FILTER (WHERE __pick_rank = 1) AS {quoted}")
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        let output_selects = group_selects
+            .into_iter()
+            .chain(row_pick_selects)
+            .chain(metric_selects)
+            .collect::<Vec<_>>();
+        let field_select = if output_selects.is_empty() {
+            "COUNT(*)::text AS row_count".to_string()
+        } else {
+            output_selects.join(",\n            ")
+        };
+        let group_columns = aggregation
+            .group_fields
+            .iter()
+            .map(|field| quote_identifier(field))
+            .collect::<Vec<_>>();
+        let internal_group_columns = if aggregation.scope_mode == AggregationScopeMode::RowScoped {
+            vec!["__node_id".to_string(), "__node_name".to_string()]
+        } else {
+            Vec::new()
+        };
+        let all_group_columns = internal_group_columns
+            .iter()
+            .cloned()
+            .chain(group_columns.iter().cloned())
+            .collect::<Vec<_>>();
+        let group_by = if all_group_columns.is_empty() {
+            String::new()
+        } else {
+            format!("\n        GROUP BY {}", all_group_columns.join(", "))
+        };
+        let row_id = if all_group_columns.is_empty() {
+            "'aggregate'::text".to_string()
+        } else {
+            format!(
+                "md5(concat_ws('|', {}))",
+                all_group_columns
+                    .iter()
+                    .map(|column| format!("{column}::text"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        };
+        let node_id = if aggregation.scope_mode == AggregationScopeMode::RowScoped {
+            "__node_id"
+        } else {
+            "NULL::uuid"
+        };
+        let node_name = if aggregation.scope_mode == AggregationScopeMode::RowScoped {
+            "__node_name"
+        } else {
+            "'Aggregated dataset'"
+        };
+        let source = if let Some(row_picker) = &aggregation.row_picker {
+            let direction = if row_picker.direction == "highest" {
+                "DESC"
+            } else {
+                "ASC"
+            };
+            let partition = if all_group_columns.is_empty() {
+                String::new()
+            } else {
+                format!("PARTITION BY {}", all_group_columns.join(", "))
+            };
+            format!(
+                r#"(SELECT
+                selected_fields.*,
+                ROW_NUMBER() OVER (
+                    {partition}
+                    ORDER BY {} {direction} NULLS LAST, __row_id
+                ) AS __pick_rank
+            FROM selected_fields)"#,
+                quote_identifier(&row_picker.sort_field_key)
+            )
+        } else {
+            "selected_fields".to_string()
+        };
+
+        format!(
+            r#"SELECT
+            {row_id} AS __row_id,
+            {node_id} AS __node_id,
+            {node_name} AS __node_name,
+            {field_select}
+        FROM {source}{group_by}"#
+        )
+    }
+}
+
+fn validate_dataset_aggregation(
+    request: Option<DatasetAggregationRequest>,
+    fields: &[ValidatedDatasetField],
+) -> ApiResult<Option<ValidatedAggregation>> {
+    let Some(request) = request else {
+        return Ok(None);
+    };
+    let active = !request.group_fields.is_empty()
+        || !request.metrics.is_empty()
+        || request.row_picker.is_some();
+    if !active {
+        return Ok(None);
+    }
+    let field_by_key = fields
+        .iter()
+        .map(|field| (field.key.as_str(), field))
+        .collect::<HashMap<_, _>>();
+    let mut group_fields = Vec::new();
+    let mut seen_groups = BTreeSet::new();
+    for key in request.group_fields {
+        require_text("aggregation group field", &key)?;
+        if !field_by_key.contains_key(key.as_str()) {
+            return Err(ApiError::BadRequest(format!(
+                "aggregation group field '{key}' is not projected"
+            )));
+        }
+        if seen_groups.insert(key.clone()) {
+            group_fields.push(key);
+        }
+    }
+    let mut seen_metric_keys = BTreeSet::new();
+    let mut metrics = Vec::new();
+    for metric in request.metrics {
+        require_text("aggregation metric key", &metric.key)?;
+        require_text("aggregation metric label", &metric.label)?;
+        require_identifier("aggregation metric key", &metric.key)?;
+        if !seen_metric_keys.insert(metric.key.clone()) {
+            return Err(ApiError::BadRequest(format!(
+                "aggregation metric key '{}' is duplicated",
+                metric.key
+            )));
+        }
+        if field_by_key.contains_key(metric.key.as_str()) || seen_groups.contains(&metric.key) {
+            return Err(ApiError::BadRequest(format!(
+                "aggregation metric key '{}' conflicts with a projected field",
+                metric.key
+            )));
+        }
+        let function = AggregationFunction::parse(&metric.function)?;
+        let source_field = metric
+            .source_field_key
+            .as_deref()
+            .unwrap_or_default()
+            .trim();
+        let source = if function.requires_source_field() {
+            if source_field.is_empty() {
+                return Err(ApiError::BadRequest(format!(
+                    "aggregation metric '{}' requires a source field",
+                    metric.key
+                )));
+            }
+            let source = field_by_key.get(source_field).ok_or_else(|| {
+                ApiError::BadRequest(format!(
+                    "aggregation metric '{}' references unprojected field '{}'",
+                    metric.key, source_field
+                ))
+            })?;
+            function.validate_field_type(&source.field_type, &metric.key)?;
+            Some((*source).clone())
+        } else {
+            if !source_field.is_empty() {
+                return Err(ApiError::BadRequest(format!(
+                    "aggregation metric '{}' does not use a source field",
+                    metric.key
+                )));
+            }
+            None
+        };
+        let field_type = function.output_field_type(source.as_ref());
+        metrics.push(ValidatedAggregationMetric {
+            key: metric.key,
+            label: metric.label,
+            function,
+            source_field_key: source.map(|field| field.key),
+            field_type,
+            position: metric.position,
+        });
+    }
+    let row_picker = request
+        .row_picker
+        .map(|row_picker| {
+            require_text("row picker sort field", &row_picker.sort_field_key)?;
+            if !field_by_key.contains_key(row_picker.sort_field_key.as_str()) {
+                return Err(ApiError::BadRequest(format!(
+                    "row picker sort field '{}' is not projected",
+                    row_picker.sort_field_key
+                )));
+            }
+            if !matches!(row_picker.direction.as_str(), "lowest" | "highest") {
+                return Err(ApiError::BadRequest(
+                    "row picker direction must be 'lowest' or 'highest'".into(),
+                ));
+            }
+            Ok(row_picker)
+        })
+        .transpose()?;
+    let scope_mode = if group_fields.iter().any(|key| {
+        field_by_key
+            .get(key.as_str())
+            .is_some_and(|field| field.source_field_key == "__node_id")
+    }) {
+        AggregationScopeMode::RowScoped
+    } else {
+        AggregationScopeMode::DatasetScoped
+    };
+    Ok(Some(ValidatedAggregation {
+        group_fields,
+        metrics,
+        row_picker,
+        scope_mode,
+    }))
+}
+
+fn output_fields_for_dataset(
+    fields: &[ValidatedDatasetField],
+    aggregation: Option<&ValidatedAggregation>,
+) -> Vec<ValidatedDatasetField> {
+    let Some(aggregation) = aggregation else {
+        return fields.to_vec();
+    };
+    let field_by_key = fields
+        .iter()
+        .map(|field| (field.key.as_str(), field))
+        .collect::<HashMap<_, _>>();
+    let mut output = Vec::new();
+    for key in &aggregation.group_fields {
+        if let Some(field) = field_by_key.get(key.as_str()) {
+            output.push((*field).clone());
+        }
+    }
+    if aggregation.row_picker.is_some() {
+        for field in fields {
+            if !aggregation.group_fields.contains(&field.key) {
+                output.push(field.clone());
+            }
+        }
+    }
+    let metric_offset = output.len() as i32;
+    let mut metrics = aggregation.metrics.clone();
+    metrics.sort_by_key(|metric| (metric.position, metric.key.clone()));
+    for (index, metric) in metrics.into_iter().enumerate() {
+        output.push(ValidatedDatasetField {
+            id: None,
+            key: metric.key,
+            label: metric.label,
+            source_alias: "aggregation".into(),
+            source_field_key: metric.source_field_key.unwrap_or_default(),
+            field_type: metric.field_type,
+            position: metric_offset + index as i32,
+        });
+    }
+    output
+}
+
+fn aggregation_metric_sql(metric: &ValidatedAggregationMetric) -> String {
+    let key = quote_identifier(&metric.key);
+    match metric.function {
+        AggregationFunction::CountRows => format!("COUNT(*)::text AS {key}"),
+        AggregationFunction::CountValues => format!(
+            "COUNT(NULLIF({}, ''))::text AS {key}",
+            quote_identifier(metric.source_field_key.as_deref().unwrap_or_default())
+        ),
+        AggregationFunction::Sum => format!(
+            "SUM(NULLIF({}, '')::numeric)::text AS {key}",
+            quote_identifier(metric.source_field_key.as_deref().unwrap_or_default())
+        ),
+        AggregationFunction::Average => format!(
+            "AVG(NULLIF({}, '')::numeric)::text AS {key}",
+            quote_identifier(metric.source_field_key.as_deref().unwrap_or_default())
+        ),
+        AggregationFunction::Min => format!(
+            "MIN(NULLIF({}, '')) AS {key}",
+            quote_identifier(metric.source_field_key.as_deref().unwrap_or_default())
+        ),
+        AggregationFunction::Max => format!(
+            "MAX(NULLIF({}, '')) AS {key}",
+            quote_identifier(metric.source_field_key.as_deref().unwrap_or_default())
+        ),
+    }
+}
+
+impl AggregationFunction {
+    fn parse(value: &str) -> ApiResult<Self> {
+        match value {
+            "count_rows" => Ok(Self::CountRows),
+            "count_values" => Ok(Self::CountValues),
+            "sum" => Ok(Self::Sum),
+            "average" => Ok(Self::Average),
+            "min" => Ok(Self::Min),
+            "max" => Ok(Self::Max),
+            other => Err(ApiError::BadRequest(format!(
+                "unsupported aggregation function '{other}'"
+            ))),
+        }
+    }
+
+    fn requires_source_field(self) -> bool {
+        !matches!(self, Self::CountRows)
+    }
+
+    fn validate_field_type(self, field_type: &str, metric_key: &str) -> ApiResult<()> {
+        let allowed = match self {
+            Self::Sum | Self::Average => matches!(field_type, "number"),
+            Self::Min | Self::Max => {
+                matches!(
+                    field_type,
+                    "number" | "date" | "text" | "single_choice" | "multi_choice" | "boolean"
+                )
+            }
+            Self::CountRows | Self::CountValues => true,
+        };
+        if allowed {
+            Ok(())
+        } else {
+            Err(ApiError::BadRequest(format!(
+                "aggregation metric '{metric_key}' cannot use field type '{field_type}'"
+            )))
+        }
+    }
+
+    fn output_field_type(self, source: Option<&ValidatedDatasetField>) -> String {
+        match self {
+            Self::CountRows | Self::CountValues | Self::Sum | Self::Average => "number".into(),
+            Self::Min | Self::Max => source
+                .map(|field| field.field_type.clone())
+                .unwrap_or_else(|| "text".into()),
+        }
+    }
+}
+
+impl AggregationScopeMode {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::RowScoped => "row_scoped",
+            Self::DatasetScoped => "dataset_scoped",
+        }
+    }
+}
+
+fn aggregation_response_from_validated(
+    aggregation: Option<DatasetAggregationRequest>,
+    validated: Option<ValidatedAggregation>,
+) -> Option<DatasetAggregationResponse> {
+    let request = aggregation?;
+    let validated = validated?;
+    Some(DatasetAggregationResponse {
+        group_fields: validated.group_fields,
+        metrics: request.metrics,
+        row_picker: request.row_picker,
+        scope_mode: validated.scope_mode.as_str().into(),
+    })
+}
+
+fn dataset_field_definition(field: &ValidatedDatasetField) -> DatasetFieldDefinition {
+    DatasetFieldDefinition {
+        id: field.id.unwrap_or_else(Uuid::nil),
+        key: field.key.clone(),
+        label: field.label.clone(),
+        source_alias: field.source_alias.clone(),
+        source_field_key: field.source_field_key.clone(),
+        field_type: field.field_type.clone(),
+        position: field.position,
     }
 }
 
@@ -1032,6 +1502,7 @@ async fn validate_dataset_fields(
             require_source_field_exists(pool, source, &field.source_field_key).await?
         };
         validated.push(ValidatedDatasetField {
+            id: None,
             key: field.key,
             label: field.label,
             source_alias: field.source_alias,
@@ -1124,8 +1595,8 @@ async fn insert_dataset_revision(
     let revision_id = sqlx::query_scalar(
         r#"
         INSERT INTO dataset_revisions
-            (dataset_id, version_number, version_label, status, published_at, definition_ast, generated_sql)
-        VALUES ($1, $2, $3, 'published'::dataset_revision_status, now(), $4, $5)
+            (dataset_id, version_number, version_label, status, published_at, definition_ast, aggregation, generated_sql)
+        VALUES ($1, $2, $3, 'published'::dataset_revision_status, now(), $4, $5, $6)
         RETURNING id
         "#,
     )
@@ -1135,6 +1606,18 @@ async fn insert_dataset_revision(
     .bind(serde_json::to_value(&compiled.definition_ast).map_err(|error| {
         ApiError::Internal(anyhow::anyhow!("dataset definition could not be serialized: {error}"))
     })?)
+    .bind(
+        compiled
+            .aggregation
+            .as_ref()
+            .map(serde_json::to_value)
+            .transpose()
+            .map_err(|error| {
+                ApiError::Internal(anyhow::anyhow!(
+                    "dataset aggregation could not be serialized: {error}"
+                ))
+            })?,
+    )
     .bind(&compiled.generated_sql)
     .fetch_one(&mut **tx)
     .await?;
@@ -1292,7 +1775,7 @@ async fn load_materialized_dataset_table_rows(
 ) -> ApiResult<Vec<DatasetTableRow>> {
     let Some(row) = sqlx::query(
         r#"
-        SELECT materialized_schema, materialized_table
+        SELECT materialized_schema, materialized_table, aggregation
         FROM dataset_revisions
         WHERE dataset_id = $1
           AND status = 'published'::dataset_revision_status
@@ -1309,8 +1792,27 @@ async fn load_materialized_dataset_table_rows(
     };
     let schema: String = row.try_get("materialized_schema")?;
     let table: String = row.try_get("materialized_table")?;
+    let aggregation_request = row
+        .try_get::<Option<serde_json::Value>, _>("aggregation")?
+        .map(serde_json::from_value::<DatasetAggregationRequest>)
+        .transpose()
+        .map_err(|error| {
+            ApiError::Internal(anyhow::anyhow!(
+                "stored dataset aggregation is invalid: {error}"
+            ))
+        })?;
+    let aggregation_scope = if let Some(aggregation) = aggregation_request.as_ref() {
+        Some(aggregation_scope_mode_for_dataset(pool, dataset_id, aggregation).await?)
+    } else {
+        None
+    };
+    let effective_node_filter = if aggregation_scope == Some(AggregationScopeMode::DatasetScoped) {
+        None
+    } else {
+        node_filter
+    };
     let full_name = format!("{}.{}", quote_identifier(&schema), quote_identifier(&table));
-    let rows = if let Some(node_filter) = node_filter {
+    let rows = if let Some(node_filter) = effective_node_filter {
         sqlx::query(&format!(
             "SELECT * FROM {full_name} WHERE __node_id = ANY($1) ORDER BY __row_id LIMIT 200"
         ))
@@ -1345,6 +1847,42 @@ async fn load_materialized_dataset_table_rows(
         });
     }
     Ok(table_rows)
+}
+
+async fn aggregation_scope_mode_for_dataset(
+    pool: &sqlx::PgPool,
+    dataset_id: Uuid,
+    aggregation: &DatasetAggregationRequest,
+) -> ApiResult<AggregationScopeMode> {
+    let active = !aggregation.group_fields.is_empty()
+        || !aggregation.metrics.is_empty()
+        || aggregation.row_picker.is_some();
+    if !active {
+        return Ok(AggregationScopeMode::RowScoped);
+    }
+    if aggregation.group_fields.is_empty() {
+        return Ok(AggregationScopeMode::DatasetScoped);
+    }
+    let group_field_rows = sqlx::query(
+        r#"
+        SELECT key, source_field_key
+        FROM dataset_fields
+        WHERE dataset_id = $1
+          AND key = ANY($2)
+        "#,
+    )
+    .bind(dataset_id)
+    .bind(&aggregation.group_fields)
+    .fetch_all(pool)
+    .await?;
+    if group_field_rows.iter().any(|row| {
+        row.try_get::<String, _>("source_field_key")
+            .is_ok_and(|source_field_key| source_field_key == "__node_id")
+    }) {
+        Ok(AggregationScopeMode::RowScoped)
+    } else {
+        Ok(AggregationScopeMode::DatasetScoped)
+    }
 }
 
 fn default_dataset_composition_mode() -> String {

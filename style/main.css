@@ -1864,6 +1864,33 @@ input {
   min-width: 48rem;
 }
 
+.dataset-aggregation-layout {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(24rem, 100%), 1fr));
+  align-items: start;
+}
+
+.dataset-aggregation-panel {
+  display: grid;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.dataset-aggregation-panel h4,
+.dataset-aggregation-section h4 {
+  margin: 0;
+}
+
+.dataset-aggregation-table .data-table {
+  min-width: 56rem;
+}
+
+.dataset-aggregation-table select,
+.dataset-aggregation-table input {
+  width: 100%;
+}
+
 .dataset-field-picker {
   display: grid;
   gap: 0.75rem;

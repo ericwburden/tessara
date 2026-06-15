@@ -304,6 +304,139 @@ async fn admin_dataset_query_designer_materializes_generated_sql() {
             .iter()
             .any(|row| row["values"].get(field_key).is_some())
     );
+
+    let aggregation_payload = json!({
+        "name": "Query Designer Aggregated Dataset",
+        "slug": "query-designer-aggregated-dataset",
+        "grain": "submission",
+        "composition_mode": "union_all",
+        "visibility_node_ids": [visibility_node_id],
+        "definition_ast": {
+            "kind": "form",
+            "alias": "form_a",
+            "form_id": form_id,
+            "form_version_major": null,
+            "selection_rule": "latest"
+        },
+        "fields": [
+            {
+                "key": "node_id",
+                "label": "Attached Node ID",
+                "source_alias": "form_a",
+                "source_field_key": "__node_id",
+                "position": 0
+            },
+            {
+                "key": field_key,
+                "label": field_label,
+                "source_alias": "form_a",
+                "source_field_key": field_key,
+                "position": 1
+            }
+        ],
+        "aggregation": {
+            "group_fields": ["node_id"],
+            "metrics": [{
+                "key": "response_count",
+                "label": "Response Count",
+                "function": "count_rows",
+                "source_field_key": null,
+                "position": 0
+            }],
+            "row_picker": {
+                "sort_field_key": field_key,
+                "direction": "lowest"
+            }
+        }
+    });
+    let preview = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/datasets/sql-preview",
+            &admin_token,
+            Some(aggregation_payload.clone()),
+        ),
+    )
+    .await;
+    assert!(
+        preview["generated_sql"]
+            .as_str()
+            .is_some_and(|sql| sql.contains("GROUP BY __node_id, __node_name"))
+    );
+    let mut invalid_average_payload = aggregation_payload.clone();
+    let created_aggregation = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/datasets",
+            &admin_token,
+            Some(aggregation_payload),
+        ),
+    )
+    .await;
+    let aggregated_dataset_id = created_aggregation["id"]
+        .as_str()
+        .expect("created aggregated dataset id");
+    let aggregated_detail = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/datasets/{aggregated_dataset_id}"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(
+        aggregated_detail["aggregation"]["scope_mode"].as_str(),
+        Some("row_scoped")
+    );
+    assert!(
+        aggregated_detail["output_fields"]
+            .as_array()
+            .expect("output fields")
+            .iter()
+            .any(|field| field["key"] == "response_count")
+    );
+    let aggregated_table = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/datasets/{aggregated_dataset_id}/table"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert!(
+        aggregated_table["rows"]
+            .as_array()
+            .expect("aggregated preview rows")
+            .iter()
+            .any(|row| row["values"].get("response_count").is_some())
+    );
+
+    invalid_average_payload["name"] = json!("Invalid Average Dataset");
+    invalid_average_payload["slug"] = json!("invalid-average-dataset");
+    invalid_average_payload["aggregation"]["metrics"] = json!([{
+        "key": "average_text",
+        "label": "Average Text",
+        "function": "average",
+        "source_field_key": field_key,
+        "position": 0
+    }]);
+    let invalid_status = request_status(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/datasets/sql-preview",
+            &admin_token,
+            Some(invalid_average_payload),
+        ),
+    )
+    .await;
+    assert_eq!(invalid_status, StatusCode::BAD_REQUEST);
 }
 
 async fn test_app() -> Option<axum::Router> {

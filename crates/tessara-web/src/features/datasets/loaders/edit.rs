@@ -4,7 +4,11 @@
 use super::super::api;
 #[cfg(feature = "hydrate")]
 use super::super::expressions::expression_to_editor_drafts;
-use super::super::types::{DatasetExpressionDraft, DatasetFieldDraft, DatasetSourceDraft};
+use super::super::types::{
+    DatasetAggregationDraft, DatasetExpressionDraft, DatasetFieldDraft, DatasetSourceDraft,
+};
+#[cfg(feature = "hydrate")]
+use super::super::types::{DatasetAggregationMetricDraft, DatasetRowPickerDraft};
 use leptos::prelude::*;
 use std::collections::BTreeSet;
 
@@ -18,6 +22,7 @@ pub(in crate::features::datasets) fn load_dataset_for_edit(
     sources: RwSignal<Vec<DatasetSourceDraft>>,
     expression: RwSignal<DatasetExpressionDraft>,
     fields: RwSignal<Vec<DatasetFieldDraft>>,
+    aggregation: RwSignal<DatasetAggregationDraft>,
     join_left_key: RwSignal<String>,
     join_right_key: RwSignal<String>,
     sql_preview: RwSignal<Option<String>>,
@@ -71,6 +76,30 @@ pub(in crate::features::datasets) fn load_dataset_for_edit(
                         })
                         .collect(),
                 );
+                aggregation.set(
+                    payload
+                        .aggregation
+                        .map(|aggregation| DatasetAggregationDraft {
+                            group_fields: aggregation.group_fields,
+                            metrics: aggregation
+                                .metrics
+                                .into_iter()
+                                .map(|metric| DatasetAggregationMetricDraft {
+                                    key: metric.key,
+                                    label: metric.label,
+                                    function: metric.function,
+                                    source_field_key: metric.source_field_key.unwrap_or_default(),
+                                })
+                                .collect(),
+                            row_picker: aggregation.row_picker.map(|row_picker| {
+                                DatasetRowPickerDraft {
+                                    sort_field_key: row_picker.sort_field_key,
+                                    direction: row_picker.direction,
+                                }
+                            }),
+                        })
+                        .unwrap_or_default(),
+                );
             }
             Ok(None) => {}
             Err(message) => load_error.set(Some(message)),
@@ -89,6 +118,7 @@ pub(in crate::features::datasets) fn load_dataset_for_edit(
     _: RwSignal<Vec<DatasetSourceDraft>>,
     _: RwSignal<DatasetExpressionDraft>,
     _: RwSignal<Vec<DatasetFieldDraft>>,
+    _: RwSignal<DatasetAggregationDraft>,
     _: RwSignal<String>,
     _: RwSignal<String>,
     _: RwSignal<Option<String>>,

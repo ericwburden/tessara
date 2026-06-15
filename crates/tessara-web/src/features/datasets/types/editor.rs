@@ -21,6 +21,27 @@ pub(in crate::features::datasets) struct DatasetFieldDraft {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub(in crate::features::datasets) struct DatasetAggregationDraft {
+    pub(in crate::features::datasets) group_fields: Vec<String>,
+    pub(in crate::features::datasets) metrics: Vec<DatasetAggregationMetricDraft>,
+    pub(in crate::features::datasets) row_picker: Option<DatasetRowPickerDraft>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(in crate::features::datasets) struct DatasetAggregationMetricDraft {
+    pub(in crate::features::datasets) key: String,
+    pub(in crate::features::datasets) label: String,
+    pub(in crate::features::datasets) function: String,
+    pub(in crate::features::datasets) source_field_key: String,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(in crate::features::datasets) struct DatasetRowPickerDraft {
+    pub(in crate::features::datasets) sort_field_key: String,
+    pub(in crate::features::datasets) direction: String,
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub(in crate::features::datasets) enum DatasetExpressionDraft {
     Source(usize),
     Operation {
@@ -54,5 +75,15 @@ impl Default for DatasetSourceDraft {
 impl Default for DatasetExpressionDraft {
     fn default() -> Self {
         Self::Source(0)
+    }
+}
+
+impl Default for DatasetAggregationDraft {
+    fn default() -> Self {
+        Self {
+            group_fields: Vec::new(),
+            metrics: Vec::new(),
+            row_picker: None,
+        }
     }
 }

@@ -13,6 +13,7 @@ pub(crate) fn submit_dataset_editor(dataset_id: Option<String>, state: DatasetEd
         state.sources.get(),
         state.expression.get(),
         state.fields.get(),
+        state.aggregation.get(),
         state.join_left_key.get(),
         state.join_right_key.get(),
         state.save_error,

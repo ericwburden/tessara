@@ -15,7 +15,37 @@ pub struct CreateDatasetRequest {
     #[serde(default)]
     pub(crate) visibility_node_ids: Vec<Uuid>,
     pub(crate) definition_ast: DatasetExpressionRequest,
+    #[serde(default)]
+    pub(crate) aggregation: Option<DatasetAggregationRequest>,
     pub(crate) fields: Vec<CreateDatasetFieldRequest>,
+}
+
+/// Optional final aggregation applied after the source expression and field projection.
+#[derive(Clone, Deserialize, Serialize)]
+pub struct DatasetAggregationRequest {
+    #[serde(default)]
+    pub(crate) group_fields: Vec<String>,
+    #[serde(default)]
+    pub(crate) metrics: Vec<DatasetAggregationMetricRequest>,
+    #[serde(default)]
+    pub(crate) row_picker: Option<DatasetRowPickerRequest>,
+}
+
+/// One aggregate metric emitted by the final dataset query.
+#[derive(Clone, Deserialize, Serialize)]
+pub struct DatasetAggregationMetricRequest {
+    pub(crate) key: String,
+    pub(crate) label: String,
+    pub(crate) function: String,
+    pub(crate) source_field_key: Option<String>,
+    pub(crate) position: i32,
+}
+
+/// Selects one representative projected row per aggregation group.
+#[derive(Clone, Deserialize, Serialize)]
+pub struct DatasetRowPickerRequest {
+    pub(crate) sort_field_key: String,
+    pub(crate) direction: String,
 }
 
 /// Recursive visual dataset query expression.
@@ -86,6 +116,7 @@ pub struct DatasetDefinition {
     pub(crate) grain: String,
     pub(crate) composition_mode: String,
     pub(crate) definition_ast: Option<DatasetExpressionRequest>,
+    pub(crate) aggregation: Option<DatasetAggregationResponse>,
     pub(crate) generated_sql: Option<String>,
     pub(crate) materialized_schema: Option<String>,
     pub(crate) materialized_table: Option<String>,
@@ -94,6 +125,16 @@ pub struct DatasetDefinition {
     pub(crate) visibility_nodes: Vec<DatasetVisibilityNodeSummary>,
     pub(crate) sources: Vec<DatasetSourceDefinition>,
     pub(crate) fields: Vec<DatasetFieldDefinition>,
+    pub(crate) output_fields: Vec<DatasetFieldDefinition>,
+}
+
+/// Stored aggregation plus server-derived scope behavior.
+#[derive(Serialize)]
+pub struct DatasetAggregationResponse {
+    pub(crate) group_fields: Vec<String>,
+    pub(crate) metrics: Vec<DatasetAggregationMetricRequest>,
+    pub(crate) row_picker: Option<DatasetRowPickerRequest>,
+    pub(crate) scope_mode: String,
 }
 
 /// Organization node that makes a dataset visible.
@@ -120,7 +161,7 @@ pub struct DatasetSourceDefinition {
 }
 
 /// Exposed field definition included in a dataset revision.
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 pub struct DatasetFieldDefinition {
     pub(crate) id: Uuid,
     pub(crate) key: String,

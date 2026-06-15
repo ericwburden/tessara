@@ -75,7 +75,7 @@ pub(crate) fn DatasetSourcesEditor(
     view! {
         <section class="route-panel__section dataset-editor-section">
             <div class="dataset-editor-section__header">
-                <h3>"Operation Designer"</h3>
+                <h3>"Data Sources"</h3>
             </div>
             <div class="dataset-expression-workspace">
                 <div class="dataset-expression-canvas">

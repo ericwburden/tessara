@@ -33,6 +33,7 @@ pub(in crate::features::datasets) struct DatasetDefinition {
     pub(in crate::features::datasets) grain: String,
     pub(in crate::features::datasets) composition_mode: String,
     pub(in crate::features::datasets) definition_ast: Option<DatasetExpressionPayload>,
+    pub(in crate::features::datasets) aggregation: Option<DatasetAggregationResponse>,
     pub(in crate::features::datasets) generated_sql: Option<String>,
     pub(in crate::features::datasets) materialized_schema: Option<String>,
     pub(in crate::features::datasets) materialized_table: Option<String>,
@@ -41,6 +42,15 @@ pub(in crate::features::datasets) struct DatasetDefinition {
     pub(in crate::features::datasets) visibility_nodes: Vec<DatasetVisibilityNode>,
     pub(in crate::features::datasets) sources: Vec<DatasetSourceDefinition>,
     pub(in crate::features::datasets) fields: Vec<DatasetFieldDefinition>,
+    pub(in crate::features::datasets) output_fields: Vec<DatasetFieldDefinition>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub(in crate::features::datasets) struct DatasetAggregationResponse {
+    pub(in crate::features::datasets) group_fields: Vec<String>,
+    pub(in crate::features::datasets) metrics: Vec<DatasetAggregationMetricPayload>,
+    pub(in crate::features::datasets) row_picker: Option<DatasetRowPickerPayload>,
+    pub(in crate::features::datasets) scope_mode: String,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -146,7 +156,30 @@ pub(in crate::features::datasets) struct DatasetPayload {
     pub(in crate::features::datasets) composition_mode: String,
     pub(in crate::features::datasets) visibility_node_ids: Vec<String>,
     pub(in crate::features::datasets) definition_ast: DatasetExpressionPayload,
+    pub(in crate::features::datasets) aggregation: Option<DatasetAggregationPayload>,
     pub(in crate::features::datasets) fields: Vec<DatasetFieldPayload>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub(in crate::features::datasets) struct DatasetAggregationPayload {
+    pub(in crate::features::datasets) group_fields: Vec<String>,
+    pub(in crate::features::datasets) metrics: Vec<DatasetAggregationMetricPayload>,
+    pub(in crate::features::datasets) row_picker: Option<DatasetRowPickerPayload>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+pub(in crate::features::datasets) struct DatasetAggregationMetricPayload {
+    pub(in crate::features::datasets) key: String,
+    pub(in crate::features::datasets) label: String,
+    pub(in crate::features::datasets) function: String,
+    pub(in crate::features::datasets) source_field_key: Option<String>,
+    pub(in crate::features::datasets) position: i32,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+pub(in crate::features::datasets) struct DatasetRowPickerPayload {
+    pub(in crate::features::datasets) sort_field_key: String,
+    pub(in crate::features::datasets) direction: String,
 }
 
 #[allow(dead_code)]

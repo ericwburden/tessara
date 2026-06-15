@@ -1,8 +1,8 @@
 //! Dataset editor page surface.
 
 use super::{
-    DatasetEditorMessages, DatasetEditorState, DatasetFieldsEditor, DatasetIdentitySection,
-    DatasetSourcesEditor, DatasetSqlPreviewPanel, DatasetVisibilityEditor,
+    DatasetAggregationEditor, DatasetEditorMessages, DatasetEditorState, DatasetFieldsEditor,
+    DatasetIdentitySection, DatasetSourcesEditor, DatasetSqlPreviewPanel, DatasetVisibilityEditor,
     install_dataset_editor_loaders, submit_dataset_editor,
 };
 use crate::ui::{
@@ -68,6 +68,10 @@ pub(crate) fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView 
                         datasets=state.datasets
                         rendered_forms=state.rendered_forms
                     />
+                    <DatasetAggregationEditor
+                        fields=state.fields
+                        aggregation=state.aggregation
+                    />
                     <DatasetSqlPreviewPanel
                         dataset_id=dataset_id.clone()
                         name=state.name
@@ -76,6 +80,7 @@ pub(crate) fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView 
                         sources=state.sources
                         expression=state.expression
                         fields=state.fields
+                        aggregation=state.aggregation
                         join_left_key=state.join_left_key
                         join_right_key=state.join_right_key
                         sql_preview=state.sql_preview

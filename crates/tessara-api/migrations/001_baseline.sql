@@ -359,6 +359,7 @@ CREATE TABLE dataset_revisions (
     version_label text NOT NULL,
     status dataset_revision_status NOT NULL DEFAULT 'draft',
     definition_ast jsonb,
+    aggregation jsonb,
     generated_sql text,
     materialized_schema text,
     materialized_table text,

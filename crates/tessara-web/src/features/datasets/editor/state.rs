@@ -1,8 +1,8 @@
 //! Signal state for the dataset editor surface.
 
 use crate::features::datasets::types::{
-    DatasetDesignerSelection, DatasetExpressionDraft, DatasetFieldDraft, DatasetFormOption,
-    DatasetRenderedForm, DatasetSourceDraft, DatasetSummary, NodeResponse,
+    DatasetAggregationDraft, DatasetDesignerSelection, DatasetExpressionDraft, DatasetFieldDraft,
+    DatasetFormOption, DatasetRenderedForm, DatasetSourceDraft, DatasetSummary, NodeResponse,
 };
 use leptos::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
@@ -16,6 +16,7 @@ pub(crate) struct DatasetEditorState {
     pub(crate) sources: RwSignal<Vec<DatasetSourceDraft>>,
     pub(crate) expression: RwSignal<DatasetExpressionDraft>,
     pub(crate) fields: RwSignal<Vec<DatasetFieldDraft>>,
+    pub(crate) aggregation: RwSignal<DatasetAggregationDraft>,
     pub(crate) join_left_key: RwSignal<String>,
     pub(crate) join_right_key: RwSignal<String>,
     pub(crate) forms: RwSignal<Vec<DatasetFormOption>>,
@@ -45,6 +46,7 @@ impl DatasetEditorState {
             sources: RwSignal::new(vec![DatasetSourceDraft::default()]),
             expression: RwSignal::new(DatasetExpressionDraft::default()),
             fields: RwSignal::new(Vec::<DatasetFieldDraft>::new()),
+            aggregation: RwSignal::new(DatasetAggregationDraft::default()),
             join_left_key: RwSignal::new(String::new()),
             join_right_key: RwSignal::new(String::new()),
             forms: RwSignal::new(Vec::<DatasetFormOption>::new()),
