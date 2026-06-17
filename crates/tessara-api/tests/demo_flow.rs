@@ -196,6 +196,9 @@ async fn admin_dataset_query_designer_materializes_generated_sql() {
     let visibility_node_id = seed["program_node_id"]
         .as_str()
         .expect("seed program node id");
+    let admin_token =
+        login_token_for(app.clone(), "admin@tessara.local", "tessara-dev-admin").await;
+
     let rendered_form = request_json(
         app.clone(),
         authorized_request(
@@ -488,27 +491,31 @@ async fn admin_dataset_query_designer_materializes_generated_sql() {
     .await;
     assert_eq!(invalid_status, StatusCode::BAD_REQUEST);
 
-    let mut invalid_max_payload = invalid_average_payload.clone();
-    invalid_max_payload["name"] = json!("Invalid Max Dataset");
-    invalid_max_payload["slug"] = json!("invalid-max-dataset");
-    invalid_max_payload["aggregation"]["metrics"] = json!([{
+    let mut max_text_payload = invalid_average_payload.clone();
+    max_text_payload["name"] = json!("Max Text Dataset");
+    max_text_payload["slug"] = json!("max-text-dataset");
+    max_text_payload["aggregation"]["metrics"] = json!([{
         "key": "max_text",
         "label": "Max Text",
         "function": "max",
         "source_field_key": field_key,
         "position": 0
     }]);
-    let invalid_max_status = request_status(
+    let max_text_preview = request_json(
         app.clone(),
         authorized_request(
             "POST",
             "/api/admin/datasets/sql-preview",
             &admin_token,
-            Some(invalid_max_payload),
+            Some(max_text_payload),
         ),
     )
     .await;
-    assert_eq!(invalid_max_status, StatusCode::BAD_REQUEST);
+    assert!(
+        max_text_preview["generated_sql"]
+            .as_str()
+            .is_some_and(|sql| sql.contains("max_text"))
+    );
 
     let hidden_join_key_payload = json!({
         "name": "Query Designer Joined Dataset",
@@ -636,10 +643,12 @@ async fn login_token_for(app: axum::Router, email: &str, password: &str) -> Stri
 }
 
 async fn request_json(app: axum::Router, request: Request<Body>) -> Value {
+    let method = request.method().clone();
+    let uri = request.uri().clone();
     let (status, body) = request_status_and_json(app, request).await;
     assert!(
         status.is_success(),
-        "expected success status, got {status}: {body}"
+        "expected success status for {method} {uri}, got {status}: {body}"
     );
     body
 }

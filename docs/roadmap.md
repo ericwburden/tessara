@@ -524,15 +524,17 @@ This section records the completed foundation sequence that led to the current n
 
 ## Phase 3: Dataset Engine And Revisions
 
-### Sprint 3A: Dataset Authoring Foundation Slice (Next)
+### Sprint 3A: Dataset Authoring Foundation Slice (Complete)
 
 **Outcome:** datasets become first-class application assets for practical v1 authoring and preview.
 
 **Build:**
 
 - dataset directory/detail/create/edit flows
-- source composition and previews using published form sources
+- source composition using published form sources and reusable dataset expression controls
+- field projection, grouping/aggregation controls, generated SQL preview, and filters placeholder in the final authoring flow
 - clearer separation between authoring and viewing surfaces
+- stable logical form field identity with dataset SQL generated against `(form_version_id, field_id)` instead of mutable field keys
 - dataset and reporting work following bounded-context backend structure on touch
 - query planning and execution concerns moving behind clearer dataset and reporting service boundaries
 - pagination, limits, and guardrails added to dataset and reporting list and execution surfaces where touched
@@ -546,7 +548,7 @@ This section records the completed foundation sequence that led to the current n
 
 **User-testable exit condition:** a tester can create, inspect, edit, and preview datasets through app UI, while scoped operators can read the full materialized output for datasets visible to their effective scope.
 
-### Sprint 3B: Dataset Advanced Authoring Slice
+### Sprint 3B: Dataset Advanced Authoring Slice (Next)
 
 **Outcome:** dataset authors can refine datasets beyond direct source-field projection.
 

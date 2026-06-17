@@ -131,6 +131,7 @@ async fn seed_dev_admin(pool: &PgPool, config: &Config) -> anyhow::Result<()> {
         "submissions:respond",
         "submissions:manage",
         "operations:view",
+        "datasets:read",
         "components:read",
         "dashboards:read",
     ] {

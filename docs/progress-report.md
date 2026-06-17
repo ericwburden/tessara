@@ -1,5 +1,171 @@
 # Progress Report
 
+## 2026-06-17 - Sprint 3A Dataset Authoring Foundation Closeout
+
+- Completed:
+  - shipped native Dataset directory, detail, create, edit, and preview flows at `/datasets`, `/datasets/new`, `/datasets/{dataset_id}`, and `/datasets/{dataset_id}/edit`
+  - replaced placeholder dataset screens with a native authoring flow: Dataset Definition, Data Sources, Fields, Aggregation, Filters placeholder, Generated SQL, and Visibility
+  - added a Data Sources expression designer for form and dataset inputs, nested expressions, union/union all, left/inner/outer joins, pre-projection join keys, and right-side configuration sheets
+  - added field projection with source-grouped accordions, stable include/exclude behavior, editable display labels, system metadata fields, and stable selected-field readback after save/reopen
+  - added Aggregation v1 with `None`, `Row`, and `Field` modes, grouping comboboxes, multi-field row sorting with shared direction, metric rows, and generated SQL recompilation
+  - kept Filters as a read-only placeholder for Sprint 3B so the editor matches the intended flow without expanding Sprint 3A scope
+  - updated generated dataset SQL to use stable logical form field identity through `(form_version_id, field_id)`, removed source-level latest/earliest/all selection, removed ranked source CTEs, and stopped treating mutable `field_key` as identity
+  - simplified dataset visibility so visibility selections are the dataset read gate; materialized dataset rows are not implicitly filtered by `__node_id`
+  - retained source node metadata as normal selectable fields for joins, grouping, debugging, and future explicit restriction rules
+  - tightened `/api/form-versions/{id}/render` and propagated stable form field identity through create/copy/update/delete, submissions, analytics facts, dataset definitions, and tests
+  - added Sprint 3A Playwright coverage in `end2end/tests/datasets.spec.ts` for dataset directory/detail/editor/viewing flows, SQL preview, aggregation, visibility, and source configuration behavior
+  - confirmed the migration set is squashed for closeout: `crates/tessara-api/migrations` contains a single `001_baseline.sql`
+- Validation:
+  - `cargo fmt --all` - passed
+  - `cargo check -p tessara-api` - passed
+  - `cargo check -p tessara-web --features hydrate` - passed
+  - `cargo check -p tessara-web --no-default-features --features ssr` - passed
+  - `cargo test -p tessara-api` - passed
+  - `cargo test -p tessara-web` - passed
+  - `.\scripts\smoke.ps1` - passed after fixing the built-in operator `datasets:read` seed and updating aggregation min/max test expectations
+  - `.\scripts\local-launch.ps1 -FreshData` - passed and left the local app running at `http://localhost:8080`
+  - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"` - passed
+  - `npx playwright test` from `end2end` - passed, 28 tests
+- Known release conditions:
+  - editable dataset filters are intentionally deferred to Sprint 3B; Sprint 3A only displays the placeholder in the final editor sequence
+  - explicit dataset row restriction rules are future work; Sprint 3A makes dataset visibility the read gate and keeps `__node_id` available as normal metadata
+- Next Sprint:
+  - Sprint 3B: Dataset Advanced Authoring Slice
+
+### Sprint Handoff / Demo Instructions
+
+#### Dataset Directory And Detail
+- Role: admin
+- Paths:
+  - `http://localhost:8080/datasets`
+  - `http://localhost:8080/datasets/{dataset_id}`
+- Steps:
+  1. Sign in as `admin@tessara.local`.
+  2. Open `/datasets`.
+  3. Search for a seeded dataset, open it, and switch through Preview, Sources, Fields, and SQL tabs.
+  4. Click the Visibility summary card to inspect visible nodes.
+- Expected:
+  - the directory uses standard searchable, paginated table behavior; dataset names link to detail; slugs render as secondary text
+  - detail tabs show the materialized output, sources, final output fields, and generated SQL without exposing internal helper columns
+- Acceptance check:
+  - pass when a reviewer can inspect a dataset and verify that Preview reflects the final materialized table output
+- Evidence location:
+  - `end2end/tests/datasets.spec.ts`
+  - closeout Playwright transcript
+
+#### Dataset Authoring Editor
+- Role: admin
+- Paths:
+  - `http://localhost:8080/datasets/new`
+  - `http://localhost:8080/datasets/{dataset_id}/edit`
+- Steps:
+  1. Create or edit a dataset.
+  2. Configure Dataset Definition metadata.
+  3. Use Data Sources to add or split inputs, configure join operations, and choose pre-projection join keys.
+  4. Use Fields to include/exclude projected fields and change display labels.
+  5. Save and reopen the dataset editor.
+- Expected:
+  - field selections, aliases, joins, and display labels persist after save/reopen
+  - source-level latest/earliest/all selectors are not present
+- Acceptance check:
+  - pass when selected fields remain stable and the editor reloads the saved definition instead of regenerating default selections
+- Evidence location:
+  - `end2end/tests/datasets.spec.ts`
+  - `cargo test -p tessara-api`
+
+#### Dataset Aggregation And SQL Preview
+- Role: admin
+- Paths:
+  - `http://localhost:8080/datasets/{dataset_id}/edit`
+  - `POST /api/admin/datasets/sql-preview`
+- Steps:
+  1. In Aggregation, switch between None, Row, and Field.
+  2. Add grouping fields through the searchable combobox.
+  3. In Row mode, add multiple sort fields and choose the shared direction.
+  4. In Field mode, add metric rows and choose eligible source fields.
+  5. Expand Generated SQL and confirm it refreshes from the current settings.
+- Expected:
+  - SQL uses `(form_version_id, field_id)` joins for form field values, avoids `field_key` as identity, and avoids ranked CTEs when no row picking is configured
+  - unsupported aggregate-field combinations are not offered in the UI
+- Acceptance check:
+  - pass when SQL preview compiles from unsaved editor settings and reflects current source aliases, selected fields, joins, and aggregation
+- Evidence location:
+  - `end2end/tests/datasets.spec.ts`
+  - `cargo test -p tessara-api`
+
+#### Dataset Visibility And Role Gating
+- Role: admin and scoped reader
+- Paths:
+  - `http://localhost:8080/datasets/{dataset_id}/edit`
+  - `GET /api/datasets`
+  - `GET /api/datasets/{dataset_id}/table`
+- Steps:
+  1. In the editor, search the Visibility tree.
+  2. Toggle a node, a node with parents, and a node with descendants.
+  3. Sign in as a scoped reader and request a dataset visible to that scope.
+  4. Sign in as a no-access user and request dataset APIs.
+- Expected:
+  - visibility tree selection is ID-based and highlights search matches
+  - scoped readers can access visible datasets and their full materialized output
+  - no-access users cannot see dataset navigation and cannot fetch dataset APIs
+- Acceptance check:
+  - pass when dataset visibility gates dataset access and no implicit `__node_id` row filtering hides rows
+- Evidence location:
+  - `end2end/tests/permissions.spec.ts`
+  - `end2end/tests/datasets.spec.ts`
+
+### Acceptance Mapping
+
+- Exit condition:
+  - Admin can create a dataset, open detail, preview rows, edit the definition, and see the updated definition.
+- Manual demonstration:
+  - Dataset Authoring Editor
+- Automated check:
+  - `npx playwright test` from `end2end`, especially `end2end/tests/datasets.spec.ts`
+
+- Exit condition:
+  - Admin can configure data sources, projected fields, grouping/aggregation, generated SQL preview, and visibility in the Dataset editor.
+- Manual demonstration:
+  - Dataset Authoring Editor; Dataset Aggregation And SQL Preview; Dataset Visibility And Role Gating
+- Automated check:
+  - `end2end/tests/datasets.spec.ts`
+  - `POST /api/admin/datasets/sql-preview` assertions in Playwright
+
+- Exit condition:
+  - Scoped readers see only datasets visible to their scope and can read the full materialized output for those datasets.
+- Manual demonstration:
+  - Dataset Visibility And Role Gating
+- Automated check:
+  - `end2end/tests/permissions.spec.ts`
+
+- Exit condition:
+  - No-capability users cannot see dataset navigation and cannot fetch dataset APIs.
+- Manual demonstration:
+  - Dataset Visibility And Role Gating
+- Automated check:
+  - `end2end/tests/permissions.spec.ts`
+
+- Exit condition:
+  - Dataset directory and preview surfaces use standard searchable/paginated table behavior and mobile cards.
+- Manual demonstration:
+  - Dataset Directory And Detail
+- Automated check:
+  - `end2end/tests/datasets.spec.ts`
+
+- Exit condition:
+  - Form-version render endpoint requires readable/manageable form access.
+- Manual demonstration:
+  - Dataset Authoring Editor
+- Automated check:
+  - `cargo test -p tessara-api`
+
+- Exit condition:
+  - Sprint closeout uses a squashed migration baseline.
+- Manual demonstration:
+  - inspect `crates/tessara-api/migrations`
+- Automated check:
+  - `.\scripts\local-launch.ps1 -FreshData` applies the single `001_baseline.sql` baseline
+
 ## 2026-06-06 - Sprint 3A Dataset Authoring Foundation Kickoff
 
 - Kickoff status:

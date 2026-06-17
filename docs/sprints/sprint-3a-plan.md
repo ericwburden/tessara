@@ -2,21 +2,25 @@
 
 ## Sprint Summary
 
-Sprint 3A replaces the native `/datasets` placeholders with practical v1 Dataset Authoring: directory, detail, create, edit, and preview flows backed by the existing dataset APIs. Authoring is admin-only for this slice; scoped users with `datasets:read` can browse and preview visible datasets.
+Sprint 3A replaces the native `/datasets` placeholders with practical v1 Dataset Authoring: directory, detail, create, edit, SQL preview, and dataset preview flows backed by the existing dataset APIs. Authoring is admin-only for this slice; scoped users with `datasets:read` can browse and preview visible datasets.
 
 ## Sprint Specifications
 
 - Add native SSR routes for `/datasets`, `/datasets/new`, `/datasets/{dataset_id}`, and `/datasets/{dataset_id}/edit`.
 - Reuse existing dataset APIs for list/detail/table/create/update; do not add delete UI.
-- Create/edit supports submission-grain datasets, union/join composition, published-form sources, `all/latest/earliest` source selection, visibility nodes, and exposed source-field mappings.
+- Create/edit supports submission-grain datasets, union/join composition, published-form sources, field projection, grouping/aggregation, generated SQL preview, visibility nodes, and exposed source-field mappings.
+- Source-level `all/latest/earliest` selection was removed during Sprint 3A. Row picking now belongs to Aggregation, and source rows pass through directly unless Aggregation is configured.
+- Form fields use stable logical `field_id` values across versions. Dataset SQL joins facts to field metadata by `(form_version_id, field_id)`; `field_key` is mutable metadata, not identity.
 - Detail/edit screens show metadata, visibility nodes, source and field tables, and a dataset preview table.
 - Dataset Visibility selections are the dataset read gate. Materialized rows are not implicitly filtered by `__node_id`; `__node_id` remains available as normal system metadata for grouping, joins, debugging, and future explicit restriction rules.
+- The editor includes a read-only Filters section placeholder so the final flow is `Dataset Definition > Data Sources > Fields > Aggregation > Filters > Generated SQL > Visibility`; editable filters remain deferred to Sprint 3B.
 - Tighten `/api/form-versions/{id}/render` so form field metadata requires readable form access.
 - Defer row filters, calculated fields, explicit dataset restriction filters/rules, dataset revision history, compatibility findings, component authoring, and dashboard work.
 
 ## Acceptance Criteria
 
 - Admin can create a dataset, open detail, preview rows, edit the definition, and see the updated definition.
+- Admin can configure data sources, projected fields, grouping/aggregation, generated SQL preview, and visibility in the Dataset editor.
 - Scoped readers see only datasets visible to their scope, and can read the full materialized output for those datasets.
 - No-capability users cannot see dataset navigation and cannot fetch dataset APIs.
 - Dataset directory and preview surfaces use standard searchable/paginated table behavior and mobile cards.
