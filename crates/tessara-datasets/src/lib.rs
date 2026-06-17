@@ -104,40 +104,6 @@ impl DatasetCompositionMode {
     }
 }
 
-/// Dataset source record-selection rule.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DatasetSelectionRule {
-    /// Include every matching record from the source.
-    All,
-    /// Select the latest matching record per dataset grain.
-    Latest,
-    /// Select the earliest matching record per dataset grain.
-    Earliest,
-}
-
-impl DatasetSelectionRule {
-    /// Parses a dataset source selection rule from the API/storage representation.
-    pub fn parse(value: &str) -> Result<Self, DatasetRuleError> {
-        match value.trim() {
-            "all" => Ok(Self::All),
-            "latest" => Ok(Self::Latest),
-            "earliest" => Ok(Self::Earliest),
-            other => Err(DatasetRuleError::new(format!(
-                "unsupported dataset selection rule '{other}'"
-            ))),
-        }
-    }
-
-    /// Returns the stable storage representation.
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::All => "all",
-            Self::Latest => "latest",
-            Self::Earliest => "earliest",
-        }
-    }
-}
-
 /// Validates the shape of a dataset definition before database-specific checks.
 pub fn validate_dataset_shape<'a>(
     source_aliases: impl IntoIterator<Item = &'a str>,
@@ -190,9 +156,7 @@ pub fn validate_dataset_shape<'a>(
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        DatasetCompositionMode, DatasetGrain, DatasetSelectionRule, validate_dataset_shape,
-    };
+    use super::{DatasetCompositionMode, DatasetGrain, validate_dataset_shape};
 
     #[test]
     fn parses_supported_dataset_grains() {
@@ -209,22 +173,6 @@ mod tests {
                 .expect_err("unsupported grains should fail")
                 .message(),
             "unsupported dataset grain 'client'"
-        );
-    }
-
-    #[test]
-    fn parses_supported_selection_rules() {
-        assert_eq!(
-            DatasetSelectionRule::parse("all").expect("all should parse"),
-            DatasetSelectionRule::All
-        );
-        assert_eq!(
-            DatasetSelectionRule::parse("latest").expect("latest should parse"),
-            DatasetSelectionRule::Latest
-        );
-        assert_eq!(
-            DatasetSelectionRule::parse("earliest").expect("earliest should parse"),
-            DatasetSelectionRule::Earliest
         );
     }
 

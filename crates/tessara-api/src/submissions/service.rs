@@ -134,7 +134,8 @@ pub async fn save_submission_values(
             .get(&key)
             .ok_or_else(|| ApiError::BadRequest(format!("unknown form field '{key}'")))?;
         validate_field_value(field.field_type, &value)?;
-        repo::upsert_submission_value(pool, submission_id, field.id, value).await?;
+        repo::upsert_submission_value(pool, submission_id, form_version_id, field.id, value)
+            .await?;
     }
 
     repo::audit_submission(pool, submission_id, "save_draft", Some(account.account_id)).await?;

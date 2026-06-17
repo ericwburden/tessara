@@ -3,7 +3,7 @@
 use crate::features::forms::FormDatasetSourceLink;
 use crate::ui::{SearchableDataTable, TablePaginationFooter};
 use crate::utils::pagination::pagination_page_start;
-use crate::utils::text::{sentence_label, text_matches};
+use crate::utils::text::text_matches;
 use leptos::prelude::*;
 
 #[component]
@@ -18,16 +18,7 @@ pub(crate) fn FormRelatedDatasetSourcesTable(
         let query = search.get();
         sources_for_filter
             .iter()
-            .filter(|source| {
-                text_matches(
-                    &query,
-                    &[
-                        &source.dataset_name,
-                        &source.source_alias,
-                        &source.selection_rule,
-                    ],
-                )
-            })
+            .filter(|source| text_matches(&query, &[&source.dataset_name, &source.source_alias]))
             .cloned()
             .collect::<Vec<_>>()
     });
@@ -40,7 +31,6 @@ pub(crate) fn FormRelatedDatasetSourcesTable(
                     <tr>
                         <th scope="col">"Dataset"</th>
                         <th scope="col">"Alias"</th>
-                        <th scope="col">"Selection rule"</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -49,7 +39,7 @@ pub(crate) fn FormRelatedDatasetSourcesTable(
                         if rows.is_empty() {
                             view! {
                                 <tr>
-                                    <td class="data-table__empty" colspan="3">"No Related Dataset Sources to Display"</td>
+                                    <td class="data-table__empty" colspan="2">"No Related Dataset Sources to Display"</td>
                                 </tr>
                             }
                             .into_any()
@@ -68,7 +58,6 @@ pub(crate) fn FormRelatedDatasetSourcesTable(
                                                 <a class="data-table__primary-link" href=format!("/datasets/{}", source.dataset_id)>{source.dataset_name}</a>
                                             </th>
                                             <td>{source.source_alias}</td>
-                                            <td>{sentence_label(&source.selection_rule)}</td>
                                         </tr>
                                     }
                                 })
@@ -108,10 +97,6 @@ pub(crate) fn FormRelatedDatasetSourcesTable(
                                             <div>
                                                 <dt>"Alias"</dt>
                                                 <dd>{source.source_alias}</dd>
-                                            </div>
-                                            <div>
-                                                <dt>"Selection rule"</dt>
-                                                <dd>{sentence_label(&source.selection_rule)}</dd>
                                             </div>
                                         </dl>
                                     </article>

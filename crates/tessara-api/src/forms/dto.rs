@@ -35,6 +35,8 @@ pub(crate) struct CreateFormSectionRequest {
 
 #[derive(Deserialize)]
 pub(crate) struct CreateFormFieldRequest {
+    #[serde(default)]
+    pub(crate) field_id: Option<Uuid>,
     pub(crate) section_id: Uuid,
     pub(crate) key: String,
     pub(crate) label: String,
@@ -118,7 +120,7 @@ fn default_form_field_grid_height() -> i32 {
 
 #[derive(Serialize)]
 pub(crate) struct RenderedField {
-    pub(crate) id: Uuid,
+    pub(crate) field_id: Uuid,
     pub(crate) key: String,
     pub(crate) label: String,
     pub(crate) field_type: String,
@@ -222,7 +224,6 @@ pub(crate) struct FormDatasetSourceLink {
     pub(crate) dataset_id: Uuid,
     pub(crate) dataset_name: String,
     pub(crate) source_alias: String,
-    pub(crate) selection_rule: String,
 }
 
 #[derive(Serialize)]

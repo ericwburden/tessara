@@ -1,5 +1,6 @@
 use serde_json::{Value, json};
 use sqlx::PgPool;
+use std::collections::BTreeSet;
 use uuid::Uuid;
 
 use crate::error::ApiResult;
@@ -11,6 +12,12 @@ pub(super) struct DatasetFieldBinding<'a> {
     pub(super) label: &'a str,
     pub(super) source_field_key: &'a str,
     pub(super) field_type: &'a str,
+}
+
+struct ResolvedDatasetFieldBinding<'a> {
+    logical_key: &'a str,
+    source_field_key: &'a str,
+    source_field_id: Option<Uuid>,
 }
 
 pub(super) async fn ensure_dataset(
@@ -27,6 +34,25 @@ pub(super) async fn ensure_dataset(
             "demo dataset '{slug}' requires a published form version"
         ))
     })?;
+    let form_version_id = sqlx::query_scalar(
+        r#"
+        SELECT id
+        FROM form_versions
+        WHERE form_id = $1
+          AND version_major = $2
+          AND status = 'published'::form_version_status
+        ORDER BY
+            version_minor DESC NULLS LAST,
+            version_patch DESC NULLS LAST,
+            published_at DESC NULLS LAST,
+            created_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(form_id)
+    .bind(form_version_major)
+    .fetch_one(pool)
+    .await?;
     let dataset_id = if let Some(id) = sqlx::query_scalar("SELECT id FROM datasets WHERE slug = $1")
         .bind(slug)
         .fetch_optional(pool)
@@ -63,8 +89,8 @@ pub(super) async fn ensure_dataset(
     sqlx::query(
         r#"
         INSERT INTO dataset_sources
-            (dataset_id, source_alias, form_id, form_version_major, selection_rule, position)
-        VALUES ($1, $2, $3, $4, 'latest', 0)
+            (dataset_id, source_alias, form_id, form_version_major, position)
+        VALUES ($1, $2, $3, $4, 0)
         "#,
     )
     .bind(dataset_id)
@@ -74,12 +100,27 @@ pub(super) async fn ensure_dataset(
     .execute(pool)
     .await?;
 
+    let mut resolved_bindings = Vec::new();
+    for binding in bindings {
+        resolved_bindings.push(ResolvedDatasetFieldBinding {
+            logical_key: binding.logical_key,
+            source_field_key: binding.source_field_key,
+            source_field_id: source_field_id(
+                pool,
+                form_id,
+                form_version_major,
+                binding.source_field_key,
+            )
+            .await?,
+        });
+    }
+
     for (position, binding) in bindings.iter().enumerate() {
         sqlx::query(
             r#"
             INSERT INTO dataset_fields
-                (dataset_id, key, label, source_alias, source_field_key, field_type, position)
-            VALUES ($1, $2, $3, $4, $5, $6::field_type, $7)
+                (dataset_id, key, label, source_alias, source_field_key, source_field_id, field_type, position)
+            VALUES ($1, $2, $3, $4, $5, $6, $7::field_type, $8)
             "#,
         )
         .bind(dataset_id)
@@ -87,6 +128,7 @@ pub(super) async fn ensure_dataset(
         .bind(binding.label)
         .bind(source_alias)
         .bind(binding.source_field_key)
+        .bind(resolved_bindings[position].source_field_id)
         .bind(binding.field_type)
         .bind(position as i32)
         .execute(pool)
@@ -114,10 +156,9 @@ pub(super) async fn ensure_dataset(
         "kind": "form",
         "alias": source_alias,
         "form_id": form_id,
-        "form_version_major": form_version_major,
-        "selection_rule": "latest"
+        "form_version_major": form_version_major
     });
-    let generated_sql = generated_dataset_sql(form_id, form_version_major, bindings);
+    let generated_sql = generated_dataset_sql(form_version_id, &resolved_bindings);
     let revision_id = sqlx::query_scalar(
         r#"
         INSERT INTO dataset_revisions
@@ -139,71 +180,88 @@ pub(super) async fn ensure_dataset(
 }
 
 fn generated_dataset_sql(
-    form_id: Uuid,
-    form_version_major: i32,
-    bindings: &[DatasetFieldBinding<'_>],
+    form_version_id: Uuid,
+    bindings: &[ResolvedDatasetFieldBinding<'_>],
 ) -> String {
+    let value_field_ids = bindings
+        .iter()
+        .filter_map(|binding| binding.source_field_id)
+        .collect::<Vec<_>>();
+    let needs_node_dim = bindings
+        .iter()
+        .any(|binding| binding.source_field_key == "__node_name");
+    let mut group_by_expressions = BTreeSet::from([
+        "submission_fact.form_version_id".to_string(),
+        "submission_fact.submission_id".to_string(),
+    ]);
     let select_columns = bindings
         .iter()
         .map(|binding| {
             let column = quote_identifier(binding.logical_key);
             if let Some(expression) = system_source_field_expression(binding.source_field_key) {
+                group_by_expressions.insert(expression.to_string());
                 format!("{expression} AS {column}")
             } else {
+                let source_field_id = binding
+                    .source_field_id
+                    .expect("demo dataset field should resolve to a stable field id");
                 format!(
-                    "MAX(submission_value_fact.value_text) FILTER (WHERE submission_value_fact.field_key = {}) AS {column}",
-                    sql_literal(binding.source_field_key)
+                    "MAX(submission_value_fact.value_text) FILTER (WHERE submission_value_fact.field_id = {}::uuid) AS {column}",
+                    sql_literal(&source_field_id.to_string())
                 )
             }
         })
         .collect::<Vec<_>>()
         .join(",\n                ");
+    let value_join = if value_field_ids.is_empty() {
+        String::new()
+    } else {
+        let field_id_filter = value_field_ids
+            .iter()
+            .map(|field_id| format!("{}::uuid", sql_literal(&field_id.to_string())))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!(
+            r#"
+            LEFT JOIN analytics.submission_value_fact
+              ON submission_value_fact.submission_id = submission_fact.submission_id
+             AND submission_value_fact.form_version_id = submission_fact.form_version_id
+             AND submission_value_fact.field_id IN ({field_id_filter})"#
+        )
+    };
+    let group_by = if value_field_ids.is_empty() {
+        String::new()
+    } else {
+        format!(
+            r#"
+            GROUP BY {}"#,
+            group_by_expressions
+                .into_iter()
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    };
+    let node_join = if needs_node_dim {
+        "\n            JOIN analytics.node_dim ON node_dim.node_id = submission_fact.node_id"
+    } else {
+        ""
+    };
 
     format!(
         r#"WITH
         form_a_1 AS (
-            WITH ranked AS (
-                SELECT
-                    submission_fact.submission_id,
-                    submission_fact.form_version_id,
-                    submission_fact.node_id,
-                    node_dim.node_name,
-                    submission_fact.status,
-                    submission_fact.submitted_at,
-                    submission_fact.created_at,
-                    submission_fact.last_modified_at,
-                    submission_fact.last_modified_by_user_name,
-                    ROW_NUMBER() OVER (
-                        PARTITION BY submission_fact.node_id
-                        ORDER BY submission_fact.submitted_at DESC NULLS LAST, submission_fact.submission_id
-                    ) AS selection_rank
-                FROM analytics.submission_fact
-                JOIN form_versions ON form_versions.id = submission_fact.form_version_id
-                JOIN analytics.node_dim ON node_dim.node_id = submission_fact.node_id
-                WHERE submission_fact.status = 'submitted'
-                  AND form_versions.form_id = {}::uuid
-                  AND form_versions.version_major = {form_version_major}
-            )
             SELECT
-                ranked.submission_id::text AS __row_id,
-                ranked.node_id AS __node_id,
-                ranked.node_name AS __node_name,
+                md5(concat_ws('|', 'form', submission_fact.form_version_id::text, submission_fact.submission_id::text)) AS __row_id,
                 {select_columns}
-            FROM ranked
-            LEFT JOIN analytics.submission_value_fact
-              ON submission_value_fact.submission_id = ranked.submission_id
-            WHERE selection_rank = 1
-            GROUP BY ranked.submission_id, ranked.node_id, ranked.node_name,
-                ranked.form_version_id, ranked.status, ranked.submitted_at,
-                ranked.created_at, ranked.last_modified_at, ranked.last_modified_by_user_name
+            FROM analytics.submission_fact{node_join}{value_join}
+            WHERE submission_fact.status = 'submitted'
+              AND submission_fact.form_version_id = {}::uuid{group_by}
         )
         SELECT
             __row_id,
-            __node_id,
-            __node_name,
             {}
         FROM form_a_1"#,
-        sql_literal(&form_id.to_string()),
+        sql_literal(&form_version_id.to_string()),
         bindings
             .iter()
             .map(|binding| quote_identifier(binding.logical_key))
@@ -212,17 +270,51 @@ fn generated_dataset_sql(
     )
 }
 
+async fn source_field_id(
+    pool: &PgPool,
+    form_id: Uuid,
+    form_version_major: i32,
+    source_field_key: &str,
+) -> ApiResult<Option<Uuid>> {
+    if system_source_field_expression(source_field_key).is_some() {
+        return Ok(None);
+    }
+    let field_id = sqlx::query_scalar(
+        r#"
+        SELECT form_fields.field_id
+        FROM form_fields
+        JOIN form_versions ON form_versions.id = form_fields.form_version_id
+        WHERE form_versions.form_id = $1
+          AND form_versions.version_major = $2
+          AND form_versions.status = 'published'::form_version_status
+          AND form_fields.key = $3
+        ORDER BY
+            form_versions.version_minor DESC NULLS LAST,
+            form_versions.version_patch DESC NULLS LAST,
+            form_versions.published_at DESC NULLS LAST,
+            form_fields.position
+        LIMIT 1
+        "#,
+    )
+    .bind(form_id)
+    .bind(form_version_major)
+    .bind(source_field_key)
+    .fetch_one(pool)
+    .await?;
+    Ok(Some(field_id))
+}
+
 fn system_source_field_expression(source_field_key: &str) -> Option<&'static str> {
     match source_field_key {
-        "__submission_id" => Some("ranked.submission_id::text"),
-        "__form_version_id" => Some("ranked.form_version_id::text"),
-        "__node_id" => Some("ranked.node_id::text"),
-        "__node_name" => Some("ranked.node_name"),
-        "__submission_status" => Some("ranked.status"),
-        "__submitted_at" => Some("ranked.submitted_at::text"),
-        "__submission_created_at" => Some("ranked.created_at::text"),
-        "__last_updated_at" => Some("ranked.last_modified_at::text"),
-        "__last_updated_by_user_name" => Some("ranked.last_modified_by_user_name"),
+        "__submission_id" => Some("submission_fact.submission_id::text"),
+        "__form_version_id" => Some("submission_fact.form_version_id::text"),
+        "__node_id" => Some("submission_fact.node_id::text"),
+        "__node_name" => Some("node_dim.node_name"),
+        "__submission_status" => Some("submission_fact.status"),
+        "__submitted_at" => Some("submission_fact.submitted_at::text"),
+        "__submission_created_at" => Some("submission_fact.created_at::text"),
+        "__last_updated_at" => Some("submission_fact.last_modified_at::text"),
+        "__last_updated_by_user_name" => Some("submission_fact.last_modified_by_user_name"),
         _ => None,
     }
 }
@@ -244,7 +336,7 @@ async fn materialize_dataset_revision(
     sqlx::query(&format!("CREATE TABLE {full_name} AS {generated_sql}"))
         .execute(pool)
         .await?;
-    sqlx::query(&format!("CREATE INDEX ON {full_name} (__node_id)"))
+    sqlx::query(&format!("CREATE INDEX ON {full_name} (__row_id)"))
         .execute(pool)
         .await?;
     let row_count: i64 = sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {full_name}"))

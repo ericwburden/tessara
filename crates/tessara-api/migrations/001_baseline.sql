@@ -186,7 +186,7 @@ CREATE TABLE form_sections (
 );
 
 CREATE TABLE form_fields (
-    id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+    field_id uuid NOT NULL DEFAULT uuid_generate_v4(),
     form_version_id uuid NOT NULL REFERENCES form_versions(id) ON DELETE CASCADE,
     section_id uuid NOT NULL REFERENCES form_sections(id) ON DELETE CASCADE,
     key text NOT NULL,
@@ -198,6 +198,7 @@ CREATE TABLE form_fields (
     grid_column integer NOT NULL DEFAULT 1,
     grid_width integer NOT NULL DEFAULT 1,
     grid_height integer NOT NULL DEFAULT 1,
+    PRIMARY KEY (form_version_id, field_id),
     UNIQUE (form_version_id, key)
 );
 
@@ -311,16 +312,20 @@ ALTER TABLE submissions
 
 CREATE TABLE submission_values (
     submission_id uuid NOT NULL REFERENCES submissions(id) ON DELETE CASCADE,
-    field_id uuid NOT NULL REFERENCES form_fields(id) ON DELETE RESTRICT,
+    form_version_id uuid NOT NULL,
+    field_id uuid NOT NULL,
     value jsonb NOT NULL,
-    PRIMARY KEY (submission_id, field_id)
+    PRIMARY KEY (submission_id, field_id),
+    FOREIGN KEY (form_version_id, field_id) REFERENCES form_fields(form_version_id, field_id) ON DELETE RESTRICT
 );
 
 CREATE TABLE submission_value_multi (
     submission_id uuid NOT NULL REFERENCES submissions(id) ON DELETE CASCADE,
-    field_id uuid NOT NULL REFERENCES form_fields(id) ON DELETE RESTRICT,
+    form_version_id uuid NOT NULL,
+    field_id uuid NOT NULL,
     value text NOT NULL,
-    PRIMARY KEY (submission_id, field_id, value)
+    PRIMARY KEY (submission_id, field_id, value),
+    FOREIGN KEY (form_version_id, field_id) REFERENCES form_fields(form_version_id, field_id) ON DELETE RESTRICT
 );
 
 CREATE TABLE submission_audit_events (
@@ -383,11 +388,9 @@ CREATE TABLE dataset_sources (
     form_id uuid REFERENCES forms(id) ON DELETE CASCADE,
     dataset_revision_id uuid REFERENCES dataset_revisions(id) ON DELETE RESTRICT,
     form_version_major integer,
-    selection_rule text NOT NULL DEFAULT 'all',
     position integer NOT NULL DEFAULT 0,
     created_at timestamptz NOT NULL DEFAULT now(),
     UNIQUE (dataset_id, source_alias),
-    CHECK (selection_rule IN ('all', 'latest', 'earliest')),
     CHECK (
         ((form_id IS NOT NULL)::integer
         + (dataset_revision_id IS NOT NULL)::integer) = 1
@@ -401,6 +404,7 @@ CREATE TABLE dataset_fields (
     label text NOT NULL,
     source_alias text NOT NULL,
     source_field_key text NOT NULL,
+    source_field_id uuid,
     field_type field_type NOT NULL,
     position integer NOT NULL DEFAULT 0,
     created_at timestamptz NOT NULL DEFAULT now(),
@@ -489,11 +493,12 @@ CREATE TABLE analytics.form_version_dim (
 );
 
 CREATE TABLE analytics.field_dim (
-    field_id uuid PRIMARY KEY,
     form_version_id uuid NOT NULL,
+    field_id uuid NOT NULL,
     field_key text NOT NULL,
     field_label text NOT NULL,
-    field_type text NOT NULL
+    field_type text NOT NULL,
+    PRIMARY KEY (form_version_id, field_id)
 );
 
 CREATE TABLE analytics.compatibility_group_dim (
@@ -515,12 +520,18 @@ CREATE TABLE analytics.submission_fact (
 
 CREATE TABLE analytics.submission_value_fact (
     submission_id uuid NOT NULL,
+    form_version_id uuid NOT NULL,
     field_id uuid NOT NULL,
     field_key text NOT NULL,
     value_text text,
     value_json jsonb NOT NULL,
     PRIMARY KEY (submission_id, field_id)
 );
+
+CREATE INDEX analytics_submission_fact_form_version_idx
+    ON analytics.submission_fact (form_version_id);
+CREATE INDEX analytics_submission_value_fact_form_version_field_idx
+    ON analytics.submission_value_fact (form_version_id, field_id, submission_id);
 
 CREATE INDEX workflow_versions_workflow_idx
     ON workflow_versions (workflow_id, status, created_at);

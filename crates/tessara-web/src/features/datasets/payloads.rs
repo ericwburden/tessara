@@ -1,6 +1,6 @@
 //! Payload preparation helpers for dataset mutations.
 
-use super::expressions::{build_expression_ast, expression_uses_join, root_expression_operation};
+use super::expressions::{build_expression_ast, root_expression_operation};
 use super::types::*;
 
 #[cfg(feature = "hydrate")]
@@ -8,7 +8,7 @@ pub(super) fn dataset_payload_from_drafts(
     name: String,
     slug: String,
     visibility_node_ids: Vec<String>,
-    mut sources: Vec<DatasetSourceDraft>,
+    sources: Vec<DatasetSourceDraft>,
     expression: DatasetExpressionDraft,
     fields: Vec<DatasetFieldDraft>,
     aggregation: DatasetAggregationDraft,
@@ -17,13 +17,7 @@ pub(super) fn dataset_payload_from_drafts(
 ) -> Result<DatasetPayload, String> {
     let root_composition_mode =
         root_expression_operation(&expression).unwrap_or_else(|| "union".into());
-    if expression_uses_join(&expression) {
-        for source in &mut sources {
-            if source.selection_rule == "all" {
-                source.selection_rule = "latest".into();
-            }
-        }
-    }
+    let field_drafts = fields.clone();
     let field_payloads = fields
         .into_iter()
         .enumerate()
@@ -41,9 +35,13 @@ pub(super) fn dataset_payload_from_drafts(
             position: index as i32,
         })
         .collect::<Vec<_>>();
-    let Some(definition_ast) =
-        build_expression_ast(&sources, &expression, &join_left_key, &join_right_key)
-    else {
+    let Some(definition_ast) = build_expression_ast(
+        &sources,
+        &field_drafts,
+        &expression,
+        &join_left_key,
+        &join_right_key,
+    ) else {
         return Err("Choose at least one complete dataset input before saving.".into());
     };
     Ok(DatasetPayload {

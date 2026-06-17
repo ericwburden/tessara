@@ -68,7 +68,6 @@ pub(in crate::features::datasets) struct DatasetSourceDefinition {
     pub(in crate::features::datasets) form_name: Option<String>,
     pub(in crate::features::datasets) form_version_major: Option<i32>,
     pub(in crate::features::datasets) dataset_revision_id: Option<String>,
-    pub(in crate::features::datasets) selection_rule: String,
     pub(in crate::features::datasets) position: i32,
 }
 
@@ -200,7 +199,6 @@ pub(in crate::features::datasets) enum DatasetExpressionPayload {
         alias: String,
         form_id: String,
         form_version_major: Option<i32>,
-        selection_rule: String,
     },
     Dataset {
         alias: String,

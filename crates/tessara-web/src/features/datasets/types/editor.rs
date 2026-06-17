@@ -9,7 +9,6 @@ pub(in crate::features::datasets) struct DatasetSourceDraft {
     pub(in crate::features::datasets) form_version_major: Option<i32>,
     pub(in crate::features::datasets) dataset_id: String,
     pub(in crate::features::datasets) dataset_revision_id: String,
-    pub(in crate::features::datasets) selection_rule: String,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -75,7 +74,6 @@ impl Default for DatasetSourceDraft {
             form_version_major: None,
             dataset_id: String::new(),
             dataset_revision_id: String::new(),
-            selection_rule: "latest".into(),
         }
     }
 }

@@ -32,6 +32,7 @@ pub(crate) struct CreateFormSectionPayload {
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
 pub(crate) struct CreateFormFieldPayload {
     pub(crate) section_id: String,
+    pub(crate) field_id: Option<String>,
     pub(crate) key: String,
     pub(crate) label: String,
     pub(crate) field_type: String,
@@ -111,7 +112,6 @@ pub(crate) struct FormDatasetSourceLink {
     pub(crate) dataset_id: String,
     pub(crate) dataset_name: String,
     pub(crate) source_alias: String,
-    pub(crate) selection_rule: String,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -137,7 +137,7 @@ pub(crate) struct RenderedSection {
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 pub(crate) struct RenderedField {
-    pub(crate) id: String,
+    pub(crate) field_id: String,
     pub(crate) key: String,
     pub(crate) label: String,
     pub(crate) field_type: String,

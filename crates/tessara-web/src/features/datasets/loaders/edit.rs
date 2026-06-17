@@ -3,6 +3,10 @@
 #[cfg(feature = "hydrate")]
 use super::super::api;
 #[cfg(feature = "hydrate")]
+use super::super::editor::canonical_field_key;
+#[cfg(feature = "hydrate")]
+use super::super::editor::source_seed_key;
+#[cfg(feature = "hydrate")]
 use super::super::expressions::expression_to_editor_drafts;
 use super::super::types::{
     DatasetAggregationDraft, DatasetExpressionDraft, DatasetFieldDraft, DatasetSourceDraft,
@@ -12,6 +16,8 @@ use super::super::types::{
     DatasetAggregationMetricDraft, DatasetRowPickerDraft, DatasetRowPickerSortDraft,
 };
 use leptos::prelude::*;
+#[cfg(feature = "hydrate")]
+use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 
 #[cfg(feature = "hydrate")]
@@ -29,6 +35,7 @@ pub(in crate::features::datasets) fn load_dataset_for_edit(
     join_right_key: RwSignal<String>,
     sql_preview: RwSignal<Option<String>>,
     load_error: RwSignal<Option<String>>,
+    auto_seeded_sources: RwSignal<BTreeSet<String>>,
 ) {
     leptos::task::spawn_local(async move {
         match api::fetch_dataset_detail(&dataset_id).await {
@@ -60,21 +67,46 @@ pub(in crate::features::datasets) fn load_dataset_for_edit(
                     join_left_key.set(join_key.left_field.clone());
                     join_right_key.set(join_key.right_field.clone());
                 }
-                sources.set(if source_drafts.is_empty() {
+                let source_drafts = if source_drafts.is_empty() {
                     vec![DatasetSourceDraft::default()]
                 } else {
                     source_drafts
-                });
+                };
+                auto_seeded_sources.set(
+                    source_drafts
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(index, source)| {
+                            if source.input_kind == "form" {
+                                Some(source_seed_key(index, "*"))
+                            } else {
+                                None
+                            }
+                        })
+                        .collect(),
+                );
+                sources.set(source_drafts);
                 expression.set(expression_draft);
+                let mut field_key_aliases = BTreeMap::new();
                 let field_drafts = payload
                     .fields
                     .into_iter()
-                    .map(|field| DatasetFieldDraft {
-                        key: field.key,
-                        label: field.label,
-                        source_alias: field.source_alias,
-                        source_field_key: field.source_field_key,
-                        field_type: field.field_type,
+                    .map(|field| {
+                        let canonical_key =
+                            canonical_field_key(&field.source_alias, &field.source_field_key);
+                        let key = if canonical_key.trim().is_empty() {
+                            field.key.clone()
+                        } else {
+                            canonical_key
+                        };
+                        field_key_aliases.insert(field.key.clone(), key.clone());
+                        DatasetFieldDraft {
+                            key,
+                            label: field.label,
+                            source_alias: field.source_alias,
+                            source_field_key: field.source_field_key,
+                            field_type: field.field_type,
+                        }
                     })
                     .collect::<Vec<_>>();
                 fields.set(field_drafts.clone());
@@ -83,7 +115,13 @@ pub(in crate::features::datasets) fn load_dataset_for_edit(
                         .aggregation
                         .map(|aggregation| DatasetAggregationDraft {
                             enabled: true,
-                            group_fields: aggregation.group_fields,
+                            group_fields: aggregation
+                                .group_fields
+                                .into_iter()
+                                .map(|field_key| {
+                                    normalize_field_reference(&field_key_aliases, field_key)
+                                })
+                                .collect(),
                             metrics: aggregation
                                 .metrics
                                 .into_iter()
@@ -93,7 +131,12 @@ pub(in crate::features::datasets) fn load_dataset_for_edit(
                                     key: metric.key,
                                     label: metric.label,
                                     function: metric.function,
-                                    source_field_key: metric.source_field_key.unwrap_or_default(),
+                                    source_field_key: metric
+                                        .source_field_key
+                                        .map(|field_key| {
+                                            normalize_field_reference(&field_key_aliases, field_key)
+                                        })
+                                        .unwrap_or_default(),
                                 })
                                 .collect(),
                             row_picker: aggregation.row_picker.map(|row_picker| {
@@ -102,7 +145,10 @@ pub(in crate::features::datasets) fn load_dataset_for_edit(
                                         .sort_fields
                                         .into_iter()
                                         .map(|sort| DatasetRowPickerSortDraft {
-                                            field_key: sort.field_key,
+                                            field_key: normalize_field_reference(
+                                                &field_key_aliases,
+                                                sort.field_key,
+                                            ),
                                         })
                                         .collect(),
                                     direction: row_picker.direction,
@@ -116,6 +162,11 @@ pub(in crate::features::datasets) fn load_dataset_for_edit(
             Err(message) => load_error.set(Some(message)),
         }
     });
+}
+
+#[cfg(feature = "hydrate")]
+fn normalize_field_reference(aliases: &BTreeMap<String, String>, field_key: String) -> String {
+    aliases.get(&field_key).cloned().unwrap_or(field_key)
 }
 
 #[cfg(not(feature = "hydrate"))]
@@ -134,5 +185,6 @@ pub(in crate::features::datasets) fn load_dataset_for_edit(
     _: RwSignal<String>,
     _: RwSignal<Option<String>>,
     _: RwSignal<Option<String>>,
+    _: RwSignal<BTreeSet<String>>,
 ) {
 }

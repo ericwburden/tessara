@@ -109,7 +109,7 @@ pub(super) fn prepare_update_form_save(
             rendered
                 .sections
                 .iter()
-                .flat_map(|section| section.fields.iter().map(|field| field.id.clone()))
+                .flat_map(|section| section.fields.iter().map(|field| field.field_id.clone()))
                 .collect::<HashSet<_>>()
         })
         .unwrap_or_default();

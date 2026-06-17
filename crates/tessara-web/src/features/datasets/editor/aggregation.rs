@@ -468,13 +468,15 @@ fn field_option_label(field: &DatasetFieldDraft) -> String {
 }
 
 fn field_combobox_options(fields: Vec<DatasetFieldDraft>) -> Vec<ComboboxOption> {
-    fields
+    let mut options = fields
         .into_iter()
         .map(|field| ComboboxOption {
             label: field_option_label(&field),
             value: field.key,
         })
-        .collect()
+        .collect::<Vec<_>>();
+    options.sort_by(|left, right| left.value.cmp(&right.value));
+    options
 }
 
 fn next_metric_id(metrics: &[DatasetAggregationMetricDraft]) -> u64 {
@@ -482,11 +484,13 @@ fn next_metric_id(metrics: &[DatasetAggregationMetricDraft]) -> u64 {
 }
 
 fn eligible_metric_fields(function: &str, fields: &[DatasetFieldDraft]) -> Vec<DatasetFieldDraft> {
-    fields
+    let mut eligible = fields
         .iter()
         .filter(|field| metric_field_type_is_allowed(function, &field.field_type))
         .cloned()
-        .collect()
+        .collect::<Vec<_>>();
+    eligible.sort_by(|left, right| left.key.cmp(&right.key));
+    eligible
 }
 
 fn metric_source_field_is_allowed(

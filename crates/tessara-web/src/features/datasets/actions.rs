@@ -98,6 +98,7 @@ pub(super) fn preview_dataset_sql(
 ) {
     leptos::task::spawn_local(async move {
         sql_preview_error.set(None);
+        sql_preview.set(None);
         let payload = match dataset_payload_from_drafts(
             name,
             slug,
@@ -112,12 +113,16 @@ pub(super) fn preview_dataset_sql(
             Ok(payload) => payload,
             Err(message) => {
                 sql_preview_error.set(Some(message));
+                sql_preview.set(None);
                 return;
             }
         };
         match api::preview_dataset_sql_payload(dataset_id.as_deref(), &payload).await {
             Ok(response) => sql_preview.set(Some(response.generated_sql)),
-            Err(message) => sql_preview_error.set(Some(message)),
+            Err(message) => {
+                sql_preview_error.set(Some(message));
+                sql_preview.set(None);
+            }
         }
     });
 }

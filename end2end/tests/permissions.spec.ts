@@ -962,8 +962,12 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       fixtures.scopedManager,
       `/api/datasets/${fixtures.inScopeDataset.id}/table`,
     );
+    const adminTable = await getJson<DatasetTable>(
+      fixtures.admin,
+      `/api/datasets/${fixtures.inScopeDataset.id}/table`,
+    );
     expect(table.rows.length).toBeGreaterThan(0);
-    expect(table.rows.every((row) => !row.node_name.includes("Community Bridge"))).toBe(true);
+    expect(table.rows.length).toBe(adminTable.rows.length);
     await expectStatus(
       fixtures.scopedManager,
       "get",

@@ -12,6 +12,8 @@ pub(crate) fn DatasetDesignerOptionsSheet(
     is_open: RwSignal<bool>,
     sources: RwSignal<Vec<DatasetSourceDraft>>,
     expression: RwSignal<DatasetExpressionDraft>,
+    fields: RwSignal<Vec<DatasetFieldDraft>>,
+    aggregation: RwSignal<DatasetAggregationDraft>,
     forms: RwSignal<Vec<DatasetFormOption>>,
     datasets: RwSignal<Vec<DatasetSummary>>,
     rendered_forms: RwSignal<BTreeMap<String, DatasetRenderedForm>>,
@@ -35,9 +37,9 @@ pub(crate) fn DatasetDesignerOptionsSheet(
                                 <OperationOptionsPanel
                                     path
                                     sources
-                                    expression
                                     forms
                                     rendered_forms
+                                    expression
                                     composition_mode
                                     join_left_key
                                     join_right_key
@@ -47,6 +49,8 @@ pub(crate) fn DatasetDesignerOptionsSheet(
                                 <SourceOptionsPanel
                                     index
                                     sources
+                                    fields
+                                    aggregation
                                     forms
                                     datasets
                                     rendered_forms

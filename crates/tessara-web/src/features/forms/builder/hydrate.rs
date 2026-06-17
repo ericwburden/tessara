@@ -69,7 +69,7 @@ pub(crate) fn hydrate_form_builder_from_rendered(
             next_field_id += 1;
             builder_fields.push(FormBuilderFieldDraft {
                 id: local_field_id,
-                remote_id: Some(field.id),
+                remote_id: Some(field.field_id),
                 section_id,
                 label: field.label,
                 key: field.key,

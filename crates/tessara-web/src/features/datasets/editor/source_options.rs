@@ -99,30 +99,6 @@ pub(crate) fn source_display_name(
         .unwrap_or_else(|| "Form input".into())
 }
 
-/// Returns join key field options for a source index.
-pub(crate) fn join_key_options_for_source_index(
-    sources: &[DatasetSourceDraft],
-    forms: &[DatasetFormOption],
-    rendered_forms: &BTreeMap<String, DatasetRenderedForm>,
-    source_index: usize,
-    selected_key: &str,
-) -> Vec<DatasetRenderedField> {
-    let mut options = sources
-        .get(source_index)
-        .map(|source| source_field_options(sources, forms, rendered_forms, &source.source_alias))
-        .unwrap_or_default();
-
-    if !selected_key.is_empty() && !options.iter().any(|option| option.key == selected_key) {
-        options.push(DatasetRenderedField {
-            key: selected_key.to_string(),
-            label: "Unknown field".into(),
-            field_type: String::new(),
-        });
-    }
-
-    options
-}
-
 /// Resolves the source's form version id from explicit id, major version, or first published version.
 pub(crate) fn resolved_form_version_id(
     source: &DatasetSourceDraft,

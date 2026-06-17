@@ -1,12 +1,9 @@
 //! Dataset directory table and mobile-card components.
 
-use super::super::display::{table_summary, visibility_label};
+use super::super::display::visibility_label;
 use super::super::types::DatasetSummary;
-use crate::ui::DataTable;
-use crate::utils::{
-    pagination::{pagination_current_page, pagination_page_count, pagination_page_start},
-    text::sentence_label,
-};
+use crate::ui::{DataTable, TablePaginationFooter};
+use crate::utils::{pagination::pagination_page_start, text::sentence_label};
 use icons::Search;
 use leptos::prelude::*;
 
@@ -17,11 +14,9 @@ pub(crate) fn DatasetDirectoryTable(
     page_index: RwSignal<usize>,
     page_size: RwSignal<usize>,
 ) -> impl IntoView {
-    let total_count = datasets.len();
-    let page_count = pagination_page_count(total_count, page_size.get());
-    let current_page = pagination_current_page(total_count, page_size.get(), page_index.get());
-    let summary = table_summary(total_count, page_size.get(), page_index.get(), "datasets");
-    let page_start = pagination_page_start(total_count, page_size.get(), page_index.get());
+    let total_count_value = datasets.len();
+    let total_count = Memo::new(move |_| total_count_value);
+    let page_start = pagination_page_start(total_count_value, page_size.get(), page_index.get());
     let paged_datasets = datasets
         .iter()
         .skip(page_start)
@@ -63,12 +58,12 @@ pub(crate) fn DatasetDirectoryTable(
                 </tbody>
             </DataTable>
             <DatasetMobileCards datasets=datasets.clone() page_index page_size/>
-            <TablePagination
-                summary=summary
-                page_count=page_count
-                current_page=current_page
-                page_index
-                page_size
+            <TablePaginationFooter
+                aria_label="Datasets table pagination"
+                item_label="datasets"
+                total_count=total_count
+                page_size=page_size
+                page_index=page_index
             />
         </section>
     }
@@ -79,7 +74,7 @@ fn DatasetSummaryRow(dataset: DatasetSummary) -> impl IntoView {
     let href = format!("/datasets/{}", dataset.id);
     view! {
         <tr>
-            <th scope="row">
+            <th scope="row" class="data-table__stacked-label">
                 <a class="data-table__primary-link" href=href>{dataset.name}</a>
                 <span class="data-table__secondary-text">{dataset.slug}</span>
             </th>
@@ -125,38 +120,6 @@ fn DatasetMobileCards(
                     }
                 })
                 .collect_view()}
-        </div>
-    }
-}
-
-#[component]
-fn TablePagination(
-    summary: String,
-    page_count: usize,
-    current_page: usize,
-    page_index: RwSignal<usize>,
-    page_size: RwSignal<usize>,
-) -> impl IntoView {
-    view! {
-        <div class="directory-table-pagination">
-            <span>{summary}</span>
-            <div class="directory-table-pagination__actions">
-                <label>"Rows"
-                    <select prop:value=move || page_size.get().to_string() on:change=move |event| {
-                        if let Ok(value) = event_target_value(&event).parse::<usize>() {
-                            page_size.set(value);
-                            page_index.set(0);
-                        }
-                    }>
-                        <option value="10">"10"</option>
-                        <option value="25">"25"</option>
-                        <option value="50">"50"</option>
-                    </select>
-                </label>
-                <button class="button button--compact" type="button" disabled=move || page_index.get() == 0 on:click=move |_| page_index.update(|value| *value = value.saturating_sub(1))>"Previous"</button>
-                <strong>{format!("Page {current_page} of {page_count}")}</strong>
-                <button class="button button--compact" type="button" disabled=move || page_index.get() + 1 >= page_count on:click=move |_| page_index.update(|value| *value += 1)>"Next"</button>
-            </div>
         </div>
     }
 }

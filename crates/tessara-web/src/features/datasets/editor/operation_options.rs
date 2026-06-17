@@ -3,17 +3,18 @@
 use super::super::expressions::is_join_operation;
 use super::super::types::*;
 use super::helpers::{join_key_option_label, operation_label};
-use super::source_options::join_key_options_for_source_index;
+use super::source_field_actions::canonical_field_key;
+use super::source_options::source_field_options;
 use leptos::prelude::*;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 #[component]
 pub(crate) fn OperationOptionsPanel(
     path: Vec<bool>,
     sources: RwSignal<Vec<DatasetSourceDraft>>,
-    expression: RwSignal<DatasetExpressionDraft>,
     forms: RwSignal<Vec<DatasetFormOption>>,
     rendered_forms: RwSignal<BTreeMap<String, DatasetRenderedForm>>,
+    expression: RwSignal<DatasetExpressionDraft>,
     composition_mode: RwSignal<String>,
     join_left_key: RwSignal<String>,
     join_right_key: RwSignal<String>,
@@ -46,18 +47,23 @@ pub(crate) fn OperationOptionsPanel(
                 </select>
             </label>
             {move || if operation_at_path(&expression.get(), &join_path).is_some_and(|operation| is_join_operation(&operation)) {
-                let left_options = join_key_options_for_source_index(
+                let expression_value = expression.get();
+                let left_options = join_key_options_for_expression_side(
+                    &expression_value,
                     &sources.get(),
                     &forms.get(),
                     &rendered_forms.get(),
-                    0,
+                    &join_path,
+                    false,
                     &join_left_key.get(),
                 );
-                let right_options = join_key_options_for_source_index(
+                let right_options = join_key_options_for_expression_side(
+                    &expression_value,
                     &sources.get(),
                     &forms.get(),
                     &rendered_forms.get(),
-                    1,
+                    &join_path,
+                    true,
                     &join_right_key.get(),
                 );
                 view! {
@@ -99,6 +105,83 @@ fn operation_at_path(expression: &DatasetExpressionDraft, path: &[bool]) -> Opti
             operation_at_path(right, rest)
         }
         _ => None,
+    }
+}
+
+fn expression_at_path<'a>(
+    expression: &'a DatasetExpressionDraft,
+    path: &[bool],
+) -> Option<&'a DatasetExpressionDraft> {
+    match (expression, path.split_first()) {
+        (_, None) => Some(expression),
+        (DatasetExpressionDraft::Operation { left, .. }, Some((false, rest))) => {
+            expression_at_path(left, rest)
+        }
+        (DatasetExpressionDraft::Operation { right, .. }, Some((true, rest))) => {
+            expression_at_path(right, rest)
+        }
+        _ => None,
+    }
+}
+
+fn join_key_options_for_expression_side(
+    expression: &DatasetExpressionDraft,
+    sources: &[DatasetSourceDraft],
+    forms: &[DatasetFormOption],
+    rendered_forms: &BTreeMap<String, DatasetRenderedForm>,
+    operation_path: &[bool],
+    right_side: bool,
+    selected_key: &str,
+) -> Vec<DatasetRenderedField> {
+    let Some(DatasetExpressionDraft::Operation { left, right, .. }) =
+        expression_at_path(expression, operation_path)
+    else {
+        return Vec::new();
+    };
+    let side = if right_side { right } else { left };
+    let mut aliases = BTreeSet::new();
+    collect_source_aliases(side, sources, &mut aliases);
+    let mut options_by_key = BTreeMap::new();
+    for alias in aliases {
+        for option in source_field_options(sources, forms, rendered_forms, &alias) {
+            let key = canonical_field_key(&alias, &option.key);
+            options_by_key
+                .entry(key.clone())
+                .or_insert(DatasetRenderedField {
+                    key,
+                    label: option.label,
+                    field_type: option.field_type,
+                });
+        }
+    }
+    let mut options = options_by_key.into_values().collect::<Vec<_>>();
+
+    if !selected_key.is_empty() && !options.iter().any(|option| option.key == selected_key) {
+        options.push(DatasetRenderedField {
+            key: selected_key.to_string(),
+            label: "Unknown field".into(),
+            field_type: String::new(),
+        });
+    }
+
+    options
+}
+
+fn collect_source_aliases(
+    expression: &DatasetExpressionDraft,
+    sources: &[DatasetSourceDraft],
+    aliases: &mut BTreeSet<String>,
+) {
+    match expression {
+        DatasetExpressionDraft::Source(index) => {
+            if let Some(source) = sources.get(*index) {
+                aliases.insert(source.source_alias.clone());
+            }
+        }
+        DatasetExpressionDraft::Operation { left, right, .. } => {
+            collect_source_aliases(left, sources, aliases);
+            collect_source_aliases(right, sources, aliases);
+        }
     }
 }
 

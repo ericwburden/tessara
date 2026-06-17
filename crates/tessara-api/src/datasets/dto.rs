@@ -69,7 +69,6 @@ pub enum DatasetExpressionRequest {
         alias: String,
         form_id: Uuid,
         form_version_major: Option<i32>,
-        selection_rule: String,
     },
     Dataset {
         alias: String,
@@ -168,7 +167,6 @@ pub struct DatasetSourceDefinition {
     pub(crate) form_name: Option<String>,
     pub(crate) form_version_major: Option<i32>,
     pub(crate) dataset_revision_id: Option<Uuid>,
-    pub(crate) selection_rule: String,
     pub(crate) position: i32,
 }
 

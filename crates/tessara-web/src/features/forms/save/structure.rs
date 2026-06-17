@@ -61,7 +61,9 @@ pub(super) async fn save_form_fields(
 
         if update_existing_draft && let Some(field_id) = field.remote_id.as_ref() {
             send_json_id_request(
-                gloo_net::http::Request::put(&format!("/api/admin/form-fields/{field_id}")),
+                gloo_net::http::Request::put(&format!(
+                    "/api/admin/form-versions/{version_id}/fields/{field_id}"
+                )),
                 Some(field_body),
                 "Update form field",
             )

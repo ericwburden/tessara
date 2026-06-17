@@ -15,7 +15,7 @@ pub(crate) fn ResponseFieldInput(
     let field_key = field.key.clone();
     let field_key_for_input = field.key.clone();
     let field_key_for_bool = field.key.clone();
-    let input_id = format!("response-field-{}", field.id);
+    let input_id = format!("response-field-{}", field.field_id);
     let required_label = if field.required { " *" } else { "" };
     let layout_style = rendered_form_field_layout_style(&field);
     let field_height = field.grid_height;

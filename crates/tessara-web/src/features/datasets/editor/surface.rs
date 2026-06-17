@@ -2,8 +2,8 @@
 
 use super::{
     DatasetAggregationEditor, DatasetEditorMessages, DatasetEditorState, DatasetFieldsEditor,
-    DatasetIdentitySection, DatasetSourcesEditor, DatasetSqlPreviewPanel, DatasetVisibilityEditor,
-    install_dataset_editor_loaders, submit_dataset_editor,
+    DatasetFiltersEditor, DatasetIdentitySection, DatasetSourcesEditor, DatasetSqlPreviewPanel,
+    DatasetVisibilityEditor, install_dataset_editor_loaders, submit_dataset_editor,
 };
 use crate::ui::{
     AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator,
@@ -22,7 +22,6 @@ pub(crate) fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView 
     let state = DatasetEditorState::new();
     install_dataset_editor_loaders(dataset_id.clone(), state);
     let save_dataset_id = dataset_id.clone();
-    let preview_dataset_id = dataset_id.clone();
 
     view! {
         <AppShell active_route="datasets" title=title>
@@ -55,6 +54,7 @@ pub(crate) fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView 
                         rendered_forms=state.rendered_forms
                         composition_mode=state.composition_mode
                         fields=state.fields
+                        aggregation=state.aggregation
                         join_left_key=state.join_left_key
                         join_right_key=state.join_right_key
                         designer_selection=state.designer_selection
@@ -72,6 +72,7 @@ pub(crate) fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView 
                         fields=state.fields
                         aggregation=state.aggregation
                     />
+                    <DatasetFiltersEditor/>
                     <DatasetSqlPreviewPanel
                         dataset_id=dataset_id.clone()
                         name=state.name
@@ -95,23 +96,6 @@ pub(crate) fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView 
                     />
                 </form>
                 <div class="form-actions">
-                    {move || preview_dataset_id.clone().map(|id| {
-                        let preview_url = format!("/datasets/{id}");
-                        view! {
-                            <button
-                                class="button button--secondary"
-                                type="button"
-                                onclick=format!("window.location.href='/datasets/{id}';")
-                                on:click=move |_| {
-                                    if let Some(window) = web_sys::window() {
-                                        let _ = window.location().set_href(&preview_url);
-                                    }
-                                }
-                            >
-                                "Open Preview"
-                            </button>
-                        }
-                    })}
                     <button class="button" type="submit" form="dataset-editor-form">
                         {if is_edit { "Save Dataset" } else { "Create Dataset" }}
                     </button>

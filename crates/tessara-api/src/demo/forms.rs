@@ -215,7 +215,7 @@ async fn ensure_form_field(
             label = EXCLUDED.label,
             required = EXCLUDED.required,
             position = EXCLUDED.position
-        RETURNING id
+        RETURNING field_id
         "#,
     )
     .bind(form_version_id)

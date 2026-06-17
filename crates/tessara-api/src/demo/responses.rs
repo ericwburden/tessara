@@ -85,7 +85,7 @@ pub(super) async fn ensure_seed_submission(
 
     let field_rows = sqlx::query(
         r#"
-        SELECT id, key
+        SELECT field_id, key
         FROM form_fields
         WHERE form_version_id = $1
         "#,
@@ -96,7 +96,7 @@ pub(super) async fn ensure_seed_submission(
 
     let mut field_ids_by_key = HashMap::new();
     for row in field_rows {
-        let field_id: Uuid = row.try_get("id")?;
+        let field_id: Uuid = row.try_get("field_id")?;
         let key: String = row.try_get("key")?;
         field_ids_by_key.insert(key, field_id);
     }
@@ -108,7 +108,7 @@ pub(super) async fn ensure_seed_submission(
             .copied()
             .ok_or_else(|| ApiError::BadRequest(format!("unknown demo seed field '{key}'")))?;
         retained_field_ids.push(field_id);
-        upsert_submission_value(pool, submission_id, field_id, value).await?;
+        upsert_submission_value(pool, submission_id, form_version_id, field_id, value).await?;
     }
 
     sqlx::query(
@@ -175,6 +175,7 @@ pub(super) async fn ensure_seed_submission(
 async fn upsert_submission_value(
     pool: &PgPool,
     submission_id: Uuid,
+    form_version_id: Uuid,
     field_id: Uuid,
     value: Value,
 ) -> ApiResult<()> {
@@ -196,13 +197,14 @@ async fn upsert_submission_value(
 
     sqlx::query(
         r#"
-        INSERT INTO submission_values (submission_id, field_id, value)
-        VALUES ($1, $2, $3)
+        INSERT INTO submission_values (submission_id, form_version_id, field_id, value)
+        VALUES ($1, $2, $3, $4)
         ON CONFLICT (submission_id, field_id)
         DO UPDATE SET value = EXCLUDED.value
         "#,
     )
     .bind(submission_id)
+    .bind(form_version_id)
     .bind(field_id)
     .bind(&value)
     .execute(pool)
@@ -221,12 +223,13 @@ async fn upsert_submission_value(
             };
             sqlx::query(
                 r#"
-                INSERT INTO submission_value_multi (submission_id, field_id, value)
-                VALUES ($1, $2, $3)
+                INSERT INTO submission_value_multi (submission_id, form_version_id, field_id, value)
+                VALUES ($1, $2, $3, $4)
                 ON CONFLICT DO NOTHING
                 "#,
             )
             .bind(submission_id)
+            .bind(form_version_id)
             .bind(field_id)
             .bind(item_value)
             .execute(pool)

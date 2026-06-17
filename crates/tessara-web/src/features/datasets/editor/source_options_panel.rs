@@ -3,6 +3,7 @@
 use super::super::loaders::load_rendered_form;
 use super::super::types::*;
 use super::helpers::version_label;
+use super::source_field_actions::rename_source_alias_references;
 use super::source_options::{find_version, first_published_version, published_versions_for_form};
 use leptos::prelude::*;
 use std::collections::BTreeMap;
@@ -12,6 +13,8 @@ use std::collections::BTreeMap;
 pub(crate) fn SourceOptionsPanel(
     index: usize,
     sources: RwSignal<Vec<DatasetSourceDraft>>,
+    fields: RwSignal<Vec<DatasetFieldDraft>>,
+    aggregation: RwSignal<DatasetAggregationDraft>,
     forms: RwSignal<Vec<DatasetFormOption>>,
     datasets: RwSignal<Vec<DatasetSummary>>,
     rendered_forms: RwSignal<BTreeMap<String, DatasetRenderedForm>>,
@@ -29,7 +32,13 @@ pub(crate) fn SourceOptionsPanel(
                             <span>"Alias"</span>
                             <input prop:value=source.source_alias.clone() on:input=move |event| {
                                 let value = event_target_value(&event);
-                                sources.update(|items| if let Some(item) = items.get_mut(index) { item.source_alias = value; });
+                                let previous_alias = sources
+                                    .get()
+                                    .get(index)
+                                    .map(|source| source.source_alias.clone())
+                                    .unwrap_or_default();
+                                sources.update(|items| if let Some(item) = items.get_mut(index) { item.source_alias = value.clone(); });
+                                rename_source_alias_references(&previous_alias, &value, fields, aggregation);
                             }/>
                         </label>
                         <label class="form-field">
@@ -112,17 +121,6 @@ pub(crate) fn SourceOptionsPanel(
                                         {published_versions_for_form(&forms.get(), &source.form_id).into_iter().map(|version| {
                                             view! { <option value=version.id>{version_label(&version)}</option> }
                                         }).collect_view()}
-                                    </select>
-                                </label>
-                                <label class="form-field">
-                                    <span>"Selection"</span>
-                                    <select prop:value=source.selection_rule.clone() on:change=move |event| {
-                                        let value = event_target_value(&event);
-                                        sources.update(|items| if let Some(item) = items.get_mut(index) { item.selection_rule = value; });
-                                    }>
-                                        <option value="latest">"Latest"</option>
-                                        <option value="earliest">"Earliest"</option>
-                                        <option value="all">"All"</option>
                                     </select>
                                 </label>
                             }.into_any()

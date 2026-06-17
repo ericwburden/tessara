@@ -59,7 +59,7 @@ pub(crate) fn routes() -> Router<AppState> {
             axum::routing::put(update_form_section).delete(delete_form_section),
         )
         .route(
-            "/api/admin/form-fields/{field_id}",
+            "/api/admin/form-versions/{form_version_id}/fields/{field_id}",
             axum::routing::put(update_form_field).delete(delete_form_field),
         )
         .route(
@@ -246,7 +246,7 @@ pub async fn list_forms(
             form_versions.published_at,
             form_versions.semantic_bump,
             form_versions.started_new_major_line,
-            COUNT(form_fields.id) AS field_count
+            COUNT(form_fields.field_id) AS field_count
         FROM form_versions
         LEFT JOIN compatibility_groups
             ON compatibility_groups.id = form_versions.compatibility_group_id
@@ -349,7 +349,7 @@ pub async fn list_published_form_versions(
             form_versions.id AS form_version_id,
             form_versions.version_label,
             form_versions.published_at,
-            COUNT(form_fields.id) AS field_count
+            COUNT(form_fields.field_id) AS field_count
         FROM form_versions
         JOIN forms ON forms.id = form_versions.form_id
         JOIN form_scope_nodes ON form_scope_nodes.form_id = forms.id
@@ -381,7 +381,7 @@ pub async fn list_published_form_versions(
             form_versions.id AS form_version_id,
             form_versions.version_label,
             form_versions.published_at,
-            COUNT(form_fields.id) AS field_count
+            COUNT(form_fields.field_id) AS field_count
         FROM form_versions
         JOIN forms ON forms.id = form_versions.form_id
         LEFT JOIN form_fields ON form_fields.form_version_id = form_versions.id
@@ -457,7 +457,7 @@ pub async fn list_readable_forms(
                 form_versions.published_at,
                 form_versions.semantic_bump,
                 form_versions.started_new_major_line,
-                COUNT(form_fields.id) AS field_count
+                COUNT(form_fields.field_id) AS field_count
             FROM form_versions
             LEFT JOIN compatibility_groups
                 ON compatibility_groups.id = form_versions.compatibility_group_id
@@ -597,7 +597,7 @@ async fn get_form_definition_with_visibility_filter(
             form_versions.published_at,
             form_versions.semantic_bump,
             form_versions.started_new_major_line,
-            COUNT(form_fields.id) AS field_count
+            COUNT(form_fields.field_id) AS field_count
         FROM form_versions
         LEFT JOIN compatibility_groups
             ON compatibility_groups.id = form_versions.compatibility_group_id
@@ -733,8 +733,7 @@ async fn get_form_definition_with_visibility_filter(
         SELECT
             datasets.id AS dataset_id,
             datasets.name AS dataset_name,
-            dataset_sources.source_alias,
-            dataset_sources.selection_rule::text AS selection_rule
+            dataset_sources.source_alias
         FROM dataset_sources
         JOIN datasets ON datasets.id = dataset_sources.dataset_id
         WHERE dataset_sources.form_id = $1
@@ -750,7 +749,6 @@ async fn get_form_definition_with_visibility_filter(
             dataset_id: row.try_get("dataset_id")?,
             dataset_name: row.try_get("dataset_name")?,
             source_alias: row.try_get("source_alias")?,
-            selection_rule: row.try_get("selection_rule")?,
         })
     })
     .collect::<Result<Vec<_>, sqlx::Error>>()?;
@@ -1164,15 +1162,16 @@ pub async fn create_form_field(
     assert_section_belongs_to_form_version(&state.pool, form_version_id, payload.section_id)
         .await?;
 
-    let id = sqlx::query_scalar(
+    let field_id = sqlx::query_scalar(
         r#"
         INSERT INTO form_fields
-            (form_version_id, section_id, key, label, field_type, required, position, grid_row, grid_column, grid_width, grid_height)
-        VALUES ($1, $2, $3, $4, $5::field_type, $6, $7, $8, $9, $10, $11)
-        RETURNING id
+            (form_version_id, field_id, section_id, key, label, field_type, required, position, grid_row, grid_column, grid_width, grid_height)
+        VALUES ($1, COALESCE($2, uuid_generate_v4()), $3, $4, $5, $6::field_type, $7, $8, $9, $10, $11, $12)
+        RETURNING field_id
         "#,
     )
     .bind(form_version_id)
+    .bind(payload.field_id)
     .bind(payload.section_id)
     .bind(payload.key)
     .bind(payload.label)
@@ -1186,7 +1185,7 @@ pub async fn create_form_field(
     .fetch_one(&state.pool)
     .await?;
 
-    Ok(Json(IdResponse { id }))
+    Ok(Json(IdResponse { id: field_id }))
 }
 
 /// Updates an editable form section in a draft form version.
@@ -1237,26 +1236,21 @@ pub async fn delete_form_section(
 pub async fn update_form_field(
     State(state): State<AppState>,
     request: AuthenticatedRequest,
-    Path(field_id): Path<Uuid>,
+    Path((form_version_id, field_id)): Path<(Uuid, Uuid)>,
     Json(payload): Json<UpdateFormFieldRequest>,
 ) -> ApiResult<Json<IdResponse>> {
     request.require_capability("forms:manage")?;
-    let existing = require_form_field(&state.pool, field_id).await?;
-    assert_form_version_draft(&state.pool, existing.form_version_id).await?;
+    let existing = require_form_field(&state.pool, form_version_id, field_id).await?;
+    assert_form_version_draft(&state.pool, form_version_id).await?;
     require_text("field key", &payload.key)?;
     require_text("field label", &payload.label)?;
     if payload.key != existing.key {
-        require_form_field_key_available(&state.pool, existing.form_version_id, &payload.key)
-            .await?;
+        require_form_field_key_available(&state.pool, form_version_id, &payload.key).await?;
     }
     let field_type = parse_field_type(&payload.field_type)?;
     let required = payload.required && field_type.as_str() != "static_text";
-    assert_section_belongs_to_form_version(
-        &state.pool,
-        existing.form_version_id,
-        payload.section_id,
-    )
-    .await?;
+    assert_section_belongs_to_form_version(&state.pool, form_version_id, payload.section_id)
+        .await?;
     require_form_field_layout(
         payload.grid_row,
         payload.grid_column,
@@ -1277,7 +1271,8 @@ pub async fn update_form_field(
             grid_column = $8,
             grid_width = $9,
             grid_height = $10
-        WHERE id = $11
+        WHERE form_version_id = $11
+          AND field_id = $12
         "#,
     )
     .bind(payload.section_id)
@@ -1290,6 +1285,7 @@ pub async fn update_form_field(
     .bind(payload.grid_column)
     .bind(payload.grid_width)
     .bind(payload.grid_height)
+    .bind(form_version_id)
     .bind(field_id)
     .execute(&state.pool)
     .await?;
@@ -1301,13 +1297,14 @@ pub async fn update_form_field(
 pub async fn delete_form_field(
     State(state): State<AppState>,
     request: AuthenticatedRequest,
-    Path(field_id): Path<Uuid>,
+    Path((form_version_id, field_id)): Path<(Uuid, Uuid)>,
 ) -> ApiResult<Json<IdResponse>> {
     request.require_capability("forms:manage")?;
-    let existing = require_form_field(&state.pool, field_id).await?;
-    assert_form_version_draft(&state.pool, existing.form_version_id).await?;
+    require_form_field(&state.pool, form_version_id, field_id).await?;
+    assert_form_version_draft(&state.pool, form_version_id).await?;
 
-    sqlx::query("DELETE FROM form_fields WHERE id = $1")
+    sqlx::query("DELETE FROM form_fields WHERE form_version_id = $1 AND field_id = $2")
+        .bind(form_version_id)
         .bind(field_id)
         .execute(&state.pool)
         .await?;
@@ -1439,7 +1436,7 @@ pub async fn render_form_version(
     let field_rows = sqlx::query(
         r#"
         SELECT
-            id,
+            field_id,
             section_id,
             key,
             label,
@@ -1467,7 +1464,7 @@ pub async fn render_form_version(
             let field_section_id: Uuid = field.try_get("section_id")?;
             if field_section_id == section_id {
                 fields.push(RenderedField {
-                    id: field.try_get("id")?,
+                    field_id: field.try_get("field_id")?,
                     key: field.try_get("key")?,
                     label: field.try_get("label")?,
                     field_type: field.try_get("field_type")?,
@@ -1577,19 +1574,23 @@ async fn require_section_form_version(pool: &sqlx::PgPool, section_id: Uuid) -> 
 }
 
 struct ExistingFormField {
-    form_version_id: Uuid,
     key: String,
 }
 
-async fn require_form_field(pool: &sqlx::PgPool, field_id: Uuid) -> ApiResult<ExistingFormField> {
-    let row = sqlx::query("SELECT form_version_id, key FROM form_fields WHERE id = $1")
-        .bind(field_id)
-        .fetch_optional(pool)
-        .await?
-        .ok_or_else(|| ApiError::NotFound(format!("form field {field_id}")))?;
+async fn require_form_field(
+    pool: &sqlx::PgPool,
+    form_version_id: Uuid,
+    field_id: Uuid,
+) -> ApiResult<ExistingFormField> {
+    let row =
+        sqlx::query("SELECT key FROM form_fields WHERE form_version_id = $1 AND field_id = $2")
+            .bind(form_version_id)
+            .bind(field_id)
+            .fetch_optional(pool)
+            .await?
+            .ok_or_else(|| ApiError::NotFound(format!("form field {field_id}")))?;
 
     Ok(ExistingFormField {
-        form_version_id: row.try_get("form_version_id")?,
         key: row.try_get("key")?,
     })
 }

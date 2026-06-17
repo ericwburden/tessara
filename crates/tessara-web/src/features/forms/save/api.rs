@@ -94,9 +94,14 @@ pub(super) async fn create_draft_form_version(form_id: &str) -> Result<IdRespons
     .await
 }
 
-pub(super) async fn delete_form_field(field_id: &str) -> Result<IdResponse, String> {
+pub(super) async fn delete_form_field(
+    version_id: &str,
+    field_id: &str,
+) -> Result<IdResponse, String> {
     send_json_id_request(
-        gloo_net::http::Request::delete(&format!("/api/admin/form-fields/{field_id}")),
+        gloo_net::http::Request::delete(&format!(
+            "/api/admin/form-versions/{version_id}/fields/{field_id}"
+        )),
         None,
         "Delete form field",
     )

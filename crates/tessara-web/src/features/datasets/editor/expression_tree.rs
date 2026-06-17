@@ -4,6 +4,7 @@ use super::super::types::*;
 use super::helpers::{confirm_action, expression_button_class, operation_label};
 use icons::{RefreshCcw, TableColumnsSplit, X};
 use leptos::prelude::*;
+use std::collections::BTreeSet;
 
 pub(super) fn expression_tree_view(
     items: Vec<DatasetSourceDraft>,
@@ -173,12 +174,16 @@ fn expression_source_panel(
                     aria-label=format!("Convert {} to expression", source_label)
                     title="Convert to expression"
                     on:click=move |_| {
-                        let new_index = sources.get().len();
+                        let current_sources = sources.get();
+                        let new_index = current_sources.len();
+                        let source_to_split = current_sources.get(index).cloned();
+                        let new_alias = next_split_alias(&current_sources, index);
                         sources.update(|items| {
-                            items.push(DatasetSourceDraft {
-                                source_alias: format!("source_{}", new_index + 1),
-                                ..DatasetSourceDraft::default()
-                            });
+                            let mut new_source = source_to_split
+                                .clone()
+                                .unwrap_or_else(DatasetSourceDraft::default);
+                            new_source.source_alias = new_alias.clone();
+                            items.push(new_source);
                         });
                         expression.update(|draft| {
                             replace_source_with_expression(draft, index, new_index);
@@ -222,6 +227,46 @@ fn expression_source_panel(
             </div>
         </div>
     }.into_any()
+}
+
+fn next_split_alias(items: &[DatasetSourceDraft], source_index: usize) -> String {
+    let used_aliases = items
+        .iter()
+        .map(|source| source.source_alias.as_str())
+        .collect::<BTreeSet<_>>();
+    let current_alias = items
+        .get(source_index)
+        .map(|source| source.source_alias.trim())
+        .filter(|alias| !alias.is_empty())
+        .unwrap_or("source");
+    let (prefix, mut suffix) = split_alias_suffix(current_alias);
+    if suffix < 2 {
+        suffix = 2;
+    }
+    loop {
+        let candidate = format!("{prefix}{suffix}");
+        if !used_aliases.contains(candidate.as_str()) {
+            return candidate;
+        }
+        suffix += 1;
+    }
+}
+
+fn split_alias_suffix(alias: &str) -> (&str, usize) {
+    let split_at = alias
+        .char_indices()
+        .rev()
+        .find_map(|(index, character)| {
+            if character.is_ascii_digit() {
+                None
+            } else {
+                Some(index + character.len_utf8())
+            }
+        })
+        .unwrap_or(0);
+    let prefix = &alias[..split_at];
+    let suffix = alias[split_at..].parse::<usize>().unwrap_or(1);
+    (if prefix.is_empty() { "source" } else { prefix }, suffix)
 }
 
 fn replace_source_with_expression(

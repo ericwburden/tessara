@@ -92,7 +92,7 @@ pub(crate) fn submit_update_form(
 
             if update_existing_draft {
                 for field_id in original_field_ids.difference(&kept_field_ids) {
-                    if let Err(error) = delete_form_field(field_id).await {
+                    if let Err(error) = delete_form_field(&version_id, field_id).await {
                         message.set(Some(error));
                         is_saving.set(false);
                         return;

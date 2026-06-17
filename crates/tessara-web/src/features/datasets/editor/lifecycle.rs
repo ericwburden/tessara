@@ -29,6 +29,7 @@ pub(crate) fn install_dataset_editor_loaders(
                 state.join_right_key,
                 state.sql_preview,
                 state.load_error,
+                state.auto_seeded_sources,
             );
         }
     });

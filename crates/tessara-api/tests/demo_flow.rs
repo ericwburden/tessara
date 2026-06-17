@@ -223,8 +223,7 @@ async fn admin_dataset_query_designer_materializes_generated_sql() {
             "kind": "form",
             "alias": "form_a",
             "form_id": form_id,
-            "form_version_major": null,
-            "selection_rule": "latest"
+            "form_version_major": null
         },
         "fields": [{
             "key": field_key,
@@ -238,8 +237,7 @@ async fn admin_dataset_query_designer_materializes_generated_sql() {
     legacy_payload["sources"] = json!([{
         "source_alias": "form_a",
         "form_id": form_id,
-        "form_version_major": null,
-        "selection_rule": "latest"
+        "form_version_major": null
     }]);
     let legacy_status = request_status(
         app.clone(),
@@ -273,9 +271,18 @@ async fn admin_dataset_query_designer_materializes_generated_sql() {
     )
     .await;
     assert_eq!(detail["definition_ast"]["kind"], "form");
-    assert!(detail["generated_sql"].as_str().is_some_and(|sql| {
-        sql.contains("analytics.submission_fact") && sql.contains(field_key)
-    }));
+    let generated_sql = detail["generated_sql"]
+        .as_str()
+        .expect("dataset detail includes generated sql");
+    assert!(generated_sql.contains("analytics.submission_fact"));
+    assert!(generated_sql.contains("submission_value_fact.field_id"));
+    assert!(!generated_sql.contains("submission_value_fact.field_key"));
+    assert!(!generated_sql.contains("field_dim.field_key"));
+    assert!(
+        !generated_sql
+            .contains("JOIN form_versions ON form_versions.id = submission_fact.form_version_id")
+    );
+    assert!(generated_sql.contains(field_key));
     assert!(
         detail["materialized_table"]
             .as_str()
@@ -356,8 +363,7 @@ async fn admin_dataset_query_designer_materializes_generated_sql() {
             "kind": "form",
             "alias": "form_a",
             "form_id": form_id,
-            "form_version_major": null,
-            "selection_rule": "latest"
+            "form_version_major": null
         },
         "fields": [
             {
@@ -503,6 +509,69 @@ async fn admin_dataset_query_designer_materializes_generated_sql() {
     )
     .await;
     assert_eq!(invalid_max_status, StatusCode::BAD_REQUEST);
+
+    let hidden_join_key_payload = json!({
+        "name": "Query Designer Joined Dataset",
+        "slug": "query-designer-joined-dataset",
+        "grain": "submission",
+        "composition_mode": "inner_join",
+        "visibility_node_ids": [visibility_node_id],
+        "definition_ast": {
+            "kind": "operation",
+            "alias": "join_root",
+            "operation": "inner_join",
+            "left": {
+                "kind": "form",
+                "alias": "left_form",
+                "form_id": form_id,
+                "form_version_major": null
+            },
+            "right": {
+                "kind": "form",
+                "alias": "right_form",
+                "form_id": form_id,
+                "form_version_major": null
+            },
+            "join_keys": [{
+                "left_field": "left_form__node_id",
+                "right_field": "right_form__node_id"
+            }]
+        },
+        "fields": [
+            {
+                "key": format!("left_form__{field_key}"),
+                "label": format!("Left {field_label}"),
+                "source_alias": "left_form",
+                "source_field_key": field_key,
+                "position": 0
+            },
+            {
+                "key": format!("right_form__{field_key}"),
+                "label": format!("Right {field_label}"),
+                "source_alias": "right_form",
+                "source_field_key": field_key,
+                "position": 1
+            }
+        ]
+    });
+    let hidden_join_key_preview = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/datasets/sql-preview",
+            &admin_token,
+            Some(hidden_join_key_payload),
+        ),
+    )
+    .await;
+    let hidden_join_key_sql = hidden_join_key_preview["generated_sql"]
+        .as_str()
+        .expect("hidden join key preview sql");
+    assert!(hidden_join_key_sql.contains("INNER JOIN"));
+    assert!(hidden_join_key_sql.contains("l.\"left_form__node_id\" = r.\"right_form__node_id\""));
+    assert!(hidden_join_key_sql.contains("submission_value_fact.field_id"));
+    assert!(!hidden_join_key_sql.contains("submission_value_fact.field_key"));
+    assert!(!hidden_join_key_sql.contains("field_dim.field_key"));
 }
 
 async fn test_app() -> Option<axum::Router> {

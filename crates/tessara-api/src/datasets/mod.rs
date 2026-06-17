@@ -17,9 +17,7 @@ use axum::{
     routing::{get, post},
 };
 use sqlx::{Column, Postgres, Row, Transaction};
-use tessara_datasets::{
-    DatasetCompositionMode, DatasetGrain, DatasetSelectionRule, validate_dataset_shape,
-};
+use tessara_datasets::{DatasetCompositionMode, DatasetGrain, validate_dataset_shape};
 use uuid::Uuid;
 
 mod dto;
@@ -61,7 +59,6 @@ struct ValidatedDatasetSource {
     form_id: Option<Uuid>,
     form_version_major: Option<i32>,
     dataset_revision_id: Option<Uuid>,
-    selection_rule: DatasetSelectionRule,
     position: i32,
 }
 
@@ -72,6 +69,7 @@ struct ValidatedDatasetField {
     label: String,
     source_alias: String,
     source_field_key: String,
+    source_field_id: Option<Uuid>,
     field_type: String,
     position: i32,
 }
@@ -88,8 +86,9 @@ struct QueryCompiler<'a> {
     pool: &'a sqlx::PgPool,
     account: &'a auth::AccountContext,
     dataset_id: Option<Uuid>,
-    output_fields: &'a [CreateDatasetFieldRequest],
+    output_fields: &'a [ValidatedDatasetField],
     aggregation: Option<ValidatedAggregation>,
+    require_source_field_ids: bool,
     field_keys: Vec<String>,
     ctes: Vec<String>,
     cte_index: usize,
@@ -127,6 +126,79 @@ enum AggregationFunction {
 struct CompiledExpression {
     cte_name: String,
     columns: BTreeSet<String>,
+}
+
+#[derive(Clone)]
+struct SourceCompileField {
+    key: String,
+    source_field_key: String,
+    source_field_id: Option<Uuid>,
+}
+
+struct SourceFieldInfo {
+    field_id: Option<Uuid>,
+    field_type: String,
+}
+
+struct PublishedFormVersionIdentity {
+    id: Uuid,
+    major: Option<i32>,
+}
+
+fn internal_dataset_columns() -> BTreeSet<String> {
+    ["__row_id"].into_iter().map(String::from).collect()
+}
+
+fn ordered_columns(columns: &BTreeSet<String>) -> Vec<String> {
+    let mut ordered = ["__row_id"]
+        .into_iter()
+        .filter(|column| columns.contains(*column))
+        .map(String::from)
+        .collect::<Vec<_>>();
+    let internal = ordered.iter().cloned().collect::<BTreeSet<_>>();
+    ordered.extend(
+        columns
+            .iter()
+            .filter(|column| !internal.contains(*column))
+            .cloned(),
+    );
+    ordered
+}
+
+fn select_expression_from_cte(
+    table_alias: Option<&str>,
+    source_columns: &BTreeSet<String>,
+    column: &str,
+) -> String {
+    let quoted = quote_identifier(column);
+    if source_columns.contains(column) {
+        match table_alias {
+            Some(alias) => format!("{alias}.{quoted} AS {quoted}"),
+            None => quoted,
+        }
+    } else {
+        format!("NULL::text AS {quoted}")
+    }
+}
+
+fn coalesced_join_expression(
+    left_columns: &BTreeSet<String>,
+    right_columns: &BTreeSet<String>,
+    column: &str,
+) -> String {
+    if column == "__row_id" {
+        return "CASE WHEN l.__row_id IS NOT NULL AND r.__row_id IS NOT NULL THEN md5(concat_ws('|', l.__row_id, r.__row_id)) ELSE COALESCE(l.__row_id, r.__row_id) END AS __row_id".to_string();
+    }
+    let quoted = quote_identifier(column);
+    match (
+        left_columns.contains(column),
+        right_columns.contains(column),
+    ) {
+        (true, true) => format!("COALESCE(l.{quoted}, r.{quoted}) AS {quoted}"),
+        (true, false) => format!("l.{quoted} AS {quoted}"),
+        (false, true) => format!("r.{quoted} AS {quoted}"),
+        (false, false) => format!("NULL::text AS {quoted}"),
+    }
 }
 
 /// Compiles a dataset draft and returns generated SQL without saving it.
@@ -504,7 +576,6 @@ pub async fn get_dataset(
             forms.name AS form_name,
             dataset_sources.form_version_major,
             dataset_sources.dataset_revision_id,
-            dataset_sources.selection_rule,
             dataset_sources.position
         FROM dataset_sources
         LEFT JOIN forms ON forms.id = dataset_sources.form_id
@@ -518,7 +589,7 @@ pub async fn get_dataset(
 
     let field_rows = sqlx::query(
         r#"
-        SELECT id, key, label, source_alias, source_field_key, field_type::text AS field_type, position
+        SELECT id, key, label, source_alias, source_field_key, source_field_id, field_type::text AS field_type, position
         FROM dataset_fields
         WHERE dataset_id = $1
         ORDER BY position, key
@@ -548,6 +619,7 @@ pub async fn get_dataset(
                 label: row.try_get("label")?,
                 source_alias: row.try_get("source_alias")?,
                 source_field_key: row.try_get("source_field_key")?,
+                source_field_id: row.try_get("source_field_id")?,
                 field_type: row.try_get("field_type")?,
                 position: row.try_get("position")?,
             })
@@ -592,7 +664,6 @@ pub async fn get_dataset(
                     form_name: row.try_get("form_name")?,
                     form_version_major: row.try_get("form_version_major")?,
                     dataset_revision_id: row.try_get("dataset_revision_id")?,
-                    selection_rule: row.try_get("selection_rule")?,
                     position: row.try_get("position")?,
                 })
             })
@@ -646,12 +717,26 @@ async fn compile_dataset_definition(
         field_requests.iter().map(|field| field.key.as_str()),
     )
     .map_err(|error| ApiError::BadRequest(error.to_string()))?;
-    let mut compiler = QueryCompiler {
+    let provisional_fields = field_requests
+        .iter()
+        .map(|field| ValidatedDatasetField {
+            id: None,
+            key: field.key.clone(),
+            label: field.label.clone(),
+            source_alias: field.source_alias.clone(),
+            source_field_key: field.source_field_key.clone(),
+            source_field_id: None,
+            field_type: "text".into(),
+            position: field.position,
+        })
+        .collect::<Vec<_>>();
+    let mut source_compiler = QueryCompiler {
         pool,
         account,
         dataset_id,
-        output_fields: field_requests,
+        output_fields: &provisional_fields,
         aggregation: None,
+        require_source_field_ids: false,
         field_keys: field_requests
             .iter()
             .map(|field| field.key.clone())
@@ -661,9 +746,27 @@ async fn compile_dataset_definition(
         aliases: BTreeSet::new(),
         sources: Vec::new(),
     };
-    let root = compiler.compile_expression(&ast).await?;
-    let fields = validate_dataset_fields(pool, &compiler.sources, field_requests.to_vec()).await?;
+    source_compiler
+        .compile_expression(&ast, BTreeSet::new())
+        .await?;
+    let fields =
+        validate_dataset_fields(pool, &source_compiler.sources, field_requests.to_vec()).await?;
     let aggregation = validate_dataset_aggregation(payload.aggregation.clone(), &fields)?;
+
+    let mut compiler = QueryCompiler {
+        pool,
+        account,
+        dataset_id,
+        output_fields: &fields,
+        aggregation: aggregation.clone(),
+        require_source_field_ids: true,
+        field_keys: fields.iter().map(|field| field.key.clone()).collect(),
+        ctes: Vec::new(),
+        cte_index: 0,
+        aliases: BTreeSet::new(),
+        sources: Vec::new(),
+    };
+    let root = compiler.compile_expression(&ast, BTreeSet::new()).await?;
     compiler.aggregation = aggregation.clone();
     let generated_sql = compiler.final_sql(&root);
     Ok(CompiledDataset {
@@ -692,6 +795,7 @@ impl<'a> QueryCompiler<'a> {
     fn compile_expression<'b>(
         &'b mut self,
         ast: &'b DatasetExpressionRequest,
+        required_columns: BTreeSet<String>,
     ) -> Pin<Box<dyn Future<Output = ApiResult<CompiledExpression>> + Send + 'b>> {
         Box::pin(async move {
             match ast {
@@ -699,18 +803,27 @@ impl<'a> QueryCompiler<'a> {
                     alias,
                     form_id,
                     form_version_major,
-                    selection_rule,
                 } => {
-                    self.compile_form_source(alias, *form_id, *form_version_major, selection_rule)
-                        .await
+                    self.compile_form_source(
+                        alias,
+                        *form_id,
+                        *form_version_major,
+                        &required_columns,
+                    )
+                    .await
                 }
                 DatasetExpressionRequest::Dataset {
                     alias,
                     dataset_id,
                     dataset_revision_id,
                 } => {
-                    self.compile_dataset_source(alias, *dataset_id, *dataset_revision_id)
-                        .await
+                    self.compile_dataset_source(
+                        alias,
+                        *dataset_id,
+                        *dataset_revision_id,
+                        &required_columns,
+                    )
+                    .await
                 }
                 DatasetExpressionRequest::Operation {
                     operation,
@@ -719,8 +832,23 @@ impl<'a> QueryCompiler<'a> {
                     join_keys,
                     ..
                 } => {
-                    let left = self.compile_expression(left).await?;
-                    let right = self.compile_expression(right).await?;
+                    let mut left_required = required_columns.clone();
+                    let mut right_required = required_columns;
+                    if DatasetCompositionMode::parse(operation).is_ok_and(|mode| {
+                        matches!(
+                            mode,
+                            DatasetCompositionMode::LeftJoin
+                                | DatasetCompositionMode::InnerJoin
+                                | DatasetCompositionMode::OuterJoin
+                        )
+                    }) {
+                        for key in join_keys {
+                            left_required.insert(key.left_field.clone());
+                            right_required.insert(key.right_field.clone());
+                        }
+                    }
+                    let left = self.compile_expression(left, left_required).await?;
+                    let right = self.compile_expression(right, right_required).await?;
                     self.compile_operation(operation, left, right, join_keys)
                 }
             }
@@ -732,7 +860,7 @@ impl<'a> QueryCompiler<'a> {
         alias: &str,
         form_id: Uuid,
         form_version_major: Option<i32>,
-        selection_rule: &str,
+        required_columns: &BTreeSet<String>,
     ) -> ApiResult<CompiledExpression> {
         require_identifier("dataset source alias", alias)?;
         if form_id.is_nil() {
@@ -745,109 +873,147 @@ impl<'a> QueryCompiler<'a> {
                 "dataset expression alias '{alias}' is duplicated"
             )));
         }
-        let selection_rule = DatasetSelectionRule::parse(selection_rule)
-            .map_err(|error| ApiError::BadRequest(error.to_string()))?;
         require_form_exists(self.pool, form_id).await?;
         require_form_readable_by_account(self.pool, self.account, form_id).await?;
-        let form_version_major = match form_version_major {
-            Some(value) => Some(value),
-            None => load_latest_published_form_major(self.pool, form_id).await?,
-        };
+        let form_version =
+            load_published_form_version_identity(self.pool, form_id, form_version_major).await?;
+        let form_version_major = form_version.major;
         let source = ValidatedDatasetSource {
             source_alias: alias.to_string(),
             form_id: Some(form_id),
             form_version_major,
             dataset_revision_id: None,
-            selection_rule,
             position: self.sources.len() as i32,
         };
         let cte_name = self.next_cte_name(alias)?;
-        let select_columns = self
+        let mut source_fields = self
             .output_fields
+            .iter()
+            .filter(|field| field.source_alias == alias)
+            .map(|field| SourceCompileField {
+                key: field.key.clone(),
+                source_field_key: field.source_field_key.clone(),
+                source_field_id: field.source_field_id,
+            })
+            .collect::<Vec<_>>();
+        let mut seen_columns = source_fields
+            .iter()
+            .map(|field| field.key.clone())
+            .collect::<BTreeSet<_>>();
+        for column in required_columns {
+            if column == "__row_id" || seen_columns.contains(column) {
+                continue;
+            }
+            let Some(source_field_key) = source_field_key_for_column(alias, column) else {
+                continue;
+            };
+            let source_field = if system_source_field_type(&source_field_key).is_some() {
+                SourceFieldInfo {
+                    field_id: None,
+                    field_type: "text".into(),
+                }
+            } else if self.require_source_field_ids {
+                require_source_field_exists(self.pool, &source, &source_field_key).await?
+            } else {
+                SourceFieldInfo {
+                    field_id: None,
+                    field_type: "text".into(),
+                }
+            };
+            source_fields.push(SourceCompileField {
+                key: column.clone(),
+                source_field_key,
+                source_field_id: source_field.field_id,
+            });
+            seen_columns.insert(column.clone());
+        }
+        let mut columns = internal_dataset_columns();
+        columns.extend(source_fields.iter().map(|field| field.key.clone()));
+        let mut value_field_ids = BTreeSet::new();
+        let needs_node_dim = source_fields
+            .iter()
+            .any(|field| field.source_field_key == "__node_name");
+        let mut group_by_expressions = BTreeSet::from([
+            "submission_fact.form_version_id".to_string(),
+            "submission_fact.submission_id".to_string(),
+        ]);
+        let select_columns = source_fields
             .iter()
             .map(|field| {
                 let column = quote_identifier(&field.key);
-                if field.source_alias == alias {
-                    if let Some(expression) =
-                        system_source_field_expression(&field.source_field_key)
-                    {
-                        Ok(format!("{expression} AS {column}"))
-                    } else {
-                        Ok(format!(
-                            "MAX(submission_value_fact.value_text) FILTER (WHERE submission_value_fact.field_key = {}) AS {column}",
-                            sql_literal(&field.source_field_key)
-                        ))
-                    }
+                if let Some(expression) = system_source_field_expression(&field.source_field_key) {
+                    group_by_expressions.insert(expression.to_string());
+                    Ok(format!("{expression} AS {column}"))
                 } else {
-                    Ok(format!("NULL::text AS {column}"))
+                    let Some(source_field_id) = field.source_field_id else {
+                        if !self.require_source_field_ids {
+                            return Ok(format!("NULL::text AS {column}"));
+                        }
+                        return Err(ApiError::BadRequest(format!(
+                            "dataset field '{}' cannot be projected without a stable source field id",
+                            field.key
+                        )));
+                    };
+                    value_field_ids.insert(source_field_id);
+                    Ok(format!(
+                        "MAX(submission_value_fact.value_text) FILTER (WHERE submission_value_fact.field_id = {}::uuid) AS {column}",
+                        sql_literal(&source_field_id.to_string())
+                    ))
                 }
             })
             .collect::<ApiResult<Vec<_>>>()?
             .join(",\n                ");
-        let form_predicate = match form_version_major {
-            Some(major) => format!(
-                "form_versions.form_id = {}::uuid AND form_versions.version_major = {major}",
-                sql_literal(&form_id.to_string())
-            ),
-            None => format!(
-                "form_versions.form_id = {}::uuid",
-                sql_literal(&form_id.to_string())
-            ),
-        };
-        let order = match selection_rule {
-            DatasetSelectionRule::Earliest => "submission_fact.submitted_at ASC NULLS LAST",
-            DatasetSelectionRule::All | DatasetSelectionRule::Latest => {
-                "submission_fact.submitted_at DESC NULLS LAST"
-            }
-        };
-        let selected_filter = if selection_rule == DatasetSelectionRule::All {
-            "TRUE"
+        let extra_select_columns = if select_columns.is_empty() {
+            String::new()
         } else {
-            "selection_rank = 1"
+            format!(",\n                {select_columns}")
+        };
+        let value_join = if value_field_ids.is_empty() {
+            String::new()
+        } else {
+            let field_id_filter = value_field_ids
+                .iter()
+                .map(|field_id| format!("{}::uuid", sql_literal(&field_id.to_string())))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!(
+                r#"
+            LEFT JOIN analytics.submission_value_fact
+              ON submission_value_fact.submission_id = submission_fact.submission_id
+             AND submission_value_fact.form_version_id = submission_fact.form_version_id
+             AND submission_value_fact.field_id IN ({field_id_filter})"#
+            )
+        };
+        let group_by = if value_field_ids.is_empty() {
+            String::new()
+        } else {
+            format!(
+                r#"
+            GROUP BY {}"#,
+                group_by_expressions
+                    .into_iter()
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        };
+        let node_join = if needs_node_dim {
+            "\n            JOIN analytics.node_dim ON node_dim.node_id = submission_fact.node_id"
+        } else {
+            ""
         };
         let sql = format!(
             r#"{cte_name} AS (
-            WITH ranked AS (
-                SELECT
-                    submission_fact.submission_id,
-                    submission_fact.form_version_id,
-                    submission_fact.node_id,
-                    node_dim.node_name,
-                    submission_fact.status,
-                    submission_fact.submitted_at,
-                    submission_fact.created_at,
-                    submission_fact.last_modified_at,
-                    submission_fact.last_modified_by_user_name,
-                    ROW_NUMBER() OVER (
-                        PARTITION BY submission_fact.node_id
-                        ORDER BY {order}, submission_fact.submission_id
-                    ) AS selection_rank
-                FROM analytics.submission_fact
-                JOIN form_versions ON form_versions.id = submission_fact.form_version_id
-                JOIN analytics.node_dim ON node_dim.node_id = submission_fact.node_id
-                WHERE submission_fact.status = 'submitted'
-                  AND {form_predicate}
-            )
             SELECT
-                ranked.submission_id::text AS __row_id,
-                ranked.node_id AS __node_id,
-                ranked.node_name AS __node_name,
-                {select_columns}
-            FROM ranked
-            LEFT JOIN analytics.submission_value_fact
-              ON submission_value_fact.submission_id = ranked.submission_id
-            WHERE {selected_filter}
-            GROUP BY ranked.submission_id, ranked.node_id, ranked.node_name
-                , ranked.form_version_id, ranked.status, ranked.submitted_at
-                , ranked.created_at, ranked.last_modified_at, ranked.last_modified_by_user_name
-        )"#
+                md5(concat_ws('|', 'form', submission_fact.form_version_id::text, submission_fact.submission_id::text)) AS __row_id{extra_select_columns}
+            FROM analytics.submission_fact{node_join}{value_join}
+            WHERE submission_fact.status = 'submitted'
+              AND submission_fact.form_version_id = {}::uuid{group_by}
+        )"#,
+            sql_literal(&form_version.id.to_string())
         );
         self.ctes.push(sql);
         self.sources.push(source);
-        Ok(CompiledExpression {
-            cte_name,
-            columns: self.field_keys.iter().cloned().collect(),
-        })
+        Ok(CompiledExpression { cte_name, columns })
     }
 
     async fn compile_dataset_source(
@@ -855,6 +1021,7 @@ impl<'a> QueryCompiler<'a> {
         alias: &str,
         dataset_id: Uuid,
         dataset_revision_id: Uuid,
+        required_columns: &BTreeSet<String>,
     ) -> ApiResult<CompiledExpression> {
         require_identifier("dataset source alias", alias)?;
         if !self.aliases.insert(alias.to_string()) {
@@ -889,25 +1056,56 @@ impl<'a> QueryCompiler<'a> {
         let schema: String = row.try_get("materialized_schema")?;
         let table: String = row.try_get("materialized_table")?;
         let cte_name = self.next_cte_name(alias)?;
-        let select_columns = self
-            .field_keys
+        let mut source_fields = self
+            .output_fields
+            .iter()
+            .filter(|field| field.source_alias == alias)
+            .map(|field| SourceCompileField {
+                key: field.key.clone(),
+                source_field_key: field.source_field_key.clone(),
+                source_field_id: None,
+            })
+            .collect::<Vec<_>>();
+        let mut seen_columns = source_fields
+            .iter()
+            .map(|field| field.key.clone())
+            .collect::<BTreeSet<_>>();
+        for column in required_columns {
+            if column == "__row_id" || seen_columns.contains(column) {
+                continue;
+            }
+            let Some(source_field_key) = source_field_key_for_column(alias, column) else {
+                continue;
+            };
+            source_fields.push(SourceCompileField {
+                key: column.clone(),
+                source_field_key,
+                source_field_id: None,
+            });
+            seen_columns.insert(column.clone());
+        }
+        let mut columns = internal_dataset_columns();
+        columns.extend(source_fields.iter().map(|field| field.key.clone()));
+        let select_columns = source_fields
             .iter()
             .map(|field| {
                 format!(
                     "{}::text AS {}",
-                    quote_identifier(field),
-                    quote_identifier(field)
+                    quote_identifier(&field.source_field_key),
+                    quote_identifier(&field.key)
                 )
             })
             .collect::<Vec<_>>()
             .join(",\n                ");
+        let extra_select_columns = if select_columns.is_empty() {
+            String::new()
+        } else {
+            format!(",\n                {select_columns}")
+        };
         self.ctes.push(format!(
             r#"{cte_name} AS (
             SELECT
-                __row_id,
-                __node_id,
-                __node_name,
-                {select_columns}
+                __row_id{extra_select_columns}
             FROM {}.{}
         )"#,
             quote_identifier(&schema),
@@ -918,13 +1116,9 @@ impl<'a> QueryCompiler<'a> {
             form_id: None,
             form_version_major: None,
             dataset_revision_id: Some(dataset_revision_id),
-            selection_rule: DatasetSelectionRule::Latest,
             position: self.sources.len() as i32,
         });
-        Ok(CompiledExpression {
-            cte_name,
-            columns: self.field_keys.iter().cloned().collect(),
-        })
+        Ok(CompiledExpression { cte_name, columns })
     }
 
     fn compile_operation(
@@ -937,15 +1131,11 @@ impl<'a> QueryCompiler<'a> {
         let mode = DatasetCompositionMode::parse(operation)
             .map_err(|error| ApiError::BadRequest(error.to_string()))?;
         let cte_name = self.next_cte_name("op")?;
-        let columns = self
-            .field_keys
-            .iter()
-            .map(|field| {
-                let quoted = quote_identifier(field);
-                format!("COALESCE(l.{quoted}, r.{quoted}) AS {quoted}")
-            })
-            .collect::<Vec<_>>()
-            .join(",\n                ");
+        let output_columns = left
+            .columns
+            .union(&right.columns)
+            .cloned()
+            .collect::<BTreeSet<_>>();
         let sql = match mode {
             DatasetCompositionMode::Union | DatasetCompositionMode::UnionAll => {
                 let op = if mode == DatasetCompositionMode::Union {
@@ -953,11 +1143,25 @@ impl<'a> QueryCompiler<'a> {
                 } else {
                     "UNION ALL"
                 };
+                let left_columns = ordered_columns(&output_columns)
+                    .iter()
+                    .map(|column| select_expression_from_cte(None, &left.columns, column))
+                    .collect::<Vec<_>>()
+                    .join(",\n                ");
+                let right_columns = ordered_columns(&output_columns)
+                    .iter()
+                    .map(|column| select_expression_from_cte(None, &right.columns, column))
+                    .collect::<Vec<_>>()
+                    .join(",\n                ");
                 format!(
                     r#"{cte_name} AS (
-            SELECT * FROM {}
+            SELECT
+                {left_columns}
+            FROM {}
             {op}
-            SELECT * FROM {}
+            SELECT
+                {right_columns}
+            FROM {}
         )"#,
                     quote_identifier(&left.cte_name),
                     quote_identifier(&right.cte_name)
@@ -982,13 +1186,13 @@ impl<'a> QueryCompiler<'a> {
                     .map(|key| {
                         if !left.columns.contains(&key.left_field) {
                             return Err(ApiError::BadRequest(format!(
-                                "left join key '{}' is not projected by the left input",
+                                "left join key '{}' is not available from the left input",
                                 key.left_field
                             )));
                         }
                         if !right.columns.contains(&key.right_field) {
                             return Err(ApiError::BadRequest(format!(
-                                "right join key '{}' is not projected by the right input",
+                                "right join key '{}' is not available from the right input",
                                 key.right_field
                             )));
                         }
@@ -1000,12 +1204,14 @@ impl<'a> QueryCompiler<'a> {
                     })
                     .collect::<ApiResult<Vec<_>>>()?
                     .join(" AND ");
+                let columns = ordered_columns(&output_columns)
+                    .iter()
+                    .map(|column| coalesced_join_expression(&left.columns, &right.columns, column))
+                    .collect::<Vec<_>>()
+                    .join(",\n                ");
                 format!(
                     r#"{cte_name} AS (
             SELECT
-                COALESCE(l.__row_id, r.__row_id) AS __row_id,
-                COALESCE(l.__node_id, r.__node_id) AS __node_id,
-                COALESCE(l.__node_name, r.__node_name) AS __node_name,
                 {columns}
             FROM {} l
             {join} {} r ON {predicates}
@@ -1018,7 +1224,7 @@ impl<'a> QueryCompiler<'a> {
         self.ctes.push(sql);
         Ok(CompiledExpression {
             cte_name,
-            columns: self.field_keys.iter().cloned().collect(),
+            columns: output_columns,
         })
     }
 
@@ -1029,40 +1235,43 @@ impl<'a> QueryCompiler<'a> {
     }
 
     fn final_sql(&self, root: &CompiledExpression) -> String {
-        let field_select = self
+        let field_selects = self
             .field_keys
             .iter()
             .map(|field| quote_identifier(field))
+            .collect::<Vec<_>>();
+        let root_select = ["__row_id"]
+            .into_iter()
+            .map(String::from)
+            .chain(field_selects.iter().cloned())
             .collect::<Vec<_>>()
-            .join(",\n    ");
+            .join(",\n            ");
+        let selected_fields = ["__row_id"]
+            .into_iter()
+            .map(String::from)
+            .chain(field_selects.iter().cloned())
+            .collect::<Vec<_>>()
+            .join(",\n                ");
         let selected_cte = format!(
             r#"selected_fields AS (
             SELECT
-                __row_id,
-                __node_id,
-                __node_name,
-                {field_select}
+                {selected_fields}
             FROM {}
         )"#,
             quote_identifier(&root.cte_name)
         );
         let mut ctes = self.ctes.clone();
-        ctes.push(selected_cte);
-
-        let final_select = self
-            .aggregation
-            .as_ref()
-            .map(|aggregation| self.aggregation_sql(aggregation))
-            .unwrap_or_else(|| {
-                format!(
-                    r#"SELECT
-            __row_id,
-            __node_id,
-            __node_name,
-            {field_select}
-        FROM selected_fields"#
-                )
-            });
+        let final_select = if let Some(aggregation) = self.aggregation.as_ref() {
+            ctes.push(selected_cte);
+            self.aggregation_sql(aggregation)
+        } else {
+            format!(
+                r#"SELECT
+            {root_select}
+        FROM {}"#,
+                quote_identifier(&root.cte_name)
+            )
+        };
 
         format!(
             r#"WITH
@@ -1138,8 +1347,6 @@ impl<'a> QueryCompiler<'a> {
                     .join(", ")
             )
         };
-        let node_id = "NULL::uuid";
-        let node_name = "'Aggregated dataset'";
         let source = if let Some(row_picker) = &aggregation.row_picker {
             let partition = if all_group_columns.is_empty() {
                 String::new()
@@ -1179,8 +1386,6 @@ impl<'a> QueryCompiler<'a> {
         format!(
             r#"SELECT
             {row_id} AS __row_id,
-            {node_id} AS __node_id,
-            {node_name} AS __node_name,
             {field_select}
         FROM {source}{group_by}"#
         )
@@ -1351,6 +1556,7 @@ fn output_fields_for_dataset(
             label: metric.label,
             source_alias: "aggregation".into(),
             source_field_key: metric.source_field_key.unwrap_or_default(),
+            source_field_id: None,
             field_type: metric.field_type,
             position: metric_offset + index as i32,
         });
@@ -1468,6 +1674,18 @@ async fn validate_dataset_fields(
         .iter()
         .map(|source| (source.source_alias.as_str(), source))
         .collect::<HashMap<_, _>>();
+    let source_positions = sources
+        .iter()
+        .enumerate()
+        .map(|(index, source)| (source.source_alias.clone(), index))
+        .collect::<HashMap<_, _>>();
+    let mut source_field_orders = HashMap::new();
+    for source in sources {
+        source_field_orders.insert(
+            source.source_alias.clone(),
+            load_source_field_order(pool, source).await?,
+        );
+    }
     let mut validated = Vec::new();
 
     for field in fields {
@@ -1483,8 +1701,11 @@ async fn validate_dataset_fields(
                     field.key, field.source_alias
                 ))
             })?;
-        let field_type = if source.dataset_revision_id.is_some() {
-            "text".to_string()
+        let source_field = if source.dataset_revision_id.is_some() {
+            SourceFieldInfo {
+                field_id: None,
+                field_type: "text".to_string(),
+            }
         } else {
             require_source_field_exists(pool, source, &field.source_field_key).await?
         };
@@ -1494,12 +1715,137 @@ async fn validate_dataset_fields(
             label: field.label,
             source_alias: field.source_alias,
             source_field_key: field.source_field_key,
-            field_type,
+            source_field_id: source_field.field_id,
+            field_type: source_field.field_type,
             position: field.position,
         });
     }
 
+    validated.sort_by_key(|field| {
+        let source_position = source_positions
+            .get(&field.source_alias)
+            .copied()
+            .unwrap_or(usize::MAX);
+        let field_position = source_field_orders
+            .get(&field.source_alias)
+            .and_then(|field_order| field_order.get(&field.source_field_key))
+            .copied()
+            .unwrap_or(i32::MAX);
+        (
+            source_position,
+            field_position,
+            field.position,
+            field.key.clone(),
+        )
+    });
+    for (index, field) in validated.iter_mut().enumerate() {
+        field.position = index as i32;
+    }
+
     Ok(validated)
+}
+
+async fn load_source_field_order(
+    pool: &sqlx::PgPool,
+    source: &ValidatedDatasetSource,
+) -> ApiResult<HashMap<String, i32>> {
+    let mut field_order = HashMap::new();
+    for (index, key) in system_source_field_keys().into_iter().enumerate() {
+        field_order.insert(key.to_string(), index as i32);
+    }
+
+    let Some(form_id) = source.form_id else {
+        return Ok(field_order);
+    };
+
+    let rows = if let Some(form_version_major) = source.form_version_major {
+        sqlx::query(
+            r#"
+            WITH latest_fields AS (
+                SELECT DISTINCT ON (form_fields.key)
+                    form_fields.key,
+                    form_fields.label,
+                    form_fields.position AS field_position,
+                    form_fields.grid_row,
+                    form_fields.grid_column,
+                    form_sections.position AS section_position
+                FROM form_fields
+                JOIN form_versions ON form_versions.id = form_fields.form_version_id
+                JOIN form_sections ON form_sections.id = form_fields.section_id
+                WHERE form_versions.form_id = $1
+                  AND form_versions.version_major = $2
+                  AND form_versions.status = 'published'::form_version_status
+                ORDER BY
+                    form_fields.key,
+                    form_versions.version_minor DESC NULLS LAST,
+                    form_versions.version_patch DESC NULLS LAST,
+                    form_versions.published_at DESC NULLS LAST,
+                    form_sections.position,
+                    form_fields.position,
+                    form_fields.grid_row,
+                    form_fields.grid_column,
+                    form_fields.label
+            )
+            SELECT
+                key,
+                (ROW_NUMBER() OVER (
+                    ORDER BY section_position, field_position, grid_row, grid_column, label, key
+                ) - 1)::integer AS position
+            FROM latest_fields
+            ORDER BY section_position, field_position, grid_row, grid_column, label, key
+            "#,
+        )
+        .bind(form_id)
+        .bind(form_version_major)
+        .fetch_all(pool)
+        .await?
+    } else {
+        sqlx::query(
+            r#"
+            WITH latest_fields AS (
+                SELECT DISTINCT ON (form_fields.key)
+                    form_fields.key,
+                    form_fields.label,
+                    form_fields.position AS field_position,
+                    form_fields.grid_row,
+                    form_fields.grid_column,
+                    form_sections.position AS section_position
+                FROM form_fields
+                JOIN form_versions ON form_versions.id = form_fields.form_version_id
+                JOIN form_sections ON form_sections.id = form_fields.section_id
+                WHERE form_versions.form_id = $1
+                  AND form_versions.status = 'published'::form_version_status
+                ORDER BY
+                    form_fields.key,
+                    form_versions.created_at DESC,
+                    form_sections.position,
+                    form_fields.position,
+                    form_fields.grid_row,
+                    form_fields.grid_column,
+                    form_fields.label
+            )
+            SELECT
+                key,
+                (ROW_NUMBER() OVER (
+                    ORDER BY section_position, field_position, grid_row, grid_column, label, key
+                ) - 1)::integer AS position
+            FROM latest_fields
+            ORDER BY section_position, field_position, grid_row, grid_column, label, key
+            "#,
+        )
+        .bind(form_id)
+        .fetch_all(pool)
+        .await?
+    };
+
+    let system_count = field_order.len() as i32;
+    for row in rows {
+        let key: String = row.try_get("key")?;
+        let position: i32 = row.try_get("position")?;
+        field_order.insert(key, system_count + position);
+    }
+
+    Ok(field_order)
 }
 
 async fn insert_dataset_sources(
@@ -1511,8 +1857,8 @@ async fn insert_dataset_sources(
         sqlx::query(
             r#"
             INSERT INTO dataset_sources
-                (dataset_id, source_alias, form_id, form_version_major, dataset_revision_id, selection_rule, position)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+                (dataset_id, source_alias, form_id, form_version_major, dataset_revision_id, position)
+            VALUES ($1, $2, $3, $4, $5, $6)
             "#,
         )
         .bind(dataset_id)
@@ -1520,7 +1866,6 @@ async fn insert_dataset_sources(
         .bind(source.form_id)
         .bind(source.form_version_major)
         .bind(source.dataset_revision_id)
-        .bind(source.selection_rule.as_str())
         .bind(source.position)
         .execute(&mut **tx)
         .await?;
@@ -1538,8 +1883,8 @@ async fn insert_dataset_fields(
         sqlx::query(
             r#"
             INSERT INTO dataset_fields
-                (dataset_id, key, label, source_alias, source_field_key, field_type, position)
-            VALUES ($1, $2, $3, $4, $5, $6::field_type, $7)
+                (dataset_id, key, label, source_alias, source_field_key, source_field_id, field_type, position)
+            VALUES ($1, $2, $3, $4, $5, $6, $7::field_type, $8)
             "#,
         )
         .bind(dataset_id)
@@ -1547,6 +1892,7 @@ async fn insert_dataset_fields(
         .bind(&field.label)
         .bind(&field.source_alias)
         .bind(&field.source_field_key)
+        .bind(field.source_field_id)
         .bind(&field.field_type)
         .bind(field.position)
         .execute(&mut **tx)
@@ -1632,7 +1978,7 @@ async fn materialize_dataset_revision(
     ))
     .execute(&mut **tx)
     .await?;
-    sqlx::query(&format!("CREATE INDEX ON {full_name} (__node_id)"))
+    sqlx::query(&format!("CREATE INDEX ON {full_name} (__row_id)"))
         .execute(&mut **tx)
         .await?;
     let row_count: i64 = sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {full_name}"))
@@ -1660,16 +2006,19 @@ async fn require_source_field_exists(
     pool: &sqlx::PgPool,
     source: &ValidatedDatasetSource,
     source_field_key: &str,
-) -> ApiResult<String> {
+) -> ApiResult<SourceFieldInfo> {
     if let Some(field_type) = system_source_field_type(source_field_key) {
-        return Ok(field_type.to_string());
+        return Ok(SourceFieldInfo {
+            field_id: None,
+            field_type: field_type.to_string(),
+        });
     }
 
     let row = if let Some(form_id) = source.form_id {
         if let Some(form_version_major) = source.form_version_major {
             sqlx::query(
                 r#"
-                SELECT form_fields.field_type::text AS field_type
+                SELECT form_fields.field_id, form_fields.field_type::text AS field_type
                 FROM form_fields
                 JOIN form_versions ON form_versions.id = form_fields.form_version_id
                 WHERE form_versions.form_id = $1
@@ -1692,7 +2041,7 @@ async fn require_source_field_exists(
         } else {
             sqlx::query(
                 r#"
-                SELECT form_fields.field_type::text AS field_type
+                SELECT form_fields.field_id, form_fields.field_type::text AS field_type
                 FROM form_fields
                 JOIN form_versions ON form_versions.id = form_fields.form_version_id
                 WHERE form_versions.form_id = $1 AND form_fields.key = $2
@@ -1709,29 +2058,62 @@ async fn require_source_field_exists(
         None
     };
 
-    row.map(|row| row.try_get("field_type"))
-        .transpose()?
-        .ok_or_else(|| {
-            ApiError::BadRequest(format!(
-                "dataset source field '{source_field_key}' is not available on source '{}'",
-                source.source_alias
-            ))
+    row.map(|row| -> Result<SourceFieldInfo, sqlx::Error> {
+        Ok(SourceFieldInfo {
+            field_id: Some(row.try_get("field_id")?),
+            field_type: row.try_get("field_type")?,
         })
+    })
+    .transpose()?
+    .ok_or_else(|| {
+        ApiError::BadRequest(format!(
+            "dataset source field '{source_field_key}' is not available on source '{}'",
+            source.source_alias
+        ))
+    })
+}
+
+fn source_field_key_for_column(source_alias: &str, column: &str) -> Option<String> {
+    if system_source_field_type(column).is_some() {
+        return Some(column.to_string());
+    }
+
+    let prefix = format!("{source_alias}__");
+    let suffix = column.strip_prefix(&prefix)?;
+    system_source_field_keys()
+        .into_iter()
+        .find(|key| key.trim_start_matches('_') == suffix)
+        .map(String::from)
+        .or_else(|| Some(suffix.to_string()))
 }
 
 fn system_source_field_expression(source_field_key: &str) -> Option<&'static str> {
     match source_field_key {
-        "__submission_id" => Some("ranked.submission_id::text"),
-        "__form_version_id" => Some("ranked.form_version_id::text"),
-        "__node_id" => Some("ranked.node_id::text"),
-        "__node_name" => Some("ranked.node_name"),
-        "__submission_status" => Some("ranked.status"),
-        "__submitted_at" => Some("ranked.submitted_at::text"),
-        "__submission_created_at" => Some("ranked.created_at::text"),
-        "__last_updated_at" => Some("ranked.last_modified_at::text"),
-        "__last_updated_by_user_name" => Some("ranked.last_modified_by_user_name"),
+        "__submission_id" => Some("submission_fact.submission_id::text"),
+        "__form_version_id" => Some("submission_fact.form_version_id::text"),
+        "__node_id" => Some("submission_fact.node_id::text"),
+        "__node_name" => Some("node_dim.node_name"),
+        "__submission_status" => Some("submission_fact.status"),
+        "__submitted_at" => Some("submission_fact.submitted_at::text"),
+        "__submission_created_at" => Some("submission_fact.created_at::text"),
+        "__last_updated_at" => Some("submission_fact.last_modified_at::text"),
+        "__last_updated_by_user_name" => Some("submission_fact.last_modified_by_user_name"),
         _ => None,
     }
+}
+
+fn system_source_field_keys() -> [&'static str; 9] {
+    [
+        "__submission_id",
+        "__form_version_id",
+        "__node_id",
+        "__node_name",
+        "__submission_status",
+        "__submitted_at",
+        "__submission_created_at",
+        "__last_updated_at",
+        "__last_updated_by_user_name",
+    ]
 }
 
 fn system_source_field_type(source_field_key: &str) -> Option<&'static str> {
@@ -1786,7 +2168,6 @@ async fn load_materialized_dataset_table_rows(
     let mut table_rows = Vec::new();
     for row in rows {
         let submission_id: String = row.try_get("__row_id")?;
-        let node_name: String = row.try_get("__node_name")?;
         let mut values = BTreeMap::new();
         for column in row.columns() {
             let name = column.name();
@@ -1798,7 +2179,7 @@ async fn load_materialized_dataset_table_rows(
         }
         table_rows.push(DatasetTableRow {
             submission_id,
-            node_name,
+            node_name: String::new(),
             source_alias: "materialized".into(),
             values,
         });
@@ -2066,30 +2447,62 @@ async fn require_form_readable_by_account(
     }
 }
 
-async fn load_latest_published_form_major(
+async fn load_published_form_version_identity(
     pool: &sqlx::PgPool,
     form_id: Uuid,
-) -> ApiResult<Option<i32>> {
-    sqlx::query_scalar(
-        r#"
-        SELECT version_major
-        FROM form_versions
-        WHERE form_id = $1
-          AND status = 'published'::form_version_status
-          AND version_major IS NOT NULL
-        ORDER BY
-            version_major DESC,
-            version_minor DESC NULLS LAST,
-            version_patch DESC NULLS LAST,
-            published_at DESC NULLS LAST,
-            created_at DESC
-        LIMIT 1
-        "#,
-    )
-    .bind(form_id)
-    .fetch_optional(pool)
-    .await
-    .map_err(Into::into)
+    form_version_major: Option<i32>,
+) -> ApiResult<PublishedFormVersionIdentity> {
+    let row = if let Some(major) = form_version_major {
+        sqlx::query(
+            r#"
+            SELECT id, version_major
+            FROM form_versions
+            WHERE form_id = $1
+              AND status = 'published'::form_version_status
+              AND version_major = $2
+            ORDER BY
+                version_minor DESC NULLS LAST,
+                version_patch DESC NULLS LAST,
+                published_at DESC NULLS LAST,
+                created_at DESC
+            LIMIT 1
+            "#,
+        )
+        .bind(form_id)
+        .bind(major)
+        .fetch_optional(pool)
+        .await?
+    } else {
+        sqlx::query(
+            r#"
+            SELECT id, version_major
+            FROM form_versions
+            WHERE form_id = $1
+              AND status = 'published'::form_version_status
+              AND version_major IS NOT NULL
+            ORDER BY
+                version_major DESC,
+                version_minor DESC NULLS LAST,
+                version_patch DESC NULLS LAST,
+                published_at DESC NULLS LAST,
+                created_at DESC
+            LIMIT 1
+            "#,
+        )
+        .bind(form_id)
+        .fetch_optional(pool)
+        .await?
+    }
+    .ok_or_else(|| {
+        ApiError::BadRequest(format!(
+            "dataset form source must reference a published form version for form {form_id}"
+        ))
+    })?;
+
+    Ok(PublishedFormVersionIdentity {
+        id: row.try_get("id")?,
+        major: row.try_get("version_major")?,
+    })
 }
 
 fn require_identifier(label: &str, value: &str) -> ApiResult<()> {

@@ -2,10 +2,11 @@
 
 use super::source_options::source_field_options;
 use crate::features::datasets::types::{
-    DatasetFieldDraft, DatasetFormOption, DatasetRenderedForm, DatasetSourceDraft,
+    DatasetAggregationDraft, DatasetFieldDraft, DatasetFormOption, DatasetRenderedForm,
+    DatasetSourceDraft,
 };
 use leptos::prelude::*;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 pub(crate) fn add_fields_from_source(
     index: usize,
@@ -51,4 +52,56 @@ pub(crate) fn canonical_field_key(source_alias: &str, source_field_key: &str) ->
     } else {
         format!("{source_alias}__{field_key}")
     }
+}
+
+pub(crate) fn rename_source_alias_references(
+    old_alias: &str,
+    new_alias: &str,
+    fields: RwSignal<Vec<DatasetFieldDraft>>,
+    aggregation: RwSignal<DatasetAggregationDraft>,
+) {
+    if old_alias == new_alias {
+        return;
+    }
+
+    let mut renamed_field_keys = BTreeMap::new();
+    fields.update(|items| {
+        for field in items
+            .iter_mut()
+            .filter(|field| field.source_alias == old_alias)
+        {
+            let previous_key = field.key.clone();
+            field.source_alias = new_alias.to_string();
+            field.key = canonical_field_key(new_alias, &field.source_field_key);
+            renamed_field_keys.insert(previous_key, field.key.clone());
+        }
+        let mut seen = BTreeSet::new();
+        items.retain(|field| {
+            seen.insert((field.source_alias.clone(), field.source_field_key.clone()))
+        });
+    });
+
+    if renamed_field_keys.is_empty() {
+        return;
+    }
+
+    aggregation.update(|draft| {
+        for group_field in &mut draft.group_fields {
+            if let Some(renamed) = renamed_field_keys.get(group_field) {
+                *group_field = renamed.clone();
+            }
+        }
+        for metric in &mut draft.metrics {
+            if let Some(renamed) = renamed_field_keys.get(&metric.source_field_key) {
+                metric.source_field_key = renamed.clone();
+            }
+        }
+        if let Some(row_picker) = &mut draft.row_picker {
+            for sort_field in &mut row_picker.sort_fields {
+                if let Some(renamed) = renamed_field_keys.get(&sort_field.field_key) {
+                    sort_field.field_key = renamed.clone();
+                }
+            }
+        }
+    });
 }

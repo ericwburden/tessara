@@ -20,6 +20,7 @@ pub(super) fn form_field_payload(
 ) -> CreateFormFieldPayload {
     CreateFormFieldPayload {
         section_id,
+        field_id: field.remote_id.clone(),
         key: field.key.clone(),
         label: field.label.clone(),
         field_type: field.field_type.clone(),

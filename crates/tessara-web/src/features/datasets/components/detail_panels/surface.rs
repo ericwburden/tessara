@@ -52,8 +52,8 @@ pub(crate) fn DatasetDetailSurface(dataset_id: String, edit: bool) -> impl IntoV
                         let visibility_nodes = loaded.visibility_nodes.clone();
                         view! {
                             <PageHeader title=Box::leak(loaded.name.clone().into_boxed_str())>
-                                {if can_manage() && !edit {
-                                    view! { <a class="button button--secondary" href=edit_href>"Edit Dataset"</a> }.into_any()
+                                {move || if can_manage() && !edit {
+                                    view! { <a class="button button--secondary" href=edit_href.clone()>"Edit Dataset"</a> }.into_any()
                                 } else {
                                     view! { <span></span> }.into_any()
                                 }}
@@ -175,7 +175,7 @@ pub(crate) fn DatasetPreviewTable(
                             <tr>
                                 {fields.iter().map(|field| {
                                     let value = values.get(&field.key).and_then(|value| value.clone()).unwrap_or_default();
-                                    view! { <td>{value}</td> }
+                                    view! { <td>{display_preview_value(&field.field_type, &value)}</td> }
                                 }).collect_view()}
                             </tr>
                         }
@@ -192,4 +192,15 @@ fn detail_output_fields(dataset: &DatasetDefinition) -> Vec<DatasetFieldDefiniti
     } else {
         dataset.output_fields.clone()
     }
+}
+
+fn display_preview_value(field_type: &str, value: &str) -> String {
+    if field_type == "number" && value.contains('.') {
+        if let Ok(number) = value.parse::<f64>() {
+            if number.is_finite() {
+                return format!("{number:.2}");
+            }
+        }
+    }
+    value.to_string()
 }

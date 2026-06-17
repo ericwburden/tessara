@@ -7,7 +7,7 @@ use crate::ui::DataTable;
 use crate::utils::text::sentence_label;
 use icons::ChevronDown;
 use leptos::prelude::*;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 #[component]
 pub(crate) fn DatasetFieldsEditor(
@@ -39,7 +39,20 @@ pub(crate) fn DatasetFieldsEditor(
                                     field.source_alias == source_alias && field.source_field_key == option.key
                                 })
                             });
-                        let included_count = fields.get().iter().filter(|field| field.source_alias == source_alias).count();
+                        let available_option_keys = source_options
+                            .iter()
+                            .map(|option| option.key.clone())
+                            .collect::<BTreeSet<_>>();
+                        let included_count = fields
+                            .get()
+                            .into_iter()
+                            .filter(|field| {
+                                field.source_alias == source_alias
+                                    && available_option_keys.contains(&field.source_field_key)
+                            })
+                            .map(|field| field.source_field_key)
+                            .collect::<BTreeSet<_>>()
+                            .len();
                         let source_heading = source_display_name(&source, &forms.get(), &datasets.get());
                         let source_alias_for_all = source_alias.clone();
                         let source_options_for_all = source_options.clone();

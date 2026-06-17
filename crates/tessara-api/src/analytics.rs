@@ -63,7 +63,7 @@ pub async fn refresh_projection(pool: &sqlx::PgPool) -> ApiResult<AnalyticsStatu
         r#"
         INSERT INTO analytics.field_dim
             (field_id, form_version_id, field_key, field_label, field_type)
-        SELECT id, form_version_id, key, label, field_type::text
+        SELECT field_id, form_version_id, key, label, field_type::text
         FROM form_fields
         "#,
         r#"
@@ -102,9 +102,10 @@ pub async fn refresh_projection(pool: &sqlx::PgPool) -> ApiResult<AnalyticsStatu
         "#,
         r#"
         INSERT INTO analytics.submission_value_fact
-            (submission_id, field_id, field_key, value_text, value_json)
+            (submission_id, form_version_id, field_id, field_key, value_text, value_json)
         SELECT
             submission_values.submission_id,
+            submission_values.form_version_id,
             submission_values.field_id,
             form_fields.key,
             CASE jsonb_typeof(submission_values.value)
@@ -113,7 +114,9 @@ pub async fn refresh_projection(pool: &sqlx::PgPool) -> ApiResult<AnalyticsStatu
             END AS value_text,
             submission_values.value
         FROM submission_values
-        JOIN form_fields ON form_fields.id = submission_values.field_id
+        JOIN form_fields
+          ON form_fields.form_version_id = submission_values.form_version_id
+         AND form_fields.field_id = submission_values.field_id
         JOIN submissions ON submissions.id = submission_values.submission_id
         WHERE submissions.status = 'submitted'::submission_status
         "#,

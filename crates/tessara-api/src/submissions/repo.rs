@@ -70,7 +70,7 @@ pub async fn fields_by_key(
 ) -> ApiResult<HashMap<String, FormFieldContract>> {
     let rows = sqlx::query(
         r#"
-        SELECT id, key, field_type::text AS field_type, required
+        SELECT field_id, key, field_type::text AS field_type, required
         FROM form_fields
         WHERE form_version_id = $1
         "#,
@@ -85,7 +85,7 @@ pub async fn fields_by_key(
         fields.insert(
             key.clone(),
             FormFieldContract {
-                id: row.try_get("id")?,
+                id: row.try_get("field_id")?,
                 key,
                 field_type: parse_field_type(&row.try_get::<String, _>("field_type")?)?,
                 required: row.try_get("required")?,
@@ -312,18 +312,20 @@ pub async fn saved_values_by_field_id(
 pub async fn upsert_submission_value(
     pool: &PgPool,
     submission_id: Uuid,
+    form_version_id: Uuid,
     field_id: Uuid,
     value: Value,
 ) -> ApiResult<()> {
     sqlx::query(
         r#"
-        INSERT INTO submission_values (submission_id, field_id, value)
-        VALUES ($1, $2, $3)
+        INSERT INTO submission_values (submission_id, form_version_id, field_id, value)
+        VALUES ($1, $2, $3, $4)
         ON CONFLICT (submission_id, field_id)
         DO UPDATE SET value = EXCLUDED.value
         "#,
     )
     .bind(submission_id)
+    .bind(form_version_id)
     .bind(field_id)
     .bind(value)
     .execute(pool)
@@ -433,7 +435,7 @@ async fn load_submission_value_details(
     let rows = sqlx::query(
         r#"
         SELECT
-            form_fields.id AS field_id,
+            form_fields.field_id AS field_id,
             form_fields.key,
             form_fields.label,
             form_fields.field_type::text AS field_type,
@@ -441,7 +443,8 @@ async fn load_submission_value_details(
             submission_values.value
         FROM form_fields
         LEFT JOIN submission_values
-            ON submission_values.field_id = form_fields.id
+            ON submission_values.form_version_id = form_fields.form_version_id
+            AND submission_values.field_id = form_fields.field_id
             AND submission_values.submission_id = $1
         WHERE form_fields.form_version_id = $2
         ORDER BY form_fields.position, form_fields.label

@@ -20,6 +20,7 @@ pub(crate) fn DatasetSourcesEditor(
     rendered_forms: RwSignal<BTreeMap<String, DatasetRenderedForm>>,
     composition_mode: RwSignal<String>,
     fields: RwSignal<Vec<DatasetFieldDraft>>,
+    aggregation: RwSignal<DatasetAggregationDraft>,
     join_left_key: RwSignal<String>,
     join_right_key: RwSignal<String>,
     designer_selection: RwSignal<DatasetDesignerSelection>,
@@ -61,7 +62,11 @@ pub(crate) fn DatasetSourcesEditor(
                 load_rendered_form(version_id.clone(), rendered_forms);
                 if rendered_forms.get().contains_key(&version_id) {
                     let seed_key = source_seed_key(index, &version_id);
-                    if !auto_seeded_sources.get().contains(&seed_key) {
+                    let edit_seed_key = source_seed_key(index, "*");
+                    let seeded_sources = auto_seeded_sources.get();
+                    if !seeded_sources.contains(&seed_key)
+                        && !seeded_sources.contains(&edit_seed_key)
+                    {
                         add_fields_from_source(index, sources, forms, rendered_forms, fields);
                         auto_seeded_sources.update(|keys| {
                             keys.insert(seed_key);
@@ -93,6 +98,8 @@ pub(crate) fn DatasetSourcesEditor(
                     is_open=designer_sheet_open
                     sources
                     expression
+                    fields
+                    aggregation
                     forms
                     datasets
                     rendered_forms

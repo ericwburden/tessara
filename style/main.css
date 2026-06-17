@@ -1188,6 +1188,20 @@ input {
   color: var(--color-text);
 }
 
+.data-table__stacked-label {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+}
+
+.data-table__stacked-label .data-table__secondary-text {
+  color: var(--color-muted);
+  font-size: 0.82rem;
+  font-weight: 500;
+  line-height: 1.25;
+}
+
 .workflow-source-marker {
   display: inline-flex;
   align-items: center;
