@@ -35,6 +35,10 @@ pub enum DatasetSourceRequest {
 }
 
 /// One ordered dataset operation applied after source composition.
+///
+/// The operations array order is authoritative. Each operation's `position`
+/// must match its zero-based index in that array; the backend validates it as a
+/// client-side consistency guard and does not sort by `position`.
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum DatasetOperationRequest {

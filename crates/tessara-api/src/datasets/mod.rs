@@ -232,6 +232,10 @@ struct PublishedFormVersionIdentity {
 }
 
 fn internal_dataset_columns() -> BTreeSet<String> {
+    // Security invariant: every pipeline CTE must expose __row_id and
+    // __restriction_tier. The tier column must represent the most sensitive
+    // upstream row tier seen so far, so later operations cannot rematerialize
+    // restricted or confidential rows as public data.
     ["__row_id", "__restriction_tier"]
         .into_iter()
         .map(String::from)
