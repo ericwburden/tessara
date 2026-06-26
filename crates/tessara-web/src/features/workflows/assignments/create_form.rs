@@ -8,7 +8,7 @@ use crate::ui::empty_view;
 use leptos::prelude::*;
 use std::collections::HashSet;
 
-use super::mutations::submit_workflow_assignment_bulk;
+use super::mutations::{SubmitWorkflowAssignmentBulkInput, submit_workflow_assignment_bulk};
 
 #[component]
 pub(in crate::features::workflows) fn WorkflowAssignmentCreateForm(
@@ -42,7 +42,7 @@ pub(in crate::features::workflows) fn WorkflowAssignmentCreateForm(
             class="native-form workflow-assignment-create-form"
             on:submit=move |event| {
                 event.prevent_default();
-                submit_workflow_assignment_bulk(
+                submit_workflow_assignment_bulk(SubmitWorkflowAssignmentBulkInput {
                     selected_candidate_id,
                     candidates,
                     selected_account_ids,
@@ -51,7 +51,7 @@ pub(in crate::features::workflows) fn WorkflowAssignmentCreateForm(
                     assignments_error,
                     is_saving,
                     message,
-                );
+                });
             }
         >
             <section class="form-section">

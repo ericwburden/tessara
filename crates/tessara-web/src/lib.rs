@@ -49,8 +49,13 @@ pub fn svg_asset(name: &str) -> Option<&'static str> {
 mod tests {
     use super::application_html;
 
+    fn initialize_test_executor() {
+        let _ = any_spawner::Executor::init_futures_executor();
+    }
+
     #[test]
     fn native_document_has_overlay_root_and_no_app_prefix() {
+        initialize_test_executor();
         let html = application_html("/", "Tessara Home", "Native Tessara shell.");
 
         assert!(html.contains(r#"<div id="app-overlays"></div>"#));
@@ -61,6 +66,7 @@ mod tests {
     #[test]
     /// Verifies the login is registered as root level route behavior.
     fn login_is_registered_as_root_level_route() {
+        initialize_test_executor();
         let html = application_html("/login", "Tessara Sign In", "Sign in.");
 
         assert!(html.contains("Sign In"));

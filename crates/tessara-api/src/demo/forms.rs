@@ -279,16 +279,15 @@ fn parse_major_version_suffix(version_label: &str) -> Option<i32> {
     digits.parse().ok()
 }
 
-pub(super) async fn current_form_major(pool: &PgPool, form_id: Uuid) -> ApiResult<Option<i32>> {
+pub(super) async fn current_form_version(pool: &PgPool, form_id: Uuid) -> ApiResult<Option<Uuid>> {
     sqlx::query_scalar(
         r#"
-        SELECT version_major
+        SELECT id
         FROM form_versions
         WHERE form_id = $1
           AND status = 'published'::form_version_status
-          AND version_major IS NOT NULL
         ORDER BY
-            version_major DESC,
+            version_major DESC NULLS LAST,
             version_minor DESC NULLS LAST,
             version_patch DESC NULLS LAST,
             published_at DESC NULLS LAST,

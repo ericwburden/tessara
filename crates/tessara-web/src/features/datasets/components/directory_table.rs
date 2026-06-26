@@ -44,7 +44,6 @@ pub(crate) fn DatasetDirectoryTable(
                     <tr>
                         <th scope="col">"Dataset"</th>
                         <th scope="col">"Grain"</th>
-                        <th scope="col">"Composition"</th>
                         <th scope="col">"Visibility"</th>
                         <th scope="col" class="data-table__cell--center">"Sources"</th>
                         <th scope="col" class="data-table__cell--center">"Fields"</th>
@@ -79,7 +78,6 @@ fn DatasetSummaryRow(dataset: DatasetSummary) -> impl IntoView {
                 <span class="data-table__secondary-text">{dataset.slug}</span>
             </th>
             <td>{sentence_label(&dataset.grain)}</td>
-            <td>{sentence_label(&dataset.composition_mode)}</td>
             <td>{visibility_label(&dataset.visibility_nodes)}</td>
             <td class="data-table__cell--center">{dataset.source_count}</td>
             <td class="data-table__cell--center">{dataset.field_count}</td>
@@ -111,7 +109,6 @@ fn DatasetMobileCards(
                             <h4><a href=href>{dataset.name}</a></h4>
                             <dl>
                                 <dt>"Grain"</dt><dd>{sentence_label(&dataset.grain)}</dd>
-                                <dt>"Composition"</dt><dd>{sentence_label(&dataset.composition_mode)}</dd>
                                 <dt>"Visibility"</dt><dd>{visibility_label(&dataset.visibility_nodes)}</dd>
                                 <dt>"Sources"</dt><dd>{dataset.source_count}</dd>
                                 <dt>"Fields"</dt><dd>{dataset.field_count}</dd>

@@ -13,6 +13,7 @@ mod breadcrumb;
 mod button;
 mod combobox;
 mod data_table;
+mod draggable_panel_list;
 pub mod dropdown;
 mod empty_state;
 mod info_list;
@@ -29,6 +30,10 @@ pub(crate) use breadcrumb::*;
 pub(crate) use button::*;
 pub(crate) use combobox::{Combobox, ComboboxOption};
 pub(crate) use data_table::{DataTable, SearchableDataTable};
+pub(crate) use draggable_panel_list::{
+    DraggablePanelList, DraggablePanelListAnchor, DraggablePanelListDraggable,
+    DraggablePanelListDropZone, DraggablePanelListItem, DraggablePanelListMove,
+};
 pub(crate) use dropdown::DropdownMenu;
 pub(crate) use empty_state::*;
 pub(crate) use info_list::{InfoListTable, InfoRow};

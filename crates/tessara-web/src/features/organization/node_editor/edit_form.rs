@@ -7,7 +7,10 @@ use crate::ui::Button;
 use leptos::prelude::*;
 use std::collections::HashMap;
 
-use super::{OrganizationNodeMetadataSection, parent_node_options_for_edit, submit_update_node};
+use super::{
+    OrganizationNodeMetadataSection, SubmitUpdateNodeInput, parent_node_options_for_edit,
+    submit_update_node,
+};
 
 #[component]
 pub(super) fn OrganizationNodeEditForm(
@@ -35,8 +38,8 @@ pub(super) fn OrganizationNodeEditForm(
             class="native-form organization-node-form"
             on:submit=move |event| {
                 event.prevent_default();
-                submit_update_node(
-                    node_id.clone(),
+                submit_update_node(SubmitUpdateNodeInput {
+                    node_id: node_id.clone(),
                     selected_parent_node_id,
                     name,
                     metadata_fields,
@@ -44,7 +47,7 @@ pub(super) fn OrganizationNodeEditForm(
                     metadata_booleans,
                     is_saving,
                     message,
-                );
+                });
             }
         >
             <div class="form-grid">

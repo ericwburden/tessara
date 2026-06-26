@@ -1,8 +1,9 @@
 //! Dataset editor page surface.
 
+use super::operations::catalog_after_operations;
 use super::{
-    DatasetAggregationEditor, DatasetEditorMessages, DatasetEditorState, DatasetFieldsEditor,
-    DatasetFiltersEditor, DatasetIdentitySection, DatasetSourcesEditor, DatasetSqlPreviewPanel,
+    DatasetEditorMessages, DatasetEditorState, DatasetIdentitySection, DatasetOperationSequence,
+    DatasetRestrictionsEditor, DatasetSourcesEditor, DatasetSqlPreviewPanel,
     DatasetVisibilityEditor, install_dataset_editor_loaders, submit_dataset_editor,
 };
 use crate::ui::{
@@ -22,6 +23,15 @@ pub(crate) fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView 
     let state = DatasetEditorState::new();
     install_dataset_editor_loaders(dataset_id.clone(), state);
     let save_dataset_id = dataset_id.clone();
+    let final_fields = Signal::derive(move || {
+        catalog_after_operations(
+            state.initial_source.get(),
+            state.datasets.get(),
+            state.forms.get(),
+            state.rendered_forms.get(),
+            state.operation_order.get(),
+        )
+    });
 
     view! {
         <AppShell active_route="datasets" title=title>
@@ -47,43 +57,37 @@ pub(crate) fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView 
                 }>
                     <DatasetIdentitySection name=state.name slug=state.slug/>
                     <DatasetSourcesEditor
-                        sources=state.sources
-                        expression=state.expression
+                        initial_source=state.initial_source
                         forms=state.forms
                         datasets=state.datasets
                         rendered_forms=state.rendered_forms
-                        composition_mode=state.composition_mode
-                        fields=state.fields
-                        aggregation=state.aggregation
-                        join_left_key=state.join_left_key
-                        join_right_key=state.join_right_key
-                        designer_selection=state.designer_selection
-                        designer_sheet_open=state.designer_sheet_open
-                        auto_seeded_sources=state.auto_seeded_sources
+                        operation_order=state.operation_order
                     />
-                    <DatasetFieldsEditor
-                        fields=state.fields
-                        sources=state.sources
+                    <DatasetOperationSequence
+                        operation_order=state.operation_order
+                        initial_source=state.initial_source
                         forms=state.forms
                         datasets=state.datasets
                         rendered_forms=state.rendered_forms
+                        nodes=state.nodes
+                        users=state.users
                     />
-                    <DatasetAggregationEditor
-                        fields=state.fields
-                        aggregation=state.aggregation
+                    <DatasetRestrictionsEditor
+                        fields=final_fields
+                        restriction_internal_field_key=state.restriction_internal_field_key
+                        restriction_restricted_field_key=state.restriction_restricted_field_key
+                        restriction_confidential_field_key=state.restriction_confidential_field_key
                     />
-                    <DatasetFiltersEditor/>
                     <DatasetSqlPreviewPanel
                         dataset_id=dataset_id.clone()
                         name=state.name
                         slug=state.slug
                         visibility_node_ids=state.visibility_node_ids
-                        sources=state.sources
-                        expression=state.expression
-                        fields=state.fields
-                        aggregation=state.aggregation
-                        join_left_key=state.join_left_key
-                        join_right_key=state.join_right_key
+                        initial_source=state.initial_source
+                        operation_order=state.operation_order
+                        restriction_internal_field_key=state.restriction_internal_field_key
+                        restriction_restricted_field_key=state.restriction_restricted_field_key
+                        restriction_confidential_field_key=state.restriction_confidential_field_key
                         sql_preview=state.sql_preview
                         sql_preview_error=state.sql_preview_error
                         expanded=state.sql_preview_expanded

@@ -100,6 +100,14 @@ async fn seed_dev_admin(pool: &PgPool, config: &Config) -> anyhow::Result<()> {
         ),
         ("datasets:manage", "Manage dataset definitions"),
         ("datasets:read", "Inspect dataset definitions"),
+        (
+            "datasets:read_restricted",
+            "Read restricted dataset rows when dataset visibility allows access",
+        ),
+        (
+            "datasets:read_confidential",
+            "Read confidential and restricted dataset rows when dataset visibility allows access",
+        ),
         ("components:manage", "Manage component definitions"),
         ("components:read", "Inspect component definitions"),
         ("dashboards:manage", "Manage dashboard definitions"),

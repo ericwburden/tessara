@@ -7,9 +7,9 @@ use leptos::prelude::*;
 use std::collections::HashSet;
 
 use super::{
-    WorkflowActiveRevisionSection, WorkflowAvailabilitySection, WorkflowEditStepsSection,
-    WorkflowIdentityFields, add_workflow_step, can_submit_workflow_editor, submit_update_workflow,
-    workflow_step_signature,
+    SubmitUpdateWorkflowInput, WorkflowActiveRevisionSection, WorkflowAvailabilitySection,
+    WorkflowEditStepsSection, WorkflowIdentityFields, add_workflow_step,
+    can_submit_workflow_editor, submit_update_workflow, workflow_step_signature,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -49,10 +49,10 @@ pub(in crate::features::workflows) fn WorkflowEditForm(
             class="native-form workflow-create-form"
             on:submit=move |event| {
                 event.prevent_default();
-                submit_update_workflow(
-                    workflow_id_for_submit.clone(),
-                    edit_version_id.get_untracked(),
-                    version_is_draft.get_untracked(),
+                submit_update_workflow(SubmitUpdateWorkflowInput {
+                    workflow_id: workflow_id_for_submit.clone(),
+                    version_id: edit_version_id.get_untracked(),
+                    version_is_draft: version_is_draft.get_untracked(),
                     name,
                     slug,
                     available_node_ids,
@@ -62,8 +62,8 @@ pub(in crate::features::workflows) fn WorkflowEditForm(
                     is_saving,
                     save_intent,
                     message,
-                    WorkflowSaveIntent::Draft,
-                );
+                    intent: WorkflowSaveIntent::Draft,
+                });
             }
         >
             <WorkflowIdentityFields name=name description=description/>
@@ -111,10 +111,10 @@ pub(in crate::features::workflows) fn WorkflowEditForm(
                             || (!version_is_draft.get() && !has_step_changes())
                     }
                     on:click=move |_| {
-                        submit_update_workflow(
-                            workflow_id_for_publish.clone(),
-                            edit_version_id.get_untracked(),
-                            version_is_draft.get_untracked(),
+                        submit_update_workflow(SubmitUpdateWorkflowInput {
+                            workflow_id: workflow_id_for_publish.clone(),
+                            version_id: edit_version_id.get_untracked(),
+                            version_is_draft: version_is_draft.get_untracked(),
                             name,
                             slug,
                             available_node_ids,
@@ -124,8 +124,8 @@ pub(in crate::features::workflows) fn WorkflowEditForm(
                             is_saving,
                             save_intent,
                             message,
-                            WorkflowSaveIntent::Publish,
-                        );
+                            intent: WorkflowSaveIntent::Publish,
+                        });
                     }
                 >
                     {move || {

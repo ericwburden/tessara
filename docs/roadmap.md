@@ -548,7 +548,7 @@ This section records the completed foundation sequence that led to the current n
 
 **User-testable exit condition:** a tester can create, inspect, edit, and preview datasets through app UI, while scoped operators can read the full materialized output for datasets visible to their effective scope.
 
-### Sprint 3B: Dataset Advanced Authoring Slice (Next)
+### Sprint 3B: Dataset Advanced Authoring Slice (Complete)
 
 **Outcome:** dataset authors can refine datasets beyond direct source-field projection.
 
@@ -566,7 +566,7 @@ This section records the completed foundation sequence that led to the current n
 
 **User-testable exit condition:** a tester can add a row filter and calculated field to a dataset, preview the resulting rows, save the definition, and verify any explicit restriction rules behave as authored.
 
-### Sprint 3C: Dataset Revision And Compatibility Slice
+### Sprint 3C: Dataset Revision And Compatibility Slice (Next)
 
 **Outcome:** revision behavior is visible and manageable.
 

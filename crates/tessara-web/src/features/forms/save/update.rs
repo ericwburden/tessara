@@ -13,24 +13,41 @@ use crate::features::forms::save::structure::{save_form_fields, save_form_sectio
 use crate::features::forms::types::{FormSummary, RenderedForm};
 use leptos::prelude::*;
 
-#[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+pub(crate) struct SubmitUpdateFormInput {
+    pub(crate) form_id: String,
+    pub(crate) name: RwSignal<String>,
+    pub(crate) workflow_node_type_id: RwSignal<String>,
+    pub(crate) sections: RwSignal<Vec<FormBuilderSectionDraft>>,
+    pub(crate) fields: RwSignal<Vec<FormBuilderFieldDraft>>,
+    pub(crate) existing_forms: RwSignal<Vec<FormSummary>>,
+    pub(crate) edit_version_id: RwSignal<Option<String>>,
+    pub(crate) edit_version_status: RwSignal<Option<String>>,
+    pub(crate) rendered_form: RwSignal<Option<RenderedForm>>,
+    pub(crate) is_saving: RwSignal<bool>,
+    pub(crate) message: RwSignal<Option<String>>,
+    pub(crate) publish_after_save: bool,
+}
+
 /// Submits the submit update form request.
-pub(crate) fn submit_update_form(
-    form_id: String,
-    name: RwSignal<String>,
-    workflow_node_type_id: RwSignal<String>,
-    sections: RwSignal<Vec<FormBuilderSectionDraft>>,
-    fields: RwSignal<Vec<FormBuilderFieldDraft>>,
-    existing_forms: RwSignal<Vec<FormSummary>>,
-    edit_version_id: RwSignal<Option<String>>,
-    edit_version_status: RwSignal<Option<String>>,
-    rendered_form: RwSignal<Option<RenderedForm>>,
-    is_saving: RwSignal<bool>,
-    message: RwSignal<Option<String>>,
-    publish_after_save: bool,
-) {
+pub(crate) fn submit_update_form(input: SubmitUpdateFormInput) {
     #[cfg(feature = "hydrate")]
     {
+        let SubmitUpdateFormInput {
+            form_id,
+            name,
+            workflow_node_type_id,
+            sections,
+            fields,
+            existing_forms,
+            edit_version_id,
+            edit_version_status,
+            rendered_form,
+            is_saving,
+            message,
+            publish_after_save,
+        } = input;
+
         if is_saving.get() {
             return;
         }
@@ -133,12 +150,10 @@ pub(crate) fn submit_update_form(
                 return;
             }
 
-            if publish_after_save {
-                if let Err(error) = publish_form_version(&version_id).await {
-                    message.set(Some(error));
-                    is_saving.set(false);
-                    return;
-                }
+            if publish_after_save && let Err(error) = publish_form_version(&version_id).await {
+                message.set(Some(error));
+                is_saving.set(false);
+                return;
             }
 
             if let Some(window) = web_sys::window() {
@@ -149,19 +164,6 @@ pub(crate) fn submit_update_form(
 
     #[cfg(not(feature = "hydrate"))]
     {
-        let _ = (
-            form_id,
-            name,
-            workflow_node_type_id,
-            sections,
-            fields,
-            existing_forms,
-            edit_version_id,
-            edit_version_status,
-            rendered_form,
-            is_saving,
-            message,
-            publish_after_save,
-        );
+        let _ = input;
     }
 }

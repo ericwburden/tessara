@@ -41,7 +41,6 @@ pub fn DatasetsPage() -> impl IntoView {
                         dataset.name.as_str(),
                         dataset.slug.as_str(),
                         dataset.grain.as_str(),
-                        dataset.composition_mode.as_str(),
                     ],
                 )
             })

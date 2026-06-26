@@ -3,7 +3,7 @@
 #[cfg(feature = "hydrate")]
 use super::api;
 #[cfg(feature = "hydrate")]
-use super::payloads::dataset_payload_from_drafts;
+use super::payloads::{DatasetPayloadDrafts, dataset_payload_from_drafts};
 use super::types::*;
 use leptos::prelude::*;
 
@@ -14,29 +14,27 @@ pub(super) fn save_dataset(
     name: String,
     slug: String,
     visibility_node_ids: Vec<String>,
-    sources: Vec<DatasetSourceDraft>,
-    expression: DatasetExpressionDraft,
-    fields: Vec<DatasetFieldDraft>,
-    aggregation: DatasetAggregationDraft,
-    join_left_key: String,
-    join_right_key: String,
+    initial_source: DatasetSourceDraft,
+    operation_order: Vec<DatasetOperationDraft>,
+    restriction_internal_field_key: String,
+    restriction_restricted_field_key: String,
+    restriction_confidential_field_key: String,
     save_error: RwSignal<Option<String>>,
     save_message: RwSignal<Option<String>>,
 ) {
     leptos::task::spawn_local(async move {
         save_error.set(None);
         save_message.set(None);
-        let payload = match dataset_payload_from_drafts(
+        let payload = match dataset_payload_from_drafts(DatasetPayloadDrafts {
             name,
             slug,
             visibility_node_ids,
-            sources,
-            expression,
-            fields,
-            aggregation,
-            join_left_key,
-            join_right_key,
-        ) {
+            initial_source,
+            operation_order,
+            restriction_internal_field_key,
+            restriction_restricted_field_key,
+            restriction_confidential_field_key,
+        }) {
             Ok(payload) => payload,
             Err(message) => {
                 save_error.set(Some(message));
@@ -51,10 +49,10 @@ pub(super) fn save_dataset(
                     .unwrap_or_default()
                     .to_string();
                 save_message.set(Some("Dataset saved.".into()));
-                if !id.is_empty() {
-                    if let Some(window) = web_sys::window() {
-                        let _ = window.location().set_href(&format!("/datasets/{id}"));
-                    }
+                if !id.is_empty()
+                    && let Some(window) = web_sys::window()
+                {
+                    let _ = window.location().set_href(&format!("/datasets/{id}"));
                 }
             }
             Err(message) => save_error.set(Some(message)),
@@ -69,10 +67,9 @@ pub(super) fn save_dataset(
     _: String,
     _: String,
     _: Vec<String>,
-    _: Vec<DatasetSourceDraft>,
-    _: DatasetExpressionDraft,
-    _: Vec<DatasetFieldDraft>,
-    _: DatasetAggregationDraft,
+    _: DatasetSourceDraft,
+    _: Vec<DatasetOperationDraft>,
+    _: String,
     _: String,
     _: String,
     _: RwSignal<Option<String>>,
@@ -87,29 +84,26 @@ pub(super) fn preview_dataset_sql(
     name: String,
     slug: String,
     visibility_node_ids: Vec<String>,
-    sources: Vec<DatasetSourceDraft>,
-    expression: DatasetExpressionDraft,
-    fields: Vec<DatasetFieldDraft>,
-    aggregation: DatasetAggregationDraft,
-    join_left_key: String,
-    join_right_key: String,
+    initial_source: DatasetSourceDraft,
+    operation_order: Vec<DatasetOperationDraft>,
+    restriction_internal_field_key: String,
+    restriction_restricted_field_key: String,
+    restriction_confidential_field_key: String,
     sql_preview: RwSignal<Option<String>>,
     sql_preview_error: RwSignal<Option<String>>,
 ) {
     leptos::task::spawn_local(async move {
         sql_preview_error.set(None);
-        sql_preview.set(None);
-        let payload = match dataset_payload_from_drafts(
+        let payload = match dataset_payload_from_drafts(DatasetPayloadDrafts {
             name,
             slug,
             visibility_node_ids,
-            sources,
-            expression,
-            fields,
-            aggregation,
-            join_left_key,
-            join_right_key,
-        ) {
+            initial_source,
+            operation_order,
+            restriction_internal_field_key,
+            restriction_restricted_field_key,
+            restriction_confidential_field_key,
+        }) {
             Ok(payload) => payload,
             Err(message) => {
                 sql_preview_error.set(Some(message));
@@ -134,10 +128,9 @@ pub(super) fn preview_dataset_sql(
     _: String,
     _: String,
     _: Vec<String>,
-    _: Vec<DatasetSourceDraft>,
-    _: DatasetExpressionDraft,
-    _: Vec<DatasetFieldDraft>,
-    _: DatasetAggregationDraft,
+    _: DatasetSourceDraft,
+    _: Vec<DatasetOperationDraft>,
+    _: String,
     _: String,
     _: String,
     _: RwSignal<Option<String>>,

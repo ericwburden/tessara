@@ -5,18 +5,19 @@ use uuid::Uuid;
 
 use crate::error::ApiResult;
 
-use super::forms::current_form_major;
+use super::forms::current_form_version;
 
 pub(super) struct DatasetFieldBinding<'a> {
-    pub(super) logical_key: &'a str,
     pub(super) label: &'a str,
     pub(super) source_field_key: &'a str,
     pub(super) field_type: &'a str,
 }
 
 struct ResolvedDatasetFieldBinding<'a> {
-    logical_key: &'a str,
+    key: String,
+    label: &'a str,
     source_field_key: &'a str,
+    field_type: &'a str,
     source_field_id: Option<Uuid>,
 }
 
@@ -29,38 +30,17 @@ pub(super) async fn ensure_dataset(
     visibility_node_ids: &[Uuid],
     bindings: &[DatasetFieldBinding<'_>],
 ) -> ApiResult<(Uuid, Uuid)> {
-    let form_version_major = current_form_major(pool, form_id).await?.ok_or_else(|| {
+    let form_version_id = current_form_version(pool, form_id).await?.ok_or_else(|| {
         crate::error::ApiError::BadRequest(format!(
             "demo dataset '{slug}' requires a published form version"
         ))
     })?;
-    let form_version_id = sqlx::query_scalar(
-        r#"
-        SELECT id
-        FROM form_versions
-        WHERE form_id = $1
-          AND version_major = $2
-          AND status = 'published'::form_version_status
-        ORDER BY
-            version_minor DESC NULLS LAST,
-            version_patch DESC NULLS LAST,
-            published_at DESC NULLS LAST,
-            created_at DESC
-        LIMIT 1
-        "#,
-    )
-    .bind(form_id)
-    .bind(form_version_major)
-    .fetch_one(pool)
-    .await?;
     let dataset_id = if let Some(id) = sqlx::query_scalar("SELECT id FROM datasets WHERE slug = $1")
         .bind(slug)
         .fetch_optional(pool)
         .await?
     {
-        sqlx::query(
-            "UPDATE datasets SET name = $1, grain = 'submission', composition_mode = 'union' WHERE id = $2",
-        )
+        sqlx::query("UPDATE datasets SET name = $1, grain = 'submission' WHERE id = $2")
             .bind(name)
             .bind(id)
             .execute(pool)
@@ -68,12 +48,12 @@ pub(super) async fn ensure_dataset(
         id
     } else {
         sqlx::query_scalar(
-            "INSERT INTO datasets (name, slug, grain, composition_mode) VALUES ($1, $2, 'submission', 'union') RETURNING id",
+            "INSERT INTO datasets (name, slug, grain) VALUES ($1, $2, 'submission') RETURNING id",
         )
-            .bind(name)
-            .bind(slug)
-            .fetch_one(pool)
-            .await?
+        .bind(name)
+        .bind(slug)
+        .fetch_one(pool)
+        .await?
     };
 
     sqlx::query("DELETE FROM dataset_sources WHERE dataset_id = $1")
@@ -89,33 +69,30 @@ pub(super) async fn ensure_dataset(
     sqlx::query(
         r#"
         INSERT INTO dataset_sources
-            (dataset_id, source_alias, form_id, form_version_major, position)
+            (dataset_id, source_alias, form_id, form_version_id, position)
         VALUES ($1, $2, $3, $4, 0)
         "#,
     )
     .bind(dataset_id)
     .bind(source_alias)
     .bind(form_id)
-    .bind(form_version_major)
+    .bind(form_version_id)
     .execute(pool)
     .await?;
 
     let mut resolved_bindings = Vec::new();
     for binding in bindings {
         resolved_bindings.push(ResolvedDatasetFieldBinding {
-            logical_key: binding.logical_key,
+            key: canonical_dataset_field_key(source_alias, binding.source_field_key),
+            label: binding.label,
             source_field_key: binding.source_field_key,
-            source_field_id: source_field_id(
-                pool,
-                form_id,
-                form_version_major,
-                binding.source_field_key,
-            )
-            .await?,
+            field_type: binding.field_type,
+            source_field_id: source_field_id(pool, form_version_id, binding.source_field_key)
+                .await?,
         });
     }
 
-    for (position, binding) in bindings.iter().enumerate() {
+    for (position, resolved_binding) in resolved_bindings.iter().enumerate() {
         sqlx::query(
             r#"
             INSERT INTO dataset_fields
@@ -124,12 +101,12 @@ pub(super) async fn ensure_dataset(
             "#,
         )
         .bind(dataset_id)
-        .bind(binding.logical_key)
-        .bind(binding.label)
+        .bind(&resolved_binding.key)
+        .bind(resolved_binding.label)
         .bind(source_alias)
-        .bind(binding.source_field_key)
-        .bind(resolved_bindings[position].source_field_id)
-        .bind(binding.field_type)
+        .bind(resolved_binding.source_field_key)
+        .bind(resolved_binding.source_field_id)
+        .bind(resolved_binding.field_type)
         .bind(position as i32)
         .execute(pool)
         .await?;
@@ -152,25 +129,38 @@ pub(super) async fn ensure_dataset(
     .bind(dataset_id)
     .execute(pool)
     .await?;
-    let definition_ast = json!({
+    let initial_source = json!({
         "kind": "form",
         "alias": source_alias,
         "form_id": form_id,
-        "form_version_major": form_version_major
+        "form_version_id": form_version_id
     });
+    let operations = json!([{
+        "kind": "projection",
+        "position": 0,
+        "fields": resolved_bindings.iter().enumerate().map(|(position, binding)| {
+            json!({
+                "key": binding.key,
+                "label": binding.label,
+                "input_field_key": binding.key,
+                "position": position as i32
+            })
+        }).collect::<Vec<_>>()
+    }]);
     let generated_sql = generated_dataset_sql(form_version_id, &resolved_bindings);
     let revision_id = sqlx::query_scalar(
         r#"
         INSERT INTO dataset_revisions
-            (dataset_id, version_number, version_label, status, published_at, definition_ast, generated_sql)
-        VALUES ($1, $2, $3, 'published'::dataset_revision_status, now(), $4, $5)
+            (dataset_id, version_number, version_label, status, published_at, initial_source, operations, generated_sql)
+        VALUES ($1, $2, $3, 'published'::dataset_revision_status, now(), $4, $5, $6)
         RETURNING id
         "#,
     )
     .bind(dataset_id)
     .bind(version_number)
     .bind(version_number.to_string())
-    .bind(definition_ast)
+    .bind(initial_source)
+    .bind(operations)
     .bind(&generated_sql)
     .fetch_one(pool)
     .await?;
@@ -197,7 +187,7 @@ fn generated_dataset_sql(
     let select_columns = bindings
         .iter()
         .map(|binding| {
-            let column = quote_identifier(binding.logical_key);
+            let column = quote_identifier(&binding.key);
             if let Some(expression) = system_source_field_expression(binding.source_field_key) {
                 group_by_expressions.insert(expression.to_string());
                 format!("{expression} AS {column}")
@@ -259,21 +249,28 @@ fn generated_dataset_sql(
         )
         SELECT
             __row_id,
+            'public'::text AS "__restriction_tier",
             {}
         FROM form_a_1"#,
         sql_literal(&form_version_id.to_string()),
         bindings
             .iter()
-            .map(|binding| quote_identifier(binding.logical_key))
+            .map(|binding| quote_identifier(&binding.key))
             .collect::<Vec<_>>()
             .join(",\n            ")
     )
 }
 
+fn canonical_dataset_field_key(source_alias: &str, source_field_key: &str) -> String {
+    format!(
+        "{source_alias}__{}",
+        source_field_key.trim_start_matches('_')
+    )
+}
+
 async fn source_field_id(
     pool: &PgPool,
-    form_id: Uuid,
-    form_version_major: i32,
+    form_version_id: Uuid,
     source_field_key: &str,
 ) -> ApiResult<Option<Uuid>> {
     if system_source_field_expression(source_field_key).is_some() {
@@ -283,21 +280,13 @@ async fn source_field_id(
         r#"
         SELECT form_fields.field_id
         FROM form_fields
-        JOIN form_versions ON form_versions.id = form_fields.form_version_id
-        WHERE form_versions.form_id = $1
-          AND form_versions.version_major = $2
-          AND form_versions.status = 'published'::form_version_status
-          AND form_fields.key = $3
-        ORDER BY
-            form_versions.version_minor DESC NULLS LAST,
-            form_versions.version_patch DESC NULLS LAST,
-            form_versions.published_at DESC NULLS LAST,
-            form_fields.position
+        WHERE form_fields.form_version_id = $1
+          AND form_fields.key = $2
+        ORDER BY form_fields.position
         LIMIT 1
         "#,
     )
-    .bind(form_id)
-    .bind(form_version_major)
+    .bind(form_version_id)
     .bind(source_field_key)
     .fetch_one(pool)
     .await?;

@@ -1,5 +1,144 @@
 # Progress Report
 
+## 2026-06-26 - Sprint 3C Dataset Authoring Refactor Checkpoint
+
+- Unified the dataset editor source-composition UI around one Add Source operation draft with an Add Type selector for Union, Union All, Left Join, Inner Join, and Outer Join.
+- Unified backend and web source-composition contracts around `add_source`, with `add_type`, source, join keys, and position carrying Union, Union All, Left Join, Inner Join, and Outer Join behavior.
+- Removed the legacy source-composition operation variants from backend DTOs, web payload contracts, editor loading, API fixtures, and Playwright request fixtures so active callers use `add_source` directly.
+- Sprint closeout gate: run full validation and confirm stored revision compatibility/migration against the unified `add_source` contract before Sprint 3C can close.
+
+## 2026-06-19 - Sprint 3B Dataset Advanced Authoring Closeout
+
+- Completed:
+  - delivered advanced dataset authoring while preserving the Sprint 3A editor flow: Definition, Sources, Fields, Aggregation, Calculated Fields, Filters, SQL Preview, Visibility
+  - added output-level row filters with type-aware operators, literal value and field-comparison modes, typed value controls, persistence, hydration, SQL preview, and materialized-row behavior
+  - added calculated fields as first-class output columns with ordered function pipelines, carry-forward type-aware function options, typed literal and field arguments, expression previews, comparison/casting/map/default functions, and save/reopen hydration
+  - added hidden included fields through the `Display?` model so fields can feed calculations, filters, joins, aggregation, and restriction flags without appearing in normal dataset output
+  - replaced the original tier-field restriction model with boolean internal/restricted/confidential flag fields, public-by-default rows, lowest-tier-wins precedence, standard restricted/confidential capabilities, and row gating in dataset table loading
+  - audited and corrected SQL generation order so source operations run before projection, followed by aggregation, calculated fields, filters, and restriction-tier enforcement metadata
+  - hardened validation for missing references, invalid function ids, invalid typed literals, incompatible field arguments, duplicate output keys, unsupported operators, no-visible-fields saves, and legacy flat-source payloads
+  - refined the editor UAT surface with collapsible panels, responsive expression/source layouts, mobile card layouts, icon-based row actions, blur/change-based reactive updates, and clearer advanced-authoring controls
+  - captured Sprint 3B reviewer demo steps directly in `end2end/tests/datasets.spec.ts` under the `admin can UAT Sprint 3B advanced dataset authoring` Playwright test
+- Validation:
+  - `.\scripts\local-launch.ps1` - passed; final relaunch left the app running at `http://localhost:8080` and a health check returned HTTP 200
+  - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"` - passed for organization, forms, datasets, and seed flows
+  - `.\scripts\smoke.ps1` - passed; demo-flow smoke returned `dataset_rows: 2`
+  - `cargo fmt --all` - passed
+  - `cargo test -p tessara-api` - passed: 15 dataset unit tests, 4 demo-flow tests, and 25 workflow-runtime tests
+  - `cargo test -p tessara-web` - bare Windows MSVC run hit linker `LNK1318` PDB limit; rerun with `$env:RUSTFLAGS='-C debuginfo=0'; cargo test -p tessara-web` passed 7 tests
+  - `cargo check -p tessara-web --no-default-features --features ssr` - passed
+  - `cargo check -p tessara-web --features hydrate` - passed
+  - `npx playwright test` - passed: 29/29 browser tests, including Sprint 3A regression authoring, Sprint 3B UAT, and constrained non-admin permission checks
+- Next Sprint:
+  - Sprint 3C: Dataset Revision And Compatibility Slice
+
+### Sprint Handoff / Demo Instructions
+
+#### Advanced Dataset Authoring Editor
+- Role: admin
+- Paths:
+  - `http://localhost:8080/datasets/{dataset_id}/edit`
+  - `GET /api/datasets/{dataset_id}`
+  - `PUT /api/admin/datasets/{dataset_id}`
+- Steps:
+  1. Sign in as `admin@tessara.local`.
+  2. Open a dataset edit page and confirm Aggregation, Calculated Fields, Filters, and View Restrictions start collapsed.
+  3. Add a second source with `Add Input`, set an alias, pick the demo form/version, and confirm the first source's projected field count is unchanged.
+  4. Convert the source operation from `UNION` to `INNER JOIN` and choose pre-projection node-id join keys.
+  5. Include source fields needed for downstream logic, then hide helper fields with `Display?` while leaving them available in advanced dropdowns.
+  6. Add calculated fields using a date comparison field argument, a numeric comparison followed by `Cast to Text`, and a text `Map Value` pipeline.
+  7. Add one literal numeric filter and one date filter that compares against another field.
+  8. Save, reopen, and verify calculations, filters, hidden fields, and source selections hydrate without clearing.
+- Expected:
+  - field options include all included fields from all sources, hidden fields are subtly labeled, filters and calculations update on blur/change, and generated SQL/save state reflect the authored controls
+- Acceptance check:
+  - pass when the saved detail payload includes `row_filters`, `calculated_fields`, hidden included fields, and the same authoring state after reopening
+- Evidence location:
+  - `end2end/tests/datasets.spec.ts` -> `admin can UAT Sprint 3B advanced dataset authoring`
+  - `crates/tessara-api/tests/demo_flow.rs` -> `dataset_advanced_authoring_compiles_typed_fields_and_restriction_precedence`
+
+#### SQL Generation And Materialized Output
+- Role: admin
+- Paths:
+  - `http://localhost:8080/datasets/{dataset_id}/edit`
+  - `POST /api/admin/datasets/sql-preview`
+  - `GET /api/datasets/{dataset_id}/table`
+- Steps:
+  1. Open Generated SQL after configuring joins, hidden fields, aggregation, calculations, filters, and restrictions.
+  2. Verify the SQL has source CTEs before `selected_fields`, aggregates before `calculated_fields`, `filtered_fields` after calculations, and restriction-tier metadata kept internal.
+  3. Save the dataset and open the detail/table preview.
+- Expected:
+  - materialized output includes the final analytical field catalog, keeps restriction metadata internal, and uses typed SQL casts for numeric/date comparisons
+- Acceptance check:
+  - pass when SQL preview and saved materialization use the same operation order and output contract
+- Evidence location:
+  - `crates/tessara-api/tests/demo_flow.rs` -> `admin_dataset_query_designer_materializes_generated_sql`
+  - `crates/tessara-api/src/datasets/mod.rs` unit tests for calculated-field SQL order and typed expressions
+
+#### View Restriction Enforcement
+- Role: admin for authoring; constrained non-admin operator for verification
+- Paths:
+  - `http://localhost:8080/datasets/{dataset_id}/edit`
+  - `GET /api/datasets/{dataset_id}/table`
+  - role capability UI for `datasets:read_restricted` and `datasets:read_confidential`
+- Steps:
+  1. In View Restrictions, enable Internal, Restricted, and/or Confidential rows and select boolean flag fields.
+  2. Save the dataset.
+  3. Read the dataset table as admin and then as an operator account without confidential access.
+  4. Compare visible rows for public/internal/restricted/confidential tier behavior.
+- Expected:
+  - public is the default row tier, enabled boolean flags set row tiers, internal wins when multiple selected flags are true, restricted rows require restricted or confidential read capability, confidential rows require confidential read capability, and `admin:all` bypasses tier filtering
+- Acceptance check:
+  - pass when constrained non-admin table reads omit rows above their capabilities while admin sees all permitted rows for the visible dataset
+- Evidence location:
+  - `crates/tessara-api/tests/demo_flow.rs` -> `dataset_advanced_authoring_compiles_typed_fields_and_restriction_precedence`
+  - `crates/tessara-api/tests/demo_flow.rs` -> `admin_dataset_query_designer_materializes_generated_sql`
+
+#### Editor Responsiveness And Mobile Handoff
+- Role: admin
+- Paths:
+  - `http://localhost:8080/datasets/{dataset_id}/edit`
+- Steps:
+  1. Resize the editor to desktop, medium, and mobile widths.
+  2. Inspect the source expression builder, source field cards, aggregation metrics, calculated-field accordions, filters, restrictions, and generated SQL panel.
+  3. Confirm text inputs commit on blur/change rather than keystroke and icon actions remain visible without horizontal overflow.
+- Expected:
+  - advanced panels use consistent collapsible headers, mobile layouts switch to cards, expression cards remain readable, and destructive/actions use compact icon buttons
+- Acceptance check:
+  - pass when the editor remains usable at mobile width and does not lose focus while typing advanced values
+- Evidence location:
+  - `end2end/tests/datasets.spec.ts` -> `admin can UAT Sprint 3B advanced dataset authoring`
+  - reviewer browser-session feedback captured during Sprint 3B implementation
+
+### Acceptance Mapping
+
+- Exit condition: a tester can add a row filter to a dataset, preview the resulting rows, save the definition, and reopen it.
+  - Manual demonstration: Advanced Dataset Authoring Editor steps 7 and 8.
+  - Automated check: `end2end/tests/datasets.spec.ts` `admin can UAT Sprint 3B advanced dataset authoring`; `crates/tessara-api/tests/demo_flow.rs` `dataset_advanced_authoring_compiles_typed_fields_and_restriction_precedence`.
+- Exit condition: a tester can add a calculated field to a dataset, preview SQL/materialized output, save the definition, and reopen it.
+  - Manual demonstration: Advanced Dataset Authoring Editor steps 6 and 8; SQL Generation And Materialized Output steps 1-3.
+  - Automated check: `end2end/tests/datasets.spec.ts` `admin can UAT Sprint 3B advanced dataset authoring`; `cargo test -p tessara-api`.
+- Exit condition: explicit restriction rules behave as authored rather than being implied by system metadata.
+  - Manual demonstration: View Restriction Enforcement steps 1-4.
+  - Automated check: `crates/tessara-api/tests/demo_flow.rs` `dataset_advanced_authoring_compiles_typed_fields_and_restriction_precedence`; `admin_dataset_query_designer_materializes_generated_sql`.
+- Exit condition: generated SQL applies operations in screen order and keeps helper columns internal.
+  - Manual demonstration: SQL Generation And Materialized Output steps 1-3.
+  - Automated check: `crates/tessara-api/tests/demo_flow.rs` `admin_dataset_query_designer_materializes_generated_sql`; `crates/tessara-api/src/datasets/mod.rs` SQL-order unit tests.
+- Exit condition: invalid filters, missing field references, unsupported function ids, invalid argument types, and no-visible-field saves produce actionable validation errors.
+  - Manual demonstration: Advanced Dataset Authoring Editor steps 5-7 with invalid values or hidden-only output.
+  - Automated check: `cargo test -p tessara-api`, including typed literal, invalid function, incompatible field argument, legacy source, and no-visible-fields validation assertions.
+- Exit condition: the Sprint 3A dataset authoring flow remains intact while advanced authoring is added.
+  - Manual demonstration: Advanced Dataset Authoring Editor steps 1-3 and Editor Responsiveness And Mobile Handoff steps 1-3.
+  - Automated check: `end2end/tests/datasets.spec.ts` `admin can author, edit, save, and view a Sprint 3A dataset` plus `admin can UAT Sprint 3B advanced dataset authoring`.
+
+## 2026-06-17 - Sprint 3B Dataset Advanced Authoring Kickoff
+
+- Kickoff status: started from clean `main` and created sprint branch `codex/sprint-3b`.
+- Sprint worktree: `C:\Users\eric-dev\Projects\tessara-sprint-3b`.
+- Plan file: `C:\Users\eric-dev\Projects\tessara-sprint-3b\docs\sprints\sprint-3b-plan.md`.
+- Planned verification: `cargo fmt --all`, `cargo test -p tessara-api`, `cargo test -p tessara-web`, `npx playwright test`, `.\scripts\smoke.ps1`, `.\scripts\local-launch.ps1`, `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`.
+- Immediate focus: review the Sprint 3A dataset definition, SQL preview, editor state, and persistence contracts before implementing row filters, calculated fields, and explicit restriction rules.
+
 ## 2026-06-17 - Sprint 3A Dataset Authoring Foundation Closeout
 
 - Completed:

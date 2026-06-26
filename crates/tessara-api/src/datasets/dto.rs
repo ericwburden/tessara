@@ -10,17 +10,87 @@ pub struct CreateDatasetRequest {
     pub(crate) name: String,
     pub(crate) slug: String,
     pub(crate) grain: String,
-    #[serde(default = "super::default_dataset_composition_mode")]
-    pub(crate) composition_mode: String,
     #[serde(default)]
     pub(crate) visibility_node_ids: Vec<Uuid>,
-    pub(crate) definition_ast: DatasetExpressionRequest,
+    pub(crate) initial_source: DatasetSourceRequest,
+    pub(crate) operations: Vec<DatasetOperationRequest>,
     #[serde(default)]
-    pub(crate) aggregation: Option<DatasetAggregationRequest>,
-    pub(crate) fields: Vec<CreateDatasetFieldRequest>,
+    pub(crate) restriction_policy: Option<DatasetRestrictionPolicyRequest>,
 }
 
-/// Optional final aggregation applied after the source expression and field projection.
+/// One source stream that can initialize or extend a dataset query pipeline.
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum DatasetSourceRequest {
+    Form {
+        alias: String,
+        form_id: Uuid,
+        form_version_id: Uuid,
+    },
+    Dataset {
+        alias: String,
+        dataset_id: Uuid,
+        dataset_revision_id: Uuid,
+    },
+}
+
+/// One ordered dataset operation applied after source composition.
+///
+/// The operations array order is authoritative. Each operation's `position`
+/// must match its zero-based index in that array; the backend validates it as a
+/// client-side consistency guard and does not sort by `position`.
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum DatasetOperationRequest {
+    AddSource {
+        source: DatasetSourceRequest,
+        add_type: String,
+        #[serde(default)]
+        join_keys: Vec<DatasetJoinKeyRequest>,
+        #[serde(default)]
+        position: i32,
+    },
+    Projection {
+        #[serde(default)]
+        fields: Vec<DatasetProjectionFieldRequest>,
+        #[serde(default)]
+        position: i32,
+    },
+    Aggregation {
+        #[serde(default)]
+        group_fields: Vec<String>,
+        #[serde(default)]
+        metrics: Vec<DatasetAggregationMetricRequest>,
+        #[serde(default)]
+        row_picker: Option<DatasetRowPickerRequest>,
+        #[serde(default)]
+        position: i32,
+    },
+    CalculatedFields {
+        #[serde(default)]
+        fields: Vec<DatasetCalculatedFieldRequest>,
+        #[serde(default)]
+        position: i32,
+    },
+    Filter {
+        #[serde(default)]
+        filters: Vec<DatasetRowFilterRequest>,
+        #[serde(default)]
+        position: i32,
+    },
+}
+
+/// One projected field emitted by a projection operation.
+#[derive(Clone, Deserialize, Serialize)]
+pub struct DatasetProjectionFieldRequest {
+    pub(crate) key: String,
+    pub(crate) label: String,
+    #[serde(default)]
+    pub(crate) input_field_key: Option<String>,
+    pub(crate) position: i32,
+}
+
+/// Aggregation applied by an ordered operation.
 #[derive(Clone, Deserialize, Serialize)]
 pub struct DatasetAggregationRequest {
     #[serde(default)]
@@ -57,32 +127,59 @@ pub struct DatasetRowPickerSortRequest {
     pub(crate) position: i32,
 }
 
-fn default_row_picker_direction() -> String {
-    "lowest".into()
+/// One output-field row filter applied after projection and before aggregation.
+#[derive(Clone, Deserialize, Serialize)]
+pub struct DatasetRowFilterRequest {
+    pub(crate) field_key: String,
+    pub(crate) operator: String,
+    pub(crate) value_mode: String,
+    #[serde(default)]
+    pub(crate) value: Option<String>,
+    pub(crate) value_field_key: Option<String>,
+    pub(crate) position: i32,
 }
 
-/// Recursive visual dataset query expression.
+/// One calculated output field produced from a base output field and function chain.
 #[derive(Clone, Deserialize, Serialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-pub enum DatasetExpressionRequest {
-    Form {
-        alias: String,
-        form_id: Uuid,
-        form_version_major: Option<i32>,
-    },
-    Dataset {
-        alias: String,
-        dataset_id: Uuid,
-        dataset_revision_id: Uuid,
-    },
-    Operation {
-        alias: String,
-        operation: String,
-        left: Box<DatasetExpressionRequest>,
-        right: Box<DatasetExpressionRequest>,
-        #[serde(default)]
-        join_keys: Vec<DatasetJoinKeyRequest>,
-    },
+pub struct DatasetCalculatedFieldRequest {
+    pub(crate) key: String,
+    pub(crate) label: String,
+    pub(crate) base_field_key: String,
+    #[serde(default)]
+    pub(crate) functions: Vec<DatasetCalculationFunctionRequest>,
+    pub(crate) position: i32,
+}
+
+/// One ordered function application in a calculated-field pipeline.
+#[derive(Clone, Deserialize, Serialize)]
+pub struct DatasetCalculationFunctionRequest {
+    pub(crate) function: String,
+    #[serde(default)]
+    pub(crate) argument: Option<String>,
+    #[serde(default = "default_argument_mode")]
+    pub(crate) argument_mode: String,
+    #[serde(default)]
+    pub(crate) argument_field_key: Option<String>,
+    pub(crate) position: i32,
+}
+
+fn default_argument_mode() -> String {
+    "value".into()
+}
+
+/// Row tier policy used to enforce dataset restrictions after materialization.
+#[derive(Clone, Deserialize, Serialize)]
+pub struct DatasetRestrictionPolicyRequest {
+    #[serde(default)]
+    pub(crate) internal_field_key: Option<String>,
+    #[serde(default)]
+    pub(crate) restricted_field_key: Option<String>,
+    #[serde(default)]
+    pub(crate) confidential_field_key: Option<String>,
+}
+
+fn default_row_picker_direction() -> String {
+    "lowest".into()
 }
 
 /// One explicit join key pair.
@@ -90,16 +187,6 @@ pub enum DatasetExpressionRequest {
 pub struct DatasetJoinKeyRequest {
     pub(crate) left_field: String,
     pub(crate) right_field: String,
-}
-
-/// One exposed field mapped from a dataset source field.
-#[derive(Clone, Deserialize)]
-pub struct CreateDatasetFieldRequest {
-    pub(crate) key: String,
-    pub(crate) label: String,
-    pub(crate) source_alias: String,
-    pub(crate) source_field_key: String,
-    pub(crate) position: i32,
 }
 
 /// Compact dataset row used by list surfaces.
@@ -110,12 +197,13 @@ pub struct DatasetSummary {
     pub(crate) name: String,
     pub(crate) slug: String,
     pub(crate) grain: String,
-    pub(crate) composition_mode: String,
     pub(crate) materialized_row_count: Option<i64>,
     pub(crate) materialized_at: Option<chrono::DateTime<chrono::Utc>>,
     pub(crate) visibility_nodes: Vec<DatasetVisibilityNodeSummary>,
     pub(crate) source_count: i64,
     pub(crate) field_count: i64,
+    pub(crate) output_fields: Vec<DatasetFieldDefinition>,
+    pub(crate) revisions: Vec<DatasetRevisionFieldSummary>,
 }
 
 /// Dataset detail with the current revision's sources and fields.
@@ -126,9 +214,9 @@ pub struct DatasetDefinition {
     pub(crate) name: String,
     pub(crate) slug: String,
     pub(crate) grain: String,
-    pub(crate) composition_mode: String,
-    pub(crate) definition_ast: Option<DatasetExpressionRequest>,
-    pub(crate) aggregation: Option<DatasetAggregationResponse>,
+    pub(crate) initial_source: Option<DatasetSourceRequest>,
+    pub(crate) operations: Vec<DatasetOperationRequest>,
+    pub(crate) restriction_policy: Option<DatasetRestrictionPolicyRequest>,
     pub(crate) generated_sql: Option<String>,
     pub(crate) materialized_schema: Option<String>,
     pub(crate) materialized_table: Option<String>,
@@ -138,14 +226,6 @@ pub struct DatasetDefinition {
     pub(crate) sources: Vec<DatasetSourceDefinition>,
     pub(crate) fields: Vec<DatasetFieldDefinition>,
     pub(crate) output_fields: Vec<DatasetFieldDefinition>,
-}
-
-/// Stored aggregation definition.
-#[derive(Serialize)]
-pub struct DatasetAggregationResponse {
-    pub(crate) group_fields: Vec<String>,
-    pub(crate) metrics: Vec<DatasetAggregationMetricRequest>,
-    pub(crate) row_picker: Option<DatasetRowPickerRequest>,
 }
 
 /// Organization node that makes a dataset visible.
@@ -158,6 +238,13 @@ pub struct DatasetVisibilityNodeSummary {
     pub(crate) node_path: String,
 }
 
+/// Output-field snapshot for one dataset revision.
+#[derive(Clone, Serialize)]
+pub struct DatasetRevisionFieldSummary {
+    pub(crate) id: Uuid,
+    pub(crate) output_fields: Vec<DatasetFieldDefinition>,
+}
+
 /// Source definition included in a dataset revision.
 #[derive(Serialize)]
 pub struct DatasetSourceDefinition {
@@ -165,13 +252,13 @@ pub struct DatasetSourceDefinition {
     pub(crate) source_alias: String,
     pub(crate) form_id: Option<Uuid>,
     pub(crate) form_name: Option<String>,
-    pub(crate) form_version_major: Option<i32>,
+    pub(crate) form_version_id: Option<Uuid>,
     pub(crate) dataset_revision_id: Option<Uuid>,
     pub(crate) position: i32,
 }
 
 /// Exposed field definition included in a dataset revision.
-#[derive(Clone, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct DatasetFieldDefinition {
     pub(crate) id: Uuid,
     pub(crate) key: String,

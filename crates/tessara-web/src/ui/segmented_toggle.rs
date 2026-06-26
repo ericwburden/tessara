@@ -16,6 +16,7 @@ pub(crate) fn SegmentedToggle(
     #[prop(default = "Segmented options")] aria_label: &'static str,
     #[prop(optional)] class: &'static str,
 ) -> impl IntoView {
+    let select_options = options.clone();
     let class_name = if class.is_empty() {
         "segmented-toggle".to_string()
     } else {
@@ -45,6 +46,23 @@ pub(crate) fn SegmentedToggle(
                     }
                 })
                 .collect_view()}
+            <select
+                class="segmented-toggle__select"
+                aria-label=aria_label
+                prop:value=move || active.get()
+                on:change=move |event| on_select.run(event_target_value(&event))
+            >
+                {select_options
+                    .into_iter()
+                    .map(|option| {
+                        view! {
+                            <option value=option.value>
+                                {option.label}
+                            </option>
+                        }
+                    })
+                    .collect_view()}
+            </select>
         </div>
     }
 }

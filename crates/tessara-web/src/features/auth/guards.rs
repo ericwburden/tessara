@@ -34,10 +34,10 @@ pub fn require_authenticated_route(active_route: &'static str) {
                 .and_then(|session| session.account)
                 .map(|account| account.capabilities)
                 .unwrap_or_default();
-            if !navigation::nav_item_is_allowed(item, &capabilities) {
-                if let Some(window) = web_sys::window() {
-                    let _ = window.location().set_href("/");
-                }
+            if !navigation::nav_item_is_allowed(item, &capabilities)
+                && let Some(window) = web_sys::window()
+            {
+                let _ = window.location().set_href("/");
             }
         }
     });

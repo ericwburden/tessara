@@ -1,14 +1,27 @@
 //! Dataset editor aggregation controls.
 
 use super::super::types::*;
-use crate::ui::{Combobox, ComboboxOption, DataTable, SegmentedToggle, SegmentedToggleOption};
+use crate::ui::{
+    Combobox, ComboboxOption, DataTable, DraggablePanelList, DraggablePanelListAnchor,
+    DraggablePanelListDraggable, DraggablePanelListDropZone, DraggablePanelListItem,
+    DraggablePanelListMove, SegmentedToggle, SegmentedToggleOption, empty_view,
+};
+use icons::{ChevronsUpDown, Trash2};
 use leptos::prelude::*;
 
 #[component]
 pub(crate) fn DatasetAggregationEditor(
-    fields: RwSignal<Vec<DatasetFieldDraft>>,
-    aggregation: RwSignal<DatasetAggregationDraft>,
+    fields: Signal<Vec<DatasetFieldDraft>>,
+    aggregation: Signal<DatasetAggregationDraft>,
+    on_aggregation_change: Callback<DatasetAggregationDraft>,
+    #[prop(optional)] embedded: bool,
 ) -> impl IntoView {
+    let is_open = RwSignal::new(embedded);
+    let section_class = if embedded {
+        "route-panel__section dataset-editor-section dataset-aggregation-section dataset-editor-section--embedded"
+    } else {
+        "route-panel__section dataset-editor-section dataset-aggregation-section"
+    };
     let projected_fields = move || fields.get();
     let group_fields = move || aggregation.get().group_fields;
     let aggregation_enabled = move || aggregation.get().enabled;
@@ -29,11 +42,21 @@ pub(crate) fn DatasetAggregationEditor(
     };
     let selected_sort_fields = move || {
         let selected = sort_fields();
-        projected_fields()
+        selected
             .into_iter()
-            .filter(|field| selected.iter().any(|sort| sort.field_key == field.key))
+            .filter_map(|sort| {
+                projected_fields()
+                    .into_iter()
+                    .find(|field| field.key == sort.field_key)
+            })
             .collect::<Vec<_>>()
     };
+    let selected_sort_items = Signal::derive(move || {
+        sort_fields()
+            .into_iter()
+            .map(|sort| DraggablePanelListItem { id: sort.field_key })
+            .collect::<Vec<_>>()
+    });
     let available_sort_fields = move || {
         let selected = sort_fields();
         projected_fields()
@@ -72,10 +95,25 @@ pub(crate) fn DatasetAggregationEditor(
         Signal::derive(move || field_combobox_options(available_sort_fields()));
 
     view! {
-        <section class="route-panel__section dataset-editor-section dataset-aggregation-section">
-            <div class="dataset-editor-section__header">
-                <h3>"Aggregation"</h3>
-            </div>
+        <section class=section_class>
+            {if embedded {
+                view! { <span></span> }.into_any()
+            } else {
+                view! {
+                    <div class="dataset-editor-section__header">
+                        <button
+                            class="dataset-editor-section__header dataset-sql-header dataset-editor-section__collapse"
+                            type="button"
+                            aria-expanded=move || is_open.get().to_string()
+                            on:click=move |_| is_open.update(|open| *open = !*open)
+                        >
+                            <h3>"Aggregation"</h3>
+                            <ChevronsUpDown class="dataset-sql-header__icon"/>
+                        </button>
+                    </div>
+                }.into_any()
+            }}
+            <div class=move || if is_open.get() { "dataset-aggregation-content" } else { "dataset-aggregation-content is-collapsed" }>
             <div class="dataset-aggregation-top-row">
                 <span class="dataset-aggregation-top-row__label">"Aggregate by"</span>
                 <SegmentedToggle
@@ -89,7 +127,7 @@ pub(crate) fn DatasetAggregationEditor(
                     on_select=Callback::new(move |mode: String| {
                         match mode.as_str() {
                             "none" => {
-                                aggregation.update(|draft| {
+                                mutate_aggregation(aggregation, on_aggregation_change, |draft| {
                                     draft.enabled = false;
                                     draft.group_fields.clear();
                                     draft.metrics.clear();
@@ -97,7 +135,7 @@ pub(crate) fn DatasetAggregationEditor(
                                 });
                             }
                             "row" => {
-                                aggregation.update(|draft| {
+                                mutate_aggregation(aggregation, on_aggregation_change, |draft| {
                                     draft.enabled = true;
                                     draft.metrics.clear();
                                     draft.row_picker = Some(DatasetRowPickerDraft {
@@ -107,7 +145,7 @@ pub(crate) fn DatasetAggregationEditor(
                                 });
                             }
                             "metrics" => {
-                                aggregation.update(|draft| {
+                                mutate_aggregation(aggregation, on_aggregation_change, |draft| {
                                     draft.enabled = true;
                                     draft.row_picker = None;
                                 });
@@ -138,7 +176,7 @@ pub(crate) fn DatasetAggregationEditor(
                                     empty_label="No fields found."
                                     aria_label="Add group field"
                                     on_select=Callback::new(move |field_key: String| {
-                                        aggregation.update(|draft| {
+                                        mutate_aggregation(aggregation, on_aggregation_change, |draft| {
                                             if !draft.group_fields.contains(&field_key) {
                                                 draft.group_fields.push(field_key);
                                             }
@@ -164,14 +202,18 @@ pub(crate) fn DatasetAggregationEditor(
                                                                 <code>{field_key}</code>
                                                             </span>
                                                             <button
-                                                                class="button button--secondary button--compact"
+                                                                class="icon-button icon-button--compact-control"
                                                                 type="button"
+                                                                aria-label="Remove group field"
+                                                                title="Remove group field"
                                                                 on:click=move |_| {
-                                                                    aggregation.update(|draft| {
+                                                                    mutate_aggregation(aggregation, on_aggregation_change, |draft| {
                                                                         draft.group_fields.retain(|key| key != &field_key_for_remove);
                                                                     });
                                                                 }
-                                                            >"Remove"</button>
+                                                            >
+                                                                <Trash2 class="icon-button__icon"/>
+                                                            </button>
                                                         </li>
                                                     }
                                                 }).collect_view()}
@@ -197,7 +239,7 @@ pub(crate) fn DatasetAggregationEditor(
                                                 SegmentedToggleOption { value: "highest", label: "Highest / latest first" },
                                             ]
                                             on_select=Callback::new(move |direction: String| {
-                                                aggregation.update(|draft| {
+                                                mutate_aggregation(aggregation, on_aggregation_change, |draft| {
                                                     let row_picker = draft.row_picker.get_or_insert_with(|| DatasetRowPickerDraft {
                                                         sort_fields: Vec::new(),
                                                         direction: "lowest".into(),
@@ -216,7 +258,7 @@ pub(crate) fn DatasetAggregationEditor(
                                             empty_label="No fields found."
                                             aria_label="Add sort field"
                                             on_select=Callback::new(move |field_key: String| {
-                                                aggregation.update(|draft| {
+                                                mutate_aggregation(aggregation, on_aggregation_change, |draft| {
                                                     let row_picker = draft.row_picker.get_or_insert_with(|| DatasetRowPickerDraft {
                                                         sort_fields: Vec::new(),
                                                         direction: "lowest".into(),
@@ -237,31 +279,68 @@ pub(crate) fn DatasetAggregationEditor(
                                                 view! { <span></span> }.into_any()
                                             } else {
                                                 view! {
-                                                    <ul>
-                                                        {selected.into_iter().map(|field| {
+                                                    <DraggablePanelList
+                                                        list_id="aggregation-row-picker-sort-fields"
+                                                        items=selected_sort_items
+                                                        container_class="dataset-aggregation-selected-list__draggable"
+                                                        list_class="dataset-aggregation-selected-list__items"
+                                                        draggable_class="dataset-aggregation-selected-list__item"
+                                                        drop_zone_class="dataset-aggregation-selected-list__drop-zone"
+                                                        drag_handle_title="Drag sort field to reorder"
+                                                        data_transfer_type="application/x-tessara-aggregation-sort-field"
+                                                        render_drop_zone=Callback::new(move |_drop_zone: DraggablePanelListDropZone| {
+                                                            empty_view()
+                                                        })
+                                                        render_draggable=Callback::new(move |draggable: DraggablePanelListDraggable| {
+                                                            let Some(field) = selected
+                                                                .iter()
+                                                                .find(|field| field.key == draggable.id)
+                                                                .cloned()
+                                                            else {
+                                                                return empty_view();
+                                                            };
                                                             let field_key = field.key.clone();
                                                             let field_key_for_remove = field_key.clone();
                                                             view! {
-                                                                <li>
+                                                                <div class="dataset-aggregation-selected-list__row">
                                                                     <span>
                                                                         <strong>{field.label}</strong>
                                                                         <code>{field_key}</code>
                                                                     </span>
                                                                     <button
-                                                                        class="button button--secondary button--compact"
+                                                                        class="icon-button icon-button--compact-control"
                                                                         type="button"
+                                                                        aria-label="Remove sort field"
+                                                                        title="Remove sort field"
                                                                         on:click=move |_| {
-                                                                            aggregation.update(|draft| {
+                                                                            mutate_aggregation(aggregation, on_aggregation_change, |draft| {
                                                                                 if let Some(row_picker) = &mut draft.row_picker {
                                                                                     row_picker.sort_fields.retain(|sort| sort.field_key != field_key_for_remove);
                                                                                 }
                                                                             });
                                                                         }
-                                                                    >"Remove"</button>
-                                                                </li>
-                                                            }
-                                                        }).collect_view()}
-                                                    </ul>
+                                                                    >
+                                                                        <Trash2 class="icon-button__icon"/>
+                                                                    </button>
+                                                                </div>
+                                                            }.into_any()
+                                                        })
+                                                        on_move=Callback::new(move |move_event: DraggablePanelListMove| {
+                                                            mutate_aggregation(aggregation, on_aggregation_change, |draft| {
+                                                                if let Some(row_picker) = &mut draft.row_picker {
+                                                                    let target_index = aggregation_sort_insert_index_for_anchor(
+                                                                        &row_picker.sort_fields,
+                                                                        &move_event.anchor,
+                                                                    );
+                                                                    move_aggregation_sort_field_to_index(
+                                                                        &mut row_picker.sort_fields,
+                                                                        &move_event.dragged_id,
+                                                                        target_index,
+                                                                    );
+                                                                }
+                                                            });
+                                                        })
+                                                    />
                                                 }.into_any()
                                             }
                                         }}
@@ -286,7 +365,7 @@ pub(crate) fn DatasetAggregationEditor(
                                 disabled=move || !aggregation_enabled()
                                 type="button"
                                 on:click=move |_| {
-                                    aggregation.update(|draft| {
+                                    mutate_aggregation(aggregation, on_aggregation_change, |draft| {
                                         draft.row_picker = None;
                                         let next = next_metric_id(&draft.metrics);
                                         draft.metrics.push(DatasetAggregationMetricDraft {
@@ -308,7 +387,7 @@ pub(crate) fn DatasetAggregationEditor(
                                         <th>"Source Field"</th>
                                         <th>"Output Key"</th>
                                         <th>"Output Label"</th>
-                                        <th>"Remove"</th>
+                                        <th>"Actions"</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -334,7 +413,7 @@ pub(crate) fn DatasetAggregationEditor(
                                                                 .unwrap_or_else(|| "count_rows".into())
                                                             on:change=move |event| {
                                                                 let value = event_target_value(&event);
-                                                                aggregation.update(|draft| {
+                                                                mutate_aggregation(aggregation, on_aggregation_change, |draft| {
                                                                     if let Some(metric) = draft.metrics.iter_mut().find(|metric| metric.id == metric_id) {
                                                                         metric.function = value;
                                                                         if metric.function == "count_rows"
@@ -380,7 +459,7 @@ pub(crate) fn DatasetAggregationEditor(
                                                                 .unwrap_or_default()
                                                             on:change=move |event| {
                                                                 let value = event_target_value(&event);
-                                                                aggregation.update(|draft| {
+                                                                mutate_aggregation(aggregation, on_aggregation_change, |draft| {
                                                                     if let Some(metric) = draft.metrics.iter_mut().find(|metric| metric.id == metric_id) {
                                                                         metric.source_field_key = value;
                                                                     }
@@ -412,7 +491,7 @@ pub(crate) fn DatasetAggregationEditor(
                                                             value=initial_key
                                                             on:change=move |event| {
                                                                 let value = event_target_value(&event);
-                                                                aggregation.update(|draft| {
+                                                                mutate_aggregation(aggregation, on_aggregation_change, |draft| {
                                                                     if let Some(metric) = draft.metrics.iter_mut().find(|metric| metric.id == metric_id) {
                                                                         metric.key = value;
                                                                     }
@@ -427,7 +506,7 @@ pub(crate) fn DatasetAggregationEditor(
                                                             value=initial_label
                                                             on:change=move |event| {
                                                                 let value = event_target_value(&event);
-                                                                aggregation.update(|draft| {
+                                                                mutate_aggregation(aggregation, on_aggregation_change, |draft| {
                                                                     if let Some(metric) = draft.metrics.iter_mut().find(|metric| metric.id == metric_id) {
                                                                         metric.label = value;
                                                                     }
@@ -437,15 +516,19 @@ pub(crate) fn DatasetAggregationEditor(
                                                     </td>
                                                     <td>
                                                         <button
-                                                            class="button button--secondary button--compact"
+                                                            class="icon-button icon-button--compact-control"
                                                             disabled=move || !aggregation_enabled()
                                                             type="button"
+                                                            aria-label="Remove metric"
+                                                            title="Remove metric"
                                                             on:click=move |_| {
-                                                                aggregation.update(|draft| {
+                                                                mutate_aggregation(aggregation, on_aggregation_change, |draft| {
                                                                     draft.metrics.retain(|metric| metric.id != metric_id);
                                                                 });
                                                             }
-                                                        >"Remove"</button>
+                                                        >
+                                                            <Trash2 class="icon-button__icon"/>
+                                                        </button>
                                                     </td>
                                                 </tr>
                                             }
@@ -459,12 +542,58 @@ pub(crate) fn DatasetAggregationEditor(
             } else {
                 view! { <span></span> }.into_any()
             }}
+            </div>
         </section>
     }
 }
 
 fn field_option_label(field: &DatasetFieldDraft) -> String {
     format!("{} ({})", field.label, field.key)
+}
+
+fn mutate_aggregation(
+    aggregation: Signal<DatasetAggregationDraft>,
+    on_aggregation_change: Callback<DatasetAggregationDraft>,
+    update: impl FnOnce(&mut DatasetAggregationDraft),
+) {
+    let mut draft = aggregation.get();
+    update(&mut draft);
+    on_aggregation_change.run(draft);
+}
+
+fn aggregation_sort_insert_index_for_anchor(
+    sort_fields: &[DatasetRowPickerSortDraft],
+    anchor: &DraggablePanelListAnchor,
+) -> usize {
+    match anchor {
+        DraggablePanelListAnchor::Start => 0,
+        DraggablePanelListAnchor::After(field_key) => sort_fields
+            .iter()
+            .position(|sort| &sort.field_key == field_key)
+            .map(|index| index + 1)
+            .unwrap_or(sort_fields.len()),
+    }
+}
+
+fn move_aggregation_sort_field_to_index(
+    sort_fields: &mut Vec<DatasetRowPickerSortDraft>,
+    dragged_key: &str,
+    target_index: usize,
+) {
+    let Some(dragged_index) = sort_fields
+        .iter()
+        .position(|sort| sort.field_key == dragged_key)
+    else {
+        return;
+    };
+    let dragged_field = sort_fields.remove(dragged_index);
+    let target_index = if dragged_index < target_index {
+        target_index.saturating_sub(1)
+    } else {
+        target_index
+    }
+    .min(sort_fields.len());
+    sort_fields.insert(target_index, dragged_field);
 }
 
 fn field_combobox_options(fields: Vec<DatasetFieldDraft>) -> Vec<ComboboxOption> {

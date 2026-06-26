@@ -14,7 +14,7 @@ use leptos::prelude::*;
 use std::collections::{HashMap, HashSet};
 
 pub(crate) use loaders::{load_organization_detail, load_organization_tree};
-pub(crate) use view::organization_tree_view;
+pub(crate) use view::{OrganizationTreeViewContext, organization_tree_view};
 
 /// Keeps only ancestors of the selected branch expanded, then toggles the selected node.
 pub(crate) fn toggle_organization_branch(

@@ -16,22 +16,37 @@ pub(super) struct PreparedWorkflowUpdate {
     pub(super) step_payload: Option<Vec<CreateWorkflowStepPayload>>,
 }
 
+pub(super) struct WorkflowUpdateDraft {
+    pub(super) name: String,
+    pub(super) slug: String,
+    pub(super) available_node_ids: HashSet<String>,
+    pub(super) current_steps: Vec<WorkflowStepDraft>,
+    pub(super) original_steps: Vec<WorkflowStepDraft>,
+    pub(super) description: String,
+    pub(super) version_is_draft: bool,
+    pub(super) intent: WorkflowSaveIntent,
+}
+
 pub(super) fn prepare_workflow_update(
-    name: String,
-    slug: String,
-    available_node_ids: HashSet<String>,
-    current_steps: Vec<WorkflowStepDraft>,
-    original_steps: &[WorkflowStepDraft],
-    description: String,
-    version_is_draft: bool,
-    intent: WorkflowSaveIntent,
+    draft: WorkflowUpdateDraft,
 ) -> Result<PreparedWorkflowUpdate, String> {
+    let WorkflowUpdateDraft {
+        name,
+        slug,
+        available_node_ids,
+        current_steps,
+        original_steps,
+        description,
+        version_is_draft,
+        intent,
+    } = draft;
+
     let workflow_name = validated_workflow_name(name)?;
     let workflow_slug = validated_workflow_slug(slug)?;
     let selected_available_node_ids = validated_available_node_ids(available_node_ids)?;
 
     let steps_changed =
-        workflow_step_signature(&current_steps) != workflow_step_signature(original_steps);
+        workflow_step_signature(&current_steps) != workflow_step_signature(&original_steps);
     if intent == WorkflowSaveIntent::Publish && !version_is_draft && !steps_changed {
         return Err("Make a workflow step change before publishing a new revision.".into());
     }
