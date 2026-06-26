@@ -11,13 +11,18 @@ use icons::{ChevronDown, ChevronRight, PanelRight, Pencil, Plus};
 use leptos::prelude::*;
 use std::collections::HashSet;
 
+#[derive(Clone)]
+pub(crate) struct OrganizationTreeViewContext {
+    pub(crate) node_types: Vec<NodeTypeCatalogEntry>,
+    pub(crate) expanded_nodes: RwSignal<HashSet<String>>,
+    pub(crate) detail: RwSignal<Option<OrganizationNodeDetail>>,
+    pub(crate) detail_is_loading: RwSignal<bool>,
+    pub(crate) detail_error: RwSignal<Option<String>>,
+}
+
 pub(crate) fn organization_tree_view(
     nodes: Vec<OrganizationTreeNode>,
-    node_types: Vec<NodeTypeCatalogEntry>,
-    expanded_nodes: RwSignal<HashSet<String>>,
-    detail: RwSignal<Option<OrganizationNodeDetail>>,
-    detail_is_loading: RwSignal<bool>,
-    detail_error: RwSignal<Option<String>>,
+    context: OrganizationTreeViewContext,
     depth: usize,
     lineage: Vec<String>,
 ) -> AnyView {
@@ -28,11 +33,7 @@ pub(crate) fn organization_tree_view(
                 .map(|branch| {
                     organization_branch_view(
                         branch,
-                        node_types.clone(),
-                        expanded_nodes,
-                        detail,
-                        detail_is_loading,
-                        detail_error,
+                        context.clone(),
                         depth,
                         lineage.clone(),
                     )
@@ -45,11 +46,7 @@ pub(crate) fn organization_tree_view(
 
 pub(crate) fn organization_branch_view(
     branch: OrganizationTreeNode,
-    node_types: Vec<NodeTypeCatalogEntry>,
-    expanded_nodes: RwSignal<HashSet<String>>,
-    detail: RwSignal<Option<OrganizationNodeDetail>>,
-    detail_is_loading: RwSignal<bool>,
-    detail_error: RwSignal<Option<String>>,
+    context: OrganizationTreeViewContext,
     depth: usize,
     lineage: Vec<String>,
 ) -> AnyView {
@@ -71,6 +68,7 @@ pub(crate) fn organization_branch_view(
         next_lineage.push(node.id.clone());
         next_lineage
     };
+    let expanded_nodes = context.expanded_nodes;
     let row_class = move || {
         if has_children && expanded_nodes.with(|nodes| nodes.contains(&row_class_id)) {
             "organization-node is-open"
@@ -79,7 +77,7 @@ pub(crate) fn organization_branch_view(
         }
     };
     let edit_href = format!("/organization/{node_id}/edit");
-    let create_links = child_create_links(&child_link_node_type_id, &node_types, &node_id);
+    let create_links = child_create_links(&child_link_node_type_id, &context.node_types, &node_id);
     let child_label = visible_child_label(child_count);
 
     view! {
@@ -127,9 +125,9 @@ pub(crate) fn organization_branch_view(
                         on:click=move |_| {
                             load_organization_detail(
                                 details_id.clone(),
-                                detail,
-                                detail_is_loading,
-                                detail_error,
+                                context.detail,
+                                context.detail_is_loading,
+                                context.detail_error,
                             );
                         }
                     >
@@ -157,11 +155,7 @@ pub(crate) fn organization_branch_view(
             <Show when=move || has_children && expanded_nodes.with(|nodes| nodes.contains(&child_visibility_id))>
                 {organization_tree_view(
                     children.clone(),
-                    node_types.clone(),
-                    expanded_nodes,
-                    detail,
-                    detail_is_loading,
-                    detail_error,
+                    context.clone(),
                     depth + 1,
                     child_lineage.clone(),
                 )}

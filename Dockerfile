@@ -10,6 +10,8 @@ RUN rustup target add wasm32-unknown-unknown
 RUN cargo install cargo-leptos --locked
 
 WORKDIR /app
+ARG APP_CACHE_BUST=dev
+RUN echo "$APP_CACHE_BUST" >/tmp/app-cache-bust
 COPY . .
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \

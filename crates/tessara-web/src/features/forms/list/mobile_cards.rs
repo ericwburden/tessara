@@ -26,10 +26,9 @@ pub(super) fn FormsMobileCards(
                     .iter()
                     .skip(pagination_page_start(total_count.get(), page_size.get(), page_index.get()))
                     .take(page_size.get())
-                    .cloned()
                     .map(|form| {
                         let href = format!("/forms/{}", form.id);
-                        let active_version = active_form_version(&form);
+                        let active_version = active_form_version(form);
                         let status = active_version
                             .map(|version| version.status.as_str())
                             .unwrap_or("none");

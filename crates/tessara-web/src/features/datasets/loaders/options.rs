@@ -2,7 +2,9 @@
 
 #[cfg(feature = "hydrate")]
 use super::super::api;
-use super::super::types::{DatasetFormOption, DatasetRenderedForm, NodeResponse};
+use super::super::types::{
+    DatasetFormOption, DatasetRenderedForm, DatasetUserOption, NodeResponse,
+};
 use leptos::prelude::*;
 use std::collections::BTreeMap;
 
@@ -44,6 +46,27 @@ pub(in crate::features::datasets) fn load_nodes(
 #[cfg(not(feature = "hydrate"))]
 pub(in crate::features::datasets) fn load_nodes(
     _: RwSignal<Vec<NodeResponse>>,
+    _: RwSignal<Option<String>>,
+) {
+}
+
+#[cfg(feature = "hydrate")]
+pub(in crate::features::datasets) fn load_users(
+    users: RwSignal<Vec<DatasetUserOption>>,
+    load_error: RwSignal<Option<String>>,
+) {
+    leptos::task::spawn_local(async move {
+        match api::fetch_users().await {
+            Ok(Some(payload)) => users.set(payload),
+            Ok(None) => {}
+            Err(message) => load_error.set(Some(message)),
+        }
+    });
+}
+
+#[cfg(not(feature = "hydrate"))]
+pub(in crate::features::datasets) fn load_users(
+    _: RwSignal<Vec<DatasetUserOption>>,
     _: RwSignal<Option<String>>,
 ) {
 }

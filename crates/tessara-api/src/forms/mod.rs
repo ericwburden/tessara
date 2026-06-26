@@ -2129,28 +2129,6 @@ async fn load_direct_dependency_warnings(
     pool: &sqlx::PgPool,
     form_id: Uuid,
 ) -> ApiResult<Vec<String>> {
-    let dataset_rows = sqlx::query(
-        r#"
-        SELECT datasets.name AS dataset_name, dataset_sources.source_alias
-        FROM dataset_sources
-        JOIN datasets ON datasets.id = dataset_sources.dataset_id
-        WHERE dataset_sources.form_id = $1
-          AND dataset_sources.form_version_major IS NULL
-        ORDER BY datasets.name, dataset_sources.source_alias
-        "#,
-    )
-    .bind(form_id)
-    .fetch_all(pool)
-    .await?;
-    let warnings = dataset_rows
-        .into_iter()
-        .map(|row| {
-            Ok(format!(
-                "Dataset source '{} / {}' is bound directly to this form and should be reviewed.",
-                row.try_get::<String, _>("dataset_name")?,
-                row.try_get::<String, _>("source_alias")?
-            ))
-        })
-        .collect::<Result<Vec<_>, sqlx::Error>>()?;
-    Ok(warnings)
+    let _ = (pool, form_id);
+    Ok(Vec::new())
 }

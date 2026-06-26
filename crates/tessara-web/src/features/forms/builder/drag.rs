@@ -76,17 +76,15 @@ pub(crate) fn schedule_form_builder_drag_preview(
             timeout_signal.set(None);
         }) as Box<dyn FnMut()>);
 
-        if let Some(window) = web_sys::window() {
-            if let Ok(timeout_handle) = window
+        if let Some(window) = web_sys::window()
+            && let Ok(timeout_handle) = window
                 .set_timeout_with_callback_and_timeout_and_arguments_0(
                     callback.as_ref().unchecked_ref(),
                     1_000,
                 )
-            {
-                _builder_drag_preview_timeout.set(Some(timeout_handle));
-                callback.forget();
-                return;
-            }
+        {
+            _builder_drag_preview_timeout.set(Some(timeout_handle));
+            callback.forget();
         }
     }
 

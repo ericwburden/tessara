@@ -17,6 +17,9 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::closure::Closure;
 
 #[cfg(feature = "hydrate")]
+type MouseEventCallback = Rc<RefCell<Option<Closure<dyn FnMut(web_sys::MouseEvent)>>>>;
+
+#[cfg(feature = "hydrate")]
 fn form_builder_grid_tile_style(field: &FormBuilderFieldDraft) -> String {
     let column = field.grid_column.max(1);
     let row = field.grid_row.max(1);
@@ -88,10 +91,8 @@ pub(crate) fn start_form_builder_field_resize(
     let start_x = event.client_x();
     let start_y = event.client_y();
 
-    let move_callback: Rc<RefCell<Option<Closure<dyn FnMut(web_sys::MouseEvent)>>>> =
-        Rc::new(RefCell::new(None));
-    let up_callback: Rc<RefCell<Option<Closure<dyn FnMut(web_sys::MouseEvent)>>>> =
-        Rc::new(RefCell::new(None));
+    let move_callback: MouseEventCallback = Rc::new(RefCell::new(None));
+    let up_callback: MouseEventCallback = Rc::new(RefCell::new(None));
 
     let active_for_move = active.clone();
     let tile_for_move = tile.clone();

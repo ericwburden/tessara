@@ -355,11 +355,7 @@ fn dataset_readiness_sql(scoped: bool) -> &'static str {
         LEFT JOIN dataset_sources ON dataset_sources.dataset_id = datasets.id
         LEFT JOIN dataset_fields ON dataset_fields.dataset_id = datasets.id
         LEFT JOIN form_versions
-            ON form_versions.form_id = dataset_sources.form_id
-           AND (
-                dataset_sources.form_version_major IS NULL
-                OR form_versions.version_major = dataset_sources.form_version_major
-           )
+            ON form_versions.id = dataset_sources.form_version_id
         LEFT JOIN analytics.submission_fact
             ON analytics.submission_fact.form_version_id = form_versions.id
            AND analytics.submission_fact.node_id = ANY($1)
@@ -383,11 +379,7 @@ fn dataset_readiness_sql(scoped: bool) -> &'static str {
         LEFT JOIN dataset_sources ON dataset_sources.dataset_id = datasets.id
         LEFT JOIN dataset_fields ON dataset_fields.dataset_id = datasets.id
         LEFT JOIN form_versions
-            ON form_versions.form_id = dataset_sources.form_id
-           AND (
-                dataset_sources.form_version_major IS NULL
-                OR form_versions.version_major = dataset_sources.form_version_major
-           )
+            ON form_versions.id = dataset_sources.form_version_id
         LEFT JOIN analytics.submission_fact
             ON analytics.submission_fact.form_version_id = form_versions.id
         GROUP BY datasets.id, datasets.name, dataset_revisions.status

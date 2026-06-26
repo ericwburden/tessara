@@ -14,42 +14,40 @@ pub(crate) fn DatasetSqlPreviewPanel(
     name: RwSignal<String>,
     slug: RwSignal<String>,
     visibility_node_ids: RwSignal<BTreeSet<String>>,
-    sources: RwSignal<Vec<DatasetSourceDraft>>,
-    expression: RwSignal<DatasetExpressionDraft>,
-    fields: RwSignal<Vec<DatasetFieldDraft>>,
-    aggregation: RwSignal<DatasetAggregationDraft>,
-    join_left_key: RwSignal<String>,
-    join_right_key: RwSignal<String>,
+    initial_source: RwSignal<DatasetSourceDraft>,
+    operation_order: RwSignal<Vec<DatasetOperationDraft>>,
+    restriction_internal_field_key: RwSignal<String>,
+    restriction_restricted_field_key: RwSignal<String>,
+    restriction_confidential_field_key: RwSignal<String>,
     sql_preview: RwSignal<Option<String>>,
     sql_preview_error: RwSignal<Option<String>>,
     expanded: RwSignal<bool>,
 ) -> impl IntoView {
-    Effect::new(move |_| {
-        if expanded.get() {
-            preview_dataset_sql(
-                dataset_id.clone(),
-                name.get(),
-                slug.get(),
-                visibility_node_ids.get().into_iter().collect(),
-                sources.get(),
-                expression.get(),
-                fields.get(),
-                aggregation.get(),
-                join_left_key.get(),
-                join_right_key.get(),
-                sql_preview,
-                sql_preview_error,
-            );
-        }
-    });
-
     view! {
         <section class="route-panel__section dataset-editor-section">
             <button
                 class="dataset-editor-section__header dataset-sql-header"
                 type="button"
                 aria-expanded=move || expanded.get().to_string()
-                on:click=move |_| expanded.update(|value| *value = !*value)
+                on:click=move |_| {
+                    let next_expanded = !expanded.get_untracked();
+                    expanded.set(next_expanded);
+                    if next_expanded {
+                        preview_dataset_sql(
+                            dataset_id.clone(),
+                            name.get_untracked(),
+                            slug.get_untracked(),
+                            visibility_node_ids.get_untracked().into_iter().collect(),
+                            initial_source.get_untracked(),
+                            operation_order.get_untracked(),
+                            restriction_internal_field_key.get_untracked(),
+                            restriction_restricted_field_key.get_untracked(),
+                            restriction_confidential_field_key.get_untracked(),
+                            sql_preview,
+                            sql_preview_error,
+                        );
+                    }
+                }
             >
                 <h3>"Generated SQL"</h3>
                 <ChevronsUpDown class="dataset-sql-header__icon"/>

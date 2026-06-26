@@ -72,8 +72,9 @@ try {
     }
 
     if (-not $SkipBuild) {
+        $cacheBust = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
         Invoke-CheckedStep -Label "Rebuilding Tessara API image" -Command {
-            docker compose build api
+            docker compose build --build-arg "APP_CACHE_BUST=$cacheBust" api
         }
     } else {
         Write-Host "`n==> Reusing existing API image" -ForegroundColor Cyan

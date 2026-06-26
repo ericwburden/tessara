@@ -10,7 +10,7 @@ use super::api::{
 #[cfg(feature = "hydrate")]
 use super::errors::WorkflowEditorMutationError;
 #[cfg(feature = "hydrate")]
-use super::update_payloads::prepare_workflow_update;
+use super::update_payloads::{WorkflowUpdateDraft, prepare_workflow_update};
 #[cfg(feature = "hydrate")]
 use crate::features::workflows::{
     CreateWorkflowRevisionPayload, CreateWorkflowStepPayload, UpdateWorkflowRevisionStepsPayload,
@@ -18,6 +18,23 @@ use crate::features::workflows::{
 use crate::features::workflows::{WorkflowSaveIntent, WorkflowStepDraft};
 use leptos::prelude::*;
 use std::collections::HashSet;
+
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+pub(crate) struct SubmitUpdateWorkflowInput {
+    pub(crate) workflow_id: String,
+    pub(crate) version_id: Option<String>,
+    pub(crate) version_is_draft: bool,
+    pub(crate) name: RwSignal<String>,
+    pub(crate) slug: RwSignal<String>,
+    pub(crate) available_node_ids: RwSignal<HashSet<String>>,
+    pub(crate) steps: RwSignal<Vec<WorkflowStepDraft>>,
+    pub(crate) original_steps: RwSignal<Vec<WorkflowStepDraft>>,
+    pub(crate) description: RwSignal<String>,
+    pub(crate) is_saving: RwSignal<bool>,
+    pub(crate) save_intent: RwSignal<Option<WorkflowSaveIntent>>,
+    pub(crate) message: RwSignal<Option<String>>,
+    pub(crate) intent: WorkflowSaveIntent,
+}
 
 #[cfg(feature = "hydrate")]
 async fn save_workflow_step_revision(
@@ -61,37 +78,39 @@ async fn save_workflow_step_revision(
     Ok(version_to_publish)
 }
 
-pub(crate) fn submit_update_workflow(
-    workflow_id: String,
-    version_id: Option<String>,
-    version_is_draft: bool,
-    name: RwSignal<String>,
-    slug: RwSignal<String>,
-    available_node_ids: RwSignal<HashSet<String>>,
-    steps: RwSignal<Vec<WorkflowStepDraft>>,
-    original_steps: RwSignal<Vec<WorkflowStepDraft>>,
-    description: RwSignal<String>,
-    is_saving: RwSignal<bool>,
-    save_intent: RwSignal<Option<WorkflowSaveIntent>>,
-    message: RwSignal<Option<String>>,
-    intent: WorkflowSaveIntent,
-) {
+pub(crate) fn submit_update_workflow(input: SubmitUpdateWorkflowInput) {
     #[cfg(feature = "hydrate")]
     {
+        let SubmitUpdateWorkflowInput {
+            workflow_id,
+            version_id,
+            version_is_draft,
+            name,
+            slug,
+            available_node_ids,
+            steps,
+            original_steps,
+            description,
+            is_saving,
+            save_intent,
+            message,
+            intent,
+        } = input;
+
         if is_saving.get() {
             return;
         }
 
-        let prepared_update = match prepare_workflow_update(
-            name.get(),
-            slug.get(),
-            available_node_ids.get(),
-            steps.get(),
-            &original_steps.get_untracked(),
-            description.get(),
+        let prepared_update = match prepare_workflow_update(WorkflowUpdateDraft {
+            name: name.get(),
+            slug: slug.get(),
+            available_node_ids: available_node_ids.get(),
+            current_steps: steps.get(),
+            original_steps: original_steps.get_untracked(),
+            description: description.get(),
             version_is_draft,
             intent,
-        ) {
+        }) {
             Ok(prepared_update) => prepared_update,
             Err(error) => {
                 message.set(Some(error));
@@ -164,20 +183,6 @@ pub(crate) fn submit_update_workflow(
 
     #[cfg(not(feature = "hydrate"))]
     {
-        let _ = (
-            workflow_id,
-            version_id,
-            version_is_draft,
-            name,
-            slug,
-            available_node_ids,
-            steps,
-            original_steps,
-            description,
-            is_saving,
-            save_intent,
-            message,
-            intent,
-        );
+        let _ = input;
     }
 }

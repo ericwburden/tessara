@@ -47,7 +47,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 uuid = { version = "1", features = ["serde", "v4"] }
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
-web-sys = { version = "0.3", features = ["Document", "Element", "Event", "EventTarget", "HtmlElement", "HtmlInputElement", "HtmlSelectElement", "HtmlTextAreaElement", "Location", "MediaQueryList", "MouseEvent", "NodeList", "Storage", "UrlSearchParams", "Window"] }
+web-sys = { version = "0.3", features = ["DataTransfer", "Document", "DragEvent", "Element", "Event", "EventTarget", "HtmlElement", "HtmlInputElement", "HtmlSelectElement", "HtmlTextAreaElement", "Location", "MediaQueryList", "MouseEvent", "NodeList", "Storage", "UrlSearchParams", "Window"] }
 
 [[workspace.metadata.leptos]]
 name = "tessara-web"

@@ -8,8 +8,8 @@ use leptos::prelude::*;
 use std::collections::HashMap;
 
 use super::{
-    OrganizationNodeMetadataSection, available_node_types_for_parent, parent_node_options,
-    submit_create_node,
+    OrganizationNodeMetadataSection, SubmitCreateNodeInput, available_node_types_for_parent,
+    parent_node_options, submit_create_node,
 };
 
 #[component]
@@ -42,7 +42,7 @@ pub(super) fn OrganizationNodeCreateForm(
             class="native-form organization-node-form"
             on:submit=move |event| {
                 event.prevent_default();
-                submit_create_node(
+                submit_create_node(SubmitCreateNodeInput {
                     selected_node_type_id,
                     selected_parent_node_id,
                     name,
@@ -51,7 +51,7 @@ pub(super) fn OrganizationNodeCreateForm(
                     metadata_booleans,
                     is_saving,
                     message,
-                );
+                });
             }
         >
             <div class="form-grid">

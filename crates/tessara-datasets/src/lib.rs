@@ -62,48 +62,6 @@ impl DatasetGrain {
     }
 }
 
-/// Dataset source composition mode.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DatasetCompositionMode {
-    /// Union rows from all configured sources into one dataset row stream.
-    Union,
-    /// Union rows from all configured sources, preserving duplicates.
-    UnionAll,
-    /// Left join the right input onto the left input.
-    LeftJoin,
-    /// Inner join two inputs.
-    InnerJoin,
-    /// Full outer join two inputs.
-    OuterJoin,
-}
-
-impl DatasetCompositionMode {
-    /// Parses a dataset composition mode from the API/storage representation.
-    pub fn parse(value: &str) -> Result<Self, DatasetRuleError> {
-        match value.trim() {
-            "union" => Ok(Self::Union),
-            "union_all" => Ok(Self::UnionAll),
-            "left_join" => Ok(Self::LeftJoin),
-            "inner_join" => Ok(Self::InnerJoin),
-            "outer_join" => Ok(Self::OuterJoin),
-            other => Err(DatasetRuleError::new(format!(
-                "unsupported dataset composition mode '{other}'"
-            ))),
-        }
-    }
-
-    /// Returns the stable storage representation.
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Union => "union",
-            Self::UnionAll => "union_all",
-            Self::LeftJoin => "left_join",
-            Self::InnerJoin => "inner_join",
-            Self::OuterJoin => "outer_join",
-        }
-    }
-}
-
 /// Validates the shape of a dataset definition before database-specific checks.
 pub fn validate_dataset_shape<'a>(
     source_aliases: impl IntoIterator<Item = &'a str>,
@@ -156,7 +114,7 @@ pub fn validate_dataset_shape<'a>(
 
 #[cfg(test)]
 mod tests {
-    use super::{DatasetCompositionMode, DatasetGrain, validate_dataset_shape};
+    use super::{DatasetGrain, validate_dataset_shape};
 
     #[test]
     fn parses_supported_dataset_grains() {
@@ -173,24 +131,6 @@ mod tests {
                 .expect_err("unsupported grains should fail")
                 .message(),
             "unsupported dataset grain 'client'"
-        );
-    }
-
-    #[test]
-    fn parses_supported_composition_modes() {
-        assert_eq!(
-            DatasetCompositionMode::parse("union").expect("union should parse"),
-            DatasetCompositionMode::Union
-        );
-        assert_eq!(
-            DatasetCompositionMode::parse("left_join").expect("left join should parse"),
-            DatasetCompositionMode::LeftJoin
-        );
-        assert_eq!(
-            DatasetCompositionMode::parse("merge")
-                .expect_err("unsupported composition modes should fail")
-                .message(),
-            "unsupported dataset composition mode 'merge'"
         );
     }
 

@@ -9,6 +9,16 @@ use icons::{
 use leptos::prelude::*;
 use std::collections::{BTreeSet, HashMap};
 
+#[derive(Clone)]
+struct VisibilityTreeContext {
+    visible_nodes: Vec<NodeResponse>,
+    all_nodes: Vec<NodeResponse>,
+    visibility_node_ids: RwSignal<BTreeSet<String>>,
+    expanded_node_ids: RwSignal<BTreeSet<String>>,
+    force_expanded: bool,
+    query: String,
+}
+
 /// Renders the node visibility picker for dataset access.
 #[component]
 pub(crate) fn DatasetVisibilityEditor(
@@ -38,15 +48,18 @@ pub(crate) fn DatasetVisibilityEditor(
                     let all_nodes = sorted_nodes(nodes.get());
                     let visible_nodes = visible_tree_nodes(&all_nodes, &query);
                     let roots = root_nodes(&visible_nodes);
+                    let context = VisibilityTreeContext {
+                        visible_nodes,
+                        all_nodes,
+                        visibility_node_ids,
+                        expanded_node_ids,
+                        force_expanded: !query.trim().is_empty(),
+                        query,
+                    };
                     roots.into_iter().map(|node| {
                         visibility_tree_branch(
                             node,
-                            visible_nodes.clone(),
-                            all_nodes.clone(),
-                            visibility_node_ids,
-                            expanded_node_ids,
-                            !query.trim().is_empty(),
-                            query.clone(),
+                            context.clone(),
                             0,
                         )
                     }).collect_view()
@@ -58,12 +71,7 @@ pub(crate) fn DatasetVisibilityEditor(
 
 fn visibility_tree_branch(
     node: NodeResponse,
-    visible_nodes: Vec<NodeResponse>,
-    all_nodes: Vec<NodeResponse>,
-    visibility_node_ids: RwSignal<BTreeSet<String>>,
-    expanded_node_ids: RwSignal<BTreeSet<String>>,
-    force_expanded: bool,
-    query: String,
+    context: VisibilityTreeContext,
     depth: usize,
 ) -> AnyView {
     let node_id_for_class = node.id.clone();
@@ -72,9 +80,9 @@ fn visibility_tree_branch(
     let node_id_for_children = node.id.clone();
     let parents_node = node.clone();
     let descendants_node = node.clone();
-    let all_nodes_for_parents = all_nodes.clone();
-    let all_nodes_for_descendants = all_nodes.clone();
-    let children = child_nodes(&visible_nodes, &node.id);
+    let all_nodes_for_parents = context.all_nodes.clone();
+    let all_nodes_for_descendants = context.all_nodes.clone();
+    let children = child_nodes(&context.visible_nodes, &node.id);
     let has_children = !children.is_empty();
     let children_for_selected_count = children.clone();
     let node_scope = vec![node.id.clone()];
@@ -90,7 +98,11 @@ fn visibility_tree_branch(
     let descendant_scope_for_class = descendant_scope.clone();
     let descendant_scope_for_pressed = descendant_scope.clone();
     let descendant_scope_for_click = descendant_scope.clone();
-    let is_search_match = !query.trim().is_empty() && node_matches_visibility_query(&node, &query);
+    let is_search_match =
+        !context.query.trim().is_empty() && node_matches_visibility_query(&node, &context.query);
+    let visibility_node_ids = context.visibility_node_ids;
+    let expanded_node_ids = context.expanded_node_ids;
+    let force_expanded = context.force_expanded;
     view! {
         <section class="dataset-visibility-branch" style=format!("--visibility-depth: {depth};")>
             <div class=move || {
@@ -209,12 +221,7 @@ fn visibility_tree_branch(
                     {children.clone().into_iter().map(|child| {
                         visibility_tree_branch(
                             child,
-                            visible_nodes.clone(),
-                            all_nodes.clone(),
-                            visibility_node_ids,
-                            expanded_node_ids,
-                            force_expanded,
-                            query.clone(),
+                            context.clone(),
                             depth + 1,
                         )
                     }).collect_view()}

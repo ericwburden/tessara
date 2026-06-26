@@ -195,12 +195,12 @@ fn detail_output_fields(dataset: &DatasetDefinition) -> Vec<DatasetFieldDefiniti
 }
 
 fn display_preview_value(field_type: &str, value: &str) -> String {
-    if field_type == "number" && value.contains('.') {
-        if let Ok(number) = value.parse::<f64>() {
-            if number.is_finite() {
-                return format!("{number:.2}");
-            }
-        }
+    if field_type == "number"
+        && value.contains('.')
+        && let Ok(number) = value.parse::<f64>()
+        && number.is_finite()
+    {
+        return format!("{number:.2}");
     }
     value.to_string()
 }

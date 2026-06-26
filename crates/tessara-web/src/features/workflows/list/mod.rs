@@ -1,6 +1,6 @@
 //! List view components for the Workflows feature.
 
-mod list;
 mod mobile_cards;
+mod surface;
 
-pub(crate) use list::*;
+pub(crate) use surface::*;

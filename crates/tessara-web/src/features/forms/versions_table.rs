@@ -46,13 +46,12 @@ pub(crate) fn FormVersionsTable(versions: Vec<FormVersionSummary>) -> impl IntoV
                         table_versions
                             .iter()
                             .take(visible_count.get())
-                            .cloned()
                             .map(|version| {
                                 let status = version.status.clone();
                                 let published_at = version.published_at.clone();
                                 view! {
                                     <tr>
-                                        <th scope="row">{form_version_sort_label(&version)}</th>
+                                        <th scope="row">{form_version_sort_label(version)}</th>
                                         <td><span class=status_badge_class(&status)>{sentence_label(&status)}</span></td>
                                         <td>{nonempty_text(version.compatibility_group_name.as_deref(), "-")}</td>
                                         <td>
@@ -76,14 +75,13 @@ pub(crate) fn FormVersionsTable(versions: Vec<FormVersionSummary>) -> impl IntoV
                     card_versions
                         .iter()
                         .take(visible_count.get())
-                        .cloned()
                         .map(|version| {
                             let status = version.status.clone();
                             let published_at = version.published_at.clone();
                             view! {
                                 <article class="forms-list-mobile-card">
                                     <div class="forms-list-mobile-card__header">
-                                        <h3>{form_version_sort_label(&version)}</h3>
+                                        <h3>{form_version_sort_label(version)}</h3>
                                     </div>
                                     <dl>
                                         <div>

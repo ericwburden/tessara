@@ -7,7 +7,7 @@ use super::types::DatasetSqlPreviewResponse;
 #[cfg(feature = "hydrate")]
 use super::types::{
     DatasetDefinition, DatasetFormOption, DatasetPayload, DatasetRenderedForm, DatasetSummary,
-    DatasetTable, NodeResponse, SessionAccount,
+    DatasetTable, DatasetUserOption, NodeResponse, SessionAccount,
 };
 
 #[cfg(feature = "hydrate")]
@@ -77,6 +77,11 @@ pub(super) async fn fetch_forms() -> Result<Option<Vec<DatasetFormOption>>, Stri
 /// Fetches the fetch nodes data.
 pub(super) async fn fetch_nodes() -> Result<Option<Vec<NodeResponse>>, String> {
     fetch_json("/api/nodes", "Visibility nodes").await
+}
+
+#[cfg(feature = "hydrate")]
+pub(super) async fn fetch_users() -> Result<Option<Vec<DatasetUserOption>>, String> {
+    fetch_json("/api/admin/users", "User options").await
 }
 
 #[cfg(feature = "hydrate")]

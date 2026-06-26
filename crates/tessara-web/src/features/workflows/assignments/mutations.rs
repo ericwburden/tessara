@@ -19,18 +19,32 @@ use std::collections::HashSet;
 #[cfg(feature = "hydrate")]
 use super::{errors::WorkflowAssignmentMutationError, workflow_assignment_candidate_key};
 
-pub(crate) fn submit_workflow_assignment_bulk(
-    selected_candidate_id: RwSignal<String>,
-    candidates: RwSignal<Vec<WorkflowAssignmentCandidate>>,
-    selected_account_ids: RwSignal<HashSet<String>>,
-    assignments: RwSignal<Vec<WorkflowAssignmentSummary>>,
-    assignments_loading: RwSignal<bool>,
-    assignments_error: RwSignal<Option<String>>,
-    is_saving: RwSignal<bool>,
-    message: RwSignal<Option<String>>,
-) {
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+pub(crate) struct SubmitWorkflowAssignmentBulkInput {
+    pub(crate) selected_candidate_id: RwSignal<String>,
+    pub(crate) candidates: RwSignal<Vec<WorkflowAssignmentCandidate>>,
+    pub(crate) selected_account_ids: RwSignal<HashSet<String>>,
+    pub(crate) assignments: RwSignal<Vec<WorkflowAssignmentSummary>>,
+    pub(crate) assignments_loading: RwSignal<bool>,
+    pub(crate) assignments_error: RwSignal<Option<String>>,
+    pub(crate) is_saving: RwSignal<bool>,
+    pub(crate) message: RwSignal<Option<String>>,
+}
+
+pub(crate) fn submit_workflow_assignment_bulk(input: SubmitWorkflowAssignmentBulkInput) {
     #[cfg(feature = "hydrate")]
     {
+        let SubmitWorkflowAssignmentBulkInput {
+            selected_candidate_id,
+            candidates,
+            selected_account_ids,
+            assignments,
+            assignments_loading,
+            assignments_error,
+            is_saving,
+            message,
+        } = input;
+
         if is_saving.get() {
             return;
         }
@@ -87,16 +101,7 @@ pub(crate) fn submit_workflow_assignment_bulk(
 
     #[cfg(not(feature = "hydrate"))]
     {
-        let _ = (
-            selected_candidate_id,
-            candidates,
-            selected_account_ids,
-            assignments,
-            assignments_loading,
-            assignments_error,
-            is_saving,
-            message,
-        );
+        let _ = input;
     }
 }
 

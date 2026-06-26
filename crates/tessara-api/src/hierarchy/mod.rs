@@ -922,12 +922,8 @@ pub async fn get_node(
             JOIN dataset_sources
                 ON dataset_sources.dataset_id = dataset_revisions.dataset_id
             JOIN form_versions
-                ON form_versions.form_id = dataset_sources.form_id
+                ON form_versions.id = dataset_sources.form_version_id
                AND form_versions.status = 'published'::form_version_status
-               AND (
-                    dataset_sources.form_version_major IS NULL
-                    OR form_versions.version_major = dataset_sources.form_version_major
-               )
             JOIN workflow_steps
                 ON workflow_steps.form_version_id = form_versions.id
             JOIN workflow_assignments

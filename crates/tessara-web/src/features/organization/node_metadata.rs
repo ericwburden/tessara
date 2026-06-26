@@ -132,7 +132,6 @@ pub(crate) fn collect_node_metadata(
 }
 
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
-#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
 /// Builds editable metadata input state from stored metadata values.
 pub(crate) fn metadata_input_state(
     fields: &[NodeMetadataFieldSummary],
@@ -157,7 +156,6 @@ pub(crate) fn metadata_input_state(
     (text_values, boolean_values)
 }
 
-#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
 /// Converts a stored metadata value into an editable input string.
 pub(crate) fn metadata_input_value(value: &Value) -> String {

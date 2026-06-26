@@ -15,19 +15,45 @@ use super::super::node_metadata::collect_node_metadata;
 #[cfg(feature = "hydrate")]
 use super::api::{create_node, update_node};
 
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+pub(crate) struct SubmitCreateNodeInput {
+    pub(crate) selected_node_type_id: RwSignal<String>,
+    pub(crate) selected_parent_node_id: RwSignal<String>,
+    pub(crate) name: RwSignal<String>,
+    pub(crate) metadata_fields: RwSignal<Vec<NodeMetadataFieldSummary>>,
+    pub(crate) metadata_values: RwSignal<HashMap<String, String>>,
+    pub(crate) metadata_booleans: RwSignal<HashMap<String, bool>>,
+    pub(crate) is_saving: RwSignal<bool>,
+    pub(crate) message: RwSignal<Option<String>>,
+}
+
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+pub(crate) struct SubmitUpdateNodeInput {
+    pub(crate) node_id: String,
+    pub(crate) selected_parent_node_id: RwSignal<String>,
+    pub(crate) name: RwSignal<String>,
+    pub(crate) metadata_fields: RwSignal<Vec<NodeMetadataFieldSummary>>,
+    pub(crate) metadata_values: RwSignal<HashMap<String, String>>,
+    pub(crate) metadata_booleans: RwSignal<HashMap<String, bool>>,
+    pub(crate) is_saving: RwSignal<bool>,
+    pub(crate) message: RwSignal<Option<String>>,
+}
+
 /// Validates and submits a create-node request, then navigates to the created node.
-pub(crate) fn submit_create_node(
-    selected_node_type_id: RwSignal<String>,
-    selected_parent_node_id: RwSignal<String>,
-    name: RwSignal<String>,
-    metadata_fields: RwSignal<Vec<NodeMetadataFieldSummary>>,
-    metadata_values: RwSignal<HashMap<String, String>>,
-    metadata_booleans: RwSignal<HashMap<String, bool>>,
-    is_saving: RwSignal<bool>,
-    message: RwSignal<Option<String>>,
-) {
+pub(crate) fn submit_create_node(input: SubmitCreateNodeInput) {
     #[cfg(feature = "hydrate")]
     {
+        let SubmitCreateNodeInput {
+            selected_node_type_id,
+            selected_parent_node_id,
+            name,
+            metadata_fields,
+            metadata_values,
+            metadata_booleans,
+            is_saving,
+            message,
+        } = input;
+
         if is_saving.get() {
             return;
         }
@@ -85,8 +111,16 @@ pub(crate) fn submit_create_node(
 
     #[cfg(not(feature = "hydrate"))]
     {
-        let _ = (
-            selected_node_type_id,
+        let _ = input;
+    }
+}
+
+/// Validates and submits an update-node request, then navigates to the updated node.
+pub(crate) fn submit_update_node(input: SubmitUpdateNodeInput) {
+    #[cfg(feature = "hydrate")]
+    {
+        let SubmitUpdateNodeInput {
+            node_id,
             selected_parent_node_id,
             name,
             metadata_fields,
@@ -94,23 +128,8 @@ pub(crate) fn submit_create_node(
             metadata_booleans,
             is_saving,
             message,
-        );
-    }
-}
+        } = input;
 
-/// Validates and submits an update-node request, then navigates to the updated node.
-pub(crate) fn submit_update_node(
-    node_id: String,
-    selected_parent_node_id: RwSignal<String>,
-    name: RwSignal<String>,
-    metadata_fields: RwSignal<Vec<NodeMetadataFieldSummary>>,
-    metadata_values: RwSignal<HashMap<String, String>>,
-    metadata_booleans: RwSignal<HashMap<String, bool>>,
-    is_saving: RwSignal<bool>,
-    message: RwSignal<Option<String>>,
-) {
-    #[cfg(feature = "hydrate")]
-    {
         if is_saving.get() {
             return;
         }
@@ -161,15 +180,6 @@ pub(crate) fn submit_update_node(
 
     #[cfg(not(feature = "hydrate"))]
     {
-        let _ = (
-            node_id,
-            selected_parent_node_id,
-            name,
-            metadata_fields,
-            metadata_values,
-            metadata_booleans,
-            is_saving,
-            message,
-        );
+        let _ = input;
     }
 }

@@ -6,7 +6,6 @@ pub(in crate::features::datasets) struct DatasetSourceDraft {
     pub(in crate::features::datasets) source_alias: String,
     pub(in crate::features::datasets) form_id: String,
     pub(in crate::features::datasets) form_version_id: String,
-    pub(in crate::features::datasets) form_version_major: Option<i32>,
     pub(in crate::features::datasets) dataset_id: String,
     pub(in crate::features::datasets) dataset_revision_id: String,
 }
@@ -20,7 +19,7 @@ pub(in crate::features::datasets) struct DatasetFieldDraft {
     pub(in crate::features::datasets) field_type: String,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub(in crate::features::datasets) struct DatasetAggregationDraft {
     pub(in crate::features::datasets) enabled: bool,
     pub(in crate::features::datasets) group_fields: Vec<String>,
@@ -49,19 +48,56 @@ pub(in crate::features::datasets) struct DatasetRowPickerSortDraft {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(in crate::features::datasets) enum DatasetExpressionDraft {
-    Source(usize),
-    Operation {
-        operation: String,
-        left: Box<DatasetExpressionDraft>,
-        right: Box<DatasetExpressionDraft>,
-    },
+pub(in crate::features::datasets) struct DatasetRowFilterDraft {
+    pub(in crate::features::datasets) id: u64,
+    pub(in crate::features::datasets) field_key: String,
+    pub(in crate::features::datasets) operator: String,
+    pub(in crate::features::datasets) value: String,
+    pub(in crate::features::datasets) value_mode: String,
+    pub(in crate::features::datasets) value_field_key: String,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(in crate::features::datasets) enum DatasetDesignerSelection {
-    Operation(Vec<bool>),
-    Source(usize),
+pub(in crate::features::datasets) struct DatasetCalculatedFieldDraft {
+    pub(in crate::features::datasets) id: u64,
+    pub(in crate::features::datasets) key: String,
+    pub(in crate::features::datasets) label: String,
+    pub(in crate::features::datasets) base_field_key: String,
+    pub(in crate::features::datasets) functions: Vec<DatasetCalculationFunctionDraft>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(in crate::features::datasets) struct DatasetCalculationFunctionDraft {
+    pub(in crate::features::datasets) id: u64,
+    pub(in crate::features::datasets) function: String,
+    pub(in crate::features::datasets) argument: String,
+    pub(in crate::features::datasets) argument_mode: String,
+    pub(in crate::features::datasets) argument_field_key: String,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::features::datasets) enum DatasetOperationDraftKind {
+    JoinSource,
+    UnionSource,
+    UnionAllSource,
+    Projection,
+    Aggregation,
+    CalculatedFields,
+    Filter,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(in crate::features::datasets) struct DatasetOperationDraft {
+    pub(in crate::features::datasets) id: u64,
+    pub(in crate::features::datasets) kind: DatasetOperationDraftKind,
+    pub(in crate::features::datasets) source: Option<DatasetSourceDraft>,
+    pub(in crate::features::datasets) join_type: String,
+    pub(in crate::features::datasets) left_field_key: String,
+    pub(in crate::features::datasets) right_field_key: String,
+    pub(in crate::features::datasets) projection_fields: Vec<DatasetFieldDraft>,
+    pub(in crate::features::datasets) aggregation: DatasetAggregationDraft,
+    pub(in crate::features::datasets) calculated_fields: Vec<DatasetCalculatedFieldDraft>,
+    pub(in crate::features::datasets) row_filters: Vec<DatasetRowFilterDraft>,
 }
 
 impl Default for DatasetSourceDraft {
@@ -71,26 +107,39 @@ impl Default for DatasetSourceDraft {
             source_alias: "source_1".into(),
             form_id: String::new(),
             form_version_id: String::new(),
-            form_version_major: None,
             dataset_id: String::new(),
             dataset_revision_id: String::new(),
         }
     }
 }
 
-impl Default for DatasetExpressionDraft {
-    fn default() -> Self {
-        Self::Source(0)
+impl DatasetOperationDraftKind {
+    pub(in crate::features::datasets) fn label(self) -> &'static str {
+        match self {
+            Self::JoinSource => "Join Source",
+            Self::UnionSource => "Union Source",
+            Self::UnionAllSource => "Union Source",
+            Self::Projection => "Projection",
+            Self::Aggregation => "Aggregation",
+            Self::CalculatedFields => "Calculated Fields",
+            Self::Filter => "Filter",
+        }
     }
 }
 
-impl Default for DatasetAggregationDraft {
-    fn default() -> Self {
+impl DatasetOperationDraft {
+    pub(in crate::features::datasets) fn new(id: u64, kind: DatasetOperationDraftKind) -> Self {
         Self {
-            enabled: false,
-            group_fields: Vec::new(),
-            metrics: Vec::new(),
-            row_picker: None,
+            id,
+            kind,
+            source: None,
+            join_type: String::new(),
+            left_field_key: String::new(),
+            right_field_key: String::new(),
+            projection_fields: Vec::new(),
+            aggregation: DatasetAggregationDraft::default(),
+            calculated_fields: Vec::new(),
+            row_filters: Vec::new(),
         }
     }
 }

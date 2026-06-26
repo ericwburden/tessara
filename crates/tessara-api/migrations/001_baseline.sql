@@ -341,10 +341,8 @@ CREATE TABLE datasets (
     name text NOT NULL,
     slug text NOT NULL UNIQUE,
     grain text NOT NULL,
-    composition_mode text NOT NULL DEFAULT 'union',
     created_at timestamptz NOT NULL DEFAULT now(),
-    CHECK (grain IN ('submission', 'node')),
-    CHECK (composition_mode IN ('union', 'union_all', 'left_join', 'inner_join', 'outer_join'))
+    CHECK (grain IN ('submission', 'node'))
 );
 
 CREATE TABLE dataset_scope_nodes (
@@ -363,8 +361,9 @@ CREATE TABLE dataset_revisions (
     version_number integer NOT NULL,
     version_label text NOT NULL,
     status dataset_revision_status NOT NULL DEFAULT 'draft',
-    definition_ast jsonb,
-    aggregation jsonb,
+    initial_source jsonb,
+    operations jsonb,
+    restriction_policy jsonb,
     generated_sql text,
     materialized_schema text,
     materialized_table text,
@@ -386,14 +385,22 @@ CREATE TABLE dataset_sources (
     dataset_id uuid NOT NULL REFERENCES datasets(id) ON DELETE CASCADE,
     source_alias text NOT NULL,
     form_id uuid REFERENCES forms(id) ON DELETE CASCADE,
+    form_version_id uuid REFERENCES form_versions(id) ON DELETE RESTRICT,
     dataset_revision_id uuid REFERENCES dataset_revisions(id) ON DELETE RESTRICT,
-    form_version_major integer,
     position integer NOT NULL DEFAULT 0,
     created_at timestamptz NOT NULL DEFAULT now(),
     UNIQUE (dataset_id, source_alias),
     CHECK (
-        ((form_id IS NOT NULL)::integer
-        + (dataset_revision_id IS NOT NULL)::integer) = 1
+        (
+            form_id IS NOT NULL
+            AND form_version_id IS NOT NULL
+            AND dataset_revision_id IS NULL
+        )
+        OR (
+            form_id IS NULL
+            AND form_version_id IS NULL
+            AND dataset_revision_id IS NOT NULL
+        )
     )
 );
 
@@ -408,10 +415,7 @@ CREATE TABLE dataset_fields (
     field_type field_type NOT NULL,
     position integer NOT NULL DEFAULT 0,
     created_at timestamptz NOT NULL DEFAULT now(),
-    UNIQUE (dataset_id, key),
-    FOREIGN KEY (dataset_id, source_alias)
-        REFERENCES dataset_sources(dataset_id, source_alias)
-        ON DELETE CASCADE
+    UNIQUE (dataset_id, key)
 );
 
 CREATE INDEX dataset_sources_dataset_id_position_idx

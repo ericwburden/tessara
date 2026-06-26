@@ -1244,7 +1244,6 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         "partner",
         &[partner_a, partner_b],
         &[DatasetFieldBinding {
-            logical_key: "contact_name",
             label: "Contact Name",
             source_field_key: "contact_name",
             field_type: "text",
@@ -1259,7 +1258,6 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         "program",
         &[program_a, program_b, program_c, program_d],
         &[DatasetFieldBinding {
-            logical_key: "participant_target",
             label: "Participant Target",
             source_field_key: "participant_target",
             field_type: "number",
@@ -1276,7 +1274,6 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
             activity_a, activity_b, activity_c, activity_d, activity_e, activity_f,
         ],
         &[DatasetFieldBinding {
-            logical_key: "expected_attendees",
             label: "Expected Attendees",
             source_field_key: "expected_attendees",
             field_type: "number",
@@ -1291,7 +1288,6 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         "session",
         &[session_a, session_b, session_g],
         &[DatasetFieldBinding {
-            logical_key: "participants",
             label: "Participants",
             source_field_key: "participants",
             field_type: "number",

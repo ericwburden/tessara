@@ -2,7 +2,8 @@
 
 use super::DatasetEditorState;
 use crate::features::datasets::loaders::{
-    load_dataset_for_edit, load_datasets, load_forms, load_nodes,
+    DatasetEditLoadTargets, load_dataset_for_edit, load_datasets, load_forms, load_nodes,
+    load_users,
 };
 use leptos::prelude::*;
 
@@ -14,22 +15,22 @@ pub(crate) fn install_dataset_editor_loaders(
         load_forms(state.forms, state.load_error);
         load_datasets(state.datasets, RwSignal::new(false), state.load_error);
         load_nodes(state.nodes, state.load_error);
+        load_users(state.users, state.load_error);
         if let Some(dataset_id) = dataset_id.clone() {
             load_dataset_for_edit(
                 dataset_id,
-                state.name,
-                state.slug,
-                state.composition_mode,
-                state.visibility_node_ids,
-                state.sources,
-                state.expression,
-                state.fields,
-                state.aggregation,
-                state.join_left_key,
-                state.join_right_key,
-                state.sql_preview,
-                state.load_error,
-                state.auto_seeded_sources,
+                DatasetEditLoadTargets {
+                    name: state.name,
+                    slug: state.slug,
+                    visibility_node_ids: state.visibility_node_ids,
+                    initial_source: state.initial_source,
+                    operation_order: state.operation_order,
+                    restriction_internal_field_key: state.restriction_internal_field_key,
+                    restriction_restricted_field_key: state.restriction_restricted_field_key,
+                    restriction_confidential_field_key: state.restriction_confidential_field_key,
+                    sql_preview: state.sql_preview,
+                    load_error: state.load_error,
+                },
             );
         }
     });

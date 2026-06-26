@@ -13,6 +13,7 @@ pub(crate) struct ComboboxOption {
 pub(crate) fn Combobox(
     options: Signal<Vec<ComboboxOption>>,
     on_select: Callback<String>,
+    #[prop(optional)] selected_label: Option<Signal<String>>,
     #[prop(default = "Select...")] placeholder: &'static str,
     #[prop(default = "Search...")] search_placeholder: &'static str,
     #[prop(default = "No options found.")] empty_label: &'static str,
@@ -23,10 +24,10 @@ pub(crate) fn Combobox(
     let search_input = NodeRef::<leptos::html::Input>::new();
 
     Effect::new(move |_| {
-        if is_open.get() {
-            if let Some(input) = search_input.get() {
-                let _ = input.focus();
-            }
+        if is_open.get()
+            && let Some(input) = search_input.get()
+        {
+            let _ = input.focus();
         }
     });
 
@@ -40,7 +41,15 @@ pub(crate) fn Combobox(
                 aria-label=aria_label
                 on:click=move |_| is_open.update(|open| *open = !*open)
             >
-                <span class="truncate">{placeholder}</span>
+                <span class="truncate">
+                    {move || {
+                        selected_label
+                            .as_ref()
+                            .map(|label| label.get())
+                            .filter(|label| !label.trim().is_empty())
+                            .unwrap_or_else(|| placeholder.to_string())
+                    }}
+                </span>
                 <ChevronsUpDown class="combobox__trigger-icon"/>
             </button>
             <button

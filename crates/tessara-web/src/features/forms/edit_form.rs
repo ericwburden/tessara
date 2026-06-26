@@ -7,7 +7,7 @@ use crate::features::forms::{
 use crate::features::organization::NodeTypeCatalogEntry;
 use leptos::prelude::*;
 
-use super::save::submit_update_form;
+use super::save::{SubmitUpdateFormInput, submit_update_form};
 
 #[allow(clippy::too_many_arguments)]
 #[component]
@@ -37,20 +37,20 @@ pub(in crate::features::forms) fn FormEditForm(
                 class="native-form form-create-form"
                 on:submit=move |event| {
                     event.prevent_default();
-                    submit_update_form(
-                        form_id_for_draft_submit.clone(),
+                    submit_update_form(SubmitUpdateFormInput {
+                        form_id: form_id_for_draft_submit.clone(),
                         name,
                         workflow_node_type_id,
-                        builder_state.builder_sections,
-                        builder_state.builder_fields,
+                        sections: builder_state.builder_sections,
+                        fields: builder_state.builder_fields,
                         existing_forms,
                         edit_version_id,
                         edit_version_status,
                         rendered_form,
                         is_saving,
                         message,
-                        false,
-                    );
+                        publish_after_save: false,
+                    });
                 }
             >
                 <FormIdentityFields
@@ -79,20 +79,20 @@ pub(in crate::features::forms) fn FormEditForm(
                         type="button"
                         disabled=move || !can_submit()
                         on:click=move |_| {
-                            submit_update_form(
-                                form_id_for_publish_submit.clone(),
+                            submit_update_form(SubmitUpdateFormInput {
+                                form_id: form_id_for_publish_submit.clone(),
                                 name,
                                 workflow_node_type_id,
-                                builder_state.builder_sections,
-                                builder_state.builder_fields,
+                                sections: builder_state.builder_sections,
+                                fields: builder_state.builder_fields,
                                 existing_forms,
                                 edit_version_id,
                                 edit_version_status,
                                 rendered_form,
                                 is_saving,
                                 message,
-                                true,
-                            );
+                                publish_after_save: true,
+                            });
                         }
                     >
                         {move || if is_saving.get() { "Publishing..." } else { "Save and Publish" }}

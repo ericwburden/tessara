@@ -11,13 +11,13 @@ pub(super) fn DatasetSourcesTable(sources: Vec<DatasetSourceDefinition>) -> impl
         <section class="route-panel__section">
             <h3>"Sources"</h3>
             <DataTable>
-                <thead><tr><th>"Alias"</th><th>"Form"</th><th>"Major"</th></tr></thead>
+                <thead><tr><th>"Alias"</th><th>"Form"</th><th>"Version"</th></tr></thead>
                 <tbody>
                     {sources.into_iter().map(|source| view! {
                         <tr>
                             <th scope="row">{source.source_alias}</th>
                             <td>{source.form_name.unwrap_or_else(|| "Unavailable form".into())}</td>
-                            <td>{source.form_version_major.map(|value| value.to_string()).unwrap_or_else(|| "Current".into())}</td>
+                            <td>{source.form_version_id.unwrap_or_else(|| "Dataset revision".into())}</td>
                         </tr>
                     }).collect_view()}
                 </tbody>

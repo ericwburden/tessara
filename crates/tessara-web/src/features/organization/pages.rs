@@ -4,7 +4,10 @@
 
 use super::detail::{OrganizationDetailFullContent, OrganizationDetailSheet};
 pub(crate) use super::node_editor::{OrganizationEditPage, OrganizationNewPage};
-use super::tree::{load_organization_detail, load_organization_tree, organization_tree_view};
+use super::tree::{
+    OrganizationTreeViewContext, load_organization_detail, load_organization_tree,
+    organization_tree_view,
+};
 use super::types::{NodeTypeCatalogEntry, OrganizationNodeDetail, OrganizationTreeNode};
 use crate::types::route_params::{NodeRouteParams, require_route_params};
 use crate::ui::{
@@ -65,11 +68,13 @@ pub fn OrganizationPage() -> impl IntoView {
                         view! {
                             {organization_tree_view(
                                 tree.get(),
-                                node_types.get(),
-                                expanded_nodes,
-                                detail,
-                                detail_is_loading,
-                                detail_error,
+                                OrganizationTreeViewContext {
+                                    node_types: node_types.get(),
+                                    expanded_nodes,
+                                    detail,
+                                    detail_is_loading,
+                                    detail_error,
+                                },
                                 0,
                                 Vec::new(),
                             )}

@@ -87,11 +87,14 @@ pub(crate) fn FormBuilderGridTile(
                     if let Some(target) = _event
                         .target()
                         .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
+                        && target
+                            .closest(".form-builder-resize-handle")
+                            .ok()
+                            .flatten()
+                            .is_some()
                     {
-                        if target.closest(".form-builder-resize-handle").ok().flatten().is_some() {
-                            _event.prevent_default();
-                            return;
-                        }
+                        _event.prevent_default();
+                        return;
                     }
                 }
                 clear_form_builder_drag_intent(

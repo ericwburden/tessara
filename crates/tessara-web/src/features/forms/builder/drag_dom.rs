@@ -98,10 +98,10 @@ pub(super) fn clear_form_builder_drag_target_dom() {
     };
 
     for index in 0..targets.length() {
-        if let Some(target) = targets.item(index) {
-            if let Ok(element) = target.dyn_into::<web_sys::Element>() {
-                let _ = element.class_list().remove_1("is-drop-target");
-            }
+        if let Some(target) = targets.item(index)
+            && let Ok(element) = target.dyn_into::<web_sys::Element>()
+        {
+            let _ = element.class_list().remove_1("is-drop-target");
         }
     }
 }

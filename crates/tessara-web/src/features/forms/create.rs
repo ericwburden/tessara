@@ -12,7 +12,7 @@ use crate::ui::{
 };
 use leptos::prelude::*;
 
-use super::save::submit_create_form;
+use super::save::{SubmitCreateFormInput, submit_create_form};
 
 #[component]
 pub fn FormsNewPage() -> impl IntoView {
@@ -74,16 +74,16 @@ pub fn FormsNewPage() -> impl IntoView {
                                 class="native-form form-create-form"
                                 on:submit=move |event| {
                                     event.prevent_default();
-                                    submit_create_form(
+                                    submit_create_form(SubmitCreateFormInput {
                                         name,
                                         workflow_node_type_id,
-                                        builder_sections,
-                                        builder_fields,
+                                        sections: builder_sections,
+                                        fields: builder_fields,
                                         existing_forms,
                                         is_saving,
                                         message,
-                                        false,
-                                    );
+                                        publish_after_save: false,
+                                    });
                                 }
                             >
                                 <FormIdentityFields
@@ -121,16 +121,16 @@ pub fn FormsNewPage() -> impl IntoView {
                                         type="button"
                                         disabled=move || !can_submit()
                                         on:click=move |_| {
-                                            submit_create_form(
+                                            submit_create_form(SubmitCreateFormInput {
                                                 name,
                                                 workflow_node_type_id,
-                                                builder_sections,
-                                                builder_fields,
+                                                sections: builder_sections,
+                                                fields: builder_fields,
                                                 existing_forms,
                                                 is_saving,
                                                 message,
-                                                true,
-                                            );
+                                                publish_after_save: true,
+                                            });
                                         }
                                     >
                                         {move || if is_saving.get() { "Publishing..." } else { "Create and Publish" }}

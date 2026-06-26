@@ -407,6 +407,10 @@ async fn reset_database(database_url: &str) {
         .execute(&pool)
         .await
         .expect("analytics schema should be droppable");
+    sqlx::query("DROP SCHEMA IF EXISTS dataset_materialized CASCADE")
+        .execute(&pool)
+        .await
+        .expect("dataset materialized schema should be droppable");
     sqlx::query("DROP TABLE IF EXISTS _sqlx_migrations")
         .execute(&pool)
         .await
@@ -415,6 +419,9 @@ async fn reset_database(database_url: &str) {
         "field_type",
         "form_version_status",
         "submission_status",
+        "dataset_revision_status",
+        "component_type",
+        "component_version_status",
         "missing_data_policy",
     ] {
         sqlx::query(&format!("DROP TYPE IF EXISTS {type_name} CASCADE"))

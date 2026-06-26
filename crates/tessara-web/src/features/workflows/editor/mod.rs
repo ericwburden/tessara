@@ -46,4 +46,6 @@ pub(in crate::features::workflows) use step_list::WorkflowStepList;
 #[cfg(feature = "hydrate")]
 pub(in crate::features::workflows) use steps::workflow_step_payloads_from_drafts;
 pub(in crate::features::workflows) use steps::workflow_step_signature;
-pub(in crate::features::workflows) use update_actions::submit_update_workflow;
+pub(in crate::features::workflows) use update_actions::{
+    SubmitUpdateWorkflowInput, submit_update_workflow,
+};
