@@ -365,6 +365,7 @@ CREATE TABLE dataset_revisions (
     operations jsonb,
     restriction_policy jsonb,
     generated_sql text,
+    output_fields jsonb,
     materialized_schema text,
     materialized_table text,
     materialized_row_count bigint,

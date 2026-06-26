@@ -15,8 +15,9 @@ use super::super::types::{
     DatasetRowPickerDraft, DatasetRowPickerPayload, DatasetRowPickerSortDraft,
 };
 use super::super::types::{DatasetOperationDraft, DatasetSourceDraft};
-use leptos::prelude::*;
 #[cfg(feature = "hydrate")]
+use super::load_rendered_form;
+use leptos::prelude::*;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 
@@ -27,6 +28,8 @@ pub(in crate::features::datasets) struct DatasetEditLoadTargets {
     pub(in crate::features::datasets) visibility_node_ids: RwSignal<BTreeSet<String>>,
     pub(in crate::features::datasets) initial_source: RwSignal<DatasetSourceDraft>,
     pub(in crate::features::datasets) operation_order: RwSignal<Vec<DatasetOperationDraft>>,
+    pub(in crate::features::datasets) rendered_forms:
+        RwSignal<BTreeMap<String, super::super::types::DatasetRenderedForm>>,
     pub(in crate::features::datasets) restriction_internal_field_key: RwSignal<String>,
     pub(in crate::features::datasets) restriction_restricted_field_key: RwSignal<String>,
     pub(in crate::features::datasets) restriction_confidential_field_key: RwSignal<String>,
@@ -46,6 +49,7 @@ pub(in crate::features::datasets) fn load_dataset_for_edit(
             visibility_node_ids,
             initial_source,
             operation_order,
+            rendered_forms,
             restriction_internal_field_key,
             restriction_restricted_field_key,
             restriction_confidential_field_key,
@@ -72,7 +76,9 @@ pub(in crate::features::datasets) fn load_dataset_for_edit(
                         ));
                     return;
                 };
-                initial_source.set(source_payload_to_draft(initial_source_payload));
+                let initial_source_draft = source_payload_to_draft(initial_source_payload);
+                preload_source_form(&initial_source_draft, rendered_forms);
+                initial_source.set(initial_source_draft);
                 let source_field_lookup = source_field_lookup(&payload.fields);
                 let mut operation_order_drafts = Vec::new();
                 for operation in payload.operations {
@@ -88,6 +94,9 @@ pub(in crate::features::datasets) fn load_dataset_for_edit(
                                 DatasetOperationDraftKind::AddSource,
                             );
                             draft.source = Some(source_payload_to_draft(&source));
+                            if let Some(source) = draft.source.as_ref() {
+                                preload_source_form(source, rendered_forms);
+                            }
                             draft.add_type = add_type;
                             if let Some(join_key) = join_keys.first() {
                                 draft.left_field_key = join_key.left_field.clone();
@@ -205,6 +214,19 @@ fn projection_field_drafts_from_payload(
             }
         })
         .collect()
+}
+
+#[cfg(feature = "hydrate")]
+fn preload_source_form(
+    source: &DatasetSourceDraft,
+    rendered_forms: RwSignal<BTreeMap<String, super::super::types::DatasetRenderedForm>>,
+) {
+    if source.input_kind.eq_ignore_ascii_case("form")
+        && !source.form_version_id.trim().is_empty()
+        && !rendered_forms.with(|forms| forms.contains_key(&source.form_version_id))
+    {
+        load_rendered_form(source.form_version_id.clone(), rendered_forms);
+    }
 }
 
 #[cfg(feature = "hydrate")]

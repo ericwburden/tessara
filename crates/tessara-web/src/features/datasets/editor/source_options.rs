@@ -39,6 +39,7 @@ pub(crate) fn published_versions_for_form(
 /// Returns source field options for the selected source alias.
 pub(crate) fn source_field_options(
     sources: &[DatasetSourceDraft],
+    datasets: &[DatasetSummary],
     _forms: &[DatasetFormOption],
     rendered_forms: &BTreeMap<String, DatasetRenderedForm>,
     source_alias: &str,
@@ -51,6 +52,33 @@ pub(crate) fn source_field_options(
     };
     if !source_has_selected_reference(source) {
         return Vec::new();
+    }
+    if source.input_kind.eq_ignore_ascii_case("dataset") {
+        return datasets
+            .iter()
+            .find(|dataset| {
+                dataset.id == source.dataset_id
+                    || dataset.current_revision_id.as_deref()
+                        == Some(source.dataset_revision_id.as_str())
+            })
+            .map(|dataset| {
+                let fields = dataset
+                    .revisions
+                    .iter()
+                    .find(|revision| revision.id == source.dataset_revision_id)
+                    .map(|revision| revision.output_fields.as_slice())
+                    .unwrap_or(dataset.output_fields.as_slice());
+                fields
+                    .iter()
+                    .map(|field| DatasetRenderedField {
+                        key: field.key.clone(),
+                        label: field.label.clone(),
+                        field_type: field.field_type.clone(),
+                        value_options: Vec::new(),
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
     }
     let mut options = system_source_field_options();
     options.extend(

@@ -25,6 +25,7 @@ pub(crate) fn install_dataset_editor_loaders(
                     visibility_node_ids: state.visibility_node_ids,
                     initial_source: state.initial_source,
                     operation_order: state.operation_order,
+                    rendered_forms: state.rendered_forms,
                     restriction_internal_field_key: state.restriction_internal_field_key,
                     restriction_restricted_field_key: state.restriction_restricted_field_key,
                     restriction_confidential_field_key: state.restriction_confidential_field_key,

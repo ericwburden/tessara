@@ -21,9 +21,9 @@ mod dto;
 pub use dto::{
     CreateDatasetRequest, DatasetAggregationRequest, DatasetCalculatedFieldRequest,
     DatasetDefinition, DatasetFieldDefinition, DatasetJoinKeyRequest, DatasetOperationRequest,
-    DatasetProjectionFieldRequest, DatasetRestrictionPolicyRequest, DatasetRowFilterRequest,
-    DatasetSourceDefinition, DatasetSourceRequest, DatasetSqlPreview, DatasetSummary, DatasetTable,
-    DatasetTableRow, DatasetVisibilityNodeSummary,
+    DatasetProjectionFieldRequest, DatasetRestrictionPolicyRequest, DatasetRevisionFieldSummary,
+    DatasetRowFilterRequest, DatasetSourceDefinition, DatasetSourceRequest, DatasetSqlPreview,
+    DatasetSummary, DatasetTable, DatasetTableRow, DatasetVisibilityNodeSummary,
 };
 
 use crate::{
@@ -232,11 +232,14 @@ struct PublishedFormVersionIdentity {
 }
 
 fn internal_dataset_columns() -> BTreeSet<String> {
-    ["__row_id"].into_iter().map(String::from).collect()
+    ["__row_id", "__restriction_tier"]
+        .into_iter()
+        .map(String::from)
+        .collect()
 }
 
 fn ordered_columns(columns: &BTreeSet<String>) -> Vec<String> {
-    let mut ordered = ["__row_id"]
+    let mut ordered = ["__row_id", "__restriction_tier"]
         .into_iter()
         .filter(|column| columns.contains(*column))
         .map(String::from)
@@ -262,6 +265,9 @@ fn select_union_expression(
     {
         return format!("{} AS {quoted_output}", quote_identifier(source_column));
     }
+    if output_column == "__restriction_tier" {
+        return format!("'public'::text AS {quoted_output}");
+    }
     format!("NULL::text AS {quoted_output}")
 }
 
@@ -272,6 +278,16 @@ fn coalesced_join_expression(
 ) -> String {
     if column == "__row_id" {
         return "CASE WHEN l.__row_id IS NOT NULL AND r.__row_id IS NOT NULL THEN md5(concat_ws('|', l.__row_id, r.__row_id)) ELSE COALESCE(l.__row_id, r.__row_id) END AS __row_id".to_string();
+    }
+    if column == "__restriction_tier" {
+        return format!(
+            "{} AS {}",
+            greatest_restriction_tier_sql(&[
+                "l.__restriction_tier".to_string(),
+                "r.__restriction_tier".to_string()
+            ]),
+            quote_identifier("__restriction_tier")
+        );
     }
     let quoted = quote_identifier(column);
     match (
@@ -554,14 +570,42 @@ pub async fn list_datasets(
     };
     let visibility_nodes =
         load_dataset_visibility_nodes(&state.pool, &dataset_ids, visible_node_filter).await?;
+    let mut output_fields_by_revision = BTreeMap::<Uuid, Vec<DatasetFieldDefinition>>::new();
+    let revision_rows = sqlx::query(
+        r#"
+        SELECT dataset_id, id
+        FROM dataset_revisions
+        WHERE dataset_id = ANY($1)
+        ORDER BY dataset_id, version_number
+        "#,
+    )
+    .bind(&dataset_ids)
+    .fetch_all(&state.pool)
+    .await?;
+    let mut revisions_by_dataset = BTreeMap::<Uuid, Vec<Uuid>>::new();
+    for row in revision_rows {
+        let dataset_id: Uuid = row.try_get("dataset_id")?;
+        let revision_id: Uuid = row.try_get("id")?;
+        revisions_by_dataset
+            .entry(dataset_id)
+            .or_default()
+            .push(revision_id);
+        let fields = load_dataset_revision_output_fields(&state.pool, revision_id)
+            .await?
+            .iter()
+            .map(dataset_field_definition)
+            .collect::<Vec<_>>();
+        output_fields_by_revision.insert(revision_id, fields);
+    }
 
     let datasets = rows
         .into_iter()
         .map(|row| {
             let id: Uuid = row.try_get("id")?;
+            let current_revision_id: Option<Uuid> = row.try_get("current_revision_id")?;
             Ok(DatasetSummary {
                 id,
-                current_revision_id: row.try_get("current_revision_id")?,
+                current_revision_id,
                 name: row.try_get("name")?,
                 slug: row.try_get("slug")?,
                 grain: row.try_get("grain")?,
@@ -570,6 +614,21 @@ pub async fn list_datasets(
                 visibility_nodes: visibility_nodes.get(&id).cloned().unwrap_or_default(),
                 source_count: row.try_get("source_count")?,
                 field_count: row.try_get("field_count")?,
+                output_fields: current_revision_id
+                    .and_then(|revision_id| output_fields_by_revision.get(&revision_id).cloned())
+                    .unwrap_or_default(),
+                revisions: revisions_by_dataset
+                    .get(&id)
+                    .into_iter()
+                    .flat_map(|revision_ids| revision_ids.iter())
+                    .map(|revision_id| DatasetRevisionFieldSummary {
+                        id: *revision_id,
+                        output_fields: output_fields_by_revision
+                            .get(revision_id)
+                            .cloned()
+                            .unwrap_or_default(),
+                    })
+                    .collect(),
             })
         })
         .collect::<Result<Vec<_>, sqlx::Error>>()?;
@@ -684,11 +743,16 @@ pub async fn get_dataset(
             })
         })
         .collect::<Result<Vec<_>, sqlx::Error>>()?;
-    let output_fields = fields.clone();
+    let current_revision_id: Option<Uuid> = dataset.try_get("current_revision_id")?;
+    let output_fields = if let Some(revision_id) = current_revision_id {
+        load_dataset_revision_output_fields(&state.pool, revision_id).await?
+    } else {
+        fields.clone()
+    };
 
     Ok(Json(DatasetDefinition {
         id: dataset.try_get("id")?,
-        current_revision_id: dataset.try_get("current_revision_id")?,
+        current_revision_id,
         name: dataset.try_get("name")?,
         slug: dataset.try_get("slug")?,
         grain: dataset.try_get("grain")?,
@@ -840,7 +904,8 @@ impl<'a> QuerySpecBuilder<'a> {
     }
 
     async fn apply_operations(&mut self, operations: &[DatasetOperationRequest]) -> ApiResult<()> {
-        for operation in operations {
+        for (index, operation) in operations.iter().enumerate() {
+            validate_operation_position(operation, index)?;
             self.apply_operation(operation).await?;
         }
         Ok(())
@@ -1026,7 +1091,8 @@ impl<'a> QuerySpecBuilder<'a> {
         let sql = format!(
             r#"{cte_name} AS (
             SELECT
-                md5(concat_ws('|', 'form', submission_fact.form_version_id::text, submission_fact.submission_id::text)) AS __row_id{extra_select_columns}
+                md5(concat_ws('|', 'form', submission_fact.form_version_id::text, submission_fact.submission_id::text)) AS __row_id,
+                'public'::text AS __restriction_tier{extra_select_columns}
             FROM analytics.submission_fact{node_join}{value_join}
             WHERE submission_fact.status = 'submitted'
               AND submission_fact.form_version_id = {}::uuid{group_by}
@@ -1112,7 +1178,8 @@ impl<'a> QuerySpecBuilder<'a> {
         self.ctes.push(format!(
             r#"{cte_name} AS (
             SELECT
-                __row_id{extra_select_columns}
+                __row_id,
+                __restriction_tier{extra_select_columns}
             FROM {schema}.{table}
         )"#,
             schema = quote_identifier(&schema),
@@ -1285,7 +1352,10 @@ impl<'a> QuerySpecBuilder<'a> {
         let mut seen_output_keys = BTreeSet::new();
         let mut seen_input_keys = BTreeSet::new();
         let mut output_fields = Vec::new();
-        let mut select_fields = vec![quote_identifier("__row_id")];
+        let mut select_fields = vec![
+            quote_identifier("__row_id"),
+            quote_identifier("__restriction_tier"),
+        ];
 
         for (index, request) in requests.into_iter().enumerate() {
             require_text("projection field key", &request.key)?;
@@ -1394,7 +1464,7 @@ impl<'a> QuerySpecBuilder<'a> {
             .iter()
             .map(calculated_field_sql)
             .collect::<Vec<_>>();
-        let select_list = ["__row_id"]
+        let select_list = ["__row_id", "__restriction_tier"]
             .into_iter()
             .map(quote_identifier)
             .chain(base_selects)
@@ -1441,7 +1511,7 @@ impl<'a> QuerySpecBuilder<'a> {
             .into_iter()
             .chain(std::iter::once(format!(
                 "{} AS {}",
-                restriction_policy_tier_sql(restriction_policy),
+                effective_restriction_tier_sql(restriction_policy),
                 quote_identifier("__restriction_tier")
             )))
             .chain(field_selects)
@@ -1458,6 +1528,23 @@ impl<'a> QuerySpecBuilder<'a> {
             quote_identifier(&self.current_cte)
         )
     }
+}
+
+fn validate_operation_position(operation: &DatasetOperationRequest, index: usize) -> ApiResult<()> {
+    let expected = index as i32;
+    let actual = match operation {
+        DatasetOperationRequest::AddSource { position, .. }
+        | DatasetOperationRequest::Projection { position, .. }
+        | DatasetOperationRequest::Aggregation { position, .. }
+        | DatasetOperationRequest::CalculatedFields { position, .. }
+        | DatasetOperationRequest::Filter { position, .. } => *position,
+    };
+    if actual != expected {
+        return Err(ApiError::BadRequest(format!(
+            "dataset operation at array index {index} has position {actual}; expected {expected}"
+        )));
+    }
+    Ok(())
 }
 
 fn projection_input_field_key(request: &DatasetProjectionFieldRequest) -> ApiResult<String> {
@@ -1522,11 +1609,18 @@ fn union_field_catalog(
     union_alias: &str,
 ) -> ApiResult<(Vec<ValidatedDatasetField>, Vec<UnionColumnMapping>)> {
     let mut output = left.to_vec();
-    let mut mappings = vec![UnionColumnMapping {
-        output_key: "__row_id".into(),
-        left_key: Some("__row_id".into()),
-        right_key: Some("__row_id".into()),
-    }];
+    let mut mappings = vec![
+        UnionColumnMapping {
+            output_key: "__row_id".into(),
+            left_key: Some("__row_id".into()),
+            right_key: Some("__row_id".into()),
+        },
+        UnionColumnMapping {
+            output_key: "__restriction_tier".into(),
+            left_key: Some("__restriction_tier".into()),
+            right_key: Some("__restriction_tier".into()),
+        },
+    ];
     mappings.extend(left.iter().map(|field| UnionColumnMapping {
         output_key: field.key.clone(),
         left_key: Some(field.key.clone()),
@@ -1734,6 +1828,11 @@ fn aggregation_sql_from_source(
     } else {
         output_selects.join(",\n            ")
     };
+    let restriction_tier_select = format!(
+        "{} AS {}",
+        max_restriction_tier_sql("__restriction_tier"),
+        quote_identifier("__restriction_tier")
+    );
     let group_columns = aggregation
         .group_fields
         .iter()
@@ -1796,6 +1895,7 @@ fn aggregation_sql_from_source(
     format!(
         r#"SELECT
             {row_id} AS __row_id,
+            {restriction_tier_select},
             {field_select}
         FROM {source}{group_by}"#
     )
@@ -1832,10 +1932,56 @@ fn restriction_policy_tier_sql(restriction_policy: &ValidatedRestrictionPolicy) 
 
     format!(
         r#"CASE
-                    WHEN {internal_predicate} THEN 'internal'
-                    WHEN {restricted_predicate} THEN 'restricted'
                     WHEN {confidential_predicate} THEN 'confidential'
+                    WHEN {restricted_predicate} THEN 'restricted'
+                    WHEN {internal_predicate} THEN 'internal'
                     ELSE 'public'
+                END"#
+    )
+}
+
+fn effective_restriction_tier_sql(restriction_policy: &ValidatedRestrictionPolicy) -> String {
+    greatest_restriction_tier_sql(&[
+        quote_identifier("__restriction_tier"),
+        restriction_policy_tier_sql(restriction_policy),
+    ])
+}
+
+fn greatest_restriction_tier_sql(expressions: &[String]) -> String {
+    let rank_args = expressions
+        .iter()
+        .map(|expression| restriction_tier_rank_sql(expression))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!(
+        r#"CASE GREATEST({rank_args})
+                    WHEN 3 THEN 'confidential'
+                    WHEN 2 THEN 'restricted'
+                    WHEN 1 THEN 'internal'
+                    ELSE 'public'
+                END"#
+    )
+}
+
+fn max_restriction_tier_sql(expression: &str) -> String {
+    format!(
+        r#"CASE COALESCE(MAX({}), 0)
+                    WHEN 3 THEN 'confidential'
+                    WHEN 2 THEN 'restricted'
+                    WHEN 1 THEN 'internal'
+                    ELSE 'public'
+                END"#,
+        restriction_tier_rank_sql(expression)
+    )
+}
+
+fn restriction_tier_rank_sql(expression: &str) -> String {
+    format!(
+        r#"CASE {expression}
+                    WHEN 'confidential' THEN 3
+                    WHEN 'restricted' THEN 2
+                    WHEN 'internal' THEN 1
+                    ELSE 0
                 END"#
     )
 }
@@ -3090,8 +3236,8 @@ async fn insert_dataset_revision(
     let revision_id = sqlx::query_scalar(
         r#"
         INSERT INTO dataset_revisions
-            (dataset_id, version_number, version_label, status, published_at, initial_source, operations, restriction_policy, generated_sql)
-        VALUES ($1, $2, $3, 'published'::dataset_revision_status, now(), $4, $5, $6, $7)
+            (dataset_id, version_number, version_label, status, published_at, initial_source, operations, restriction_policy, generated_sql, output_fields)
+        VALUES ($1, $2, $3, 'published'::dataset_revision_status, now(), $4, $5, $6, $7, $8)
         RETURNING id
         "#,
     )
@@ -3121,6 +3267,18 @@ async fn insert_dataset_revision(
             })?,
     )
     .bind(&compiled.generated_sql)
+    .bind(serde_json::to_value(
+        compiled
+            .fields
+            .iter()
+            .map(dataset_field_definition)
+            .collect::<Vec<_>>(),
+    )
+    .map_err(|error| {
+        ApiError::Internal(anyhow::anyhow!(
+            "dataset output fields could not be serialized: {error}"
+        ))
+    })?)
     .fetch_one(&mut **tx)
     .await?;
 
@@ -3177,7 +3335,7 @@ async fn load_dataset_revision_output_fields(
 ) -> ApiResult<Vec<ValidatedDatasetField>> {
     let revision = sqlx::query(
         r#"
-        SELECT dataset_id
+        SELECT dataset_id, output_fields
         FROM dataset_revisions
         WHERE id = $1
         "#,
@@ -3190,6 +3348,30 @@ async fn load_dataset_revision_output_fields(
             "dataset revision {dataset_revision_id} is not available"
         ))
     })?;
+    if let Some(output_fields) =
+        revision.try_get::<Option<serde_json::Value>, _>("output_fields")?
+    {
+        let fields = serde_json::from_value::<Vec<DatasetFieldDefinition>>(output_fields).map_err(
+            |error| {
+                ApiError::Internal(anyhow::anyhow!(
+                    "stored dataset revision output fields are invalid: {error}"
+                ))
+            },
+        )?;
+        return Ok(fields
+            .into_iter()
+            .map(|field| ValidatedDatasetField {
+                id: Some(field.id),
+                key: field.key,
+                label: field.label,
+                source_alias: field.source_alias,
+                source_field_key: field.source_field_key,
+                source_field_id: None,
+                field_type: field.field_type,
+                position: field.position,
+            })
+            .collect());
+    }
     let dataset_id: Uuid = revision.try_get("dataset_id")?;
     let fields = sqlx::query(
         r#"
@@ -3793,6 +3975,95 @@ mod tests {
         }
     }
 
+    fn positioned_operations(
+        operations: Vec<DatasetOperationRequest>,
+    ) -> Vec<DatasetOperationRequest> {
+        operations
+            .into_iter()
+            .enumerate()
+            .map(|(index, operation)| operation_with_position(operation, index as i32))
+            .collect()
+    }
+
+    fn operation_with_position(
+        operation: DatasetOperationRequest,
+        position: i32,
+    ) -> DatasetOperationRequest {
+        match operation {
+            DatasetOperationRequest::AddSource {
+                source,
+                add_type,
+                join_keys,
+                ..
+            } => DatasetOperationRequest::AddSource {
+                source,
+                add_type,
+                join_keys,
+                position,
+            },
+            DatasetOperationRequest::Projection { fields, .. } => {
+                DatasetOperationRequest::Projection { fields, position }
+            }
+            DatasetOperationRequest::Aggregation {
+                group_fields,
+                metrics,
+                row_picker,
+                ..
+            } => DatasetOperationRequest::Aggregation {
+                group_fields,
+                metrics,
+                row_picker,
+                position,
+            },
+            DatasetOperationRequest::CalculatedFields { fields, .. } => {
+                DatasetOperationRequest::CalculatedFields { fields, position }
+            }
+            DatasetOperationRequest::Filter { filters, .. } => {
+                DatasetOperationRequest::Filter { filters, position }
+            }
+        }
+    }
+
+    #[test]
+    fn restriction_policy_uses_most_sensitive_matching_flag() {
+        let policy = ValidatedRestrictionPolicy {
+            internal_field_key: Some("is_internal".into()),
+            restricted_field_key: Some("is_restricted".into()),
+            confidential_field_key: Some("is_confidential".into()),
+        };
+
+        let sql = restriction_policy_tier_sql(&policy);
+        let confidential = sql.find("confidential").expect("confidential branch");
+        let restricted = sql.find("restricted").expect("restricted branch");
+        let internal = sql.find("internal").expect("internal branch");
+
+        assert!(confidential < restricted);
+        assert!(restricted < internal);
+    }
+
+    #[test]
+    fn effective_restriction_tier_preserves_upstream_dataset_tier() {
+        let policy = ValidatedRestrictionPolicy::default();
+
+        let sql = effective_restriction_tier_sql(&policy);
+
+        assert!(sql.contains("GREATEST"));
+        assert!(sql.contains("\"__restriction_tier\""));
+        assert!(sql.contains("WHEN 'confidential' THEN 3"));
+    }
+
+    #[test]
+    fn operation_positions_must_match_array_order() {
+        let operation =
+            operation_with_position(projection_operation(vec![projection_field("a", "a")]), 3);
+
+        let error = validate_operation_position(&operation, 0)
+            .expect_err("operation position mismatch should fail")
+            .to_string();
+
+        assert!(error.contains("array index 0 has position 3; expected 0"));
+    }
+
     #[test]
     fn date_calculation_comparison_uses_field_argument_and_date_casts() {
         let function = ValidatedCalculationFunction {
@@ -4188,7 +4459,7 @@ mod tests {
             1,
         );
 
-        spec.apply_operations(&[
+        spec.apply_operations(&positioned_operations(vec![
             projection_operation(vec![projection_field("a", "a")]),
             calculated_field_operation("a_plus_one", "a", "add", Some("1")),
             filter_operation("a_plus_one", "greater_than", Some("1")),
@@ -4197,7 +4468,7 @@ mod tests {
             filter_operation("renamed_a_plus_one", "less_than_or_equal", Some("10")),
             count_rows_aggregation_operation("row_count"),
             calculated_field_operation("row_count_plus_one", "row_count", "add", Some("1")),
-        ])
+        ]))
         .await
         .expect("repeated operations should validate");
         let sql = spec.final_sql(&ValidatedRestrictionPolicy::default());
@@ -4247,10 +4518,10 @@ mod tests {
         );
 
         let error = spec
-            .apply_operations(&[
+            .apply_operations(&positioned_operations(vec![
                 projection_operation(vec![projection_field("kept", "kept")]),
                 filter_operation("removed", "is_not_empty", None),
-            ])
+            ]))
             .await
             .expect_err("removed field should not be available after projection")
             .to_string();
@@ -4267,7 +4538,7 @@ mod tests {
             1,
         );
 
-        spec.apply_operations(&[
+        spec.apply_operations(&positioned_operations(vec![
             projection_operation(vec![projection_field("score", "score")]),
             calculated_field_operation("score_plus_one", "score", "add", Some("1")),
             calculated_field_operation(
@@ -4287,9 +4558,9 @@ mod tests {
                     position: 0,
                 }],
                 row_picker: None,
-                position: 3,
+                position: 0,
             },
-        ])
+        ]))
         .await
         .expect("calculated field types should feed later validation");
 
@@ -4349,13 +4620,13 @@ mod tests {
             1,
         );
 
-        spec.apply_operations(&[
+        spec.apply_operations(&positioned_operations(vec![
             projection_operation(vec![
                 projection_field("title", "title"),
                 projection_field("internal_flag", "internal_flag"),
             ]),
             filter_operation("title", "contains", Some("Ready")),
-        ])
+        ]))
         .await
         .expect("restriction source field should remain available after final operation");
         let sql = spec.final_sql(&ValidatedRestrictionPolicy {
@@ -4366,7 +4637,9 @@ mod tests {
 
         assert!(
             sql.find("filtered_fields_3 AS").expect("filter cte")
-                < sql.find("__restriction_tier").expect("restriction select")
+                < sql
+                    .rfind("FROM \"filtered_fields_3\"")
+                    .expect("final filtered source")
         );
         assert!(sql.contains("WHEN LOWER(COALESCE(\"internal_flag\", '')) IN"));
         assert!(sql.contains("\"internal_flag\""));

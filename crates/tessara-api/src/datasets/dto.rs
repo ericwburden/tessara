@@ -198,6 +198,8 @@ pub struct DatasetSummary {
     pub(crate) visibility_nodes: Vec<DatasetVisibilityNodeSummary>,
     pub(crate) source_count: i64,
     pub(crate) field_count: i64,
+    pub(crate) output_fields: Vec<DatasetFieldDefinition>,
+    pub(crate) revisions: Vec<DatasetRevisionFieldSummary>,
 }
 
 /// Dataset detail with the current revision's sources and fields.
@@ -232,6 +234,13 @@ pub struct DatasetVisibilityNodeSummary {
     pub(crate) node_path: String,
 }
 
+/// Output-field snapshot for one dataset revision.
+#[derive(Clone, Serialize)]
+pub struct DatasetRevisionFieldSummary {
+    pub(crate) id: Uuid,
+    pub(crate) output_fields: Vec<DatasetFieldDefinition>,
+}
+
 /// Source definition included in a dataset revision.
 #[derive(Serialize)]
 pub struct DatasetSourceDefinition {
@@ -245,7 +254,7 @@ pub struct DatasetSourceDefinition {
 }
 
 /// Exposed field definition included in a dataset revision.
-#[derive(Clone, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct DatasetFieldDefinition {
     pub(crate) id: Uuid,
     pub(crate) key: String,

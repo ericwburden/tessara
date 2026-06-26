@@ -528,11 +528,12 @@ fn filter_value_options(
         return sorted_unique_options(users.iter().map(|user| user.display_name.clone()).collect());
     }
     let sources = [initial_source.clone()];
-    let mut options = source_field_options(&sources, forms, rendered_forms, &field.source_alias)
-        .into_iter()
-        .find(|option| option.key == field.source_field_key)
-        .map(|option| option.value_options)
-        .unwrap_or_default();
+    let mut options =
+        source_field_options(&sources, &[], forms, rendered_forms, &field.source_alias)
+            .into_iter()
+            .find(|option| option.key == field.source_field_key)
+            .map(|option| option.value_options)
+            .unwrap_or_default();
     options.sort();
     options.dedup();
     options

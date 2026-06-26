@@ -21,6 +21,10 @@ pub(in crate::features::datasets) struct DatasetSummary {
     pub(in crate::features::datasets) visibility_nodes: Vec<DatasetVisibilityNode>,
     pub(in crate::features::datasets) source_count: i64,
     pub(in crate::features::datasets) field_count: i64,
+    #[serde(default)]
+    pub(in crate::features::datasets) output_fields: Vec<DatasetFieldDefinition>,
+    #[serde(default)]
+    pub(in crate::features::datasets) revisions: Vec<DatasetRevisionFieldSummary>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -51,6 +55,13 @@ pub(in crate::features::datasets) struct DatasetVisibilityNode {
     pub(in crate::features::datasets) node_type_name: String,
     pub(in crate::features::datasets) parent_node_id: Option<String>,
     pub(in crate::features::datasets) node_path: String,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub(in crate::features::datasets) struct DatasetRevisionFieldSummary {
+    pub(in crate::features::datasets) id: String,
+    #[serde(default)]
+    pub(in crate::features::datasets) output_fields: Vec<DatasetFieldDefinition>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]

@@ -246,6 +246,7 @@ fn operation_body(
             let operation_fields = Memo::new(move |_| {
                 catalog_before_operation_id(
                     initial_source.get(),
+                    datasets.get(),
                     forms.get(),
                     rendered_forms.get(),
                     operation_order.get(),
@@ -281,6 +282,7 @@ fn operation_body(
             let operation_fields = Signal::derive(move || {
                 catalog_before_operation_id(
                     initial_source.get(),
+                    datasets.get(),
                     forms.get(),
                     rendered_forms.get(),
                     operation_order.get(),
@@ -305,6 +307,7 @@ fn operation_body(
             let operation_fields = Signal::derive(move || {
                 catalog_before_operation_id(
                     initial_source.get(),
+                    datasets.get(),
                     forms.get(),
                     rendered_forms.get(),
                     operation_order.get(),
@@ -329,6 +332,7 @@ fn operation_body(
             let operation_fields = Signal::derive(move || {
                 catalog_before_operation_id(
                     initial_source.get(),
+                    datasets.get(),
                     forms.get(),
                     rendered_forms.get(),
                     operation_order.get(),
@@ -380,11 +384,14 @@ fn source_add_body(
     let source_options_for_select = operation_source;
     let forms_for_source_options = forms;
     let forms_for_source_fields = forms;
+    let datasets_for_current_fields = datasets;
+    let datasets_for_source_fields = datasets;
     let rendered_forms_for_source_options = rendered_forms;
     let rendered_forms_for_source_fields = rendered_forms;
     let current_fields = Signal::derive(move || {
         catalog_before_operation_id(
             initial_source.get(),
+            datasets_for_current_fields.get(),
             forms.get(),
             rendered_forms.get(),
             operation_order.get(),
@@ -502,6 +509,7 @@ fn source_add_body(
                             {move || {
                                 source_fields_for_source(
                                     &source_options_for_select.get(),
+                                    &datasets_for_source_fields.get(),
                                     &forms_for_source_fields.get(),
                                     &rendered_forms_for_source_fields.get(),
                                 ).into_iter().map(|field| {
@@ -924,12 +932,14 @@ fn field_sort_group(field: &DatasetFieldDraft) -> u8 {
 
 fn catalog_before_operation_id(
     initial_source: DatasetSourceDraft,
+    datasets: Vec<DatasetSummary>,
     forms: Vec<DatasetFormOption>,
     rendered_forms: BTreeMap<String, DatasetRenderedForm>,
     operation_order: Vec<DatasetOperationDraft>,
     target_id: u64,
 ) -> Vec<DatasetFieldDraft> {
-    let mut current_fields = source_catalog_for_initial(&initial_source, &forms, &rendered_forms);
+    let mut current_fields =
+        source_catalog_for_initial(&initial_source, &datasets, &forms, &rendered_forms);
 
     for (operation_index, operation) in operation_order.into_iter().enumerate() {
         if operation.id == target_id {
@@ -940,6 +950,7 @@ fn catalog_before_operation_id(
             current_fields,
             operation,
             operation_index + 1,
+            &datasets,
             &forms,
             &rendered_forms,
         );
@@ -950,16 +961,19 @@ fn catalog_before_operation_id(
 
 pub(super) fn catalog_after_operations(
     initial_source: DatasetSourceDraft,
+    datasets: Vec<DatasetSummary>,
     forms: Vec<DatasetFormOption>,
     rendered_forms: BTreeMap<String, DatasetRenderedForm>,
     operation_order: Vec<DatasetOperationDraft>,
 ) -> Vec<DatasetFieldDraft> {
-    let mut current_fields = source_catalog_for_initial(&initial_source, &forms, &rendered_forms);
+    let mut current_fields =
+        source_catalog_for_initial(&initial_source, &datasets, &forms, &rendered_forms);
     for (operation_index, operation) in operation_order.into_iter().enumerate() {
         current_fields = apply_operation_to_catalog(
             current_fields,
             operation,
             operation_index + 1,
+            &datasets,
             &forms,
             &rendered_forms,
         );
@@ -971,17 +985,20 @@ fn apply_operation_to_catalog(
     mut current_fields: Vec<DatasetFieldDraft>,
     operation: DatasetOperationDraft,
     operation_position: usize,
+    datasets: &[DatasetSummary],
     forms: &[DatasetFormOption],
     rendered_forms: &BTreeMap<String, DatasetRenderedForm>,
 ) -> Vec<DatasetFieldDraft> {
     match operation.kind {
         DatasetOperationDraftKind::AddSource if source_add_type_is_join(&operation.add_type) => {
-            let source_fields = source_catalog_for_operation(&operation, forms, rendered_forms);
+            let source_fields =
+                source_catalog_for_operation(&operation, datasets, forms, rendered_forms);
             extend_catalog(&mut current_fields, source_fields);
             current_fields
         }
         DatasetOperationDraftKind::AddSource => {
-            let source_fields = source_catalog_for_operation(&operation, forms, rendered_forms);
+            let source_fields =
+                source_catalog_for_operation(&operation, datasets, forms, rendered_forms);
             merge_union_catalog(current_fields, source_fields, operation_position)
         }
         DatasetOperationDraftKind::Projection => {
@@ -999,21 +1016,23 @@ fn apply_operation_to_catalog(
 
 fn source_catalog_for_initial(
     initial_source: &DatasetSourceDraft,
+    datasets: &[DatasetSummary],
     forms: &[DatasetFormOption],
     rendered_forms: &BTreeMap<String, DatasetRenderedForm>,
 ) -> Vec<DatasetFieldDraft> {
-    source_fields_for_source(initial_source, forms, rendered_forms)
+    source_fields_for_source(initial_source, datasets, forms, rendered_forms)
 }
 
 fn source_catalog_for_operation(
     operation: &DatasetOperationDraft,
+    datasets: &[DatasetSummary],
     forms: &[DatasetFormOption],
     rendered_forms: &BTreeMap<String, DatasetRenderedForm>,
 ) -> Vec<DatasetFieldDraft> {
     operation
         .source
         .as_ref()
-        .map(|source| source_fields_for_source(source, forms, rendered_forms))
+        .map(|source| source_fields_for_source(source, datasets, forms, rendered_forms))
         .unwrap_or_default()
 }
 
@@ -1115,20 +1134,27 @@ fn projection_input_key(field: &DatasetFieldDraft) -> String {
 
 fn source_fields_for_source(
     source: &DatasetSourceDraft,
+    datasets: &[DatasetSummary],
     forms: &[DatasetFormOption],
     rendered_forms: &BTreeMap<String, DatasetRenderedForm>,
 ) -> Vec<DatasetFieldDraft> {
     let sources = vec![source.clone()];
-    let fields = source_field_options(&sources, forms, rendered_forms, &source.source_alias)
-        .into_iter()
-        .map(|field| DatasetFieldDraft {
-            key: canonical_field_key(&source.source_alias, &field.key),
-            label: field.label,
-            source_alias: source.source_alias.clone(),
-            source_field_key: field.key,
-            field_type: field.field_type,
-        })
-        .collect::<Vec<_>>();
+    let fields = source_field_options(
+        &sources,
+        datasets,
+        forms,
+        rendered_forms,
+        &source.source_alias,
+    )
+    .into_iter()
+    .map(|field| DatasetFieldDraft {
+        key: canonical_field_key(&source.source_alias, &field.key),
+        label: field.label,
+        source_alias: source.source_alias.clone(),
+        source_field_key: field.key,
+        field_type: field.field_type,
+    })
+    .collect::<Vec<_>>();
     sorted_fields(fields)
 }
 
@@ -1136,9 +1162,9 @@ fn source_fields_for_source(
 mod tests {
     use super::*;
     use crate::features::datasets::types::{
-        DatasetAggregationMetricDraft, DatasetCalculationFunctionDraft, DatasetFormVersionOption,
-        DatasetRenderedField, DatasetRenderedSection, DatasetRowPickerDraft,
-        DatasetRowPickerSortDraft,
+        DatasetAggregationMetricDraft, DatasetCalculationFunctionDraft, DatasetFieldDefinition,
+        DatasetFormVersionOption, DatasetRenderedField, DatasetRenderedSection,
+        DatasetRowPickerDraft, DatasetRowPickerSortDraft,
     };
 
     fn form_option(form_id: &str, version_id: &str) -> DatasetFormOption {
@@ -1186,6 +1212,57 @@ mod tests {
             form_version_id: version_id.into(),
             dataset_id: String::new(),
             dataset_revision_id: String::new(),
+        }
+    }
+
+    fn dataset_source(alias: &str, dataset_id: &str, revision_id: &str) -> DatasetSourceDraft {
+        DatasetSourceDraft {
+            input_kind: "dataset".into(),
+            source_alias: alias.into(),
+            form_id: String::new(),
+            form_version_id: String::new(),
+            dataset_id: dataset_id.into(),
+            dataset_revision_id: revision_id.into(),
+        }
+    }
+
+    fn dataset_summary(
+        dataset_id: &str,
+        revision_id: &str,
+        fields: Vec<(&str, &str, &str)>,
+    ) -> DatasetSummary {
+        let output_fields = fields
+            .into_iter()
+            .enumerate()
+            .map(
+                |(position, (key, label, field_type))| DatasetFieldDefinition {
+                    key: key.into(),
+                    label: label.into(),
+                    source_alias: "source_1".into(),
+                    source_field_key: key.into(),
+                    field_type: field_type.into(),
+                    position: position as i32,
+                },
+            )
+            .collect::<Vec<_>>();
+        DatasetSummary {
+            id: dataset_id.into(),
+            current_revision_id: Some(revision_id.into()),
+            name: dataset_id.into(),
+            slug: dataset_id.into(),
+            grain: "submission".into(),
+            materialized_row_count: Some(0),
+            materialized_at: None,
+            visibility_nodes: Vec::new(),
+            source_count: 1,
+            field_count: output_fields.len() as i64,
+            output_fields: output_fields.clone(),
+            revisions: vec![
+                crate::features::datasets::types::DatasetRevisionFieldSummary {
+                    id: revision_id.into(),
+                    output_fields,
+                },
+            ],
         }
     }
 
@@ -1272,10 +1349,60 @@ mod tests {
         let initial_source = DatasetSourceDraft::default();
         let projection = DatasetOperationDraft::new(1, DatasetOperationDraftKind::Projection);
 
-        let before_projection =
-            catalog_before_operation_id(initial_source, forms, rendered_forms, vec![projection], 1);
+        let before_projection = catalog_before_operation_id(
+            initial_source,
+            Vec::new(),
+            forms,
+            rendered_forms,
+            vec![projection],
+            1,
+        );
 
         assert!(before_projection.is_empty());
+    }
+
+    #[test]
+    fn dataset_source_catalog_uses_selected_revision_output_fields() {
+        let source = dataset_source("upstream", "dataset_1", "revision_1");
+        let mut dataset = dataset_summary(
+            "dataset_1",
+            "revision_2",
+            vec![("source_1__current_only", "Current Only", "text")],
+        );
+        dataset.revisions.push(
+            crate::features::datasets::types::DatasetRevisionFieldSummary {
+                id: "revision_1".into(),
+                output_fields: vec![
+                    DatasetFieldDefinition {
+                        key: "source_1__focus_tags".into(),
+                        label: "Focus Tags".into(),
+                        source_alias: "source_1".into(),
+                        source_field_key: "source_1__focus_tags".into(),
+                        field_type: "multi_choice".into(),
+                        position: 0,
+                    },
+                    DatasetFieldDefinition {
+                        key: "source_1__submitted_at".into(),
+                        label: "Submitted Date".into(),
+                        source_alias: "source_1".into(),
+                        source_field_key: "source_1__submitted_at".into(),
+                        field_type: "date".into(),
+                        position: 1,
+                    },
+                ],
+            },
+        );
+        let datasets = vec![dataset];
+
+        let fields = source_fields_for_source(&source, &datasets, &[], &BTreeMap::new());
+
+        assert_eq!(
+            field_keys(fields),
+            vec![
+                "upstream__source_1__focus_tags".to_string(),
+                "upstream__source_1__submitted_at".to_string(),
+            ]
+        );
     }
 
     fn projection_field(key: &str, source_field_key: &str, field_type: &str) -> DatasetFieldDraft {
@@ -1363,6 +1490,7 @@ mod tests {
 
         let before_projection = field_keys(catalog_before_operation_id(
             initial_source.clone(),
+            Vec::new(),
             forms.clone(),
             rendered_forms.clone(),
             operations.clone(),
@@ -1373,6 +1501,7 @@ mod tests {
 
         let before_union = field_keys(catalog_before_operation_id(
             initial_source.clone(),
+            Vec::new(),
             forms.clone(),
             rendered_forms.clone(),
             operations.clone(),
@@ -1382,6 +1511,7 @@ mod tests {
 
         let before_filter = field_keys(catalog_before_operation_id(
             initial_source,
+            Vec::new(),
             forms,
             rendered_forms,
             operations,
@@ -1413,6 +1543,7 @@ mod tests {
 
         let keys = field_keys(catalog_after_operations(
             initial_source,
+            Vec::new(),
             forms,
             rendered_forms,
             vec![calculation],

@@ -26,6 +26,7 @@ pub(crate) fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView 
     let final_fields = Signal::derive(move || {
         catalog_after_operations(
             state.initial_source.get(),
+            state.datasets.get(),
             state.forms.get(),
             state.rendered_forms.get(),
             state.operation_order.get(),

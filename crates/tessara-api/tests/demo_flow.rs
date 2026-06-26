@@ -520,12 +520,12 @@ async fn dataset_advanced_authoring_compiles_typed_fields_and_restriction_preced
     assert!(preview_sql.contains("snot"));
     assert!(
         preview_sql
-            .find("\"internal_flag\"")
-            .expect("internal flag tier branch")
+            .find("\"restricted_flag\"")
+            .expect("restricted flag tier branch")
             < preview_sql
-                .find("\"restricted_flag\"")
-                .expect("restricted flag tier branch"),
-        "internal tier should be evaluated before restricted when multiple flags are true"
+                .find("\"internal_flag\"")
+                .expect("internal flag tier branch"),
+        "the more sensitive restricted tier should be evaluated before internal when multiple flags are true"
     );
 
     let created = request_json(
@@ -609,13 +609,13 @@ async fn dataset_advanced_authoring_compiles_typed_fields_and_restriction_preced
         ),
     )
     .await;
-    assert_eq!(
+    assert!(
         operator_table["rows"]
             .as_array()
             .expect("operator rows")
-            .len(),
-        admin_rows.len(),
-        "internal flag should win over restricted when both boolean flags are true"
+            .len()
+            < admin_rows.len(),
+        "restricted flag should win over internal when both boolean flags are true"
     );
 
     let mut invalid_function_payload = payload.clone();
@@ -1148,14 +1148,14 @@ async fn admin_dataset_query_designer_materializes_generated_sql() {
                 "source_alias": "restricted_source",
                 "source_field_key": field_key,
                 "position": 1
-            }]), 0),
+            }]), 1),
             aggregation_operation(json!([]), json!([{
                 "key": "mixed_count",
                 "label": "Mixed Count",
                 "function": "count_rows",
                 "source_field_key": null,
                 "position": 0
-            }]), Value::Null, 1)
+            }]), Value::Null, 2)
         ]
     });
     let mixed_preview = request_json(
@@ -1172,7 +1172,7 @@ async fn admin_dataset_query_designer_materializes_generated_sql() {
         .as_str()
         .expect("mixed aggregation generated SQL");
     assert!(!mixed_sql.contains("__source_restriction_rank"));
-    assert!(!mixed_sql.contains("GREATEST("));
+    assert!(mixed_sql.contains("GREATEST("));
     let mixed_created = request_json(
         app.clone(),
         authorized_request(
@@ -1218,8 +1218,8 @@ async fn admin_dataset_query_designer_materializes_generated_sql() {
             .as_array()
             .expect("mixed operator rows")
             .len(),
-        1,
-        "mixed-source aggregates are public unless the author adds an explicit terminal restriction policy"
+        0,
+        "mixed-source aggregates inherit the most sensitive upstream restriction tier"
     );
     let respondent_token = login_token_for(
         app.clone(),
