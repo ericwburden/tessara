@@ -1126,7 +1126,8 @@ async fn admin_dataset_query_designer_materializes_generated_sql() {
         },
         "operations": [
             {
-                "kind": "union_all_source",
+                "kind": "add_source",
+                "add_type": "union_all",
                 "source": {
                     "kind": "dataset",
                     "alias": "restricted_source",
@@ -1499,8 +1500,8 @@ async fn admin_dataset_query_designer_materializes_generated_sql() {
         },
         "operations": [
             {
-                "kind": "join_source",
-                "operation": "inner_join",
+                "kind": "add_source",
+                "add_type": "inner_join",
                 "source": {
                     "kind": "form",
                     "alias": "right_form",

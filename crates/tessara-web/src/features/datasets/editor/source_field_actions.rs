@@ -170,7 +170,8 @@ mod tests {
         let mut operations = vec![
             {
                 let mut operation =
-                    DatasetOperationDraft::new(1, DatasetOperationDraftKind::JoinSource);
+                    DatasetOperationDraft::new(1, DatasetOperationDraftKind::AddSource);
+                operation.add_type = "left_join".into();
                 operation.left_field_key = "program__node_id".into();
                 operation.right_field_key = "source_2__node_id".into();
                 operation

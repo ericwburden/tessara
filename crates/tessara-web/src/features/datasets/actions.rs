@@ -94,7 +94,6 @@ pub(super) fn preview_dataset_sql(
 ) {
     leptos::task::spawn_local(async move {
         sql_preview_error.set(None);
-        sql_preview.set(None);
         let payload = match dataset_payload_from_drafts(DatasetPayloadDrafts {
             name,
             slug,

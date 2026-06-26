@@ -427,10 +427,22 @@ fn projection_option_groups(
             .or_default()
             .push(field);
     }
-    groups
+    let mut groups = groups
         .into_iter()
         .map(|(label, fields)| ProjectionFieldGroup { label, fields })
-        .collect()
+        .collect::<Vec<_>>();
+    groups.sort_by(|left, right| {
+        projection_source_group_sort_key(&left.label)
+            .cmp(&projection_source_group_sort_key(&right.label))
+    });
+    groups
+}
+
+fn projection_source_group_sort_key(label: &str) -> (u8, &str) {
+    match label {
+        "calculated" | "aggregation" => (1, label),
+        _ => (0, label),
+    }
 }
 
 fn include_all_projection_fields(
@@ -581,7 +593,10 @@ fn sorted_projection_fields(mut fields: Vec<DatasetFieldDraft>) -> Vec<DatasetFi
     fields.sort_by(|left, right| {
         projection_field_group(left)
             .cmp(&projection_field_group(right))
-            .then_with(|| left.source_alias.cmp(&right.source_alias))
+            .then_with(|| {
+                projection_source_group_sort_key(&left.source_alias)
+                    .cmp(&projection_source_group_sort_key(&right.source_alias))
+            })
             .then_with(|| left.key.cmp(&right.key))
     });
     fields

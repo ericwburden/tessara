@@ -2,15 +2,15 @@
 //!
 //! This module owns loading, providing, reading, and clearing the current account summary used by the application shell.
 
-#[cfg(feature = "hydrate")]
+#[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
 use crate::features::auth;
 use crate::features::auth::ShellAccountSummary;
 #[cfg(feature = "hydrate")]
 use leptos::context::{provide_context, use_context};
 use leptos::prelude::RwSignal;
-#[cfg(feature = "hydrate")]
+#[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
 use leptos::prelude::Set;
-#[cfg(feature = "hydrate")]
+#[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
 use leptos::task::spawn_local;
 
 #[cfg(feature = "hydrate")]
@@ -44,7 +44,7 @@ pub(crate) fn provide_shell_session() -> RwSignal<Option<ShellAccountSummary>> {
     RwSignal::new(None)
 }
 
-#[cfg(feature = "hydrate")]
+#[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
 /// Loads the load shell account data.
 pub(crate) fn load_shell_account(account: RwSignal<Option<ShellAccountSummary>>) {
     spawn_local(async move {
@@ -58,14 +58,14 @@ pub(crate) fn load_shell_account(account: RwSignal<Option<ShellAccountSummary>>)
     });
 }
 
-#[cfg(not(feature = "hydrate"))]
+#[cfg(not(all(feature = "hydrate", target_arch = "wasm32")))]
 #[allow(dead_code)]
 /// Loads the load shell account data.
 pub(crate) fn load_shell_account(account: RwSignal<Option<ShellAccountSummary>>) {
     let _ = account;
 }
 
-#[cfg(feature = "hydrate")]
+#[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
 /// Submits the submit logout request.
 pub(crate) fn submit_logout() {
     spawn_local(async move {
@@ -77,6 +77,6 @@ pub(crate) fn submit_logout() {
     });
 }
 
-#[cfg(not(feature = "hydrate"))]
+#[cfg(not(all(feature = "hydrate", target_arch = "wasm32")))]
 /// Submits the submit logout request.
 pub(crate) fn submit_logout() {}

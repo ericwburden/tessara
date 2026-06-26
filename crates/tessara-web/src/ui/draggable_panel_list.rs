@@ -436,3 +436,39 @@ fn generated_draggable_panel_list_id() -> String {
     let id = NEXT_DRAGGABLE_PANEL_LIST_ID.fetch_add(1, Ordering::Relaxed);
     format!("draggable-panel-list-{id}")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn item(id: &str) -> DraggablePanelListItem {
+        DraggablePanelListItem { id: id.into() }
+    }
+
+    #[test]
+    fn anchor_before_first_item_is_start() {
+        let items = vec![item("one"), item("two"), item("three")];
+
+        assert_eq!(
+            anchor_before_item(&items, "one"),
+            Some(DraggablePanelListAnchor::Start)
+        );
+    }
+
+    #[test]
+    fn anchor_before_later_item_is_after_previous_item() {
+        let items = vec![item("one"), item("two"), item("three")];
+
+        assert_eq!(
+            anchor_before_item(&items, "three"),
+            Some(DraggablePanelListAnchor::After("two".into()))
+        );
+    }
+
+    #[test]
+    fn anchor_before_missing_item_is_none() {
+        let items = vec![item("one"), item("two")];
+
+        assert_eq!(anchor_before_item(&items, "missing"), None);
+    }
+}

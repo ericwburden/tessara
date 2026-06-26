@@ -139,20 +139,10 @@ type DatasetRowFilterPayload = {
 
 type DatasetOperation =
   | {
-      kind: "join_source";
+      kind: "add_source";
       source: DatasetSourcePayload;
-      operation: string;
-      join_keys: Array<{ left_field: string; right_field: string }>;
-      position: number;
-    }
-  | {
-      kind: "union_source";
-      source: DatasetSourcePayload;
-      position: number;
-    }
-  | {
-      kind: "union_all_source";
-      source: DatasetSourcePayload;
+      add_type: "union" | "union_all" | "left_join" | "inner_join" | "outer_join";
+      join_keys?: Array<{ left_field: string; right_field: string }>;
       position: number;
     }
   | {
@@ -1209,14 +1199,14 @@ test("dataset SQL preview uses pre-projection join keys and stable field identit
         },
         operations: [
           {
-            kind: "join_source",
+            kind: "add_source",
             source: {
               kind: "form",
               alias: "right_source",
               form_id: seed.form_id,
               form_version_id: seed.form_version_id,
             },
-            operation: "inner_join",
+            add_type: "inner_join",
             join_keys: [
               {
                 left_field: sourceFieldKey("left_source", "__node_id"),
@@ -1391,6 +1381,71 @@ test("dataset SQL preview renders ordered QuerySpec operations as sequential CTE
   expect(sql.indexOf("__restriction_tier")).toBeGreaterThan(finalProjectionStart);
   expect(sql).toContain('FROM "projection_6"');
 });
+
+test("dataset SQL preview merges unioned source fields under the union step alias", async ({
+  page,
+}) => {
+  await signInAsAdmin(page);
+  const seed = await seedDemo(page);
+  const renderedForm = await expectJson<RenderedForm>(
+    await page.request.get(`/api/form-versions/${seed.form_version_id}/render`),
+  );
+  const formFields = renderedFields(renderedForm);
+  const textField = requireRenderedField(
+    formFields,
+    (candidate) => candidate.field_type === "text",
+    "text field for union source merge preview",
+  );
+  const unionFieldKey = sourceFieldKey("union_1", textField.key);
+
+  const preview = await expectJson<DatasetSqlPreview>(
+    await page.request.post("/api/admin/datasets/sql-preview", {
+      data: {
+        name: "Playwright Union Merge Dataset",
+        slug: `${PW_DATASET_PREFIX}union-merge`,
+        grain: "submission",
+        visibility_node_ids: [seed.program_node_id],
+        initial_source: {
+          kind: "form",
+          alias: "source_1",
+          form_id: seed.form_id,
+          form_version_id: seed.form_version_id,
+        },
+        operations: [
+          {
+            kind: "add_source",
+            source: {
+              kind: "form",
+              alias: "source_2",
+              form_id: seed.form_id,
+              form_version_id: seed.form_version_id,
+            },
+            add_type: "union_all",
+            position: 0,
+          },
+          projectionOperation(
+            [
+              {
+                key: unionFieldKey,
+                label: textField.label,
+                input_field_key: unionFieldKey,
+                position: 0,
+              },
+            ],
+            1,
+          ),
+        ],
+      },
+    }),
+  );
+
+  const sql = preview.generated_sql;
+  expect(sql).toContain("UNION ALL");
+  expect(sql).toContain(`AS "${unionFieldKey}"`);
+  expect(sql).toContain(`"source_1__${textField.key}" AS "${unionFieldKey}"`);
+  expect(sql).toContain(`"source_2__${textField.key}" AS "${unionFieldKey}"`);
+});
+
 test("dataset operations keep operation-local state through reorder, save, and reload", async ({
   page,
 }) => {

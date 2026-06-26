@@ -1,5 +1,12 @@
 # Progress Report
 
+## 2026-06-26 - Sprint 3C Dataset Authoring Refactor Checkpoint
+
+- Unified the dataset editor source-composition UI around one Add Source operation draft with an Add Type selector for Union, Union All, Left Join, Inner Join, and Outer Join.
+- Unified backend and web source-composition contracts around `add_source`, with `add_type`, source, join keys, and position carrying Union, Union All, Left Join, Inner Join, and Outer Join behavior.
+- Removed the legacy source-composition operation variants from backend DTOs, web payload contracts, editor loading, API fixtures, and Playwright request fixtures so active callers use `add_source` directly.
+- Sprint closeout gate: run full validation and confirm stored revision compatibility/migration against the unified `add_source` contract before Sprint 3C can close.
+
 ## 2026-06-19 - Sprint 3B Dataset Advanced Authoring Closeout
 
 - Completed:

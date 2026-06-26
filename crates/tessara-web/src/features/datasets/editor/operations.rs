@@ -93,7 +93,7 @@ pub(crate) fn DatasetOperationSequence(
                 .into_any()
             })
             on_move=Callback::new(move |move_event: DraggablePanelListMove| {
-                if let Some(dragged_id) = move_event.dragged_id.parse::<u64>().ok() {
+                if let Ok(dragged_id) = move_event.dragged_id.parse::<u64>() {
                     move_operation_to_anchor(operation_order, dragged_id, move_event.anchor);
                 }
             })
@@ -234,7 +234,7 @@ fn operation_body(
     projection_active_source_tabs: RwSignal<BTreeMap<u64, String>>,
 ) -> AnyView {
     match kind {
-        DatasetOperationDraftKind::JoinSource => source_join_body(
+        DatasetOperationDraftKind::AddSource => source_add_body(
             operation_id,
             operation_order,
             initial_source,
@@ -242,15 +242,6 @@ fn operation_body(
             datasets,
             rendered_forms,
         ),
-        DatasetOperationDraftKind::UnionSource | DatasetOperationDraftKind::UnionAllSource => {
-            source_union_body(
-                operation_id,
-                operation_order,
-                forms,
-                datasets,
-                rendered_forms,
-            )
-        }
         DatasetOperationDraftKind::Projection => {
             let operation_fields = Memo::new(move |_| {
                 catalog_before_operation_id(
@@ -367,84 +358,7 @@ fn operation_body(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn source_union_body(
-    operation_id: u64,
-    operation_order: RwSignal<Vec<DatasetOperationDraft>>,
-    forms: RwSignal<Vec<DatasetFormOption>>,
-    datasets: RwSignal<Vec<DatasetSummary>>,
-    rendered_forms: RwSignal<BTreeMap<String, DatasetRenderedForm>>,
-) -> AnyView {
-    let operation_source = operation_source(operation_order, operation_id);
-    let union_mode = Signal::derive(move || {
-        operation_order
-            .get()
-            .into_iter()
-            .find(|operation| operation.id == operation_id)
-            .map(|operation| {
-                if operation.kind == DatasetOperationDraftKind::UnionAllSource {
-                    "union_all".to_string()
-                } else {
-                    "union".to_string()
-                }
-            })
-            .unwrap_or_else(|| "union".into())
-    });
-
-    view! {
-        <div class="dataset-operation-panel__source">
-            <div class="dataset-operation-toggle-row">
-                <span class="dataset-operation-toggle-row__label">"Union mode"</span>
-                <SegmentedToggle
-                    active=union_mode
-                    aria_label="Union mode"
-                    class="segmented-toggle--binary"
-                    options=vec![
-                        SegmentedToggleOption { value: "union", label: "Union" },
-                        SegmentedToggleOption { value: "union_all", label: "Union All" },
-                    ]
-                    on_select=Callback::new(move |mode: String| {
-                        operation_order.update(|operations| {
-                            if let Some(operation) = operations
-                                .iter_mut()
-                                .find(|operation| operation.id == operation_id)
-                            {
-                                operation.kind = if mode == "union_all" {
-                                    DatasetOperationDraftKind::UnionAllSource
-                                } else {
-                                    DatasetOperationDraftKind::UnionSource
-                                };
-                            }
-                        });
-                    })
-                />
-            </div>
-            <SourceOptionsFields
-                source_signal=operation_source
-                on_source_change=Callback::new(move |source: DatasetSourceDraft| {
-                    let previous_alias = operation_order
-                        .get()
-                        .into_iter()
-                        .find(|operation| operation.id == operation_id)
-                        .and_then(|operation| operation.source)
-                        .map(|source| source.source_alias)
-                        .unwrap_or_default();
-                    let next_alias = source.source_alias.clone();
-                    update_operation(operation_order, operation_id, |operation| {
-                        operation.source = Some(source);
-                    });
-                    rename_source_alias_references(&previous_alias, &next_alias, operation_order);
-                })
-                forms=forms
-                datasets=datasets
-                rendered_forms=rendered_forms
-            />
-        </div>
-    }
-    .into_any()
-}
-
-#[allow(clippy::too_many_arguments)]
-fn source_join_body(
+fn source_add_body(
     operation_id: u64,
     operation_order: RwSignal<Vec<DatasetOperationDraft>>,
     initial_source: RwSignal<DatasetSourceDraft>,
@@ -453,14 +367,21 @@ fn source_join_body(
     rendered_forms: RwSignal<BTreeMap<String, DatasetRenderedForm>>,
 ) -> AnyView {
     let operation_source = operation_source(operation_order, operation_id);
-    let join_type = Signal::derive(move || {
+    let add_type = Signal::derive(move || {
         operation_order
             .get()
             .into_iter()
             .find(|operation| operation.id == operation_id)
-            .map(|operation| operation.join_type)
-            .unwrap_or_else(|| "left_join".into())
+            .map(|operation| source_add_type(&operation))
+            .unwrap_or_else(|| "union".into())
     });
+    let is_join_mode = Signal::derive(move || source_add_type_is_join(&add_type.get()));
+    let source_options_for_change = operation_source;
+    let source_options_for_select = operation_source;
+    let forms_for_source_options = forms;
+    let forms_for_source_fields = forms;
+    let rendered_forms_for_source_options = rendered_forms;
+    let rendered_forms_for_source_fields = rendered_forms;
     let current_fields = Signal::derive(move || {
         catalog_before_operation_id(
             initial_source.get(),
@@ -489,14 +410,17 @@ fn source_join_body(
     view! {
         <div class="dataset-operation-panel__source">
             <div class="dataset-operation-toggle-row">
-                <span class="dataset-operation-toggle-row__label">"Join type"</span>
+                <span class="dataset-operation-toggle-row__label">"Add type"</span>
                 <SegmentedToggle
-                    active=join_type
-                    aria_label="Join type"
+                    active=add_type
+                    aria_label="Add type"
+                    class="segmented-toggle--add-type"
                     options=vec![
-                        SegmentedToggleOption { value: "left_join", label: "Left" },
-                        SegmentedToggleOption { value: "inner_join", label: "Inner" },
-                        SegmentedToggleOption { value: "outer_join", label: "Outer" },
+                        SegmentedToggleOption { value: "union", label: "Union" },
+                        SegmentedToggleOption { value: "union_all", label: "Union All" },
+                        SegmentedToggleOption { value: "left_join", label: "Left Join" },
+                        SegmentedToggleOption { value: "inner_join", label: "Inner Join" },
+                        SegmentedToggleOption { value: "outer_join", label: "Outer Join" },
                     ]
                     on_select=Callback::new(move |value: String| {
                         operation_order.update(|operations| {
@@ -504,14 +428,14 @@ fn source_join_body(
                                 .iter_mut()
                                 .find(|operation| operation.id == operation_id)
                             {
-                                operation.join_type = value;
+                                operation.add_type = value;
                             }
                         });
                     })
                 />
             </div>
             <SourceOptionsFields
-                source_signal=operation_source
+                source_signal=source_options_for_change
                 on_source_change=Callback::new(move |source: DatasetSourceDraft| {
                     let previous_alias = operation_order
                         .get()
@@ -526,70 +450,72 @@ fn source_join_body(
                     });
                     rename_source_alias_references(&previous_alias, &next_alias, operation_order);
                 })
-                forms=forms
+                forms=forms_for_source_options
                 datasets=datasets
-                rendered_forms=rendered_forms
+                rendered_forms=rendered_forms_for_source_options
             />
-            <div class="dataset-operation-panel__join-grid">
-                <label class="form-field">
-                    <span>"Current Field"</span>
-                    <select
-                        prop:value=move || left_field_key.get()
-                        on:change=move |event| {
-                            let value = event_target_value(&event);
-                            operation_order.update(|operations| {
-                                if let Some(operation) = operations
-                                    .iter_mut()
-                                    .find(|operation| operation.id == operation_id)
-                                {
-                                    operation.left_field_key = value.clone();
-                                }
-                            });
-                        }
-                    >
-                        <option value="">"Select field"</option>
-                        {move || sorted_fields(current_fields.get()).into_iter().map(|field| {
-                            view! {
-                                <option value=field.key.clone()>
-                                    {format!("{} ({})", field.label, field.key)}
-                                </option>
+            <Show when=move || is_join_mode.get()>
+                <div class="dataset-operation-panel__join-grid">
+                    <label class="form-field">
+                        <span>"Current Field"</span>
+                        <select
+                            prop:value=move || left_field_key.get()
+                            on:change=move |event| {
+                                let value = event_target_value(&event);
+                                operation_order.update(|operations| {
+                                    if let Some(operation) = operations
+                                        .iter_mut()
+                                        .find(|operation| operation.id == operation_id)
+                                    {
+                                        operation.left_field_key = value.clone();
+                                    }
+                                });
                             }
-                        }).collect_view()}
-                    </select>
-                </label>
-                <label class="form-field">
-                    <span>"Source Field"</span>
-                    <select
-                        prop:value=move || right_field_key.get()
-                        on:change=move |event| {
-                            let value = event_target_value(&event);
-                            operation_order.update(|operations| {
-                                if let Some(operation) = operations
-                                    .iter_mut()
-                                    .find(|operation| operation.id == operation_id)
-                                {
-                                    operation.right_field_key = value.clone();
+                        >
+                            <option value="">"Select field"</option>
+                            {move || sorted_fields(current_fields.get()).into_iter().map(|field| {
+                                view! {
+                                    <option value=field.key.clone()>
+                                        {format!("{} ({})", field.label, field.key)}
+                                    </option>
                                 }
-                            });
-                        }
-                    >
-                        <option value="">"Select field"</option>
-                        {move || {
-                            source_fields_for_source(
-                                &operation_source.get(),
-                                &forms.get(),
-                                &rendered_forms.get(),
-                            ).into_iter().map(|field| {
-                            view! {
-                                <option value=field.key.clone()>
-                                    {format!("{} ({})", field.label, field.key)}
-                                </option>
+                            }).collect_view()}
+                        </select>
+                    </label>
+                    <label class="form-field">
+                        <span>"Source Field"</span>
+                        <select
+                            prop:value=move || right_field_key.get()
+                            on:change=move |event| {
+                                let value = event_target_value(&event);
+                                operation_order.update(|operations| {
+                                    if let Some(operation) = operations
+                                        .iter_mut()
+                                        .find(|operation| operation.id == operation_id)
+                                    {
+                                        operation.right_field_key = value.clone();
+                                    }
+                                });
                             }
-                        }).collect_view()
-                        }}
-                    </select>
-                </label>
-            </div>
+                        >
+                            <option value="">"Select field"</option>
+                            {move || {
+                                source_fields_for_source(
+                                    &source_options_for_select.get(),
+                                    &forms_for_source_fields.get(),
+                                    &rendered_forms_for_source_fields.get(),
+                                ).into_iter().map(|field| {
+                                    view! {
+                                        <option value=field.key.clone()>
+                                            {format!("{} ({})", field.label, field.key)}
+                                        </option>
+                                    }
+                                }).collect_view()
+                            }}
+                        </select>
+                    </label>
+                </div>
+            </Show>
         </div>
     }
     .into_any()
@@ -630,18 +556,16 @@ fn operation_insert_control(
                     <Plus class="icon-button__icon"/>
                 </button>
                 <Show when=move || open_insert_menu_anchor.get() == Some(anchor_for_show.clone())>
+                    <button
+                        class="dataset-operation-insert__scrim"
+                        type="button"
+                        aria-label="Close add operation menu"
+                        on:click=move |_| open_insert_menu_anchor.set(None)
+                    ></button>
                     <div class="dataset-operation-insert__menu">
                         {operation_add_menu_button(
-                            "Join Source",
-                            "join_source",
-                            anchor.clone(),
-                            operation_order,
-                            initial_source,
-                            open_insert_menu_anchor,
-                        )}
-                        {operation_add_menu_button(
-                            "Union Source",
-                            "union_source",
+                            "Add Source",
+                            "add_source",
                             anchor.clone(),
                             operation_order,
                             initial_source,
@@ -738,32 +662,14 @@ fn add_operation_at(
     };
 
     match kind {
-        "join_source" => {
+        "add_source" => {
             let mut operation =
-                DatasetOperationDraft::new(next_id, DatasetOperationDraftKind::JoinSource);
+                DatasetOperationDraft::new(next_id, DatasetOperationDraftKind::AddSource);
             operation.source = Some(new_operation_source_draft(
                 &initial_source.get(),
                 &operation_order.get(),
             ));
-            operation.join_type = "left_join".into();
-            insert_operation(operation_order, operation);
-        }
-        "union_source" => {
-            let mut operation =
-                DatasetOperationDraft::new(next_id, DatasetOperationDraftKind::UnionSource);
-            operation.source = Some(new_operation_source_draft(
-                &initial_source.get(),
-                &operation_order.get(),
-            ));
-            insert_operation(operation_order, operation);
-        }
-        "union_all_source" => {
-            let mut operation =
-                DatasetOperationDraft::new(next_id, DatasetOperationDraftKind::UnionAllSource);
-            operation.source = Some(new_operation_source_draft(
-                &initial_source.get(),
-                &operation_order.get(),
-            ));
+            operation.add_type = "union".into();
             insert_operation(operation_order, operation);
         }
         "projection" => insert_operation(
@@ -1025,13 +931,18 @@ fn catalog_before_operation_id(
 ) -> Vec<DatasetFieldDraft> {
     let mut current_fields = source_catalog_for_initial(&initial_source, &forms, &rendered_forms);
 
-    for operation in operation_order {
+    for (operation_index, operation) in operation_order.into_iter().enumerate() {
         if operation.id == target_id {
             return sorted_fields(current_fields);
         }
 
-        current_fields =
-            apply_operation_to_catalog(current_fields, operation, &forms, &rendered_forms);
+        current_fields = apply_operation_to_catalog(
+            current_fields,
+            operation,
+            operation_index + 1,
+            &forms,
+            &rendered_forms,
+        );
     }
 
     sorted_fields(current_fields)
@@ -1044,9 +955,14 @@ pub(super) fn catalog_after_operations(
     operation_order: Vec<DatasetOperationDraft>,
 ) -> Vec<DatasetFieldDraft> {
     let mut current_fields = source_catalog_for_initial(&initial_source, &forms, &rendered_forms);
-    for operation in operation_order {
-        current_fields =
-            apply_operation_to_catalog(current_fields, operation, &forms, &rendered_forms);
+    for (operation_index, operation) in operation_order.into_iter().enumerate() {
+        current_fields = apply_operation_to_catalog(
+            current_fields,
+            operation,
+            operation_index + 1,
+            &forms,
+            &rendered_forms,
+        );
     }
     sorted_fields(current_fields)
 }
@@ -1054,16 +970,19 @@ pub(super) fn catalog_after_operations(
 fn apply_operation_to_catalog(
     mut current_fields: Vec<DatasetFieldDraft>,
     operation: DatasetOperationDraft,
+    operation_position: usize,
     forms: &[DatasetFormOption],
     rendered_forms: &BTreeMap<String, DatasetRenderedForm>,
 ) -> Vec<DatasetFieldDraft> {
     match operation.kind {
-        DatasetOperationDraftKind::JoinSource
-        | DatasetOperationDraftKind::UnionSource
-        | DatasetOperationDraftKind::UnionAllSource => {
+        DatasetOperationDraftKind::AddSource if source_add_type_is_join(&operation.add_type) => {
             let source_fields = source_catalog_for_operation(&operation, forms, rendered_forms);
             extend_catalog(&mut current_fields, source_fields);
             current_fields
+        }
+        DatasetOperationDraftKind::AddSource => {
+            let source_fields = source_catalog_for_operation(&operation, forms, rendered_forms);
+            merge_union_catalog(current_fields, source_fields, operation_position)
         }
         DatasetOperationDraftKind::Projection => {
             apply_projection_to_catalog(current_fields, &operation.projection_fields)
@@ -1111,6 +1030,55 @@ fn extend_catalog(
             current_fields.push(field);
         }
     }
+}
+
+fn merge_union_catalog(
+    mut current_fields: Vec<DatasetFieldDraft>,
+    next_fields: Vec<DatasetFieldDraft>,
+    operation_position: usize,
+) -> Vec<DatasetFieldDraft> {
+    let mut seen_keys = current_fields
+        .iter()
+        .map(|field| field.key.clone())
+        .collect::<BTreeSet<_>>();
+    for field in next_fields {
+        let has_compatible_input_match = current_fields.iter().any(|existing| {
+            existing.source_field_key == field.source_field_key
+                && existing.field_type == field.field_type
+        });
+        if has_compatible_input_match {
+            let union_alias = union_output_alias(operation_position);
+            for existing in current_fields.iter_mut().filter(|existing| {
+                existing.source_field_key == field.source_field_key
+                    && existing.field_type == field.field_type
+            }) {
+                seen_keys.remove(&existing.key);
+                existing.key = canonical_field_key(&union_alias, &existing.source_field_key);
+                existing.source_alias = union_alias.clone();
+                seen_keys.insert(existing.key.clone());
+            }
+        } else if seen_keys.insert(field.key.clone()) {
+            current_fields.push(field);
+        }
+    }
+    current_fields
+}
+
+fn union_output_alias(operation_position: usize) -> String {
+    format!("union_{operation_position}")
+}
+
+fn source_add_type(operation: &DatasetOperationDraft) -> String {
+    match operation.add_type.trim() {
+        "union" | "union_all" | "left_join" | "inner_join" | "outer_join" => {
+            operation.add_type.clone()
+        }
+        _ => "union".into(),
+    }
+}
+
+fn source_add_type_is_join(add_type: &str) -> bool {
+    matches!(add_type, "left_join" | "inner_join" | "outer_join")
 }
 
 fn apply_projection_to_catalog(
@@ -1264,6 +1232,41 @@ mod tests {
     }
 
     #[test]
+    fn union_catalog_merges_compatible_source_fields() {
+        let current_fields = vec![catalog_field("source_1", "activity_summary", "text")];
+        let next_fields = vec![
+            catalog_field("source_3", "activity_summary", "text"),
+            catalog_field("source_3", "delivery_mode", "single_choice"),
+        ];
+
+        let merged = merge_union_catalog(current_fields, next_fields, 2);
+
+        assert_eq!(
+            field_keys(merged),
+            vec![
+                "union_2__activity_summary".to_string(),
+                "source_3__delivery_mode".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn union_catalog_keeps_incompatible_source_fields_separate() {
+        let current_fields = vec![catalog_field("source_1", "activity_summary", "text")];
+        let next_fields = vec![catalog_field("source_3", "activity_summary", "number")];
+
+        let merged = merge_union_catalog(current_fields, next_fields, 2);
+
+        assert_eq!(
+            field_keys(merged),
+            vec![
+                "source_1__activity_summary".to_string(),
+                "source_3__activity_summary".to_string()
+            ]
+        );
+    }
+
+    #[test]
     fn incomplete_initial_source_has_empty_catalog() {
         let (_, forms, rendered_forms) = catalog_fixture();
         let initial_source = DatasetSourceDraft::default();
@@ -1280,6 +1283,16 @@ mod tests {
             key: key.into(),
             label: key.into(),
             source_alias: "program".into(),
+            source_field_key: source_field_key.into(),
+            field_type: field_type.into(),
+        }
+    }
+
+    fn catalog_field(alias: &str, source_field_key: &str, field_type: &str) -> DatasetFieldDraft {
+        DatasetFieldDraft {
+            key: format!("{alias}__{source_field_key}"),
+            label: source_field_key.into(),
+            source_alias: alias.into(),
             source_field_key: source_field_key.into(),
             field_type: field_type.into(),
         }
@@ -1341,7 +1354,8 @@ mod tests {
             field_type: "number".into(),
         }];
 
-        let mut union = DatasetOperationDraft::new(2, DatasetOperationDraftKind::UnionSource);
+        let mut union = DatasetOperationDraft::new(2, DatasetOperationDraftKind::AddSource);
+        union.add_type = "union".into();
         union.source = Some(source("partner", "partner_form", "partner_v1"));
 
         let filter = DatasetOperationDraft::new(3, DatasetOperationDraftKind::Filter);
@@ -1429,7 +1443,7 @@ mod tests {
             }),
         };
 
-        let operations = vec![first, second];
+        let operations = [first, second];
 
         assert_eq!(
             operations[0].aggregation.group_fields,
@@ -1463,7 +1477,7 @@ mod tests {
         second.row_filters = vec![filter(2, "program__participant_target", "100")];
         second.row_filters[0].operator = "greater_than_or_equal".into();
 
-        let operations = vec![first, second];
+        let operations = [first, second];
 
         assert_eq!(
             operations[0].row_filters[0].field_key,
@@ -1503,7 +1517,7 @@ mod tests {
             "100",
         )];
 
-        let operations = vec![first, second];
+        let operations = [first, second];
 
         assert_eq!(operations[0].calculated_fields[0].key, "status_upper");
         assert_eq!(

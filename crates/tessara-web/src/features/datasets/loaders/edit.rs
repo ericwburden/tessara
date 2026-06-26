@@ -77,38 +77,22 @@ pub(in crate::features::datasets) fn load_dataset_for_edit(
                 let mut operation_order_drafts = Vec::new();
                 for operation in payload.operations {
                     match operation {
-                        DatasetOperationPayload::JoinSource {
+                        DatasetOperationPayload::AddSource {
                             source,
-                            operation,
+                            add_type,
                             join_keys,
                             ..
                         } => {
                             let mut draft = DatasetOperationDraft::new(
                                 operation_order_drafts.len() as u64 + 1,
-                                DatasetOperationDraftKind::JoinSource,
+                                DatasetOperationDraftKind::AddSource,
                             );
                             draft.source = Some(source_payload_to_draft(&source));
-                            draft.join_type = operation;
+                            draft.add_type = add_type;
                             if let Some(join_key) = join_keys.first() {
                                 draft.left_field_key = join_key.left_field.clone();
                                 draft.right_field_key = join_key.right_field.clone();
                             }
-                            operation_order_drafts.push(draft);
-                        }
-                        DatasetOperationPayload::UnionSource { source, .. } => {
-                            let mut draft = DatasetOperationDraft::new(
-                                operation_order_drafts.len() as u64 + 1,
-                                DatasetOperationDraftKind::UnionSource,
-                            );
-                            draft.source = Some(source_payload_to_draft(&source));
-                            operation_order_drafts.push(draft);
-                        }
-                        DatasetOperationPayload::UnionAllSource { source, .. } => {
-                            let mut draft = DatasetOperationDraft::new(
-                                operation_order_drafts.len() as u64 + 1,
-                                DatasetOperationDraftKind::UnionAllSource,
-                            );
-                            draft.source = Some(source_payload_to_draft(&source));
                             operation_order_drafts.push(draft);
                         }
                         DatasetOperationPayload::Projection {

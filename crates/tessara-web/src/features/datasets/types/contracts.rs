@@ -174,19 +174,11 @@ pub(in crate::features::datasets) enum DatasetSourcePayload {
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub(in crate::features::datasets) enum DatasetOperationPayload {
-    JoinSource {
+    AddSource {
         source: DatasetSourcePayload,
-        operation: String,
+        add_type: String,
         #[serde(default)]
         join_keys: Vec<DatasetJoinKeyPayload>,
-        position: i32,
-    },
-    UnionSource {
-        source: DatasetSourcePayload,
-        position: i32,
-    },
-    UnionAllSource {
-        source: DatasetSourcePayload,
         position: i32,
     },
     Projection {

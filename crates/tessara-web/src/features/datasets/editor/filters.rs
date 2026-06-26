@@ -159,16 +159,16 @@ pub(crate) fn DatasetFiltersEditor(
                                         </label>
                                         <label class="form-field">
                                             <span>"Value"</span>
-                                            {filter_value_control(
-                                                input_value_id,
-                                                filter.value,
-                                                selected_field,
-                                                fields.get(),
-                                                operator_for_input,
+                                            {filter_value_control(FilterValueControlParams {
+                                                filter_id: input_value_id,
+                                                value: filter.value,
+                                                field: selected_field,
+                                                fields: fields.get(),
+                                                operator: operator_for_input,
                                                 value_options,
                                                 row_filters,
                                                 on_row_filters_change,
-                                            )}
+                                            })}
                                         </label>
                                         <button
                                             class="icon-button icon-button--compact-control"
@@ -303,7 +303,7 @@ fn mutate_filters(
     on_row_filters_change.run(filters);
 }
 
-fn filter_value_control(
+struct FilterValueControlParams {
     filter_id: u64,
     value: String,
     field: Option<DatasetFieldDraft>,
@@ -312,7 +312,19 @@ fn filter_value_control(
     value_options: Vec<String>,
     row_filters: Signal<Vec<DatasetRowFilterDraft>>,
     on_row_filters_change: Callback<Vec<DatasetRowFilterDraft>>,
-) -> AnyView {
+}
+
+fn filter_value_control(params: FilterValueControlParams) -> AnyView {
+    let FilterValueControlParams {
+        filter_id,
+        value,
+        field,
+        fields,
+        operator,
+        value_options,
+        row_filters,
+        on_row_filters_change,
+    } = params;
     if !filter_operator_uses_value(&operator) {
         return view! { <input disabled=true prop:value="" /> }.into_any();
     }

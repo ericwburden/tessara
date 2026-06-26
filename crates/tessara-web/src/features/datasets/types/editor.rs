@@ -77,9 +77,7 @@ pub(in crate::features::datasets) struct DatasetCalculationFunctionDraft {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(in crate::features::datasets) enum DatasetOperationDraftKind {
-    JoinSource,
-    UnionSource,
-    UnionAllSource,
+    AddSource,
     Projection,
     Aggregation,
     CalculatedFields,
@@ -91,7 +89,7 @@ pub(in crate::features::datasets) struct DatasetOperationDraft {
     pub(in crate::features::datasets) id: u64,
     pub(in crate::features::datasets) kind: DatasetOperationDraftKind,
     pub(in crate::features::datasets) source: Option<DatasetSourceDraft>,
-    pub(in crate::features::datasets) join_type: String,
+    pub(in crate::features::datasets) add_type: String,
     pub(in crate::features::datasets) left_field_key: String,
     pub(in crate::features::datasets) right_field_key: String,
     pub(in crate::features::datasets) projection_fields: Vec<DatasetFieldDraft>,
@@ -116,9 +114,7 @@ impl Default for DatasetSourceDraft {
 impl DatasetOperationDraftKind {
     pub(in crate::features::datasets) fn label(self) -> &'static str {
         match self {
-            Self::JoinSource => "Join Source",
-            Self::UnionSource => "Union Source",
-            Self::UnionAllSource => "Union Source",
+            Self::AddSource => "Add Source",
             Self::Projection => "Projection",
             Self::Aggregation => "Aggregation",
             Self::CalculatedFields => "Calculated Fields",
@@ -133,7 +129,7 @@ impl DatasetOperationDraft {
             id,
             kind,
             source: None,
-            join_type: String::new(),
+            add_type: String::new(),
             left_field_key: String::new(),
             right_field_key: String::new(),
             projection_fields: Vec::new(),

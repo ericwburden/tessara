@@ -20,7 +20,7 @@ mod dto;
 
 pub use dto::{
     CreateDatasetRequest, DatasetAggregationRequest, DatasetCalculatedFieldRequest,
-    DatasetDefinition, DatasetFieldDefinition, DatasetOperationRequest,
+    DatasetDefinition, DatasetFieldDefinition, DatasetJoinKeyRequest, DatasetOperationRequest,
     DatasetProjectionFieldRequest, DatasetRestrictionPolicyRequest, DatasetRowFilterRequest,
     DatasetSourceDefinition, DatasetSourceRequest, DatasetSqlPreview, DatasetSummary, DatasetTable,
     DatasetTableRow, DatasetVisibilityNodeSummary,
@@ -96,6 +96,12 @@ struct QuerySpecBuilder<'a> {
 struct CompiledSource {
     cte_name: String,
     fields: Vec<ValidatedDatasetField>,
+}
+
+struct UnionColumnMapping {
+    output_key: String,
+    left_key: Option<String>,
+    right_key: Option<String>,
 }
 
 #[derive(Clone)]
@@ -245,20 +251,18 @@ fn ordered_columns(columns: &BTreeSet<String>) -> Vec<String> {
     ordered
 }
 
-fn select_expression_from_cte(
-    table_alias: Option<&str>,
+fn select_union_expression(
     source_columns: &BTreeSet<String>,
-    column: &str,
+    source_column: Option<&str>,
+    output_column: &str,
 ) -> String {
-    let quoted = quote_identifier(column);
-    if source_columns.contains(column) {
-        match table_alias {
-            Some(alias) => format!("{alias}.{quoted} AS {quoted}"),
-            None => quoted,
-        }
-    } else {
-        format!("NULL::text AS {quoted}")
+    let quoted_output = quote_identifier(output_column);
+    if let Some(source_column) = source_column
+        && source_columns.contains(source_column)
+    {
+        return format!("{} AS {quoted_output}", quote_identifier(source_column));
     }
+    format!("NULL::text AS {quoted_output}")
 }
 
 fn coalesced_join_expression(
@@ -844,22 +848,14 @@ impl<'a> QuerySpecBuilder<'a> {
 
     async fn apply_operation(&mut self, operation: &DatasetOperationRequest) -> ApiResult<()> {
         match operation {
-            DatasetOperationRequest::JoinSource {
+            DatasetOperationRequest::AddSource {
                 source,
-                operation,
+                add_type,
                 join_keys,
-                ..
+                position,
             } => {
                 let right = self.compile_source(source).await?;
-                self.apply_join_source(right, operation, join_keys)
-            }
-            DatasetOperationRequest::UnionSource { source, .. } => {
-                let right = self.compile_source(source).await?;
-                self.apply_union_source(right, false)
-            }
-            DatasetOperationRequest::UnionAllSource { source, .. } => {
-                let right = self.compile_source(source).await?;
-                self.apply_union_source(right, true)
+                self.apply_add_source(right, add_type, join_keys, *position)
             }
             DatasetOperationRequest::Projection { fields, .. } => self.apply_projection(fields),
             DatasetOperationRequest::Aggregation {
@@ -872,6 +868,25 @@ impl<'a> QuerySpecBuilder<'a> {
                 self.apply_calculated_fields(fields)
             }
             DatasetOperationRequest::Filter { filters, .. } => self.apply_filter(filters),
+        }
+    }
+
+    fn apply_add_source(
+        &mut self,
+        right: CompiledSource,
+        add_type: &str,
+        join_keys: &[DatasetJoinKeyRequest],
+        operation_position: i32,
+    ) -> ApiResult<()> {
+        match add_type {
+            "union" => self.apply_union_add_type(right, false, operation_position),
+            "union_all" => self.apply_union_add_type(right, true, operation_position),
+            "left_join" | "inner_join" | "outer_join" => {
+                self.apply_join_add_type(right, add_type, join_keys)
+            }
+            _ => Err(ApiError::BadRequest(format!(
+                "unsupported add source type '{add_type}'"
+            ))),
         }
     }
 
@@ -1107,7 +1122,7 @@ impl<'a> QuerySpecBuilder<'a> {
         Ok(CompiledSource { cte_name, fields })
     }
 
-    fn apply_join_source(
+    fn apply_join_add_type(
         &mut self,
         right: CompiledSource,
         operation: &str,
@@ -1119,7 +1134,7 @@ impl<'a> QuerySpecBuilder<'a> {
             "outer_join" => "FULL OUTER JOIN",
             "union" | "union_all" => {
                 return Err(ApiError::BadRequest(
-                    "join_source operations require a join type".into(),
+                    "add_source join modes require a join type".into(),
                 ));
             }
             other => {
@@ -1181,21 +1196,39 @@ impl<'a> QuerySpecBuilder<'a> {
         Ok(())
     }
 
-    fn apply_union_source(&mut self, right: CompiledSource, union_all: bool) -> ApiResult<()> {
+    fn apply_union_add_type(
+        &mut self,
+        right: CompiledSource,
+        union_all: bool,
+        operation_position: i32,
+    ) -> ApiResult<()> {
         let cte_name = self.next_cte_name("op")?;
         let left_columns = catalog_columns(&self.fields);
         let right_columns = catalog_columns(&right.fields);
-        let output_fields = merge_field_catalogs(&self.fields, &right.fields)?;
-        let output_columns = catalog_columns(&output_fields);
+        let union_alias = union_output_alias(operation_position);
+        let (output_fields, output_columns) =
+            union_field_catalog(&self.fields, &right.fields, &union_alias)?;
         let operation = if union_all { "UNION ALL" } else { "UNION" };
-        let left_selects = ordered_columns(&output_columns)
+        let left_selects = output_columns
             .iter()
-            .map(|column| select_expression_from_cte(None, &left_columns, column))
+            .map(|column| {
+                select_union_expression(
+                    &left_columns,
+                    column.left_key.as_deref(),
+                    &column.output_key,
+                )
+            })
             .collect::<Vec<_>>()
             .join(",\n                ");
-        let right_selects = ordered_columns(&output_columns)
+        let right_selects = output_columns
             .iter()
-            .map(|column| select_expression_from_cte(None, &right_columns, column))
+            .map(|column| {
+                select_union_expression(
+                    &right_columns,
+                    column.right_key.as_deref(),
+                    &column.output_key,
+                )
+            })
             .collect::<Vec<_>>()
             .join(",\n                ");
         self.ctes.push(format!(
@@ -1481,6 +1514,89 @@ fn merge_field_catalogs(
         field.position = index as i32;
     }
     Ok(output)
+}
+
+fn union_field_catalog(
+    left: &[ValidatedDatasetField],
+    right: &[ValidatedDatasetField],
+    union_alias: &str,
+) -> ApiResult<(Vec<ValidatedDatasetField>, Vec<UnionColumnMapping>)> {
+    let mut output = left.to_vec();
+    let mut mappings = vec![UnionColumnMapping {
+        output_key: "__row_id".into(),
+        left_key: Some("__row_id".into()),
+        right_key: Some("__row_id".into()),
+    }];
+    mappings.extend(left.iter().map(|field| UnionColumnMapping {
+        output_key: field.key.clone(),
+        left_key: Some(field.key.clone()),
+        right_key: None,
+    }));
+
+    let mut index_by_key = output
+        .iter()
+        .enumerate()
+        .map(|(index, field)| (field.key.clone(), index))
+        .collect::<HashMap<_, _>>();
+    let mut input_counts = HashMap::<String, usize>::new();
+    for field in &output {
+        *input_counts
+            .entry(field.source_field_key.clone())
+            .or_default() += 1;
+    }
+    let index_by_unique_input = output
+        .iter()
+        .enumerate()
+        .filter(|(_, field)| input_counts.get(&field.source_field_key) == Some(&1))
+        .map(|(index, field)| (field.source_field_key.clone(), index))
+        .collect::<HashMap<_, _>>();
+
+    for field in right {
+        let matching_index = index_by_key
+            .get(&field.key)
+            .copied()
+            .or_else(|| index_by_unique_input.get(&field.source_field_key).copied());
+        if let Some(index) = matching_index {
+            let existing_key = output[index].key.clone();
+            if output[index].field_type != field.field_type {
+                return Err(ApiError::BadRequest(format!(
+                    "union field '{}' has incompatible types '{}' and '{}'",
+                    field.source_field_key, output[index].field_type, field.field_type
+                )));
+            }
+            let output_key =
+                canonical_source_column_key(union_alias, &output[index].source_field_key);
+            if let Some(mapping) = mappings
+                .iter_mut()
+                .find(|mapping| mapping.output_key == existing_key)
+            {
+                mapping.output_key = output_key.clone();
+                mapping.right_key = Some(field.key.clone());
+            }
+            index_by_key.remove(&existing_key);
+            output[index].key = output_key.clone();
+            output[index].source_alias = union_alias.to_string();
+            index_by_key.insert(output_key, index);
+            continue;
+        }
+
+        index_by_key.insert(field.key.clone(), output.len());
+        mappings.push(UnionColumnMapping {
+            output_key: field.key.clone(),
+            left_key: None,
+            right_key: Some(field.key.clone()),
+        });
+        output.push(field.clone());
+    }
+
+    for (index, field) in output.iter_mut().enumerate() {
+        field.position = index as i32;
+    }
+    Ok((output, mappings))
+}
+
+fn union_output_alias(operation_position: i32) -> String {
+    format!("union_{}", operation_position.saturating_add(1))
 }
 
 async fn load_form_source_catalog(
@@ -3573,6 +3689,23 @@ mod tests {
         }
     }
 
+    fn source_field(
+        alias: &str,
+        source_field_key: &str,
+        field_type: &str,
+    ) -> ValidatedDatasetField {
+        ValidatedDatasetField {
+            id: None,
+            key: canonical_source_column_key(alias, source_field_key),
+            label: source_field_key.into(),
+            source_alias: alias.into(),
+            source_field_key: source_field_key.into(),
+            source_field_id: None,
+            field_type: field_type.into(),
+            position: 0,
+        }
+    }
+
     fn projection_field(key: &str, input_field_key: &str) -> DatasetProjectionFieldRequest {
         DatasetProjectionFieldRequest {
             key: key.into(),
@@ -3703,6 +3836,59 @@ mod tests {
         assert!(validate_filter_literal("boolean", "yes").is_ok());
         assert!(validate_filter_literal("boolean", "0").is_ok());
         assert!(validate_filter_literal("boolean", "maybe").is_err());
+    }
+
+    #[test]
+    fn add_source_union_catalog_merges_matching_source_fields_under_union_alias() {
+        let left = vec![
+            source_field("source_1", "activity_summary", "text"),
+            source_field("source_1", "expected_attendees", "number"),
+        ];
+        let right = vec![
+            source_field("source_3", "activity_summary", "text"),
+            source_field("source_3", "focus_tags", "multi_choice"),
+        ];
+
+        let (fields, mappings) =
+            union_field_catalog(&left, &right, "union_2").expect("compatible union catalog");
+
+        assert_eq!(
+            fields
+                .iter()
+                .map(|field| field.key.as_str())
+                .collect::<Vec<_>>(),
+            vec![
+                "union_2__activity_summary",
+                "source_1__expected_attendees",
+                "source_3__focus_tags",
+            ]
+        );
+        assert_eq!(fields[0].source_alias, "union_2");
+        let activity_mapping = mappings
+            .iter()
+            .find(|mapping| mapping.output_key == "union_2__activity_summary")
+            .expect("merged activity mapping");
+        assert_eq!(
+            activity_mapping.left_key.as_deref(),
+            Some("source_1__activity_summary")
+        );
+        assert_eq!(
+            activity_mapping.right_key.as_deref(),
+            Some("source_3__activity_summary")
+        );
+    }
+
+    #[test]
+    fn add_source_union_catalog_rejects_matching_source_fields_with_different_types() {
+        let left = vec![source_field("source_1", "activity_summary", "text")];
+        let right = vec![source_field("source_3", "activity_summary", "number")];
+
+        let error = match union_field_catalog(&left, &right, "union_2") {
+            Ok(_) => panic!("conflicting source field types should fail"),
+            Err(error) => error.to_string(),
+        };
+
+        assert!(error.contains("union field 'activity_summary' has incompatible types"));
     }
 
     #[test]

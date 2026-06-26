@@ -23,6 +23,24 @@ pub(crate) fn DatasetSqlPreviewPanel(
     sql_preview_error: RwSignal<Option<String>>,
     expanded: RwSignal<bool>,
 ) -> impl IntoView {
+    Effect::new(move |_| {
+        if expanded.get() {
+            preview_dataset_sql(
+                dataset_id.clone(),
+                name.get(),
+                slug.get(),
+                visibility_node_ids.get().into_iter().collect(),
+                initial_source.get(),
+                operation_order.get(),
+                restriction_internal_field_key.get(),
+                restriction_restricted_field_key.get(),
+                restriction_confidential_field_key.get(),
+                sql_preview,
+                sql_preview_error,
+            );
+        }
+    });
+
     view! {
         <section class="route-panel__section dataset-editor-section">
             <button
@@ -32,21 +50,6 @@ pub(crate) fn DatasetSqlPreviewPanel(
                 on:click=move |_| {
                     let next_expanded = !expanded.get_untracked();
                     expanded.set(next_expanded);
-                    if next_expanded {
-                        preview_dataset_sql(
-                            dataset_id.clone(),
-                            name.get_untracked(),
-                            slug.get_untracked(),
-                            visibility_node_ids.get_untracked().into_iter().collect(),
-                            initial_source.get_untracked(),
-                            operation_order.get_untracked(),
-                            restriction_internal_field_key.get_untracked(),
-                            restriction_restricted_field_key.get_untracked(),
-                            restriction_confidential_field_key.get_untracked(),
-                            sql_preview,
-                            sql_preview_error,
-                        );
-                    }
                 }
             >
                 <h3>"Generated SQL"</h3>

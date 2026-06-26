@@ -38,23 +38,13 @@ pub(super) fn dataset_payload_from_drafts(
     let mut operation_position = 0;
     for operation in operation_order {
         let next_operation = match operation.kind {
-            DatasetOperationDraftKind::JoinSource => {
-                join_source_operation_from_draft(&operation, operation_position)
+            DatasetOperationDraftKind::AddSource => {
+                source_operation_from_draft(&operation, operation_position)
             }
-            DatasetOperationDraftKind::UnionSource => source_operation_from_draft(
-                &operation,
-                operation_position,
-                DatasetOperationDraftKind::UnionSource,
-            ),
-            DatasetOperationDraftKind::UnionAllSource => source_operation_from_draft(
-                &operation,
-                operation_position,
-                DatasetOperationDraftKind::UnionAllSource,
-            ),
             DatasetOperationDraftKind::Projection => {
                 let projection_fields =
                     projection_field_payloads_from_drafts(operation.projection_fields.clone());
-                (!projection_fields.is_empty()).then(|| DatasetOperationPayload::Projection {
+                (!projection_fields.is_empty()).then_some(DatasetOperationPayload::Projection {
                     fields: projection_fields,
                     position: operation_position,
                 })
@@ -140,51 +130,47 @@ fn projection_input_key(field: &DatasetFieldDraft) -> String {
 }
 
 #[cfg(feature = "hydrate")]
-fn join_source_operation_from_draft(
+fn source_operation_from_draft(
     operation: &DatasetOperationDraft,
     position: i32,
 ) -> Option<DatasetOperationPayload> {
     let source = source_for_operation(operation)?;
-    let join_type = if operation.join_type.trim().is_empty() {
-        "left_join".to_string()
-    } else {
-        operation.join_type.clone()
-    };
+    let add_type = source_add_type(operation);
     let left_field = operation.left_field_key.trim().to_string();
     let right_field = operation.right_field_key.trim().to_string();
-    let join_keys = if left_field.is_empty() || right_field.is_empty() {
-        Vec::new()
-    } else {
+    let join_keys = if source_add_type_is_join(&add_type)
+        && !left_field.is_empty()
+        && !right_field.is_empty()
+    {
         vec![DatasetJoinKeyPayload {
             left_field,
             right_field,
         }]
+    } else {
+        Vec::new()
     };
 
-    Some(DatasetOperationPayload::JoinSource {
+    Some(DatasetOperationPayload::AddSource {
         source,
-        operation: join_type,
+        add_type,
         join_keys,
         position,
     })
 }
 
 #[cfg(feature = "hydrate")]
-fn source_operation_from_draft(
-    operation: &DatasetOperationDraft,
-    position: i32,
-    kind: DatasetOperationDraftKind,
-) -> Option<DatasetOperationPayload> {
-    let source = source_for_operation(operation)?;
-    match kind {
-        DatasetOperationDraftKind::UnionSource => {
-            Some(DatasetOperationPayload::UnionSource { source, position })
+fn source_add_type(operation: &DatasetOperationDraft) -> String {
+    match operation.add_type.trim() {
+        "union" | "union_all" | "left_join" | "inner_join" | "outer_join" => {
+            operation.add_type.clone()
         }
-        DatasetOperationDraftKind::UnionAllSource => {
-            Some(DatasetOperationPayload::UnionAllSource { source, position })
-        }
-        _ => None,
+        _ => "union".into(),
     }
+}
+
+#[cfg(feature = "hydrate")]
+fn source_add_type_is_join(add_type: &str) -> bool {
+    matches!(add_type, "left_join" | "inner_join" | "outer_join")
 }
 
 #[cfg(feature = "hydrate")]
@@ -557,15 +543,17 @@ mod tests {
     #[cfg(feature = "hydrate")]
     #[test]
     fn dataset_payload_uses_explicit_source_operation_order() {
-        let mut join = source_operation_draft(1, DatasetOperationDraftKind::JoinSource, "program2");
-        join.join_type = "inner_join".into();
+        let mut join = source_operation_draft(1, DatasetOperationDraftKind::AddSource, "program2");
+        join.add_type = "inner_join".into();
         join.left_field_key = "program__submission_id".into();
         join.right_field_key = "program2__submission_id".into();
 
-        let mut drafts = drafts_with_operations(vec![
-            join,
-            source_operation_draft(2, DatasetOperationDraftKind::UnionAllSource, "program3"),
-        ]);
+        let mut drafts = drafts_with_operations(vec![join, {
+            let mut union =
+                source_operation_draft(2, DatasetOperationDraftKind::AddSource, "program3");
+            union.add_type = "union_all".into();
+            union
+        }]);
         drafts.name = "Source Ordered Dataset".into();
         drafts.slug = "source-ordered-dataset".into();
         drafts.initial_source = form_source("program");
@@ -575,15 +563,19 @@ mod tests {
         assert_eq!(payload.operations.len(), 2);
         assert!(matches!(
             payload.operations[0],
-            DatasetOperationPayload::JoinSource {
-                ref operation,
+            DatasetOperationPayload::AddSource {
+                ref add_type,
                 position: 0,
                 ..
-            } if operation == "inner_join"
+            } if add_type == "inner_join"
         ));
         assert!(matches!(
             payload.operations[1],
-            DatasetOperationPayload::UnionAllSource { position: 1, .. }
+            DatasetOperationPayload::AddSource {
+                ref add_type,
+                position: 1,
+                ..
+            } if add_type == "union_all"
         ));
     }
 

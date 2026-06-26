@@ -38,21 +38,11 @@ pub enum DatasetSourceRequest {
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum DatasetOperationRequest {
-    JoinSource {
+    AddSource {
         source: DatasetSourceRequest,
-        operation: String,
+        add_type: String,
         #[serde(default)]
         join_keys: Vec<DatasetJoinKeyRequest>,
-        #[serde(default)]
-        position: i32,
-    },
-    UnionSource {
-        source: DatasetSourceRequest,
-        #[serde(default)]
-        position: i32,
-    },
-    UnionAllSource {
-        source: DatasetSourceRequest,
         #[serde(default)]
         position: i32,
     },
