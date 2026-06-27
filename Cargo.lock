@@ -4443,6 +4443,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tessara-web-datasets",
+ "tessara-web-forms",
  "tessara-web-ui",
  "wasm-bindgen",
  "wasm-bindgen-futures",
@@ -4461,6 +4462,22 @@ dependencies = [
  "serde_json",
  "tessara-web-ui",
  "wasm-bindgen",
+ "web-sys",
+]
+
+[[package]]
+name = "tessara-web-forms"
+version = "0.1.0"
+dependencies = [
+ "gloo-net",
+ "icons",
+ "js-sys",
+ "leptos",
+ "serde",
+ "serde_json",
+ "tessara-web-ui",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
  "web-sys",
 ]
 

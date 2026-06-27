@@ -13,6 +13,7 @@ members = [
     "crates/tessara-submissions",
     "crates/tessara-web",
     "crates/tessara-web-datasets",
+    "crates/tessara-web-forms",
     "crates/tessara-web-ui",
 ]
 resolver = "3"
