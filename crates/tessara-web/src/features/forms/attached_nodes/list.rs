@@ -1,6 +1,6 @@
 //! Compact attached-node list trigger for form rows.
 
-use crate::features::shared::{FormAttachmentLink, FormsAttachedNodesSheetData, node_count_label};
+use crate::features::forms::{FormAttachmentLink, FormsAttachedNodesSheetData, node_count_label};
 use crate::ui::empty_view;
 use icons::PanelRight;
 use leptos::prelude::*;

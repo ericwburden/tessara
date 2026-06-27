@@ -2,6 +2,8 @@
 
 use crate::features::forms::builder::{FormBuilderFieldDraft, FormBuilderSectionDraft};
 #[cfg(feature = "hydrate")]
+use crate::features::forms::http::redirect_to_login;
+#[cfg(feature = "hydrate")]
 use crate::features::forms::save::api::{
     FormSaveApiError, create_form, create_initial_form_version, publish_form_version,
 };
@@ -12,8 +14,6 @@ use crate::features::forms::save::create_structure::{
 #[cfg(feature = "hydrate")]
 use crate::features::forms::save::drafts::prepare_create_form_save;
 use crate::features::forms::types::FormSummary;
-#[cfg(feature = "hydrate")]
-use crate::http::redirect_to_login;
 use leptos::prelude::*;
 
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]

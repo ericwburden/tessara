@@ -4,6 +4,27 @@
 
 use serde::{Deserialize, Serialize};
 
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub(crate) struct FormNodeTypeOption {
+    pub(crate) id: String,
+    pub(crate) name: String,
+    pub(crate) singular_label: String,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct FormAttachmentLink {
+    pub(crate) href: String,
+    pub(crate) label: String,
+    pub(crate) title: String,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct FormsAttachedNodesSheetData {
+    pub(crate) form_name: String,
+    pub(crate) form_href: String,
+    pub(crate) nodes: Vec<FormAttachmentLink>,
+}
+
 #[derive(Serialize)]
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
 pub(crate) struct CreateFormPayload {

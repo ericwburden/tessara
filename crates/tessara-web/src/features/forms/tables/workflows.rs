@@ -1,11 +1,11 @@
 //! Related workflow table for form detail pages.
 
 use crate::features::forms::FormWorkflowLink;
-use crate::features::shared::status_badge_class;
-use crate::features::workflows::{WorkflowSourceMarker, workflow_revision_label_from_option};
+use crate::features::forms::status_badge_class;
+use crate::features::forms::support::pagination::pagination_page_start;
+use crate::features::forms::support::text::{sentence_label, text_matches};
+use crate::features::forms::{FormWorkflowSourceMarker, form_workflow_revision_label_from_option};
 use crate::ui::{SearchableDataTable, TablePaginationFooter};
-use crate::utils::pagination::pagination_page_start;
-use crate::utils::text::{sentence_label, text_matches};
 use leptos::prelude::*;
 
 #[component]
@@ -74,10 +74,10 @@ pub(crate) fn FormRelatedWorkflowsTable(workflows: Vec<FormWorkflowLink>) -> imp
                                         <tr>
                                             <th scope="row">
                                                 <a class="data-table__primary-link" href=href>{workflow.name}</a>
-                                                <WorkflowSourceMarker source=workflow_source/>
+                                                <FormWorkflowSourceMarker source=workflow_source/>
                                                 <small class="workflow-assignment-step-meta">{workflow.slug}</small>
                                             </th>
-                                            <td>{workflow_revision_label_from_option(workflow.current_version_label)}</td>
+                                            <td>{form_workflow_revision_label_from_option(workflow.current_version_label)}</td>
                                             <td><span class=status_badge_class(&status)>{sentence_label(&status)}</span></td>
                                             <td class="data-table__cell--center">{workflow.assignment_count.to_string()}</td>
                                         </tr>
@@ -118,7 +118,7 @@ pub(crate) fn FormRelatedWorkflowsTable(workflows: Vec<FormWorkflowLink>) -> imp
                                         <div class="related-work-mobile-card__header">
                                             <h4>
                                                 <a href=href>{workflow.name}</a>
-                                                <WorkflowSourceMarker source=workflow_source/>
+                                                <FormWorkflowSourceMarker source=workflow_source/>
                                             </h4>
                                         </div>
                                         <dl>
@@ -128,7 +128,7 @@ pub(crate) fn FormRelatedWorkflowsTable(workflows: Vec<FormWorkflowLink>) -> imp
                                             </div>
                                             <div>
                                                 <dt>"Revision"</dt>
-                                                <dd>{workflow_revision_label_from_option(workflow.current_version_label)}</dd>
+                                                <dd>{form_workflow_revision_label_from_option(workflow.current_version_label)}</dd>
                                             </div>
                                             <div>
                                                 <dt>"Status"</dt>

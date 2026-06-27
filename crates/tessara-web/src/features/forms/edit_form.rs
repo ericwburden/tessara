@@ -1,10 +1,10 @@
 //! Editable form surface for existing forms.
 
+use crate::features::forms::FormNodeTypeOption;
 use crate::features::forms::builder::{FormBuilderCanvas, FormBuilderEditorState};
 use crate::features::forms::{
     FormEditableVersionSummary, FormIdentityFields, FormSummary, RenderedForm,
 };
-use crate::features::organization::NodeTypeCatalogEntry;
 use leptos::prelude::*;
 
 use super::save::{SubmitUpdateFormInput, submit_update_form};
@@ -16,7 +16,7 @@ pub(in crate::features::forms) fn FormEditForm(
     cancel_href: String,
     name: RwSignal<String>,
     workflow_node_type_id: RwSignal<String>,
-    node_types: RwSignal<Vec<NodeTypeCatalogEntry>>,
+    node_types: RwSignal<Vec<FormNodeTypeOption>>,
     existing_forms: RwSignal<Vec<FormSummary>>,
     rendered_form: RwSignal<Option<RenderedForm>>,
     edit_version_id: RwSignal<Option<String>>,

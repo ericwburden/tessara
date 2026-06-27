@@ -1,6 +1,6 @@
 //! Attached-node sheet for the forms list.
 
-use crate::features::shared::FormsAttachedNodesSheetData;
+use crate::features::forms::FormsAttachedNodesSheetData;
 use crate::ui::empty_view;
 use icons::{ExternalLink, Search, X};
 use leptos::portal::Portal;

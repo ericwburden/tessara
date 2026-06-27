@@ -1,9 +1,9 @@
 //! Related attached-node table for form detail pages.
 
-use crate::features::shared::FormAttachmentLink;
+use crate::features::forms::FormAttachmentLink;
+use crate::features::forms::support::pagination::pagination_page_start;
+use crate::features::forms::support::text::text_matches;
 use crate::ui::{SearchableDataTable, TablePaginationFooter};
-use crate::utils::pagination::pagination_page_start;
-use crate::utils::text::text_matches;
 use leptos::prelude::*;
 
 #[component]

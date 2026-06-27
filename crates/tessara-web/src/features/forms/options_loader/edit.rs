@@ -1,20 +1,20 @@
 //! Option loader for the form edit page.
 
+use crate::features::forms::FormNodeTypeOption;
 #[cfg(feature = "hydrate")]
 use crate::features::forms::api::{FormsApiError, fetch_form_edit_options};
 #[cfg(feature = "hydrate")]
 use crate::features::forms::builder::hydrate_form_builder_from_rendered;
 use crate::features::forms::builder::{FormBuilderFieldDraft, FormBuilderSectionDraft};
-use crate::features::forms::{FormDefinition, FormSummary, RenderedForm};
-use crate::features::organization::NodeTypeCatalogEntry;
 #[cfg(feature = "hydrate")]
-use crate::http::redirect_to_login;
+use crate::features::forms::http::redirect_to_login;
+use crate::features::forms::{FormDefinition, FormSummary, RenderedForm};
 use leptos::prelude::*;
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn load_form_edit_options(
     form_id: String,
-    node_types: RwSignal<Vec<NodeTypeCatalogEntry>>,
+    node_types: RwSignal<Vec<FormNodeTypeOption>>,
     existing_forms: RwSignal<Vec<FormSummary>>,
     detail: RwSignal<Option<FormDefinition>>,
     rendered_form: RwSignal<Option<RenderedForm>>,

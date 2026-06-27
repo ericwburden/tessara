@@ -2,9 +2,74 @@
 //!
 //! Keep label, class, and summary formatting here when it depends on Forms domain values but not on route state.
 
-use crate::features::forms::types::{FormDefinition, FormVersionSummary, RenderedField};
-use crate::features::shared::FormAttachmentLink;
-use crate::utils::text::{nonempty_text, sentence_label};
+use crate::features::forms::support::text::{nonempty_text, sentence_label};
+use crate::features::forms::types::{
+    FormAttachmentLink, FormDefinition, FormVersionSummary, RenderedField,
+};
+use crate::ui::empty_view;
+use icons::FileText;
+use leptos::prelude::*;
+
+pub(crate) fn status_badge_class(status: &str) -> &'static str {
+    match status {
+        "published" | "done" | "active" | "submitted" => "status-badge is-success",
+        "draft" | "in_progress" => "status-badge is-warning",
+        "error" | "archived" => "status-badge is-danger",
+        _ => "status-badge is-info",
+    }
+}
+
+pub(crate) fn node_count_label(count: usize) -> String {
+    if count == 1 {
+        "1 Node".to_string()
+    } else {
+        format!("{count} Nodes")
+    }
+}
+
+pub(crate) fn form_workflow_revision_label_from_option(label: Option<String>) -> String {
+    label
+        .as_deref()
+        .map(form_workflow_revision_label_from_raw)
+        .unwrap_or_else(|| "-".to_string())
+}
+
+fn form_workflow_revision_label_from_raw(label: &str) -> String {
+    let trimmed = label.trim();
+    if trimmed.is_empty() {
+        return "-".to_string();
+    }
+
+    if let Ok(revision) = trimmed.parse::<u64>() {
+        return revision.to_string();
+    }
+
+    trimmed
+        .split('.')
+        .next()
+        .and_then(|part| part.trim().parse::<u64>().ok())
+        .map(|revision| revision.to_string())
+        .unwrap_or_else(|| trimmed.to_string())
+}
+
+#[component]
+pub(crate) fn FormWorkflowSourceMarker(source: String) -> impl IntoView {
+    if source == "generated_form" {
+        view! {
+            <span
+                class="workflow-source-marker"
+                title="Single-Form, Generated Workflow"
+                aria-label="Single-Form, Generated Workflow"
+            >
+                <FileText class="workflow-source-marker__icon"/>
+                <span>"Single-form"</span>
+            </span>
+        }
+        .into_any()
+    } else {
+        empty_view()
+    }
+}
 
 pub(crate) fn form_version_desc_sort_key(version: &FormVersionSummary) -> (i32, i32, i32, String) {
     (

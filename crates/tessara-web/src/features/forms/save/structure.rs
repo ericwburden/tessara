@@ -1,8 +1,8 @@
 //! Form section and field persistence helpers.
 
 use crate::features::forms::builder::{FormBuilderFieldDraft, FormBuilderSectionDraft};
+use crate::features::forms::http::send_json_id_request;
 use crate::features::forms::save::payloads::{form_field_payload, form_section_payload};
-use crate::http::send_json_id_request;
 use std::collections::HashMap;
 
 /// Saves prepared sections and returns local draft ids mapped to remote section ids.

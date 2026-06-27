@@ -1,12 +1,12 @@
 //! Mobile card rendering for the forms list.
 
 use crate::features::forms::FormSummary;
+use crate::features::forms::support::pagination::pagination_page_start;
 use crate::features::forms::{
     FormsAttachedNodesList, active_form_version, form_attached_nodes, form_field_count_label,
     form_status_label, form_version_label,
 };
-use crate::features::shared::{FormsAttachedNodesSheetData, status_badge_class};
-use crate::utils::pagination::pagination_page_start;
+use crate::features::forms::{FormsAttachedNodesSheetData, status_badge_class};
 use leptos::prelude::*;
 
 #[component]

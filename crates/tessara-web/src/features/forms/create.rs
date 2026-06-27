@@ -1,11 +1,11 @@
 //! Form creation route page.
 
+use crate::features::forms::FormNodeTypeOption;
 use crate::features::forms::builder::{
     FormBuilderCanvas, FormBuilderEditorState, new_form_builder_editor_state,
 };
 use crate::features::forms::options_loader::load_form_create_options;
 use crate::features::forms::{FormIdentityFields, FormInitialVersionSummary, FormSummary};
-use crate::features::organization::NodeTypeCatalogEntry;
 use crate::ui::{
     AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator,
     Button, PageHeader,
@@ -16,7 +16,7 @@ use super::save::{SubmitCreateFormInput, submit_create_form};
 
 #[component]
 pub fn FormsNewPage() -> impl IntoView {
-    let node_types = RwSignal::new(Vec::<NodeTypeCatalogEntry>::new());
+    let node_types = RwSignal::new(Vec::<FormNodeTypeOption>::new());
     let existing_forms = RwSignal::new(Vec::<FormSummary>::new());
     let name = RwSignal::new(String::new());
     let workflow_node_type_id = RwSignal::new(String::new());

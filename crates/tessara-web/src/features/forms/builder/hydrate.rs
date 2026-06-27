@@ -5,7 +5,7 @@ use super::types::{
     blank_form_builder_section,
 };
 use crate::features::forms::RenderedForm;
-use crate::utils::text::nonempty_text;
+use crate::features::forms::support::text::nonempty_text;
 use std::collections::HashMap;
 
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]

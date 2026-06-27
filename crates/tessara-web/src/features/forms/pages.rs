@@ -1,13 +1,13 @@
 //! Forms list route page.
 
 use crate::features::forms::loaders::load_forms;
+use crate::features::forms::support::filtering::unique_filter_options;
+use crate::features::forms::support::text::text_matches;
 use crate::features::forms::{
     FormSummary, active_form_version, form_attached_to_label, form_matches_node_filter,
     form_node_filter_options, form_status_label, form_version_label,
 };
 use crate::ui::{AppShell, Button, PageHeader};
-use crate::utils::filtering::unique_filter_options;
-use crate::utils::text::text_matches;
 use leptos::prelude::*;
 
 use super::list::FormsList;

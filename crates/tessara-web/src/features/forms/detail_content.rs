@@ -1,11 +1,11 @@
 //! Form detail presentation components.
 
+use crate::features::forms::{FormAttachmentLink, status_badge_class};
 use crate::features::forms::{
     FormDatasetSourceLink, FormDefinition, FormVersionsTable, FormWorkflowLink, RenderedForm,
     active_form_definition_version, form_attached_nodes, form_definition_scope_label,
     form_field_count_label, form_status_label, form_version_label,
 };
-use crate::features::shared::{FormAttachmentLink, status_badge_class};
 use crate::ui::{InfoListTable, Tabs, TabsContent, TabsList, TabsTrigger, Timestamp, empty_view};
 use leptos::prelude::*;
 

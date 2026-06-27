@@ -1,9 +1,9 @@
 //! Form editor page sections.
 
-use crate::features::organization::NodeTypeCatalogEntry;
-use crate::features::shared::status_badge_class;
+use crate::features::forms::FormNodeTypeOption;
+use crate::features::forms::status_badge_class;
+use crate::features::forms::support::text::sentence_label;
 use crate::ui::{InfoListTable, InfoRow};
-use crate::utils::text::sentence_label;
 use leptos::prelude::*;
 
 #[component]
@@ -11,7 +11,7 @@ use leptos::prelude::*;
 pub(in crate::features::forms) fn FormIdentityFields(
     name: RwSignal<String>,
     workflow_node_type_id: RwSignal<String>,
-    node_types: RwSignal<Vec<NodeTypeCatalogEntry>>,
+    node_types: RwSignal<Vec<FormNodeTypeOption>>,
 ) -> impl IntoView {
     view! {
         <div class="form-grid">

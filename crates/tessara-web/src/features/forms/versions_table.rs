@@ -1,9 +1,9 @@
 //! Form version table components.
 
+use crate::features::forms::status_badge_class;
+use crate::features::forms::support::text::{nonempty_text, sentence_label};
 use crate::features::forms::types::FormVersionSummary;
-use crate::features::shared::status_badge_class;
 use crate::ui::{DataTable, Timestamp, empty_view};
-use crate::utils::text::{nonempty_text, sentence_label};
 use leptos::prelude::*;
 
 use super::display::form_version_desc_sort_key;

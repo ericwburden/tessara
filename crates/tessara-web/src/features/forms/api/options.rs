@@ -3,21 +3,21 @@
 #[cfg(feature = "hydrate")]
 use super::FormsApiError;
 #[cfg(feature = "hydrate")]
+use crate::features::forms::FormNodeTypeOption;
+#[cfg(feature = "hydrate")]
 use crate::features::forms::versions::editable_form_definition_version;
 #[cfg(feature = "hydrate")]
 use crate::features::forms::{FormDefinition, FormSummary, RenderedForm};
-#[cfg(feature = "hydrate")]
-use crate::features::organization::NodeTypeCatalogEntry;
 
 #[cfg(feature = "hydrate")]
 pub(in crate::features::forms) struct FormCreateOptions {
-    pub(in crate::features::forms) node_types: Vec<NodeTypeCatalogEntry>,
+    pub(in crate::features::forms) node_types: Vec<FormNodeTypeOption>,
     pub(in crate::features::forms) existing_forms: Vec<FormSummary>,
 }
 
 #[cfg(feature = "hydrate")]
 pub(in crate::features::forms) struct FormEditOptions {
-    pub(in crate::features::forms) node_types: Vec<NodeTypeCatalogEntry>,
+    pub(in crate::features::forms) node_types: Vec<FormNodeTypeOption>,
     pub(in crate::features::forms) existing_forms: Vec<FormSummary>,
     pub(in crate::features::forms) detail: FormDefinition,
     pub(in crate::features::forms) rendered_form: Option<RenderedForm>,
@@ -37,9 +37,7 @@ pub(in crate::features::forms) async fn fetch_form_create_options()
         (Ok(node_types_response), Ok(forms_response))
             if node_types_response.ok() && forms_response.ok() =>
         {
-            let node_types = node_types_response
-                .json::<Vec<NodeTypeCatalogEntry>>()
-                .await;
+            let node_types = node_types_response.json::<Vec<FormNodeTypeOption>>().await;
             let existing_forms = forms_response.json::<Vec<FormSummary>>().await;
 
             match (node_types, existing_forms) {
@@ -78,9 +76,7 @@ pub(in crate::features::forms) async fn fetch_form_edit_options(
         (Ok(node_types_response), Ok(forms_response), Ok(detail_response))
             if node_types_response.ok() && forms_response.ok() && detail_response.ok() =>
         {
-            let node_types = node_types_response
-                .json::<Vec<NodeTypeCatalogEntry>>()
-                .await;
+            let node_types = node_types_response.json::<Vec<FormNodeTypeOption>>().await;
             let existing_forms = forms_response.json::<Vec<FormSummary>>().await;
             let detail = detail_response.json::<FormDefinition>().await;
 

@@ -4,11 +4,11 @@ use crate::features::forms::builder::{
     FormBuilderFieldDraft, FormBuilderSectionDraft, prepared_form_builder_fields,
     prepared_form_builder_sections,
 };
+use crate::features::forms::support::slug::unique_slug_from_label;
+use crate::features::forms::support::text::IntoNonemptyString;
 use crate::features::forms::types::{
     CreateFormPayload, FormSummary, RenderedForm, UpdateFormPayload,
 };
-use crate::utils::slug::unique_slug_from_label;
-use crate::utils::text::IntoNonemptyString;
 use std::collections::HashSet;
 
 use super::slugs::{existing_form_slugs, existing_form_slugs_for_update};

@@ -1,9 +1,9 @@
 //! Form edit route page.
 
+use crate::features::forms::FormNodeTypeOption;
 use crate::features::forms::builder::{FormBuilderEditorState, new_form_builder_editor_state};
 use crate::features::forms::options_loader::load_form_edit_options;
 use crate::features::forms::{FormDefinition, FormEditForm, FormSummary, RenderedForm};
-use crate::features::organization::NodeTypeCatalogEntry;
 use crate::types::route_params::{FormRouteParams, require_route_params};
 use crate::ui::{
     AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator,
@@ -18,7 +18,7 @@ pub fn FormsEditPage() -> impl IntoView {
     let form_id_for_load = form_id.clone();
     let form_id_for_submit = form_id.clone();
     let cancel_href = format!("/forms/{form_id}");
-    let node_types = RwSignal::new(Vec::<NodeTypeCatalogEntry>::new());
+    let node_types = RwSignal::new(Vec::<FormNodeTypeOption>::new());
     let existing_forms = RwSignal::new(Vec::<FormSummary>::new());
     let detail = RwSignal::new(None::<FormDefinition>);
     let rendered_form = RwSignal::new(None::<RenderedForm>);

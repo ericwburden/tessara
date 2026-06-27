@@ -1,15 +1,15 @@
 //! Option loader for the form create page.
 
+use crate::features::forms::FormNodeTypeOption;
 use crate::features::forms::FormSummary;
 #[cfg(feature = "hydrate")]
 use crate::features::forms::api::{FormsApiError, fetch_form_create_options};
-use crate::features::organization::NodeTypeCatalogEntry;
 #[cfg(feature = "hydrate")]
-use crate::http::redirect_to_login;
+use crate::features::forms::http::redirect_to_login;
 use leptos::prelude::*;
 
 pub(crate) fn load_form_create_options(
-    node_types: RwSignal<Vec<NodeTypeCatalogEntry>>,
+    node_types: RwSignal<Vec<FormNodeTypeOption>>,
     existing_forms: RwSignal<Vec<FormSummary>>,
     is_loading: RwSignal<bool>,
     message: RwSignal<Option<String>>,
