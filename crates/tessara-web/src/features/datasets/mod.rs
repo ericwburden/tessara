@@ -16,5 +16,5 @@ mod permissions;
 mod types;
 mod validation;
 pub(crate) use pages::{
-    DatasetsDetailPage, DatasetsEditPage, DatasetsNewPage, DatasetsPage, DatasetsPreviewPage,
+    DatasetDetailContent, DatasetEditorContent, DatasetPreviewContent, DatasetsIndexContent,
 };

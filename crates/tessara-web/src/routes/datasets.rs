@@ -6,11 +6,13 @@ use leptos::prelude::*;
 use leptos_router::components::Route;
 use leptos_router::{MatchNestedRoutes, path};
 
+use crate::features::auth::require_authenticated_route;
 use crate::features::datasets::{
-    DatasetsDetailPage, DatasetsEditPage, DatasetsNewPage, DatasetsPage, DatasetsPreviewPage,
+    DatasetDetailContent, DatasetEditorContent, DatasetPreviewContent, DatasetsIndexContent,
 };
-
 use crate::routes::PRIMARY_SSR_MODE;
+use crate::types::route_params::{DatasetRouteParams, require_route_params};
+use crate::ui::AppShell;
 
 pub fn dataset_routes() -> impl MatchNestedRoutes + Clone {
     view! {
@@ -34,4 +36,55 @@ pub fn dataset_routes() -> impl MatchNestedRoutes + Clone {
             />
         </>
     }
+}
+
+#[component]
+fn DatasetsPage() -> impl IntoView {
+    view! {
+        <AppShell active_route="datasets" title="Datasets">
+            <DatasetsIndexContent/>
+        </AppShell>
+    }
+}
+
+#[component]
+fn DatasetsNewPage() -> impl IntoView {
+    view! {
+        <AppShell active_route="datasets" title="Create Dataset">
+            <DatasetEditorContent dataset_id=None/>
+        </AppShell>
+    }
+}
+
+#[component]
+fn DatasetsDetailPage() -> impl IntoView {
+    let params = require_route_params::<DatasetRouteParams>();
+    let dataset_id = params.dataset_id;
+
+    view! {
+        <AppShell active_route="datasets" title="Dataset Detail">
+            <DatasetDetailContent dataset_id/>
+        </AppShell>
+    }
+}
+
+#[component]
+fn DatasetsEditPage() -> impl IntoView {
+    let params = require_route_params::<DatasetRouteParams>();
+    let dataset_id = params.dataset_id;
+
+    view! {
+        <AppShell active_route="datasets" title="Edit Dataset">
+            <DatasetEditorContent dataset_id=Some(dataset_id)/>
+        </AppShell>
+    }
+}
+
+#[component]
+fn DatasetsPreviewPage() -> impl IntoView {
+    require_authenticated_route("datasets");
+    let params = require_route_params::<DatasetRouteParams>();
+    let dataset_id = params.dataset_id;
+
+    view! { <DatasetPreviewContent dataset_id/> }
 }

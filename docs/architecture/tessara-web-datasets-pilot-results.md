@@ -1,6 +1,6 @@
 # Tessara Web Dataset-Crate Pilot Results
 
-Status: Commit 1 UI extraction in progress
+Status: Commit 2 route-adapter split validated
 
 Governing plan:
 
@@ -85,6 +85,13 @@ Commit 1 added `tessara-web-ui`. Feature-tree review:
 - No root app, API, router, meta, transport, auth, session, navigation, or product feature crate dependency is declared by `tessara-web-ui`.
 - Source audit for `datasets|forms|workflows|responses|organization|administration|AppShell|ShellSession|require_authenticated_route` under `crates\tessara-web-ui\src` found no matches.
 
+Commit 2 kept the dataset feature in `tessara-web` but moved route-only concerns back to the root route adapter:
+
+- `crates\tessara-web\src\routes\datasets.rs` now owns dataset route page adapters, route parameter parsing, shell wrapping, and the explicit preview auth guard.
+- `crates\tessara-web\src\features\datasets\pages` now exposes shell-free content components: `DatasetsIndexContent`, `DatasetDetailContent`, `DatasetEditorContent`, and `DatasetPreviewContent`.
+- Source audit for `AppShell|require_route_params|DatasetRouteParams|Datasets(Page|DetailPage|EditPage|NewPage|PreviewPage)` under `crates\tessara-web\src\features\datasets` found no matches. Those route/shell references remain root-owned in `crates\tessara-web\src\routes\datasets.rs`.
+- Dataset-internal absolute imports such as `crate::features::datasets::types` remain and are tracked for the extraction/import rewrite commit rather than preserved for compatibility.
+
 ## Bundle-Size Deltas
 
 Commit 0 bundle report, from the `cargo leptos build` output in worktree-local `target/site`:
@@ -107,6 +114,11 @@ Commit 1 UI public API:
 
 Dataset public API review is not applicable yet.
 
+Commit 2 dataset feature facade:
+
+- The root-facing dataset boundary now re-exports content components rather than route pages.
+- `/datasets/:dataset_id/preview` remains intentionally shell-less, with `require_authenticated_route("datasets")` called by the route adapter before rendering `DatasetPreviewContent`.
+
 ## Dependency-Boundary Report
 
 Not applicable yet. Boundary tooling is planned for Commit 4.
@@ -125,10 +137,19 @@ Commit 1 validation:
 | `cargo check -p tessara-api --features ssr` | pass |
 | `cargo leptos build` | pass |
 
+Commit 2 validation:
+
+| Command | Result |
+| --- | --- |
+| `cargo fmt --all --check` | pass |
+| `cargo check -p tessara-web --no-default-features --features hydrate --target wasm32-unknown-unknown` | pass, 21.89s |
+| `cargo check -p tessara-api --features ssr` | pass, 27.31s |
+| `cargo leptos build` | pass, 1m35s; existing missing `node_modules` and missing `crates/tessara-web/public` warnings only |
+
 ## Intentional Contract and Transport Debt Retained
 
 Not applicable yet. Required after dataset extraction.
 
 ## GO/PARTIAL/NO-GO Decision
 
-No final decision yet. The pilot is still in Commit 0 baseline setup.
+No final decision yet. The pilot is validated through Commit 2 and still needs dataset crate extraction, boundary enforcement, and post-extraction watch/bundle evidence.

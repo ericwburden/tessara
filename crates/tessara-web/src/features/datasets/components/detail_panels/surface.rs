@@ -6,7 +6,7 @@ use super::super::super::permissions::can_manage_datasets;
 use super::super::super::types::*;
 use super::summary::{MetricCard, tab_class};
 use super::tables::{DatasetFieldsTable, DatasetSourcesTable, DatasetSqlPanel};
-use crate::ui::{AppShell, DataTable, EmptyState, PageHeader};
+use crate::ui::{DataTable, EmptyState, PageHeader};
 use crate::utils::text::sentence_label;
 use icons::X;
 use leptos::portal::Portal;
@@ -39,58 +39,56 @@ pub(crate) fn DatasetDetailSurface(dataset_id: String, edit: bool) -> impl IntoV
     };
 
     view! {
-        <AppShell active_route="datasets" title="Dataset Detail">
-            <section class="route-panel datasets-page">
-                {move || {
-                    if is_loading.get() {
-                        view! { <EmptyState title="Loading dataset" message="Fetching dataset definition."/> }.into_any()
-                    } else if let Some(message) = load_error.get() {
-                        view! { <EmptyState title="Dataset unavailable" message=Box::leak(message.into_boxed_str())/> }.into_any()
-                    } else if let Some(loaded) = dataset.get() {
-                        let edit_href = format!("/datasets/{}/edit", loaded.id);
-                        let tab_dataset = loaded.clone();
-                        let visibility_nodes = loaded.visibility_nodes.clone();
-                        view! {
-                            <PageHeader title=Box::leak(loaded.name.clone().into_boxed_str())>
-                                {move || if can_manage() && !edit {
-                                    view! { <a class="button button--secondary" href=edit_href.clone()>"Edit Dataset"</a> }.into_any()
-                                } else {
-                                    view! { <span></span> }.into_any()
-                                }}
-                            </PageHeader>
-                            <section class="dataset-detail-summary">
-                                <MetricCard label="Slug" value=loaded.slug.clone()/>
-                                <MetricCard label="Grain" value=sentence_label(&loaded.grain)/>
-                                <button class="metric-card metric-card--button" type="button" aria-label="Show dataset visibility nodes" on:click=move |_| visibility_sheet_open.set(true)>
-                                    <span>"Visibility"</span>
-                                    <strong>{visibility_label(&loaded.visibility_nodes)}</strong>
-                                </button>
-                            </section>
-                            <div class="tabs" data-active=move || active_tab.get()>
-                                <div class="tabs-list" role="tablist">
-                                    <button class=tab_class(active_tab, "preview") type="button" on:click=move |_| active_tab.set("preview".into())>"Preview"</button>
-                                    <button class=tab_class(active_tab, "sources") type="button" on:click=move |_| active_tab.set("sources".into())>"Sources"</button>
-                                    <button class=tab_class(active_tab, "fields") type="button" on:click=move |_| active_tab.set("fields".into())>"Fields"</button>
-                                    <button class=tab_class(active_tab, "sql") type="button" on:click=move |_| active_tab.set("sql".into())>"SQL"</button>
-                                </div>
-                                {move || if active_tab.get() == "preview" {
-                                    view! { <DatasetPreviewTable dataset=tab_dataset.clone() table=table.get() error=table_error.get()/> }.into_any()
-                                } else if active_tab.get() == "sources" {
-                                    view! { <DatasetSourcesTable sources=tab_dataset.sources.clone()/> }.into_any()
-                                } else if active_tab.get() == "sql" {
-                                    view! { <DatasetSqlPanel sql=tab_dataset.generated_sql.clone()/> }.into_any()
-                                } else {
-                                    view! { <DatasetFieldsTable fields=detail_output_fields(&tab_dataset) /> }.into_any()
-                                }}
+        <section class="route-panel datasets-page">
+            {move || {
+                if is_loading.get() {
+                    view! { <EmptyState title="Loading dataset" message="Fetching dataset definition."/> }.into_any()
+                } else if let Some(message) = load_error.get() {
+                    view! { <EmptyState title="Dataset unavailable" message=Box::leak(message.into_boxed_str())/> }.into_any()
+                } else if let Some(loaded) = dataset.get() {
+                    let edit_href = format!("/datasets/{}/edit", loaded.id);
+                    let tab_dataset = loaded.clone();
+                    let visibility_nodes = loaded.visibility_nodes.clone();
+                    view! {
+                        <PageHeader title=Box::leak(loaded.name.clone().into_boxed_str())>
+                            {move || if can_manage() && !edit {
+                                view! { <a class="button button--secondary" href=edit_href.clone()>"Edit Dataset"</a> }.into_any()
+                            } else {
+                                view! { <span></span> }.into_any()
+                            }}
+                        </PageHeader>
+                        <section class="dataset-detail-summary">
+                            <MetricCard label="Slug" value=loaded.slug.clone()/>
+                            <MetricCard label="Grain" value=sentence_label(&loaded.grain)/>
+                            <button class="metric-card metric-card--button" type="button" aria-label="Show dataset visibility nodes" on:click=move |_| visibility_sheet_open.set(true)>
+                                <span>"Visibility"</span>
+                                <strong>{visibility_label(&loaded.visibility_nodes)}</strong>
+                            </button>
+                        </section>
+                        <div class="tabs" data-active=move || active_tab.get()>
+                            <div class="tabs-list" role="tablist">
+                                <button class=tab_class(active_tab, "preview") type="button" on:click=move |_| active_tab.set("preview".into())>"Preview"</button>
+                                <button class=tab_class(active_tab, "sources") type="button" on:click=move |_| active_tab.set("sources".into())>"Sources"</button>
+                                <button class=tab_class(active_tab, "fields") type="button" on:click=move |_| active_tab.set("fields".into())>"Fields"</button>
+                                <button class=tab_class(active_tab, "sql") type="button" on:click=move |_| active_tab.set("sql".into())>"SQL"</button>
                             </div>
-                            <DatasetVisibilitySheet nodes=visibility_nodes open=visibility_sheet_open/>
-                        }.into_any()
-                    } else {
-                        view! { <EmptyState title="Dataset unavailable" message="Dataset data could not be loaded."/> }.into_any()
-                    }
-                }}
-            </section>
-        </AppShell>
+                            {move || if active_tab.get() == "preview" {
+                                view! { <DatasetPreviewTable dataset=tab_dataset.clone() table=table.get() error=table_error.get()/> }.into_any()
+                            } else if active_tab.get() == "sources" {
+                                view! { <DatasetSourcesTable sources=tab_dataset.sources.clone()/> }.into_any()
+                            } else if active_tab.get() == "sql" {
+                                view! { <DatasetSqlPanel sql=tab_dataset.generated_sql.clone()/> }.into_any()
+                            } else {
+                                view! { <DatasetFieldsTable fields=detail_output_fields(&tab_dataset) /> }.into_any()
+                            }}
+                        </div>
+                        <DatasetVisibilitySheet nodes=visibility_nodes open=visibility_sheet_open/>
+                    }.into_any()
+                } else {
+                    view! { <EmptyState title="Dataset unavailable" message="Dataset data could not be loaded."/> }.into_any()
+                }
+            }}
+        </section>
     }
 }
 
