@@ -1,6 +1,6 @@
 # Tessara Web Dataset-Crate Pilot Results
 
-Status: Commit 3 dataset crate extraction validated
+Status: Commit 4 boundary and watch gates validated
 
 Governing plan:
 
@@ -72,7 +72,20 @@ Commit 1 UI watch gate:
 - observed revert rebuild: `tessara-web-ui` and `tessara-web` rebuilt in 14.31s, wasm-bindgen finished in 3.26s, and watch reported `Watch updated Front`
 - limitation: browser refresh timing was not separately measured because the local API emitted `migration 1 was previously applied but has been modified` after serving. The hard path-dependency detection gate passed; full browser-refresh timing remains to capture when the local DB migration state is repaired.
 
-Dataset watch gate is not run yet. Required after Commit 3 for `tessara-web-datasets`.
+Commit 4 dataset watch gate:
+
+- command: `cargo leptos watch`
+- source edit: temporary `data-pilot-benchmark` attribute in `crates\tessara-web-datasets\src\pages\mod.rs`
+- result: pass for path-dependency detection and front rebuild
+- observed initial watch build: `tessara-web-ui`, `tessara-web-datasets`, and `tessara-web` compiled for both front/server paths, then cargo-leptos served at `http://127.0.0.1:8080`
+- observed `dataset-edit-1` rebuild: `tessara-web-datasets` and `tessara-web` rebuilt in 14.29s, wasm-bindgen finished in 3.74s, and watch reported `Watch updated Front`
+- observed `dataset-edit-2` rebuild: `tessara-web-datasets` and `tessara-web` rebuilt in 14.55s, wasm-bindgen finished in 3.29s, and watch reported `Watch updated Front`
+- observed `dataset-edit-3` rebuild: `tessara-web-datasets` and `tessara-web` rebuilt in 13.58s, wasm-bindgen finished in 3.56s, and watch reported `Watch updated Front`
+- observed cleanup rebuild: `tessara-web-datasets` and `tessara-web` rebuilt in 14.39s, wasm-bindgen finished in 3.52s, and watch reported `Watch updated Front`
+- median dataset edit rebuild time, cargo compile only: 14.29s, range 13.58s to 14.55s
+- median dataset edit rebuild plus wasm-bindgen: 17.84s, range 17.14s to 18.03s
+- limitation: browser refresh timing was not separately measured because the local API again emitted `migration 1 was previously applied but has been modified` after serving. The hard path-dependency detection gate passed; full browser-refresh timing remains to capture when the local DB migration state is repaired.
+- cleanup audit for `data-pilot-benchmark|dataset-edit-[123]|ui-edit-[123]` found no matches, and no Cargo/Rust watcher processes remained after shutdown.
 
 ## Feature-Tree Deltas
 
@@ -146,7 +159,24 @@ Commit 3 dataset crate public API:
 
 ## Dependency-Boundary Report
 
-Not applicable yet. Boundary tooling is planned for Commit 4.
+Commit 4 added `scripts\check-web-crate-boundaries.ps1`.
+
+Boundary checker behavior:
+
+- runs `cargo metadata --format-version 1 --filter-platform x86_64-pc-windows-msvc`
+- runs `cargo metadata --format-version 1 --filter-platform wasm32-unknown-unknown`
+- computes dependency paths across all dependency kinds reported by Cargo metadata
+- rejects paths from `tessara-web-datasets` to root/API/sibling web feature crates
+- rejects paths from `tessara-web-ui` to root/API/web feature crates
+- rejects paths from domain crates to web/server transport or UI framework packages
+- fails source-level root route/shell/auth/router/meta imports in `crates\tessara-web-datasets\src`
+- prints `tessara-web-ui` product/app concept matches as review-aid output, not a strict word ban
+
+Local result:
+
+| Command | Result |
+| --- | --- |
+| `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\check-web-crate-boundaries.ps1` | pass |
 
 ## Behavior Validation Results
 
@@ -186,6 +216,25 @@ Commit 3 validation:
 | `cargo doc -p tessara-web-datasets --no-deps` | pass |
 | `cargo leptos build` | pass, 1m43s; existing missing `node_modules` and missing `crates/tessara-web/public` warnings only |
 
+Commit 4 validation:
+
+| Command | Result |
+| --- | --- |
+| `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\check-web-crate-boundaries.ps1` | pass |
+| `cargo check -p tessara-web-ui` | pass |
+| `cargo tree -p tessara-web-ui -e features --depth 2 --color never` | pass; includes approved `DraggablePanelList` browser drag dependencies |
+| `cargo doc -p tessara-web-ui --no-deps` | pass |
+| `cargo check -p tessara-web-datasets --no-default-features --features ssr` | pass, 6.28s |
+| `cargo check -p tessara-web-datasets --no-default-features --features hydrate --target wasm32-unknown-unknown` | pass |
+| `cargo test -p tessara-web-datasets --no-default-features --features ssr --no-run -j 1` | pass, 3m15s |
+| `cargo tree -p tessara-web-datasets -e features --features ssr --depth 2 --color never` | pass |
+| `cargo tree -p tessara-web-datasets -e features --no-default-features --features hydrate --target wasm32-unknown-unknown --depth 2 --color never` | pass |
+| `cargo doc -p tessara-web-datasets --no-deps --no-default-features --features ssr` | pass |
+| `cargo doc -p tessara-web-datasets --no-deps --no-default-features --features hydrate --target wasm32-unknown-unknown` | pass |
+| `cargo tree -p tessara-web -e features --depth 2 --features ssr --color never` | pass |
+| `cargo tree -p tessara-web -e features --depth 2 --no-default-features --features hydrate --target wasm32-unknown-unknown --color never` | pass |
+| `cargo fmt --all --check` | pass |
+
 ## Intentional Contract and Transport Debt Retained
 
 Commit 3 retained intentional local debt:
@@ -196,4 +245,4 @@ Commit 3 retained intentional local debt:
 
 ## GO/PARTIAL/NO-GO Decision
 
-No final decision yet. The pilot is validated through Commit 3 and still needs automated boundary enforcement plus the post-extraction dataset watch gate.
+PARTIAL GO. The structural extraction, dependency boundaries, feature matrix, bundle gate, dataset-local test compile gate, and cargo-leptos path-dependency watch gate all pass. The remaining limitation is environmental rather than architectural: browser refresh timing could not be measured because the local API exits with the pre-existing modified-migration error after serving. Repair the local DB migration state before using refresh timing as decision-grade evidence.
