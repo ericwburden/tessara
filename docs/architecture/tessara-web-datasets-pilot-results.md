@@ -1,6 +1,6 @@
 # Tessara Web Dataset-Crate Pilot Results
 
-Status: Commit 2 route-adapter split validated
+Status: Commit 3 dataset crate extraction validated
 
 Governing plan:
 
@@ -92,6 +92,16 @@ Commit 2 kept the dataset feature in `tessara-web` but moved route-only concerns
 - Source audit for `AppShell|require_route_params|DatasetRouteParams|Datasets(Page|DetailPage|EditPage|NewPage|PreviewPage)` under `crates\tessara-web\src\features\datasets` found no matches. Those route/shell references remain root-owned in `crates\tessara-web\src\routes\datasets.rs`.
 - Dataset-internal absolute imports such as `crate::features::datasets::types` remain and are tracked for the extraction/import rewrite commit rather than preserved for compatibility.
 
+Commit 3 extracted `crates\tessara-web-datasets`:
+
+- `crates\tessara-web\src\features\datasets` was removed; dataset code now lives under `crates\tessara-web-datasets\src`.
+- Root dataset routes import the four content components directly from `tessara_web_datasets`.
+- Dataset route params, shell wrappers, and auth guard remain root-owned in `crates\tessara-web\src\routes\datasets.rs`.
+- Dataset-internal `crate::features::datasets::*` imports and `pub(in crate::features::datasets)` visibility were rewritten to crate-local paths and `pub(crate)`.
+- `tessara-web-datasets` owns small local `http`, `pagination`, and `text` helper modules instead of depending on root `tessara-web` utilities.
+- `DraggablePanelList` moved into `tessara-web-ui` because the dataset editor needs it and it is domain-neutral UI behavior.
+- Source audit for root app/router/shell/auth references under `crates\tessara-web-datasets\src` found no matches except `crate::http`, which is the new crate-local transport module.
+
 ## Bundle-Size Deltas
 
 Commit 0 bundle report, from the `cargo leptos build` output in worktree-local `target/site`:
@@ -102,6 +112,15 @@ Commit 0 bundle report, from the `cargo leptos build` output in worktree-local `
 | `tessara-web.js` | 60,562 | 2026-06-27T02:29:14Z |
 | combined JS/WASM | 27,663,145 |  |
 | `tessara-web.css` | 120,731 | 2026-06-27T02:24:36Z |
+
+Commit 3 bundle report, from the post-extraction `cargo leptos build` output in worktree-local `target/site`:
+
+| Artifact | Bytes | Delta vs Commit 0 |
+| --- | ---: | ---: |
+| `tessara-web.wasm` | 27,727,967 | +125,384 |
+| `tessara-web.js` | 60,563 | +1 |
+| combined JS/WASM | 27,788,530 | +125,385 |
+| `tessara-web.css` | 120,731 | 0 |
 
 ## Public API Review
 
@@ -118,6 +137,12 @@ Commit 2 dataset feature facade:
 
 - The root-facing dataset boundary now re-exports content components rather than route pages.
 - `/datasets/:dataset_id/preview` remains intentionally shell-less, with `require_authenticated_route("datasets")` called by the route adapter before rendering `DatasetPreviewContent`.
+
+Commit 3 dataset crate public API:
+
+- `cargo doc -p tessara-web-datasets --no-deps` passed.
+- Public API is limited to `DatasetsIndexContent`, `DatasetDetailContent`, `DatasetEditorContent`, and `DatasetPreviewContent`.
+- Dataset DTOs, loaders, editor state, transport, validation, and helper modules remain crate-private.
 
 ## Dependency-Boundary Report
 
@@ -146,10 +171,29 @@ Commit 2 validation:
 | `cargo check -p tessara-api --features ssr` | pass, 27.31s |
 | `cargo leptos build` | pass, 1m35s; existing missing `node_modules` and missing `crates/tessara-web/public` warnings only |
 
+Commit 3 validation:
+
+| Command | Result |
+| --- | --- |
+| `cargo fmt --all --check` | pass |
+| `cargo check -p tessara-web-datasets --no-default-features --features hydrate --target wasm32-unknown-unknown` | pass, 7.93s |
+| `cargo check -p tessara-web-datasets --features ssr` | pass, 47.64s |
+| `cargo check -p tessara-web --no-default-features --features hydrate --target wasm32-unknown-unknown` | pass, 4.60s after stale root re-export cleanup |
+| `cargo check -p tessara-api --features ssr` | pass, 37.06s |
+| `cargo test -p tessara-web-datasets --lib` | pass, 21 tests |
+| `cargo test -p tessara-web-ui --lib` | pass, 3 tests |
+| `cargo tree -p tessara-web-datasets -e features --depth 2 --color never` | pass |
+| `cargo doc -p tessara-web-datasets --no-deps` | pass |
+| `cargo leptos build` | pass, 1m43s; existing missing `node_modules` and missing `crates/tessara-web/public` warnings only |
+
 ## Intentional Contract and Transport Debt Retained
 
-Not applicable yet. Required after dataset extraction.
+Commit 3 retained intentional local debt:
+
+- `tessara-web-datasets` has its own browser HTTP transport copied from the root app transport shape. This avoids a root-app dependency during extraction; Commit 4 should enforce that no feature crate imports root transport.
+- Minimal text and pagination helpers were copied into the dataset crate rather than preserved through root `utils` imports. If more feature crates need them, promote them to a small shared utility crate instead of reintroducing root coupling.
+- `DraggablePanelList` moved into `tessara-web-ui` with direct `js-sys`, `wasm-bindgen`, and `web-sys` dependencies because the primitive itself owns browser drag behavior.
 
 ## GO/PARTIAL/NO-GO Decision
 
-No final decision yet. The pilot is validated through Commit 2 and still needs dataset crate extraction, boundary enforcement, and post-extraction watch/bundle evidence.
+No final decision yet. The pilot is validated through Commit 3 and still needs automated boundary enforcement plus the post-extraction dataset watch gate.

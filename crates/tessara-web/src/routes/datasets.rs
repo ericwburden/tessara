@@ -7,12 +7,12 @@ use leptos_router::components::Route;
 use leptos_router::{MatchNestedRoutes, path};
 
 use crate::features::auth::require_authenticated_route;
-use crate::features::datasets::{
-    DatasetDetailContent, DatasetEditorContent, DatasetPreviewContent, DatasetsIndexContent,
-};
 use crate::routes::PRIMARY_SSR_MODE;
 use crate::types::route_params::{DatasetRouteParams, require_route_params};
 use crate::ui::AppShell;
+use tessara_web_datasets::{
+    DatasetDetailContent, DatasetEditorContent, DatasetPreviewContent, DatasetsIndexContent,
+};
 
 pub fn dataset_routes() -> impl MatchNestedRoutes + Clone {
     view! {

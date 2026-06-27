@@ -11,7 +11,6 @@ pub(crate) fn empty_view() -> AnyView {
 
 mod button;
 mod data_table;
-mod draggable_panel_list;
 pub mod dropdown;
 mod info_list;
 pub mod shell;
@@ -22,10 +21,6 @@ mod timestamp;
 
 pub(crate) use button::*;
 pub(crate) use data_table::SearchableDataTable;
-pub(crate) use draggable_panel_list::{
-    DraggablePanelList, DraggablePanelListAnchor, DraggablePanelListDraggable,
-    DraggablePanelListDropZone, DraggablePanelListItem, DraggablePanelListMove,
-};
 pub(crate) use dropdown::DropdownMenu;
 pub(crate) use info_list::{InfoListTable, InfoRow};
 pub(crate) use shell::AppShell;
@@ -33,8 +28,7 @@ pub(crate) use status_badge::*;
 pub(crate) use table_filter::TableFilterHeader;
 pub(crate) use tabs::{Tabs, TabsContent, TabsList, TabsTrigger};
 pub(crate) use tessara_web_ui::{
-    Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator, Combobox,
-    ComboboxOption, DataTable, EmptyState, PageHeader, SegmentedToggle, SegmentedToggleOption,
-    TablePaginationFooter,
+    Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator, DataTable,
+    EmptyState, PageHeader, TablePaginationFooter,
 };
 pub(crate) use timestamp::*;
