@@ -2,13 +2,13 @@
 
 These notes capture post-PR #100 organization and hardening work that should not block the Sprint 3C merge. They preserve the trigger for each item so future planning can pull work forward when it becomes materially useful.
 
-## Immediate Follow-Up
+## Completed Follow-Up
 
 ### Centralize Restriction-Tier Semantics
 
 Trigger: the next change that touches dataset row-tier behavior, tier access predicates, or restriction policy SQL.
 
-Plan: move restriction-tier ordering, rank SQL, greatest/max tier SQL, policy CASE SQL, and access predicates into one helper/module. Keep the current ordering `confidential > restricted > internal > public` and preserve existing tests.
+Status: implemented in `crates/tessara-api/src/datasets/restriction_tiers.rs`.
 
 Validation: run dataset compiler unit tests, `demo_flow`, and API clippy.
 
@@ -16,7 +16,7 @@ Validation: run dataset compiler unit tests, `demo_flow`, and API clippy.
 
 Trigger: the next dataset editor or compiler change that affects available fields, output fields, source catalogs, joins, unions, projections, aggregations, calculated fields, filters, or restriction field options.
 
-Plan: add paired backend/frontend test scenarios that assert the backend compiler and frontend editor catalog simulation produce matching field keys/types for representative pipelines. Prioritize dataset-source revision fields, compatible unions, joins, projection renames, aggregation plus calculated fields, and mixed restriction tiers.
+Status: added paired backend/frontend golden catalog tests for compatible union merges and projection plus aggregation plus calculated-field pipelines.
 
 Validation: run `cargo test -p tessara-api datasets:: --lib`, `cargo test -p tessara-web --features hydrate --lib`, and the affected integration tests.
 
@@ -24,7 +24,7 @@ Validation: run `cargo test -p tessara-api datasets:: --lib`, `cargo test -p tes
 
 Trigger: the next dataset integration test that adds another reusable JSON operation builder or repeats existing dataset-authoring setup.
 
-Plan: move reusable helpers from `crates/tessara-api/tests/demo_flow.rs` into `crates/tessara-api/tests/support/datasets.rs`, keeping scenario assertions in `demo_flow.rs`.
+Status: moved reusable JSON operation builders from `crates/tessara-api/tests/demo_flow.rs` into `crates/tessara-api/tests/support/datasets.rs`, keeping scenario assertions in `demo_flow.rs`.
 
 Validation: run `cargo test -p tessara-api --test demo_flow`.
 
