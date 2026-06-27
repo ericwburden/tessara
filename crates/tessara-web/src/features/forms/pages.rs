@@ -7,13 +7,13 @@ use crate::features::forms::{
     FormSummary, active_form_version, form_attached_to_label, form_matches_node_filter,
     form_node_filter_options, form_status_label, form_version_label,
 };
-use crate::ui::{AppShell, Button, PageHeader};
+use crate::ui::{Button, PageHeader};
 use leptos::prelude::*;
 
 use super::list::FormsList;
 
 #[component]
-pub fn FormsPage() -> impl IntoView {
+pub fn FormsIndexContent() -> impl IntoView {
     let forms = RwSignal::new(Vec::<FormSummary>::new());
     let search = RwSignal::new(String::new());
     let status_filter = RwSignal::new("all".to_string());
@@ -71,45 +71,43 @@ pub fn FormsPage() -> impl IntoView {
     let node_filter_options = move || form_node_filter_options(&forms.get());
 
     view! {
-        <AppShell active_route="forms" title="Forms">
-            <section class="route-panel forms-page">
-                <PageHeader title="Forms">
-                    <Button label="Create Form" href="/forms/new"/>
-                </PageHeader>
+        <section class="route-panel forms-page">
+            <PageHeader title="Forms">
+                <Button label="Create Form" href="/forms/new"/>
+            </PageHeader>
 
-                {move || {
-                    if is_loading.get() {
-                        view! {
-                            <section class="organization-state" aria-live="polite">
-                                <h3>"Loading forms"</h3>
-                                <p>"Fetching available form definitions."</p>
-                            </section>
-                        }
-                        .into_any()
-                    } else if let Some(message) = load_error.get() {
-                        view! {
-                            <section class="organization-state is-error" role="alert">
-                                <h3>"Forms unavailable"</h3>
-                                <p>{message}</p>
-                            </section>
-                        }
-                        .into_any()
-                    } else {
-                        view! {
-                            <FormsList
-                                forms=filtered_forms()
-                                search
-                                status_filter
-                                node_filter_query
-                                selected_node_id
-                                status_options=status_options()
-                                node_filter_options=node_filter_options()
-                            />
-                        }
-                        .into_any()
+            {move || {
+                if is_loading.get() {
+                    view! {
+                        <section class="organization-state" aria-live="polite">
+                            <h3>"Loading forms"</h3>
+                            <p>"Fetching available form definitions."</p>
+                        </section>
                     }
-                }}
-            </section>
-        </AppShell>
+                    .into_any()
+                } else if let Some(message) = load_error.get() {
+                    view! {
+                        <section class="organization-state is-error" role="alert">
+                            <h3>"Forms unavailable"</h3>
+                            <p>{message}</p>
+                        </section>
+                    }
+                    .into_any()
+                } else {
+                    view! {
+                        <FormsList
+                            forms=filtered_forms()
+                            search
+                            status_filter
+                            node_filter_query
+                            selected_node_id
+                            status_options=status_options()
+                            node_filter_options=node_filter_options()
+                        />
+                    }
+                    .into_any()
+                }
+            }}
+        </section>
     }
 }

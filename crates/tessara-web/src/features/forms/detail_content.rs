@@ -14,7 +14,7 @@ use super::components::RenderedFormSections;
 use super::tables::{FormRelatedDatasetSourcesTable, FormRelatedWorkflowsTable};
 
 #[component]
-pub(in crate::features::forms) fn FormDetailContent(
+pub(in crate::features::forms) fn FormDetailBody(
     form: FormDefinition,
     rendered_form: Option<RenderedForm>,
 ) -> impl IntoView {

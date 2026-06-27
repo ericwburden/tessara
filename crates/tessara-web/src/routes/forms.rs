@@ -6,9 +6,12 @@ use leptos::prelude::*;
 use leptos_router::components::Route;
 use leptos_router::{MatchNestedRoutes, path};
 
-use crate::features::forms::{FormsDetailPage, FormsEditPage, FormsNewPage, FormsPage};
-
+use crate::features::forms::{
+    FormDetailContent, FormEditContent, FormNewContent, FormsIndexContent,
+};
 use crate::routes::PRIMARY_SSR_MODE;
+use crate::types::route_params::{FormRouteParams, require_route_params};
+use crate::ui::AppShell;
 
 pub fn form_routes() -> impl MatchNestedRoutes + Clone {
     view! {
@@ -26,5 +29,47 @@ pub fn form_routes() -> impl MatchNestedRoutes + Clone {
                 ssr=PRIMARY_SSR_MODE
             />
         </>
+    }
+}
+
+#[component]
+fn FormsPage() -> impl IntoView {
+    view! {
+        <AppShell active_route="forms" title="Forms">
+            <FormsIndexContent/>
+        </AppShell>
+    }
+}
+
+#[component]
+fn FormsNewPage() -> impl IntoView {
+    view! {
+        <AppShell active_route="forms" title="Forms">
+            <FormNewContent/>
+        </AppShell>
+    }
+}
+
+#[component]
+fn FormsDetailPage() -> impl IntoView {
+    let params = require_route_params::<FormRouteParams>();
+    let form_id = params.form_id;
+
+    view! {
+        <AppShell active_route="forms" title="Forms">
+            <FormDetailContent form_id/>
+        </AppShell>
+    }
+}
+
+#[component]
+fn FormsEditPage() -> impl IntoView {
+    let params = require_route_params::<FormRouteParams>();
+    let form_id = params.form_id;
+
+    view! {
+        <AppShell active_route="forms" title="Forms">
+            <FormEditContent form_id/>
+        </AppShell>
     }
 }

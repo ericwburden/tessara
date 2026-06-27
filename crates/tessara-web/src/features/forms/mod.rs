@@ -29,16 +29,16 @@ mod versions_table;
 pub(in crate::features::forms) use attached_nodes::{
     FormsAttachedNodesList, FormsAttachedNodesSheet,
 };
-pub(crate) use create::FormsNewPage;
-pub(crate) use detail::FormsDetailPage;
-pub(in crate::features::forms) use detail_content::FormDetailContent;
+pub(crate) use create::FormNewContent;
+pub(crate) use detail::FormDetailContent;
+pub(in crate::features::forms) use detail_content::FormDetailBody;
 pub(crate) use display::{
     FormWorkflowSourceMarker, form_attached_nodes, form_attached_to_label,
     form_definition_scope_label, form_field_count_label, form_status_label,
     form_workflow_revision_label_from_option, node_count_label, rendered_field_layout_label,
     rendered_field_type_label, status_badge_class,
 };
-pub(crate) use edit::FormsEditPage;
+pub(crate) use edit::FormEditContent;
 pub(in crate::features::forms) use edit_form::FormEditForm;
 pub(in crate::features::forms) use editor_sections::{
     FormEditableVersionSummary, FormIdentityFields, FormInitialVersionSummary,
@@ -47,7 +47,7 @@ pub(crate) use filtering::{
     FormNodeFilterOption, form_matches_node_filter, form_node_filter_options, indented_node_label,
     visible_form_node_filter_options,
 };
-pub(crate) use pages::FormsPage;
+pub(crate) use pages::FormsIndexContent;
 pub(crate) use types::{
     FormAttachmentLink, FormDatasetSourceLink, FormDefinition, FormNodeTypeOption, FormSummary,
     FormVersionSummary, FormWorkflowLink, FormsAttachedNodesSheetData, RenderedField, RenderedForm,

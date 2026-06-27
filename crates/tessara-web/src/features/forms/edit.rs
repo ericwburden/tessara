@@ -4,17 +4,14 @@ use crate::features::forms::FormNodeTypeOption;
 use crate::features::forms::builder::{FormBuilderEditorState, new_form_builder_editor_state};
 use crate::features::forms::options_loader::load_form_edit_options;
 use crate::features::forms::{FormDefinition, FormEditForm, FormSummary, RenderedForm};
-use crate::types::route_params::{FormRouteParams, require_route_params};
 use crate::ui::{
-    AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator,
-    PageHeader, empty_view,
+    Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator, PageHeader,
+    empty_view,
 };
 use leptos::prelude::*;
 
 #[component]
-pub fn FormsEditPage() -> impl IntoView {
-    let params = require_route_params::<FormRouteParams>();
-    let form_id = params.form_id;
+pub fn FormEditContent(form_id: String) -> impl IntoView {
     let form_id_for_load = form_id.clone();
     let form_id_for_submit = form_id.clone();
     let cancel_href = format!("/forms/{form_id}");
@@ -61,67 +58,65 @@ pub fn FormsEditPage() -> impl IntoView {
     });
 
     view! {
-        <AppShell active_route="forms" title="Forms">
-            <Breadcrumb>
-                <BreadcrumbItem>
-                    <BreadcrumbLink href="/forms">"Forms"</BreadcrumbLink>
-                </BreadcrumbItem>
-                <BreadcrumbSeparator/>
-                {move || {
-                    detail
-                        .get()
-                        .map(|form| {
-                            let href = format!("/forms/{}", form.id);
-                            view! {
-                                <BreadcrumbItem>
-                                    <BreadcrumbLink href=href>{form.name}</BreadcrumbLink>
-                                </BreadcrumbItem>
-                                <BreadcrumbSeparator/>
-                            }
-                            .into_any()
-                        })
-                        .unwrap_or_else(empty_view)
-                }}
-                <BreadcrumbItem>
-                    <BreadcrumbPage>"Edit Form"</BreadcrumbPage>
-                </BreadcrumbItem>
-            </Breadcrumb>
-
-            <section class="route-panel forms-page form-editor-panel">
-                <PageHeader title="Edit Form"/>
-
-                {move || {
-                    if is_loading.get() {
+        <Breadcrumb>
+            <BreadcrumbItem>
+                <BreadcrumbLink href="/forms">"Forms"</BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator/>
+            {move || {
+                detail
+                    .get()
+                    .map(|form| {
+                        let href = format!("/forms/{}", form.id);
                         view! {
-                            <section class="organization-state" aria-live="polite">
-                                <h3>"Loading form"</h3>
-                                <p>"Fetching form definition and editable version."</p>
-                            </section>
+                            <BreadcrumbItem>
+                                <BreadcrumbLink href=href>{form.name}</BreadcrumbLink>
+                            </BreadcrumbItem>
+                            <BreadcrumbSeparator/>
                         }
                         .into_any()
-                    } else {
-                        let form_id_for_submit = form_id_for_submit.clone();
-                        view! {
-                            <FormEditForm
-                                form_id=form_id_for_submit
-                                cancel_href=cancel_href.clone()
-                                name=name
-                                workflow_node_type_id=workflow_node_type_id
-                                node_types=node_types
-                                existing_forms=existing_forms
-                                rendered_form=rendered_form
-                                edit_version_id=edit_version_id
-                                edit_version_status=edit_version_status
-                                builder_state=builder_state
-                                is_loading=is_loading
-                                is_saving=is_saving
-                                message=message
-                            />
-                        }
-                        .into_any()
+                    })
+                    .unwrap_or_else(empty_view)
+            }}
+            <BreadcrumbItem>
+                <BreadcrumbPage>"Edit Form"</BreadcrumbPage>
+            </BreadcrumbItem>
+        </Breadcrumb>
+
+        <section class="route-panel forms-page form-editor-panel">
+            <PageHeader title="Edit Form"/>
+
+            {move || {
+                if is_loading.get() {
+                    view! {
+                        <section class="organization-state" aria-live="polite">
+                            <h3>"Loading form"</h3>
+                            <p>"Fetching form definition and editable version."</p>
+                        </section>
                     }
-                }}
-            </section>
-        </AppShell>
+                    .into_any()
+                } else {
+                    let form_id_for_submit = form_id_for_submit.clone();
+                    view! {
+                        <FormEditForm
+                            form_id=form_id_for_submit
+                            cancel_href=cancel_href.clone()
+                            name=name
+                            workflow_node_type_id=workflow_node_type_id
+                            node_types=node_types
+                            existing_forms=existing_forms
+                            rendered_form=rendered_form
+                            edit_version_id=edit_version_id
+                            edit_version_status=edit_version_status
+                            builder_state=builder_state
+                            is_loading=is_loading
+                            is_saving=is_saving
+                            message=message
+                        />
+                    }
+                    .into_any()
+                }
+            }}
+        </section>
     }
 }
