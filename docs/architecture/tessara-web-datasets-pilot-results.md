@@ -1,6 +1,6 @@
 # Tessara Web Dataset-Crate Pilot Results
 
-Status: Commit 4 boundary and watch gates validated
+Status: GO, final timing and DB reset evidence recorded
 
 Governing plan:
 
@@ -27,6 +27,8 @@ Raw local evidence:
 - inventory: `tmp\web-refactor-pilot\commit-0-20260626-221854`
 - baseline probes: `tmp\web-refactor-pilot\commit-0-baseline-20260626-221917`
 - bundle report: `tmp\web-refactor-pilot\commit-0-bundle-20260626-224632`
+- clean current timing comparison: `tmp\pilot-targets\compile-compare-current-v2`
+- final dataset watch/page-availability logs: `tmp\web-refactor-pilot\final-watch-browser-timing`
 - pilot target directories: `tmp\pilot-targets\commit-0-baseline`
 
 The raw directories are intentionally under ignored `tmp` paths. Durable results are summarized here.
@@ -60,6 +62,17 @@ These baseline probes used isolated pilot-owned target directories under `tmp\pi
 
 The root test-link metric is not used as a claimed improvement baseline. The plan allows this metric to remain inconclusive when the same timeout behavior persists and no new linker failure mode appears. Feature-crate test targets must still complete after extraction.
 
+Current clean-target timing comparison after Commit 4:
+
+| Probe | Baseline | Current | Delta | Result |
+| --- | ---: | ---: | ---: | --- |
+| `cargo check -p tessara-web --no-default-features --features hydrate --target wasm32-unknown-unknown` | 2m08s | 2m18s | +10s / +7.7% | pass |
+| `cargo check -p tessara-api --features ssr` | 3m05s | 3m06s | +1s / +0.5% | pass |
+| `cargo leptos build` | 6m30s | 6m51s | +21s / +5.4% | pass |
+| root web test compile | exceeded 600s | replaced by `cargo test -p tessara-web-datasets --no-default-features --features ssr --no-run -j 1` at 6m43s | feature-local gate now completes | pass |
+
+The full-app clean checks are inside the pilot regression thresholds. The useful compile-loop win is the new dataset-local test compile gate, which completes independently instead of timing out through the root web crate.
+
 ## Watch-Mode Results
 
 Commit 1 UI watch gate:
@@ -86,6 +99,22 @@ Commit 4 dataset watch gate:
 - median dataset edit rebuild plus wasm-bindgen: 17.84s, range 17.14s to 18.03s
 - limitation: browser refresh timing was not separately measured because the local API again emitted `migration 1 was previously applied but has been modified` after serving. The hard path-dependency detection gate passed; full browser-refresh timing remains to capture when the local DB migration state is repaired.
 - cleanup audit for `data-pilot-benchmark|dataset-edit-[123]|ui-edit-[123]` found no matches, and no Cargo/Rust watcher processes remained after shutdown.
+
+Final dataset watch/page-availability gate after DB reset:
+
+- local DB reset removed `tessara-sprint-3b_tessara-postgres` and created fresh `tessara-refactoring_tessara-postgres`
+- verification query: `_sqlx_migrations` contains version `1`, description `baseline`, success `true`
+- API health under `cargo leptos watch`: `http://127.0.0.1:8080/health` returned healthy, with no modified-migration error
+- authenticated `/datasets` page availability returned HTTP 200 after dataset edit rebuilds
+- observed initial watch build after warm targets: front build 12.42s, wasm-bindgen 8.47s, server build 2m01s, then served at `http://127.0.0.1:8080`
+- observed `dataset-edit-1` rebuild: `tessara-web-datasets` and `tessara-web` rebuilt in 48.14s, wasm-bindgen finished in 5.89s, and watch reported `Watch updated Front`
+- observed `dataset-edit-2` rebuild: `tessara-web-datasets` and `tessara-web` rebuilt in 26.49s, wasm-bindgen finished in 7.03s, watch reported `Watch updated Front`, `/health` returned healthy, and authenticated `/datasets` returned HTTP 200
+- observed `dataset-edit-3` rebuild: `tessara-web-datasets` and `tessara-web` rebuilt in 26.84s, wasm-bindgen finished in 5.56s, watch reported `Watch updated Front`, `/health` returned healthy, and authenticated `/datasets` returned HTTP 200
+- observed cleanup rebuild: `tessara-web-datasets` and `tessara-web` rebuilt in 26.29s, wasm-bindgen finished in 7.57s, and watch reported `Watch updated Front`
+- steady-state median dataset edit rebuild time, cargo compile only, excluding the first cold-ish post-reset edit: 26.67s, range 26.49s to 26.84s
+- steady-state median dataset edit rebuild plus wasm-bindgen, excluding the first cold-ish post-reset edit: 32.71s, range 32.40s to 33.52s
+- direct hydrated-browser DOM refresh timing was not independently measured because this session did not expose a browser automation tool and local Playwright was unavailable. The measured browser-facing proxy is save-to-`Watch updated Front` plus healthy authenticated page availability.
+- cleanup audit for `data-pilot-benchmark|dataset-edit-[123]|ui-edit-[123]` found no matches, and no Cargo/Rust/API watcher processes remained after shutdown.
 
 ## Feature-Tree Deltas
 
@@ -235,6 +264,20 @@ Commit 4 validation:
 | `cargo tree -p tessara-web -e features --depth 2 --no-default-features --features hydrate --target wasm32-unknown-unknown --color never` | pass |
 | `cargo fmt --all --check` | pass |
 
+Final timing/DB reset validation:
+
+| Command | Result |
+| --- | --- |
+| `docker compose ps` | fresh `tessara-refactoring-postgres-1` healthy |
+| `_sqlx_migrations` query | version `1`, description `baseline`, success `true` |
+| `cargo check -p tessara-web --no-default-features --features hydrate --target wasm32-unknown-unknown` in isolated target | pass, 2m18s |
+| `cargo check -p tessara-api --features ssr` in isolated target | pass, 3m06s |
+| `cargo leptos build` in isolated target | pass, 6m51s |
+| `cargo test -p tessara-web-datasets --no-default-features --features ssr --no-run -j 1` in isolated target | pass, 6m43s |
+| final `cargo leptos watch` dataset edit gate | pass; no migration error; `/health` and authenticated `/datasets` available after edits |
+| `cargo fmt --all --check` | pass |
+| cleanup audit for temporary benchmark strings | pass |
+
 ## Intentional Contract and Transport Debt Retained
 
 Commit 3 retained intentional local debt:
@@ -245,4 +288,6 @@ Commit 3 retained intentional local debt:
 
 ## GO/PARTIAL/NO-GO Decision
 
-PARTIAL GO. The structural extraction, dependency boundaries, feature matrix, bundle gate, dataset-local test compile gate, and cargo-leptos path-dependency watch gate all pass. The remaining limitation is environmental rather than architectural: browser refresh timing could not be measured because the local API exits with the pre-existing modified-migration error after serving. Repair the local DB migration state before using refresh timing as decision-grade evidence.
+GO. The structural extraction, dependency boundaries, feature matrix, bundle gate, dataset-local test compile gate, clean compile comparison, DB reset verification, and cargo-leptos path-dependency watch/page-availability gate all pass.
+
+The only remaining measurement caveat is tooling-specific rather than architectural: direct hydrated-browser DOM refresh timing was not independently captured because this session did not expose a browser automation tool and local Playwright was unavailable. The final rerun did verify that the previous migration checksum blocker is gone, `cargo leptos watch` serves against the fresh DB, dataset crate edits are detected, the front bundle is updated, `/health` remains healthy, and authenticated `/datasets` remains available after rebuilds.
