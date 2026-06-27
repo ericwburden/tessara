@@ -10,7 +10,7 @@
 
 ## 1. Recommendation
 
-Extract Responses next, before Administration.
+Extract Responses next. Administration is intentionally deferred to a future sprint.
 
 The short post-Workflows inventory found that Administration is still tightly coupled to Organization web types and currently renders shell-wrapped pages inside the feature. Responses is smaller, more leaf-like, and has the same kind of root-helper and route-adapter work that Forms and Workflows already proved out.
 
@@ -51,7 +51,7 @@ Key blockers from the initial inventory:
 - internal paths use `crate::features::responses::*` and `pub(in crate::features::responses)`.
 - no direct dependency on Forms, Workflows, Datasets, Administration, or Organization web feature modules appeared in the Responses inventory.
 
-Administration should be deferred because its initial inventory shows direct imports from Organization web types such as `AdminRoleSummary`, `NodeTypeCatalogEntry`, `NodeTypeDefinition`, `NodeTypeFormLink`, `NodeTypeUpsertRequest`, and metadata DTOs. That coupling should be resolved deliberately before Administration extraction.
+Administration should be deferred because its initial inventory shows direct imports from Organization web types such as `AdminRoleSummary`, `NodeTypeCatalogEntry`, `NodeTypeDefinition`, `NodeTypeFormLink`, `NodeTypeUpsertRequest`, and metadata DTOs. It should be broken into smaller future sprint slices rather than treated as the next monolithic extraction target.
 
 ## 3. Target Architecture
 
@@ -501,4 +501,4 @@ no response/form/workflow contract convergence attempted
 
 Proceed with Responses extraction next, unless R0 discovers new sibling/root coupling that is materially worse than this inventory.
 
-Organization should be the next major candidate after Responses. Administration should follow Organization, or at least follow an Organization contract-prep slice, so node/hierarchy DTO ownership is settled before Administration extraction.
+Organization should be the next major candidate after Responses. Administration is deferred to a future sprint where it can be broken into smaller slices.

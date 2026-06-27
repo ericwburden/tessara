@@ -454,7 +454,7 @@ This ranking combines expected compile-time payoff, source weight, churn, coupli
 | done | `tessara-web-workflows` | Very high | Medium-high | GO result recorded; validates another large Leptos feature crate |
 | 1 | `tessara-web-responses` | Medium-high | Medium | Leaf-like and cleanest immediate post-Workflows proposal target |
 | 2 | `tessara-web-organization` | Medium-high | High | High-fan-out hierarchy concepts, but preferred before Administration to settle node DTO ownership |
-| 3 | `tessara-web-administration` | High | Medium-high | Substantial payoff, but should follow Organization or Organization contract prep |
+| defer | `tessara-web-administration` | High | Medium-high | Defer to a future sprint; likely split into smaller administration slices |
 | 4 | `tessara-web-operations` | Low | Low | Aggregator surface; keep root until it grows |
 | defer | auth/login/home/placeholders | Low | Varies | Keep root unless evidence changes |
 
@@ -472,7 +472,7 @@ Use the current ranking as a starting point, but treat the short post-Workflows 
 
 - `tessara-web-responses` is the next proposal target because it is smaller, leafier, and has no direct Forms/Workflows/Organization web feature dependency in the initial inventory.
 - `tessara-web-organization` should come before Administration so hierarchy/node DTO ownership can be settled at the source instead of working around it from Administration.
-- `tessara-web-administration` remains high-value, but its initial inventory exposed enough Organization web DTO coupling that it should follow Organization extraction or an Organization contract-prep slice.
+- `tessara-web-administration` remains high-value, but it is intentionally deferred to a future sprint where it can be split into smaller administration slices.
 
 ### 9.2 Required pre-proposal checkpoint
 
@@ -501,7 +501,7 @@ Create:
 docs/architecture/tessara-web-responses-extraction-proposal.md
 ```
 
-Organization should be the next major candidate after Responses. Administration should follow Organization, or at least follow an Organization contract-prep slice that removes direct Administration dependence on Organization web DTOs. The Responses proposal must include the same inventory, facade, route-adapter, boundary, compile/watch/browser, bundle, GO/PARTIAL/NO-GO, and rollback sections used for Forms and Workflows.
+Organization should be the next major candidate after Responses. Administration is deferred out of the current extraction sequence and should be handled in a future sprint as smaller slices. The Responses proposal must include the same inventory, facade, route-adapter, boundary, compile/watch/browser, bundle, GO/PARTIAL/NO-GO, and rollback sections used for Forms and Workflows.
 
 ## 10. Per-Feature Extraction Template
 
@@ -900,7 +900,7 @@ pub fn ResponseDetailContent(submission_id: String) -> impl IntoView;
 pub fn ResponseEditContent(submission_id: String) -> impl IntoView;
 ```
 
-Responses is selected for the next proposal. Re-rank again after the Responses result, with Organization preferred before Administration.
+Responses is selected for the next proposal. Re-rank again after the Responses result, with Organization preferred as the next major candidate and Administration deferred to a future sprint.
 
 ### Stage E — Organization extraction
 
@@ -938,25 +938,26 @@ pub fn OrganizationNodeCreateContent(parent_node_id: Option<String>, node_type_i
 pub fn OrganizationNodeEditContent(node_id: String) -> impl IntoView;
 ```
 
-### Stage F — Administration extraction
+### Stage F — Administration deferral
 
-**Status:** after Organization or Organization contract-prep.
+**Status:** deferred to a future sprint.
 
 Goal:
 
 ```text
-extract user, role, access, and node-type administration surfaces into `tessara-web-administration`
+break Administration into smaller future extraction slices before attempting a full `tessara-web-administration` crate
 ```
 
-Why after Organization:
+Why defer:
 
 ```text
 substantial user/role/node-type management surface
 potentially strong focused-loop payoff
 initial inventory shows Organization web DTO coupling to resolve first
+likely better handled as user/role/access/node-type slices rather than one large extraction
 ```
 
-Possible administration facade:
+Possible future facade, if a full Administration crate is still useful after slicing:
 
 ```rust
 pub fn AdministrationIndexContent() -> impl IntoView;
@@ -1076,6 +1077,6 @@ The dataset, Forms, and Workflows extractions validated the core thesis:
 
 > Tessara can use feature-area crates to regain focused development loops while retaining a single routed Leptos app and one primary API service.
 
-The next move is not a mass split. It is a Responses extraction proposal, followed by Organization before Administration so node/hierarchy DTO ownership is settled at the source.
+The next move is not a mass split. It is a Responses extraction proposal, followed by Organization as the next major candidate. Administration is explicitly deferred to a future sprint where it can be broken into smaller slices.
 
 The long-term roadmap points toward feature-area crates for the major product surfaces, but each stage remains conditional on evidence.
