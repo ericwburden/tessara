@@ -129,6 +129,16 @@ Authenticated route smoke under the running watcher:
 - authenticated `GET /forms/new` returned 200.
 - unauthenticated `GET /forms` and `/forms/new` returned 303 to login, preserving protected-route behavior.
 
+Follow-up detail/edit smoke with seeded demo data:
+
+- `POST /api/auth/login` returned 200.
+- `POST /api/demo/seed` returned 200.
+- seeded form id: `c9a53d26-2311-4b0c-bafd-026de3d5b7fd`.
+- authenticated `GET /forms` returned 200.
+- authenticated `GET /forms/new` returned 200.
+- authenticated `GET /forms/c9a53d26-2311-4b0c-bafd-026de3d5b7fd` returned 200.
+- authenticated `GET /forms/c9a53d26-2311-4b0c-bafd-026de3d5b7fd/edit` returned 200.
+
 Cleanup:
 
 - watcher process tree was stopped.
@@ -153,6 +163,19 @@ Comparison:
 | original dataset pilot baseline | 27,663,145 | +990,615 / +3.6% |
 
 Bundle growth is below the 5% explanation threshold.
+
+## Behavior Test Notes
+
+Additional behavior gates:
+
+- `cargo test -p tessara-web-forms --no-default-features --features ssr`: pass, 0 tests, 22.87s compile.
+- `cargo test -p tessara-web --lib -j 1`: fails during Windows `link.exe`, after compilation, with unresolved Leptos/Tachys symbols and `warning LNK4003: invalid library format; library ignored` for `target\debug\deps\libtessara_web_datasets-4784e249a804efe4.rlib`.
+
+The root web lib test-link failure is recorded as root integration/test-link status, not as a forms-local failure:
+
+- forms-local test compilation and full forms-local test execution both pass;
+- root hydrate, API SSR, and `cargo leptos build` all pass;
+- browser-facing SSR route smoke passes for list, create, detail, and edit routes.
 
 ## GO Decision
 
