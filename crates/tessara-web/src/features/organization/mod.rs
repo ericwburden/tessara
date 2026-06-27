@@ -17,7 +17,7 @@ pub(crate) use pages::{
 };
 pub(crate) use types::{
     AdminRoleSummary, NodeMetadataFieldSummary, NodeTypeCatalogEntry, NodeTypeDefinition,
-    NodeTypeFormLink, NodeTypeUpsertRequest, OrganizationNode,
+    NodeTypeFormLink, NodeTypeUpsertRequest,
 };
 #[cfg(feature = "hydrate")]
 pub(crate) use types::{CreateNodeMetadataFieldRequest, UpdateNodeMetadataFieldRequest};

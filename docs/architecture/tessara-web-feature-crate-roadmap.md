@@ -1,7 +1,7 @@
 # Tessara Web Feature-Crate Migration Plan and Long-Term Roadmap
 
-**Status:** Active architecture roadmap after successful `tessara-web-datasets` and `tessara-web-forms` extractions
-**Primary near-term target:** `tessara-web-workflows` extraction proposal
+**Status:** Active architecture roadmap after successful `tessara-web-datasets`, `tessara-web-forms`, and `tessara-web-workflows` extractions
+**Primary near-term target:** next extraction selection after Workflows GO review
 **Long-term direction:** product-area frontend crates under a modular monolith
 **Non-goal:** microservices as a frontend compile-time solution
 
@@ -15,7 +15,7 @@ This plan is not a mandate to split everything immediately. It defines:
 
 1. the accepted architecture after the dataset pilot;
 2. permanent crate-boundary rules;
-3. the completed `tessara-web-forms` result and next concrete proposal target for `tessara-web-workflows`;
+3. the completed `tessara-web-forms` and `tessara-web-workflows` results;
 4. shared infrastructure and contract policies;
 5. measurement and validation standards;
 6. a long-term roadmap for the remaining feature-area crates.
@@ -180,11 +180,99 @@ Retained intentional debt:
 - Shared workflow/form/response contracts were not generalized during extraction.
 - Root web lib test still fails at Windows link time with unresolved Leptos/Tachys symbols, but forms-local tests, root hydrate, API SSR, `cargo leptos build`, and browser-facing route smoke all pass.
 
-The Forms result strengthens the case for Workflows as the next proposal target, but it does not authorize implementation without a Workflows-specific inventory and proposal.
+The Forms result remains a reference model for future extractions.
 
 ---
 
-## 4. Accepted Architecture After Dataset and Forms
+## 4. Workflows Extraction Findings
+
+The Workflows extraction should also be treated as **GO**.
+
+Governing evidence:
+
+- `docs/architecture/tessara-web-workflows-extraction-proposal.md`
+- `docs/architecture/tessara-web-workflows-extraction-results.md`
+
+### 4.1 Architecture result
+
+The extraction created:
+
+```text
+crates/tessara-web-workflows
+```
+
+and preserved the accepted feature-crate pattern:
+
+- root `tessara-web` owns Workflows route adapters, `WorkflowRouteParams`, auth guard, `AppShell`, hydration, document, CSS/assets, and cargo-leptos app ownership;
+- `tessara-web-workflows` owns workflow list/detail/new/edit content, assignments UI, loaders, transport, DTOs, payloads, display helpers, and feature-local support helpers;
+- root routes import only the approved content facade:
+
+```rust
+WorkflowsIndexContent
+WorkflowDetailContent
+WorkflowNewContent
+WorkflowEditContent
+WorkflowAssignmentsContent
+```
+
+The root `features::workflows` module was removed rather than preserved as a compatibility layer.
+
+### 4.2 Compile result
+
+Latest clean-target comparison against the original pre-Forms extraction baseline:
+
+| Probe | Original clean baseline | Post-Forms clean target | Current Workflows clean target | Delta vs original |
+| --- | ---: | ---: | ---: | ---: |
+| `cargo check -p tessara-web --no-default-features --features hydrate --target wasm32-unknown-unknown` | 305.92s | 270.47s | 247.39s | -58.53s / -19.1% |
+| `cargo check -p tessara-api --features ssr` | 392.17s | 392.15s | 337.40s | -54.77s / -14.0% |
+| `cargo leptos build` | `>900s` timeout | 799.46s | 410.31s | completed, at least 489.69s under timeout |
+| `cargo check -p tessara-web-workflows --no-default-features --features ssr` | n/a | n/a | 204.98s | focused loop available |
+| `cargo check -p tessara-web-workflows --no-default-features --features hydrate --target wasm32-unknown-unknown` | n/a | n/a | 216.68s | focused loop available |
+| `cargo test -p tessara-web-workflows --no-default-features --features ssr --no-run -j 1` | n/a | n/a | 323.48s | focused test compile available |
+
+The practical result is a successful extraction with no full-app compile regression, materially faster full-app clean checks than the original baseline, and a new Workflows-focused check loop.
+
+### 4.3 Watch and route result
+
+The Workflows watch gate passed:
+
+- `cargo leptos watch` detected edits in `crates\tessara-web-workflows`;
+- `tessara-web-workflows` and root `tessara-web` rebuilt through the path dependency;
+- wasm-bindgen completed and `Watch updated Front` was reported;
+- `/health` returned 200 under watch;
+- authenticated `/workflows`, `/workflows/new`, `/workflows/assignments`, `/workflows/:workflow_id`, and `/workflows/:workflow_id/edit` returned 200 after demo seed.
+
+### 4.4 Boundary and bundle result
+
+The boundary checker now covers `tessara-web-workflows` and rejects root/API/sibling web feature dependencies plus router/meta dependencies.
+
+`tessara-web-workflows` has no dependency on:
+
+```text
+tessara-web
+tessara-api
+tessara-web-datasets
+tessara-web-forms
+tessara-web-responses
+tessara-web-organization
+tessara-web-administration
+leptos_router
+leptos_meta
+```
+
+Immediate bundle growth from the Forms post-extraction bundle remained below the 5% threshold. Cumulative growth since the dataset pilot is now above 5%, so bundle size should be tracked closely before another large Leptos extraction.
+
+### 4.5 Retained debt and caveats
+
+Retained intentional debt:
+
+- Workflows keeps web DTOs separate from API DTOs.
+- Workflows owns local transport, unauthorized handling, and small local support helpers.
+- Organization node and node type option DTOs are duplicated locally.
+- Shared transport/helper contracts were not generalized during extraction.
+- Cumulative JS/WASM growth should remain a gate for the next large extraction.
+
+## 5. Accepted Architecture After Dataset, Forms, and Workflows
 
 The architecture is now:
 
@@ -194,6 +282,7 @@ crates/
 ├── tessara-web-ui           # generic Leptos UI primitives
 ├── tessara-web-datasets     # extracted dataset feature crate
 ├── tessara-web-forms        # extracted forms feature crate
+├── tessara-web-workflows    # extracted workflows feature crate
 ├── tessara-api              # single deployable API/SSR service
 ├── tessara-core             # shared domain primitives
 ├── tessara-datasets         # dataset domain rules
@@ -203,7 +292,7 @@ crates/
 └── other domain/stub crates
 ```
 
-### 4.1 Root `tessara-web` owns
+### 5.1 Root `tessara-web` owns
 
 ```text
 - cargo-leptos frontend app role
@@ -221,7 +310,7 @@ crates/
 - temporary root `ui` compatibility facade
 ```
 
-### 4.2 `tessara-web-ui` owns
+### 5.2 `tessara-web-ui` owns
 
 ```text
 - generic Leptos UI primitives
@@ -240,7 +329,7 @@ It must not own:
 - product concepts such as datasets, forms, workflows, responses, organization, administration
 ```
 
-### 4.3 Feature crates own
+### 5.3 Feature crates own
 
 Each `tessara-web-*` feature crate should own:
 
@@ -259,11 +348,11 @@ Feature crates should expose only a small public facade to the root route adapte
 
 ---
 
-## 5. Permanent Boundary Rules
+## 6. Permanent Boundary Rules
 
 These rules apply to the current dataset crate and all future feature crates.
 
-### 5.1 Feature web crates must not depend on
+### 6.1 Feature web crates must not depend on
 
 ```text
 - root `tessara-web`
@@ -275,7 +364,7 @@ These rules apply to the current dataset crate and all future feature crates.
 - `leptos_meta`, unless a specific feature proves it owns metadata composition
 ```
 
-### 5.2 Feature web crates may depend on
+### 6.2 Feature web crates may depend on
 
 ```text
 - `tessara-web-ui`
@@ -286,7 +375,7 @@ These rules apply to the current dataset crate and all future feature crates.
 - domain crates for stable pure rules or stable contracts
 ```
 
-### 5.3 Domain and contract crates must not depend on
+### 6.3 Domain and contract crates must not depend on
 
 ```text
 - Leptos
@@ -299,7 +388,7 @@ These rules apply to the current dataset crate and all future feature crates.
 - frontend feature crates
 ```
 
-### 5.4 Boundary checker
+### 6.4 Boundary checker
 
 The existing boundary checker should become permanent:
 
@@ -317,287 +406,114 @@ Any allowlist must be temporary, documented, and treated as architectural debt.
 
 ---
 
-## 6. Current Intentional Debt
+## 7. Current Intentional Debt
 
 The dataset pilot intentionally retained some debt to keep the experiment focused.
 
-### 6.1 Dataset-local browser transport
+### 7.1 Dataset-local browser transport
 
 `tessara-web-datasets` has private copied browser HTTP transport. This avoids a root app dependency.
 
 Do **not** create `tessara-web-platform` yet. Reassess after one or two more feature extractions.
 
-### 6.2 Dataset-local helpers
+### 7.2 Dataset-local helpers
 
 Minimal text and pagination helpers are local to `tessara-web-datasets`.
 
 If forms and workflows need the same helpers, consider promotion to a small shared crate or `tessara-web-ui` private implementation where appropriate. Do not prematurely centralize.
 
-### 6.3 API/web DTO duplication
+### 7.3 API/web DTO duplication
 
 Dataset API DTOs and dataset web DTOs remain intentionally separate.
 
 This is correct pilot debt. Contract convergence should be considered only after crate extraction is proven useful and the representation question is understood.
 
-Forms API DTOs and Forms web DTOs also remain intentionally separate after the Forms GO result. Workflows should assume separate web DTOs by default unless its own inventory proves a stable shared contract is worth the dependency cost.
+Forms and Workflows API DTOs and web DTOs remain intentionally separate after their GO results. Future extractions should assume separate web DTOs by default unless inventory proves a stable shared contract is worth the dependency cost.
 
-### 6.4 Browser-heavy UI primitive
+### 7.4 Browser-heavy UI primitive
 
 `DraggablePanelList` moved to `tessara-web-ui` with browser drag dependencies.
 
 This is acceptable because the primitive is domain-neutral, but it is now part of the high-fan-out UI crate and should be monitored. Avoid moving additional browser-heavy UI primitives without measuring shared-UI edit cost.
 
-### 6.5 Feature-local transport and helper duplication
+### 7.5 Feature-local transport and helper duplication
 
 Both extracted feature crates currently own local browser transport and tiny local helpers where needed.
 
-Do not create `tessara-web-platform` as part of the Workflows proposal unless inventory shows the third copy creates real maintenance risk and a small policy-neutral support crate can be justified without root auth/session/navigation coupling.
+Do not create `tessara-web-platform` as part of the next proposal unless inventory shows the repeated copies create real maintenance risk and a small policy-neutral support crate can be justified without root auth/session/navigation coupling.
 
 ---
 
-## 7. Candidate Feature-Crate Ranking
+## 8. Candidate Feature-Crate Ranking
 
 This ranking combines expected compile-time payoff, source weight, churn, coupling, and extraction risk.
 
 | Rank | Candidate crate | Payoff | Risk | Notes |
 | ---: | --- | --- | --- | --- |
 | done | `tessara-web-forms` | Very high | Medium | GO result recorded; keep as reference model |
-| 1 | `tessara-web-workflows` | Very high | Medium-high | Large editor/assignments/detail/list surface; next proposal target |
-| 2 | `tessara-web-administration` | High | Medium | Substantial, relatively isolated after auth/hierarchy contracts are clear |
-| 3 | `tessara-web-responses` | Medium-high | Medium | Leaf-like but depends conceptually on forms and workflow assignments |
-| 4 | `tessara-web-organization` | Medium-high | High | High-fan-out hierarchy/organization concepts; extract later |
-| 5 | `tessara-web-operations` | Low | Low | Aggregator surface; keep root until it grows |
+| done | `tessara-web-workflows` | Very high | Medium-high | GO result recorded; validates another large Leptos feature crate |
+| 1 | `tessara-web-administration` | High | Medium | Substantial, relatively isolated after auth/hierarchy contracts are clear |
+| 2 | `tessara-web-responses` | Medium-high | Medium | Leaf-like but depends conceptually on forms and workflow assignments |
+| 3 | `tessara-web-organization` | Medium-high | High | High-fan-out hierarchy/organization concepts; extract later |
+| 4 | `tessara-web-operations` | Low | Low | Aggregator surface; keep root until it grows |
 | defer | auth/login/home/placeholders | Low | Varies | Keep root unless evidence changes |
 
 The ranking is not an automatic sequence. Re-rank after each extraction using fresh measurements and the current dependency graph.
 
 ---
 
-## 8. Near-Term Plan: `tessara-web-workflows`
+## 9. Near-Term Plan After Workflows
 
-Workflows should be the next concrete extraction proposal, not an automatic implementation.
+Workflows is now complete and should be used as the latest large-feature reference model. The next concrete extraction should be selected from current measurements rather than assumed from the pre-Workflows ranking.
 
-### 8.1 Why workflows next
+### 9.1 Candidate choice
 
-Workflows is the best next proposal target because it is:
+Use the current ranking as a starting point:
 
-- large and Leptos-heavy;
-- high-churn and central to authoring/runtime operations;
-- the next highest-payoff surface after Forms;
-- now safer to inventory because Forms no longer exposes root web internals;
-- likely to reveal whether repeated local transport/helper duplication is still acceptable or whether a small shared web support crate should be considered later.
+- `tessara-web-administration` is the leading candidate if its auth/role/organization coupling can stay root-adapter or crate-private.
+- `tessara-web-responses` is the leading candidate if Administration inventory exposes too much root policy coupling for a clean first pass.
+- `tessara-web-organization` should remain later because organization/hierarchy DTOs are high-fan-out and already duplicated into extracted crates.
 
-Workflows should not be extracted until a Workflows-specific proposal inventories the current dependency graph and confirms a narrow public facade.
+### 9.2 Required pre-proposal checkpoint
 
-### 8.2 Proposal inputs
+Before drafting the next proposal, run a short inventory across Administration and Responses:
 
-The external proposal author should use:
+```powershell
+rg -n "crate::features::(datasets|forms|workflows|responses|organization|administration)|crate::routes|AppShell|leptos_router|leptos_meta|crate::http|crate::utils|crate::types" crates\tessara-web\src\features\administration crates\tessara-web\src\features\responses crates\tessara-web\src\routes
+```
+
+The next proposal should also review the Workflows retained debt:
 
 ```text
-docs/architecture/tessara-web-forms-extraction-results.md
-docs/architecture/tessara-web-feature-crate-roadmap.md
+local browser transport copied in three feature crates
+local text/slug/pagination helpers copied across feature crates
+organization/node option DTO duplication
+cumulative JS/WASM bundle growth above the original dataset-pilot baseline
 ```
 
-The Forms result is a pattern, not a guarantee that Workflows has the same coupling shape.
+Do not create a shared web platform crate as a default next step. Create one only if the next inventory proves a small policy-neutral support crate removes real duplication without absorbing root auth/session/navigation behavior.
 
-### 8.3 Near-term goal
+### 9.3 Next deliverable
 
-Prepare an implementation-ready proposal for extracting the current Workflows frontend implementation into:
+Create one implementation-ready proposal after the Administration/Responses inventory:
 
 ```text
-crates/tessara-web-workflows
+docs/architecture/tessara-web-administration-extraction-proposal.md
 ```
 
-using the established pattern:
+or:
 
 ```text
-root route adapters + small workflow content facade + crate-private internals
+docs/architecture/tessara-web-responses-extraction-proposal.md
 ```
 
-### 8.4 Non-goals for the Workflows proposal
+The proposal must include the same inventory, facade, route-adapter, boundary, compile/watch/browser, bundle, GO/PARTIAL/NO-GO, and rollback sections used for Forms and Workflows.
 
-Do not include these in the first Workflows extraction proposal unless inventory proves they are unavoidable:
-
-```text
-- API/web workflow DTO convergence
-- creating `tessara-web-platform`
-- creating `tessara-workflows` for symmetry alone
-- moving AppShell
-- moving route params
-- moving auth/session/navigation/capability policy
-- moving CSS/assets
-- extracting responses
-- extracting organization
-- extracting administration
-- depending on `tessara-web-forms` or any sibling web feature crate
-```
-
-### 8.5 Initial public facade hypothesis
-
-The proposal should validate, refine, or reject this facade after inventory:
-
-```rust
-pub fn WorkflowsIndexContent() -> impl IntoView;
-pub fn WorkflowDetailContent(workflow_id: String) -> impl IntoView;
-pub fn WorkflowNewContent() -> impl IntoView;
-pub fn WorkflowEditContent(workflow_id: String) -> impl IntoView;
-pub fn WorkflowAssignmentsContent() -> impl IntoView;
-```
-
-If current routes split assignments by workflow or node context, the proposal should preserve root route ownership and expose content components with explicit string IDs or option inputs rather than route-param parsing inside the crate.
-
-### 8.6 Root ownership
-
-Root `tessara-web` must keep:
-
-```text
-routes/workflows.rs
-workflow route params
-AppShell wrapping
-route registry
-auth/session/navigation/capability behavior
-hydration/document/CSS/assets
-```
-
-Workflow content components must not:
-
-```text
-- parse route params
-- render AppShell
-- import root route modules
-- import root session/navigation/auth modules
-- depend on sibling web feature crates
-```
-
-### 8.7 Workflow crate ownership
-
-`tessara-web-workflows` should own, subject to inventory:
-
-```text
-workflow list/detail/create/edit content
-workflow editor UI/state/options/steps/payload logic
-workflow assignments UI and actions
-workflow API transport
-workflow loaders/actions
-workflow web DTOs and view models
-workflow display/filtering helpers
-workflow feature-local tests
-```
-
-### 8.8 Coupling to inventory before implementation
-
-The Workflows proposal must inventory and resolve:
-
-```text
-crate::ui imports
-crate::utils imports
-crate::http imports
-crate::types and route param imports
-crate::features::* imports
-all direct imports from forms, responses, organization, administration, datasets, shared
-all hard-coded links to forms/responses/organization/datasets routes
-all hydrate/browser API use
-all workflow editor tests and pure state tests
-all public-ish workflow DTOs consumed by other root features
-all root features importing workflow internals
-```
-
-Special attention areas:
-
-- form option contracts already moved into workflow-local DTOs during Forms extraction prep;
-- responses and operations may still link to workflow assignments or summaries;
-- organization/hierarchy concepts may appear in workflow scope and assignment UIs;
-- workflow display helpers may be tempting to share but should remain local unless proven domain-neutral;
-- hard-coded app URLs are acceptable when they are stable route links and do not create crate dependencies.
-
-### 8.9 Expected dependencies
-
-Allowed:
-
-```text
-tessara-web-ui
-leptos
-icons
-serde
-serde_json
-hydrate-gated gloo-net/web-sys/js-sys/wasm-bindgen as needed
-possibly pure domain/contract crates only after measured justification
-```
-
-Forbidden by default:
-
-```text
-tessara-web
-tessara-api
-tessara-web-datasets
-tessara-web-forms
-tessara-web-responses
-tessara-web-organization
-tessara-web-administration
-leptos_router
-leptos_meta
-root auth/session/navigation/shell modules
-```
-
-### 8.10 Workflows proposal deliverable
-
-Create:
-
-```text
-docs/architecture/tessara-web-workflows-extraction-proposal.md
-```
-
-The proposal should include:
-
-```text
-- inventory commands and expected blockers
-- route/shell ownership split
-- public facade and signatures
-- cross-feature dependency resolution plan
-- Cargo manifest and feature forwarding plan
-- boundary checker updates
-- commit-by-commit implementation sequence
-- compile/watch/browser/bundle measurement plan
-- behavior validation plan
-- GO/PARTIAL/NO-GO criteria
-- rollback plan
-- results-document template
-```
-
-### 8.11 Workflows GO/PARTIAL/NO-GO principles
-
-Use the Forms thresholds as the starting point:
-
-GO requires:
-
-```text
-- workflow-local hydrate/SSR checks pass
-- workflow-local test compile completes
-- root full-app regressions stay acceptable
-- cargo-leptos watch detects workflow crate edits
-- boundary checker passes with no permanent exceptions
-- public API is only the approved facade
-- root retains route/shell ownership
-- no CSS/assets migration is required
-- no sibling web feature dependency is introduced
-```
-
-NO-GO if:
-
-```text
-- workflows requires dependency on `tessara-web-forms`, `tessara-web-responses`, or root `tessara-web`
-- public API grows beyond facade to make migration compile
-- cargo-leptos watch does not detect workflow path-dependency edits
-- full-app regressions exceed thresholds
-- DTO convergence becomes required to compile
-- route parsing/AppShell/session/auth/CSS/assets must move to make extraction work
-```
-
-## 9. Per-Feature Extraction Template
+## 10. Per-Feature Extraction Template
 
 Every future feature extraction should use this template.
 
-### 9.1 Proposal
+### 10.1 Proposal
 
 Before code movement, write:
 
@@ -622,7 +538,7 @@ Include:
 - rollback plan
 ```
 
-### 9.2 Public facade pattern
+### 10.2 Public facade pattern
 
 Feature crates expose content components, not route pages.
 
@@ -651,7 +567,7 @@ fn FeatureDetailRoute() -> impl IntoView {
 }
 ```
 
-### 9.3 Default commit sequence
+### 10.3 Default commit sequence
 
 ```text
 0. inventory and measurement
@@ -662,7 +578,7 @@ fn FeatureDetailRoute() -> impl IntoView {
 
 Add a support-crate prep commit only when the feature needs new generic UI.
 
-### 9.4 Default non-goals
+### 10.4 Default non-goals
 
 For every feature extraction, default non-goals are:
 
@@ -676,7 +592,7 @@ For every feature extraction, default non-goals are:
 - sibling web crate dependencies
 ```
 
-### 9.5 Default retained-debt section
+### 10.5 Default retained-debt section
 
 Every result document must include:
 
@@ -690,9 +606,9 @@ Every result document must include:
 
 ---
 
-## 10. Measurement and Validation Policy
+## 11. Measurement and Validation Policy
 
-### 10.1 Required commands for every extracted feature
+### 11.1 Required commands for every extracted feature
 
 Replace `<feature>` with the new crate.
 
@@ -720,7 +636,7 @@ cargo leptos build
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\check-web-crate-boundaries.ps1
 ```
 
-### 10.2 Watch gate
+### 11.2 Watch gate
 
 For each feature:
 
@@ -732,7 +648,7 @@ For each feature:
 - confirm route/page availability
 ```
 
-### 10.3 Bundle gate
+### 11.3 Bundle gate
 
 Track:
 
@@ -745,7 +661,7 @@ Track:
 
 A bundle increase above 5% requires explanation.
 
-### 10.4 Test gate
+### 11.4 Test gate
 
 Move feature-local tests into the feature crate.
 
@@ -755,9 +671,9 @@ Do not make internal symbols public solely for tests.
 
 ---
 
-## 11. Contract Migration Policy
+## 12. Contract Migration Policy
 
-### 11.1 Default rule
+### 12.1 Default rule
 
 For first extraction of a feature:
 
@@ -769,7 +685,7 @@ measure
 decide later
 ```
 
-### 11.2 When to promote shared contracts
+### 12.2 When to promote shared contracts
 
 Promote a shared contract only when all are true:
 
@@ -782,7 +698,7 @@ Promote a shared contract only when all are true:
 - the contract crate remains Leptos/Axum/SQLx/browser-free
 ```
 
-### 11.3 Representation caution
+### 12.3 Representation caution
 
 Do not introduce `uuid`, `chrono`, or other heavier shared dependencies into WASM builds just because server DTOs use them.
 
@@ -798,7 +714,7 @@ Make this decision per domain, not globally.
 
 ---
 
-## 12. Shared Infrastructure Promotion Policy
+## 13. Shared Infrastructure Promotion Policy
 
 Do not create `tessara-web-platform` yet.
 
@@ -832,9 +748,9 @@ Requirements for promotion:
 
 ---
 
-## 13. Rollback and Stop Policy
+## 14. Rollback and Stop Policy
 
-### 13.1 Rollback
+### 14.1 Rollback
 
 Each extraction must be commit-based and revertible in reverse order.
 
@@ -849,7 +765,7 @@ Default rollback:
 6. rerun validation
 ```
 
-### 13.2 Stop rules
+### 14.2 Stop rules
 
 Stop the extraction program when:
 
@@ -863,7 +779,7 @@ Stop the extraction program when:
 - feature is small/low-churn and does not justify Cargo complexity
 ```
 
-### 13.3 GO does not authorize the next feature automatically
+### 14.3 GO does not authorize the next feature automatically
 
 A successful feature extraction authorizes only:
 
@@ -876,11 +792,11 @@ It does not authorize extracting the rest of the roadmap.
 
 ---
 
-## 14. Long-Term Roadmap
+## 15. Long-Term Roadmap
 
 This roadmap is directional. Later stages should be progressively elaborated after fresh measurements and dependency inventories.
 
-### Stage A — Foundation, dataset, and Forms consolidation
+### Stage A — Foundation, dataset, Forms, and Workflows consolidation
 
 **Status:** complete / active.
 
@@ -890,17 +806,19 @@ Completed:
 - extracted `tessara-web-ui`
 - extracted `tessara-web-datasets`
 - extracted `tessara-web-forms`
+- extracted `tessara-web-workflows`
 - installed boundary checker
 - validated cargo-leptos path dependency watch
 - retained root AppShell/routes/hydration/CSS/assets
 - kept dataset DTO convergence out of scope
 - kept Forms DTO convergence out of scope
+- kept Workflows DTO convergence out of scope
 ```
 
 Follow-up:
 
 ```text
-- preserve dataset and Forms extraction results
+- preserve dataset, Forms, and Workflows extraction results
 - document accepted retained debt
 - ensure boundary checker remains part of normal validation
 ```
@@ -928,13 +846,13 @@ Completed evidence:
 Expected result:
 
 ```text
-- keep as the reference model for Workflows proposal planning
-- do not reopen Forms unless Workflows inventory exposes a concrete contract issue
+- keep as the reference model for future proposal planning
+- do not reopen Forms unless a later inventory exposes a concrete contract issue
 ```
 
 ### Stage C — Workflows extraction
 
-**Status:** next concrete proposal target.
+**Status:** complete / GO.
 
 Goal:
 
@@ -942,30 +860,28 @@ Goal:
 extract workflow list/detail/editor/assignments into `tessara-web-workflows`
 ```
 
-Preconditions:
+Completed evidence:
 
 ```text
-- Workflows import inventory complete
-- root route-adapter facade agreed
-- dependencies on forms/responses/organization/hierarchy resolved without sibling web crate dependencies
-- decision made whether a pure `tessara-workflows` domain/contract crate is warranted
-- decision made whether duplicated transport/helpers remain local or justify a small shared support crate
+- `tessara-web-workflows` extracted with root route adapters and shell ownership preserved
+- Workflows-local hydrate, SSR, and test-compile gates pass
+- cargo-leptos watch detects Workflows crate edits
+- list, create, assignments, detail, and edit routes return 200 after authenticated demo seed
+- boundary checker covers the Workflows crate
+- no sibling web feature dependency or root compatibility namespace was retained
 ```
 
-Possible facade:
+Retained debt:
 
-```rust
-pub fn WorkflowsIndexContent() -> impl IntoView;
-pub fn WorkflowDetailContent(workflow_id: String) -> impl IntoView;
-pub fn WorkflowEditorContent(workflow_id: Option<String>) -> impl IntoView;
-pub fn WorkflowAssignmentsContent() -> impl IntoView;
+```text
+- Workflows owns local browser transport and helper copies
+- Workflows duplicates organization/node option DTOs locally
+- cumulative bundle growth now needs closer tracking before another large Leptos extraction
 ```
-
-Do not create `tessara-workflows` just for symmetry. Create it only if stable workflow rules/contracts are used by both API and web.
 
 ### Stage D — Administration and responses
 
-**Status:** future, order to be re-evaluated.
+**Status:** next proposal fork; order to be selected after a short Administration/Responses inventory.
 
 Candidate 1:
 
@@ -1015,7 +931,7 @@ pub fn ResponseDetailContent(submission_id: String) -> impl IntoView;
 pub fn ResponseEditContent(submission_id: String) -> impl IntoView;
 ```
 
-Re-rank after workflow extraction.
+Re-rank using the Workflows result before implementation. Administration remains the leading candidate; Responses is the fallback if Administration's auth/role/organization coupling is too root-policy-heavy.
 
 ### Stage E — Organization extraction
 
@@ -1134,26 +1050,32 @@ Do not use microservices to solve frontend compile time.
 
 ---
 
-## 15. Next Artifact
+## 16. Next Artifact
 
-This roadmap is the durable architecture artifact after the dataset pilot.
+This roadmap is the durable architecture artifact after the dataset, Forms, and Workflows extractions.
 
 The next implementation-specific document is:
 
 ```text
-docs/architecture/tessara-web-workflows-extraction-proposal.md
+docs/architecture/tessara-web-administration-extraction-proposal.md
 ```
 
-The Workflows proposal should be implementation-ready and should include inventory, facade, route adapters, dependency rules, cross-feature dependency resolution, validation commands, measurement gates, GO/PARTIAL/NO-GO criteria, and rollback steps.
+If the Administration inventory proves too root-policy-heavy, use:
+
+```text
+docs/architecture/tessara-web-responses-extraction-proposal.md
+```
+
+The next proposal should be implementation-ready and should include inventory, facade, route adapters, dependency rules, cross-feature dependency resolution, validation commands, measurement gates, GO/PARTIAL/NO-GO criteria, and rollback steps.
 
 ---
 
-## 16. Summary
+## 17. Summary
 
-The dataset and Forms extractions validated the core thesis:
+The dataset, Forms, and Workflows extractions validated the core thesis:
 
 > Tessara can use feature-area crates to regain focused development loops while retaining a single routed Leptos app and one primary API service.
 
-The next move is not a mass split. It is a Workflows extraction proposal, followed by implementation only if Workflows-specific inventory confirms the same boundary discipline can hold.
+The next move is not a mass split. It is a short Administration/Responses inventory, followed by one implementation-ready proposal if the same boundary discipline can hold.
 
 The long-term roadmap points toward feature-area crates for the major product surfaces, but each stage remains conditional on evidence.

@@ -5,6 +5,7 @@ mod button;
 mod combobox;
 mod data_table;
 mod draggable_panel_list;
+mod dropdown;
 mod empty_state;
 mod info_list;
 mod page_header;
@@ -27,6 +28,7 @@ pub use draggable_panel_list::{
     DraggablePanelList, DraggablePanelListAnchor, DraggablePanelListDraggable,
     DraggablePanelListDropZone, DraggablePanelListItem, DraggablePanelListMove,
 };
+pub use dropdown::DropdownMenu;
 pub use empty_state::EmptyState;
 pub use info_list::{InfoListTable, InfoRow};
 pub use page_header::PageHeader;

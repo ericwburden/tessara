@@ -12,6 +12,7 @@ hydrate = [
     "leptos/hydrate",
     "tessara-web-datasets/hydrate",
     "tessara-web-forms/hydrate",
+    "tessara-web-workflows/hydrate",
     "tessara-web-ui/hydrate",
 ]
 ssr = [
@@ -20,6 +21,7 @@ ssr = [
     "leptos_router/ssr",
     "tessara-web-datasets/ssr",
     "tessara-web-forms/ssr",
+    "tessara-web-workflows/ssr",
     "tessara-web-ui/ssr",
 ]
 
@@ -36,6 +38,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tessara-web-datasets = { path = "../tessara-web-datasets" }
 tessara-web-forms = { path = "../tessara-web-forms", default-features = false }
+tessara-web-workflows = { path = "../tessara-web-workflows", default-features = false }
 tessara-web-ui = { path = "../tessara-web-ui" }
 wasm-bindgen = { workspace = true }
 wasm-bindgen-futures = { workspace = true }

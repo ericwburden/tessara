@@ -1,7 +1,7 @@
 //! Response start assignment picker fields.
 
 use crate::features::responses::types::AssignmentResponseStartOption;
-use crate::features::workflows::workflow_revision_label_from_option;
+use crate::features::responses::workflow_revision_label_from_option;
 use crate::ui::empty_view;
 use crate::utils::text::nonempty_text;
 use leptos::prelude::*;

@@ -12,4 +12,3 @@ pub mod operations;
 pub mod organization;
 pub mod responses;
 pub mod shared;
-pub mod workflows;

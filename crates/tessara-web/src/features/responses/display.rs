@@ -19,6 +19,31 @@ pub(crate) fn submission_status_label(submission: &SubmissionSummary) -> String 
     metadata_label(&submission.status)
 }
 
+pub(crate) fn workflow_revision_label_from_raw(label: &str) -> String {
+    let trimmed = label.trim();
+    if trimmed.is_empty() {
+        return "-".to_string();
+    }
+
+    if let Ok(revision) = trimmed.parse::<u64>() {
+        return revision.to_string();
+    }
+
+    trimmed
+        .split('.')
+        .next()
+        .and_then(|part| part.trim().parse::<u64>().ok())
+        .map(|revision| revision.to_string())
+        .unwrap_or_else(|| trimmed.to_string())
+}
+
+pub(crate) fn workflow_revision_label_from_option(label: Option<String>) -> String {
+    label
+        .as_deref()
+        .map(workflow_revision_label_from_raw)
+        .unwrap_or_else(|| "-".to_string())
+}
+
 pub(crate) fn submission_workflow_label(submission: &SubmissionSummary) -> String {
     nonempty_text(submission.workflow_name.as_deref(), "Standalone Response")
 }

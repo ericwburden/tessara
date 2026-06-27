@@ -4445,6 +4445,7 @@ dependencies = [
  "tessara-web-datasets",
  "tessara-web-forms",
  "tessara-web-ui",
+ "tessara-web-workflows",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
@@ -4489,6 +4490,22 @@ dependencies = [
  "js-sys",
  "leptos",
  "wasm-bindgen",
+ "web-sys",
+]
+
+[[package]]
+name = "tessara-web-workflows"
+version = "0.1.0"
+dependencies = [
+ "gloo-net",
+ "icons",
+ "js-sys",
+ "leptos",
+ "serde",
+ "serde_json",
+ "tessara-web-ui",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
  "web-sys",
 ]
 
