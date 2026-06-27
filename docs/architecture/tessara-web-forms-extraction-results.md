@@ -74,6 +74,17 @@ F0 baseline used isolated target directories. F5 timings below are warm-cache me
 
 `cargo test -p tessara-web-forms --no-default-features --features ssr --no-run -j 1` originally hit Rust's default Leptos view recursion limit. Adding `#![recursion_limit = "512"]` to `tessara-web-forms` matches the existing root web crate treatment and the gate now passes.
 
+Follow-up clean-target comparison captured after the GO call in `tmp\pilot-targets\forms-current-compile-compare`:
+
+| Probe | Original baseline | Current clean target | Delta |
+| --- | ---: | ---: | ---: |
+| `cargo check -p tessara-web --no-default-features --features hydrate --target wasm32-unknown-unknown` | 305.92s | 270.47s | -35.45s / -11.6% |
+| `cargo check -p tessara-api --features ssr` | 392.17s | 392.15s | -0.02s / flat |
+| `cargo leptos build` | `>900s` timeout | 799.46s | completed, at least 100.54s under timeout |
+| `cargo check -p tessara-web-forms --no-default-features --features ssr` | n/a | 114.87s | focused loop available |
+| `cargo check -p tessara-web-forms --no-default-features --features hydrate --target wasm32-unknown-unknown` | n/a | 105.48s | focused loop available |
+| `cargo test -p tessara-web-forms --no-default-features --features ssr --no-run -j 1` | n/a | 336.19s | focused test compile available |
+
 ## Boundary Gates
 
 `scripts\check-web-crate-boundaries.ps1` now checks `tessara-web-forms` for both `x86_64-pc-windows-msvc` and `wasm32-unknown-unknown`.
