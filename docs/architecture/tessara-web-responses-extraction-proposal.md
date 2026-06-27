@@ -49,7 +49,8 @@ Key blockers from the initial inventory:
 - API/actions/loaders use root `crate::http` helpers.
 - list/table/display components use root `crate::utils::{filtering, metadata, pagination, text}` helpers.
 - internal paths use `crate::features::responses::*` and `pub(in crate::features::responses)`.
-- no direct dependency on Forms, Workflows, Datasets, Administration, or Organization web feature modules appeared in the Responses inventory.
+- Home currently imports `crate::features::responses::start_assignment_response_and_navigate` for the pending-work start button. This must be decoupled before removing root `features::responses`.
+- no direct dependency on Forms, Workflows, Datasets, Administration, or Organization web feature modules appeared inside the Responses feature inventory.
 
 Administration should be deferred because its initial inventory shows direct imports from Organization web types such as `AdminRoleSummary`, `NodeTypeCatalogEntry`, `NodeTypeDefinition`, `NodeTypeFormLink`, `NodeTypeUpsertRequest`, and metadata DTOs. It should be broken into smaller future sprint slices rather than treated as the next monolithic extraction target.
 
@@ -88,6 +89,8 @@ response-local tests
 ```
 
 Do not preserve `crate::features::responses` as a compatibility namespace. If temporary root shims are needed during extraction, keep them root-only and remove them before GO.
+
+Home must not depend on the extracted Responses crate for its pending-work start action. The preferred implementation is for Home to own a small local start-assignment action and browser transport helper, mirroring the local pending-work DTO ownership introduced during Workflows extraction.
 
 ## 4. Public Facade
 
@@ -213,6 +216,28 @@ Keep response web DTOs in `tessara-web-responses`.
 
 Do not converge API and web DTOs during extraction. Do not move workflow/form label helpers into a shared crate during this extraction.
 
+### 6.6 Home Pending-Work Start Action
+
+Before extracting the crate, remove this root consumer:
+
+```rust
+use crate::features::responses::start_assignment_response_and_navigate;
+```
+
+from Home. Home should own a local action that calls:
+
+```text
+POST /api/workflow-assignments/{workflow_assignment_id}/start
+```
+
+and navigates to:
+
+```text
+/responses/{submission_id}/edit
+```
+
+This keeps the Responses public facade route-content-only. Do not expose `start_assignment_response_and_navigate` from `tessara-web-responses` just to make Home compile.
+
 ## 7. Commit Sequence
 
 ### R0 — Inventory and Baseline
@@ -235,6 +260,14 @@ Inventory:
 ```powershell
 rg -n "AppShell|require_route_params|SubmissionRouteParams|crate::http|crate::utils|crate::types|crate::routes|leptos_router|leptos_meta|crate::features::(datasets|forms|workflows|organization|administration)" crates\tessara-web\src\features\responses crates\tessara-web\src\routes\responses.rs
 ```
+
+Root consumers inventory:
+
+```powershell
+rg -n "features::responses|start_assignment_response_and_navigate|ResponsesPage|ResponsesNewPage|ResponsesDetailPage|ResponsesEditPage|workflow_revision_label_from_option" crates\tessara-web\src
+```
+
+Do not proceed to R1 until all non-route consumers are classified. Home's pending-work start action must be resolved before R2.
 
 Baseline route smoke after local seed:
 
@@ -275,6 +308,38 @@ cargo check -p tessara-api --features ssr
 ```
 
 Do not proceed if Responses still imports `AppShell`, `SubmissionRouteParams`, `require_route_params`, `leptos_router`, or `leptos_meta`.
+
+### R1.5 — Decouple Home Pending-Work Start
+
+Move pending-work start behavior out of Responses and into Home:
+
+```text
+Home owns the local start-assignment action
+Home owns any tiny local transport/helper needed for that action
+Responses no longer exports `start_assignment_response_and_navigate`
+```
+
+Required audit after R1.5:
+
+```powershell
+rg -n "features::responses|start_assignment_response_and_navigate" crates\tessara-web\src\features\home crates\tessara-web\src\features\responses crates\tessara-web\src\routes\responses.rs
+```
+
+Expected result:
+
+```text
+routes/responses.rs may import only route-content components from Responses
+Home has no `crate::features::responses` import
+Responses does not expose start-assignment actions outside the feature
+```
+
+Gate:
+
+```powershell
+cargo fmt --all --check
+cargo check -p tessara-web --no-default-features --features hydrate --target wasm32-unknown-unknown
+cargo check -p tessara-api --features ssr
+```
 
 ### R2 — Extract `tessara-web-responses`
 
@@ -439,6 +504,16 @@ Also verify the direct assignment-start entry still works:
 
 If suitable IDs are not available from demo seed, record the limitation and at least verify the route renders and the API responds with the expected authorization/error payload.
 
+Also verify the Home pending-work start path still works:
+
+```text
+GET / -> 200 after authenticated demo seed
+pending-work start action creates or returns a draft response
+start action navigates or returns a response id suitable for /responses/:submission_id/edit
+```
+
+If browser automation is unavailable, use a proxy check: verify Home renders under authentication, fetch pending work, call the same assignment-start endpoint with a seeded pending assignment, and verify the resulting response edit route returns 200. Record any limitation explicitly in the results document.
+
 ## 10. GO/PARTIAL/NO-GO Criteria
 
 GO if all are true:
@@ -453,11 +528,13 @@ API SSR check passes
 cargo leptos build passes
 cargo-leptos watch detects responses crate edits
 authenticated response routes return 200 under watch
+authenticated Home pending-work start path remains functional
 boundary checker passes with no permanent exceptions
 public API is only the approved route-content facade
 root retains route/shell/hydration/CSS/assets ownership
 no API/web DTO convergence is required
 no sibling web feature dependency is introduced
+no Home dependency on `crate::features::responses` remains
 immediate bundle growth is under 5% or explained
 ```
 
@@ -470,6 +547,7 @@ responses requires dependency on root tessara-web
 responses requires dependency on tessara-web-forms or tessara-web-workflows
 route parsing/AppShell/session/auth/CSS/assets must move into responses to compile
 public API grows beyond route content to make migration compile
+Home requires importing `tessara-web-responses` or root `features::responses` to start pending work
 cargo-leptos watch does not detect responses crate edits
 full-app regressions exceed thresholds
 DTO convergence becomes required to compile
@@ -492,6 +570,7 @@ Record these in the results document:
 response-local browser transport copied
 response-local tiny helpers copied
 response web DTOs remain separate from API DTOs
+Home owns its pending-work start action separately from Responses
 root-owned route/shell/auth/session/navigation retained
 no shared web platform crate created
 no response/form/workflow contract convergence attempted
