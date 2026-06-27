@@ -11,12 +11,14 @@ default = ["ssr"]
 hydrate = [
     "leptos/hydrate",
     "tessara-web-datasets/hydrate",
+    "tessara-web-ui/hydrate",
 ]
 ssr = [
     "leptos/ssr",
     "leptos_meta/ssr",
     "leptos_router/ssr",
     "tessara-web-datasets/ssr",
+    "tessara-web-ui/ssr",
 ]
 
 [dependencies]

@@ -6,6 +6,12 @@ publish = false
 
 [features]
 default = []
+hydrate = [
+    "leptos/hydrate",
+]
+ssr = [
+    "leptos/ssr",
+]
 
 [dependencies]
 icons = { workspace = true }
