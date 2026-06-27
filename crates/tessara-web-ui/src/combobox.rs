@@ -4,13 +4,13 @@ use icons::{ChevronsUpDown, Search};
 use leptos::prelude::*;
 
 #[derive(Clone)]
-pub(crate) struct ComboboxOption {
-    pub(crate) value: String,
-    pub(crate) label: String,
+pub struct ComboboxOption {
+    pub value: String,
+    pub label: String,
 }
 
 #[component]
-pub(crate) fn Combobox(
+pub fn Combobox(
     options: Signal<Vec<ComboboxOption>>,
     on_select: Callback<String>,
     #[prop(optional)] selected_label: Option<Signal<String>>,

@@ -1,20 +1,10 @@
-//! Shared data-table layout components.
+//! Root-local searchable data-table layout component.
 //!
-//! This module owns reusable table wrappers and structural markup; row content, filters, and domain actions belong with feature pages.
+//! The generic `DataTable` wrapper lives in `tessara-web-ui`; this root module keeps the search affordance used by non-extracted features.
 
 use icons::Search;
 use leptos::prelude::*;
-
-#[component]
-pub fn DataTable(children: Children) -> impl IntoView {
-    view! {
-        <div class="table-wrap">
-            <table class="data-table">
-                {children()}
-            </table>
-        </div>
-    }
-}
+use tessara_web_ui::DataTable;
 
 #[component]
 pub fn SearchableDataTable(

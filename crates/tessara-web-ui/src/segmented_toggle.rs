@@ -3,13 +3,13 @@
 use leptos::prelude::*;
 
 #[derive(Clone)]
-pub(crate) struct SegmentedToggleOption {
-    pub(crate) value: &'static str,
-    pub(crate) label: &'static str,
+pub struct SegmentedToggleOption {
+    pub value: &'static str,
+    pub label: &'static str,
 }
 
 #[component]
-pub(crate) fn SegmentedToggle(
+pub fn SegmentedToggle(
     active: Signal<String>,
     options: Vec<SegmentedToggleOption>,
     on_select: Callback<String>,

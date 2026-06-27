@@ -4442,9 +4442,18 @@ dependencies = [
  "leptos_router",
  "serde",
  "serde_json",
+ "tessara-web-ui",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
+]
+
+[[package]]
+name = "tessara-web-ui"
+version = "0.1.0"
+dependencies = [
+ "icons",
+ "leptos",
 ]
 
 [[package]]

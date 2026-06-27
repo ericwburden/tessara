@@ -1,6 +1,6 @@
 # Tessara Web Dataset-Crate Pilot Results
 
-Status: Commit 0 baseline in progress
+Status: Commit 1 UI extraction in progress
 
 Governing plan:
 
@@ -62,11 +62,28 @@ The root test-link metric is not used as a claimed improvement baseline. The pla
 
 ## Watch-Mode Results
 
-Not run yet. Required after Commit 1 for `tessara-web-ui` and after Commit 3 for `tessara-web-datasets`.
+Commit 1 UI watch gate:
+
+- command: `cargo leptos watch`
+- source edit: temporary `data-pilot-benchmark="ui-edit-1"` attribute in `crates\tessara-web-ui\src\data_table.rs`
+- result: pass for path-dependency detection and front rebuild
+- observed initial watch build: `tessara-web-ui` compiled for both front/server paths, then cargo-leptos served at `http://127.0.0.1:8080`
+- observed edit rebuild: `tessara-web-ui` and `tessara-web` rebuilt in 14.86s, wasm-bindgen finished in 3.96s, and watch reported `Watch updated Front`
+- observed revert rebuild: `tessara-web-ui` and `tessara-web` rebuilt in 14.31s, wasm-bindgen finished in 3.26s, and watch reported `Watch updated Front`
+- limitation: browser refresh timing was not separately measured because the local API emitted `migration 1 was previously applied but has been modified` after serving. The hard path-dependency detection gate passed; full browser-refresh timing remains to capture when the local DB migration state is repaired.
+
+Dataset watch gate is not run yet. Required after Commit 3 for `tessara-web-datasets`.
 
 ## Feature-Tree Deltas
 
-Commit 0 captured current root feature trees. No new crates exist yet.
+Commit 0 captured current root feature trees.
+
+Commit 1 added `tessara-web-ui`. Feature-tree review:
+
+- `cargo tree -p tessara-web-ui -e features --depth 2 --color never` passed.
+- Direct UI crate dependencies are limited to `leptos` and `icons`.
+- No root app, API, router, meta, transport, auth, session, navigation, or product feature crate dependency is declared by `tessara-web-ui`.
+- Source audit for `datasets|forms|workflows|responses|organization|administration|AppShell|ShellSession|require_authenticated_route` under `crates\tessara-web-ui\src` found no matches.
 
 ## Bundle-Size Deltas
 
@@ -81,7 +98,14 @@ Commit 0 bundle report, from the `cargo leptos build` output in worktree-local `
 
 ## Public API Review
 
-Not applicable yet. Required after `tessara-web-ui` and `tessara-web-datasets` exist.
+Commit 1 UI public API:
+
+- `cargo doc -p tessara-web-ui --no-deps` passed.
+- Public facade is limited to `Breadcrumb`, breadcrumb item/link/page/separator primitives, `Combobox`, `ComboboxOption`, `DataTable`, `EmptyState`, `PageHeader`, `SegmentedToggle`, `SegmentedToggleOption`, and `TablePaginationFooter`.
+- `SearchableDataTable` remains root-local in `tessara-web` and composes the moved `DataTable`.
+- Shell, auth, navigation, browser transport, and product concepts remain root-owned.
+
+Dataset public API review is not applicable yet.
 
 ## Dependency-Boundary Report
 
@@ -89,7 +113,17 @@ Not applicable yet. Boundary tooling is planned for Commit 4.
 
 ## Behavior Validation Results
 
-Not run yet for structural phases. Commit 0 made no source architecture changes.
+Commit 1 validation:
+
+| Command | Result |
+| --- | --- |
+| `cargo fmt --all --check` | pass |
+| `cargo check -p tessara-web-ui` | pass |
+| `cargo tree -p tessara-web-ui -e features --depth 2 --color never` | pass |
+| `cargo doc -p tessara-web-ui --no-deps` | pass |
+| `cargo check -p tessara-web --no-default-features --features hydrate --target wasm32-unknown-unknown` | pass |
+| `cargo check -p tessara-api --features ssr` | pass |
+| `cargo leptos build` | pass |
 
 ## Intentional Contract and Transport Debt Retained
 
