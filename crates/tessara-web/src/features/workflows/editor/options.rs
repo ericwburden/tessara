@@ -1,9 +1,9 @@
 //! Workflow editor option and slug helpers.
 
-use crate::features::forms::FormSummary;
-use crate::features::forms::{form_version_label, form_version_sort_label};
 use crate::features::organization::NodeTypeCatalogEntry;
-use crate::features::workflows::types::WorkflowSummary;
+use crate::features::workflows::types::{
+    WorkflowFormSummary, WorkflowFormVersionSummary, WorkflowSummary,
+};
 
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
 pub(crate) fn existing_workflow_slugs(workflows: &[WorkflowSummary]) -> Vec<String> {
@@ -14,7 +14,7 @@ pub(crate) fn existing_workflow_slugs(workflows: &[WorkflowSummary]) -> Vec<Stri
 }
 
 pub(crate) fn workflow_form_is_in_scope(
-    form: &FormSummary,
+    form: &WorkflowFormSummary,
     node_types: &[NodeTypeCatalogEntry],
     workflow_node_type_id: &str,
 ) -> bool {
@@ -23,7 +23,7 @@ pub(crate) fn workflow_form_is_in_scope(
 }
 
 pub(crate) fn workflow_form_version_options(
-    forms: &[FormSummary],
+    forms: &[WorkflowFormSummary],
     node_types: &[NodeTypeCatalogEntry],
     workflow_node_type_id: &str,
 ) -> Vec<(String, String, String)> {
@@ -39,11 +39,11 @@ pub(crate) fn workflow_form_version_options(
             .filter(|version| version.status == "published")
             .collect::<Vec<_>>();
         versions.sort_by(|left, right| {
-            form_version_sort_label(left).cmp(&form_version_sort_label(right))
+            workflow_form_version_sort_label(left).cmp(&workflow_form_version_sort_label(right))
         });
 
         for version in versions {
-            let version_label = form_version_label(Some(version));
+            let version_label = workflow_form_version_label(Some(version));
             options.push((
                 version.id.clone(),
                 format!("{} ({version_label})", form.name),
@@ -57,18 +57,42 @@ pub(crate) fn workflow_form_version_options(
 }
 
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
-pub(crate) fn workflow_step_form_label(forms: &[FormSummary], form_version_id: &str) -> String {
+pub(crate) fn workflow_step_form_label(
+    forms: &[WorkflowFormSummary],
+    form_version_id: &str,
+) -> String {
     forms
         .iter()
         .flat_map(|form| {
             form.versions.iter().map(move |version| {
                 (
                     version.id.as_str(),
-                    format!("{} ({})", form.name, form_version_label(Some(version))),
+                    format!(
+                        "{} ({})",
+                        form.name,
+                        workflow_form_version_label(Some(version))
+                    ),
                 )
             })
         })
         .find(|(id, _)| *id == form_version_id)
         .map(|(_, label)| label)
         .unwrap_or_else(|| "Select form version".to_string())
+}
+
+fn workflow_form_version_label(version: Option<&WorkflowFormVersionSummary>) -> String {
+    version
+        .and_then(|version| version.version_label.as_deref())
+        .map(str::to_string)
+        .unwrap_or_else(|| "-".to_string())
+}
+
+fn workflow_form_version_sort_label(version: &WorkflowFormVersionSummary) -> String {
+    format!(
+        "{:04}.{:04}.{:04}.{}",
+        version.version_major.unwrap_or(-1),
+        version.version_minor.unwrap_or(-1),
+        version.version_patch.unwrap_or(-1),
+        version.version_label.clone().unwrap_or_default()
+    )
 }

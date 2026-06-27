@@ -1,10 +1,9 @@
 //! Workflow edit page implementation.
 
-use crate::features::forms::FormSummary;
 use crate::features::organization::{NodeTypeCatalogEntry, OrganizationNode};
 use crate::features::workflows::loaders::{load_workflow_create_options, load_workflow_detail};
 use crate::features::workflows::types::{
-    WorkflowDefinition, WorkflowSaveIntent, WorkflowStepDraft, WorkflowSummary,
+    WorkflowDefinition, WorkflowFormSummary, WorkflowSaveIntent, WorkflowStepDraft, WorkflowSummary,
 };
 use crate::types::route_params::{WorkflowRouteParams, require_route_params};
 use crate::ui::{
@@ -25,7 +24,7 @@ pub(crate) fn WorkflowsEditPage() -> impl IntoView {
     let detail = RwSignal::new(None::<WorkflowDefinition>);
     let node_types = RwSignal::new(Vec::<NodeTypeCatalogEntry>::new());
     let organization_nodes = RwSignal::new(Vec::<OrganizationNode>::new());
-    let forms = RwSignal::new(Vec::<FormSummary>::new());
+    let forms = RwSignal::new(Vec::<WorkflowFormSummary>::new());
     let existing_workflows = RwSignal::new(Vec::<WorkflowSummary>::new());
     let name = RwSignal::new(String::new());
     let slug = RwSignal::new(String::new());

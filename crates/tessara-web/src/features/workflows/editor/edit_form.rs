@@ -1,8 +1,9 @@
 //! Workflow edit form composition.
 
-use crate::features::forms::FormSummary;
 use crate::features::organization::{NodeTypeCatalogEntry, OrganizationNode};
-use crate::features::workflows::types::{WorkflowSaveIntent, WorkflowStepDraft};
+use crate::features::workflows::types::{
+    WorkflowFormSummary, WorkflowSaveIntent, WorkflowStepDraft,
+};
 use leptos::prelude::*;
 use std::collections::HashSet;
 
@@ -29,7 +30,7 @@ pub(in crate::features::workflows) fn WorkflowEditForm(
     version_is_draft: RwSignal<bool>,
     node_types: RwSignal<Vec<NodeTypeCatalogEntry>>,
     organization_nodes: RwSignal<Vec<OrganizationNode>>,
-    forms: RwSignal<Vec<FormSummary>>,
+    forms: RwSignal<Vec<WorkflowFormSummary>>,
     is_saving: RwSignal<bool>,
     save_intent: RwSignal<Option<WorkflowSaveIntent>>,
     message: RwSignal<Option<String>>,

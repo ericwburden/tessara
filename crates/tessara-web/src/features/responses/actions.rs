@@ -2,11 +2,11 @@
 //!
 //! Keep save, submit, start, and navigation orchestration here; endpoint transport belongs in `api`.
 
-use crate::features::forms::RenderedForm;
 #[cfg(feature = "hydrate")]
 use crate::features::responses::api::{
     ResponseApiError, save_submission_values_api, start_assignment_response, submit_submission_api,
 };
+use crate::features::responses::types::RenderedForm;
 #[cfg(feature = "hydrate")]
 use crate::features::responses::types::SaveSubmissionValuesPayload;
 #[cfg(feature = "hydrate")]

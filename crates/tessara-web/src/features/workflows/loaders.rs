@@ -1,8 +1,7 @@
 //! Signal-aware loaders for workflow pages.
 
-use crate::features::forms::FormSummary;
 use crate::features::organization::{NodeTypeCatalogEntry, OrganizationNode};
-use crate::features::workflows::types::{WorkflowDefinition, WorkflowSummary};
+use crate::features::workflows::types::{WorkflowDefinition, WorkflowFormSummary, WorkflowSummary};
 #[cfg(feature = "hydrate")]
 use crate::http::redirect_to_login;
 use leptos::prelude::*;
@@ -116,7 +115,7 @@ pub(crate) fn load_workflow_detail(
 pub(crate) fn load_workflow_create_options(
     node_types: RwSignal<Vec<NodeTypeCatalogEntry>>,
     organization_nodes: RwSignal<Vec<OrganizationNode>>,
-    forms: RwSignal<Vec<FormSummary>>,
+    forms: RwSignal<Vec<WorkflowFormSummary>>,
     workflows: RwSignal<Vec<WorkflowSummary>>,
     is_loading: RwSignal<bool>,
     message: RwSignal<Option<String>>,

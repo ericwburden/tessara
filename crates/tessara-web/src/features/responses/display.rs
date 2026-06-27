@@ -2,10 +2,9 @@
 //!
 //! Keep label, class, and summary formatting here when it depends on Responses domain values but not on route state.
 
-use crate::features::forms::RenderedField;
-use crate::features::forms::builder::FORM_BUILDER_COLUMN_COUNT;
 use crate::features::responses::types::{
-    AssignmentResponseStartOption, AssignmentResponseStartOptions, SubmissionSummary,
+    AssignmentResponseStartOption, AssignmentResponseStartOptions, RESPONSE_FORM_GRID_COLUMN_COUNT,
+    RenderedField, SubmissionSummary,
 };
 use crate::utils::metadata::metadata_label;
 use crate::utils::text::nonempty_text;
@@ -106,8 +105,8 @@ pub(crate) fn response_value_label(value: Option<&Value>) -> String {
 }
 
 pub(crate) fn rendered_form_field_layout_style(field: &RenderedField) -> String {
-    let width = field.grid_width.clamp(1, FORM_BUILDER_COLUMN_COUNT);
-    let max_column = (FORM_BUILDER_COLUMN_COUNT - width + 1).max(1);
+    let width = field.grid_width.clamp(1, RESPONSE_FORM_GRID_COLUMN_COUNT);
+    let max_column = (RESPONSE_FORM_GRID_COLUMN_COUNT - width + 1).max(1);
     let column = field.grid_column.clamp(1, max_column);
     let row = field.grid_row.max(1);
     let height = field.grid_height.max(1);

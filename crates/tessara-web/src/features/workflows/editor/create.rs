@@ -1,9 +1,8 @@
 //! Workflow creation page implementation.
 
-use crate::features::forms::FormSummary;
 use crate::features::organization::{NodeTypeCatalogEntry, OrganizationNode};
 use crate::features::workflows::loaders::load_workflow_create_options;
-use crate::features::workflows::types::{WorkflowStepDraft, WorkflowSummary};
+use crate::features::workflows::types::{WorkflowFormSummary, WorkflowStepDraft, WorkflowSummary};
 use crate::ui::{
     AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator,
     PageHeader,
@@ -21,7 +20,7 @@ use super::{
 pub(crate) fn WorkflowsNewPage() -> impl IntoView {
     let node_types = RwSignal::new(Vec::<NodeTypeCatalogEntry>::new());
     let organization_nodes = RwSignal::new(Vec::<OrganizationNode>::new());
-    let forms = RwSignal::new(Vec::<FormSummary>::new());
+    let forms = RwSignal::new(Vec::<WorkflowFormSummary>::new());
     let existing_workflows = RwSignal::new(Vec::<WorkflowSummary>::new());
     let seeded_from_form = RwSignal::new(false);
     let name = RwSignal::new(String::new());

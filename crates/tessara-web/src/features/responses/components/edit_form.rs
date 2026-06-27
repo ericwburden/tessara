@@ -1,9 +1,8 @@
 //! Response edit form component.
 
 use super::ResponseFieldInput;
-use crate::features::forms::RenderedForm;
 use crate::features::responses::actions::{save_submission_values, submit_response_values};
-use crate::features::responses::types::SubmissionDetail;
+use crate::features::responses::types::{RenderedForm, SubmissionDetail};
 use crate::features::shared::status_badge_class;
 use crate::ui::{InfoListTable, empty_view};
 use crate::utils::metadata::metadata_label;

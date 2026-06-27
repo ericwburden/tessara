@@ -1,7 +1,7 @@
 //! Response form field input component.
 
-use crate::features::forms::RenderedField;
 use crate::features::responses::display::{rendered_form_field_layout_style, response_field_class};
+use crate::features::responses::types::RenderedField;
 use crate::ui::empty_view;
 use leptos::prelude::*;
 use std::collections::HashMap;

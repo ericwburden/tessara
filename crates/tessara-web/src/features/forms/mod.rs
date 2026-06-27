@@ -50,10 +50,9 @@ pub(crate) use filtering::{
 pub(crate) use pages::FormsIndexContent;
 pub(crate) use types::{
     FormAttachmentLink, FormDatasetSourceLink, FormDefinition, FormNodeTypeOption, FormSummary,
-    FormVersionSummary, FormWorkflowLink, FormsAttachedNodesSheetData, RenderedField, RenderedForm,
+    FormVersionSummary, FormWorkflowLink, FormsAttachedNodesSheetData, RenderedForm,
 };
 pub(crate) use versions::{
     active_form_definition_version, active_form_version, form_version_label,
-    form_version_sort_label,
 };
 pub(crate) use versions_table::FormVersionsTable;

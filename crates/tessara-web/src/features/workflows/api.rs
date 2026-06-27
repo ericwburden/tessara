@@ -3,13 +3,11 @@
 //! Keep endpoint requests and response parsing here; signal orchestration belongs in loaders and actions.
 
 #[cfg(feature = "hydrate")]
-use crate::features::forms::FormSummary;
-#[cfg(feature = "hydrate")]
 use crate::features::organization::NodeTypeCatalogEntry;
 #[cfg(feature = "hydrate")]
 use crate::features::organization::OrganizationNode;
 #[cfg(feature = "hydrate")]
-use crate::features::workflows::types::{WorkflowDefinition, WorkflowSummary};
+use crate::features::workflows::types::{WorkflowDefinition, WorkflowFormSummary, WorkflowSummary};
 #[cfg(feature = "hydrate")]
 pub(super) enum WorkflowApiError {
     Unauthorized,
@@ -20,7 +18,7 @@ pub(super) enum WorkflowApiError {
 pub(super) struct WorkflowEditorOptionResponses {
     pub(super) node_types: Vec<NodeTypeCatalogEntry>,
     pub(super) organization_nodes: Vec<OrganizationNode>,
-    pub(super) forms: Vec<FormSummary>,
+    pub(super) forms: Vec<WorkflowFormSummary>,
     pub(super) workflows: Vec<WorkflowSummary>,
 }
 
@@ -137,7 +135,7 @@ pub(super) async fn fetch_workflow_editor_options()
                 .json::<Vec<NodeTypeCatalogEntry>>()
                 .await;
             let loaded_nodes = nodes_response.json::<Vec<OrganizationNode>>().await;
-            let loaded_forms = forms_response.json::<Vec<FormSummary>>().await;
+            let loaded_forms = forms_response.json::<Vec<WorkflowFormSummary>>().await;
             let loaded_workflows = workflows_response.json::<Vec<WorkflowSummary>>().await;
 
             match (

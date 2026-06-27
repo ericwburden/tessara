@@ -1,12 +1,13 @@
 //! Workflow editor state helpers.
 
 use super::options::workflow_form_version_options;
-use crate::features::forms::FormSummary;
 use crate::features::organization::NodeTypeCatalogEntry;
 use crate::features::workflows::display::{
     active_workflow_definition_version, workflow_revision_label_from_raw,
 };
-use crate::features::workflows::types::{WorkflowDefinition, WorkflowStepDraft};
+use crate::features::workflows::types::{
+    WorkflowDefinition, WorkflowFormSummary, WorkflowStepDraft,
+};
 use crate::utils::text::sentence_label;
 use leptos::prelude::*;
 use std::collections::HashSet;
@@ -87,7 +88,7 @@ pub(in crate::features::workflows) fn workflow_edit_initial_state(
 
 /// Removes workflow steps whose selected form version is no longer available.
 pub(in crate::features::workflows) fn prune_unavailable_workflow_steps(
-    forms: &[FormSummary],
+    forms: &[WorkflowFormSummary],
     node_types: &[NodeTypeCatalogEntry],
     steps: RwSignal<Vec<WorkflowStepDraft>>,
 ) {

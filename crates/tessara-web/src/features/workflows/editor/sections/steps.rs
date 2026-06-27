@@ -1,15 +1,14 @@
 //! Workflow editor step sections.
 
-use crate::features::forms::FormSummary;
 use crate::features::organization::NodeTypeCatalogEntry;
-use crate::features::workflows::types::WorkflowStepDraft;
+use crate::features::workflows::types::{WorkflowFormSummary, WorkflowStepDraft};
 use leptos::prelude::*;
 
 use super::super::{WorkflowStepList, workflow_form_version_options};
 
 #[component]
 pub(in crate::features::workflows) fn WorkflowCreateStepsSection(
-    forms: RwSignal<Vec<FormSummary>>,
+    forms: RwSignal<Vec<WorkflowFormSummary>>,
     node_types: RwSignal<Vec<NodeTypeCatalogEntry>>,
     steps: RwSignal<Vec<WorkflowStepDraft>>,
     on_add_step: impl Fn(leptos::ev::MouseEvent) + 'static + Copy,
@@ -70,7 +69,7 @@ pub(in crate::features::workflows) fn WorkflowCreateStepsSection(
 
 #[component]
 pub(in crate::features::workflows) fn WorkflowEditStepsSection(
-    forms: RwSignal<Vec<FormSummary>>,
+    forms: RwSignal<Vec<WorkflowFormSummary>>,
     node_types: RwSignal<Vec<NodeTypeCatalogEntry>>,
     steps: RwSignal<Vec<WorkflowStepDraft>>,
     version_is_draft: RwSignal<bool>,

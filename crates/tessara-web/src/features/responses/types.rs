@@ -6,6 +6,43 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 
+pub(crate) const RESPONSE_FORM_GRID_COLUMN_COUNT: i32 = 12;
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub(crate) struct RenderedForm {
+    pub(crate) form_version_id: String,
+    pub(crate) form_id: String,
+    pub(crate) form_name: String,
+    pub(crate) version_label: Option<String>,
+    pub(crate) status: String,
+    #[serde(default)]
+    pub(crate) sections: Vec<RenderedSection>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub(crate) struct RenderedSection {
+    pub(crate) id: String,
+    pub(crate) title: String,
+    pub(crate) description: String,
+    pub(crate) position: i32,
+    #[serde(default)]
+    pub(crate) fields: Vec<RenderedField>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub(crate) struct RenderedField {
+    pub(crate) field_id: String,
+    pub(crate) key: String,
+    pub(crate) label: String,
+    pub(crate) field_type: String,
+    pub(crate) required: bool,
+    pub(crate) position: i32,
+    pub(crate) grid_row: i32,
+    pub(crate) grid_column: i32,
+    pub(crate) grid_width: i32,
+    pub(crate) grid_height: i32,
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 pub(crate) struct SubmissionSummary {
     pub(crate) id: String,

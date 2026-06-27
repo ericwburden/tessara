@@ -4,8 +4,7 @@
 
 use super::components::ResponseEditForm;
 use super::loaders::load_submission_edit_context;
-use crate::features::forms::RenderedForm;
-use crate::features::responses::types::SubmissionDetail;
+use crate::features::responses::types::{RenderedForm, SubmissionDetail};
 use crate::types::route_params::{SubmissionRouteParams, require_route_params};
 use crate::ui::{
     AppShell, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator,

@@ -1,15 +1,14 @@
 //! Option list helpers for workflow editor loaders.
 
-use crate::features::forms::FormSummary;
 use crate::features::organization::{NodeTypeCatalogEntry, OrganizationNode};
 use crate::features::shared::node_display_path;
-use crate::features::workflows::types::WorkflowSummary;
+use crate::features::workflows::types::{WorkflowFormSummary, WorkflowSummary};
 
 /// Selectable workflow editor options after applying display ordering.
 pub(super) struct WorkflowEditorOptions {
     pub(super) node_types: Vec<NodeTypeCatalogEntry>,
     pub(super) organization_nodes: Vec<OrganizationNode>,
-    pub(super) forms: Vec<FormSummary>,
+    pub(super) forms: Vec<WorkflowFormSummary>,
     pub(super) workflows: Vec<WorkflowSummary>,
 }
 
@@ -17,7 +16,7 @@ pub(super) struct WorkflowEditorOptions {
 pub(super) fn ordered_workflow_editor_options(
     mut node_types: Vec<NodeTypeCatalogEntry>,
     mut organization_nodes: Vec<OrganizationNode>,
-    mut forms: Vec<FormSummary>,
+    mut forms: Vec<WorkflowFormSummary>,
     mut workflows: Vec<WorkflowSummary>,
 ) -> WorkflowEditorOptions {
     node_types.sort_by(|left, right| {

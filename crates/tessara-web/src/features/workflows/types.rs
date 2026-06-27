@@ -7,6 +7,32 @@ use serde::Deserialize;
 use crate::features::workflows::assignments::types::WorkflowAssignmentSummary;
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
+pub(crate) struct WorkflowFormSummary {
+    pub(crate) id: String,
+    pub(crate) name: String,
+    pub(crate) slug: String,
+    pub(crate) scope_node_type_id: Option<String>,
+    pub(crate) scope_node_type_name: Option<String>,
+    #[serde(default)]
+    pub(crate) versions: Vec<WorkflowFormVersionSummary>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub(crate) struct WorkflowFormVersionSummary {
+    pub(crate) id: String,
+    pub(crate) version_label: Option<String>,
+    pub(crate) status: String,
+    pub(crate) version_major: Option<i32>,
+    pub(crate) version_minor: Option<i32>,
+    pub(crate) version_patch: Option<i32>,
+    pub(crate) compatibility_group_name: Option<String>,
+    pub(crate) published_at: Option<String>,
+    pub(crate) field_count: i64,
+    pub(crate) semantic_bump: Option<String>,
+    pub(crate) started_new_major_line: Option<bool>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 pub(crate) struct WorkflowSummary {
     pub(crate) id: String,
     pub(crate) workflow_node_type_id: String,

@@ -1,7 +1,6 @@
 //! Response edit loading orchestration.
 
-use crate::features::forms::RenderedForm;
-use crate::features::responses::types::SubmissionDetail;
+use crate::features::responses::types::{RenderedForm, SubmissionDetail};
 #[cfg(feature = "hydrate")]
 use crate::features::responses::value_collection::submission_value_maps;
 #[cfg(feature = "hydrate")]

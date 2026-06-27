@@ -2,16 +2,15 @@
 
 use super::options::{workflow_form_version_options, workflow_step_form_label};
 use super::steps::{workflow_step_form_version_id_by_id, workflow_step_title_by_id};
-use crate::features::forms::FormSummary;
 use crate::features::organization::NodeTypeCatalogEntry;
-use crate::features::workflows::types::WorkflowStepDraft;
+use crate::features::workflows::types::{WorkflowFormSummary, WorkflowStepDraft};
 use icons::{ArrowDown, ArrowUp, Trash2};
 use leptos::prelude::*;
 
 #[component]
 /// Renders the editable workflow step list.
 pub(in crate::features::workflows) fn WorkflowStepList(
-    forms: RwSignal<Vec<FormSummary>>,
+    forms: RwSignal<Vec<WorkflowFormSummary>>,
     node_types: RwSignal<Vec<NodeTypeCatalogEntry>>,
     steps: RwSignal<Vec<WorkflowStepDraft>>,
 ) -> impl IntoView {

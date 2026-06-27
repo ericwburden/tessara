@@ -2,8 +2,7 @@
 //!
 //! Keep form-field value extraction and submission value maps here so response start and edit flows share one conversion path.
 
-use crate::features::forms::RenderedForm;
-use crate::features::responses::types::SubmissionDetail;
+use crate::features::responses::types::{RenderedForm, SubmissionDetail};
 use serde_json::Value;
 use std::collections::HashMap;
 

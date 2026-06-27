@@ -1,7 +1,6 @@
 //! Query-string seeding helpers for workflow creation.
 
-use crate::features::forms::FormSummary;
-use crate::features::workflows::types::WorkflowStepDraft;
+use crate::features::workflows::types::{WorkflowFormSummary, WorkflowStepDraft};
 #[cfg(feature = "hydrate")]
 use crate::utils::url::current_search_param;
 use leptos::prelude::*;
@@ -9,7 +8,7 @@ use leptos::prelude::*;
 pub(in crate::features::workflows) fn seed_workflow_from_form_query(
     is_loading: RwSignal<bool>,
     seeded_from_form: RwSignal<bool>,
-    forms: RwSignal<Vec<FormSummary>>,
+    forms: RwSignal<Vec<WorkflowFormSummary>>,
     name: RwSignal<String>,
     description: RwSignal<String>,
     steps: RwSignal<Vec<WorkflowStepDraft>>,

@@ -3,10 +3,8 @@
 //! Keep endpoint requests and response parsing here; Leptos signal orchestration belongs in loaders and actions.
 
 #[cfg(feature = "hydrate")]
-use crate::features::forms::RenderedForm;
-#[cfg(feature = "hydrate")]
 use crate::features::responses::types::{
-    AssignmentResponseStartOptions, SaveSubmissionValuesPayload, SubmissionDetail,
+    AssignmentResponseStartOptions, RenderedForm, SaveSubmissionValuesPayload, SubmissionDetail,
     SubmissionSummary,
 };
 #[cfg(feature = "hydrate")]
