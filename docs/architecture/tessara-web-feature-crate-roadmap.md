@@ -1,7 +1,7 @@
 # Tessara Web Feature-Crate Migration Plan and Long-Term Roadmap
 
 **Status:** Active architecture roadmap after successful `tessara-web-datasets`, `tessara-web-forms`, and `tessara-web-workflows` extractions
-**Primary near-term target:** next extraction selection after Workflows GO review
+**Primary near-term target:** `tessara-web-responses` extraction proposal
 **Long-term direction:** product-area frontend crates under a modular monolith
 **Non-goal:** microservices as a frontend compile-time solution
 
@@ -468,10 +468,10 @@ Workflows is now complete and should be used as the latest large-feature referen
 
 ### 9.1 Candidate choice
 
-Use the current ranking as a starting point:
+Use the current ranking as a starting point, but treat the short post-Workflows inventory as authoritative for the next proposal:
 
-- `tessara-web-administration` is the leading candidate if its auth/role/organization coupling can stay root-adapter or crate-private.
-- `tessara-web-responses` is the leading candidate if Administration inventory exposes too much root policy coupling for a clean first pass.
+- `tessara-web-responses` is the next proposal target because it is smaller, leafier, and has no direct Forms/Workflows/Organization web feature dependency in the initial inventory.
+- `tessara-web-administration` remains high-value, but its initial inventory exposed enough Organization web DTO coupling that it should follow a decoupling/prep proposal rather than be the immediate extraction.
 - `tessara-web-organization` should remain later because organization/hierarchy DTOs are high-fan-out and already duplicated into extracted crates.
 
 ### 9.2 Required pre-proposal checkpoint
@@ -482,7 +482,7 @@ Before drafting the next proposal, run a short inventory across Administration a
 rg -n "crate::features::(datasets|forms|workflows|responses|organization|administration)|crate::routes|AppShell|leptos_router|leptos_meta|crate::http|crate::utils|crate::types" crates\tessara-web\src\features\administration crates\tessara-web\src\features\responses crates\tessara-web\src\routes
 ```
 
-The next proposal should also review the Workflows retained debt:
+The Responses proposal should also review the Workflows retained debt:
 
 ```text
 local browser transport copied in three feature crates
@@ -495,19 +495,13 @@ Do not create a shared web platform crate as a default next step. Create one onl
 
 ### 9.3 Next deliverable
 
-Create one implementation-ready proposal after the Administration/Responses inventory:
-
-```text
-docs/architecture/tessara-web-administration-extraction-proposal.md
-```
-
-or:
+Create:
 
 ```text
 docs/architecture/tessara-web-responses-extraction-proposal.md
 ```
 
-The proposal must include the same inventory, facade, route-adapter, boundary, compile/watch/browser, bundle, GO/PARTIAL/NO-GO, and rollback sections used for Forms and Workflows.
+Administration remains the next likely candidate after Responses, but it should start with a decoupling proposal for Organization web DTO imports. The Responses proposal must include the same inventory, facade, route-adapter, boundary, compile/watch/browser, bundle, GO/PARTIAL/NO-GO, and rollback sections used for Forms and Workflows.
 
 ## 10. Per-Feature Extraction Template
 
@@ -881,23 +875,9 @@ Retained debt:
 
 ### Stage D — Administration and responses
 
-**Status:** next proposal fork; order to be selected after a short Administration/Responses inventory.
+**Status:** Responses selected next after short Administration/Responses inventory.
 
-Candidate 1:
-
-```text
-tessara-web-administration
-```
-
-Rationale:
-
-```text
-substantial user/role/node-type management surface
-potentially strong focused-loop payoff
-relatively self-contained after auth/hierarchy contracts are clear
-```
-
-Candidate 2:
+Selected candidate:
 
 ```text
 tessara-web-responses
@@ -908,6 +888,21 @@ Rationale:
 ```text
 leaf-ish response list/start/detail/edit feature
 safer after forms and workflows are extracted
+no direct sibling web feature dependency in initial inventory
+```
+
+Deferred candidate:
+
+```text
+tessara-web-administration
+```
+
+Rationale:
+
+```text
+substantial user/role/node-type management surface
+potentially strong focused-loop payoff
+initial inventory shows Organization web DTO coupling to resolve first
 ```
 
 Possible administration facade:
@@ -931,7 +926,7 @@ pub fn ResponseDetailContent(submission_id: String) -> impl IntoView;
 pub fn ResponseEditContent(submission_id: String) -> impl IntoView;
 ```
 
-Re-rank using the Workflows result before implementation. Administration remains the leading candidate; Responses is the fallback if Administration's auth/role/organization coupling is too root-policy-heavy.
+Responses is selected for the next proposal. Re-rank again after the Responses result before deciding whether Administration is ready or needs an Organization DTO decoupling slice first.
 
 ### Stage E — Organization extraction
 
@@ -1057,16 +1052,16 @@ This roadmap is the durable architecture artifact after the dataset, Forms, and 
 The next implementation-specific document is:
 
 ```text
-docs/architecture/tessara-web-administration-extraction-proposal.md
-```
-
-If the Administration inventory proves too root-policy-heavy, use:
-
-```text
 docs/architecture/tessara-web-responses-extraction-proposal.md
 ```
 
-The next proposal should be implementation-ready and should include inventory, facade, route adapters, dependency rules, cross-feature dependency resolution, validation commands, measurement gates, GO/PARTIAL/NO-GO criteria, and rollback steps.
+After Responses, prepare:
+
+```text
+docs/architecture/tessara-web-administration-decoupling-proposal.md
+```
+
+The Responses proposal should be implementation-ready and should include inventory, facade, route adapters, dependency rules, cross-feature dependency resolution, validation commands, measurement gates, GO/PARTIAL/NO-GO criteria, and rollback steps.
 
 ---
 
@@ -1076,6 +1071,6 @@ The dataset, Forms, and Workflows extractions validated the core thesis:
 
 > Tessara can use feature-area crates to regain focused development loops while retaining a single routed Leptos app and one primary API service.
 
-The next move is not a mass split. It is a short Administration/Responses inventory, followed by one implementation-ready proposal if the same boundary discipline can hold.
+The next move is not a mass split. It is a Responses extraction proposal, with Administration deferred until its Organization web DTO coupling is reduced.
 
 The long-term roadmap points toward feature-area crates for the major product surfaces, but each stage remains conditional on evidence.
