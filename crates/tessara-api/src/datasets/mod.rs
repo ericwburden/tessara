@@ -17,6 +17,7 @@ use tessara_datasets::DatasetGrain;
 use uuid::Uuid;
 
 mod dto;
+mod restriction_tiers;
 
 pub use dto::{
     CreateDatasetRequest, DatasetAggregationRequest, DatasetCalculatedFieldRequest,
@@ -31,6 +32,10 @@ use crate::{
     db::AppState,
     error::{ApiError, ApiResult},
     hierarchy::{IdResponse, require_text},
+};
+use restriction_tiers::{
+    effective_restriction_tier_sql, greatest_restriction_tier_sql, max_restriction_tier_sql,
+    tier_access_predicate,
 };
 
 pub(crate) fn routes() -> Router<AppState> {
@@ -1917,83 +1922,6 @@ fn row_filters_sql(filters: &[ValidatedRowFilter]) -> String {
     format!("\n            WHERE {predicates}")
 }
 
-fn restriction_policy_tier_sql(restriction_policy: &ValidatedRestrictionPolicy) -> String {
-    let internal_predicate = restriction_policy
-        .internal_field_key
-        .as_deref()
-        .map(boolean_tier_predicate_sql)
-        .unwrap_or_else(|| "FALSE".to_string());
-    let restricted_predicate = restriction_policy
-        .restricted_field_key
-        .as_deref()
-        .map(boolean_tier_predicate_sql)
-        .unwrap_or_else(|| "FALSE".to_string());
-    let confidential_predicate = restriction_policy
-        .confidential_field_key
-        .as_deref()
-        .map(boolean_tier_predicate_sql)
-        .unwrap_or_else(|| "FALSE".to_string());
-
-    format!(
-        r#"CASE
-                    WHEN {confidential_predicate} THEN 'confidential'
-                    WHEN {restricted_predicate} THEN 'restricted'
-                    WHEN {internal_predicate} THEN 'internal'
-                    ELSE 'public'
-                END"#
-    )
-}
-
-fn effective_restriction_tier_sql(restriction_policy: &ValidatedRestrictionPolicy) -> String {
-    greatest_restriction_tier_sql(&[
-        quote_identifier("__restriction_tier"),
-        restriction_policy_tier_sql(restriction_policy),
-    ])
-}
-
-fn greatest_restriction_tier_sql(expressions: &[String]) -> String {
-    let rank_args = expressions
-        .iter()
-        .map(|expression| restriction_tier_rank_sql(expression))
-        .collect::<Vec<_>>()
-        .join(", ");
-    format!(
-        r#"CASE GREATEST({rank_args})
-                    WHEN 3 THEN 'confidential'
-                    WHEN 2 THEN 'restricted'
-                    WHEN 1 THEN 'internal'
-                    ELSE 'public'
-                END"#
-    )
-}
-
-fn max_restriction_tier_sql(expression: &str) -> String {
-    format!(
-        r#"CASE COALESCE(MAX({}), 0)
-                    WHEN 3 THEN 'confidential'
-                    WHEN 2 THEN 'restricted'
-                    WHEN 1 THEN 'internal'
-                    ELSE 'public'
-                END"#,
-        restriction_tier_rank_sql(expression)
-    )
-}
-
-fn restriction_tier_rank_sql(expression: &str) -> String {
-    format!(
-        r#"CASE {expression}
-                    WHEN 'confidential' THEN 3
-                    WHEN 'restricted' THEN 2
-                    WHEN 'internal' THEN 1
-                    ELSE 0
-                END"#
-    )
-}
-
-fn boolean_tier_predicate_sql(field_key: &str) -> String {
-    boolean_expression_sql(&quote_identifier(field_key))
-}
-
 fn validate_dataset_row_filters(
     mut requests: Vec<DatasetRowFilterRequest>,
     fields: &[ValidatedDatasetField],
@@ -3523,16 +3451,6 @@ async fn load_materialized_dataset_table_rows(
     Ok(table_rows)
 }
 
-fn tier_access_predicate(account: &auth::AccountContext) -> &'static str {
-    if account.has_capability("admin:all") || account.has_capability("datasets:read_confidential") {
-        "TRUE"
-    } else if account.has_capability("datasets:read_restricted") {
-        "COALESCE(\"__restriction_tier\", 'public') IN ('public', 'internal', 'restricted')"
-    } else {
-        "COALESCE(\"__restriction_tier\", 'public') IN ('public', 'internal')"
-    }
-}
-
 async fn require_dataset_slug_available(pool: &sqlx::PgPool, slug: &str) -> ApiResult<()> {
     let exists: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM datasets WHERE slug = $1)")
         .bind(slug)
@@ -4036,7 +3954,7 @@ mod tests {
             confidential_field_key: Some("is_confidential".into()),
         };
 
-        let sql = restriction_policy_tier_sql(&policy);
+        let sql = restriction_tiers::restriction_policy_tier_sql(&policy);
         let confidential = sql.find("confidential").expect("confidential branch");
         let restricted = sql.find("restricted").expect("restricted branch");
         let internal = sql.find("internal").expect("internal branch");
@@ -4150,6 +4068,33 @@ mod tests {
         assert_eq!(
             activity_mapping.right_key.as_deref(),
             Some("source_3__activity_summary")
+        );
+    }
+
+    #[test]
+    fn golden_catalog_union_merge_matches_editor_contract() {
+        let left = vec![
+            source_field("source_1", "activity_summary", "text"),
+            source_field("source_1", "expected_attendees", "number"),
+        ];
+        let right = vec![
+            source_field("source_3", "activity_summary", "text"),
+            source_field("source_3", "focus_tags", "multi_choice"),
+        ];
+
+        let (fields, _) =
+            union_field_catalog(&left, &right, "union_2").expect("compatible union catalog");
+
+        assert_eq!(
+            fields
+                .iter()
+                .map(|field| (field.key.as_str(), field.field_type.as_str()))
+                .collect::<Vec<_>>(),
+            vec![
+                ("union_2__activity_summary", "text"),
+                ("source_1__expected_attendees", "number"),
+                ("source_3__focus_tags", "multi_choice"),
+            ]
         );
     }
 
@@ -4570,6 +4515,56 @@ mod tests {
 
         assert_eq!(spec.fields()[0].key, "average_score");
         assert_eq!(spec.fields()[0].field_type, "number");
+    }
+
+    #[tokio::test]
+    async fn golden_catalog_projection_aggregation_calculation_matches_editor_contract() {
+        let mut spec = QuerySpecBuilder::new_for_test(
+            vec![
+                r#"source_1 AS (SELECT "__row_id", "__restriction_tier", "source_1__expected_attendees")"#.into(),
+            ],
+            "source_1".into(),
+            vec![source_field("source_1", "expected_attendees", "number")],
+            1,
+        );
+
+        spec.apply_operations(&positioned_operations(vec![
+            projection_operation(vec![projection_field(
+                "expected_attendees",
+                "source_1__expected_attendees",
+            )]),
+            DatasetOperationRequest::Aggregation {
+                group_fields: Vec::new(),
+                metrics: vec![dto::DatasetAggregationMetricRequest {
+                    key: "attendee_total".into(),
+                    label: "Attendee Total".into(),
+                    function: "sum".into(),
+                    source_field_key: Some("expected_attendees".into()),
+                    position: 0,
+                }],
+                row_picker: None,
+                position: 0,
+            },
+            calculated_field_operation(
+                "attendee_total_plus_one",
+                "attendee_total",
+                "add",
+                Some("1"),
+            ),
+        ]))
+        .await
+        .expect("golden catalog pipeline should validate");
+
+        assert_eq!(
+            spec.fields()
+                .iter()
+                .map(|field| (field.key.as_str(), field.field_type.as_str()))
+                .collect::<Vec<_>>(),
+            vec![
+                ("attendee_total", "number"),
+                ("attendee_total_plus_one", "number"),
+            ]
+        );
     }
 
     #[tokio::test]

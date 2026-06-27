@@ -1308,6 +1308,13 @@ mod tests {
         fields.into_iter().map(|field| field.key).collect()
     }
 
+    fn field_key_types(fields: Vec<DatasetFieldDraft>) -> Vec<(String, String)> {
+        fields
+            .into_iter()
+            .map(|field| (field.key, field.field_type))
+            .collect()
+    }
+
     #[test]
     fn union_catalog_merges_compatible_source_fields() {
         let current_fields = vec![catalog_field("source_1", "activity_summary", "text")];
@@ -1323,6 +1330,35 @@ mod tests {
             vec![
                 "union_2__activity_summary".to_string(),
                 "source_3__delivery_mode".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn golden_catalog_union_merge_matches_backend_contract() {
+        let current_fields = vec![
+            catalog_field("source_1", "activity_summary", "text"),
+            catalog_field("source_1", "expected_attendees", "number"),
+        ];
+        let next_fields = vec![
+            catalog_field("source_3", "activity_summary", "text"),
+            catalog_field("source_3", "focus_tags", "multi_choice"),
+        ];
+
+        let merged = merge_union_catalog(current_fields, next_fields, 2);
+
+        assert_eq!(
+            field_key_types(merged),
+            vec![
+                ("union_2__activity_summary".to_string(), "text".to_string()),
+                (
+                    "source_1__expected_attendees".to_string(),
+                    "number".to_string()
+                ),
+                (
+                    "source_3__focus_tags".to_string(),
+                    "multi_choice".to_string()
+                ),
             ]
         );
     }
@@ -1549,6 +1585,51 @@ mod tests {
             vec![calculation],
         ));
         assert!(keys.contains(&"is_confidential".into()));
+    }
+
+    #[test]
+    fn golden_catalog_projection_aggregation_calculation_matches_backend_contract() {
+        let (initial_source, forms, rendered_forms) = catalog_fixture();
+        let mut projection = DatasetOperationDraft::new(1, DatasetOperationDraftKind::Projection);
+        projection.projection_fields = vec![DatasetFieldDraft {
+            key: "expected_attendees".into(),
+            label: "Expected Attendees".into(),
+            source_alias: "program".into(),
+            source_field_key: "participant_target".into(),
+            field_type: "number".into(),
+        }];
+        let mut aggregation = DatasetOperationDraft::new(2, DatasetOperationDraftKind::Aggregation);
+        aggregation.aggregation = DatasetAggregationDraft {
+            enabled: true,
+            group_fields: Vec::new(),
+            metrics: vec![metric(1, "attendee_total", "expected_attendees")],
+            row_picker: None,
+        };
+        let mut calculation =
+            DatasetOperationDraft::new(3, DatasetOperationDraftKind::CalculatedFields);
+        calculation.calculated_fields = vec![calculated_field(
+            1,
+            "attendee_total_plus_one",
+            "attendee_total",
+            "add",
+            "1",
+        )];
+
+        let fields = catalog_after_operations(
+            initial_source,
+            Vec::new(),
+            forms,
+            rendered_forms,
+            vec![projection, aggregation, calculation],
+        );
+
+        assert_eq!(
+            field_key_types(fields),
+            vec![
+                ("attendee_total".to_string(), "number".to_string()),
+                ("attendee_total_plus_one".to_string(), "number".to_string()),
+            ]
+        );
     }
 
     #[test]
