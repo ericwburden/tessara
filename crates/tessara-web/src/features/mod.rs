@@ -10,5 +10,4 @@ pub mod home;
 pub mod login;
 pub mod operations;
 pub mod organization;
-pub mod responses;
 pub mod shared;

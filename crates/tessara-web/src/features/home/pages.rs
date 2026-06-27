@@ -5,9 +5,8 @@
 use leptos::prelude::*;
 use serde::Deserialize;
 
-use crate::features::responses::start_assignment_response_and_navigate;
 #[cfg(feature = "hydrate")]
-use crate::http::redirect_to_login;
+use crate::http::{navigate_to_href, redirect_to_login, send_json_request};
 use crate::ui::{AppShell, DataTable, PageHeader, TablePaginationFooter, Timestamp};
 use crate::utils::pagination::pagination_page_start;
 use crate::utils::text::nonempty_text;
@@ -168,6 +167,79 @@ async fn fetch_pending_work() -> Result<Vec<PendingWorkflowWork>, PendingWorkflo
     }
 }
 
+#[cfg(feature = "hydrate")]
+impl PendingWorkflowWorkApiError {
+    fn from_transport_error(error: String) -> Self {
+        if error == "Authentication is required." {
+            Self::Unauthorized
+        } else {
+            Self::Message(error)
+        }
+    }
+}
+
+#[cfg(feature = "hydrate")]
+async fn start_pending_work_response(
+    workflow_assignment_id: &str,
+) -> Result<String, PendingWorkflowWorkApiError> {
+    let response = send_json_request::<serde_json::Value>(
+        gloo_net::http::Request::post(&format!(
+            "/api/workflow-assignments/{workflow_assignment_id}/start"
+        )),
+        Some("{}".into()),
+        "Start assigned response",
+    )
+    .await
+    .map_err(PendingWorkflowWorkApiError::from_transport_error)?;
+
+    response
+        .get("id")
+        .and_then(|value| value.as_str().map(str::to_owned))
+        .or_else(|| {
+            response
+                .get("id")
+                .and_then(|value| value.as_i64().map(|value| value.to_string()))
+        })
+        .ok_or_else(|| {
+            PendingWorkflowWorkApiError::message(
+                "Assigned response was started, but the response id was missing.",
+            )
+        })
+}
+
+fn start_pending_work_response_and_navigate(
+    workflow_assignment_id: String,
+    is_starting: RwSignal<bool>,
+    message: RwSignal<Option<String>>,
+) {
+    #[cfg(feature = "hydrate")]
+    {
+        leptos::task::spawn_local(async move {
+            is_starting.set(true);
+            message.set(Some("Starting assigned response...".into()));
+
+            match start_pending_work_response(&workflow_assignment_id).await {
+                Ok(id) => {
+                    navigate_to_href(&format!("/responses/{id}/edit"));
+                }
+                Err(PendingWorkflowWorkApiError::Unauthorized) => {
+                    is_starting.set(false);
+                    redirect_to_login();
+                }
+                Err(PendingWorkflowWorkApiError::Message(error)) => {
+                    message.set(Some(error));
+                    is_starting.set(false);
+                }
+            }
+        });
+    }
+
+    #[cfg(not(feature = "hydrate"))]
+    {
+        let _ = (workflow_assignment_id, is_starting, message);
+    }
+}
+
 fn workflow_revision_label_from_raw(label: &str) -> String {
     let trimmed = label.trim();
     if trimmed.is_empty() {
@@ -266,7 +338,7 @@ fn HomePendingWork(
                                                 type="button"
                                                 disabled=move || is_starting.get()
                                                 on:click=move |_| {
-                                                    start_assignment_response_and_navigate(
+                                                    start_pending_work_response_and_navigate(
                                                         assignment_id.clone(),
                                                         is_starting,
                                                         message,
