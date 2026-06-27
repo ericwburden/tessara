@@ -452,9 +452,9 @@ This ranking combines expected compile-time payoff, source weight, churn, coupli
 | ---: | --- | --- | --- | --- |
 | done | `tessara-web-forms` | Very high | Medium | GO result recorded; keep as reference model |
 | done | `tessara-web-workflows` | Very high | Medium-high | GO result recorded; validates another large Leptos feature crate |
-| 1 | `tessara-web-administration` | High | Medium | Substantial, relatively isolated after auth/hierarchy contracts are clear |
-| 2 | `tessara-web-responses` | Medium-high | Medium | Leaf-like but depends conceptually on forms and workflow assignments |
-| 3 | `tessara-web-organization` | Medium-high | High | High-fan-out hierarchy/organization concepts; extract later |
+| 1 | `tessara-web-responses` | Medium-high | Medium | Leaf-like and cleanest immediate post-Workflows proposal target |
+| 2 | `tessara-web-organization` | Medium-high | High | High-fan-out hierarchy concepts, but preferred before Administration to settle node DTO ownership |
+| 3 | `tessara-web-administration` | High | Medium-high | Substantial payoff, but should follow Organization or Organization contract prep |
 | 4 | `tessara-web-operations` | Low | Low | Aggregator surface; keep root until it grows |
 | defer | auth/login/home/placeholders | Low | Varies | Keep root unless evidence changes |
 
@@ -471,8 +471,8 @@ Workflows is now complete and should be used as the latest large-feature referen
 Use the current ranking as a starting point, but treat the short post-Workflows inventory as authoritative for the next proposal:
 
 - `tessara-web-responses` is the next proposal target because it is smaller, leafier, and has no direct Forms/Workflows/Organization web feature dependency in the initial inventory.
-- `tessara-web-administration` remains high-value, but its initial inventory exposed enough Organization web DTO coupling that it should follow a decoupling/prep proposal rather than be the immediate extraction.
-- `tessara-web-organization` should remain later because organization/hierarchy DTOs are high-fan-out and already duplicated into extracted crates.
+- `tessara-web-organization` should come before Administration so hierarchy/node DTO ownership can be settled at the source instead of working around it from Administration.
+- `tessara-web-administration` remains high-value, but its initial inventory exposed enough Organization web DTO coupling that it should follow Organization extraction or an Organization contract-prep slice.
 
 ### 9.2 Required pre-proposal checkpoint
 
@@ -501,7 +501,7 @@ Create:
 docs/architecture/tessara-web-responses-extraction-proposal.md
 ```
 
-Administration remains the next likely candidate after Responses, but it should start with a decoupling proposal for Organization web DTO imports. The Responses proposal must include the same inventory, facade, route-adapter, boundary, compile/watch/browser, bundle, GO/PARTIAL/NO-GO, and rollback sections used for Forms and Workflows.
+Organization should be the next major candidate after Responses. Administration should follow Organization, or at least follow an Organization contract-prep slice that removes direct Administration dependence on Organization web DTOs. The Responses proposal must include the same inventory, facade, route-adapter, boundary, compile/watch/browser, bundle, GO/PARTIAL/NO-GO, and rollback sections used for Forms and Workflows.
 
 ## 10. Per-Feature Extraction Template
 
@@ -873,9 +873,9 @@ Retained debt:
 - cumulative bundle growth now needs closer tracking before another large Leptos extraction
 ```
 
-### Stage D — Administration and responses
+### Stage D — Responses extraction
 
-**Status:** Responses selected next after short Administration/Responses inventory.
+**Status:** selected next after short Administration/Responses inventory.
 
 Selected candidate:
 
@@ -891,32 +891,6 @@ safer after forms and workflows are extracted
 no direct sibling web feature dependency in initial inventory
 ```
 
-Deferred candidate:
-
-```text
-tessara-web-administration
-```
-
-Rationale:
-
-```text
-substantial user/role/node-type management surface
-potentially strong focused-loop payoff
-initial inventory shows Organization web DTO coupling to resolve first
-```
-
-Possible administration facade:
-
-```rust
-pub fn AdministrationIndexContent() -> impl IntoView;
-pub fn AdministrationUsersContent() -> impl IntoView;
-pub fn AdministrationUserDetailContent(account_id: String) -> impl IntoView;
-pub fn AdministrationUserEditContent(account_id: String) -> impl IntoView;
-pub fn AdministrationUserAccessContent(account_id: String) -> impl IntoView;
-pub fn AdministrationRolesContent() -> impl IntoView;
-pub fn AdministrationNodeTypesContent() -> impl IntoView;
-```
-
 Possible responses facade:
 
 ```rust
@@ -926,11 +900,11 @@ pub fn ResponseDetailContent(submission_id: String) -> impl IntoView;
 pub fn ResponseEditContent(submission_id: String) -> impl IntoView;
 ```
 
-Responses is selected for the next proposal. Re-rank again after the Responses result before deciding whether Administration is ready or needs an Organization DTO decoupling slice first.
+Responses is selected for the next proposal. Re-rank again after the Responses result, with Organization preferred before Administration.
 
 ### Stage E — Organization extraction
 
-**Status:** future, likely late.
+**Status:** preferred next major candidate after Responses.
 
 Goal:
 
@@ -938,12 +912,13 @@ Goal:
 extract organization explorer, detail, related work, node editor, metadata, and tree UI into `tessara-web-organization`
 ```
 
-Why late:
+Why before Administration:
 
 ```text
 organization/hierarchy concepts are high fan-out
 datasets/forms/workflows/admin may all touch node concepts
-extracting organization too early risks forbidden sibling web dependencies
+Administration already imports Organization web DTOs
+settling Organization first should reduce Administration extraction risk
 ```
 
 Preconditions:
@@ -963,7 +938,37 @@ pub fn OrganizationNodeCreateContent(parent_node_id: Option<String>, node_type_i
 pub fn OrganizationNodeEditContent(node_id: String) -> impl IntoView;
 ```
 
-### Stage F — Reassess small/root-owned surfaces
+### Stage F — Administration extraction
+
+**Status:** after Organization or Organization contract-prep.
+
+Goal:
+
+```text
+extract user, role, access, and node-type administration surfaces into `tessara-web-administration`
+```
+
+Why after Organization:
+
+```text
+substantial user/role/node-type management surface
+potentially strong focused-loop payoff
+initial inventory shows Organization web DTO coupling to resolve first
+```
+
+Possible administration facade:
+
+```rust
+pub fn AdministrationIndexContent() -> impl IntoView;
+pub fn AdministrationUsersContent() -> impl IntoView;
+pub fn AdministrationUserDetailContent(account_id: String) -> impl IntoView;
+pub fn AdministrationUserEditContent(account_id: String) -> impl IntoView;
+pub fn AdministrationUserAccessContent(account_id: String) -> impl IntoView;
+pub fn AdministrationRolesContent() -> impl IntoView;
+pub fn AdministrationNodeTypesContent() -> impl IntoView;
+```
+
+### Stage G — Reassess small/root-owned surfaces
 
 Keep in root by default:
 
@@ -992,7 +997,7 @@ Extract only if:
 
 Operations is an aggregator surface and may never need a crate.
 
-### Stage G — Optional shared platform
+### Stage H — Optional shared platform
 
 Only after at least two extracted feature crates duplicate the same transport/helpers:
 
@@ -1012,7 +1017,7 @@ product concepts
 hard-coded `/login` redirect policy
 ```
 
-### Stage H — Optional contract/domain evolution
+### Stage I — Optional contract/domain evolution
 
 After multiple feature crates are stable, evaluate contract convergence.
 
@@ -1028,7 +1033,7 @@ dataset contracts
 
 Do not converge contracts automatically. Use measured adapter pain and dependency cost as the trigger.
 
-### Stage I — Future service extraction
+### Stage J — Future service extraction
 
 This remains independent of frontend compile-time work.
 
@@ -1058,7 +1063,7 @@ docs/architecture/tessara-web-responses-extraction-proposal.md
 After Responses, prepare:
 
 ```text
-docs/architecture/tessara-web-administration-decoupling-proposal.md
+docs/architecture/tessara-web-organization-extraction-proposal.md
 ```
 
 The Responses proposal should be implementation-ready and should include inventory, facade, route adapters, dependency rules, cross-feature dependency resolution, validation commands, measurement gates, GO/PARTIAL/NO-GO criteria, and rollback steps.
@@ -1071,6 +1076,6 @@ The dataset, Forms, and Workflows extractions validated the core thesis:
 
 > Tessara can use feature-area crates to regain focused development loops while retaining a single routed Leptos app and one primary API service.
 
-The next move is not a mass split. It is a Responses extraction proposal, with Administration deferred until its Organization web DTO coupling is reduced.
+The next move is not a mass split. It is a Responses extraction proposal, followed by Organization before Administration so node/hierarchy DTO ownership is settled at the source.
 
 The long-term roadmap points toward feature-area crates for the major product surfaces, but each stage remains conditional on evidence.

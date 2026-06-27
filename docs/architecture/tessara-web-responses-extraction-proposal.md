@@ -501,4 +501,4 @@ no response/form/workflow contract convergence attempted
 
 Proceed with Responses extraction next, unless R0 discovers new sibling/root coupling that is materially worse than this inventory.
 
-Administration should remain the next candidate after Responses, with a separate prep proposal focused on decoupling Organization web DTOs from Administration before extraction.
+Organization should be the next major candidate after Responses. Administration should follow Organization, or at least follow an Organization contract-prep slice, so node/hierarchy DTO ownership is settled before Administration extraction.
