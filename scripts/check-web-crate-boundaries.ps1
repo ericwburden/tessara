@@ -241,6 +241,12 @@ try {
                 ($name -like "tessara-web-*" -and $name -notin @("tessara-web-responses", "tessara-web-ui"))
         }
 
+        Assert-NoDependencyPath -Graph $graph -StartPackage "tessara-web-organization" -Description "tessara-web-organization must not depend on root/API/sibling web feature crates or router/meta crates." -IsForbiddenPackage {
+            param($name)
+            $name -in @("tessara-web", "tessara-api", "leptos_router", "leptos_meta") -or
+                ($name -like "tessara-web-*" -and $name -notin @("tessara-web-organization", "tessara-web-ui"))
+        }
+
         Assert-NoDependencyPath -Graph $graph -StartPackage "tessara-web-ui" -Description "tessara-web-ui must not depend on root/API/web feature crates." -IsForbiddenPackage {
             param($name)
             $name -in @("tessara-web", "tessara-api") -or
@@ -262,6 +268,7 @@ try {
     Assert-SourceDoesNotMatch -Path "crates\tessara-web-forms\src" -Pattern "AppShell|require_route_params|FormRouteParams|crate::routes|leptos_router|leptos_meta|features::organization|features::workflows|features::responses|features::datasets|features::administration|features::shared|crate::features::forms|pub\(in crate::features::forms\)" -Description "tessara-web-forms must not import root route, shell, router/meta, old forms namespace, or sibling web feature concepts."
     Assert-SourceDoesNotMatch -Path "crates\tessara-web-workflows\src" -Pattern "AppShell|require_route_params|WorkflowRouteParams|crate::routes|leptos_router|leptos_meta|features::forms|features::organization|features::responses|features::datasets|features::administration|features::operations|features::shared|crate::features::workflows|pub\(in crate::features::workflows\)" -Description "tessara-web-workflows must not import root route, shell, router/meta, old workflows namespace, or sibling web feature concepts."
     Assert-SourceDoesNotMatch -Path "crates\tessara-web-responses\src" -Pattern "AppShell|require_route_params|SubmissionRouteParams|crate::routes|leptos_router|leptos_meta|features::forms|features::workflows|features::organization|features::administration|features::shared|crate::features::responses|pub\(in crate::features::responses\)" -Description "tessara-web-responses must not import root route, shell, router/meta, old responses namespace, or sibling web feature concepts."
+    Assert-SourceDoesNotMatch -Path "crates\tessara-web-organization\src" -Pattern "AppShell|require_route_params|NodeRouteParams|crate::routes|leptos_router|leptos_meta|features::forms|features::workflows|features::responses|features::datasets|features::administration|features::shared|crate::features::organization|pub\(in crate::features::organization\)" -Description "tessara-web-organization must not import root route, shell, router/meta, old organization namespace, or sibling web feature concepts."
 
     Write-ReviewAidMatches -Path "crates\tessara-web-ui\src" -Pattern "datasets|forms|workflows|responses|organization|administration|AppShell|ShellSession|require_authenticated_route" -Description "Review-aid matches in tessara-web-ui source:"
 

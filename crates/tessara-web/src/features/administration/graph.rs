@@ -1,6 +1,6 @@
 //! Graph traversal helpers for Administration node type relationships.
 
-use crate::features::organization::NodeTypeCatalogEntry;
+use crate::features::administration::models::NodeTypeCatalogEntry;
 use std::collections::HashSet;
 
 /// Returns all ancestor node type IDs for a node type.

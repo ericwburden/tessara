@@ -1,7 +1,7 @@
 //! Role page state and filtering helpers.
 
+use crate::features::administration::models::AdminRoleSummary;
 use crate::features::administration::models::{AdminCapabilitySummary, AdminRoleDetail};
-use crate::features::organization::AdminRoleSummary;
 use leptos::prelude::*;
 
 #[derive(Clone, Copy)]

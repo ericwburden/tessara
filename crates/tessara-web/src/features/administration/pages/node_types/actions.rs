@@ -3,7 +3,7 @@
 use super::state::AdministrationNodeTypesPageState;
 #[cfg(feature = "hydrate")]
 use crate::features::administration::api::load_admin_node_type_catalog;
-use crate::features::organization::NodeTypeUpsertRequest;
+use crate::features::administration::models::NodeTypeUpsertRequest;
 #[cfg(feature = "hydrate")]
 use crate::http::send_json_id_request;
 use leptos::prelude::*;

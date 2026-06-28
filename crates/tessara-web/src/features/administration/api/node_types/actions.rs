@@ -1,7 +1,7 @@
 //! Node type administration save actions.
 
 #[cfg(feature = "hydrate")]
-use crate::features::organization::{
+use crate::features::administration::models::{
     CreateNodeMetadataFieldRequest, UpdateNodeMetadataFieldRequest,
 };
 #[cfg(feature = "hydrate")]

@@ -31,7 +31,11 @@ function Invoke-CheckedStep {
 }
 
 function Clear-TessaraWebTestArtifacts {
-    if (-not $IsWindows) {
+    $isWindowsPlatform = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform(
+        [System.Runtime.InteropServices.OSPlatform]::Windows
+    )
+
+    if (-not $isWindowsPlatform) {
         return
     }
 

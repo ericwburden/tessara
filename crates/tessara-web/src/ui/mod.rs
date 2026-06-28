@@ -17,7 +17,7 @@ pub(crate) use dropdown::DropdownMenu;
 pub(crate) use shell::AppShell;
 pub(crate) use status_badge::*;
 pub(crate) use tessara_web_ui::{
-    Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator, Button,
-    DataTable, EmptyState, InfoListTable, InfoRow, PageHeader, SearchableDataTable,
-    TableFilterHeader, TablePaginationFooter, Tabs, TabsContent, TabsList, TabsTrigger, Timestamp,
+    Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator, DataTable,
+    EmptyState, InfoListTable, InfoRow, PageHeader, TableFilterHeader, TablePaginationFooter,
+    Timestamp,
 };

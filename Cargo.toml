@@ -14,6 +14,7 @@ members = [
     "crates/tessara-web",
     "crates/tessara-web-datasets",
     "crates/tessara-web-forms",
+    "crates/tessara-web-organization",
     "crates/tessara-web-responses",
     "crates/tessara-web-workflows",
     "crates/tessara-web-ui",

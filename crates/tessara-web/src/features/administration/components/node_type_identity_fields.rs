@@ -1,6 +1,6 @@
 //! Identity fields for node-type administration.
 
-use crate::features::organization::NodeTypeDefinition;
+use crate::features::administration::models::NodeTypeDefinition;
 use leptos::prelude::*;
 
 #[component]
