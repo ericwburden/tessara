@@ -71,15 +71,32 @@ In the target model:
 
 ## Frontend Delivery Architecture
 
-The current application-layer crate is `tessara-web`. It owns the native Leptos SSR UI and may still be renamed or split as the long-term application boundary settles.
+The current frontend is a native Leptos SSR application with root route ownership in `tessara-web` and feature-area implementation in focused `tessara-web-*` crates. The extracted baseline includes shared UI plus Datasets, Forms, Workflows, Responses, and Organization. This split is now the default frontend architecture for major feature areas.
+
+`tessara-web` remains the cargo-leptos application crate. It owns app composition and route policy:
+
+- root route registration and route parameter parsing
+- `AppShell`, route titles, auth guards, session/navigation/logout policy, document integration, hydration entrypoint, CSS, and public assets
+- thin route adapters that render feature-crate content components
+
+Feature crates own feature UI implementation and feature-local browser transport:
+
+- `tessara-web-ui` owns generic, policy-neutral UI primitives
+- `tessara-web-datasets`, `tessara-web-forms`, `tessara-web-workflows`, `tessara-web-responses`, and `tessara-web-organization` own their respective content components, loaders/actions, web DTOs, display helpers, and local support helpers
+- feature crates expose narrow content facades and do not depend on root `tessara-web`, `tessara-api`, root route modules, `AppShell`, `leptos_router`, `leptos_meta`, auth/session/navigation policy, or sibling feature crates other than shared UI
 
 Frontend delivery should follow these rules:
 
 - use `cargo-leptos` as the canonical workspace build pipeline
 - keep a single `axum` binary (`tessara-api`) that serves API routes, SSR HTML, SVG assets, and the built wasm/js package
-- organize `tessara-web` by application shell, feature modules, shared UI primitives, and transport/infra boundaries rather than by one large shell file
+- keep `tessara-web` focused on root application composition and route adapters rather than growing new major feature implementation inside the root crate
+- implement the next major feature area as its own feature crate from the start; in the current roadmap, Component authoring/viewing should be built as `tessara-web-components`
+- replace the current broad Administration grouping with individual administrative feature areas when that work is revisited: User Management, Roles and Access, and Organization Schema are the intended slices, while Datasets is already separate and Components should be built as its own planned feature area
 - keep REST endpoints as the stable transport contract during the migration; UI components should read and mutate data through feature-local adapters rather than embedding raw fetch logic throughout the component tree
 - keep the root-level native application URLs as the active UI contract
+- keep API DTOs and web DTOs separate by default; promote shared contracts only after ownership, representation stability, maintenance cost, and WASM dependency cost are measured
+- avoid a shared `tessara-web-platform` crate by default; create one only if repeated transport/helper copies become a real maintenance cost and the crate can stay policy-neutral
+- use release frontend artifacts for production bundle decisions, and treat dev-profile bundle size as a trend signal only
 
 ### Rendering policy
 
@@ -98,10 +115,11 @@ Route and widget splitting should be selective:
 - core shell and common browse/detail routes should not be lazy-loaded by default
 - low-frequency operator surfaces and heavier analytics viewers may use route-level or widget-level splitting
 - islands are allowed for focused, high-value interactive widgets on read-heavy pages, but islands are not the default whole-app architecture in the current migration phase
+- feature-crate boundaries do not automatically create lazy-loading boundaries; any `cargo leptos build --split`, `#[lazy]`, or `#[lazy_route]` adoption should start with a focused pilot on one extracted route area
 
-Current first-class lazy-route candidate:
-
-- `/migration`
+No route is currently designated as a standing lazy-loading boundary. Pick a
+candidate through a focused bundle and route-behavior pilot when the next heavy
+operator or analytics surface needs it.
 
 ## Asset Model
 

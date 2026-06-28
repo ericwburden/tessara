@@ -251,6 +251,12 @@ Internal or operator surfaces:
 - access and role-assignment management
 - workflow and materialization monitoring
 
+Future Administration decomposition should replace the current broad Administration
+area with individual feature areas for User Management, Roles and Access, and
+Organization Schema. Do not retain an Administration landing page after that
+split; Datasets is already separate, and Components should remain a separate
+planned feature area.
+
 Internal surfaces SHOULD still feel like part of the same application, but remain visually and structurally subordinate to the core product journey.
 
 ### Home strategy
@@ -521,7 +527,6 @@ Do not lazy-load by default:
 
 First-class route or widget candidates:
 
-- `/migration`
 - administration capability or scope management grids once they become larger and more interactive
 - future dataset or component authoring routes
 - dashboard viewer enrichments, chart renderers, JSON or fixture editors, large preview or result tables, and drilldown or inspector panels
@@ -1530,33 +1535,20 @@ These appendices describe the shared primitive contracts for the reset applicati
 
 ### Current primitive layer
 
-The reset application has one active UI primitive layer:
+The application has a shared native UI primitive layer in root `tessara-web` plus the policy-neutral `tessara-web-ui` support crate used by extracted feature areas.
 
-- `crates/tessara-web/src/ui/components.rs`
-  - Leptos-native SSR components for shared shell, navigation, page framing, buttons, overlays, tables, and state surfaces.
-  - Active primitives include:
-    - `AppShell`
-    - `Sidebar`
-    - `TopAppBar`
-    - `PageHeader`
-    - `Button`
-    - `IconButton`
-    - `DropdownMenu`
-    - `Breadcrumb`
-    - `Drawer`
-    - `Sheet`
-    - `DataTable`
-    - `InfoListTable`
-    - `StatusBadge`
-    - `EmptyState`
+- `crates/tessara-web/src/ui`
+  - Leptos-native SSR components for app shell, navigation, root page framing, status badges, filters, timestamps, and root-owned route support.
+- `crates/tessara-web-ui/src`
+  - Policy-neutral shared primitives consumed by extracted feature crates, including breadcrumbs, buttons, comboboxes, data tables, dropdowns, empty states, info lists, page headers, search/filter helpers, tabs, timestamps, pagination, segmented toggles, and draggable panel lists.
 
 Rules:
 
 - New route UI MUST use native Leptos components and `view!` markup.
-- Shared primitives SHOULD be extended in `crates/tessara-web/src/ui/components.rs` before route-local variants are introduced.
+- Shared primitives SHOULD be extended in `crates/tessara-web-ui` when they are policy-neutral and useful across feature crates. Root-only shell or route-policy UI belongs under `crates/tessara-web/src/ui`.
 - Application chrome and route icons SHOULD use Rust/UI native Leptos icon components where an appropriate icon exists.
 - Tessara brand marks, favicons, and exploratory icon mockups MAY use custom SVG assets.
-- HTML-string helpers, compatibility shells, and broad legacy UI files are not part of the reset primitive layer.
+- HTML-string helpers, compatibility shells, and broad legacy UI files are not part of the primitive layer.
 
 ### App shell
 
@@ -1635,7 +1627,6 @@ These notes are implementation-facing and remain subordinate to the main policy 
 
 Known gaps:
 
-- route-by-route migration is still in progress
 - semantic color usage should continue to be tightened as new routes are rebuilt
 - number formatting beyond tabular-numeral rules is not yet globally ratified
 

@@ -1,5 +1,10 @@
 # Progress Report
 
+Historical implementation log. Older entries may mention deleted planning
+artifacts, old sprint worktrees, `/app/*` routes, or earlier crate names. Use
+`docs/roadmap.md`, `docs/architecture.md`, and `docs/README.md` for current
+project direction.
+
 ## 2026-06-26 - Sprint 3C Dataset Authoring Refactor Checkpoint
 
 - Unified the dataset editor source-composition UI around one Add Source operation draft with an Add Type selector for Union, Union All, Left Join, Inner Join, and Outer Join.

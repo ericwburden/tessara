@@ -1,8 +1,11 @@
 # Legacy MMI-DMS to Tessara Mapping
 
-This document is the first Slice 9 migration inventory. It maps product intent
-from the legacy Django application into Tessara concepts without treating the
-legacy schema as the target design.
+This document is a legacy migration reference. It maps product intent from the
+legacy Django application into Tessara concepts without treating the legacy
+schema as the target design. Current product architecture is defined by
+`docs/architecture.md`; where this document mentions historical report,
+aggregation, or chart nouns, migrate future work through
+`DatasetRevision -> ComponentVersion -> Dashboard`.
 
 ## Source
 
@@ -123,10 +126,10 @@ before creating Tessara submissions.
 
 | Legacy concept | Tessara target | Notes |
 | --- | --- | --- |
-| `Report` | `reports` | One report is tied to one form in legacy; Tessara report bindings should use logical fields for version compatibility. |
-| `report_table()` | analytics projection plus DataFusion table report | Legacy expands multi-value fields into row combinations in application code. |
-| `Aggregation` | `aggregations` | Summary field plus grouping fields maps directly, but execution belongs in DataFusion. |
-| `SummaryType` count/unique/total/mean/median/identity | aggregation kind | `identity` likely maps to detail-table/no aggregation. |
+| `Report` | `DatasetRevision` plus `ComponentVersion` | One report is tied to one form in legacy; Tessara should translate reusable row shaping into datasets and presentation into components. |
+| `report_table()` | detail-table component over a dataset revision | Legacy expands multi-value fields into row combinations in application code; Tessara should make that behavior explicit in dataset materialization or component configuration. |
+| `Aggregation` | aggregate-table or chart component | Summary field plus grouping fields maps to component configuration over a dataset revision. |
+| `SummaryType` count/unique/total/mean/median/identity | component measure or detail-table mode | `identity` likely maps to detail-table/no aggregation. |
 | Missing values as `None` or `NO DATA` | missing-data policies | Map consciously to `null`, `exclude_row`, or `bucket_unknown`. |
 
 Migration risk: compatibility groups need field-level mapping where a report is
@@ -141,9 +144,9 @@ only by physical field IDs.
 | `PartnerDashboard` | dashboard scoped to Partner node | Available reports/charts filtered by partner form scope. |
 | `ProgramDashboard` | dashboard scoped to Program node | Includes Program, Activity, and Session forms under that program. |
 | `DashboardComponent` | `dashboard_components` | Preserve row, column, width, height in config/layout metadata. |
-| `DashboardDetailTable` | dashboard component using report table chart | Already close to Tessara table chart. |
-| `DashboardSummaryTable` | dashboard component using aggregation/report chart | Needs aggregation execution support. |
-| `DashboardChart` | dashboard component using chart | Maps directly. |
+| `DashboardDetailTable` | dashboard placement of a detail-table component version | Already close to Tessara table component behavior. |
+| `DashboardSummaryTable` | dashboard placement of an aggregate-table component version | Needs aggregate component execution support. |
+| `DashboardChart` | dashboard placement of a chart component version | Maps through the Component model, not a separate target chart asset family. |
 
 Chart mapping:
 
@@ -157,14 +160,18 @@ Chart mapping:
 | `PieChart` | pie chart |
 | `SummaryBar` | ranked bar chart |
 
-Current Tessara validates `table`, `bar`, and `summary` chart type names, but
-only table-style report preview is functionally implemented. Do not import
-legacy chart definitions beyond table-compatible components until chart config
-schemas and execution semantics exist for the target chart types.
+Do not import legacy chart definitions beyond table-compatible components until
+component config schemas and execution semantics exist for the target component
+types.
 
-## Current Fixture Coverage
+## Historical Fixture Coverage Notes
 
-`fixtures/legacy-rehearsal.json` now exercises these importable concepts:
+The original migration planning used fixture names such as
+`legacy-rehearsal.json` and `legacy-inactive-locked.json`. Those fixture files
+are not present in this checkout; treat this section as coverage intent for any
+future migration rehearsal fixtures.
+
+The representative fixture should exercise these importable concepts:
 
 | Fixture area | Current import behavior |
 | --- | --- |
@@ -174,14 +181,13 @@ schemas and execution semantics exist for the target chart types.
 | Form and version | Imported as a published `legacy-v1` form version in the fixture compatibility group. |
 | Date, number, text, single-choice, multi-choice fields | Imported using current Tessara field types and validated before database writes. |
 | Submitted entry | Imported as a submitted Tessara submission with an audit event containing the fixture and legacy entry IDs. |
-| Report | Imported as a single field binding from `participants` to `participants`. |
-| Dashboard | Imported with one table chart component linked to the imported report. |
+| Report | Translate as dataset fields plus a detail-table component candidate. |
+| Dashboard | Translate as dashboard layout metadata with component-version placements. |
 
-`fixtures/legacy-inactive-locked.json` extends fixture coverage to inactive and
-locked hierarchy records, an inactive choice list, an inactive choice item, and
-a table-compatible report/dashboard against a second legacy form. It verifies
-that these status flags remain queryable as Tessara metadata rather than being
-dropped during import.
+A second fixture should extend coverage to inactive and locked hierarchy
+records, an inactive choice list, an inactive choice item, and a table-compatible
+dashboard against a second legacy form. It should verify that status flags
+remain queryable as Tessara metadata rather than being dropped during import.
 
 Validation currently catches duplicate legacy IDs, duplicate form keys,
 unsupported field types, unsupported missing-data policies, unknown submission
@@ -200,8 +206,8 @@ importer as migration-ready:
 | Public/unassigned form flow | Decide whether legacy public forms become anonymous links, assignment tokens, or scoped availability. |
 | Editable submitted records | Define import behavior for entries that remain editable or are locked after a deadline. |
 | Selector fields | Block or map `ProgramSelectField`, `ActivitySelectField`, `SessionSelectField`, and enrolled-client selectors after target selector field types exist. |
-| Aggregated reports | Prove DataFusion aggregation output against legacy count, unique, total, mean, median, and identity behavior. |
-| Non-table dashboard charts | Define config schemas for badge, gauge, bar, trend, pie, and ranked-summary charts before importing them. |
+| Aggregated reports | Prove aggregate component output against legacy count, unique, total, mean, median, and identity behavior. |
+| Non-table dashboard charts | Define component config schemas for badge, gauge, bar, trend, pie, and ranked-summary charts before importing them. |
 
 ## Workflows to Preserve
 

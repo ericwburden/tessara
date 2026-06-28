@@ -429,5 +429,5 @@ surface FeedbackMessages {
 ------------------------------------------------------------
 
 open question "What global number-formatting pattern should apply beyond tabular numerals and local surface consistency?"
-open question "Should future UI Allium work split shell behaviour and builder behaviour into separate modules once the migration stabilises?"
+decision "Shell behaviour and feature-builder behaviour are now separate implementation concerns: root tessara-web owns shell and route policy, while major feature builders belong in focused tessara-web-* crates."
 ```

@@ -18,7 +18,7 @@ This `/docs` folder is the authoritative source for Tessara's active roadmap, re
 
 - Treat this folder as the only active planning and design authority.
 - If a historical document outside `/docs` disagrees with a file in `/docs`, the file in `/docs` wins.
-- Current implementation references under `re-alignment/db/`, `re-alignment/rust/`, and `progress-report.md` remain useful inputs, but they are not canonical project direction.
+- Historical implementation notes such as `progress-report.md` remain useful inputs, but they are not canonical project direction.
 - The target analytical asset model is `Dataset -> Component -> Dashboard`.
 - Current code paths that still use `Report`, `Aggregation`, or `Chart` are transitional implementation details, not the target model.
 
@@ -26,9 +26,10 @@ This `/docs` folder is the authoritative source for Tessara's active roadmap, re
 
 The active direction for Tessara is:
 
-- preserve the implemented baseline as of May 3, 2026
+- preserve the implemented baseline as of June 28, 2026
 - transition from the current reporting stack into the `Dataset -> Component -> Dashboard` model
-- use a `cargo-leptos` SSR-first frontend pipeline with selective hydration and selective lazy loading
+- use a `cargo-leptos` SSR-first frontend pipeline with root-owned route adapters and major feature areas implemented in focused `tessara-web-*` crates
+- develop the next major frontend feature area, Components, as `tessara-web-components` from the start
 - plan future delivery as explicit vertical-slice sprints
 - require every sprint to leave the application user-testable through usable application UI
 
@@ -46,8 +47,8 @@ Start here if you are orienting:
 These remain useful but are not active direction documents:
 
 - [progress-report.md](./progress-report.md)
-- [re-alignment/db](./re-alignment/db)
-- [re-alignment/rust](./re-alignment/rust)
+- [legacy-mapping.md](./legacy-mapping.md)
+- [playwright-permissions-scenarios.md](./playwright-permissions-scenarios.md)
 - [../README.md](../README.md)
 
 ## Historical Sources
