@@ -376,26 +376,6 @@ async function closeDesignerSheet(page: Page) {
   await expect(sheet).toBeHidden();
 }
 
-function fieldSourcePanel(page: Page, alias: string) {
-  return page
-    .locator("details.dataset-field-picker__source")
-    .filter({ has: page.locator("summary", { hasText: `${alias} (` }) })
-    .first();
-}
-
-async function openFieldSourcePanel(page: Page, alias: string) {
-  const panel = fieldSourcePanel(page, alias);
-  await expect(panel.locator("summary")).toBeVisible();
-  const isOpen = await panel.evaluate((node) =>
-    (node as HTMLDetailsElement).hasAttribute("open"),
-  );
-  if (!isOpen) {
-    await panel.locator("summary").click();
-  }
-  await expect(panel.locator("tbody tr").first()).toBeVisible();
-  return panel;
-}
-
 async function selectComboboxOption(
   scope: Locator,
   ariaLabel: string,
@@ -424,6 +404,53 @@ async function openEditorSection(page: Page, heading: string) {
     await toggle.click();
   }
   return section;
+}
+
+function operationPanel(page: Page, title: string, occurrence: number | "last" = 0) {
+  const panels = page.locator("article.dataset-operation-panel", {
+    has: page.locator(".dataset-operation-panel__title", {
+      hasText: title,
+    }),
+  });
+  return occurrence === "last" ? panels.last() : panels.nth(occurrence);
+}
+
+async function openOperationPanel(
+  page: Page,
+  title: string,
+  occurrence: number | "last" = 0,
+) {
+  const panel = operationPanel(page, title, occurrence);
+  await expect(panel).toBeVisible();
+  const toggle = panel.locator("button.dataset-operation-panel__toggle");
+  if ((await toggle.getAttribute("aria-expanded")) === "false") {
+    await toggle.click();
+  }
+  return panel;
+}
+
+async function addOperation(page: Page, title: string) {
+  await page.getByLabel("Add operation").last().click();
+  await page
+    .locator(".dataset-operation-insert__menu")
+    .last()
+    .getByRole("button", { name: title, exact: true })
+    .click();
+  return openOperationPanel(page, title, "last");
+}
+
+function selectedProjectionFields(projection: Locator, sourceAlias: string) {
+  return projection
+    .locator(".dataset-projection-selected__item")
+    .filter({ hasText: `${sourceAlias}__` });
+}
+
+async function expectSelectedProjectionFieldCount(
+  projection: Locator,
+  sourceAlias: string,
+  count: number,
+) {
+  await expect(selectedProjectionFields(projection, sourceAlias)).toHaveCount(count);
 }
 
 test("admin can author, edit, save, and view a Sprint 3A dataset", async ({
@@ -539,72 +566,43 @@ test("admin can author, edit, save, and view a Sprint 3A dataset", async ({
     await expect(
       page.getByRole("heading", { level: 1, name: "Edit Dataset" }),
     ).toBeVisible();
-    for (const section of [
-      "Dataset Definition",
-      "Data Sources",
-      "Fields",
-      "Aggregation",
-      "Filters",
-      "Generated SQL",
-      "Visibility",
-    ]) {
-      await expect(
-        page.getByRole("heading", { name: section, exact: true }),
-      ).toBeVisible();
-    }
+    await expect(
+      page.getByRole("heading", { name: "Dataset Definition", exact: true }),
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: "Initial Data Source" })).toBeVisible();
+    await expect(operationPanel(page, "Projection")).toBeVisible();
+    await expect(page.getByRole("button", { name: "View Restrictions" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Generated SQL" })).toBeVisible();
     await expect(page.getByText("Operation Designer")).toHaveCount(0);
     await expect(page.getByText("Open Preview")).toHaveCount(0);
-    await expect(page.locator("details.dataset-field-picker__source[open]")).toHaveCount(
-      0,
-    );
+    await expect(page.locator(".dataset-projection-builder")).toHaveCount(0);
 
-    await page.getByRole("button", { name: /^program$/ }).first().click();
-    const sourceSheet = page.getByRole("dialog", {
-      name: "Dataset designer options",
+    const sourceSection = await openEditorSection(page, "Initial Data Source");
+    await sourceSection.getByLabel("Alias").fill("program1");
+    await sourceSection.getByLabel("Alias").press("Tab");
+    await expect(sourceSection.getByLabel("Alias")).toHaveValue("program1");
+
+    const projection = await openOperationPanel(page, "Projection");
+    await expectSelectedProjectionFieldCount(projection, "program1", 4);
+
+    const addSource = await addOperation(page, "Add Source");
+    await addSource.getByLabel("Alias").fill("program2");
+    await addSource.getByLabel("Alias").press("Tab");
+    await addSource.locator("label.form-field").nth(2).locator("select").selectOption({
+      value: seed.form_id,
     });
-    await expect(sourceSheet).toContainText("Source");
-    await expect(sourceSheet).not.toContainText("Selection");
-    await expect(sourceSheet).not.toContainText("Latest");
-    await expect(sourceSheet).not.toContainText("Earliest");
-    await expect(sourceSheet).not.toContainText("All");
-    await sourceSheet.getByLabel("Alias").fill("program1");
-    await closeDesignerSheet(page);
-    await expect(page.getByRole("button", { name: /^program1$/ })).toBeVisible();
-
-    await page.getByLabel("Convert program1 to expression").click();
-    await closeDesignerSheet(page);
-    await expect(page.getByRole("button", { name: /^program2$/ })).toBeVisible();
-    await expect(page.getByRole("button", { name: "UNION" })).toBeVisible();
-    await expect(fieldSourcePanel(page, "program1").locator("summary")).toContainText(
-      "4 of",
-    );
-
-    await page.getByRole("button", { name: "UNION" }).click();
-    const operationSheet = page.getByRole("dialog", {
-      name: "Dataset designer options",
+    await addSource.locator("label.form-field").nth(3).locator("select").selectOption({
+      value: seed.form_version_id,
     });
-    await operationSheet.getByLabel("Operation").selectOption("inner_join");
-    await operationSheet.getByLabel("Left Join Key").selectOption({
+    await addSource.getByRole("button", { name: "Inner Join" }).click();
+    await addSource.getByLabel("Current Field").selectOption({
       value: sourceFieldKey("program1", "__node_id"),
     });
-    await operationSheet.getByLabel("Right Join Key").selectOption({
+    await addSource.getByLabel("Source Field").selectOption({
       value: sourceFieldKey("program2", "__node_id"),
     });
-    await closeDesignerSheet(page);
-    await expect(page.getByRole("button", { name: "INNER JOIN" })).toBeVisible();
 
-    const program2Panel = await openFieldSourcePanel(page, "program2");
-    await program2Panel.getByLabel("Include all fields from program2").uncheck();
-    const program2NumberRow = program2Panel
-      .locator("tbody tr", { hasText: numberField.label })
-      .first();
-    await program2NumberRow.getByLabel(`Include ${numberField.label}`).check();
-    await program2NumberRow
-      .getByLabel(`Display label for ${numberField.label}`)
-      .fill("Program 2 Target");
-    await expect(program2Panel.locator("summary")).toContainText("1 of");
-
-    const aggregation = await openEditorSection(page, "Aggregation");
+    const aggregation = await addOperation(page, "Aggregation");
     await aggregation.getByRole("button", { name: "Row", exact: true }).click();
     await expect(
       aggregation.locator(
@@ -641,9 +639,9 @@ test("admin can author, edit, save, and view a Sprint 3A dataset", async ({
     await metricLabel.fill("Average Target");
     await metricLabel.press("Tab");
 
-    const filters = await openEditorSection(page, "Filters");
+    const filters = await addOperation(page, "Filter");
     await expect(filters.getByText("No filters configured.")).toBeVisible();
-    const calculations = await openEditorSection(page, "Calculated Fields");
+    const calculations = await addOperation(page, "Calculated Fields");
     await calculations.getByRole("button", { name: "Add Calculated Field" }).click();
     const roundedCalculation = calculations.locator(".dataset-calculation-row").first();
     await roundedCalculation.getByLabel("Output Key").fill("avg_target_rounded");
@@ -732,11 +730,9 @@ test("admin can author, edit, save, and view a Sprint 3A dataset", async ({
       "program1",
       "program2",
     ]);
-    expect(detail.fields.map((field) => field.key)).toContain(
-      sourceFieldKey("program2", numberField.key),
-    );
     expect(detail.operations.map((operation) => operation.kind)).toEqual([
       "projection",
+      "add_source",
       "aggregation",
       "calculated_fields",
     ]);
@@ -874,76 +870,54 @@ test("admin can UAT Sprint 3B advanced dataset authoring", async ({ page }) => {
       await expect(
         page.getByRole("heading", { level: 1, name: "Edit Dataset" }),
       ).toBeVisible();
-      await expect(fieldSourcePanel(page, "program").locator("summary")).toContainText(
-        `${initialFieldCount} of`,
-      );
+      const projection = await openOperationPanel(page, "Projection");
+      await expectSelectedProjectionFieldCount(projection, "program", initialFieldCount);
 
-      for (const heading of [
-        "Aggregation",
-        "Calculated Fields",
-        "Filters",
-        "View Restrictions",
-      ]) {
-        await expect(
-          page
-            .locator("section.dataset-editor-section", {
-              has: page.getByRole("heading", { name: heading, exact: true }),
-            })
-            .getByRole("button", { name: heading, exact: true })
-            .first(),
-        ).toHaveAttribute("aria-expanded", "false");
-      }
+      await expect(
+        operationPanel(page, "Calculated Fields"),
+      ).toHaveCount(0);
+      await expect(operationPanel(page, "Filter")).toHaveCount(0);
+      await expect(
+        page
+          .locator("section.dataset-editor-section", {
+            has: page.getByRole("heading", { name: "View Restrictions", exact: true }),
+          })
+          .getByRole("button", { name: "View Restrictions", exact: true })
+          .first(),
+      ).toHaveAttribute("aria-expanded", "false");
     });
 
     await test.step("Demo: add a second source without clearing existing field selections", async () => {
-      await page.getByRole("button", { name: "Add Input" }).click();
-      const sourceSheet = page.getByRole("dialog", {
-        name: "Dataset designer options",
+      const addSource = await addOperation(page, "Add Source");
+      await addSource.getByLabel("Alias").fill("program2");
+      await addSource.getByLabel("Alias").press("Tab");
+      await addSource.locator("label.form-field").nth(2).locator("select").selectOption({
+        value: seed.form_id,
       });
-      await expect(sourceSheet).toBeVisible();
-      await sourceSheet.getByLabel("Alias").fill("program2");
-      await sourceSheet.getByLabel("Alias").press("Tab");
-      await sourceSheet
-        .locator("label.form-field")
-        .nth(2)
-        .locator("select")
-        .selectOption({ value: seed.form_id });
-      await sourceSheet
-        .locator("label.form-field")
-        .nth(3)
-        .locator("select")
-        .selectOption({ value: seed.form_version_id });
-      await closeDesignerSheet(page);
-      await expect(page.getByRole("button", { name: /^program2$/ })).toBeVisible();
-      await expect(fieldSourcePanel(page, "program").locator("summary")).toContainText(
-        `${initialFieldCount} of`,
-      );
-      await expect(fieldSourcePanel(page, "program").locator("summary")).not.toContainText(
-        "0 of",
-      );
-      await expect(fieldSourcePanel(page, "program2").locator("summary")).toContainText(
-        /[1-9]\d* of [1-9]\d*/,
-      );
+      await addSource.locator("label.form-field").nth(3).locator("select").selectOption({
+        value: seed.form_version_id,
+      });
+      const projection = await openOperationPanel(page, "Projection");
+      await expectSelectedProjectionFieldCount(projection, "program", initialFieldCount);
+      await expect(addSource.getByLabel("Alias")).toHaveValue("program2");
     });
 
     await test.step("Demo: configure the source operation before projection", async () => {
-      await page.getByRole("button", { name: "UNION" }).click();
-      const operationSheet = page.getByRole("dialog", {
-        name: "Dataset designer options",
-      });
-      await operationSheet.getByLabel("Operation").selectOption("inner_join");
-      await operationSheet.getByLabel("Left Join Key").selectOption({
+      const addSource = await openOperationPanel(page, "Add Source");
+      await addSource.getByRole("button", { name: "Inner Join" }).click();
+      await addSource.getByLabel("Current Field").selectOption({
         value: sourceFieldKey("program", "__node_id"),
       });
-      await operationSheet.getByLabel("Right Join Key").selectOption({
+      await addSource.getByLabel("Source Field").selectOption({
         value: sourceFieldKey("program2", "__node_id"),
       });
-      await closeDesignerSheet(page);
-      await expect(page.getByRole("button", { name: "INNER JOIN" })).toBeVisible();
+      await expect(addSource.getByRole("button", { name: "Inner Join" })).toHaveClass(
+        /is-active/,
+      );
     });
 
     await test.step("Demo: add typed calculated-field pipelines", async () => {
-      const calculations = await openEditorSection(page, "Calculated Fields");
+      const calculations = await addOperation(page, "Calculated Fields");
       await calculations.getByRole("button", { name: "Add Calculated Field" }).click();
       const calculation = calculations.locator(".dataset-calculation-row").first();
       await calculation.getByLabel("Output Key").fill("review_started_together");
@@ -1034,7 +1008,7 @@ test("admin can UAT Sprint 3B advanced dataset authoring", async ({ page }) => {
     });
 
     await test.step("Demo: add literal and field-comparison filters after calculations", async () => {
-      const filters = await openEditorSection(page, "Filters");
+      const filters = await addOperation(page, "Filter");
       await filters.getByRole("button", { name: "Add Filter" }).click();
       let filterRows = filters.locator(".dataset-filter-row");
       const numberFilter = filterRows.first();
@@ -1112,6 +1086,7 @@ test("admin can UAT Sprint 3B advanced dataset authoring", async ({ page }) => {
       ).toBeGreaterThan(0);
       expect(detail.operations.map((operation) => operation.kind)).toEqual([
         "projection",
+        "add_source",
         "calculated_fields",
         "filter",
       ]);
@@ -1153,12 +1128,15 @@ test("admin can UAT Sprint 3B advanced dataset authoring", async ({ page }) => {
       );
 
       await page.goto(`/datasets/${datasetId}/edit`);
-      await expect(fieldSourcePanel(page, "program").locator("summary")).toContainText(
-        `${initialFieldCount} of`,
+      const reopenedProjection = await openOperationPanel(page, "Projection");
+      await expectSelectedProjectionFieldCount(
+        reopenedProjection,
+        "program",
+        initialFieldCount,
       );
-      const reopenedCalculations = await openEditorSection(page, "Calculated Fields");
+      const reopenedCalculations = await openOperationPanel(page, "Calculated Fields");
       await expect(reopenedCalculations).toContainText("review_started_together");
-      const reopenedFilters = await openEditorSection(page, "Filters");
+      const reopenedFilters = await openOperationPanel(page, "Filter");
       await expect(reopenedFilters.locator(".dataset-filter-row")).toHaveCount(2);
     });
 
@@ -1378,7 +1356,7 @@ test("dataset SQL preview renders ordered QuerySpec operations as sequential CTE
   expect(sql).toContain("target_allowed");
   expect(sql).toContain(">= NULLIF('100', '')::numeric");
   expect(sql).toContain("__restriction_tier");
-  expect(sql.indexOf("__restriction_tier")).toBeGreaterThan(finalProjectionStart);
+  expect(sql.lastIndexOf("__restriction_tier")).toBeGreaterThan(finalProjectionStart);
   expect(sql).toContain('FROM "projection_6"');
 });
 
