@@ -5,6 +5,16 @@ artifacts, old sprint worktrees, `/app/*` routes, or earlier crate names. Use
 `docs/roadmap.md`, `docs/architecture.md`, and `docs/README.md` for current
 project direction.
 
+## 2026-06-28 - Sprint 3C Dataset Revision And Compatibility Kickoff
+
+- Kickoff status: started from clean `main` after committing accepted Sprint 3C planning artifacts.
+- Sprint: Sprint 3C: Dataset Revision And Compatibility Slice.
+- Branch: `codex/sprint-3c`.
+- Worktree: `C:\Users\eric-dev\Projects\tessara-sprint-3c`.
+- Plan file: `docs/sprints/sprint-3c-plan.md`.
+- Planned verification commands: `cargo fmt --all`, `cargo test -p tessara-api`, `cargo test -p tessara-web`, `npx playwright test`, `.\scripts\smoke.ps1`, `.\scripts\local-launch.ps1`, and `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`.
+- Immediate implementation focus: typed revision, compatibility, dependency, and carry-forward contracts, followed by revision list/detail/draft/publish API behavior.
+
 ## 2026-06-26 - Sprint 3C Dataset Authoring Refactor Checkpoint
 
 - Unified the dataset editor source-composition UI around one Add Source operation draft with an Add Type selector for Union, Union All, Left Join, Inner Join, and Outer Join.

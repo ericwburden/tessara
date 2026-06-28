@@ -2,6 +2,8 @@
 
 Status: draft for review and refinement. This is not a kickoff record yet; do not treat branch, worktree, or progress-report setup as complete until the sprint is formally started.
 
+Kickoff acceptance: accepted for Sprint 3C kickoff on 2026-06-28. The branch, worktree, and progress-report setup are now tracked by the kickoff addendum below; earlier draft/blocker wording remains as pre-kickoff history.
+
 ## Sprint Summary
 
 Build Sprint 3C from the roadmap `(Next)` scope: make dataset revision behavior visible and manageable through explicit draft revisions, revision publishing, revision history/detail screens, compatibility findings, dependency visibility, and typed revision/compatibility/dependency contracts.
@@ -13,6 +15,17 @@ Kickoff defaults:
 - Plan artifact: `docs/sprints/sprint-3c-plan.md`
 
 Assumption for Draft 1: use explicit draft revisions. Initial dataset creation may still create the first published revision, but editing an existing dataset should save a draft and require a publish action.
+
+## Kickoff Addendum
+
+- Sprint: Sprint 3C: Dataset Revision And Compatibility Slice
+- Kickoff date: 2026-06-28
+- Branch: `codex/sprint-3c`
+- Worktree: `C:\Users\eric-dev\Projects\tessara-sprint-3c`
+- Plan artifact: `docs/sprints/sprint-3c-plan.md`
+- Planning source: `docs/roadmap.md` sprint heading marked `(Next)` plus the accepted Sprint 3C planning artifacts committed on `main`.
+- Immediate implementation focus: start with typed revision, compatibility, dependency, and carry-forward contracts, then add revision list/detail/draft/publish API behavior before wiring the Datasets UI.
+- Planned verification commands: `cargo fmt --all`, `cargo test -p tessara-api`, `cargo test -p tessara-web`, `npx playwright test`, `.\scripts\smoke.ps1`, `.\scripts\local-launch.ps1`, and `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`.
 
 ## Sprint Specifications
 
