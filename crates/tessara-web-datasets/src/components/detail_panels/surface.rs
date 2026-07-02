@@ -10,7 +10,10 @@ use crate::text::sentence_label;
 use icons::X;
 use leptos::portal::Portal;
 use leptos::prelude::*;
-use tessara_web_ui::{DataTable, EmptyState, PageHeader};
+use tessara_web_ui::{
+    Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator, DataTable,
+    EmptyState, PageHeader,
+};
 
 #[component]
 pub(crate) fn DatasetDetailSurface(dataset_id: String, edit: bool) -> impl IntoView {
@@ -47,12 +50,29 @@ pub(crate) fn DatasetDetailSurface(dataset_id: String, edit: bool) -> impl IntoV
                     view! { <EmptyState title="Dataset unavailable" message=Box::leak(message.into_boxed_str())/> }.into_any()
                 } else if let Some(loaded) = dataset.get() {
                     let edit_href = format!("/datasets/{}/edit", loaded.id);
+                    let revisions_href = format!("/datasets/{}/revisions", loaded.id);
                     let tab_dataset = loaded.clone();
                     let visibility_nodes = loaded.visibility_nodes.clone();
                     view! {
+                        <Breadcrumb>
+                            <BreadcrumbItem>
+                                <BreadcrumbLink href="/datasets">"Datasets"</BreadcrumbLink>
+                            </BreadcrumbItem>
+                            <BreadcrumbSeparator/>
+                            <BreadcrumbItem>
+                                <BreadcrumbPage>"Dataset Detail"</BreadcrumbPage>
+                            </BreadcrumbItem>
+                        </Breadcrumb>
                         <PageHeader title=Box::leak(loaded.name.clone().into_boxed_str())>
                             {move || if can_manage() && !edit {
-                                view! { <a class="button button--secondary" href=edit_href.clone()>"Edit Dataset"</a> }.into_any()
+                                view! {
+                                    <div class="button-row">
+                                        <a class="button button--secondary" href=revisions_href.clone()>"Revision History"</a>
+                                        <a class="button button--secondary" href=edit_href.clone()>"Edit Dataset"</a>
+                                    </div>
+                                }.into_any()
+                            } else if edit {
+                                view! { <a class="button button--secondary" href=revisions_href.clone()>"Revision History"</a> }.into_any()
                             } else {
                                 view! { <span></span> }.into_any()
                             }}

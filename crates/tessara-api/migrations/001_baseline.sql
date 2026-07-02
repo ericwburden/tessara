@@ -360,10 +360,19 @@ CREATE TABLE dataset_revisions (
     dataset_id uuid NOT NULL REFERENCES datasets(id) ON DELETE CASCADE,
     version_number integer NOT NULL,
     version_label text NOT NULL,
+    version_major integer,
+    version_minor integer,
+    version_patch integer,
+    semantic_bump text,
+    started_new_major_line boolean,
+    force_new_major_version boolean NOT NULL DEFAULT false,
+    revision_notes text NOT NULL DEFAULT '',
     status dataset_revision_status NOT NULL DEFAULT 'draft',
     initial_source jsonb,
     operations jsonb,
     restriction_policy jsonb,
+    definition_metadata jsonb,
+    compatibility_findings jsonb NOT NULL DEFAULT '[]'::jsonb,
     generated_sql text,
     output_fields jsonb,
     materialized_schema text,
@@ -378,8 +387,29 @@ CREATE TABLE dataset_revisions (
 CREATE UNIQUE INDEX dataset_revisions_one_published_idx
     ON dataset_revisions (dataset_id)
     WHERE status = 'published';
+CREATE UNIQUE INDEX dataset_revisions_one_draft_idx
+    ON dataset_revisions (dataset_id)
+    WHERE status = 'draft';
 CREATE INDEX dataset_revisions_materialized_table_idx
     ON dataset_revisions (materialized_schema, materialized_table);
+CREATE INDEX dataset_revisions_semantic_version_idx
+    ON dataset_revisions (dataset_id, version_major, version_minor, version_patch);
+
+CREATE TABLE dataset_major_materializations (
+    dataset_id uuid NOT NULL REFERENCES datasets(id) ON DELETE CASCADE,
+    version_major integer NOT NULL,
+    materialized_schema text,
+    materialized_table text,
+    materialized_row_count bigint,
+    materialized_at timestamptz,
+    rebuild_status text NOT NULL DEFAULT 'pending',
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (dataset_id, version_major)
+);
+
+CREATE INDEX dataset_major_materializations_table_idx
+    ON dataset_major_materializations (materialized_schema, materialized_table);
 
 CREATE TABLE dataset_sources (
     id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -387,7 +417,9 @@ CREATE TABLE dataset_sources (
     source_alias text NOT NULL,
     form_id uuid REFERENCES forms(id) ON DELETE CASCADE,
     form_version_id uuid REFERENCES form_versions(id) ON DELETE RESTRICT,
+    source_dataset_id uuid REFERENCES datasets(id) ON DELETE RESTRICT,
     dataset_revision_id uuid REFERENCES dataset_revisions(id) ON DELETE RESTRICT,
+    dataset_version_major integer,
     position integer NOT NULL DEFAULT 0,
     created_at timestamptz NOT NULL DEFAULT now(),
     UNIQUE (dataset_id, source_alias),
@@ -395,12 +427,23 @@ CREATE TABLE dataset_sources (
         (
             form_id IS NOT NULL
             AND form_version_id IS NOT NULL
+            AND source_dataset_id IS NULL
             AND dataset_revision_id IS NULL
+            AND dataset_version_major IS NULL
         )
         OR (
             form_id IS NULL
             AND form_version_id IS NULL
+            AND source_dataset_id IS NOT NULL
             AND dataset_revision_id IS NOT NULL
+            AND dataset_version_major IS NULL
+        )
+        OR (
+            form_id IS NULL
+            AND form_version_id IS NULL
+            AND source_dataset_id IS NOT NULL
+            AND dataset_revision_id IS NULL
+            AND dataset_version_major IS NOT NULL
         )
     )
 );

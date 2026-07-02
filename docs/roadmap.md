@@ -608,7 +608,7 @@ This section records the completed foundation sequence that led to the current n
 
 **User-testable exit condition:** a tester can add a row filter and calculated field to a dataset, preview the resulting rows, save the definition, and verify any explicit restriction rules behave as authored.
 
-### Sprint 3C: Dataset Revision And Compatibility Slice (Next)
+### Sprint 3C: Dataset Revision And Compatibility Slice (Complete)
 
 **Outcome:** revision behavior is visible and manageable.
 
@@ -629,7 +629,7 @@ This section records the completed foundation sequence that led to the current n
 
 ## Phase 4: Components
 
-### Sprint 4A: Table Component Slice
+### Sprint 4A: Table Component Slice (Next)
 
 **Outcome:** table-oriented presentation assets become first-class components.
 

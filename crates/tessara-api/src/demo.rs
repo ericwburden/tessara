@@ -6,7 +6,11 @@ use serde_json::{Value, json};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::{auth::AuthenticatedRequest, db::AppState, error::ApiResult};
+use crate::{
+    auth::AuthenticatedRequest,
+    db::AppState,
+    error::{ApiError, ApiResult},
+};
 
 mod accounts;
 mod analytics;
@@ -98,9 +102,10 @@ pub(crate) async fn seed_demo_endpoint(
     Ok(Json(seed_demo(&state.pool).await?))
 }
 
-/// Seeds an idempotent end-to-end Tessara UAT demo dataset.
+/// Seeds the end-to-end Tessara UAT demo dataset into an otherwise empty app database.
 pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
     let account_id = require_dev_admin_account(pool).await?;
+    require_demo_seed_target_empty(pool, account_id).await?;
     let operator_account_id = ensure_demo_account(
         pool,
         "operator@tessara.local",
@@ -1408,4 +1413,39 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         program_workflow_assignment_id,
         analytics_values: analytics_status.value_count,
     })
+}
+
+async fn require_demo_seed_target_empty(
+    pool: &PgPool,
+    dev_admin_account_id: Uuid,
+) -> ApiResult<()> {
+    let existing_rows: i64 = sqlx::query_scalar(
+        r#"
+        SELECT
+            (SELECT COUNT(*) FROM accounts WHERE id <> $1)
+          + (SELECT COUNT(*) FROM node_types)
+          + (SELECT COUNT(*) FROM nodes)
+          + (SELECT COUNT(*) FROM forms)
+          + (SELECT COUNT(*) FROM form_versions)
+          + (SELECT COUNT(*) FROM submissions)
+          + (SELECT COUNT(*) FROM workflows)
+          + (SELECT COUNT(*) FROM workflow_versions)
+          + (SELECT COUNT(*) FROM datasets)
+          + (SELECT COUNT(*) FROM dataset_revisions)
+          + (SELECT COUNT(*) FROM components)
+          + (SELECT COUNT(*) FROM component_versions)
+          + (SELECT COUNT(*) FROM dashboards)
+        "#,
+    )
+    .bind(dev_admin_account_id)
+    .fetch_one(pool)
+    .await?;
+
+    if existing_rows == 0 {
+        return Ok(());
+    }
+
+    Err(ApiError::BadRequest(
+        "Demo seed requires an empty database. Recreate the local database or run local launch with -FreshData before seeding.".into(),
+    ))
 }

@@ -10,14 +10,24 @@ pub(crate) fn source_payload(source: &DatasetSourceDraft) -> Option<DatasetSourc
         return None;
     }
     if source.input_kind == "dataset" {
-        if source.dataset_id.is_empty() || source.dataset_revision_id.is_empty() {
+        if source.dataset_id.is_empty() {
             return None;
         }
-        Some(DatasetSourcePayload::Dataset {
-            alias: source.source_alias.clone(),
-            dataset_id: source.dataset_id.clone(),
-            dataset_revision_id: source.dataset_revision_id.clone(),
-        })
+        if let Some(version_major) = source.dataset_version_major {
+            Some(DatasetSourcePayload::DatasetMajor {
+                alias: source.source_alias.clone(),
+                dataset_id: source.dataset_id.clone(),
+                version_major,
+            })
+        } else if !source.dataset_revision_id.is_empty() {
+            Some(DatasetSourcePayload::Dataset {
+                alias: source.source_alias.clone(),
+                dataset_id: source.dataset_id.clone(),
+                dataset_revision_id: source.dataset_revision_id.clone(),
+            })
+        } else {
+            None
+        }
     } else {
         if source.form_id.is_empty() || source.form_version_id.is_empty() {
             return None;
@@ -44,6 +54,7 @@ pub(crate) fn source_payload_to_draft(source: &DatasetSourcePayload) -> DatasetS
             form_version_id: form_version_id.clone(),
             dataset_id: String::new(),
             dataset_revision_id: String::new(),
+            dataset_version_major: None,
         },
         DatasetSourcePayload::Dataset {
             alias,
@@ -56,6 +67,20 @@ pub(crate) fn source_payload_to_draft(source: &DatasetSourcePayload) -> DatasetS
             form_version_id: String::new(),
             dataset_id: dataset_id.clone(),
             dataset_revision_id: dataset_revision_id.clone(),
+            dataset_version_major: None,
+        },
+        DatasetSourcePayload::DatasetMajor {
+            alias,
+            dataset_id,
+            version_major,
+        } => DatasetSourceDraft {
+            input_kind: "dataset".into(),
+            source_alias: alias.clone(),
+            form_id: String::new(),
+            form_version_id: String::new(),
+            dataset_id: dataset_id.clone(),
+            dataset_revision_id: String::new(),
+            dataset_version_major: Some(*version_major),
         },
     }
 }

@@ -466,6 +466,10 @@ fn reconcile_projection_fields(
     available_fields: Vec<DatasetFieldDraft>,
     previous_available_fields: &[DatasetFieldDraft],
 ) -> Vec<DatasetFieldDraft> {
+    if available_fields.is_empty() && previous_available_fields.is_empty() {
+        return selected_fields;
+    }
+
     let mut available_by_key = BTreeMap::<String, DatasetFieldDraft>::new();
     let mut available_by_input = BTreeMap::<String, Vec<DatasetFieldDraft>>::new();
     for field in available_fields {
@@ -660,6 +664,27 @@ mod tests {
             reconciled,
             vec![projection_field("source_1__included", "included", "text")]
         );
+    }
+
+    #[test]
+    fn reconcile_projection_fields_preserves_selections_until_catalog_loads() {
+        let selected_fields = vec![projection_field("source_1__included", "included", "text")];
+
+        let reconciled = reconcile_projection_fields(selected_fields.clone(), Vec::new(), &[]);
+
+        assert_eq!(reconciled, selected_fields);
+    }
+
+    #[test]
+    fn reconcile_projection_fields_matches_selection_after_catalog_loads() {
+        let selected_fields = vec![projection_field("source_1__included", "included", "text")];
+        let available_fields = vec![projection_field("source_1__included", "included", "text")];
+
+        let reconciled = reconcile_projection_fields(selected_fields, available_fields, &[]);
+
+        assert_eq!(reconciled.len(), 1);
+        assert_eq!(reconciled[0].key, "source_1__included");
+        assert_eq!(reconciled[0].source_field_key, "included");
     }
 
     #[test]

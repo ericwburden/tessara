@@ -12,16 +12,30 @@ use tessara_web_ui::{
 };
 
 #[component]
-pub(crate) fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView {
+pub(crate) fn DatasetEditorSurface(
+    dataset_id: Option<String>,
+    revision_id: Option<String>,
+) -> impl IntoView {
     let is_edit = dataset_id.is_some();
-    let title = if is_edit {
+    let is_revision_edit = revision_id.is_some();
+    let title = if is_revision_edit {
+        "Edit Revision"
+    } else if is_edit {
         "Edit Dataset"
     } else {
         "Create Dataset"
     };
     let state = DatasetEditorState::new();
-    install_dataset_editor_loaders(dataset_id.clone(), state);
+    install_dataset_editor_loaders(dataset_id.clone(), revision_id.clone(), state);
     let save_dataset_id = dataset_id.clone();
+    let detail_href = dataset_id.as_ref().map(|id| format!("/datasets/{id}"));
+    let history_href = dataset_id
+        .as_ref()
+        .map(|id| format!("/datasets/{id}/revisions"));
+    let revision_href = dataset_id
+        .as_ref()
+        .zip(revision_id.as_ref())
+        .map(|(dataset_id, revision_id)| format!("/datasets/{dataset_id}/revisions/{revision_id}"));
     let final_fields = Signal::derive(move || {
         catalog_after_operations(
             state.initial_source.get(),
@@ -39,6 +53,30 @@ pub(crate) fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView 
                     <BreadcrumbLink href="/datasets">"Datasets"</BreadcrumbLink>
                 </BreadcrumbItem>
                 <BreadcrumbSeparator/>
+                {detail_href.map(|href| {
+                    view! {
+                        <BreadcrumbItem>
+                            <BreadcrumbLink href=href>"Dataset Detail"</BreadcrumbLink>
+                        </BreadcrumbItem>
+                        <BreadcrumbSeparator/>
+                    }
+                })}
+                {history_href.filter(|_| is_revision_edit).map(|href| {
+                    view! {
+                        <BreadcrumbItem>
+                            <BreadcrumbLink href=href>"Revision History"</BreadcrumbLink>
+                        </BreadcrumbItem>
+                        <BreadcrumbSeparator/>
+                    }
+                })}
+                {revision_href.map(|href| {
+                    view! {
+                        <BreadcrumbItem>
+                            <BreadcrumbLink href=href>"Dataset Revision"</BreadcrumbLink>
+                        </BreadcrumbItem>
+                        <BreadcrumbSeparator/>
+                    }
+                })}
                 <BreadcrumbItem>
                     <BreadcrumbPage>{title}</BreadcrumbPage>
                 </BreadcrumbItem>
@@ -53,7 +91,10 @@ pub(crate) fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView 
                 event.prevent_default();
                 submit_dataset_editor(save_dataset_id.clone(), state);
             }>
-                <DatasetIdentitySection name=state.name slug=state.slug/>
+                <DatasetIdentitySection
+                    name=state.name
+                    slug=state.slug
+                />
                 <DatasetSourcesEditor
                     initial_source=state.initial_source
                     forms=state.forms
@@ -99,7 +140,7 @@ pub(crate) fn DatasetEditorSurface(dataset_id: Option<String>) -> impl IntoView 
             </form>
             <div class="form-actions">
                 <button class="button" type="submit" form="dataset-editor-form">
-                    {if is_edit { "Save Dataset" } else { "Create Dataset" }}
+                    {if is_revision_edit { "Save Revision" } else if is_edit { "Save Dataset" } else { "Create Dataset" }}
                 </button>
             </div>
         </section>

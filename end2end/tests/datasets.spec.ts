@@ -28,6 +28,10 @@ type DatasetSummary = {
   name: string;
   slug: string;
   current_revision_id?: string | null;
+  current_version_major?: number | null;
+  current_version_minor?: number | null;
+  current_version_patch?: number | null;
+  major_versions?: number[];
   visibility_nodes?: Array<{ node_id: string; node_name: string }>;
   source_count?: number;
   field_count?: number;
@@ -43,8 +47,13 @@ type DatasetFieldDefinition = {
 
 type DatasetDefinition = {
   id: string;
+  current_revision_id?: string | null;
+  current_version_major?: number | null;
+  current_version_minor?: number | null;
+  current_version_patch?: number | null;
   name: string;
   slug: string;
+  initial_source?: DatasetSourcePayload | null;
   generated_sql?: string | null;
   sources: Array<{ source_alias: string; form_id?: string | null }>;
   fields: DatasetFieldDefinition[];
@@ -65,6 +74,79 @@ type DatasetTable = {
 
 type DatasetSqlPreview = {
   generated_sql: string;
+};
+
+type DatasetRevisionSummary = {
+  id: string;
+  dataset_id: string;
+  version_number: number;
+  version_label: string;
+  status: "draft" | "published" | "superseded";
+  is_current: boolean;
+  version_major?: number | null;
+  version_minor?: number | null;
+  version_patch?: number | null;
+  semantic_bump?: string | null;
+  started_new_major_line?: boolean | null;
+  force_new_major_version?: boolean;
+  output_field_count: number;
+  compatibility: {
+    state: "compatible" | "review" | "breaking";
+    major_count: number;
+    minor_count: number;
+    patch_count: number;
+  };
+  dependencies: {
+    dependency_count: number;
+    dataset_count: number;
+    component_version_count: number;
+    dashboard_count: number;
+    carry_forward_state: "safe" | "manual_review" | "blocked";
+  };
+};
+
+type DatasetRevisionDetail = DatasetRevisionSummary & {
+  metadata: {
+  name: string;
+  slug: string;
+  force_new_major_version?: boolean;
+  grain: string;
+    visibility_node_ids: string[];
+  };
+  materialized_table?: string | null;
+  output_fields: DatasetFieldDefinition[];
+  compatibility_findings: Array<{
+    version_impact: "patch" | "minor" | "major";
+    code: string;
+    message: string;
+    field_key?: string | null;
+  }>;
+  dependency_impacts: Array<{
+    kind: "dataset" | "component_version" | "dashboard";
+    id: string;
+    name: string;
+    pinned_revision_id: string;
+    carry_forward_state: "safe" | "manual_review" | "blocked";
+    message: string;
+  }>;
+};
+
+type DatasetDraftRevisionResponse = {
+  dataset_id: string;
+  revision_id: string;
+  status: "draft";
+};
+
+type DatasetPublishRevisionResponse = {
+  dataset_id: string;
+  revision_id: string;
+  superseded_revision_id?: string | null;
+  status: "published";
+  version_major?: number | null;
+  version_minor?: number | null;
+  version_patch?: number | null;
+  semantic_bump?: string | null;
+  started_new_major_line?: boolean | null;
 };
 
 type RenderedField = {
@@ -92,6 +174,12 @@ type DatasetSourcePayload =
       alias: string;
       dataset_id: string;
       dataset_revision_id: string;
+    }
+  | {
+      kind: "dataset_major";
+      alias: string;
+      dataset_id: string;
+      version_major: number;
     };
 
 type DatasetProjectionFieldPayload = {
@@ -172,6 +260,7 @@ type DatasetPayload = {
   name: string;
   slug: string;
   grain: "submission";
+  version_label?: string | null;
   visibility_node_ids: string[];
   initial_source: DatasetSourcePayload;
   operations: DatasetOperation[];
@@ -340,10 +429,42 @@ async function createDataset(page: Page, payload: DatasetPayload) {
 }
 
 async function updateDataset(page: Page, datasetId: string, payload: DatasetPayload) {
-  const response = await page.request.put(`/api/admin/datasets/${datasetId}`, {
-    data: payload,
-  });
-  expect(response.ok(), `dataset update returned ${response.status()}`).toBeTruthy();
+  const draft = await saveDraftRevision(page, datasetId, payload);
+  await publishDatasetRevision(page, datasetId, draft.revision_id);
+}
+
+async function saveDraftRevision(
+  page: Page,
+  datasetId: string,
+  payload: DatasetPayload,
+) {
+  const response = await page.request.post(
+    `/api/admin/datasets/${datasetId}/draft-revision`,
+    {
+      data: payload,
+    },
+  );
+  return expectJson<DatasetDraftRevisionResponse>(response);
+}
+
+async function publishDatasetRevision(
+  page: Page,
+  datasetId: string,
+  revisionId: string,
+) {
+  const response = await page.request.post(
+    `/api/admin/datasets/${datasetId}/revisions/${revisionId}/publish`,
+    {
+      data: {},
+    },
+  );
+  return expectJson<DatasetPublishRevisionResponse>(response);
+}
+
+async function getDatasetRevisions(page: Page, datasetId: string) {
+  return expectJson<DatasetRevisionSummary[]>(
+    await page.request.get(`/api/datasets/${datasetId}/revisions`),
+  );
 }
 
 async function deleteDataset(page: Page, datasetId: string, timeout = 20_000) {
@@ -456,7 +577,7 @@ async function expectSelectedProjectionFieldCount(
 test("admin can author, edit, save, and view a Sprint 3A dataset", async ({
   page,
 }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
   const assertNoConsoleErrors = attachConsoleGuard(page);
   await signInAsAdmin(page);
   const seed = await seedDemo(page);
@@ -715,13 +836,18 @@ test("admin can author, edit, save, and view a Sprint 3A dataset", async ({
 
     const saveResponse = page.waitForResponse(
       (response) =>
-        response.url().includes(`/api/admin/datasets/${datasetId}`) &&
-        response.request().method() === "PUT",
+        response.url().includes(`/api/admin/datasets/${datasetId}/draft-revision`) &&
+        response.request().method() === "POST",
     );
     await page.getByRole("button", { name: "Save Dataset" }).click();
     const response = await saveResponse;
     expect(response.ok()).toBeTruthy();
-    await expect(page).toHaveURL(new RegExp(`/datasets/${datasetId}$`));
+    await expect(page).toHaveURL(new RegExp(`/datasets/${datasetId}/revisions/[^/]+$`));
+    const draftRevisionId = page.url().split("/").pop();
+    expect(draftRevisionId).toBeTruthy();
+    const draft = { revision_id: draftRevisionId! };
+    await publishDatasetRevision(page, datasetId, draft.revision_id);
+    await page.goto(`/datasets/${datasetId}`);
 
     const detail = await expectJson<DatasetDefinition>(
       await page.request.get(`/api/datasets/${datasetId}`),
@@ -1065,13 +1191,17 @@ test("admin can UAT Sprint 3B advanced dataset authoring", async ({ page }) => {
 
       const saveResponse = page.waitForResponse(
         (response) =>
-          response.url().includes(`/api/admin/datasets/${datasetId}`) &&
-          response.request().method() === "PUT",
+          response.url().includes(`/api/admin/datasets/${datasetId}/draft-revision`) &&
+          response.request().method() === "POST",
       );
       await page.getByRole("button", { name: "Save Dataset" }).click();
       const response = await saveResponse;
       expect(response.ok()).toBeTruthy();
-      await expect(page).toHaveURL(new RegExp(`/datasets/${datasetId}$`));
+      await expect(page).toHaveURL(new RegExp(`/datasets/${datasetId}/revisions/[^/]+$`));
+      const draftRevisionId = page.url().split("/").pop();
+      expect(draftRevisionId).toBeTruthy();
+      const draft = { revision_id: draftRevisionId! };
+      await publishDatasetRevision(page, datasetId, draft.revision_id);
     });
 
     await test.step("Demo evidence: verify persisted state and reopen hydration", async () => {
@@ -1146,6 +1276,190 @@ test("admin can UAT Sprint 3B advanced dataset authoring", async ({ page }) => {
       await deleteDataset(page, datasetId);
     }
   }
+});
+
+test("admin can review and publish a dataset draft revision", async ({ page }) => {
+  test.setTimeout(120_000);
+  const assertNoConsoleErrors = attachConsoleGuard(page);
+  await signInAsAdmin(page);
+  const seed = await seedDemo(page);
+  await cleanupPlaywrightDatasets(page);
+
+  const renderedForm = await expectJson<RenderedForm>(
+    await page.request.get(`/api/form-versions/${seed.form_version_id}/render`),
+  );
+  const formFields = renderedFields(renderedForm);
+  const firstField = requireRenderedField(
+    formFields,
+    (field) => field.field_type === "number",
+    "numeric field for revision lifecycle",
+  );
+  const secondField = requireRenderedField(
+    formFields,
+    (field) => field.key !== firstField.key,
+    "second field for draft compatibility",
+  );
+  const runId = Date.now();
+  const slug = `${PW_DATASET_PREFIX}revision-${runId}`;
+  const datasetName = `Playwright Revision Lifecycle ${runId}`;
+  const initialPayload: DatasetPayload = {
+    name: datasetName,
+    slug,
+    grain: "submission",
+    visibility_node_ids: [seed.program_node_id],
+    initial_source: {
+      kind: "form",
+      alias: "program",
+      form_id: seed.form_id,
+      form_version_id: seed.form_version_id,
+    },
+    operations: [
+      projectionOperation([
+        datasetField("program", firstField.key, firstField.label, 0),
+      ]),
+    ],
+  };
+
+  let datasetId: string | undefined;
+  let dependentDatasetId: string | undefined;
+  try {
+    datasetId = await createDataset(page, initialPayload);
+    const initialDetail = await expectJson<DatasetDefinition>(
+      await page.request.get(`/api/datasets/${datasetId}`),
+    );
+    expect(initialDetail.current_revision_id).toBeTruthy();
+    const initialRevisionId = initialDetail.current_revision_id!;
+    const firstKey = sourceFieldKey("program", firstField.key);
+    const secondKey = sourceFieldKey("program", secondField.key);
+
+    dependentDatasetId = await createDataset(page, {
+      name: `Playwright Revision Dependent ${runId}`,
+      slug: `${PW_DATASET_PREFIX}revision-dependent-${runId}`,
+      grain: "submission",
+      visibility_node_ids: [seed.program_node_id],
+      initial_source: {
+        kind: "dataset",
+        alias: "upstream",
+        dataset_id: datasetId,
+        dataset_revision_id: initialRevisionId,
+      },
+      operations: [
+        projectionOperation([
+          {
+            key: "dependent_value",
+            label: "Dependent Value",
+            input_field_key: sourceFieldKey("upstream", firstKey),
+            position: 0,
+          },
+        ]),
+      ],
+    });
+
+    const draft = await saveDraftRevision(page, datasetId, {
+      ...initialPayload,
+      name: `${datasetName} Draft`,
+      operations: [
+        projectionOperation([
+          datasetField("program", firstField.key, firstField.label, 0),
+          datasetField("program", secondField.key, secondField.label, 1),
+        ]),
+      ],
+    });
+
+    const currentBeforePublish = await expectJson<DatasetDefinition>(
+      await page.request.get(`/api/datasets/${datasetId}`),
+    );
+    expect(currentBeforePublish.current_revision_id).toBe(initialRevisionId);
+    expect(currentBeforePublish.output_fields.map((field) => field.key)).toContain(firstKey);
+    expect(currentBeforePublish.output_fields.map((field) => field.key)).not.toContain(
+      secondKey,
+    );
+
+    await page.goto(`/datasets/${datasetId}`);
+    await expect(page.getByRole("link", { name: "Revision History" })).toBeVisible();
+    await page.getByRole("link", { name: "Revision History" }).click();
+    await expect(page.locator("h1", { hasText: "Dataset Revisions" })).toBeVisible();
+    await expect(page.locator("tbody")).toContainText("Published current");
+    await expect(page.locator("tbody")).toContainText("Draft");
+
+    const draftDetail = await expectJson<DatasetRevisionDetail>(
+      await page.request.get(`/api/datasets/${datasetId}/revisions/${draft.revision_id}`),
+    );
+    expect(draftDetail.status).toBe("draft");
+    expect(draftDetail.metadata.name).toBe(`${datasetName} Draft`);
+
+    await page.goto(`/datasets/${datasetId}/revisions/${draft.revision_id}`);
+    await expect(page.locator(".page-header")).toContainText(`${datasetName} Draft`);
+    await expect(page.locator(".dataset-detail-summary")).toContainText("Draft");
+    await expect(page.locator(".dataset-detail-summary")).toContainText("1 total");
+    await expect(page.getByRole("heading", { name: "Changelog" })).toBeVisible();
+    await expect(
+      page.locator(".route-panel__section", { hasText: "Changelog" }),
+    ).toContainText(/added/i);
+    await expect(page.getByRole("heading", { name: "Downstream Dependencies" })).toBeVisible();
+    await expect(
+      page.locator(".route-panel__section", { hasText: "Downstream Dependencies" }),
+    ).toContainText("Playwright Revision Dependent");
+    await expect(page.getByRole("button", { name: "Publish" })).toBeVisible();
+
+    const publishResponse = page.waitForResponse(
+      (response) =>
+        response
+          .url()
+          .includes(`/api/admin/datasets/${datasetId}/revisions/${draft.revision_id}/publish`) &&
+        response.request().method() === "POST",
+    );
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.getByRole("button", { name: "Publish" }).click();
+    await page.getByRole("menuitem", { name: "Revision" }).click();
+    expect((await publishResponse).ok()).toBeTruthy();
+    await expect(page.locator(".dataset-detail-summary")).toContainText("Published current");
+
+    const publishedDetail = await expectJson<DatasetDefinition>(
+      await page.request.get(`/api/datasets/${datasetId}`),
+    );
+    expect(publishedDetail.current_revision_id).toBe(draft.revision_id);
+    expect(publishedDetail.output_fields.map((field) => field.key)).toEqual([
+      firstKey,
+      secondKey,
+    ]);
+    const revisions = await getDatasetRevisions(page, datasetId);
+    expect(revisions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: initialRevisionId,
+          status: "superseded",
+          is_current: false,
+        }),
+        expect.objectContaining({
+          id: draft.revision_id,
+          status: "published",
+          is_current: true,
+        }),
+      ]),
+    );
+
+    const dependentDetail = await expectJson<DatasetDefinition>(
+      await page.request.get(`/api/datasets/${dependentDatasetId}`),
+    );
+    expect(dependentDetail.initial_source).toMatchObject({
+      kind: "dataset",
+      dataset_revision_id: initialRevisionId,
+    });
+  } finally {
+    if (dependentDatasetId) {
+      await deleteDataset(page, dependentDatasetId, 5_000).catch((error: unknown) => {
+        console.warn(`dependent dataset cleanup failed: ${String(error)}`);
+      });
+    }
+    if (datasetId) {
+      await deleteDataset(page, datasetId, 5_000).catch((error: unknown) => {
+        console.warn(`dataset cleanup failed for ${datasetId}: ${String(error)}`);
+      });
+    }
+  }
+
+  await assertNoConsoleErrors();
 });
 
 test("dataset SQL preview uses pre-projection join keys and stable field identities", async ({

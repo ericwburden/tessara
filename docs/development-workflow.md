@@ -47,7 +47,9 @@ What this does:
 - rebuilds only the `api` image unless `-SkipBuild` is supplied
 - recreates only the `api` container
 - waits for `/health` and `/`
-- reseeds demo data unless `-SkipSeed` is supplied
+- seeds demo data only when the app database is empty; use
+  `.\scripts\local-launch.ps1 -FreshData` when demo data should be recreated
+  from scratch
 
 Use this loop when:
 

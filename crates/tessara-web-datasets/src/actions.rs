@@ -13,6 +13,7 @@ pub(super) fn save_dataset(
     dataset_id: Option<String>,
     name: String,
     slug: String,
+    force_new_major_version: bool,
     visibility_node_ids: Vec<String>,
     initial_source: DatasetSourceDraft,
     operation_order: Vec<DatasetOperationDraft>,
@@ -28,6 +29,7 @@ pub(super) fn save_dataset(
         let payload = match dataset_payload_from_drafts(DatasetPayloadDrafts {
             name,
             slug,
+            force_new_major_version,
             visibility_node_ids,
             initial_source,
             operation_order,
@@ -44,15 +46,30 @@ pub(super) fn save_dataset(
         match api::save_dataset_payload(dataset_id.as_deref(), &payload).await {
             Ok(value) => {
                 let id = value
-                    .get("id")
+                    .get("dataset_id")
+                    .or_else(|| value.get("id"))
                     .and_then(|value| value.as_str())
                     .unwrap_or_default()
                     .to_string();
-                save_message.set(Some("Dataset saved.".into()));
+                let revision_id = value
+                    .get("revision_id")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or_default()
+                    .to_string();
+                save_message.set(Some(if revision_id.is_empty() {
+                    "Dataset saved.".into()
+                } else {
+                    "Draft revision saved.".into()
+                }));
                 if !id.is_empty()
                     && let Some(window) = web_sys::window()
                 {
-                    let _ = window.location().set_href(&format!("/datasets/{id}"));
+                    let href = if revision_id.is_empty() {
+                        format!("/datasets/{id}")
+                    } else {
+                        format!("/datasets/{id}/revisions/{revision_id}")
+                    };
+                    let _ = window.location().set_href(&href);
                 }
             }
             Err(message) => save_error.set(Some(message)),
@@ -66,6 +83,7 @@ pub(super) fn save_dataset(
     _: Option<String>,
     _: String,
     _: String,
+    _: bool,
     _: Vec<String>,
     _: DatasetSourceDraft,
     _: Vec<DatasetOperationDraft>,
@@ -97,6 +115,7 @@ pub(super) fn preview_dataset_sql(
         let payload = match dataset_payload_from_drafts(DatasetPayloadDrafts {
             name,
             slug,
+            force_new_major_version: false,
             visibility_node_ids,
             initial_source,
             operation_order,

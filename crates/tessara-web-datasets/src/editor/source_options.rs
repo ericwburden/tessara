@@ -98,7 +98,7 @@ pub(crate) fn source_field_options(
 
 fn source_has_selected_reference(source: &DatasetSourceDraft) -> bool {
     if source.input_kind.eq_ignore_ascii_case("dataset") {
-        !source.dataset_revision_id.trim().is_empty()
+        source.dataset_version_major.is_some() || !source.dataset_revision_id.trim().is_empty()
     } else {
         !source.form_version_id.trim().is_empty()
     }

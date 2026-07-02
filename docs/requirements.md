@@ -105,6 +105,18 @@ Dataset -> Component -> Dashboard
 - Publication must be blocked when blocking issues remain.
 - Users must be able to skip some carry-forward work rather than being forced to resolve every dependent artifact immediately.
 
+### Dataset Revision Semantic Versioning
+
+Dataset revisions use semantic version numbers to communicate the impact of a revision on downstream consumers. Revision detail surfaces describe the detected changes as a Changelog, and each changelog row carries a `version_impact` of `major`, `minor`, or `patch`.
+
+- `MAJOR` revisions represent breaking contract changes. Examples include removing an output field, changing an output field type, or an author explicitly choosing to start a new major version.
+- `MINOR` revisions represent compatible but visible contract changes. Examples include adding an output field or changing restriction policy in a way that requires consumer review.
+- `PATCH` revisions represent contract-stable changes. Examples include dataset metadata changes, output field label changes, visibility changes, filter threshold changes, calculation formula changes, or other implementation changes that preserve the same output field keys, types, and restriction policy.
+- The highest changelog `version_impact` determines the automatic semantic bump: `major` outranks `minor`, and `minor` outranks `patch`.
+- A revision with only patch changelog rows publishes as a patch unless the author explicitly starts a new major version.
+- Empty revisions cannot be published; a publishable revision must have at least one changelog row.
+- Patch does not mean the materialized rows are guaranteed identical; it means the dataset contract observed by downstream consumers is unchanged.
+
 ## Migration And Verification Requirements
 
 - Legacy import, rehearsal, and verification must remain supported during the transition.

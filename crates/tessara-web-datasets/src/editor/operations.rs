@@ -19,7 +19,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use tessara_web_ui::{
     DraggablePanelList, DraggablePanelListAnchor, DraggablePanelListDraggable,
     DraggablePanelListDropZone, DraggablePanelListItem, DraggablePanelListMove, SegmentedToggle,
-    SegmentedToggleOption, empty_view,
+    SegmentedToggleOption, Skeleton, empty_view,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -198,24 +198,28 @@ fn operation_panel(
                     </button>
                 </div>
             </div>
-            <Show when=move || expanded_operation_ids.get().contains(&operation_id)>
-                {move || view! {
-                    <div class="dataset-operation-panel__body">
-                        {operation_body(
-                            operation_id,
-                            kind,
-                            operation_order,
-                            initial_source,
-                            forms,
-                            datasets,
-                            rendered_forms,
-                            nodes,
-                            users,
-                            projection_active_source_tabs,
-                        )}
-                    </div>
-                }}
-            </Show>
+            <div
+                class=move || {
+                    if expanded_operation_ids.get().contains(&operation_id) {
+                        "dataset-operation-panel__body"
+                    } else {
+                        "dataset-operation-panel__body is-collapsed"
+                    }
+                }
+            >
+                {operation_body(
+                    operation_id,
+                    kind,
+                    operation_order,
+                    initial_source,
+                    forms,
+                    datasets,
+                    rendered_forms,
+                    nodes,
+                    users,
+                    projection_active_source_tabs,
+                )}
+            </div>
         </>
     }
 }
@@ -253,28 +257,45 @@ fn operation_body(
                     operation_id,
                 )
             });
+            let is_loading = Signal::derive(move || {
+                catalog_before_operation_is_loading(
+                    initial_source.get(),
+                    datasets.get(),
+                    rendered_forms.get(),
+                    operation_order.get(),
+                    operation_id,
+                )
+            });
             view! {
-                <DatasetProjectionEditor
-                    available_fields=Signal::derive(move || operation_fields.get())
-                    fields=operation_projection_fields(operation_order, operation_id)
-                    active_source_tab=Signal::derive(move || {
-                        projection_active_source_tabs.get().get(&operation_id).cloned()
-                    })
-                    on_active_source_tab_change=Callback::new(move |source_tab| {
-                        projection_active_source_tabs.update(|source_tabs| {
-                            if let Some(source_tab) = source_tab {
-                                source_tabs.insert(operation_id, source_tab);
-                            } else {
-                                source_tabs.remove(&operation_id);
-                            }
-                        });
-                    })
-                    on_fields_change=Callback::new(move |fields| {
-                        update_operation(operation_order, operation_id, |operation| {
-                            operation.projection_fields = fields;
-                        });
-                    })
-                />
+                {move || {
+                    if is_loading.get() {
+                        operation_body_skeleton().into_any()
+                    } else {
+                        view! {
+                            <DatasetProjectionEditor
+                                available_fields=Signal::derive(move || operation_fields.get())
+                                fields=operation_projection_fields(operation_order, operation_id)
+                                active_source_tab=Signal::derive(move || {
+                                    projection_active_source_tabs.get().get(&operation_id).cloned()
+                                })
+                                on_active_source_tab_change=Callback::new(move |source_tab| {
+                                    projection_active_source_tabs.update(|source_tabs| {
+                                        if let Some(source_tab) = source_tab {
+                                            source_tabs.insert(operation_id, source_tab);
+                                        } else {
+                                            source_tabs.remove(&operation_id);
+                                        }
+                                    });
+                                })
+                                on_fields_change=Callback::new(move |fields| {
+                                    update_operation(operation_order, operation_id, |operation| {
+                                        operation.projection_fields = fields;
+                                    });
+                                })
+                            />
+                        }.into_any()
+                    }
+                }}
             }
         }
         .into_any(),
@@ -289,17 +310,34 @@ fn operation_body(
                     operation_id,
                 )
             });
+            let is_loading = Signal::derive(move || {
+                catalog_before_operation_is_loading(
+                    initial_source.get(),
+                    datasets.get(),
+                    rendered_forms.get(),
+                    operation_order.get(),
+                    operation_id,
+                )
+            });
             view! {
-                <DatasetAggregationEditor
-                    fields=operation_fields
-                    aggregation=operation_aggregation(operation_order, operation_id)
-                    on_aggregation_change=Callback::new(move |aggregation| {
-                        update_operation(operation_order, operation_id, |operation| {
-                            operation.aggregation = aggregation;
-                        });
-                    })
-                    embedded=true
-                />
+                {move || {
+                    if is_loading.get() {
+                        operation_body_skeleton().into_any()
+                    } else {
+                        view! {
+                            <DatasetAggregationEditor
+                                fields=operation_fields
+                                aggregation=operation_aggregation(operation_order, operation_id)
+                                on_aggregation_change=Callback::new(move |aggregation| {
+                                    update_operation(operation_order, operation_id, |operation| {
+                                        operation.aggregation = aggregation;
+                                    });
+                                })
+                                embedded=true
+                            />
+                        }.into_any()
+                    }
+                }}
             }
             .into_any()
         }
@@ -314,17 +352,34 @@ fn operation_body(
                     operation_id,
                 )
             });
+            let is_loading = Signal::derive(move || {
+                catalog_before_operation_is_loading(
+                    initial_source.get(),
+                    datasets.get(),
+                    rendered_forms.get(),
+                    operation_order.get(),
+                    operation_id,
+                )
+            });
             view! {
-                <DatasetCalculationsEditor
-                    fields=operation_fields
-                    calculated_fields=operation_calculated_fields(operation_order, operation_id)
-                    on_calculated_fields_change=Callback::new(move |calculated_fields| {
-                        update_operation(operation_order, operation_id, |operation| {
-                            operation.calculated_fields = calculated_fields;
-                        });
-                    })
-                    embedded=true
-                />
+                {move || {
+                    if is_loading.get() {
+                        operation_body_skeleton().into_any()
+                    } else {
+                        view! {
+                            <DatasetCalculationsEditor
+                                fields=operation_fields
+                                calculated_fields=operation_calculated_fields(operation_order, operation_id)
+                                on_calculated_fields_change=Callback::new(move |calculated_fields| {
+                                    update_operation(operation_order, operation_id, |operation| {
+                                        operation.calculated_fields = calculated_fields;
+                                    });
+                                })
+                                embedded=true
+                            />
+                        }.into_any()
+                    }
+                }}
             }
             .into_any()
         }
@@ -339,25 +394,55 @@ fn operation_body(
                     operation_id,
                 )
             });
+            let is_loading = Signal::derive(move || {
+                catalog_before_operation_is_loading(
+                    initial_source.get(),
+                    datasets.get(),
+                    rendered_forms.get(),
+                    operation_order.get(),
+                    operation_id,
+                )
+            });
             view! {
-                <DatasetFiltersEditor
-                    fields=operation_fields
-                    initial_source=initial_source
-                    forms=forms
-                    rendered_forms=rendered_forms
-                    nodes=nodes
-                    users=users
-                    row_filters=operation_filters(operation_order, operation_id)
-                    on_row_filters_change=Callback::new(move |row_filters| {
-                        update_operation(operation_order, operation_id, |operation| {
-                            operation.row_filters = row_filters;
-                        });
-                    })
-                    embedded=true
-                />
+                {move || {
+                    if is_loading.get() {
+                        operation_body_skeleton().into_any()
+                    } else {
+                        view! {
+                            <DatasetFiltersEditor
+                                fields=operation_fields
+                                initial_source=initial_source
+                                forms=forms
+                                rendered_forms=rendered_forms
+                                nodes=nodes
+                                users=users
+                                row_filters=operation_filters(operation_order, operation_id)
+                                on_row_filters_change=Callback::new(move |row_filters| {
+                                    update_operation(operation_order, operation_id, |operation| {
+                                        operation.row_filters = row_filters;
+                                    });
+                                })
+                                embedded=true
+                            />
+                        }.into_any()
+                    }
+                }}
             }
             .into_any()
         }
+    }
+}
+
+fn operation_body_skeleton() -> impl IntoView {
+    view! {
+        <section class="route-panel__section dataset-editor-section dataset-editor-section--embedded">
+            <div class="dataset-editor-section__header">
+                <Skeleton class="skeleton--text skeleton--short"/>
+            </div>
+            <Skeleton class="skeleton--control skeleton--wide"/>
+            <Skeleton class="skeleton--panel skeleton--wide"/>
+            <Skeleton class="skeleton--text skeleton--medium"/>
+        </section>
     }
 }
 
@@ -930,6 +1015,83 @@ fn field_sort_group(field: &DatasetFieldDraft) -> u8 {
     }
 }
 
+fn catalog_before_operation_is_loading(
+    initial_source: DatasetSourceDraft,
+    datasets: Vec<DatasetSummary>,
+    rendered_forms: BTreeMap<String, DatasetRenderedForm>,
+    operation_order: Vec<DatasetOperationDraft>,
+    target_id: u64,
+) -> bool {
+    if source_reference_is_loading(&initial_source, &datasets, &rendered_forms) {
+        return true;
+    }
+
+    for operation in operation_order {
+        if operation.id == target_id {
+            return false;
+        }
+
+        if operation.kind == DatasetOperationDraftKind::AddSource
+            && let Some(source) = operation.source
+            && source_reference_is_loading(&source, &datasets, &rendered_forms)
+        {
+            return true;
+        }
+    }
+
+    false
+}
+
+fn source_reference_is_loading(
+    source: &DatasetSourceDraft,
+    datasets: &[DatasetSummary],
+    rendered_forms: &BTreeMap<String, DatasetRenderedForm>,
+) -> bool {
+    if source.input_kind.eq_ignore_ascii_case("dataset") {
+        return dataset_source_reference_is_loading(source, datasets);
+    }
+
+    let form_version_id = source.form_version_id.trim();
+    !form_version_id.is_empty() && !rendered_forms.contains_key(form_version_id)
+}
+
+fn dataset_source_reference_is_loading(
+    source: &DatasetSourceDraft,
+    datasets: &[DatasetSummary],
+) -> bool {
+    if source.dataset_id.trim().is_empty()
+        && source.dataset_revision_id.trim().is_empty()
+        && source.dataset_version_major.is_none()
+    {
+        return false;
+    }
+
+    let Some(dataset) = datasets.iter().find(|dataset| {
+        dataset.id == source.dataset_id
+            || dataset.current_revision_id.as_deref() == Some(source.dataset_revision_id.as_str())
+            || dataset
+                .revisions
+                .iter()
+                .any(|revision| revision.id == source.dataset_revision_id)
+    }) else {
+        return true;
+    };
+
+    if let Some(version_major) = source.dataset_version_major {
+        return !dataset.major_versions.contains(&version_major);
+    }
+
+    if !source.dataset_revision_id.trim().is_empty() {
+        return dataset.current_revision_id.as_deref() != Some(source.dataset_revision_id.as_str())
+            && !dataset
+                .revisions
+                .iter()
+                .any(|revision| revision.id == source.dataset_revision_id);
+    }
+
+    false
+}
+
 fn catalog_before_operation_id(
     initial_source: DatasetSourceDraft,
     datasets: Vec<DatasetSummary>,
@@ -1212,6 +1374,7 @@ mod tests {
             form_version_id: version_id.into(),
             dataset_id: String::new(),
             dataset_revision_id: String::new(),
+            dataset_version_major: None,
         }
     }
 
@@ -1223,6 +1386,7 @@ mod tests {
             form_version_id: String::new(),
             dataset_id: dataset_id.into(),
             dataset_revision_id: revision_id.into(),
+            dataset_version_major: None,
         }
     }
 
@@ -1248,6 +1412,10 @@ mod tests {
         DatasetSummary {
             id: dataset_id.into(),
             current_revision_id: Some(revision_id.into()),
+            current_version_major: Some(1),
+            current_version_minor: Some(0),
+            current_version_patch: Some(0),
+            major_versions: vec![1],
             name: dataset_id.into(),
             slug: dataset_id.into(),
             grain: "submission".into(),
@@ -1393,6 +1561,56 @@ mod tests {
         );
 
         assert!(before_projection.is_empty());
+    }
+
+    #[test]
+    fn catalog_before_operation_reports_loading_for_selected_unrendered_form_source() {
+        let initial_source = source("partner", "form_1", "version_1");
+        let projection = DatasetOperationDraft::new(1, DatasetOperationDraftKind::Projection);
+
+        assert!(catalog_before_operation_is_loading(
+            initial_source,
+            Vec::new(),
+            BTreeMap::new(),
+            vec![projection],
+            1,
+        ));
+    }
+
+    #[test]
+    fn catalog_before_operation_is_ready_after_form_source_renders() {
+        let initial_source = source("partner", "form_1", "version_1");
+        let projection = DatasetOperationDraft::new(1, DatasetOperationDraftKind::Projection);
+        let rendered_forms = BTreeMap::from([(
+            "version_1".to_string(),
+            rendered_form(
+                "form_1",
+                "version_1",
+                vec![("contact_name", "Contact Name", "text")],
+            ),
+        )]);
+
+        assert!(!catalog_before_operation_is_loading(
+            initial_source,
+            Vec::new(),
+            rendered_forms,
+            vec![projection],
+            1,
+        ));
+    }
+
+    #[test]
+    fn catalog_before_operation_does_not_report_loading_for_incomplete_source() {
+        let initial_source = DatasetSourceDraft::default();
+        let projection = DatasetOperationDraft::new(1, DatasetOperationDraftKind::Projection);
+
+        assert!(!catalog_before_operation_is_loading(
+            initial_source,
+            Vec::new(),
+            BTreeMap::new(),
+            vec![projection],
+            1,
+        ));
     }
 
     #[test]

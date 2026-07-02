@@ -8,6 +8,7 @@ pub(crate) struct DatasetSourceDraft {
     pub(crate) form_version_id: String,
     pub(crate) dataset_id: String,
     pub(crate) dataset_revision_id: String,
+    pub(crate) dataset_version_major: Option<i32>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -107,6 +108,7 @@ impl Default for DatasetSourceDraft {
             form_version_id: String::new(),
             dataset_id: String::new(),
             dataset_revision_id: String::new(),
+            dataset_version_major: None,
         }
     }
 }

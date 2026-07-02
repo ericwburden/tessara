@@ -28,6 +28,7 @@ pub(crate) struct DatasetEditLoadTargets {
     pub(crate) visibility_node_ids: RwSignal<BTreeSet<String>>,
     pub(crate) initial_source: RwSignal<DatasetSourceDraft>,
     pub(crate) operation_order: RwSignal<Vec<DatasetOperationDraft>>,
+    pub(crate) force_new_major_version: RwSignal<bool>,
     pub(crate) rendered_forms: RwSignal<BTreeMap<String, super::super::types::DatasetRenderedForm>>,
     pub(crate) restriction_internal_field_key: RwSignal<String>,
     pub(crate) restriction_restricted_field_key: RwSignal<String>,
@@ -45,6 +46,7 @@ pub(crate) fn load_dataset_for_edit(dataset_id: String, targets: DatasetEditLoad
             visibility_node_ids,
             initial_source,
             operation_order,
+            force_new_major_version,
             rendered_forms,
             restriction_internal_field_key,
             restriction_restricted_field_key,
@@ -57,6 +59,7 @@ pub(crate) fn load_dataset_for_edit(dataset_id: String, targets: DatasetEditLoad
             Ok(Some(payload)) => {
                 name.set(payload.name);
                 slug.set(payload.slug);
+                force_new_major_version.set(false);
                 sql_preview.set(None);
                 visibility_node_ids.set(
                     payload
@@ -76,6 +79,142 @@ pub(crate) fn load_dataset_for_edit(dataset_id: String, targets: DatasetEditLoad
                 preload_source_form(&initial_source_draft, rendered_forms);
                 initial_source.set(initial_source_draft);
                 let source_field_lookup = source_field_lookup(&payload.fields);
+                let mut operation_order_drafts = Vec::new();
+                for operation in payload.operations {
+                    match operation {
+                        DatasetOperationPayload::AddSource {
+                            source,
+                            add_type,
+                            join_keys,
+                            ..
+                        } => {
+                            let mut draft = DatasetOperationDraft::new(
+                                operation_order_drafts.len() as u64 + 1,
+                                DatasetOperationDraftKind::AddSource,
+                            );
+                            draft.source = Some(source_payload_to_draft(&source));
+                            if let Some(source) = draft.source.as_ref() {
+                                preload_source_form(source, rendered_forms);
+                            }
+                            draft.add_type = add_type;
+                            if let Some(join_key) = join_keys.first() {
+                                draft.left_field_key = join_key.left_field.clone();
+                                draft.right_field_key = join_key.right_field.clone();
+                            }
+                            operation_order_drafts.push(draft);
+                        }
+                        DatasetOperationPayload::Projection {
+                            fields: operation_fields,
+                            ..
+                        } => {
+                            let mut draft = DatasetOperationDraft::new(
+                                operation_order_drafts.len() as u64 + 1,
+                                DatasetOperationDraftKind::Projection,
+                            );
+                            draft.projection_fields = projection_field_drafts_from_payload(
+                                operation_fields,
+                                &source_field_lookup,
+                            );
+                            operation_order_drafts.push(draft);
+                        }
+                        DatasetOperationPayload::Aggregation {
+                            group_fields,
+                            metrics,
+                            row_picker,
+                            ..
+                        } => {
+                            let mut draft = DatasetOperationDraft::new(
+                                operation_order_drafts.len() as u64 + 1,
+                                DatasetOperationDraftKind::Aggregation,
+                            );
+                            draft.aggregation =
+                                aggregation_draft_from_payload(group_fields, metrics, row_picker);
+                            operation_order_drafts.push(draft);
+                        }
+                        DatasetOperationPayload::CalculatedFields {
+                            fields: operation_fields,
+                            ..
+                        } => {
+                            let mut draft = DatasetOperationDraft::new(
+                                operation_order_drafts.len() as u64 + 1,
+                                DatasetOperationDraftKind::CalculatedFields,
+                            );
+                            draft.calculated_fields =
+                                calculated_field_drafts_from_payload(operation_fields);
+                            operation_order_drafts.push(draft);
+                        }
+                        DatasetOperationPayload::Filter {
+                            filters: operation_filters,
+                            ..
+                        } => {
+                            let mut draft = DatasetOperationDraft::new(
+                                operation_order_drafts.len() as u64 + 1,
+                                DatasetOperationDraftKind::Filter,
+                            );
+                            draft.row_filters = row_filter_drafts_from_payload(operation_filters);
+                            operation_order_drafts.push(draft);
+                        }
+                    }
+                }
+                operation_order.set(operation_order_drafts);
+                let restriction_policy = payload.restriction_policy;
+                restriction_internal_field_key.set(
+                    restriction_policy
+                        .as_ref()
+                        .and_then(|policy| policy.internal_field_key.clone())
+                        .unwrap_or_default(),
+                );
+                restriction_restricted_field_key.set(
+                    restriction_policy
+                        .as_ref()
+                        .and_then(|policy| policy.restricted_field_key.clone())
+                        .unwrap_or_default(),
+                );
+                restriction_confidential_field_key.set(
+                    restriction_policy
+                        .and_then(|policy| policy.confidential_field_key)
+                        .unwrap_or_default(),
+                );
+            }
+            Ok(None) => {}
+            Err(message) => load_error.set(Some(message)),
+        }
+    });
+}
+
+#[cfg(feature = "hydrate")]
+pub(crate) fn load_dataset_revision_for_edit(
+    dataset_id: String,
+    revision_id: String,
+    targets: DatasetEditLoadTargets,
+) {
+    leptos::task::spawn_local(async move {
+        let DatasetEditLoadTargets {
+            name,
+            slug,
+            visibility_node_ids,
+            initial_source,
+            operation_order,
+            force_new_major_version,
+            rendered_forms,
+            restriction_internal_field_key,
+            restriction_restricted_field_key,
+            restriction_confidential_field_key,
+            sql_preview,
+            load_error,
+        } = targets;
+
+        match api::fetch_dataset_revision(&dataset_id, &revision_id).await {
+            Ok(Some(payload)) => {
+                name.set(payload.metadata.name);
+                slug.set(payload.metadata.slug);
+                force_new_major_version.set(payload.force_new_major_version);
+                sql_preview.set(None);
+                visibility_node_ids.set(payload.metadata.visibility_node_ids.into_iter().collect());
+                let initial_source_draft = source_payload_to_draft(&payload.initial_source);
+                preload_source_form(&initial_source_draft, rendered_forms);
+                initial_source.set(initial_source_draft);
+                let source_field_lookup = source_field_lookup(&payload.output_fields);
                 let mut operation_order_drafts = Vec::new();
                 for operation in payload.operations {
                     match operation {
@@ -327,3 +466,6 @@ fn source_field_lookup(
 
 #[cfg(not(feature = "hydrate"))]
 pub(crate) fn load_dataset_for_edit(_: String, _: DatasetEditLoadTargets) {}
+
+#[cfg(not(feature = "hydrate"))]
+pub(crate) fn load_dataset_revision_for_edit(_: String, _: String, _: DatasetEditLoadTargets) {}

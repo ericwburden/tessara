@@ -6,8 +6,11 @@
 use super::types::DatasetSqlPreviewResponse;
 #[cfg(feature = "hydrate")]
 use super::types::{
-    DatasetDefinition, DatasetFormOption, DatasetPayload, DatasetRenderedForm, DatasetSummary,
-    DatasetTable, DatasetUserOption, NodeResponse, SessionAccount,
+    DatasetDefinition, DatasetDraftRevisionResponse, DatasetFormOption, DatasetPayload,
+    DatasetPublishRevisionResponse, DatasetRenderedForm, DatasetRevisionDetail,
+    DatasetRevisionLabelRequest, DatasetRevisionLabelResponse, DatasetRevisionOptionsRequest,
+    DatasetRevisionSummary, DatasetSummary, DatasetTable, DatasetUserOption, NodeResponse,
+    SessionAccount,
 };
 
 #[cfg(feature = "hydrate")]
@@ -68,6 +71,29 @@ pub(super) async fn fetch_dataset_table(dataset_id: &str) -> Result<Option<Datas
 }
 
 #[cfg(feature = "hydrate")]
+pub(super) async fn fetch_dataset_revisions(
+    dataset_id: &str,
+) -> Result<Option<Vec<DatasetRevisionSummary>>, String> {
+    fetch_json(
+        &format!("/api/datasets/{dataset_id}/revisions"),
+        "Dataset revisions",
+    )
+    .await
+}
+
+#[cfg(feature = "hydrate")]
+pub(super) async fn fetch_dataset_revision(
+    dataset_id: &str,
+    revision_id: &str,
+) -> Result<Option<DatasetRevisionDetail>, String> {
+    fetch_json(
+        &format!("/api/datasets/{dataset_id}/revisions/{revision_id}"),
+        "Dataset revision",
+    )
+    .await
+}
+
+#[cfg(feature = "hydrate")]
 /// Fetches the fetch forms data.
 pub(super) async fn fetch_forms() -> Result<Option<Vec<DatasetFormOption>>, String> {
     fetch_json("/api/forms", "Form options").await
@@ -111,12 +137,18 @@ pub(super) async fn save_dataset_payload(
         .map_err(|_| "Dataset payload could not be prepared.".to_string())?;
 
     if let Some(dataset_id) = dataset_id {
-        send_json_request(
-            gloo_net::http::Request::put(&format!("/api/admin/datasets/{dataset_id}")),
+        let response: DatasetDraftRevisionResponse = send_json_request(
+            gloo_net::http::Request::post(&format!(
+                "/api/admin/datasets/{dataset_id}/draft-revision"
+            )),
             Some(body),
-            "dataset update",
+            "dataset draft revision",
         )
-        .await
+        .await?;
+        Ok(serde_json::json!({
+            "dataset_id": response.dataset_id,
+            "revision_id": response.revision_id
+        }))
     } else {
         send_json_request(
             gloo_net::http::Request::post("/api/admin/datasets"),
@@ -125,6 +157,82 @@ pub(super) async fn save_dataset_payload(
         )
         .await
     }
+}
+
+#[cfg(feature = "hydrate")]
+pub(super) async fn publish_dataset_revision(
+    dataset_id: &str,
+    revision_id: &str,
+) -> Result<DatasetPublishRevisionResponse, String> {
+    send_json_request(
+        gloo_net::http::Request::post(&format!(
+            "/api/admin/datasets/{dataset_id}/revisions/{revision_id}/publish"
+        )),
+        None,
+        "dataset revision publish",
+    )
+    .await
+}
+
+#[cfg(feature = "hydrate")]
+pub(super) async fn delete_dataset_revision(
+    dataset_id: &str,
+    revision_id: &str,
+) -> Result<serde_json::Value, String> {
+    send_json_request(
+        gloo_net::http::Request::delete(&format!(
+            "/api/admin/datasets/{dataset_id}/revisions/{revision_id}"
+        )),
+        None,
+        "dataset revision delete",
+    )
+    .await
+}
+
+#[cfg(feature = "hydrate")]
+pub(super) async fn update_dataset_revision_label(
+    dataset_id: &str,
+    revision_id: &str,
+    version_label: String,
+    revision_notes: String,
+) -> Result<DatasetRevisionLabelResponse, String> {
+    let label = version_label.trim();
+    let notes = revision_notes.trim();
+    let body = serde_json::to_string(&DatasetRevisionLabelRequest {
+        version_label: (!label.is_empty()).then(|| label.to_string()),
+        revision_notes: (!notes.is_empty()).then(|| notes.to_string()),
+    })
+    .map_err(|_| "Revision label could not be prepared.".to_string())?;
+
+    send_json_request(
+        gloo_net::http::Request::patch(&format!(
+            "/api/admin/datasets/{dataset_id}/revisions/{revision_id}/label"
+        )),
+        Some(body),
+        "dataset revision label",
+    )
+    .await
+}
+
+#[cfg(feature = "hydrate")]
+pub(super) async fn update_dataset_revision_options(
+    dataset_id: &str,
+    revision_id: &str,
+    force_new_major_version: bool,
+) -> Result<DatasetRevisionDetail, String> {
+    let body = serde_json::to_string(&DatasetRevisionOptionsRequest {
+        force_new_major_version,
+    })
+    .map_err(|_| "Revision options could not be prepared.".to_string())?;
+
+    send_json_request(
+        gloo_net::http::Request::patch(&format!(
+            "/api/admin/datasets/{dataset_id}/revisions/{revision_id}/options"
+        )),
+        Some(body),
+        "dataset revision options",
+    )
+    .await
 }
 
 #[cfg(feature = "hydrate")]

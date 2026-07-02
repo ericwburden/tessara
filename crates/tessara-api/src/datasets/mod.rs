@@ -10,7 +10,7 @@ use axum::{
     Json, Router,
     extract::{Path, State},
     http::HeaderMap,
-    routing::{get, post},
+    routing::{delete, get, patch, post},
 };
 use sqlx::{Column, Postgres, Row, Transaction};
 use tessara_datasets::DatasetGrain;
@@ -20,11 +20,18 @@ mod dto;
 mod restriction_tiers;
 
 pub use dto::{
-    CreateDatasetRequest, DatasetAggregationRequest, DatasetCalculatedFieldRequest,
-    DatasetDefinition, DatasetFieldDefinition, DatasetJoinKeyRequest, DatasetOperationRequest,
-    DatasetProjectionFieldRequest, DatasetRestrictionPolicyRequest, DatasetRevisionFieldSummary,
-    DatasetRowFilterRequest, DatasetSourceDefinition, DatasetSourceRequest, DatasetSqlPreview,
-    DatasetSummary, DatasetTable, DatasetTableRow, DatasetVisibilityNodeSummary,
+    CreateDatasetRequest, DatasetAggregationMetricRequest, DatasetAggregationRequest,
+    DatasetCalculatedFieldRequest, DatasetCarryForwardState, DatasetCompatibilityFinding,
+    DatasetCompatibilityState, DatasetCompatibilitySummary, DatasetDefinition,
+    DatasetDependencyImpact, DatasetDependencyKind, DatasetDependencySummary,
+    DatasetDraftRevisionResponse, DatasetFieldDefinition, DatasetJoinKeyRequest,
+    DatasetOperationRequest, DatasetProjectionFieldRequest, DatasetPublishRevisionResponse,
+    DatasetRestrictionPolicyRequest, DatasetRevisionDetail, DatasetRevisionFieldSummary,
+    DatasetRevisionLabelResponse, DatasetRevisionMetadata, DatasetRevisionStatus,
+    DatasetRevisionSummary, DatasetRowFilterRequest, DatasetRowPickerRequest,
+    DatasetSourceDefinition, DatasetSourceRequest, DatasetSqlPreview, DatasetSummary, DatasetTable,
+    DatasetTableRow, DatasetVersionImpact, DatasetVisibilityNodeSummary,
+    UpdateDatasetRevisionLabelRequest, UpdateDatasetRevisionOptionsRequest,
 };
 
 use crate::{
@@ -50,8 +57,36 @@ pub(crate) fn routes() -> Router<AppState> {
             "/api/admin/datasets/{dataset_id}",
             axum::routing::put(update_dataset).delete(delete_dataset),
         )
+        .route(
+            "/api/admin/datasets/{dataset_id}/draft-revision",
+            post(save_dataset_draft_revision),
+        )
+        .route(
+            "/api/admin/datasets/{dataset_id}/revisions/{revision_id}/publish",
+            post(publish_dataset_revision),
+        )
+        .route(
+            "/api/admin/datasets/{dataset_id}/revisions/{revision_id}/label",
+            patch(update_dataset_revision_label),
+        )
+        .route(
+            "/api/admin/datasets/{dataset_id}/revisions/{revision_id}/options",
+            patch(update_dataset_revision_options),
+        )
+        .route(
+            "/api/admin/datasets/{dataset_id}/revisions/{revision_id}",
+            delete(delete_dataset_revision),
+        )
         .route("/api/datasets", get(list_datasets))
         .route("/api/datasets/{dataset_id}", get(get_dataset))
+        .route(
+            "/api/datasets/{dataset_id}/revisions",
+            get(list_dataset_revisions),
+        )
+        .route(
+            "/api/datasets/{dataset_id}/revisions/{revision_id}",
+            get(get_dataset_revision),
+        )
         .route("/api/datasets/{dataset_id}/table", get(run_dataset_table))
 }
 
@@ -60,7 +95,9 @@ struct ValidatedDatasetSource {
     source_alias: String,
     form_id: Option<Uuid>,
     form_version_id: Option<Uuid>,
+    source_dataset_id: Option<Uuid>,
     dataset_revision_id: Option<Uuid>,
+    dataset_version_major: Option<i32>,
     position: i32,
 }
 
@@ -236,6 +273,100 @@ struct PublishedFormVersionIdentity {
     id: Uuid,
 }
 
+struct DatasetRevisionSnapshot {
+    id: Uuid,
+    dataset_id: Uuid,
+    version_number: i32,
+    version_label: String,
+    revision_notes: String,
+    version_major: Option<i32>,
+    version_minor: Option<i32>,
+    version_patch: Option<i32>,
+    semantic_bump: Option<String>,
+    started_new_major_line: Option<bool>,
+    force_new_major_version: bool,
+    status: DatasetRevisionStatus,
+    created_at: chrono::DateTime<chrono::Utc>,
+    published_at: Option<chrono::DateTime<chrono::Utc>>,
+    materialized_schema: Option<String>,
+    materialized_table: Option<String>,
+    materialized_row_count: Option<i64>,
+    materialized_at: Option<chrono::DateTime<chrono::Utc>>,
+    metadata: DatasetRevisionMetadata,
+    initial_source: DatasetSourceRequest,
+    operations: Vec<DatasetOperationRequest>,
+    restriction_policy: Option<DatasetRestrictionPolicyRequest>,
+    compatibility_findings: Vec<DatasetCompatibilityFinding>,
+    generated_sql: Option<String>,
+    output_fields: Vec<DatasetFieldDefinition>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DatasetSemanticBump {
+    Initial,
+    Patch,
+    Minor,
+    Major,
+}
+
+impl DatasetSemanticBump {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Initial => "INITIAL",
+            Self::Patch => "PATCH",
+            Self::Minor => "MINOR",
+            Self::Major => "MAJOR",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct DatasetSemanticVersion {
+    major: i32,
+    minor: i32,
+    patch: i32,
+}
+
+impl DatasetSemanticVersion {
+    fn increment(self, bump: DatasetSemanticBump) -> Self {
+        match bump {
+            DatasetSemanticBump::Initial => Self {
+                major: 1,
+                minor: 0,
+                patch: 0,
+            },
+            DatasetSemanticBump::Patch => Self {
+                major: self.major,
+                minor: self.minor,
+                patch: self.patch + 1,
+            },
+            DatasetSemanticBump::Minor => Self {
+                major: self.major,
+                minor: self.minor + 1,
+                patch: 0,
+            },
+            DatasetSemanticBump::Major => Self {
+                major: self.major + 1,
+                minor: 0,
+                patch: 0,
+            },
+        }
+    }
+
+    fn label(self) -> String {
+        format!("{}.{}.{}", self.major, self.minor, self.patch)
+    }
+}
+
+struct DatasetRevisionReview {
+    snapshot: DatasetRevisionSnapshot,
+    is_current: bool,
+    compatibility: DatasetCompatibilitySummary,
+    compatibility_findings: Vec<DatasetCompatibilityFinding>,
+    dependencies: DatasetDependencySummary,
+    dependency_impacts: Vec<DatasetDependencyImpact>,
+}
+
 fn internal_dataset_columns() -> BTreeSet<String> {
     // Security invariant: every pipeline CTE must expose __row_id and
     // __restriction_tier. The tier column must represent the most sensitive
@@ -338,6 +469,7 @@ async fn preview_dataset_sql_inner(
     let account = auth::require_capability(&state.pool, &headers, "datasets:manage").await?;
     require_text("dataset name", &payload.name)?;
     require_text("dataset slug", &payload.slug)?;
+    validate_version_label(&payload)?;
     let grain = DatasetGrain::parse(&payload.grain)
         .map_err(|error| ApiError::BadRequest(error.to_string()))?;
     if grain != DatasetGrain::Submission {
@@ -360,6 +492,7 @@ pub async fn create_dataset(
     let account = auth::require_capability(&state.pool, &headers, "datasets:manage").await?;
     require_text("dataset name", &payload.name)?;
     require_text("dataset slug", &payload.slug)?;
+    validate_version_label(&payload)?;
     require_dataset_slug_available(&state.pool, &payload.slug).await?;
     require_node_ids_exist(&state.pool, &payload.visibility_node_ids).await?;
     auth::require_capability_contains_nodes(
@@ -394,11 +527,24 @@ pub async fn create_dataset(
     let revision_id = insert_dataset_revision(
         &mut tx,
         dataset_id,
-        "Initial published definition",
+        payload.version_label.as_deref(),
+        &DatasetRevisionMetadata::from(&payload),
         &compiled,
     )
     .await?;
     materialize_dataset_revision(&mut tx, revision_id, &compiled).await?;
+    update_revision_semantic_fields_tx(
+        &mut tx,
+        revision_id,
+        DatasetSemanticVersion {
+            major: 1,
+            minor: 0,
+            patch: 0,
+        },
+        DatasetSemanticBump::Initial,
+    )
+    .await?;
+    rebuild_dataset_major_materialization(&mut tx, dataset_id, 1).await?;
     tx.commit().await?;
 
     Ok(Json(IdResponse { id: dataset_id }))
@@ -435,11 +581,19 @@ pub async fn update_dataset(
     }
     let compiled =
         compile_dataset_definition(&state.pool, &account, Some(dataset_id), &payload).await?;
+    let (semantic_version, semantic_bump) = compute_dataset_publish_semantic_version_for_compiled(
+        &state.pool,
+        dataset_id,
+        &payload,
+        &compiled,
+    )
+    .await?;
 
     let mut tx = state.pool.begin().await?;
+    lock_dataset_for_update(&mut tx, dataset_id).await?;
     sqlx::query("UPDATE datasets SET name = $1, slug = $2, grain = $3 WHERE id = $4")
-        .bind(payload.name)
-        .bind(payload.slug)
+        .bind(&payload.name)
+        .bind(&payload.slug)
         .bind(grain.as_str())
         .bind(dataset_id)
         .execute(&mut *tx)
@@ -458,14 +612,368 @@ pub async fn update_dataset(
     let revision_id = insert_dataset_revision(
         &mut tx,
         dataset_id,
-        "Published definition update",
+        payload.version_label.as_deref(),
+        &DatasetRevisionMetadata::from(&payload),
         &compiled,
     )
     .await?;
     materialize_dataset_revision(&mut tx, revision_id, &compiled).await?;
+    sqlx::query(
+        r#"
+        UPDATE dataset_revisions
+        SET status = 'superseded'::dataset_revision_status
+        WHERE dataset_id = $1
+          AND id <> $2
+          AND status IN ('published'::dataset_revision_status, 'superseded'::dataset_revision_status)
+        "#,
+    )
+    .bind(dataset_id)
+    .bind(revision_id)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        r#"
+        UPDATE dataset_revisions
+        SET status = 'published'::dataset_revision_status,
+            published_at = now()
+        WHERE id = $1
+          AND dataset_id = $2
+        "#,
+    )
+    .bind(revision_id)
+    .bind(dataset_id)
+    .execute(&mut *tx)
+    .await?;
+    update_revision_semantic_fields_tx(&mut tx, revision_id, semantic_version, semantic_bump)
+        .await?;
+    rebuild_dataset_major_materialization(&mut tx, dataset_id, semantic_version.major).await?;
+    refresh_major_line_consumers(&mut tx, dataset_id, semantic_version.major).await?;
     tx.commit().await?;
 
     Ok(Json(IdResponse { id: dataset_id }))
+}
+
+/// Saves an existing dataset edit as the dataset's single open draft revision.
+pub async fn save_dataset_draft_revision(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(dataset_id): Path<Uuid>,
+    Json(payload): Json<CreateDatasetRequest>,
+) -> ApiResult<Json<DatasetDraftRevisionResponse>> {
+    let account = auth::require_capability(&state.pool, &headers, "datasets:manage").await?;
+    validate_existing_dataset_mutation(&state.pool, &account, dataset_id, &payload).await?;
+    let compiled =
+        compile_dataset_definition(&state.pool, &account, Some(dataset_id), &payload).await?;
+    let metadata = DatasetRevisionMetadata::from(&payload);
+
+    let mut tx = state.pool.begin().await?;
+    lock_dataset_for_update(&mut tx, dataset_id).await?;
+    let revision_id = upsert_dataset_draft_revision(
+        &mut tx,
+        dataset_id,
+        payload.version_label.as_deref(),
+        &metadata,
+        &compiled,
+    )
+    .await?;
+    tx.commit().await?;
+
+    let (semantic_version, semantic_bump) =
+        compute_dataset_publish_semantic_version(&state.pool, dataset_id, revision_id).await?;
+    update_revision_semantic_fields(&state.pool, revision_id, semantic_version, semantic_bump)
+        .await?;
+    let review = load_dataset_revision_review(&state.pool, dataset_id, revision_id).await?;
+    Ok(Json(DatasetDraftRevisionResponse {
+        dataset_id,
+        revision_id,
+        status: DatasetRevisionStatus::Draft,
+        compatibility: review.compatibility,
+        dependencies: review.dependencies,
+    }))
+}
+
+/// Publishes a draft revision, atomically replacing current-published catalog rows.
+pub async fn publish_dataset_revision(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((dataset_id, revision_id)): Path<(Uuid, Uuid)>,
+) -> ApiResult<Json<DatasetPublishRevisionResponse>> {
+    let account = auth::require_capability(&state.pool, &headers, "datasets:manage").await?;
+    require_dataset_exists(&state.pool, dataset_id).await?;
+    require_dataset_fully_in_capability_scope(&state.pool, &account, "datasets:manage", dataset_id)
+        .await?;
+
+    let draft = load_revision_snapshot(&state.pool, dataset_id, revision_id).await?;
+    if draft.status != DatasetRevisionStatus::Draft {
+        return Err(ApiError::BadRequest(
+            "only draft dataset revisions can be published".into(),
+        ));
+    }
+    require_dataset_slug_available_for_update(&state.pool, dataset_id, &draft.metadata.slug)
+        .await?;
+    require_node_ids_exist(&state.pool, &draft.metadata.visibility_node_ids).await?;
+    auth::require_capability_contains_nodes(
+        &state.pool,
+        &account,
+        "datasets:manage",
+        &draft.metadata.visibility_node_ids,
+    )
+    .await?;
+    let publish_payload = CreateDatasetRequest {
+        name: draft.metadata.name.clone(),
+        slug: draft.metadata.slug.clone(),
+        grain: draft.metadata.grain.clone(),
+        version_label: Some(draft.version_label.clone()),
+        force_new_major_version: draft.force_new_major_version,
+        visibility_node_ids: draft.metadata.visibility_node_ids.clone(),
+        initial_source: draft.initial_source.clone(),
+        operations: draft.operations.clone(),
+        restriction_policy: draft.restriction_policy.clone(),
+    };
+    let compiled =
+        compile_dataset_definition(&state.pool, &account, Some(dataset_id), &publish_payload)
+            .await?;
+    let (semantic_version, semantic_bump) =
+        compute_dataset_publish_semantic_version(&state.pool, dataset_id, revision_id).await?;
+    let draft_review = load_dataset_revision_review(&state.pool, dataset_id, revision_id).await?;
+    require_publishable_changelog(&draft_review.compatibility_findings)?;
+
+    let mut tx = state.pool.begin().await?;
+    lock_dataset_for_update(&mut tx, dataset_id).await?;
+    sqlx::query("UPDATE datasets SET name = $1, slug = $2, grain = $3 WHERE id = $4")
+        .bind(&draft.metadata.name)
+        .bind(&draft.metadata.slug)
+        .bind(&draft.metadata.grain)
+        .bind(dataset_id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM dataset_sources WHERE dataset_id = $1")
+        .bind(dataset_id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM dataset_fields WHERE dataset_id = $1")
+        .bind(dataset_id)
+        .execute(&mut *tx)
+        .await?;
+    insert_dataset_sources(&mut tx, dataset_id, &compiled.sources).await?;
+    insert_dataset_fields(&mut tx, dataset_id, &compiled.fields).await?;
+    replace_dataset_scope_nodes_tx(&mut tx, dataset_id, &draft.metadata.visibility_node_ids)
+        .await?;
+    let superseded_revision_id = current_published_revision_id_tx(&mut tx, dataset_id).await?;
+    sqlx::query(
+        r#"
+        UPDATE dataset_revisions
+        SET status = 'superseded'::dataset_revision_status
+        WHERE dataset_id = $1
+          AND status IN ('published'::dataset_revision_status, 'superseded'::dataset_revision_status)
+        "#,
+    )
+    .bind(dataset_id)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        r#"
+        UPDATE dataset_revisions
+        SET status = 'published'::dataset_revision_status,
+            published_at = now(),
+            version_major = $1,
+            version_minor = $2,
+            version_patch = $3,
+            semantic_bump = $4,
+            started_new_major_line = $5,
+            initial_source = $6,
+            operations = $7,
+            restriction_policy = $8,
+            generated_sql = $9,
+            output_fields = $10,
+            definition_metadata = $11,
+            force_new_major_version = $12,
+            compatibility_findings = $13
+        WHERE id = $14
+          AND dataset_id = $15
+          AND status = 'draft'::dataset_revision_status
+        "#,
+    )
+    .bind(semantic_version.major)
+    .bind(semantic_version.minor)
+    .bind(semantic_version.patch)
+    .bind(semantic_bump.as_str())
+    .bind(matches!(
+        semantic_bump,
+        DatasetSemanticBump::Initial | DatasetSemanticBump::Major
+    ))
+    .bind(serialize_initial_source(&compiled)?)
+    .bind(serialize_operations(&compiled)?)
+    .bind(serialize_restriction_policy(&compiled)?)
+    .bind(&compiled.generated_sql)
+    .bind(serialize_output_fields(&compiled)?)
+    .bind(serialize_metadata(&draft.metadata)?)
+    .bind(draft.force_new_major_version)
+    .bind(serialize_compatibility_findings(
+        &draft_review.compatibility_findings,
+    )?)
+    .bind(revision_id)
+    .bind(dataset_id)
+    .execute(&mut *tx)
+    .await?;
+    materialize_dataset_revision(&mut tx, revision_id, &compiled).await?;
+    rebuild_dataset_major_materialization(&mut tx, dataset_id, semantic_version.major).await?;
+    refresh_major_line_consumers(&mut tx, dataset_id, semantic_version.major).await?;
+    tx.commit().await?;
+
+    let review = load_dataset_revision_review(&state.pool, dataset_id, revision_id).await?;
+    Ok(Json(DatasetPublishRevisionResponse {
+        dataset_id,
+        revision_id,
+        superseded_revision_id,
+        version_label: semantic_version.label(),
+        version_major: semantic_version.major,
+        version_minor: semantic_version.minor,
+        version_patch: semantic_version.patch,
+        semantic_bump: semantic_bump.as_str().into(),
+        started_new_major_line: matches!(
+            semantic_bump,
+            DatasetSemanticBump::Initial | DatasetSemanticBump::Major
+        ),
+        status: DatasetRevisionStatus::Published,
+        dependencies: review.dependencies,
+    }))
+}
+
+/// Deletes an unpublished draft revision.
+pub async fn delete_dataset_revision(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((dataset_id, revision_id)): Path<(Uuid, Uuid)>,
+) -> ApiResult<Json<IdResponse>> {
+    let account = auth::require_capability(&state.pool, &headers, "datasets:manage").await?;
+    require_dataset_exists(&state.pool, dataset_id).await?;
+    require_dataset_fully_in_capability_scope(&state.pool, &account, "datasets:manage", dataset_id)
+        .await?;
+
+    let snapshot = load_revision_snapshot(&state.pool, dataset_id, revision_id).await?;
+    if snapshot.status != DatasetRevisionStatus::Draft {
+        return Err(ApiError::BadRequest(
+            "only draft dataset revisions can be deleted".into(),
+        ));
+    }
+
+    sqlx::query(
+        r#"
+        DELETE FROM dataset_revisions
+        WHERE dataset_id = $1
+          AND id = $2
+          AND status = 'draft'::dataset_revision_status
+        "#,
+    )
+    .bind(dataset_id)
+    .bind(revision_id)
+    .execute(&state.pool)
+    .await?;
+
+    Ok(Json(IdResponse { id: revision_id }))
+}
+
+/// Updates revision-authored metadata without changing the revision definition.
+pub async fn update_dataset_revision_label(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((dataset_id, revision_id)): Path<(Uuid, Uuid)>,
+    Json(payload): Json<UpdateDatasetRevisionLabelRequest>,
+) -> ApiResult<Json<DatasetRevisionLabelResponse>> {
+    let account = auth::require_capability(&state.pool, &headers, "datasets:manage").await?;
+    require_dataset_exists(&state.pool, dataset_id).await?;
+    require_dataset_fully_in_capability_scope(&state.pool, &account, "datasets:manage", dataset_id)
+        .await?;
+    validate_revision_label_value(payload.version_label.as_deref())?;
+    validate_revision_notes_value(payload.revision_notes.as_deref())?;
+
+    let version_number: i32 = sqlx::query_scalar(
+        r#"
+        SELECT version_number
+        FROM dataset_revisions
+        WHERE dataset_id = $1
+          AND id = $2
+        "#,
+    )
+    .bind(dataset_id)
+    .bind(revision_id)
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or_else(|| ApiError::NotFound(format!("dataset revision {revision_id}")))?;
+    let version_label = revision_label_or_number(payload.version_label.as_deref(), version_number);
+    let revision_notes = payload
+        .revision_notes
+        .as_deref()
+        .map(str::trim)
+        .unwrap_or_default()
+        .to_string();
+
+    sqlx::query(
+        r#"
+        UPDATE dataset_revisions
+        SET version_label = $1,
+            revision_notes = $2
+        WHERE dataset_id = $3
+          AND id = $4
+        "#,
+    )
+    .bind(&version_label)
+    .bind(&revision_notes)
+    .bind(dataset_id)
+    .bind(revision_id)
+    .execute(&state.pool)
+    .await?;
+
+    Ok(Json(DatasetRevisionLabelResponse {
+        dataset_id,
+        revision_id,
+        version_label,
+        revision_notes,
+    }))
+}
+
+/// Updates draft-only review options for a dataset revision.
+pub async fn update_dataset_revision_options(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((dataset_id, revision_id)): Path<(Uuid, Uuid)>,
+    Json(payload): Json<UpdateDatasetRevisionOptionsRequest>,
+) -> ApiResult<Json<DatasetRevisionDetail>> {
+    let account = auth::require_capability(&state.pool, &headers, "datasets:manage").await?;
+    require_dataset_exists(&state.pool, dataset_id).await?;
+    require_dataset_fully_in_capability_scope(&state.pool, &account, "datasets:manage", dataset_id)
+        .await?;
+
+    let snapshot = load_revision_snapshot(&state.pool, dataset_id, revision_id).await?;
+    if snapshot.status != DatasetRevisionStatus::Draft {
+        return Err(ApiError::BadRequest(
+            "only draft dataset revisions can change revision options".into(),
+        ));
+    }
+
+    sqlx::query(
+        r#"
+        UPDATE dataset_revisions
+        SET force_new_major_version = $1
+        WHERE id = $2
+          AND dataset_id = $3
+          AND status = 'draft'::dataset_revision_status
+        "#,
+    )
+    .bind(payload.force_new_major_version)
+    .bind(revision_id)
+    .bind(dataset_id)
+    .execute(&state.pool)
+    .await?;
+
+    let (semantic_version, semantic_bump) =
+        compute_dataset_publish_semantic_version(&state.pool, dataset_id, revision_id).await?;
+    update_revision_semantic_fields(&state.pool, revision_id, semantic_version, semantic_bump)
+        .await?;
+
+    let review = load_dataset_revision_review(&state.pool, dataset_id, revision_id).await?;
+    Ok(Json(dataset_revision_detail_from_review(review)))
 }
 
 /// Deletes a dataset definition.
@@ -502,6 +1010,9 @@ pub async fn list_datasets(
         SELECT
             datasets.id,
             current_revisions.id AS current_revision_id,
+            current_revisions.version_major AS current_version_major,
+            current_revisions.version_minor AS current_version_minor,
+            current_revisions.version_patch AS current_version_patch,
             datasets.name,
             datasets.slug,
             datasets.grain,
@@ -520,6 +1031,9 @@ pub async fn list_datasets(
         GROUP BY
             datasets.id,
             current_revisions.id,
+            current_revisions.version_major,
+            current_revisions.version_minor,
+            current_revisions.version_patch,
             current_revisions.materialized_row_count,
             current_revisions.materialized_at,
             datasets.name,
@@ -539,6 +1053,9 @@ pub async fn list_datasets(
         SELECT
             datasets.id,
             current_revisions.id AS current_revision_id,
+            current_revisions.version_major AS current_version_major,
+            current_revisions.version_minor AS current_version_minor,
+            current_revisions.version_patch AS current_version_patch,
             datasets.name,
             datasets.slug,
             datasets.grain,
@@ -555,6 +1072,9 @@ pub async fn list_datasets(
         GROUP BY
             datasets.id,
             current_revisions.id,
+            current_revisions.version_major,
+            current_revisions.version_minor,
+            current_revisions.version_patch,
             current_revisions.materialized_row_count,
             current_revisions.materialized_at,
             datasets.name,
@@ -582,7 +1102,7 @@ pub async fn list_datasets(
     let mut output_fields_by_revision = BTreeMap::<Uuid, Vec<DatasetFieldDefinition>>::new();
     let revision_rows = sqlx::query(
         r#"
-        SELECT dataset_id, id
+        SELECT dataset_id, id, version_major, status::text AS status
         FROM dataset_revisions
         WHERE dataset_id = ANY($1)
         ORDER BY dataset_id, version_number
@@ -592,9 +1112,20 @@ pub async fn list_datasets(
     .fetch_all(&state.pool)
     .await?;
     let mut revisions_by_dataset = BTreeMap::<Uuid, Vec<Uuid>>::new();
+    let mut major_versions_by_dataset = BTreeMap::<Uuid, BTreeSet<i32>>::new();
     for row in revision_rows {
         let dataset_id: Uuid = row.try_get("dataset_id")?;
         let revision_id: Uuid = row.try_get("id")?;
+        let version_major: Option<i32> = row.try_get("version_major")?;
+        let status: String = row.try_get("status")?;
+        if status != "draft" {
+            if let Some(version_major) = version_major {
+                major_versions_by_dataset
+                    .entry(dataset_id)
+                    .or_default()
+                    .insert(version_major);
+            }
+        }
         revisions_by_dataset
             .entry(dataset_id)
             .or_default()
@@ -615,6 +1146,13 @@ pub async fn list_datasets(
             Ok(DatasetSummary {
                 id,
                 current_revision_id,
+                current_version_major: row.try_get("current_version_major")?,
+                current_version_minor: row.try_get("current_version_minor")?,
+                current_version_patch: row.try_get("current_version_patch")?,
+                major_versions: major_versions_by_dataset
+                    .get(&id)
+                    .map(|versions| versions.iter().copied().collect())
+                    .unwrap_or_default(),
                 name: row.try_get("name")?,
                 slug: row.try_get("slug")?,
                 grain: row.try_get("grain")?,
@@ -663,6 +1201,11 @@ pub async fn get_dataset(
     let dataset = sqlx::query(
         r#"
         SELECT datasets.id, current_revisions.id AS current_revision_id,
+               current_revisions.version_number AS current_revision_number,
+               current_revisions.version_label AS current_revision_label,
+               current_revisions.version_major AS current_version_major,
+               current_revisions.version_minor AS current_version_minor,
+               current_revisions.version_patch AS current_version_patch,
                datasets.name, datasets.slug, datasets.grain,
                current_revisions.initial_source,
                current_revisions.operations,
@@ -692,7 +1235,9 @@ pub async fn get_dataset(
             dataset_sources.form_id,
             forms.name AS form_name,
             dataset_sources.form_version_id,
+            dataset_sources.source_dataset_id,
             dataset_sources.dataset_revision_id,
+            dataset_sources.dataset_version_major,
             dataset_sources.position
         FROM dataset_sources
         LEFT JOIN forms ON forms.id = dataset_sources.form_id
@@ -762,6 +1307,11 @@ pub async fn get_dataset(
     Ok(Json(DatasetDefinition {
         id: dataset.try_get("id")?,
         current_revision_id,
+        current_revision_number: dataset.try_get("current_revision_number")?,
+        current_revision_label: dataset.try_get("current_revision_label")?,
+        current_version_major: dataset.try_get("current_version_major")?,
+        current_version_minor: dataset.try_get("current_version_minor")?,
+        current_version_patch: dataset.try_get("current_version_patch")?,
         name: dataset.try_get("name")?,
         slug: dataset.try_get("slug")?,
         grain: dataset.try_get("grain")?,
@@ -794,7 +1344,9 @@ pub async fn get_dataset(
                     form_id: row.try_get("form_id")?,
                     form_name: row.try_get("form_name")?,
                     form_version_id: row.try_get("form_version_id")?,
+                    source_dataset_id: row.try_get("source_dataset_id")?,
                     dataset_revision_id: row.try_get("dataset_revision_id")?,
+                    dataset_version_major: row.try_get("dataset_version_major")?,
                     position: row.try_get("position")?,
                 })
             })
@@ -802,6 +1354,122 @@ pub async fn get_dataset(
         fields: fields.iter().map(dataset_field_definition).collect(),
         output_fields: output_fields.iter().map(dataset_field_definition).collect(),
     }))
+}
+
+/// Lists all revisions for one visible dataset.
+pub async fn list_dataset_revisions(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(dataset_id): Path<Uuid>,
+) -> ApiResult<Json<Vec<DatasetRevisionSummary>>> {
+    let account = auth::require_capability(&state.pool, &headers, "datasets:read").await?;
+    let boundary = auth::capability_boundary(&state.pool, &account, "datasets:read").await?;
+    require_dataset_visible_for_boundary(&state.pool, dataset_id, &boundary, "datasets:read")
+        .await?;
+    let can_manage =
+        dataset_fully_in_capability_scope(&state.pool, &account, "datasets:manage", dataset_id)
+            .await?;
+
+    let rows = sqlx::query(
+        r#"
+        SELECT id, status::text AS status
+        FROM dataset_revisions
+        WHERE dataset_id = $1
+        ORDER BY version_number DESC
+        "#,
+    )
+    .bind(dataset_id)
+    .fetch_all(&state.pool)
+    .await?;
+
+    let mut revisions = Vec::new();
+    for row in rows {
+        let status = parse_revision_status(row.try_get::<String, _>("status")?.as_str())?;
+        if status == DatasetRevisionStatus::Draft && !can_manage {
+            continue;
+        }
+        let revision_id: Uuid = row.try_get("id")?;
+        let review = load_dataset_revision_review(&state.pool, dataset_id, revision_id).await?;
+        revisions.push(DatasetRevisionSummary {
+            id: review.snapshot.id,
+            dataset_id: review.snapshot.dataset_id,
+            version_number: review.snapshot.version_number,
+            version_label: review.snapshot.version_label,
+            version_major: review.snapshot.version_major,
+            version_minor: review.snapshot.version_minor,
+            version_patch: review.snapshot.version_patch,
+            semantic_bump: review.snapshot.semantic_bump,
+            started_new_major_line: review.snapshot.started_new_major_line,
+            force_new_major_version: review.snapshot.force_new_major_version,
+            status: review.snapshot.status,
+            is_current: review.is_current,
+            created_at: review.snapshot.created_at,
+            published_at: review.snapshot.published_at,
+            materialized_at: review.snapshot.materialized_at,
+            materialized_row_count: review.snapshot.materialized_row_count,
+            output_field_count: review.snapshot.output_fields.len(),
+            compatibility: review.compatibility,
+            dependencies: review.dependencies,
+        });
+    }
+
+    Ok(Json(revisions))
+}
+
+/// Returns one revision snapshot with compatibility and downstream impact.
+pub async fn get_dataset_revision(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((dataset_id, revision_id)): Path<(Uuid, Uuid)>,
+) -> ApiResult<Json<DatasetRevisionDetail>> {
+    let account = auth::require_capability(&state.pool, &headers, "datasets:read").await?;
+    let boundary = auth::capability_boundary(&state.pool, &account, "datasets:read").await?;
+    require_dataset_visible_for_boundary(&state.pool, dataset_id, &boundary, "datasets:read")
+        .await?;
+
+    let review = load_dataset_revision_review(&state.pool, dataset_id, revision_id).await?;
+    if review.snapshot.status == DatasetRevisionStatus::Draft
+        && !dataset_fully_in_capability_scope(&state.pool, &account, "datasets:manage", dataset_id)
+            .await?
+    {
+        return Err(ApiError::Forbidden("datasets:manage".into()));
+    }
+    Ok(Json(dataset_revision_detail_from_review(review)))
+}
+
+fn dataset_revision_detail_from_review(review: DatasetRevisionReview) -> DatasetRevisionDetail {
+    let snapshot = review.snapshot;
+    DatasetRevisionDetail {
+        id: snapshot.id,
+        dataset_id: snapshot.dataset_id,
+        version_number: snapshot.version_number,
+        version_label: snapshot.version_label,
+        revision_notes: snapshot.revision_notes,
+        version_major: snapshot.version_major,
+        version_minor: snapshot.version_minor,
+        version_patch: snapshot.version_patch,
+        semantic_bump: snapshot.semantic_bump,
+        started_new_major_line: snapshot.started_new_major_line,
+        force_new_major_version: snapshot.force_new_major_version,
+        status: snapshot.status,
+        is_current: review.is_current,
+        created_at: snapshot.created_at,
+        published_at: snapshot.published_at,
+        materialized_schema: snapshot.materialized_schema,
+        materialized_table: snapshot.materialized_table,
+        materialized_row_count: snapshot.materialized_row_count,
+        materialized_at: snapshot.materialized_at,
+        metadata: snapshot.metadata,
+        initial_source: snapshot.initial_source,
+        operations: snapshot.operations,
+        restriction_policy: snapshot.restriction_policy,
+        generated_sql: snapshot.generated_sql,
+        output_fields: snapshot.output_fields,
+        compatibility: review.compatibility,
+        compatibility_findings: review.compatibility_findings,
+        dependencies: review.dependencies,
+        dependency_impacts: review.dependency_impacts,
+    }
 }
 
 /// Executes a submission-grain dataset as either a union or a node-aligned join of sources.
@@ -824,6 +1492,1400 @@ pub async fn run_dataset_table(
         dataset_id,
         rows: table_rows,
     }))
+}
+
+async fn validate_existing_dataset_mutation(
+    pool: &sqlx::PgPool,
+    account: &auth::AccountContext,
+    dataset_id: Uuid,
+    payload: &CreateDatasetRequest,
+) -> ApiResult<()> {
+    require_dataset_exists(pool, dataset_id).await?;
+    require_dataset_fully_in_capability_scope(pool, account, "datasets:manage", dataset_id).await?;
+    require_text("dataset name", &payload.name)?;
+    require_text("dataset slug", &payload.slug)?;
+    validate_version_label(payload)?;
+    require_dataset_slug_available_for_update(pool, dataset_id, &payload.slug).await?;
+    require_node_ids_exist(pool, &payload.visibility_node_ids).await?;
+    auth::require_capability_contains_nodes(
+        pool,
+        account,
+        "datasets:manage",
+        &payload.visibility_node_ids,
+    )
+    .await?;
+    let grain = DatasetGrain::parse(&payload.grain)
+        .map_err(|error| ApiError::BadRequest(error.to_string()))?;
+    if grain != DatasetGrain::Submission {
+        return Err(ApiError::BadRequest(
+            "dataset query designer currently supports submission grain".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_version_label(payload: &CreateDatasetRequest) -> ApiResult<()> {
+    validate_revision_label_value(payload.version_label.as_deref())
+}
+
+fn validate_revision_label_value(version_label: Option<&str>) -> ApiResult<()> {
+    if let Some(label) = version_label
+        && label.trim().len() > 80
+    {
+        return Err(ApiError::BadRequest(
+            "revision label must be 80 characters or fewer".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_revision_notes_value(revision_notes: Option<&str>) -> ApiResult<()> {
+    if let Some(notes) = revision_notes
+        && notes.trim().len() > 2_000
+    {
+        return Err(ApiError::BadRequest(
+            "revision notes must be 2000 characters or fewer".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn revision_label_or_number(version_label: Option<&str>, version_number: i32) -> String {
+    let _ = version_number;
+    version_label
+        .map(str::trim)
+        .filter(|label| !label.is_empty())
+        .map(str::to_string)
+        .unwrap_or_default()
+}
+
+async fn compute_dataset_publish_semantic_version(
+    pool: &sqlx::PgPool,
+    dataset_id: Uuid,
+    revision_id: Uuid,
+) -> ApiResult<(DatasetSemanticVersion, DatasetSemanticBump)> {
+    let candidate = load_revision_snapshot(pool, dataset_id, revision_id).await?;
+    let Some(current_id) = current_published_revision_id(pool, dataset_id).await? else {
+        return Ok((
+            DatasetSemanticVersion {
+                major: 1,
+                minor: 0,
+                patch: 0,
+            },
+            DatasetSemanticBump::Initial,
+        ));
+    };
+    if current_id == revision_id {
+        let version = current_semantic_version(&candidate).unwrap_or(DatasetSemanticVersion {
+            major: 1,
+            minor: 0,
+            patch: 0,
+        });
+        return Ok((version, DatasetSemanticBump::Patch));
+    }
+    let current = load_revision_snapshot(pool, dataset_id, current_id).await?;
+    let current_version = current_semantic_version(&current).unwrap_or(DatasetSemanticVersion {
+        major: 1,
+        minor: 0,
+        patch: 0,
+    });
+    let findings = compatibility_findings(&current, &candidate);
+    let summary = compatibility_summary(&findings);
+    let bump = semantic_bump_for_publish(&summary, candidate.force_new_major_version);
+    Ok((current_version.increment(bump), bump))
+}
+
+async fn compute_dataset_publish_semantic_version_for_compiled(
+    pool: &sqlx::PgPool,
+    dataset_id: Uuid,
+    payload: &CreateDatasetRequest,
+    compiled: &CompiledDataset,
+) -> ApiResult<(DatasetSemanticVersion, DatasetSemanticBump)> {
+    let Some(current_id) = current_published_revision_id(pool, dataset_id).await? else {
+        return Ok((
+            DatasetSemanticVersion {
+                major: 1,
+                minor: 0,
+                patch: 0,
+            },
+            DatasetSemanticBump::Initial,
+        ));
+    };
+    let current = load_revision_snapshot(pool, dataset_id, current_id).await?;
+    let current_version = current_semantic_version(&current).unwrap_or(DatasetSemanticVersion {
+        major: 1,
+        minor: 0,
+        patch: 0,
+    });
+    let candidate = DatasetRevisionSnapshot {
+        id: Uuid::nil(),
+        dataset_id,
+        version_number: 0,
+        version_label: revision_label_or_number(payload.version_label.as_deref(), 0),
+        revision_notes: String::new(),
+        version_major: None,
+        version_minor: None,
+        version_patch: None,
+        semantic_bump: None,
+        started_new_major_line: None,
+        force_new_major_version: payload.force_new_major_version,
+        status: DatasetRevisionStatus::Draft,
+        created_at: chrono::Utc::now(),
+        published_at: None,
+        materialized_schema: None,
+        materialized_table: None,
+        materialized_row_count: None,
+        materialized_at: None,
+        metadata: DatasetRevisionMetadata::from(payload),
+        initial_source: compiled.initial_source.clone(),
+        operations: compiled.operations.clone(),
+        restriction_policy: compiled.restriction_policy.clone(),
+        compatibility_findings: Vec::new(),
+        generated_sql: Some(compiled.generated_sql.clone()),
+        output_fields: compiled
+            .fields
+            .iter()
+            .map(dataset_field_definition)
+            .collect(),
+    };
+    let findings = compatibility_findings(&current, &candidate);
+    let summary = compatibility_summary(&findings);
+    let bump = semantic_bump_for_publish(&summary, payload.force_new_major_version);
+    Ok((current_version.increment(bump), bump))
+}
+
+fn current_semantic_version(snapshot: &DatasetRevisionSnapshot) -> Option<DatasetSemanticVersion> {
+    Some(DatasetSemanticVersion {
+        major: snapshot.version_major?,
+        minor: snapshot.version_minor?,
+        patch: snapshot.version_patch?,
+    })
+}
+
+fn semantic_bump_for_compatibility(summary: &DatasetCompatibilitySummary) -> DatasetSemanticBump {
+    if summary.major_count > 0 {
+        DatasetSemanticBump::Major
+    } else if summary.minor_count > 0 {
+        DatasetSemanticBump::Minor
+    } else {
+        DatasetSemanticBump::Patch
+    }
+}
+
+fn semantic_bump_for_publish(
+    summary: &DatasetCompatibilitySummary,
+    force_new_major_version: bool,
+) -> DatasetSemanticBump {
+    if force_new_major_version {
+        DatasetSemanticBump::Major
+    } else {
+        semantic_bump_for_compatibility(summary)
+    }
+}
+
+fn require_publishable_changelog(findings: &[DatasetCompatibilityFinding]) -> ApiResult<()> {
+    if findings.is_empty() {
+        return Err(ApiError::BadRequest(
+            "dataset revision has no changelog entries to publish".into(),
+        ));
+    }
+    Ok(())
+}
+
+async fn update_revision_semantic_fields(
+    pool: &sqlx::PgPool,
+    revision_id: Uuid,
+    version: DatasetSemanticVersion,
+    bump: DatasetSemanticBump,
+) -> ApiResult<()> {
+    sqlx::query(
+        r#"
+        UPDATE dataset_revisions
+        SET version_major = $1,
+            version_minor = $2,
+            version_patch = $3,
+            semantic_bump = $4,
+            started_new_major_line = $5
+        WHERE id = $6
+        "#,
+    )
+    .bind(version.major)
+    .bind(version.minor)
+    .bind(version.patch)
+    .bind(bump.as_str())
+    .bind(matches!(
+        bump,
+        DatasetSemanticBump::Initial | DatasetSemanticBump::Major
+    ))
+    .bind(revision_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+async fn update_revision_semantic_fields_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    revision_id: Uuid,
+    version: DatasetSemanticVersion,
+    bump: DatasetSemanticBump,
+) -> ApiResult<()> {
+    sqlx::query(
+        r#"
+        UPDATE dataset_revisions
+        SET version_major = $1,
+            version_minor = $2,
+            version_patch = $3,
+            semantic_bump = $4,
+            started_new_major_line = $5
+        WHERE id = $6
+        "#,
+    )
+    .bind(version.major)
+    .bind(version.minor)
+    .bind(version.patch)
+    .bind(bump.as_str())
+    .bind(matches!(
+        bump,
+        DatasetSemanticBump::Initial | DatasetSemanticBump::Major
+    ))
+    .bind(revision_id)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+async fn lock_dataset_for_update(
+    tx: &mut Transaction<'_, Postgres>,
+    dataset_id: Uuid,
+) -> ApiResult<()> {
+    sqlx::query("SELECT id FROM datasets WHERE id = $1 FOR UPDATE")
+        .bind(dataset_id)
+        .fetch_optional(&mut **tx)
+        .await?
+        .ok_or_else(|| ApiError::NotFound(format!("dataset {dataset_id}")))?;
+    Ok(())
+}
+
+async fn current_published_revision_id_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    dataset_id: Uuid,
+) -> ApiResult<Option<Uuid>> {
+    Ok(sqlx::query_scalar(
+        r#"
+        SELECT id
+        FROM dataset_revisions
+        WHERE dataset_id = $1
+          AND status = 'published'::dataset_revision_status
+        "#,
+    )
+    .bind(dataset_id)
+    .fetch_optional(&mut **tx)
+    .await?)
+}
+
+async fn upsert_dataset_draft_revision(
+    tx: &mut Transaction<'_, Postgres>,
+    dataset_id: Uuid,
+    version_label: Option<&str>,
+    metadata: &DatasetRevisionMetadata,
+    compiled: &CompiledDataset,
+) -> ApiResult<Uuid> {
+    let version_number: i32 = sqlx::query_scalar(
+        "SELECT COALESCE(MAX(version_number), 0) + 1 FROM dataset_revisions WHERE dataset_id = $1",
+    )
+    .bind(dataset_id)
+    .fetch_one(&mut **tx)
+    .await?;
+
+    let existing_draft: Option<Uuid> = sqlx::query_scalar(
+        r#"
+        SELECT id
+        FROM dataset_revisions
+        WHERE dataset_id = $1
+          AND status = 'draft'::dataset_revision_status
+        FOR UPDATE
+        "#,
+    )
+    .bind(dataset_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+
+    if let Some(revision_id) = existing_draft {
+        let version_label = revision_label_or_number(version_label, version_number);
+        sqlx::query(
+            r#"
+            UPDATE dataset_revisions
+            SET version_label = $1,
+                initial_source = $2,
+                operations = $3,
+                restriction_policy = $4,
+                generated_sql = $5,
+                output_fields = $6,
+                definition_metadata = $7,
+                force_new_major_version = $8,
+                materialized_schema = NULL,
+                materialized_table = NULL,
+                materialized_row_count = NULL,
+                materialized_at = NULL,
+                published_at = NULL
+            WHERE id = $9
+            "#,
+        )
+        .bind(version_label)
+        .bind(serialize_initial_source(compiled)?)
+        .bind(serialize_operations(compiled)?)
+        .bind(serialize_restriction_policy(compiled)?)
+        .bind(&compiled.generated_sql)
+        .bind(serialize_output_fields(compiled)?)
+        .bind(serialize_metadata(metadata)?)
+        .bind(metadata.force_new_major_version)
+        .bind(revision_id)
+        .execute(&mut **tx)
+        .await?;
+        return Ok(revision_id);
+    }
+
+    let version_label = revision_label_or_number(version_label, version_number);
+    let revision_id = sqlx::query_scalar(
+        r#"
+        INSERT INTO dataset_revisions
+            (dataset_id, version_number, version_label, force_new_major_version, status, initial_source, operations, restriction_policy, generated_sql, output_fields, definition_metadata)
+        VALUES ($1, $2, $3, $4, 'draft'::dataset_revision_status, $5, $6, $7, $8, $9, $10)
+        RETURNING id
+        "#,
+    )
+    .bind(dataset_id)
+    .bind(version_number)
+    .bind(version_label)
+    .bind(metadata.force_new_major_version)
+    .bind(serialize_initial_source(compiled)?)
+    .bind(serialize_operations(compiled)?)
+    .bind(serialize_restriction_policy(compiled)?)
+    .bind(&compiled.generated_sql)
+    .bind(serialize_output_fields(compiled)?)
+    .bind(serialize_metadata(metadata)?)
+    .fetch_one(&mut **tx)
+    .await?;
+    Ok(revision_id)
+}
+
+async fn load_dataset_revision_review(
+    pool: &sqlx::PgPool,
+    dataset_id: Uuid,
+    revision_id: Uuid,
+) -> ApiResult<DatasetRevisionReview> {
+    let snapshot = load_revision_snapshot(pool, dataset_id, revision_id).await?;
+    let current_revision_id = current_published_revision_id(pool, dataset_id).await?;
+    let baseline = match current_revision_id {
+        Some(current_id) if current_id != revision_id => {
+            Some(load_revision_snapshot(pool, dataset_id, current_id).await?)
+        }
+        _ => None,
+    };
+    let compatibility_findings = if snapshot.status == DatasetRevisionStatus::Draft {
+        baseline
+            .as_ref()
+            .map(|published| compatibility_findings(published, &snapshot))
+            .unwrap_or_default()
+    } else {
+        snapshot.compatibility_findings.clone()
+    };
+    let compatibility = compatibility_summary(&compatibility_findings);
+    let dependency_impacts = if let Some(current_id) = current_revision_id {
+        let current = load_revision_snapshot(pool, dataset_id, current_id).await?;
+        load_dependency_impacts(
+            pool,
+            current_id,
+            dataset_id,
+            current.version_major,
+            snapshot.version_major,
+            compatibility.state,
+        )
+        .await?
+    } else {
+        Vec::new()
+    };
+    let dependencies = dependency_summary(&dependency_impacts);
+    Ok(DatasetRevisionReview {
+        is_current: current_revision_id == Some(revision_id)
+            && snapshot.status == DatasetRevisionStatus::Published,
+        snapshot,
+        compatibility,
+        compatibility_findings,
+        dependencies,
+        dependency_impacts,
+    })
+}
+
+async fn current_published_revision_id(
+    pool: &sqlx::PgPool,
+    dataset_id: Uuid,
+) -> ApiResult<Option<Uuid>> {
+    Ok(sqlx::query_scalar(
+        r#"
+        SELECT id
+        FROM dataset_revisions
+        WHERE dataset_id = $1
+          AND status = 'published'::dataset_revision_status
+        "#,
+    )
+    .bind(dataset_id)
+    .fetch_optional(pool)
+    .await?)
+}
+
+async fn load_revision_snapshot(
+    pool: &sqlx::PgPool,
+    dataset_id: Uuid,
+    revision_id: Uuid,
+) -> ApiResult<DatasetRevisionSnapshot> {
+    let row = sqlx::query(
+        r#"
+        SELECT id, dataset_id, version_number, version_label, revision_notes, version_major, version_minor,
+               version_patch, semantic_bump, started_new_major_line, force_new_major_version,
+               status::text AS status,
+               initial_source, operations, restriction_policy, definition_metadata, compatibility_findings,
+               generated_sql, output_fields, materialized_schema, materialized_table,
+               materialized_row_count, materialized_at, published_at, created_at
+        FROM dataset_revisions
+        WHERE id = $1
+          AND dataset_id = $2
+        "#,
+    )
+    .bind(revision_id)
+    .bind(dataset_id)
+    .fetch_optional(pool)
+    .await?
+    .ok_or_else(|| ApiError::NotFound(format!("dataset revision {revision_id}")))?;
+
+    let initial_source = parse_required_json::<DatasetSourceRequest>(
+        row.try_get("initial_source")?,
+        "stored dataset revision initial source",
+    )?;
+    let operations = parse_json_or_default::<Vec<DatasetOperationRequest>>(
+        row.try_get("operations")?,
+        "stored dataset revision operations",
+    )?;
+    let restriction_policy = parse_optional_json::<DatasetRestrictionPolicyRequest>(
+        row.try_get("restriction_policy")?,
+        "stored dataset revision restriction policy",
+    )?;
+    let output_fields = parse_json_or_default::<Vec<DatasetFieldDefinition>>(
+        row.try_get("output_fields")?,
+        "stored dataset revision output fields",
+    )?;
+    let compatibility_findings = parse_json_or_default::<Vec<DatasetCompatibilityFinding>>(
+        row.try_get("compatibility_findings")?,
+        "stored dataset revision changelog",
+    )?;
+    let metadata = match row.try_get::<Option<serde_json::Value>, _>("definition_metadata")? {
+        Some(value) => serde_json::from_value(value).map_err(|error| {
+            ApiError::Internal(anyhow::anyhow!(
+                "stored dataset revision metadata is invalid: {error}"
+            ))
+        })?,
+        None => load_current_dataset_revision_metadata(pool, dataset_id).await?,
+    };
+
+    Ok(DatasetRevisionSnapshot {
+        id: row.try_get("id")?,
+        dataset_id: row.try_get("dataset_id")?,
+        version_number: row.try_get("version_number")?,
+        version_label: row.try_get("version_label")?,
+        revision_notes: row.try_get("revision_notes")?,
+        version_major: row.try_get("version_major")?,
+        version_minor: row.try_get("version_minor")?,
+        version_patch: row.try_get("version_patch")?,
+        semantic_bump: row.try_get("semantic_bump")?,
+        started_new_major_line: row.try_get("started_new_major_line")?,
+        force_new_major_version: row.try_get("force_new_major_version")?,
+        status: parse_revision_status(row.try_get::<String, _>("status")?.as_str())?,
+        created_at: row.try_get("created_at")?,
+        published_at: row.try_get("published_at")?,
+        materialized_schema: row.try_get("materialized_schema")?,
+        materialized_table: row.try_get("materialized_table")?,
+        materialized_row_count: row.try_get("materialized_row_count")?,
+        materialized_at: row.try_get("materialized_at")?,
+        metadata,
+        initial_source,
+        operations,
+        restriction_policy,
+        compatibility_findings,
+        generated_sql: row.try_get("generated_sql")?,
+        output_fields,
+    })
+}
+
+async fn load_current_dataset_revision_metadata(
+    pool: &sqlx::PgPool,
+    dataset_id: Uuid,
+) -> ApiResult<DatasetRevisionMetadata> {
+    let row = sqlx::query("SELECT name, slug, grain FROM datasets WHERE id = $1")
+        .bind(dataset_id)
+        .fetch_one(pool)
+        .await?;
+    Ok(DatasetRevisionMetadata {
+        name: row.try_get("name")?,
+        slug: row.try_get("slug")?,
+        grain: row.try_get("grain")?,
+        force_new_major_version: false,
+        visibility_node_ids: load_dataset_scope_node_ids(pool, dataset_id).await?,
+    })
+}
+
+fn parse_revision_status(value: &str) -> ApiResult<DatasetRevisionStatus> {
+    match value {
+        "draft" => Ok(DatasetRevisionStatus::Draft),
+        "published" => Ok(DatasetRevisionStatus::Published),
+        "superseded" => Ok(DatasetRevisionStatus::Superseded),
+        other => Err(ApiError::Internal(anyhow::anyhow!(
+            "stored dataset revision status is invalid: {other}"
+        ))),
+    }
+}
+
+fn parse_required_json<T>(value: Option<serde_json::Value>, label: &str) -> ApiResult<T>
+where
+    T: serde::de::DeserializeOwned,
+{
+    let value = value.ok_or_else(|| {
+        ApiError::Internal(anyhow::anyhow!("{label} is missing from revision snapshot"))
+    })?;
+    serde_json::from_value(value)
+        .map_err(|error| ApiError::Internal(anyhow::anyhow!("{label} is invalid: {error}")))
+}
+
+fn parse_optional_json<T>(value: Option<serde_json::Value>, label: &str) -> ApiResult<Option<T>>
+where
+    T: serde::de::DeserializeOwned,
+{
+    value
+        .map(serde_json::from_value)
+        .transpose()
+        .map_err(|error| ApiError::Internal(anyhow::anyhow!("{label} is invalid: {error}")))
+}
+
+fn parse_json_or_default<T>(value: Option<serde_json::Value>, label: &str) -> ApiResult<T>
+where
+    T: serde::de::DeserializeOwned + Default,
+{
+    value
+        .map(serde_json::from_value)
+        .transpose()
+        .map_err(|error| ApiError::Internal(anyhow::anyhow!("{label} is invalid: {error}")))?
+        .map_or_else(|| Ok(T::default()), Ok)
+}
+
+fn compatibility_findings(
+    published: &DatasetRevisionSnapshot,
+    candidate: &DatasetRevisionSnapshot,
+) -> Vec<DatasetCompatibilityFinding> {
+    let mut findings = Vec::new();
+    let published_fields = published
+        .output_fields
+        .iter()
+        .map(|field| (field.key.as_str(), field))
+        .collect::<BTreeMap<_, _>>();
+    let candidate_fields = candidate
+        .output_fields
+        .iter()
+        .map(|field| (field.key.as_str(), field))
+        .collect::<BTreeMap<_, _>>();
+    findings.extend(source_changelog_findings(published, candidate));
+    findings.extend(operation_changelog_findings(
+        published,
+        candidate,
+        &published_fields,
+        &candidate_fields,
+    ));
+
+    for (key, field) in &published_fields {
+        match candidate_fields.get(key) {
+            None => findings.push(compatibility_finding(
+                DatasetVersionImpact::Major,
+                "removed_output_field",
+                format!("Output field '{}' is removed.", field.label),
+                Some((*key).to_string()),
+            )),
+            Some(candidate_field) if candidate_field.field_type != field.field_type => {
+                findings.push(compatibility_finding(
+                    DatasetVersionImpact::Major,
+                    "changed_output_field_type",
+                    format!(
+                        "Output field '{}' changes type from '{}' to '{}'.",
+                        field.label, field.field_type, candidate_field.field_type
+                    ),
+                    Some((*key).to_string()),
+                ));
+            }
+            Some(candidate_field) if candidate_field.label != field.label => {
+                findings.push(compatibility_finding(
+                    DatasetVersionImpact::Patch,
+                    "changed_output_field_label",
+                    format!(
+                        "Output field key '{}' changes label from '{}' to '{}'.",
+                        key, field.label, candidate_field.label
+                    ),
+                    Some((*key).to_string()),
+                ));
+            }
+            _ => {}
+        }
+    }
+    for (key, field) in &candidate_fields {
+        if !published_fields.contains_key(key) {
+            findings.push(compatibility_finding(
+                DatasetVersionImpact::Minor,
+                "added_output_field",
+                format!("Output field '{}' is added.", field.label),
+                Some((*key).to_string()),
+            ));
+        }
+    }
+    if restriction_policy_json(&published.restriction_policy)
+        != restriction_policy_json(&candidate.restriction_policy)
+    {
+        findings.push(compatibility_finding(
+            DatasetVersionImpact::Minor,
+            "changed_restriction_policy",
+            "Restriction policy changes and should be reviewed before carry-forward.".into(),
+            None,
+        ));
+    }
+    if published.metadata.name != candidate.metadata.name {
+        findings.push(compatibility_finding(
+            DatasetVersionImpact::Patch,
+            "changed_dataset_name",
+            format!(
+                "Dataset name changes from '{}' to '{}'.",
+                published.metadata.name, candidate.metadata.name
+            ),
+            None,
+        ));
+    }
+    if published.metadata.slug != candidate.metadata.slug {
+        findings.push(compatibility_finding(
+            DatasetVersionImpact::Patch,
+            "changed_dataset_slug",
+            format!(
+                "Dataset slug changes from '{}' to '{}'.",
+                published.metadata.slug, candidate.metadata.slug
+            ),
+            None,
+        ));
+    }
+    if published
+        .metadata
+        .visibility_node_ids
+        .iter()
+        .collect::<BTreeSet<_>>()
+        != candidate
+            .metadata
+            .visibility_node_ids
+            .iter()
+            .collect::<BTreeSet<_>>()
+    {
+        findings.push(compatibility_finding(
+            DatasetVersionImpact::Patch,
+            "changed_dataset_visibility",
+            "Dataset visibility scope changes.".into(),
+            None,
+        ));
+    }
+    findings
+}
+
+fn source_changelog_findings(
+    published: &DatasetRevisionSnapshot,
+    candidate: &DatasetRevisionSnapshot,
+) -> Vec<DatasetCompatibilityFinding> {
+    let published_sources = revision_sources_by_alias(published);
+    let candidate_sources = revision_sources_by_alias(candidate);
+    let mut findings = Vec::new();
+
+    for (alias, source) in &published_sources {
+        match candidate_sources.get(alias) {
+            None => findings.push(compatibility_finding(
+                DatasetVersionImpact::Major,
+                "removed_dataset_source",
+                format!("Source '{}' is removed.", alias),
+                Some(alias.clone()),
+            )),
+            Some(candidate_source) if candidate_source != source => {
+                findings.push(compatibility_finding(
+                    DatasetVersionImpact::Minor,
+                    "changed_dataset_source",
+                    format!("Source '{}' changes binding.", alias),
+                    Some(alias.clone()),
+                ));
+            }
+            _ => {}
+        }
+    }
+
+    for alias in candidate_sources.keys() {
+        if !published_sources.contains_key(alias) {
+            findings.push(compatibility_finding(
+                DatasetVersionImpact::Minor,
+                "added_dataset_source",
+                format!("Source '{}' is added.", alias),
+                Some(alias.clone()),
+            ));
+        }
+    }
+
+    findings
+}
+
+fn revision_sources_by_alias(
+    snapshot: &DatasetRevisionSnapshot,
+) -> BTreeMap<String, serde_json::Value> {
+    let mut sources = BTreeMap::new();
+    sources.insert(
+        source_alias(&snapshot.initial_source).to_string(),
+        source_json(&snapshot.initial_source),
+    );
+    for operation in &snapshot.operations {
+        if let DatasetOperationRequest::AddSource { source, .. } = operation {
+            sources.insert(source_alias(source).to_string(), source_json(source));
+        }
+    }
+    sources
+}
+
+fn source_alias(source: &DatasetSourceRequest) -> &str {
+    match source {
+        DatasetSourceRequest::Form { alias, .. }
+        | DatasetSourceRequest::Dataset { alias, .. }
+        | DatasetSourceRequest::DatasetMajor { alias, .. } => alias,
+    }
+}
+
+fn source_json(source: &DatasetSourceRequest) -> serde_json::Value {
+    serde_json::to_value(source).unwrap_or(serde_json::Value::Null)
+}
+
+fn operation_changelog_findings(
+    published: &DatasetRevisionSnapshot,
+    candidate: &DatasetRevisionSnapshot,
+    published_fields: &BTreeMap<&str, &DatasetFieldDefinition>,
+    candidate_fields: &BTreeMap<&str, &DatasetFieldDefinition>,
+) -> Vec<DatasetCompatibilityFinding> {
+    let mut findings = Vec::new();
+    let operation_count = published.operations.len().max(candidate.operations.len());
+
+    for index in 0..operation_count {
+        match (
+            published.operations.get(index),
+            candidate.operations.get(index),
+        ) {
+            (None, Some(DatasetOperationRequest::AddSource { .. })) => {}
+            (None, Some(operation)) => findings.push(compatibility_finding(
+                operation_version_impact(operation),
+                &format!("added_{}_operation", operation_code(operation)),
+                format!("{} operation is added.", operation_label(operation)),
+                None,
+            )),
+            (Some(DatasetOperationRequest::AddSource { .. }), None) => {}
+            (Some(operation), None) => findings.push(compatibility_finding(
+                DatasetVersionImpact::Major,
+                &format!("removed_{}_operation", operation_code(operation)),
+                format!("{} operation is removed.", operation_label(operation)),
+                None,
+            )),
+            (Some(published_operation), Some(candidate_operation))
+                if operation_code(published_operation) != operation_code(candidate_operation) =>
+            {
+                findings.push(compatibility_finding(
+                    DatasetVersionImpact::Minor,
+                    "changed_operation_sequence",
+                    format!(
+                        "Operation {} changes from {} to {}.",
+                        index + 1,
+                        operation_label(published_operation),
+                        operation_label(candidate_operation)
+                    ),
+                    None,
+                ));
+            }
+            (Some(published_operation), Some(candidate_operation))
+                if operation_json(published_operation) != operation_json(candidate_operation) =>
+            {
+                let mut detailed_findings = detailed_operation_changelog_findings(
+                    published_operation,
+                    candidate_operation,
+                    published_fields,
+                    candidate_fields,
+                );
+                if detailed_findings.is_empty() {
+                    detailed_findings.push(compatibility_finding(
+                        operation_version_impact(candidate_operation),
+                        &format!("changed_{}_operation", operation_code(candidate_operation)),
+                        format!(
+                            "{} operation settings change.",
+                            operation_label(candidate_operation)
+                        ),
+                        None,
+                    ));
+                }
+                findings.extend(detailed_findings);
+            }
+            _ => {}
+        }
+    }
+
+    findings
+}
+
+fn detailed_operation_changelog_findings(
+    published: &DatasetOperationRequest,
+    candidate: &DatasetOperationRequest,
+    published_output_fields: &BTreeMap<&str, &DatasetFieldDefinition>,
+    candidate_output_fields: &BTreeMap<&str, &DatasetFieldDefinition>,
+) -> Vec<DatasetCompatibilityFinding> {
+    match (published, candidate) {
+        (
+            DatasetOperationRequest::Aggregation {
+                group_fields: published_group_fields,
+                metrics: published_metrics,
+                row_picker: published_row_picker,
+                ..
+            },
+            DatasetOperationRequest::Aggregation {
+                group_fields: candidate_group_fields,
+                metrics: candidate_metrics,
+                row_picker: candidate_row_picker,
+                ..
+            },
+        ) => aggregation_changelog_findings(
+            published_group_fields,
+            published_metrics,
+            published_row_picker,
+            candidate_group_fields,
+            candidate_metrics,
+            candidate_row_picker,
+        ),
+        (
+            DatasetOperationRequest::CalculatedFields {
+                fields: published_fields,
+                ..
+            },
+            DatasetOperationRequest::CalculatedFields {
+                fields: candidate_fields,
+                ..
+            },
+        ) => calculated_fields_changelog_findings(
+            published_fields,
+            candidate_fields,
+            published_output_fields,
+            candidate_output_fields,
+        ),
+        _ => Vec::new(),
+    }
+}
+
+fn aggregation_changelog_findings(
+    published_group_fields: &[String],
+    published_metrics: &[DatasetAggregationMetricRequest],
+    published_row_picker: &Option<DatasetRowPickerRequest>,
+    candidate_group_fields: &[String],
+    candidate_metrics: &[DatasetAggregationMetricRequest],
+    candidate_row_picker: &Option<DatasetRowPickerRequest>,
+) -> Vec<DatasetCompatibilityFinding> {
+    let mut findings = Vec::new();
+    if published_group_fields != candidate_group_fields {
+        findings.push(compatibility_finding(
+            DatasetVersionImpact::Minor,
+            "changed_aggregation_grouping",
+            "Aggregation grouping changes.".into(),
+            None,
+        ));
+    }
+    if serde_json::to_value(published_row_picker).ok()
+        != serde_json::to_value(candidate_row_picker).ok()
+    {
+        findings.push(compatibility_finding(
+            DatasetVersionImpact::Minor,
+            "changed_aggregation_row_picker",
+            "Aggregation row picker changes.".into(),
+            None,
+        ));
+    }
+
+    let published_by_key = published_metrics
+        .iter()
+        .map(|metric| (metric.key.as_str(), metric))
+        .collect::<BTreeMap<_, _>>();
+    let candidate_by_key = candidate_metrics
+        .iter()
+        .map(|metric| (metric.key.as_str(), metric))
+        .collect::<BTreeMap<_, _>>();
+
+    for (key, metric) in &published_by_key {
+        match candidate_by_key.get(key) {
+            None => findings.push(compatibility_finding(
+                DatasetVersionImpact::Major,
+                "removed_aggregation_metric",
+                format!("Aggregation metric '{}' is removed.", metric.label),
+                Some((*key).into()),
+            )),
+            Some(candidate_metric) => {
+                if metric.function != candidate_metric.function {
+                    findings.push(compatibility_finding(
+                        DatasetVersionImpact::Minor,
+                        "changed_aggregation_metric_function",
+                        format!(
+                            "Aggregation metric '{}' changes function from '{}' to '{}'.",
+                            metric.label, metric.function, candidate_metric.function
+                        ),
+                        Some((*key).into()),
+                    ));
+                }
+                if metric.source_field_key != candidate_metric.source_field_key {
+                    findings.push(compatibility_finding(
+                        DatasetVersionImpact::Minor,
+                        "changed_aggregation_metric_source",
+                        format!(
+                            "Aggregation metric '{}' changes source field.",
+                            metric.label
+                        ),
+                        Some((*key).into()),
+                    ));
+                }
+            }
+        }
+    }
+    for (key, metric) in &candidate_by_key {
+        if !published_by_key.contains_key(key) {
+            findings.push(compatibility_finding(
+                DatasetVersionImpact::Minor,
+                "added_aggregation_metric",
+                format!("Aggregation metric '{}' is added.", metric.label),
+                Some((*key).into()),
+            ));
+        }
+    }
+
+    findings
+}
+
+fn calculated_fields_changelog_findings(
+    published_fields: &[DatasetCalculatedFieldRequest],
+    candidate_fields: &[DatasetCalculatedFieldRequest],
+    published_output_fields: &BTreeMap<&str, &DatasetFieldDefinition>,
+    candidate_output_fields: &BTreeMap<&str, &DatasetFieldDefinition>,
+) -> Vec<DatasetCompatibilityFinding> {
+    let mut findings = Vec::new();
+    let published_by_key = published_fields
+        .iter()
+        .map(|field| (field.key.as_str(), field))
+        .collect::<BTreeMap<_, _>>();
+    let candidate_by_key = candidate_fields
+        .iter()
+        .map(|field| (field.key.as_str(), field))
+        .collect::<BTreeMap<_, _>>();
+
+    for (key, field) in &published_by_key {
+        match candidate_by_key.get(key) {
+            None => findings.push(compatibility_finding(
+                DatasetVersionImpact::Major,
+                "removed_calculated_field",
+                format!("Calculated field '{}' is removed.", field.label),
+                Some((*key).into()),
+            )),
+            Some(candidate_field) => {
+                if field.base_field_key != candidate_field.base_field_key {
+                    findings.push(compatibility_finding(
+                        DatasetVersionImpact::Patch,
+                        "changed_calculated_field_base",
+                        format!("Calculated field '{}' changes base field.", field.label),
+                        Some((*key).into()),
+                    ));
+                }
+                if let (Some(published_output), Some(candidate_output)) = (
+                    published_output_fields.get(key),
+                    candidate_output_fields.get(key),
+                ) && published_output.field_type != candidate_output.field_type
+                {
+                    findings.push(compatibility_finding(
+                        DatasetVersionImpact::Major,
+                        "changed_calculated_field_type",
+                        format!(
+                            "Calculated field '{}' changes type from '{}' to '{}'.",
+                            field.label, published_output.field_type, candidate_output.field_type
+                        ),
+                        Some((*key).into()),
+                    ));
+                }
+                findings.extend(calculation_function_changelog_findings(
+                    field,
+                    candidate_field,
+                ));
+            }
+        }
+    }
+    for (key, field) in &candidate_by_key {
+        if !published_by_key.contains_key(key) {
+            findings.push(compatibility_finding(
+                DatasetVersionImpact::Minor,
+                "added_calculated_field",
+                format!("Calculated field '{}' is added.", field.label),
+                Some((*key).into()),
+            ));
+        }
+    }
+
+    findings
+}
+
+fn calculation_function_changelog_findings(
+    published: &DatasetCalculatedFieldRequest,
+    candidate: &DatasetCalculatedFieldRequest,
+) -> Vec<DatasetCompatibilityFinding> {
+    let mut findings = Vec::new();
+    let function_count = published.functions.len().max(candidate.functions.len());
+
+    for index in 0..function_count {
+        match (
+            published.functions.get(index),
+            candidate.functions.get(index),
+        ) {
+            (Some(function), None) => findings.push(compatibility_finding(
+                DatasetVersionImpact::Patch,
+                "removed_calculation_function",
+                format!(
+                    "Calculated field '{}' removes function '{}'.",
+                    published.label, function.function
+                ),
+                Some(published.key.clone()),
+            )),
+            (None, Some(function)) => findings.push(compatibility_finding(
+                DatasetVersionImpact::Patch,
+                "added_calculation_function",
+                format!(
+                    "Calculated field '{}' adds function '{}'.",
+                    published.label, function.function
+                ),
+                Some(published.key.clone()),
+            )),
+            (Some(published_function), Some(candidate_function)) => {
+                if published_function.function != candidate_function.function {
+                    findings.push(compatibility_finding(
+                        DatasetVersionImpact::Patch,
+                        "changed_calculation_function",
+                        format!(
+                            "Calculated field '{}' changes function from '{}' to '{}'.",
+                            published.label,
+                            published_function.function,
+                            candidate_function.function
+                        ),
+                        Some(published.key.clone()),
+                    ));
+                }
+                if published_function.argument != candidate_function.argument
+                    || published_function.argument_mode != candidate_function.argument_mode
+                    || published_function.argument_field_key
+                        != candidate_function.argument_field_key
+                {
+                    findings.push(compatibility_finding(
+                        DatasetVersionImpact::Patch,
+                        "changed_calculation_function_argument",
+                        format!(
+                            "Calculated field '{}' changes the '{}' function argument.",
+                            published.label, candidate_function.function
+                        ),
+                        Some(published.key.clone()),
+                    ));
+                }
+            }
+            _ => {}
+        }
+    }
+
+    findings
+}
+
+fn operation_json(operation: &DatasetOperationRequest) -> serde_json::Value {
+    serde_json::to_value(operation).unwrap_or(serde_json::Value::Null)
+}
+
+fn operation_code(operation: &DatasetOperationRequest) -> &'static str {
+    match operation {
+        DatasetOperationRequest::AddSource { .. } => "add_source",
+        DatasetOperationRequest::Projection { .. } => "projection",
+        DatasetOperationRequest::Aggregation { .. } => "aggregation",
+        DatasetOperationRequest::CalculatedFields { .. } => "calculated_fields",
+        DatasetOperationRequest::Filter { .. } => "filter",
+    }
+}
+
+fn operation_label(operation: &DatasetOperationRequest) -> &'static str {
+    match operation {
+        DatasetOperationRequest::AddSource { .. } => "Add source",
+        DatasetOperationRequest::Projection { .. } => "Projection",
+        DatasetOperationRequest::Aggregation { .. } => "Aggregation",
+        DatasetOperationRequest::CalculatedFields { .. } => "Calculated fields",
+        DatasetOperationRequest::Filter { .. } => "Filter",
+    }
+}
+
+fn operation_version_impact(operation: &DatasetOperationRequest) -> DatasetVersionImpact {
+    match operation {
+        DatasetOperationRequest::AddSource { .. } | DatasetOperationRequest::Aggregation { .. } => {
+            DatasetVersionImpact::Minor
+        }
+        DatasetOperationRequest::Projection { .. }
+        | DatasetOperationRequest::CalculatedFields { .. }
+        | DatasetOperationRequest::Filter { .. } => DatasetVersionImpact::Patch,
+    }
+}
+
+fn compatibility_finding(
+    version_impact: DatasetVersionImpact,
+    code: &str,
+    message: String,
+    field_key: Option<String>,
+) -> DatasetCompatibilityFinding {
+    let state = match version_impact {
+        DatasetVersionImpact::Major => DatasetCompatibilityState::Breaking,
+        DatasetVersionImpact::Minor => DatasetCompatibilityState::Review,
+        DatasetVersionImpact::Patch => DatasetCompatibilityState::Compatible,
+    };
+    DatasetCompatibilityFinding {
+        version_impact,
+        state,
+        code: code.into(),
+        message,
+        field_key,
+    }
+}
+
+fn compatibility_summary(findings: &[DatasetCompatibilityFinding]) -> DatasetCompatibilitySummary {
+    let major_count = findings
+        .iter()
+        .filter(|finding| finding.version_impact == DatasetVersionImpact::Major)
+        .count();
+    let minor_count = findings
+        .iter()
+        .filter(|finding| finding.version_impact == DatasetVersionImpact::Minor)
+        .count();
+    let patch_count = findings
+        .iter()
+        .filter(|finding| finding.version_impact == DatasetVersionImpact::Patch)
+        .count();
+    let state = if major_count > 0 {
+        DatasetCompatibilityState::Breaking
+    } else if minor_count > 0 {
+        DatasetCompatibilityState::Review
+    } else {
+        DatasetCompatibilityState::Compatible
+    };
+    DatasetCompatibilitySummary {
+        state,
+        major_count,
+        minor_count,
+        patch_count,
+    }
+}
+
+fn restriction_policy_json(
+    policy: &Option<DatasetRestrictionPolicyRequest>,
+) -> Option<serde_json::Value> {
+    policy
+        .as_ref()
+        .and_then(|policy| serde_json::to_value(policy).ok())
+}
+
+async fn load_dependency_impacts(
+    pool: &sqlx::PgPool,
+    pinned_revision_id: Uuid,
+    source_dataset_id: Uuid,
+    current_version_major: Option<i32>,
+    candidate_version_major: Option<i32>,
+    compatibility_state: DatasetCompatibilityState,
+) -> ApiResult<Vec<DatasetDependencyImpact>> {
+    let carry_forward_state = carry_forward_state_for(compatibility_state);
+    let message = carry_forward_message(carry_forward_state).to_string();
+    let mut impacts = Vec::new();
+
+    for row in sqlx::query(
+        r#"
+        SELECT datasets.id, datasets.name
+        FROM dataset_sources
+        JOIN datasets ON datasets.id = dataset_sources.dataset_id
+        WHERE dataset_sources.dataset_revision_id = $1
+        ORDER BY datasets.name
+        "#,
+    )
+    .bind(pinned_revision_id)
+    .fetch_all(pool)
+    .await?
+    {
+        impacts.push(DatasetDependencyImpact {
+            kind: DatasetDependencyKind::Dataset,
+            id: row.try_get("id")?,
+            name: row.try_get("name")?,
+            pinned_revision_id,
+            pinned_version_major: None,
+            binding_mode: "exact_revision".into(),
+            carry_forward_state,
+            message: message.clone(),
+        });
+    }
+
+    if let Some(current_major) = current_version_major {
+        let major_line_message = if candidate_version_major == Some(current_major) {
+            "Major-line dependency is bound to this Version and will receive compatible minor/patch rows after publish."
+                .to_string()
+        } else {
+            "Major-line dependency remains on its current Version and needs review before moving to a new major version."
+                .to_string()
+        };
+        let major_line_state = if candidate_version_major == Some(current_major) {
+            DatasetCarryForwardState::Safe
+        } else {
+            DatasetCarryForwardState::ManualReview
+        };
+        for row in sqlx::query(
+            r#"
+            SELECT datasets.id, datasets.name
+            FROM dataset_sources
+            JOIN datasets ON datasets.id = dataset_sources.dataset_id
+            WHERE dataset_sources.source_dataset_id = $1
+              AND dataset_sources.dataset_version_major = $2
+            ORDER BY datasets.name
+            "#,
+        )
+        .bind(source_dataset_id)
+        .bind(current_major)
+        .fetch_all(pool)
+        .await?
+        {
+            impacts.push(DatasetDependencyImpact {
+                kind: DatasetDependencyKind::Dataset,
+                id: row.try_get("id")?,
+                name: row.try_get("name")?,
+                pinned_revision_id,
+                pinned_version_major: Some(current_major),
+                binding_mode: "major_line".into(),
+                carry_forward_state: major_line_state,
+                message: major_line_message.clone(),
+            });
+        }
+    }
+
+    for row in sqlx::query(
+        r#"
+        SELECT component_versions.id,
+               components.name || ' ' || component_versions.version_label AS name
+        FROM component_versions
+        JOIN components ON components.id = component_versions.component_id
+        WHERE component_versions.dataset_revision_id = $1
+        ORDER BY components.name, component_versions.version_number
+        "#,
+    )
+    .bind(pinned_revision_id)
+    .fetch_all(pool)
+    .await?
+    {
+        impacts.push(DatasetDependencyImpact {
+            kind: DatasetDependencyKind::ComponentVersion,
+            id: row.try_get("id")?,
+            name: row.try_get("name")?,
+            pinned_revision_id,
+            pinned_version_major: None,
+            binding_mode: "exact_revision".into(),
+            carry_forward_state,
+            message: message.clone(),
+        });
+    }
+
+    for row in sqlx::query(
+        r#"
+        SELECT dashboards.id, dashboards.name
+        FROM dashboard_components
+        JOIN dashboards ON dashboards.id = dashboard_components.dashboard_id
+        JOIN component_versions ON component_versions.id = dashboard_components.component_version_id
+        WHERE component_versions.dataset_revision_id = $1
+        ORDER BY dashboards.name
+        "#,
+    )
+    .bind(pinned_revision_id)
+    .fetch_all(pool)
+    .await?
+    {
+        impacts.push(DatasetDependencyImpact {
+            kind: DatasetDependencyKind::Dashboard,
+            id: row.try_get("id")?,
+            name: row.try_get("name")?,
+            pinned_revision_id,
+            pinned_version_major: None,
+            binding_mode: "exact_revision".into(),
+            carry_forward_state,
+            message: message.clone(),
+        });
+    }
+
+    Ok(impacts)
+}
+
+fn dependency_summary(impacts: &[DatasetDependencyImpact]) -> DatasetDependencySummary {
+    let dataset_count = impacts
+        .iter()
+        .filter(|impact| impact.kind == DatasetDependencyKind::Dataset)
+        .count();
+    let component_version_count = impacts
+        .iter()
+        .filter(|impact| impact.kind == DatasetDependencyKind::ComponentVersion)
+        .count();
+    let dashboard_count = impacts
+        .iter()
+        .filter(|impact| impact.kind == DatasetDependencyKind::Dashboard)
+        .count();
+    let carry_forward_state = if impacts
+        .iter()
+        .any(|impact| impact.carry_forward_state == DatasetCarryForwardState::Blocked)
+    {
+        DatasetCarryForwardState::Blocked
+    } else if impacts
+        .iter()
+        .any(|impact| impact.carry_forward_state == DatasetCarryForwardState::ManualReview)
+    {
+        DatasetCarryForwardState::ManualReview
+    } else {
+        DatasetCarryForwardState::Safe
+    };
+    DatasetDependencySummary {
+        dependency_count: impacts.len(),
+        dataset_count,
+        component_version_count,
+        dashboard_count,
+        carry_forward_state,
+    }
+}
+
+fn carry_forward_state_for(
+    compatibility_state: DatasetCompatibilityState,
+) -> DatasetCarryForwardState {
+    match compatibility_state {
+        DatasetCompatibilityState::Compatible => DatasetCarryForwardState::Safe,
+        DatasetCompatibilityState::Review => DatasetCarryForwardState::ManualReview,
+        DatasetCompatibilityState::Breaking => DatasetCarryForwardState::Blocked,
+    }
+}
+
+fn carry_forward_message(state: DatasetCarryForwardState) -> &'static str {
+    match state {
+        DatasetCarryForwardState::Safe => {
+            "Dependency remains pinned; carry-forward appears safe to review."
+        }
+        DatasetCarryForwardState::ManualReview => {
+            "Dependency remains pinned; carry-forward needs manual review."
+        }
+        DatasetCarryForwardState::Blocked => {
+            "Dependency remains pinned; carry-forward is blocked by breaking findings."
+        }
+    }
 }
 
 async fn compile_dataset_definition(
@@ -982,6 +3044,14 @@ impl<'a> QuerySpecBuilder<'a> {
                 self.compile_dataset_source(alias, *dataset_id, *dataset_revision_id)
                     .await
             }
+            DatasetSourceRequest::DatasetMajor {
+                alias,
+                dataset_id,
+                version_major,
+            } => {
+                self.compile_dataset_major_source(alias, *dataset_id, *version_major)
+                    .await
+            }
         }
     }
 
@@ -1015,7 +3085,9 @@ impl<'a> QuerySpecBuilder<'a> {
             source_alias: alias.to_string(),
             form_id: Some(form_id),
             form_version_id: Some(form_version.id),
+            source_dataset_id: None,
             dataset_revision_id: None,
+            dataset_version_major: None,
             position: self.sources.len() as i32,
         };
         let cte_name = self.next_cte_name(alias)?;
@@ -1156,10 +3228,106 @@ impl<'a> QuerySpecBuilder<'a> {
             source_alias: alias.to_string(),
             form_id: None,
             form_version_id: None,
+            source_dataset_id: Some(dataset_id),
             dataset_revision_id: Some(dataset_revision_id),
+            dataset_version_major: None,
             position: self.sources.len() as i32,
         };
         let fields = load_dataset_source_catalog(self.pool, &source).await?;
+        let source_fields = fields
+            .iter()
+            .map(|field| SourceCompileField {
+                key: field.key.clone(),
+                source_field_key: field.source_field_key.clone(),
+                source_field_id: None,
+            })
+            .collect::<Vec<_>>();
+        let select_columns = source_fields
+            .iter()
+            .map(|field| {
+                format!(
+                    "{}::text AS {}",
+                    quote_identifier(&field.source_field_key),
+                    quote_identifier(&field.key)
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(",\n                ");
+        let extra_select_columns = if select_columns.is_empty() {
+            String::new()
+        } else {
+            format!(",\n                {select_columns}")
+        };
+        self.ctes.push(format!(
+            r#"{cte_name} AS (
+            SELECT
+                __row_id,
+                __restriction_tier{extra_select_columns}
+            FROM {schema}.{table}
+        )"#,
+            schema = quote_identifier(&schema),
+            table = quote_identifier(&table)
+        ));
+        self.sources.push(source);
+        Ok(CompiledSource { cte_name, fields })
+    }
+
+    async fn compile_dataset_major_source(
+        &mut self,
+        alias: &str,
+        dataset_id: Uuid,
+        version_major: i32,
+    ) -> ApiResult<CompiledSource> {
+        require_identifier("dataset source alias", alias)?;
+        if !self.aliases.insert(alias.to_string()) {
+            return Err(ApiError::BadRequest(format!(
+                "dataset expression alias '{alias}' is duplicated"
+            )));
+        }
+        if Some(dataset_id) == self.dataset_id {
+            return Err(ApiError::BadRequest(
+                "dataset definitions cannot reference themselves".into(),
+            ));
+        }
+        if version_major < 1 {
+            return Err(ApiError::BadRequest(
+                "dataset major version must be greater than zero".into(),
+            ));
+        }
+        require_dataset_visible_for_account(self.pool, self.account, dataset_id).await?;
+        let row = sqlx::query(
+            r#"
+            SELECT materialized_schema, materialized_table
+            FROM dataset_major_materializations
+            WHERE dataset_id = $1
+              AND version_major = $2
+              AND materialized_table IS NOT NULL
+              AND rebuild_status = 'ready'
+            "#,
+        )
+        .bind(dataset_id)
+        .bind(version_major)
+        .fetch_optional(self.pool)
+        .await?
+        .ok_or_else(|| {
+            ApiError::BadRequest(format!(
+                "dataset version {version_major} is not materialized"
+            ))
+        })?;
+        let schema: String = row.try_get("materialized_schema")?;
+        let table: String = row.try_get("materialized_table")?;
+        let cte_name = self.next_cte_name(alias)?;
+        let source = ValidatedDatasetSource {
+            source_alias: alias.to_string(),
+            form_id: None,
+            form_version_id: None,
+            source_dataset_id: Some(dataset_id),
+            dataset_revision_id: None,
+            dataset_version_major: Some(version_major),
+            position: self.sources.len() as i32,
+        };
+        let fields =
+            load_dataset_major_source_catalog(self.pool, dataset_id, version_major).await?;
         let source_fields = fields
             .iter()
             .map(|field| SourceCompileField {
@@ -3097,15 +5265,17 @@ async fn insert_dataset_sources(
         sqlx::query(
             r#"
             INSERT INTO dataset_sources
-                (dataset_id, source_alias, form_id, form_version_id, dataset_revision_id, position)
-            VALUES ($1, $2, $3, $4, $5, $6)
+                (dataset_id, source_alias, form_id, form_version_id, source_dataset_id, dataset_revision_id, dataset_version_major, position)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             "#,
         )
         .bind(dataset_id)
         .bind(&source.source_alias)
         .bind(source.form_id)
         .bind(source.form_version_id)
+        .bind(source.source_dataset_id)
         .bind(source.dataset_revision_id)
+        .bind(source.dataset_version_major)
         .bind(source.position)
         .execute(&mut **tx)
         .await?;
@@ -3145,7 +5315,8 @@ async fn insert_dataset_fields(
 async fn insert_dataset_revision(
     tx: &mut Transaction<'_, Postgres>,
     dataset_id: Uuid,
-    version_label: &str,
+    version_label: Option<&str>,
+    metadata: &DatasetRevisionMetadata,
     compiled: &CompiledDataset,
 ) -> ApiResult<Uuid> {
     let version_number: i32 = sqlx::query_scalar(
@@ -3154,6 +5325,7 @@ async fn insert_dataset_revision(
     .bind(dataset_id)
     .fetch_one(&mut **tx)
     .await?;
+    let version_label = revision_label_or_number(version_label, version_number);
     sqlx::query(
         r#"
         UPDATE dataset_revisions
@@ -3168,38 +5340,70 @@ async fn insert_dataset_revision(
     let revision_id = sqlx::query_scalar(
         r#"
         INSERT INTO dataset_revisions
-            (dataset_id, version_number, version_label, status, published_at, initial_source, operations, restriction_policy, generated_sql, output_fields)
-        VALUES ($1, $2, $3, 'published'::dataset_revision_status, now(), $4, $5, $6, $7, $8)
+            (dataset_id, version_number, version_label, force_new_major_version, status, published_at, initial_source, operations, restriction_policy, generated_sql, output_fields, definition_metadata)
+        VALUES ($1, $2, $3, $4, 'published'::dataset_revision_status, now(), $5, $6, $7, $8, $9, $10)
         RETURNING id
         "#,
     )
     .bind(dataset_id)
     .bind(version_number)
     .bind(version_label)
-    .bind(serde_json::to_value(&compiled.initial_source).map_err(|error| {
+    .bind(metadata.force_new_major_version)
+    .bind(serialize_initial_source(compiled)?)
+    .bind(serialize_operations(compiled)?)
+    .bind(serialize_restriction_policy(compiled)?)
+    .bind(&compiled.generated_sql)
+    .bind(serialize_output_fields(compiled)?)
+    .bind(serialize_metadata(metadata)?)
+    .fetch_one(&mut **tx)
+    .await?;
+
+    Ok(revision_id)
+}
+
+fn serialize_initial_source(compiled: &CompiledDataset) -> ApiResult<serde_json::Value> {
+    serde_json::to_value(&compiled.initial_source).map_err(|error| {
         ApiError::Internal(anyhow::anyhow!(
             "dataset initial source could not be serialized: {error}"
         ))
-    })?)
-    .bind(serde_json::to_value(&compiled.operations).map_err(|error| {
+    })
+}
+
+fn serialize_operations(compiled: &CompiledDataset) -> ApiResult<serde_json::Value> {
+    serde_json::to_value(&compiled.operations).map_err(|error| {
         ApiError::Internal(anyhow::anyhow!(
             "dataset operations could not be serialized: {error}"
         ))
-    })?)
-    .bind(
-        compiled
-            .restriction_policy
-            .as_ref()
-            .map(serde_json::to_value)
-            .transpose()
-            .map_err(|error| {
-                ApiError::Internal(anyhow::anyhow!(
-                    "dataset restriction policy could not be serialized: {error}"
-                ))
-            })?,
-    )
-    .bind(&compiled.generated_sql)
-    .bind(serde_json::to_value(
+    })
+}
+
+fn serialize_compatibility_findings(
+    findings: &[DatasetCompatibilityFinding],
+) -> ApiResult<serde_json::Value> {
+    serde_json::to_value(findings).map_err(|error| {
+        ApiError::Internal(anyhow::anyhow!(
+            "dataset revision changelog could not be serialized: {error}"
+        ))
+    })
+}
+
+fn serialize_restriction_policy(
+    compiled: &CompiledDataset,
+) -> ApiResult<Option<serde_json::Value>> {
+    compiled
+        .restriction_policy
+        .as_ref()
+        .map(serde_json::to_value)
+        .transpose()
+        .map_err(|error| {
+            ApiError::Internal(anyhow::anyhow!(
+                "dataset restriction policy could not be serialized: {error}"
+            ))
+        })
+}
+
+fn serialize_output_fields(compiled: &CompiledDataset) -> ApiResult<serde_json::Value> {
+    serde_json::to_value(
         compiled
             .fields
             .iter()
@@ -3210,17 +5414,29 @@ async fn insert_dataset_revision(
         ApiError::Internal(anyhow::anyhow!(
             "dataset output fields could not be serialized: {error}"
         ))
-    })?)
-    .fetch_one(&mut **tx)
-    .await?;
+    })
+}
 
-    Ok(revision_id)
+fn serialize_metadata(metadata: &DatasetRevisionMetadata) -> ApiResult<serde_json::Value> {
+    serde_json::to_value(metadata).map_err(|error| {
+        ApiError::Internal(anyhow::anyhow!(
+            "dataset revision metadata could not be serialized: {error}"
+        ))
+    })
 }
 
 async fn materialize_dataset_revision(
     tx: &mut Transaction<'_, Postgres>,
     revision_id: Uuid,
     compiled: &CompiledDataset,
+) -> ApiResult<()> {
+    materialize_dataset_revision_sql(tx, revision_id, &compiled.generated_sql).await
+}
+
+async fn materialize_dataset_revision_sql(
+    tx: &mut Transaction<'_, Postgres>,
+    revision_id: Uuid,
+    generated_sql: &str,
 ) -> ApiResult<()> {
     let table_name = format!("dataset_{}", revision_id.simple());
     let full_name = format!(
@@ -3231,12 +5447,9 @@ async fn materialize_dataset_revision(
     sqlx::query(&format!("DROP TABLE IF EXISTS {full_name}"))
         .execute(&mut **tx)
         .await?;
-    sqlx::query(&format!(
-        "CREATE TABLE {full_name} AS {}",
-        compiled.generated_sql
-    ))
-    .execute(&mut **tx)
-    .await?;
+    sqlx::query(&format!("CREATE TABLE {full_name} AS {generated_sql}"))
+        .execute(&mut **tx)
+        .await?;
     sqlx::query(&format!("CREATE INDEX ON {full_name} (__row_id)"))
         .execute(&mut **tx)
         .await?;
@@ -3258,6 +5471,175 @@ async fn materialize_dataset_revision(
     .bind(revision_id)
     .execute(&mut **tx)
     .await?;
+    Ok(())
+}
+
+async fn rebuild_dataset_major_materialization(
+    tx: &mut Transaction<'_, Postgres>,
+    dataset_id: Uuid,
+    version_major: i32,
+) -> ApiResult<()> {
+    let revision_rows = sqlx::query(
+        r#"
+        SELECT id, materialized_schema, materialized_table, output_fields
+        FROM dataset_revisions
+        WHERE dataset_id = $1
+          AND version_major = $2
+          AND status = 'published'::dataset_revision_status
+          AND materialized_schema IS NOT NULL
+          AND materialized_table IS NOT NULL
+        ORDER BY version_major, version_minor, version_patch, published_at, created_at
+        "#,
+    )
+    .bind(dataset_id)
+    .bind(version_major)
+    .fetch_all(&mut **tx)
+    .await?;
+    if revision_rows.is_empty() {
+        return Err(ApiError::BadRequest(format!(
+            "dataset version {version_major} has no materialized published revisions"
+        )));
+    }
+
+    let mut fields_by_key = BTreeMap::<String, DatasetFieldDefinition>::new();
+    for row in &revision_rows {
+        let fields = parse_revision_output_field_value(row.try_get("output_fields")?)?;
+        for field in fields {
+            fields_by_key.insert(field.key.clone(), field);
+        }
+    }
+    let output_fields = fields_by_key.into_values().collect::<Vec<_>>();
+    let table_name = format!("dataset_major_{}_v{}", dataset_id.simple(), version_major);
+    let full_name = format!(
+        "{}.{}",
+        quote_identifier("dataset_materialized"),
+        quote_identifier(&table_name)
+    );
+    sqlx::query(&format!("DROP TABLE IF EXISTS {full_name}"))
+        .execute(&mut **tx)
+        .await?;
+
+    let mut selects = Vec::new();
+    for row in revision_rows {
+        let revision_id: Uuid = row.try_get("id")?;
+        let schema: String = row.try_get("materialized_schema")?;
+        let table: String = row.try_get("materialized_table")?;
+        let fields = parse_revision_output_field_value(row.try_get("output_fields")?)?
+            .into_iter()
+            .map(|field| field.key)
+            .collect::<BTreeSet<_>>();
+        let mut columns = vec![
+            format!("concat('{}:', __row_id)::text AS __row_id", revision_id),
+            "__restriction_tier".to_string(),
+            format!("'{}'::uuid AS __source_dataset_revision_id", revision_id),
+            format!(
+                "{}::integer AS __source_dataset_version_major",
+                version_major
+            ),
+        ];
+        columns.extend(output_fields.iter().map(|field| {
+            let column = quote_identifier(&field.key);
+            if fields.contains(&field.key) {
+                format!("{column}::text AS {column}")
+            } else {
+                format!("NULL::text AS {column}")
+            }
+        }));
+        selects.push(format!(
+            "SELECT {} FROM {}.{}",
+            columns.join(", "),
+            quote_identifier(&schema),
+            quote_identifier(&table)
+        ));
+    }
+    sqlx::query(&format!(
+        "CREATE TABLE {full_name} AS {}",
+        selects.join("\nUNION ALL\n")
+    ))
+    .execute(&mut **tx)
+    .await?;
+    sqlx::query(&format!("CREATE INDEX ON {full_name} (__row_id)"))
+        .execute(&mut **tx)
+        .await?;
+    sqlx::query(&format!(
+        "CREATE INDEX ON {full_name} (__source_dataset_revision_id)"
+    ))
+    .execute(&mut **tx)
+    .await?;
+    let row_count: i64 = sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {full_name}"))
+        .fetch_one(&mut **tx)
+        .await?;
+    sqlx::query(
+        r#"
+        INSERT INTO dataset_major_materializations
+            (dataset_id, version_major, materialized_schema, materialized_table, materialized_row_count, materialized_at, rebuild_status, updated_at)
+        VALUES ($1, $2, 'dataset_materialized', $3, $4, now(), 'ready', now())
+        ON CONFLICT (dataset_id, version_major)
+        DO UPDATE SET materialized_schema = EXCLUDED.materialized_schema,
+                      materialized_table = EXCLUDED.materialized_table,
+                      materialized_row_count = EXCLUDED.materialized_row_count,
+                      materialized_at = EXCLUDED.materialized_at,
+                      rebuild_status = 'ready',
+                      updated_at = now()
+        "#,
+    )
+    .bind(dataset_id)
+    .bind(version_major)
+    .bind(table_name)
+    .bind(row_count)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+async fn refresh_major_line_consumers(
+    tx: &mut Transaction<'_, Postgres>,
+    source_dataset_id: Uuid,
+    source_version_major: i32,
+) -> ApiResult<()> {
+    let mut pending = vec![(source_dataset_id, source_version_major)];
+    let mut visited = BTreeSet::<(Uuid, i32)>::new();
+
+    while let Some((upstream_dataset_id, upstream_major)) = pending.pop() {
+        if !visited.insert((upstream_dataset_id, upstream_major)) {
+            continue;
+        }
+
+        let consumer_rows = sqlx::query(
+            r#"
+            SELECT DISTINCT
+                dataset_sources.dataset_id,
+                current_revisions.id AS revision_id,
+                current_revisions.version_major,
+                current_revisions.generated_sql
+            FROM dataset_sources
+            JOIN dataset_revisions AS current_revisions
+              ON current_revisions.dataset_id = dataset_sources.dataset_id
+             AND current_revisions.status = 'published'::dataset_revision_status
+            WHERE dataset_sources.source_dataset_id = $1
+              AND dataset_sources.dataset_version_major = $2
+              AND current_revisions.generated_sql IS NOT NULL
+            "#,
+        )
+        .bind(upstream_dataset_id)
+        .bind(upstream_major)
+        .fetch_all(&mut **tx)
+        .await?;
+
+        for row in consumer_rows {
+            let consumer_dataset_id: Uuid = row.try_get("dataset_id")?;
+            let consumer_revision_id: Uuid = row.try_get("revision_id")?;
+            let consumer_major: Option<i32> = row.try_get("version_major")?;
+            let generated_sql: String = row.try_get("generated_sql")?;
+            materialize_dataset_revision_sql(tx, consumer_revision_id, &generated_sql).await?;
+            if let Some(consumer_major) = consumer_major {
+                rebuild_dataset_major_materialization(tx, consumer_dataset_id, consumer_major)
+                    .await?;
+                pending.push((consumer_dataset_id, consumer_major));
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -3283,13 +5665,7 @@ async fn load_dataset_revision_output_fields(
     if let Some(output_fields) =
         revision.try_get::<Option<serde_json::Value>, _>("output_fields")?
     {
-        let fields = serde_json::from_value::<Vec<DatasetFieldDefinition>>(output_fields).map_err(
-            |error| {
-                ApiError::Internal(anyhow::anyhow!(
-                    "stored dataset revision output fields are invalid: {error}"
-                ))
-            },
-        )?;
+        let fields = parse_revision_output_field_value(Some(output_fields))?;
         return Ok(fields
             .into_iter()
             .map(|field| ValidatedDatasetField {
@@ -3331,6 +5707,46 @@ async fn load_dataset_revision_output_fields(
     })
     .collect::<Result<Vec<_>, sqlx::Error>>()?;
     Ok(fields)
+}
+
+fn parse_revision_output_field_value(
+    value: Option<serde_json::Value>,
+) -> ApiResult<Vec<DatasetFieldDefinition>> {
+    value
+        .map(serde_json::from_value::<Vec<DatasetFieldDefinition>>)
+        .transpose()
+        .map_err(|error| {
+            ApiError::Internal(anyhow::anyhow!(
+                "stored dataset revision output fields are invalid: {error}"
+            ))
+        })
+        .map(Option::unwrap_or_default)
+}
+
+async fn load_dataset_major_source_catalog(
+    pool: &sqlx::PgPool,
+    dataset_id: Uuid,
+    version_major: i32,
+) -> ApiResult<Vec<ValidatedDatasetField>> {
+    let revision_id: Uuid = sqlx::query_scalar(
+        r#"
+        SELECT id
+        FROM dataset_revisions
+        WHERE dataset_id = $1
+          AND version_major = $2
+          AND status = 'published'::dataset_revision_status
+        ORDER BY version_minor DESC, version_patch DESC, published_at DESC, created_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(dataset_id)
+    .bind(version_major)
+    .fetch_optional(pool)
+    .await?
+    .ok_or_else(|| {
+        ApiError::BadRequest(format!("dataset version {version_major} is not available"))
+    })?;
+    load_dataset_revision_output_fields(pool, revision_id).await
 }
 
 fn system_source_field_expression(source_field_key: &str) -> Option<&'static str> {
@@ -3618,6 +6034,24 @@ async fn require_dataset_fully_in_capability_scope(
 ) -> ApiResult<()> {
     let node_ids = load_dataset_scope_node_ids(pool, dataset_id).await?;
     auth::require_capability_contains_nodes(pool, account, capability, &node_ids).await
+}
+
+async fn dataset_fully_in_capability_scope(
+    pool: &sqlx::PgPool,
+    account: &auth::AccountContext,
+    capability: &str,
+    dataset_id: Uuid,
+) -> ApiResult<bool> {
+    let node_ids = load_dataset_scope_node_ids(pool, dataset_id).await?;
+    Ok(
+        match auth::capability_boundary(pool, account, capability).await? {
+            auth::CapabilityBoundary::Global => true,
+            auth::CapabilityBoundary::Scoped(scope_ids) => {
+                !node_ids.is_empty() && node_ids.iter().all(|node_id| scope_ids.contains(node_id))
+            }
+            auth::CapabilityBoundary::None => false,
+        },
+    )
 }
 
 async fn require_dataset_visible_for_boundary(
@@ -4647,5 +7081,358 @@ mod tests {
                 .iter()
                 .any(|field| field.key == "internal_flag")
         );
+    }
+
+    #[test]
+    fn changelog_marks_added_fields_as_minor() {
+        let published = revision_snapshot_for_test(vec![revision_field_for_test(
+            "participant_id",
+            "Participant ID",
+            "text",
+        )]);
+        let candidate = revision_snapshot_for_test(vec![
+            revision_field_for_test("participant_id", "Participant ID", "text"),
+            revision_field_for_test("score", "Score", "number"),
+        ]);
+
+        let findings = compatibility_findings(&published, &candidate);
+        let summary = compatibility_summary(&findings);
+
+        assert_eq!(summary.state, DatasetCompatibilityState::Review);
+        assert!(findings.iter().any(|finding| {
+            finding.code == "added_output_field"
+                && finding.version_impact == DatasetVersionImpact::Minor
+        }));
+    }
+
+    #[test]
+    fn changelog_marks_removed_and_type_changed_fields_as_major() {
+        let published = revision_snapshot_for_test(vec![
+            revision_field_for_test("participant_id", "Participant ID", "text"),
+            revision_field_for_test("score", "Score", "number"),
+        ]);
+        let candidate = revision_snapshot_for_test(vec![revision_field_for_test(
+            "participant_id",
+            "Participant ID",
+            "number",
+        )]);
+
+        let findings = compatibility_findings(&published, &candidate);
+        let summary = compatibility_summary(&findings);
+
+        assert_eq!(summary.state, DatasetCompatibilityState::Breaking);
+        assert_eq!(summary.major_count, 2);
+        assert!(findings.iter().any(|finding| {
+            finding.code == "removed_output_field" && finding.field_key.as_deref() == Some("score")
+        }));
+        assert!(findings.iter().any(|finding| {
+            finding.code == "changed_output_field_type"
+                && finding.field_key.as_deref() == Some("participant_id")
+        }));
+    }
+
+    #[test]
+    fn changelog_marks_restriction_changes_as_minor() {
+        let published = revision_snapshot_for_test(vec![revision_field_for_test(
+            "participant_id",
+            "Participant ID",
+            "text",
+        )]);
+        let mut candidate = revision_snapshot_for_test(vec![revision_field_for_test(
+            "participant_id",
+            "Participant ID",
+            "text",
+        )]);
+        candidate.restriction_policy = Some(DatasetRestrictionPolicyRequest {
+            internal_field_key: Some("internal_flag".into()),
+            restricted_field_key: None,
+            confidential_field_key: None,
+        });
+
+        let findings = compatibility_findings(&published, &candidate);
+        let summary = compatibility_summary(&findings);
+
+        assert_eq!(summary.state, DatasetCompatibilityState::Review);
+        assert!(findings.iter().any(|finding| {
+            finding.code == "changed_restriction_policy"
+                && finding.version_impact == DatasetVersionImpact::Minor
+        }));
+    }
+
+    #[test]
+    fn changelog_marks_label_changes_as_patch() {
+        let published = revision_snapshot_for_test(vec![revision_field_for_test(
+            "participant_id",
+            "Participant ID",
+            "text",
+        )]);
+        let candidate = revision_snapshot_for_test(vec![revision_field_for_test(
+            "participant_id",
+            "Participant Identifier",
+            "text",
+        )]);
+
+        let findings = compatibility_findings(&published, &candidate);
+        let summary = compatibility_summary(&findings);
+
+        assert_eq!(summary.state, DatasetCompatibilityState::Compatible);
+        assert_eq!(summary.patch_count, 1);
+        assert!(findings.iter().any(|finding| {
+            finding.code == "changed_output_field_label"
+                && finding.version_impact == DatasetVersionImpact::Patch
+        }));
+    }
+
+    #[test]
+    fn changelog_marks_added_sources_as_minor() {
+        let published = revision_snapshot_for_test(Vec::new());
+        let mut candidate = revision_snapshot_for_test(Vec::new());
+        candidate.operations = vec![DatasetOperationRequest::AddSource {
+            source: DatasetSourceRequest::Form {
+                alias: "source_2".into(),
+                form_id: Uuid::new_v4(),
+                form_version_id: Uuid::new_v4(),
+            },
+            add_type: "left_join".into(),
+            join_keys: vec![DatasetJoinKeyRequest {
+                left_field: "source_1__participant_id".into(),
+                right_field: "source_2__participant_id".into(),
+            }],
+            position: 0,
+        }];
+
+        let findings = compatibility_findings(&published, &candidate);
+
+        assert!(findings.iter().any(|finding| {
+            finding.code == "added_dataset_source"
+                && finding.version_impact == DatasetVersionImpact::Minor
+                && finding.field_key.as_deref() == Some("source_2")
+        }));
+    }
+
+    #[test]
+    fn changelog_marks_aggregation_changes_as_minor() {
+        let mut published = revision_snapshot_for_test(Vec::new());
+        published.operations = vec![aggregation_operation_for_test("count", None)];
+        let mut candidate = revision_snapshot_for_test(Vec::new());
+        candidate.operations = vec![aggregation_operation_for_test(
+            "sum",
+            Some("source_1__score".into()),
+        )];
+
+        let findings = compatibility_findings(&published, &candidate);
+
+        assert!(findings.iter().any(|finding| {
+            finding.code == "changed_aggregation_metric_function"
+                && finding.version_impact == DatasetVersionImpact::Minor
+        }));
+    }
+
+    #[test]
+    fn changelog_marks_calculation_constant_changes_as_patch() {
+        let mut published = revision_snapshot_for_test(Vec::new());
+        published.operations = vec![calculation_operation_for_test("10")];
+        let mut candidate = revision_snapshot_for_test(Vec::new());
+        candidate.operations = vec![calculation_operation_for_test("20")];
+
+        let findings = compatibility_findings(&published, &candidate);
+
+        assert!(findings.iter().any(|finding| {
+            finding.code == "changed_calculation_function_argument"
+                && finding.version_impact == DatasetVersionImpact::Patch
+        }));
+    }
+
+    #[test]
+    fn changelog_marks_calculated_field_type_changes_as_major() {
+        let mut published = revision_snapshot_for_test(vec![revision_field_for_test(
+            "calculated_1",
+            "Calculated 1",
+            "number",
+        )]);
+        published.operations = vec![calculation_operation_for_test("10")];
+        let mut candidate = revision_snapshot_for_test(vec![revision_field_for_test(
+            "calculated_1",
+            "Calculated 1",
+            "boolean",
+        )]);
+        candidate.operations = vec![calculation_operation_with_function_for_test(
+            "greater_than_or_equal",
+            "10",
+        )];
+
+        let findings = compatibility_findings(&published, &candidate);
+
+        assert!(findings.iter().any(|finding| {
+            finding.code == "changed_calculated_field_type"
+                && finding.version_impact == DatasetVersionImpact::Major
+                && finding.field_key.as_deref() == Some("calculated_1")
+        }));
+    }
+
+    #[test]
+    fn changelog_marks_visibility_changes_as_patch() {
+        let published = revision_snapshot_for_test(Vec::new());
+        let mut candidate = revision_snapshot_for_test(Vec::new());
+        candidate.metadata.visibility_node_ids = vec![Uuid::new_v4()];
+
+        let findings = compatibility_findings(&published, &candidate);
+
+        assert!(findings.iter().any(|finding| {
+            finding.code == "changed_dataset_visibility"
+                && finding.version_impact == DatasetVersionImpact::Patch
+        }));
+    }
+
+    #[test]
+    fn semantic_bump_follows_dataset_compatibility_findings() {
+        let patch = compatibility_summary(&[]);
+        assert_eq!(
+            semantic_bump_for_compatibility(&patch),
+            DatasetSemanticBump::Patch
+        );
+
+        let minor = compatibility_summary(&[compatibility_finding(
+            DatasetVersionImpact::Minor,
+            "added_output_field",
+            "Output field is added.".into(),
+            Some("new_field".into()),
+        )]);
+        assert_eq!(
+            semantic_bump_for_compatibility(&minor),
+            DatasetSemanticBump::Minor
+        );
+
+        let major = compatibility_summary(&[compatibility_finding(
+            DatasetVersionImpact::Major,
+            "removed_output_field",
+            "Output field is removed.".into(),
+            Some("old_field".into()),
+        )]);
+        assert_eq!(
+            semantic_bump_for_compatibility(&major),
+            DatasetSemanticBump::Major
+        );
+    }
+
+    #[test]
+    fn forced_major_overrides_compatible_dataset_publish() {
+        let compatible = compatibility_summary(&[]);
+        assert_eq!(
+            semantic_bump_for_publish(&compatible, true),
+            DatasetSemanticBump::Major
+        );
+    }
+
+    #[test]
+    fn empty_changelog_is_not_publishable() {
+        assert!(require_publishable_changelog(&[]).is_err());
+        assert!(
+            require_publishable_changelog(&[compatibility_finding(
+                DatasetVersionImpact::Patch,
+                "changed_output_field_label",
+                "Output field label changed.".into(),
+                Some("field".into()),
+            )])
+            .is_ok()
+        );
+    }
+
+    fn revision_snapshot_for_test(
+        output_fields: Vec<DatasetFieldDefinition>,
+    ) -> DatasetRevisionSnapshot {
+        DatasetRevisionSnapshot {
+            id: Uuid::new_v4(),
+            dataset_id: Uuid::new_v4(),
+            version_number: 1,
+            version_label: "Test".into(),
+            revision_notes: String::new(),
+            version_major: Some(1),
+            version_minor: Some(0),
+            version_patch: Some(0),
+            semantic_bump: Some("INITIAL".into()),
+            started_new_major_line: Some(true),
+            force_new_major_version: false,
+            status: DatasetRevisionStatus::Published,
+            created_at: chrono::Utc::now(),
+            published_at: Some(chrono::Utc::now()),
+            materialized_schema: None,
+            materialized_table: None,
+            materialized_row_count: None,
+            materialized_at: None,
+            metadata: DatasetRevisionMetadata {
+                name: "Test Dataset".into(),
+                slug: "test-dataset".into(),
+                grain: "submission".into(),
+                force_new_major_version: false,
+                visibility_node_ids: Vec::new(),
+            },
+            initial_source: DatasetSourceRequest::Form {
+                alias: "source_1".into(),
+                form_id: Uuid::nil(),
+                form_version_id: Uuid::nil(),
+            },
+            operations: Vec::new(),
+            restriction_policy: None,
+            compatibility_findings: Vec::new(),
+            generated_sql: None,
+            output_fields,
+        }
+    }
+
+    fn revision_field_for_test(key: &str, label: &str, field_type: &str) -> DatasetFieldDefinition {
+        DatasetFieldDefinition {
+            id: Uuid::new_v4(),
+            key: key.into(),
+            label: label.into(),
+            source_alias: "source_1".into(),
+            source_field_key: key.into(),
+            field_type: field_type.into(),
+            position: 0,
+        }
+    }
+
+    fn aggregation_operation_for_test(
+        function: &str,
+        source_field_key: Option<String>,
+    ) -> DatasetOperationRequest {
+        DatasetOperationRequest::Aggregation {
+            group_fields: vec!["source_1__participant_id".into()],
+            metrics: vec![dto::DatasetAggregationMetricRequest {
+                key: "metric_1".into(),
+                label: "Metric 1".into(),
+                function: function.into(),
+                source_field_key,
+                position: 0,
+            }],
+            row_picker: None,
+            position: 0,
+        }
+    }
+
+    fn calculation_operation_for_test(argument: &str) -> DatasetOperationRequest {
+        calculation_operation_with_function_for_test("add", argument)
+    }
+
+    fn calculation_operation_with_function_for_test(
+        function: &str,
+        argument: &str,
+    ) -> DatasetOperationRequest {
+        DatasetOperationRequest::CalculatedFields {
+            fields: vec![DatasetCalculatedFieldRequest {
+                key: "calculated_1".into(),
+                label: "Calculated 1".into(),
+                base_field_key: "source_1__score".into(),
+                functions: vec![dto::DatasetCalculationFunctionRequest {
+                    function: function.into(),
+                    argument: Some(argument.into()),
+                    argument_mode: "value".into(),
+                    argument_field_key: None,
+                    position: 0,
+                }],
+                position: 0,
+            }],
+            position: 0,
+        }
     }
 }

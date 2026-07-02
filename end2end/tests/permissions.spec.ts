@@ -40,6 +40,10 @@ type DatasetSummary = {
   name: string;
   visibility_nodes: VisibilityNode[];
   current_revision_id: string | null;
+  current_version_major?: number | null;
+  current_version_minor?: number | null;
+  current_version_patch?: number | null;
+  major_versions?: number[];
 };
 type DatasetTable = {
   rows: Array<{

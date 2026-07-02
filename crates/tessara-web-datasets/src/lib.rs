@@ -21,5 +21,7 @@ mod text;
 mod types;
 mod validation;
 pub use pages::{
-    DatasetDetailContent, DatasetEditorContent, DatasetPreviewContent, DatasetsIndexContent,
+    DatasetDetailContent, DatasetEditorContent, DatasetPreviewContent,
+    DatasetRevisionDetailContent, DatasetRevisionEditorContent, DatasetRevisionHistoryContent,
+    DatasetsIndexContent,
 };

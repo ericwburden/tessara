@@ -342,6 +342,28 @@ pub fn router(state: AppState) -> Router {
             }),
         )
         .route(
+            "/datasets/{dataset_id}/revisions",
+            get(|Path(dataset_id): Path<String>| async move {
+                native_app(
+                    format!("/datasets/{dataset_id}/revisions"),
+                    "Dataset Revisions",
+                    "Review dataset revision history.",
+                )
+            }),
+        )
+        .route(
+            "/datasets/{dataset_id}/revisions/{revision_id}",
+            get(
+                |Path((dataset_id, revision_id)): Path<(String, String)>| async move {
+                    native_app(
+                        format!("/datasets/{dataset_id}/revisions/{revision_id}"),
+                        "Dataset Revision",
+                        "Inspect a dataset revision.",
+                    )
+                },
+            ),
+        )
+        .route(
             "/datasets/{dataset_id}",
             get(|Path(dataset_id): Path<String>| async move {
                 native_app(

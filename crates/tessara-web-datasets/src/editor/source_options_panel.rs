@@ -57,20 +57,46 @@ pub(crate) fn SourceOptionsFields(
                                             .find(|dataset| dataset.id == dataset_id)
                                             .and_then(|dataset| dataset.current_revision_id)
                                             .unwrap_or_default();
+                                        let selected_dataset = datasets
+                                            .get()
+                                            .into_iter()
+                                            .find(|dataset| dataset.id == dataset_id);
+                                        let version_major = selected_dataset
+                                            .as_ref()
+                                            .and_then(|dataset| dataset.current_version_major)
+                                            .or_else(|| selected_dataset.and_then(|dataset| dataset.major_versions.first().copied()));
                                         let mut next_source = source_signal.get();
                                         next_source.dataset_id = dataset_id;
                                         next_source.dataset_revision_id = revision_id;
+                                        next_source.dataset_version_major = version_major;
                                         on_source_change.run(next_source);
                                     }>
                                         <option value="">"Select dataset"</option>
-                                        {datasets.get().into_iter().filter(|dataset| dataset.current_revision_id.is_some()).map(|dataset| {
+                                        {datasets.get().into_iter().filter(|dataset| !dataset.major_versions.is_empty()).map(|dataset| {
                                             view! { <option value=dataset.id>{dataset.name}</option> }
                                         }).collect_view()}
                                     </select>
                                 </label>
                                 <label class="form-field">
-                                    <span>"Revision"</span>
-                                    <input readonly prop:value=source.dataset_revision_id.clone()/>
+                                    <span>"Version"</span>
+                                    <select prop:value=source.dataset_version_major.map(|major| major.to_string()).unwrap_or_default() on:change=move |event| {
+                                        let version_major = event_target_value(&event).parse::<i32>().ok();
+                                        let mut next_source = source_signal.get();
+                                        next_source.dataset_version_major = version_major;
+                                        next_source.dataset_revision_id.clear();
+                                        on_source_change.run(next_source);
+                                    }>
+                                        <option value="">"Select version"</option>
+                                        {datasets
+                                            .get()
+                                            .into_iter()
+                                            .find(|dataset| dataset.id == source.dataset_id)
+                                            .map(|dataset| dataset.major_versions)
+                                            .unwrap_or_default()
+                                            .into_iter()
+                                            .map(|major| view! { <option value=major.to_string()>{format!("Version {major}")}</option> })
+                                            .collect_view()}
+                                    </select>
                                 </label>
                             }.into_any()
                         } else {

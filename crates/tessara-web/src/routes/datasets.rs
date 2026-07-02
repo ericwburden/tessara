@@ -8,10 +8,14 @@ use leptos_router::{MatchNestedRoutes, path};
 
 use crate::features::auth::require_authenticated_route;
 use crate::routes::PRIMARY_SSR_MODE;
-use crate::types::route_params::{DatasetRouteParams, require_route_params};
+use crate::types::route_params::{
+    DatasetRevisionRouteParams, DatasetRouteParams, require_route_params,
+};
 use crate::ui::AppShell;
 use tessara_web_datasets::{
-    DatasetDetailContent, DatasetEditorContent, DatasetPreviewContent, DatasetsIndexContent,
+    DatasetDetailContent, DatasetEditorContent, DatasetPreviewContent,
+    DatasetRevisionDetailContent, DatasetRevisionEditorContent, DatasetRevisionHistoryContent,
+    DatasetsIndexContent,
 };
 
 pub fn dataset_routes() -> impl MatchNestedRoutes + Clone {
@@ -27,6 +31,21 @@ pub fn dataset_routes() -> impl MatchNestedRoutes + Clone {
             <Route
                 path=path!("/datasets/:dataset_id/preview")
                 view=DatasetsPreviewPage
+                ssr=PRIMARY_SSR_MODE
+            />
+            <Route
+                path=path!("/datasets/:dataset_id/revisions")
+                view=DatasetsRevisionHistoryPage
+                ssr=PRIMARY_SSR_MODE
+            />
+            <Route
+                path=path!("/datasets/:dataset_id/revisions/:revision_id/edit")
+                view=DatasetsRevisionEditPage
+                ssr=PRIMARY_SSR_MODE
+            />
+            <Route
+                path=path!("/datasets/:dataset_id/revisions/:revision_id")
+                view=DatasetsRevisionDetailPage
                 ssr=PRIMARY_SSR_MODE
             />
             <Route
@@ -76,6 +95,44 @@ fn DatasetsEditPage() -> impl IntoView {
     view! {
         <AppShell active_route="datasets" title="Edit Dataset">
             <DatasetEditorContent dataset_id=Some(dataset_id)/>
+        </AppShell>
+    }
+}
+
+#[component]
+fn DatasetsRevisionHistoryPage() -> impl IntoView {
+    let params = require_route_params::<DatasetRouteParams>();
+    let dataset_id = params.dataset_id;
+
+    view! {
+        <AppShell active_route="datasets" title="Dataset Revisions">
+            <DatasetRevisionHistoryContent dataset_id/>
+        </AppShell>
+    }
+}
+
+#[component]
+fn DatasetsRevisionDetailPage() -> impl IntoView {
+    let params = require_route_params::<DatasetRevisionRouteParams>();
+    let dataset_id = params.dataset_id;
+    let revision_id = params.revision_id;
+
+    view! {
+        <AppShell active_route="datasets" title="Dataset Revision">
+            <DatasetRevisionDetailContent dataset_id revision_id/>
+        </AppShell>
+    }
+}
+
+#[component]
+fn DatasetsRevisionEditPage() -> impl IntoView {
+    let params = require_route_params::<DatasetRevisionRouteParams>();
+    let dataset_id = params.dataset_id;
+    let revision_id = params.revision_id;
+
+    view! {
+        <AppShell active_route="datasets" title="Edit Revision">
+            <DatasetRevisionEditorContent dataset_id revision_id/>
         </AppShell>
     }
 }

@@ -5,6 +5,141 @@ artifacts, old sprint worktrees, `/app/*` routes, or earlier crate names. Use
 `docs/roadmap.md`, `docs/architecture.md`, and `docs/README.md` for current
 project direction.
 
+## 2026-06-28 - Sprint 3C Dataset Revision And Compatibility Closeout
+
+- Completed:
+  - delivered typed dataset revision, compatibility, dependency, and carry-forward contracts across API and web DTOs
+  - added draft revision save, revision history/detail, and publish APIs
+  - kept draft saves isolated from current published dataset catalog rows and materialized output until publish
+  - added revision history/detail UI under `/datasets/{dataset_id}/revisions`
+  - changed existing dataset edits to save as draft revisions and redirect to draft review before publish
+  - surfaced compatibility findings and downstream dependency impact for dependent datasets, component versions, and dashboards
+  - proved dependent datasets remain pinned to their referenced revision after publish
+  - added read-only scoped user and scoped manager revision permission coverage
+  - fixed native SSR shell routes for direct revision history/detail navigation
+- Validation:
+  - `cargo fmt --all` - passed
+  - `cargo check -p tessara-api` - passed
+  - `cargo check -p tessara-web --features hydrate` - passed
+  - `cargo check -p tessara-web --no-default-features --features ssr` - passed
+  - `cargo test -p tessara-api` - passed: 32 dataset unit tests, 5 demo-flow tests, 25 workflow-runtime tests, and doc tests
+  - `$env:RUSTFLAGS='-C debuginfo=0'; cargo test -p tessara-web` - passed 4 web tests
+  - `cargo test -p tessara-web-datasets --features hydrate --lib` - passed 30 tests
+  - `.\scripts\uat-sprint.ps1 -BaseUrl "http://127.0.0.1:18080"` - passed for organization, forms, datasets, and seed flows
+  - `$env:COMPOSE_PROJECT_NAME='tessara-sprint-3c-e2e'; .\scripts\validate-e2e.ps1 -BaseUrl "http://127.0.0.1:18080" -PlaywrightArgs @("--workers=1")` - passed 33/33 browser tests, including permission scenarios
+  - `git diff --check` - passed
+  - Default-port `.\scripts\local-launch.ps1`, `.\scripts\smoke.ps1`, and `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"` were not used for the closeout run because `8080` and `5432` are currently owned by a neighboring `tessara-refactoring` compose stack. The Sprint 3C app was left running in an isolated compose project at `http://127.0.0.1:18080` with Postgres mapped to `15432`.
+- Next Sprint:
+  - Sprint 4A: Table Component Slice
+
+### Sprint Handoff / Demo Instructions
+
+#### Draft Revision Review And Publish
+- Role: admin
+- Paths:
+  - `http://127.0.0.1:18080/datasets`
+  - `http://127.0.0.1:18080/datasets/{dataset_id}/edit`
+  - `http://127.0.0.1:18080/datasets/{dataset_id}/revisions/{revision_id}`
+  - `POST /api/admin/datasets/{dataset_id}/draft-revision`
+  - `POST /api/admin/datasets/{dataset_id}/revisions/{revision_id}/publish`
+- Steps:
+  1. Sign in as `admin@tessara.local`.
+  2. Open an existing dataset, choose `Edit Dataset`, change the definition, and choose `Save Dataset`.
+  3. Confirm the browser lands on a draft revision review route.
+  4. Review the status, compatibility summary, downstream dependencies, output fields, and generated SQL.
+  5. Choose `Publish Revision`.
+- Expected:
+  - saving an edit creates a draft review page instead of replacing the current published dataset immediately
+  - publishing marks the draft as published current and supersedes the prior published revision
+- Acceptance check:
+  - pass when current dataset detail/table stay unchanged before publish and then reflect the draft after publish
+- Evidence location:
+  - `end2end/tests/datasets.spec.ts` -> `admin can review and publish a dataset draft revision`
+  - `crates/tessara-api/tests/demo_flow.rs` -> `dataset_revision_draft_publish_preserves_current_until_publish`
+
+#### Revision History And Status Visibility
+- Role: admin
+- Paths:
+  - `http://127.0.0.1:18080/datasets/{dataset_id}`
+  - `http://127.0.0.1:18080/datasets/{dataset_id}/revisions`
+  - `GET /api/datasets/{dataset_id}/revisions`
+- Steps:
+  1. Open a dataset detail page.
+  2. Choose `Revision History`.
+  3. Confirm the list shows version labels, status, current marker behavior, field count, compatibility summary, dependency counts, and published metadata.
+  4. Open a published revision and a draft revision when present.
+- Expected:
+  - current published, superseded, and draft revisions are distinguishable with typed statuses
+  - direct browser navigation to revision history/detail serves the native Leptos shell
+- Acceptance check:
+  - pass when one revision is current after publish, the previous published revision is superseded, and draft rows appear only before publish
+- Evidence location:
+  - `end2end/tests/datasets.spec.ts` -> `admin can review and publish a dataset draft revision`
+  - `crates/tessara-api/src/lib.rs` native shell routes for `/datasets/{dataset_id}/revisions`
+
+#### Compatibility And Downstream Impact
+- Role: admin
+- Paths:
+  - `http://127.0.0.1:18080/datasets/{dataset_id}/revisions/{revision_id}`
+  - `GET /api/datasets/{dataset_id}/revisions/{revision_id}`
+- Steps:
+  1. Create or select a dataset that has a dependent dataset, component version, or dashboard reference.
+  2. Save a draft that adds or changes an output field.
+  3. Open the draft revision detail.
+  4. Review `Compatibility Findings` and `Downstream Dependencies`.
+  5. Publish and verify dependent assets remain pinned to their original revision.
+- Expected:
+  - compatibility findings classify added, removed, type-changed, label, restriction-policy, and source-pipeline changes
+  - dependency impact lists datasets, component versions, and dashboards without automatically repointing them
+- Acceptance check:
+  - pass when dependency impact is visible before publish and downstream dataset source bindings still reference the original revision after publish
+- Evidence location:
+  - `crates/tessara-api/tests/demo_flow.rs` -> dependent dataset pinning and seeded component/dashboard dependency assertions
+  - `end2end/tests/datasets.spec.ts` -> downstream dependency messaging in draft review
+
+#### Scoped Revision Permissions
+- Role: admin for fixture setup; scoped dataset manager and read-only operator for verification
+- Paths:
+  - `GET /api/datasets/{dataset_id}/revisions`
+  - `GET /api/datasets/{dataset_id}/revisions/{revision_id}`
+  - `POST /api/admin/datasets/{dataset_id}/revisions/{revision_id}/publish`
+- Steps:
+  1. Use admin APIs to create a scoped `datasets:manage` account assigned to the dataset visibility node.
+  2. Create a second scoped manager assigned only to a child activity outside the dataset's full visibility boundary.
+  3. Save a draft revision.
+  4. Read history/detail and publish as the in-scope manager.
+  5. Attempt draft read and publish as the out-of-scope manager and a read-only operator.
+- Expected:
+  - in-scope managers can see and publish drafts for datasets fully inside their scope
+  - read-only users and out-of-scope managers cannot read or publish draft revisions
+  - read-only revision history omits draft revisions
+- Acceptance check:
+  - pass when draft read/publish returns forbidden for users without matching scoped manage access, while published revisions remain readable to permitted readers
+- Evidence location:
+  - `crates/tessara-api/tests/demo_flow.rs` -> scoped manager and read-only operator assertions
+  - `docs/playwright-permissions-scenarios.md` -> Dataset revisions scenario row
+
+### Acceptance Mapping
+
+- Exit condition: a tester can edit an existing dataset, save a draft revision, review compatibility findings and downstream dependencies, then publish the revision.
+  - Manual demonstration: Draft Revision Review And Publish; Compatibility And Downstream Impact.
+  - Automated check: `end2end/tests/datasets.spec.ts` `admin can review and publish a dataset draft revision`; `cargo test -p tessara-api --test demo_flow dataset_revision_draft_publish_preserves_current_until_publish`.
+- Exit condition: published revision history clearly shows current, superseded, and draft revisions with typed statuses.
+  - Manual demonstration: Revision History And Status Visibility.
+  - Automated check: `crates/tessara-api/tests/demo_flow.rs` `assert_revision_statuses`; Playwright revision history status assertions.
+- Exit condition: downstream components, dashboards, and dependent datasets remain pinned to their referenced revision after publish, and the UI explains downstream impact.
+  - Manual demonstration: Compatibility And Downstream Impact.
+  - Automated check: `crates/tessara-api/tests/demo_flow.rs` dependent dataset pinning and seeded component/dashboard dependency assertions; Playwright downstream dependency text assertion.
+- Exit condition: compatibility and dependency contracts are typed in API and web DTOs; implementation does not rely on scattered raw string comparisons.
+  - Manual demonstration: Revision detail summary and findings tables show typed labels from API/web contracts.
+  - Automated check: `cargo test -p tessara-api datasets:: --lib`; `cargo test -p tessara-web-datasets --features hydrate --lib`; DTO definitions in `crates/tessara-api/src/datasets/dto.rs` and `crates/tessara-web-datasets/src/types/contracts.rs`.
+- Exit condition: existing dataset preview, create, edit, source catalog, restriction, and materialization behavior continue to work.
+  - Manual demonstration: Draft Revision Review And Publish plus the existing dataset authoring editor flow.
+  - Automated check: `.\scripts\validate-e2e.ps1 -BaseUrl "http://127.0.0.1:18080" -PlaywrightArgs @("--workers=1")`; `cargo test -p tessara-api`; `cargo test -p tessara-web-datasets --features hydrate --lib`.
+- Exit condition: scoped dataset reader/manager accounts can only see or publish revisions permitted by their dataset capabilities.
+  - Manual demonstration: Scoped Revision Permissions.
+  - Automated check: `crates/tessara-api/tests/demo_flow.rs` scoped manager/read-only operator assertions; `docs/playwright-permissions-scenarios.md` Dataset revisions matrix entry.
+
 ## 2026-06-28 - Sprint 3C Dataset Revision And Compatibility Kickoff
 
 - Kickoff status: started from clean `main` after committing accepted Sprint 3C planning artifacts.
@@ -14,6 +149,39 @@ project direction.
 - Plan file: `docs/sprints/sprint-3c-plan.md`.
 - Planned verification commands: `cargo fmt --all`, `cargo test -p tessara-api`, `cargo test -p tessara-web`, `npx playwright test`, `.\scripts\smoke.ps1`, `.\scripts\local-launch.ps1`, and `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`.
 - Immediate implementation focus: typed revision, compatibility, dependency, and carry-forward contracts, followed by revision list/detail/draft/publish API behavior.
+
+## 2026-06-28 - Sprint 3C Revision Lifecycle Checkpoint
+
+- Implemented backend revision lifecycle foundation: typed revision/compatibility/dependency/carry-forward DTOs, `definition_metadata` revision snapshots, one-open-draft baseline constraint, draft-save endpoint, revision history/detail endpoints, and draft publish endpoint.
+- Draft saves now compile and store revision snapshots without mutating current-published dataset catalog tables or materialized preview state; publish atomically updates dataset metadata, visibility, current source/field catalogs, revision status, and materialized output.
+- Added initial compatibility classification for added, removed, type-changed, label-changed, restriction-policy-changed, and source-pipeline-changed revision snapshots, plus dependency impact discovery through dependent datasets, component versions, and dashboards.
+- Implemented first web slice: existing dataset save posts to draft-save and redirects to draft review; dataset detail links to revision history; revision history and revision detail/review routes are available under `/datasets/:dataset_id/revisions`.
+- Added database-backed API coverage proving draft saves do not mutate current published detail/table state, revision history reports draft/published/superseded states, publish advances the current revision, dependent datasets remain pinned, component/dashboard dependencies surface from seeded data, and read-only scoped users cannot view or publish draft revisions.
+- Verification passed: `cargo fmt --all`, `cargo check -p tessara-api`, `cargo check -p tessara-web --features hydrate`, `cargo check -p tessara-web --no-default-features --features ssr`, `cargo test -p tessara-api datasets:: --lib`, `cargo test -p tessara-api --test demo_flow`, and `cargo test -p tessara-web-datasets --features hydrate --lib`.
+- Remaining focus: polish revision UI, add Playwright coverage, cover additional scoped manager edge cases, and run the full sprint validation set.
+
+## 2026-06-28 - Sprint 3C Revision Lifecycle E2E Checkpoint
+
+- Added Playwright coverage for the admin draft review and publish flow: draft save leaves the current published dataset unchanged, revision history shows published/draft states, draft detail surfaces compatibility findings and downstream dependencies, publish advances the current revision, and dependent datasets remain pinned to their original revision.
+- Updated legacy Sprint 3A/3B dataset authoring Playwright flows to follow the new draft-save contract: UI saves redirect to revision review, tests publish the draft before asserting current dataset detail, and direct navigation returns to the main dataset detail where needed.
+- Fixed native shell route registration for `/datasets/{dataset_id}/revisions` and `/datasets/{dataset_id}/revisions/{revision_id}` so direct SSR navigation and redirected draft-review URLs serve the Leptos app instead of returning 404.
+- Local e2e stack note: validated with an isolated compose project on `http://127.0.0.1:18080` because an existing `tessara-refactoring` stack owned `8080` and `5432`.
+- Verification passed: `cargo fmt --all`, `cargo check -p tessara-api`, `cargo check -p tessara-web --features hydrate`, `cargo test -p tessara-api datasets:: --lib`, `cargo test -p tessara-api --test demo_flow`, `npm --prefix end2end exec -- playwright test --list tests/datasets.spec.ts`, focused `npm --prefix end2end test -- tests/datasets.spec.ts -g "admin can review and publish a dataset draft revision"`, and full `npm --prefix end2end test -- tests/datasets.spec.ts`.
+- Remaining focus: additional scoped manager edge cases, final revision UI polish, and the full sprint closeout validation set.
+
+## 2026-06-28 - Sprint 3C Scoped Manager Revision Checkpoint
+
+- Added API regression coverage for scoped dataset managers in the revision lifecycle test: an in-scope `datasets:manage` user can read draft revision detail, sees draft rows in revision history, and can publish the draft; a manager scoped only to a child activity is forbidden from reading or publishing the parent-program dataset draft.
+- Polished revision history heading copy so the app-level title remains `Dataset Revisions` while the inner page header reads `Revision History`.
+- Verification passed: `cargo fmt --all`, focused `cargo test -p tessara-api --test demo_flow dataset_revision_draft_publish_preserves_current_until_publish`, full `cargo test -p tessara-api --test demo_flow`, `cargo check -p tessara-web --features hydrate`, `cargo check -p tessara-web --no-default-features --features ssr`, and `git diff --check`.
+- Remaining focus: full sprint closeout validation.
+
+## 2026-06-28 - Sprint 3C Validation Checkpoint
+
+- Rebuilt the isolated Sprint 3C local stack on `http://127.0.0.1:18080` / Postgres `15432` after the final route and UI changes. The default `8080` / `5432` ports were occupied by a separate `tessara-refactoring` stack.
+- Validation passed: `cargo fmt --all`, `cargo check -p tessara-api`, `cargo check -p tessara-web --features hydrate`, `cargo check -p tessara-web --no-default-features --features ssr`, `cargo test -p tessara-api datasets:: --lib`, `cargo test -p tessara-api --test demo_flow`, `cargo test -p tessara-web-datasets --features hydrate --lib`, `npm --prefix end2end test -- tests/datasets.spec.ts` with `PLAYWRIGHT_BASE_URL=http://127.0.0.1:18080`, `.\scripts\uat-sprint.ps1 -BaseUrl "http://127.0.0.1:18080"`, and `git diff --check`.
+- Not run in this worktree: `.\scripts\smoke.ps1` and `.\scripts\local-launch.ps1` against their default `8080` / `5432` ports, because those ports are currently owned by the neighboring `tessara-refactoring` compose stack.
+- Remaining focus: sprint closeout packaging and handoff notes.
 
 ## 2026-06-26 - Sprint 3C Dataset Authoring Refactor Checkpoint
 

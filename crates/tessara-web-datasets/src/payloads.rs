@@ -8,6 +8,7 @@ use super::types::*;
 pub(super) struct DatasetPayloadDrafts {
     pub(super) name: String,
     pub(super) slug: String,
+    pub(super) force_new_major_version: bool,
     pub(super) visibility_node_ids: Vec<String>,
     pub(super) initial_source: DatasetSourceDraft,
     pub(super) operation_order: Vec<DatasetOperationDraft>,
@@ -23,6 +24,7 @@ pub(super) fn dataset_payload_from_drafts(
     let DatasetPayloadDrafts {
         name,
         slug,
+        force_new_major_version,
         visibility_node_ids,
         initial_source,
         operation_order,
@@ -77,6 +79,7 @@ pub(super) fn dataset_payload_from_drafts(
         name,
         slug,
         grain: "submission".into(),
+        force_new_major_version,
         visibility_node_ids,
         initial_source,
         operations,
@@ -410,6 +413,7 @@ mod tests {
         DatasetPayloadDrafts {
             name: "Ordered Dataset".into(),
             slug: "ordered-dataset".into(),
+            force_new_major_version: false,
             visibility_node_ids: Vec::new(),
             initial_source: form_source("program"),
             restriction_internal_field_key: String::new(),
