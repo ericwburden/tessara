@@ -101,8 +101,8 @@ Dataset -> Component -> Dashboard
 
 - Stable dependency edges must bind to immutable revisions or versions.
 - Archived or inactive records must remain resolvable for historical integrity.
-- When a dependent draft is rebound to a newer dependency version, the system must classify findings as compatible, warning, or blocking.
-- Publication must be blocked when blocking issues remain.
+- When a dependent draft is rebound to a newer dependency version, the system must classify changelog entries by version impact: `major`, `minor`, or `patch`.
+- Publication must be blocked for empty revisions and may separately block on validation failures when a definition cannot compile or materialize.
 - Users must be able to skip some carry-forward work rather than being forced to resolve every dependent artifact immediately.
 
 ### Dataset Revision Semantic Versioning
@@ -116,6 +116,8 @@ Dataset revisions use semantic version numbers to communicate the impact of a re
 - A revision with only patch changelog rows publishes as a patch unless the author explicitly starts a new major version.
 - Empty revisions cannot be published; a publishable revision must have at least one changelog row.
 - Patch does not mean the materialized rows are guaranteed identical; it means the dataset contract observed by downstream consumers is unchanged.
+- A dataset source labeled `Version N` means the full major line for major version `N`. It reads from one prebuilt materialized table containing rows appended from all published historical revisions in that major.
+- New minor and patch publishes automatically rebuild the selected major-line table for consumers bound to that `Version N`; new major publishes do not move existing consumers until they are explicitly rebound.
 
 ## Migration And Verification Requirements
 

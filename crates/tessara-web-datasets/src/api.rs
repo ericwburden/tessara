@@ -199,8 +199,8 @@ pub(super) async fn update_dataset_revision_label(
     let label = version_label.trim();
     let notes = revision_notes.trim();
     let body = serde_json::to_string(&DatasetRevisionLabelRequest {
-        version_label: (!label.is_empty()).then(|| label.to_string()),
-        revision_notes: (!notes.is_empty()).then(|| notes.to_string()),
+        version_label: Some(label.to_string()),
+        revision_notes: Some(notes.to_string()),
     })
     .map_err(|_| "Revision label could not be prepared.".to_string())?;
 

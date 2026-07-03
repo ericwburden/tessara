@@ -190,8 +190,8 @@ Detailed flow:
 
 When a dependent draft is rebound to a newer dependency version:
 
-- findings must classify as `compatible`, `warning`, or `blocking`
-- publication is blocked while blocking issues remain
+- changelog entries must classify version impact as `major`, `minor`, or `patch`
+- publication is blocked for empty revisions and for validation failures that prevent compilation or materialization
 - users may skip some carry-forward work instead of resolving every dependent artifact immediately
 
 This behavior applies most directly to:
@@ -199,6 +199,8 @@ This behavior applies most directly to:
 - dataset revision consumers
 - component drafts bound to newer dataset revisions
 - dashboard composition when component versions change
+
+Dataset major-line sources use an append-all contract. A source labeled `Version N` resolves to a single prebuilt `dataset_major_materializations` table for major version `N`, populated from every published historical revision in that major line. Minor and patch publishes rebuild that table; a new major publish leaves prior-major consumers bound to their existing `Version N`.
 
 ## Relational Model Summary
 
@@ -243,10 +245,13 @@ Access is evaluated from capability + scope + ownership:
 - analytical assets:
   - `datasets`
   - `dataset_revisions`
-  - `dataset_revision_dependencies`
+  - `dataset_sources`
+  - `dataset_major_materializations`
   - `components`
   - `component_versions`
   - `dashboards`
+
+Dataset dependency impact is currently derived from dataset source bindings, component versions, and dashboard components. There is no separate `dataset_revision_dependencies` table in the active model.
 
 ## API And Resource Families
 
@@ -273,7 +278,7 @@ Target analytical lifecycle examples:
 - `POST /datasets`
 - `PATCH /datasets/{dataset_id}`
 - `POST /datasets/{dataset_id}/revisions`
-- `GET /datasets/{dataset_id}/revisions/{dataset_revision_id}/sql`
+- `GET /datasets/{dataset_id}/revisions/{dataset_revision_id}` for revision detail, including generated SQL
 - `POST /components`
 - `POST /components/{component_id}/versions`
 - `POST /components/{component_id}/versions/{component_version_id}/validate`

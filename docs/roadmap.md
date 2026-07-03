@@ -161,6 +161,7 @@ Workflow and response runtime:
 Datasets, components, dashboards, and operations:
 
 - Before the next substantial dataset compiler or materialization feature, split `crates/tessara-api/src/datasets/mod.rs` mechanically into focused handler, access, repository, materialization, and compiler modules.
+- Sprint 3C review adoption intentionally defers that `datasets/mod.rs` split to a mechanical follow-up branch so blocker fixes stay focused on publish/materialization semantics.
 - After the dataset module split, or when another internal pipeline column is added beyond `__row_id` and `__restriction_tier`, introduce a small pipeline schema abstraction that separates internal CTE columns from user-visible dataset fields.
 - Split revision field loading from `DatasetSummary` if `/api/datasets` payload size, latency, or call-site needs show that output fields and revision field summaries are too heavy by default.
 - Continue the ordered dataset operation-pipeline direction: projection, aggregation, calculated fields, filters, and view restrictions should be composable in saved operation-list order, including multiple operation instances where useful.
@@ -716,7 +717,7 @@ This section records the completed foundation sequence that led to the current n
 
 **Build:**
 
-- warning/blocking findings
+- changelog version impacts plus any separate publish-blocking validation outcomes
 - carry-forward and rebinding flows
 - publication guards for incompatible changes
 - stale dependency, carry-forward, and rebinding flows operating on typed dataset, component, and dashboard relationships

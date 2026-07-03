@@ -1209,8 +1209,8 @@ Required sections:
    - source alias;
    - source field;
    - position.
-7. **Compatibility Findings**
-   - grouped by blocking, warning, info;
+7. **Changelog**
+   - grouped by major, minor, patch version impact;
    - clear human-readable explanation;
    - affected fields.
 8. **Downstream Dependencies**
@@ -1417,7 +1417,7 @@ Sprint 3C is acceptable when all of the following are true:
 18. Confirm the prior revision becomes superseded.
 19. Confirm dataset detail and table preview now reflect the new revision.
 
-### 20.2 Compatibility Findings
+### 20.2 Changelog
 
 Create draft changes that produce:
 
@@ -1428,7 +1428,7 @@ Create draft changes that produce:
 - source/operation semantic change;
 - restriction policy change.
 
-Verify each finding has the expected severity and message.
+Verify each entry has the expected version impact and message.
 
 ### 20.3 Dependency Visibility
 

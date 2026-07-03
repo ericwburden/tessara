@@ -53,10 +53,7 @@ pub(crate) fn routes() -> Router<AppState> {
             "/api/admin/datasets/{dataset_id}/sql-preview",
             post(preview_existing_dataset_sql),
         )
-        .route(
-            "/api/admin/datasets/{dataset_id}",
-            axum::routing::put(update_dataset).delete(delete_dataset),
-        )
+        .route("/api/admin/datasets/{dataset_id}", delete(delete_dataset))
         .route(
             "/api/admin/datasets/{dataset_id}/draft-revision",
             post(save_dataset_draft_revision),
@@ -550,109 +547,6 @@ pub async fn create_dataset(
     Ok(Json(IdResponse { id: dataset_id }))
 }
 
-/// Updates a dataset definition and replaces its sources and exposed fields.
-pub async fn update_dataset(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Path(dataset_id): Path<Uuid>,
-    Json(payload): Json<CreateDatasetRequest>,
-) -> ApiResult<Json<IdResponse>> {
-    let account = auth::require_capability(&state.pool, &headers, "datasets:manage").await?;
-    require_dataset_exists(&state.pool, dataset_id).await?;
-    require_dataset_fully_in_capability_scope(&state.pool, &account, "datasets:manage", dataset_id)
-        .await?;
-    require_text("dataset name", &payload.name)?;
-    require_text("dataset slug", &payload.slug)?;
-    require_dataset_slug_available_for_update(&state.pool, dataset_id, &payload.slug).await?;
-    require_node_ids_exist(&state.pool, &payload.visibility_node_ids).await?;
-    auth::require_capability_contains_nodes(
-        &state.pool,
-        &account,
-        "datasets:manage",
-        &payload.visibility_node_ids,
-    )
-    .await?;
-    let grain = DatasetGrain::parse(&payload.grain)
-        .map_err(|error| ApiError::BadRequest(error.to_string()))?;
-    if grain != DatasetGrain::Submission {
-        return Err(ApiError::BadRequest(
-            "dataset query designer currently supports submission grain".into(),
-        ));
-    }
-    let compiled =
-        compile_dataset_definition(&state.pool, &account, Some(dataset_id), &payload).await?;
-    let (semantic_version, semantic_bump) = compute_dataset_publish_semantic_version_for_compiled(
-        &state.pool,
-        dataset_id,
-        &payload,
-        &compiled,
-    )
-    .await?;
-
-    let mut tx = state.pool.begin().await?;
-    lock_dataset_for_update(&mut tx, dataset_id).await?;
-    sqlx::query("UPDATE datasets SET name = $1, slug = $2, grain = $3 WHERE id = $4")
-        .bind(&payload.name)
-        .bind(&payload.slug)
-        .bind(grain.as_str())
-        .bind(dataset_id)
-        .execute(&mut *tx)
-        .await?;
-    sqlx::query("DELETE FROM dataset_sources WHERE dataset_id = $1")
-        .bind(dataset_id)
-        .execute(&mut *tx)
-        .await?;
-    sqlx::query("DELETE FROM dataset_fields WHERE dataset_id = $1")
-        .bind(dataset_id)
-        .execute(&mut *tx)
-        .await?;
-    insert_dataset_sources(&mut tx, dataset_id, &compiled.sources).await?;
-    insert_dataset_fields(&mut tx, dataset_id, &compiled.fields).await?;
-    replace_dataset_scope_nodes_tx(&mut tx, dataset_id, &payload.visibility_node_ids).await?;
-    let revision_id = insert_dataset_revision(
-        &mut tx,
-        dataset_id,
-        payload.version_label.as_deref(),
-        &DatasetRevisionMetadata::from(&payload),
-        &compiled,
-    )
-    .await?;
-    materialize_dataset_revision(&mut tx, revision_id, &compiled).await?;
-    sqlx::query(
-        r#"
-        UPDATE dataset_revisions
-        SET status = 'superseded'::dataset_revision_status
-        WHERE dataset_id = $1
-          AND id <> $2
-          AND status IN ('published'::dataset_revision_status, 'superseded'::dataset_revision_status)
-        "#,
-    )
-    .bind(dataset_id)
-    .bind(revision_id)
-    .execute(&mut *tx)
-    .await?;
-    sqlx::query(
-        r#"
-        UPDATE dataset_revisions
-        SET status = 'published'::dataset_revision_status,
-            published_at = now()
-        WHERE id = $1
-          AND dataset_id = $2
-        "#,
-    )
-    .bind(revision_id)
-    .bind(dataset_id)
-    .execute(&mut *tx)
-    .await?;
-    update_revision_semantic_fields_tx(&mut tx, revision_id, semantic_version, semantic_bump)
-        .await?;
-    rebuild_dataset_major_materialization(&mut tx, dataset_id, semantic_version.major).await?;
-    refresh_major_line_consumers(&mut tx, dataset_id, semantic_version.major).await?;
-    tx.commit().await?;
-
-    Ok(Json(IdResponse { id: dataset_id }))
-}
-
 /// Saves an existing dataset edit as the dataset's single open draft revision.
 pub async fn save_dataset_draft_revision(
     State(state): State<AppState>,
@@ -888,9 +782,9 @@ pub async fn update_dataset_revision_label(
     validate_revision_label_value(payload.version_label.as_deref())?;
     validate_revision_notes_value(payload.revision_notes.as_deref())?;
 
-    let version_number: i32 = sqlx::query_scalar(
+    let current = sqlx::query(
         r#"
-        SELECT version_number
+        SELECT version_number, version_label, revision_notes
         FROM dataset_revisions
         WHERE dataset_id = $1
           AND id = $2
@@ -901,13 +795,17 @@ pub async fn update_dataset_revision_label(
     .fetch_optional(&state.pool)
     .await?
     .ok_or_else(|| ApiError::NotFound(format!("dataset revision {revision_id}")))?;
-    let version_label = revision_label_or_number(payload.version_label.as_deref(), version_number);
-    let revision_notes = payload
-        .revision_notes
-        .as_deref()
-        .map(str::trim)
-        .unwrap_or_default()
-        .to_string();
+    let version_number: i32 = current.try_get("version_number")?;
+    let current_version_label: String = current.try_get("version_label")?;
+    let current_revision_notes: String = current.try_get("revision_notes")?;
+    let version_label = match payload.version_label.as_deref() {
+        Some(value) => revision_label_or_number(Some(value), version_number),
+        None => current_version_label,
+    };
+    let revision_notes = match payload.revision_notes.as_deref() {
+        Some(value) => value.trim().to_string(),
+        None => current_revision_notes,
+    };
 
     sqlx::query(
         r#"
@@ -1595,65 +1493,6 @@ async fn compute_dataset_publish_semantic_version(
     Ok((current_version.increment(bump), bump))
 }
 
-async fn compute_dataset_publish_semantic_version_for_compiled(
-    pool: &sqlx::PgPool,
-    dataset_id: Uuid,
-    payload: &CreateDatasetRequest,
-    compiled: &CompiledDataset,
-) -> ApiResult<(DatasetSemanticVersion, DatasetSemanticBump)> {
-    let Some(current_id) = current_published_revision_id(pool, dataset_id).await? else {
-        return Ok((
-            DatasetSemanticVersion {
-                major: 1,
-                minor: 0,
-                patch: 0,
-            },
-            DatasetSemanticBump::Initial,
-        ));
-    };
-    let current = load_revision_snapshot(pool, dataset_id, current_id).await?;
-    let current_version = current_semantic_version(&current).unwrap_or(DatasetSemanticVersion {
-        major: 1,
-        minor: 0,
-        patch: 0,
-    });
-    let candidate = DatasetRevisionSnapshot {
-        id: Uuid::nil(),
-        dataset_id,
-        version_number: 0,
-        version_label: revision_label_or_number(payload.version_label.as_deref(), 0),
-        revision_notes: String::new(),
-        version_major: None,
-        version_minor: None,
-        version_patch: None,
-        semantic_bump: None,
-        started_new_major_line: None,
-        force_new_major_version: payload.force_new_major_version,
-        status: DatasetRevisionStatus::Draft,
-        created_at: chrono::Utc::now(),
-        published_at: None,
-        materialized_schema: None,
-        materialized_table: None,
-        materialized_row_count: None,
-        materialized_at: None,
-        metadata: DatasetRevisionMetadata::from(payload),
-        initial_source: compiled.initial_source.clone(),
-        operations: compiled.operations.clone(),
-        restriction_policy: compiled.restriction_policy.clone(),
-        compatibility_findings: Vec::new(),
-        generated_sql: Some(compiled.generated_sql.clone()),
-        output_fields: compiled
-            .fields
-            .iter()
-            .map(dataset_field_definition)
-            .collect(),
-    };
-    let findings = compatibility_findings(&current, &candidate);
-    let summary = compatibility_summary(&findings);
-    let bump = semantic_bump_for_publish(&summary, payload.force_new_major_version);
-    Ok((current_version.increment(bump), bump))
-}
-
 fn current_semantic_version(snapshot: &DatasetRevisionSnapshot) -> Option<DatasetSemanticVersion> {
     Some(DatasetSemanticVersion {
         major: snapshot.version_major?,
@@ -1891,19 +1730,34 @@ async fn load_dataset_revision_review(
         snapshot.compatibility_findings.clone()
     };
     let compatibility = compatibility_summary(&compatibility_findings);
-    let dependency_impacts = if let Some(current_id) = current_revision_id {
-        let current = load_revision_snapshot(pool, dataset_id, current_id).await?;
-        load_dependency_impacts(
-            pool,
-            current_id,
-            dataset_id,
-            current.version_major,
-            snapshot.version_major,
-            compatibility.state,
-        )
-        .await?
-    } else {
-        Vec::new()
+    let dependency_impacts = match snapshot.status {
+        DatasetRevisionStatus::Draft => {
+            if let Some(current_id) = current_revision_id {
+                let current = load_revision_snapshot(pool, dataset_id, current_id).await?;
+                load_dependency_impacts(
+                    pool,
+                    current_id,
+                    dataset_id,
+                    current.version_major,
+                    snapshot.version_major,
+                    compatibility.state,
+                )
+                .await?
+            } else {
+                Vec::new()
+            }
+        }
+        DatasetRevisionStatus::Published | DatasetRevisionStatus::Superseded => {
+            load_dependency_impacts(
+                pool,
+                snapshot.id,
+                dataset_id,
+                snapshot.version_major,
+                snapshot.version_major,
+                compatibility.state,
+            )
+            .await?
+        }
     };
     let dependencies = dependency_summary(&dependency_impacts);
     Ok(DatasetRevisionReview {
@@ -5481,14 +5335,18 @@ async fn rebuild_dataset_major_materialization(
 ) -> ApiResult<()> {
     let revision_rows = sqlx::query(
         r#"
-        SELECT id, materialized_schema, materialized_table, output_fields
+        SELECT id, version_major, version_minor, version_patch, version_number,
+               materialized_schema, materialized_table, output_fields
         FROM dataset_revisions
         WHERE dataset_id = $1
           AND version_major = $2
-          AND status = 'published'::dataset_revision_status
+          AND status IN ('published'::dataset_revision_status, 'superseded'::dataset_revision_status)
           AND materialized_schema IS NOT NULL
           AND materialized_table IS NOT NULL
-        ORDER BY version_major, version_minor, version_patch, published_at, created_at
+        ORDER BY version_major,
+                 COALESCE(version_minor, 0),
+                 COALESCE(version_patch, 0),
+                 version_number
         "#,
     )
     .bind(dataset_id)
@@ -5501,14 +5359,11 @@ async fn rebuild_dataset_major_materialization(
         )));
     }
 
-    let mut fields_by_key = BTreeMap::<String, DatasetFieldDefinition>::new();
-    for row in &revision_rows {
-        let fields = parse_revision_output_field_value(row.try_get("output_fields")?)?;
-        for field in fields {
-            fields_by_key.insert(field.key.clone(), field);
-        }
-    }
-    let output_fields = fields_by_key.into_values().collect::<Vec<_>>();
+    let latest_revision = revision_rows
+        .last()
+        .expect("revision rows should not be empty after guard");
+    let output_fields =
+        parse_revision_output_field_value(latest_revision.try_get("output_fields")?)?;
     let table_name = format!("dataset_major_{}_v{}", dataset_id.simple(), version_major);
     let full_name = format!(
         "{}.{}",
@@ -5522,6 +5377,9 @@ async fn rebuild_dataset_major_materialization(
     let mut selects = Vec::new();
     for row in revision_rows {
         let revision_id: Uuid = row.try_get("id")?;
+        let source_major: Option<i32> = row.try_get("version_major")?;
+        let source_minor: Option<i32> = row.try_get("version_minor")?;
+        let source_patch: Option<i32> = row.try_get("version_patch")?;
         let schema: String = row.try_get("materialized_schema")?;
         let table: String = row.try_get("materialized_table")?;
         let fields = parse_revision_output_field_value(row.try_get("output_fields")?)?
@@ -5534,7 +5392,21 @@ async fn rebuild_dataset_major_materialization(
             format!("'{}'::uuid AS __source_dataset_revision_id", revision_id),
             format!(
                 "{}::integer AS __source_dataset_version_major",
-                version_major
+                source_major.unwrap_or(version_major)
+            ),
+            format!(
+                "{}::integer AS __source_dataset_version_minor",
+                source_minor.unwrap_or(0)
+            ),
+            format!(
+                "{}::integer AS __source_dataset_version_patch",
+                source_patch.unwrap_or(0)
+            ),
+            format!(
+                "'v{}.{}.{}'::text AS __source_dataset_semantic_version",
+                source_major.unwrap_or(version_major),
+                source_minor.unwrap_or(0),
+                source_patch.unwrap_or(0)
             ),
         ];
         columns.extend(output_fields.iter().map(|field| {
@@ -5734,8 +5606,10 @@ async fn load_dataset_major_source_catalog(
         FROM dataset_revisions
         WHERE dataset_id = $1
           AND version_major = $2
-          AND status = 'published'::dataset_revision_status
-        ORDER BY version_minor DESC, version_patch DESC, published_at DESC, created_at DESC
+          AND status IN ('published'::dataset_revision_status, 'superseded'::dataset_revision_status)
+        ORDER BY COALESCE(version_minor, 0) DESC,
+                 COALESCE(version_patch, 0) DESC,
+                 version_number DESC
         LIMIT 1
         "#,
     )

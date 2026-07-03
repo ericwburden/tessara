@@ -139,6 +139,66 @@ async fn demo_seed_uses_capability_scope_ownership_and_components() {
             .iter()
             .any(|impact| impact["kind"] == "dashboard" && impact["id"] == seed["dashboard_id"])
     );
+    let label_update = request_json(
+        app.clone(),
+        authorized_request(
+            "PATCH",
+            &format!(
+                "/api/admin/datasets/{}/revisions/{}/label",
+                seed["dataset_id"].as_str().expect("dataset id"),
+                seed["dataset_revision_id"]
+                    .as_str()
+                    .expect("dataset revision id")
+            ),
+            &admin_token,
+            Some(json!({
+                "version_label": "Initial Seed",
+                "revision_notes": "Seeded baseline notes"
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(label_update["version_label"], "Initial Seed");
+    assert_eq!(label_update["revision_notes"], "Seeded baseline notes");
+    let partial_label_update = request_json(
+        app.clone(),
+        authorized_request(
+            "PATCH",
+            &format!(
+                "/api/admin/datasets/{}/revisions/{}/label",
+                seed["dataset_id"].as_str().expect("dataset id"),
+                seed["dataset_revision_id"]
+                    .as_str()
+                    .expect("dataset revision id")
+            ),
+            &admin_token,
+            Some(json!({ "version_label": "Retitled Seed" })),
+        ),
+    )
+    .await;
+    assert_eq!(partial_label_update["version_label"], "Retitled Seed");
+    assert_eq!(
+        partial_label_update["revision_notes"],
+        "Seeded baseline notes"
+    );
+    let partial_notes_update = request_json(
+        app.clone(),
+        authorized_request(
+            "PATCH",
+            &format!(
+                "/api/admin/datasets/{}/revisions/{}/label",
+                seed["dataset_id"].as_str().expect("dataset id"),
+                seed["dataset_revision_id"]
+                    .as_str()
+                    .expect("dataset revision id")
+            ),
+            &admin_token,
+            Some(json!({ "revision_notes": "Updated notes only" })),
+        ),
+    )
+    .await;
+    assert_eq!(partial_notes_update["version_label"], "Retitled Seed");
+    assert_eq!(partial_notes_update["revision_notes"], "Updated notes only");
 
     let operator_token = login_token_for(
         app.clone(),
@@ -676,11 +736,28 @@ async fn dataset_revision_draft_publish_preserves_current_until_publish() {
             "POST",
             "/api/admin/datasets",
             &admin_token,
-            Some(initial_payload),
+            Some(initial_payload.clone()),
         ),
     )
     .await;
     let dataset_id = created["id"].as_str().expect("created dataset id");
+    let legacy_update_status = request_status(
+        app.clone(),
+        authorized_request(
+            "PUT",
+            &format!("/api/admin/datasets/{dataset_id}"),
+            &admin_token,
+            Some(initial_payload.clone()),
+        ),
+    )
+    .await;
+    assert!(
+        matches!(
+            legacy_update_status,
+            StatusCode::METHOD_NOT_ALLOWED | StatusCode::NOT_FOUND
+        ),
+        "legacy dataset update route should not accept published-state mutations"
+    );
     let published_detail = request_json(
         app.clone(),
         authorized_request(
@@ -707,6 +784,32 @@ async fn dataset_revision_draft_publish_preserves_current_until_publish() {
     )
     .await;
     assert_table_values(&published_table, &[first_key], &[second_key]);
+    let no_op_draft = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            &format!("/api/admin/datasets/{dataset_id}/draft-revision"),
+            &admin_token,
+            Some(initial_payload.clone()),
+        ),
+    )
+    .await;
+    let no_op_draft_revision_id = no_op_draft["revision_id"]
+        .as_str()
+        .expect("no-op draft revision id");
+    let no_op_publish_status = request_status(
+        app.clone(),
+        authorized_request(
+            "POST",
+            &format!(
+                "/api/admin/datasets/{dataset_id}/revisions/{no_op_draft_revision_id}/publish"
+            ),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(no_op_publish_status, StatusCode::BAD_REQUEST);
     let dependent_payload = json!({
         "name": "Revision Lifecycle Dependent Dataset",
         "slug": "revision-lifecycle-dependent-dataset",
@@ -771,7 +874,7 @@ async fn dataset_revision_draft_publish_preserves_current_until_publish() {
             "POST",
             "/api/admin/datasets",
             &admin_token,
-            Some(major_dependent_payload),
+            Some(major_dependent_payload.clone()),
         ),
     )
     .await;
@@ -1141,6 +1244,129 @@ async fn dataset_revision_draft_publish_preserves_current_until_publish() {
             (&draft_revision_id, "published", true),
         ],
     );
+    let superseded_detail = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/datasets/{dataset_id}/revisions/{initial_revision_id}"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert!(
+        superseded_detail["dependency_impacts"]
+            .as_array()
+            .expect("superseded dependency impacts")
+            .iter()
+            .any(|impact| {
+                impact["binding_mode"] == "exact_revision" && impact["id"] == dependent_dataset_id
+            })
+    );
+    assert!(
+        superseded_detail["dependency_impacts"]
+            .as_array()
+            .expect("superseded dependency impacts")
+            .iter()
+            .any(|impact| {
+                impact["binding_mode"] == "major_line"
+                    && impact["pinned_version_major"] == 1
+                    && impact["id"] == major_dependent_dataset_id
+            })
+    );
+
+    let mut major_two_payload = dataset_revision_payload(
+        "Revision Lifecycle Dataset V2",
+        "revision-lifecycle-dataset",
+        form_id,
+        form_version_id,
+        visibility_node_id,
+        json!([{
+            "key": first_key,
+            "label": first_label,
+            "source_alias": "form_a",
+            "source_field_key": first_key,
+            "position": 0
+        }, {
+            "key": second_key,
+            "label": second_label,
+            "source_alias": "form_a",
+            "source_field_key": second_key,
+            "position": 1
+        }]),
+    );
+    major_two_payload["force_new_major_version"] = json!(true);
+    let major_two_draft = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            &format!("/api/admin/datasets/{dataset_id}/draft-revision"),
+            &admin_token,
+            Some(major_two_payload),
+        ),
+    )
+    .await;
+    let major_two_revision_id = major_two_draft["revision_id"]
+        .as_str()
+        .expect("major two draft revision id");
+    let major_two_publish = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            &format!("/api/admin/datasets/{dataset_id}/revisions/{major_two_revision_id}/publish"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(major_two_publish["semantic_version"], "v2.0.0");
+    let major_dependent_after_new_major = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/datasets/{major_dependent_dataset_id}/table"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(
+        major_dependent_after_new_major["rows"]
+            .as_array()
+            .expect("major dependent rows after new major")
+            .len(),
+        major_dependent_before_count * 2,
+        "Version 1 consumers should remain on the Version 1 major-line table after Version 2 publishes"
+    );
+    let mut major_dependent_draft_payload = major_dependent_payload;
+    major_dependent_draft_payload["name"] =
+        json!("Revision Lifecycle Major Dependent Dataset Draft");
+    let major_dependent_draft = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            &format!("/api/admin/datasets/{major_dependent_dataset_id}/draft-revision"),
+            &admin_token,
+            Some(major_dependent_draft_payload),
+        ),
+    )
+    .await;
+    let major_dependent_draft_revision_id = major_dependent_draft["revision_id"]
+        .as_str()
+        .expect("major dependent draft revision id");
+    let major_dependent_publish = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            &format!(
+                "/api/admin/datasets/{major_dependent_dataset_id}/revisions/{major_dependent_draft_revision_id}/publish"
+            ),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(major_dependent_publish["status"], "published");
 }
 
 #[tokio::test]

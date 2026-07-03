@@ -696,7 +696,7 @@ test("admin can author, edit, save, and view a Sprint 3A dataset", async ({
     await expect(page.getByRole("button", { name: "Generated SQL" })).toBeVisible();
     await expect(page.getByText("Operation Designer")).toHaveCount(0);
     await expect(page.getByText("Open Preview")).toHaveCount(0);
-    await expect(page.locator(".dataset-projection-builder")).toHaveCount(0);
+    await expect(page.locator(".dataset-projection-builder")).toBeHidden();
 
     const sourceSection = await openEditorSection(page, "Initial Data Source");
     await sourceSection.getByLabel("Alias").fill("program1");
@@ -1390,15 +1390,17 @@ test("admin can review and publish a dataset draft revision", async ({ page }) =
 
     await page.goto(`/datasets/${datasetId}/revisions/${draft.revision_id}`);
     await expect(page.locator(".page-header")).toContainText(`${datasetName} Draft`);
-    await expect(page.locator(".dataset-detail-summary")).toContainText("Draft");
-    await expect(page.locator(".dataset-detail-summary")).toContainText("1 total");
+    const revisionSummary = page
+      .locator(".route-panel__section")
+      .filter({ hasText: "Dependency Review" })
+      .first();
+    await expect(revisionSummary).toContainText("Draft");
+    await expect(revisionSummary).toContainText("1 total");
     await expect(page.getByRole("heading", { name: "Changelog" })).toBeVisible();
-    await expect(
-      page.locator(".route-panel__section", { hasText: "Changelog" }),
-    ).toContainText(/added/i);
+    await expect(page.locator("table.data-table").filter({ hasText: "Version Impact" })).toContainText(/added/i);
     await expect(page.getByRole("heading", { name: "Downstream Dependencies" })).toBeVisible();
     await expect(
-      page.locator(".route-panel__section", { hasText: "Downstream Dependencies" }),
+      page.locator("table.data-table").filter({ hasText: "Carry Forward" }),
     ).toContainText("Playwright Revision Dependent");
     await expect(page.getByRole("button", { name: "Publish" })).toBeVisible();
 
@@ -1413,7 +1415,7 @@ test("admin can review and publish a dataset draft revision", async ({ page }) =
     await page.getByRole("button", { name: "Publish" }).click();
     await page.getByRole("menuitem", { name: "Revision" }).click();
     expect((await publishResponse).ok()).toBeTruthy();
-    await expect(page.locator(".dataset-detail-summary")).toContainText("Published current");
+    await expect(revisionSummary).toContainText("Published current");
 
     const publishedDetail = await expectJson<DatasetDefinition>(
       await page.request.get(`/api/datasets/${datasetId}`),

@@ -86,10 +86,10 @@ project direction.
   1. Create or select a dataset that has a dependent dataset, component version, or dashboard reference.
   2. Save a draft that adds or changes an output field.
   3. Open the draft revision detail.
-  4. Review `Compatibility Findings` and `Downstream Dependencies`.
+  4. Review `Changelog` and `Downstream Dependencies`.
   5. Publish and verify dependent assets remain pinned to their original revision.
 - Expected:
-  - compatibility findings classify added, removed, type-changed, label, restriction-policy, and source-pipeline changes
+  - changelog entries classify added, removed, type-changed, label, restriction-policy, and source-pipeline changes by `major`, `minor`, or `patch` version impact
   - dependency impact lists datasets, component versions, and dashboards without automatically repointing them
 - Acceptance check:
   - pass when dependency impact is visible before publish and downstream dataset source bindings still reference the original revision after publish
