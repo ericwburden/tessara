@@ -200,6 +200,7 @@ pub fn DatasetRevisionDetailContent(dataset_id: String, revision_id: String) -> 
     let load_error = RwSignal::new(None::<String>);
     let publish_error = RwSignal::new(None::<String>);
     let publish_message = RwSignal::new(None::<String>);
+    let is_publishing = RwSignal::new(false);
     let label_draft = RwSignal::new(String::new());
     let notes_draft = RwSignal::new(String::new());
     let label_loaded_revision_id = RwSignal::new(None::<String>);
@@ -208,6 +209,7 @@ pub fn DatasetRevisionDetailContent(dataset_id: String, revision_id: String) -> 
     let options_error = RwSignal::new(None::<String>);
     let delete_error = RwSignal::new(None::<String>);
     let delete_message = RwSignal::new(None::<String>);
+    let is_deleting = RwSignal::new(false);
 
     Effect::new({
         let dataset_id = dataset_id.clone();
@@ -303,14 +305,15 @@ pub fn DatasetRevisionDetailContent(dataset_id: String, revision_id: String) -> 
                                 <section class="route-panel__section">
                                     <div class="button-row dataset-revision-actions">
                                         <a class="button button--secondary" href=edit_href>"Edit Revision"</a>
-                                        <button class="button button--danger" type="button" on:click=move |_| {
+                                        <button class="button button--danger" type="button" disabled=move || is_deleting.get() on:click=move |_| {
                                             delete_dataset_revision(
                                                 delete_dataset_id.clone(),
                                                 delete_revision_id.clone(),
                                                 delete_error,
                                                 delete_message,
+                                                is_deleting,
                                             );
-                                        }>"Delete Revision"</button>
+                                        }>{move || if is_deleting.get() { "Deleting..." } else { "Delete Revision" }}</button>
                                         <PublishRevisionMenu
                                             dataset_id=publish_dataset_id
                                             revision_id=publish_revision_id
@@ -318,6 +321,7 @@ pub fn DatasetRevisionDetailContent(dataset_id: String, revision_id: String) -> 
                                             options_error
                                             publish_error
                                             publish_message
+                                            is_publishing
                                         />
                                     </div>
                                 </section>
@@ -447,6 +451,7 @@ fn PublishRevisionMenu(
     options_error: RwSignal<Option<String>>,
     publish_error: RwSignal<Option<String>>,
     publish_message: RwSignal<Option<String>>,
+    is_publishing: RwSignal<bool>,
 ) -> impl IntoView {
     let is_open = RwSignal::new(false);
     let menu_class = move || {
@@ -468,9 +473,10 @@ fn PublishRevisionMenu(
                 type="button"
                 aria-haspopup="menu"
                 aria-expanded=move || is_open.get().to_string()
+                disabled=move || is_publishing.get()
                 on:click=move |_| is_open.update(|open| *open = !*open)
             >
-                "Publish"
+                {move || if is_publishing.get() { "Publishing..." } else { "Publish" }}
             </button>
             <button
                 class="dropdown-menu__scrim"
@@ -479,7 +485,7 @@ fn PublishRevisionMenu(
                 on:click=move |_| is_open.set(false)
             ></button>
             <div class="dropdown-menu__content blurred-surface" role="menu" on:click=move |_| is_open.set(false)>
-                <button class="dropdown-menu__item" type="button" role="menuitem" on:click=move |_| {
+                <button class="dropdown-menu__item" type="button" role="menuitem" disabled=move || is_publishing.get() on:click=move |_| {
                     publish_dataset_revision(
                         revision_dataset_id.clone(),
                         revision_revision_id.clone(),
@@ -488,11 +494,12 @@ fn PublishRevisionMenu(
                         options_error,
                         publish_error,
                         publish_message,
+                        is_publishing,
                     );
                 }>
                     <span>"Revision"</span>
                 </button>
-                <button class="dropdown-menu__item" type="button" role="menuitem" on:click=move |_| {
+                <button class="dropdown-menu__item" type="button" role="menuitem" disabled=move || is_publishing.get() on:click=move |_| {
                     publish_dataset_revision(
                         major_dataset_id.clone(),
                         major_revision_id.clone(),
@@ -501,6 +508,7 @@ fn PublishRevisionMenu(
                         options_error,
                         publish_error,
                         publish_message,
+                        is_publishing,
                     );
                 }>
                     <span>"New Major Version"</span>
@@ -811,8 +819,12 @@ fn publish_dataset_revision(
     options_error: RwSignal<Option<String>>,
     publish_error: RwSignal<Option<String>>,
     publish_message: RwSignal<Option<String>>,
+    is_publishing: RwSignal<bool>,
 ) {
     leptos::task::spawn_local(async move {
+        if is_publishing.get_untracked() {
+            return;
+        }
         let confirmation = if force_new_major_version {
             "Publish this draft as a new major version?"
         } else {
@@ -825,6 +837,7 @@ fn publish_dataset_revision(
             return;
         }
 
+        is_publishing.set(true);
         options_error.set(None);
         publish_error.set(None);
         publish_message.set(None);
@@ -837,6 +850,7 @@ fn publish_dataset_revision(
         {
             Ok(updated) => revision.set(Some(updated)),
             Err(message) => {
+                is_publishing.set(false);
                 options_error.set(Some(message));
                 return;
             }
@@ -851,7 +865,10 @@ fn publish_dataset_revision(
                     ));
                 }
             }
-            Err(message) => publish_error.set(Some(message)),
+            Err(message) => {
+                is_publishing.set(false);
+                publish_error.set(Some(message));
+            }
         }
     });
 }
@@ -865,6 +882,7 @@ fn publish_dataset_revision(
     _: RwSignal<Option<String>>,
     _: RwSignal<Option<String>>,
     _: RwSignal<Option<String>>,
+    _: RwSignal<bool>,
 ) {
 }
 
@@ -874,8 +892,12 @@ fn delete_dataset_revision(
     revision_id: String,
     delete_error: RwSignal<Option<String>>,
     delete_message: RwSignal<Option<String>>,
+    is_deleting: RwSignal<bool>,
 ) {
     leptos::task::spawn_local(async move {
+        if is_deleting.get_untracked() {
+            return;
+        }
         let confirmed = web_sys::window()
             .and_then(|window| {
                 window
@@ -887,6 +909,7 @@ fn delete_dataset_revision(
             return;
         }
 
+        is_deleting.set(true);
         delete_error.set(None);
         delete_message.set(None);
         match api::delete_dataset_revision(&dataset_id, &revision_id).await {
@@ -898,7 +921,10 @@ fn delete_dataset_revision(
                         .set_href(&format!("/datasets/{dataset_id}/revisions"));
                 }
             }
-            Err(message) => delete_error.set(Some(message)),
+            Err(message) => {
+                is_deleting.set(false);
+                delete_error.set(Some(message));
+            }
         }
     });
 }
@@ -909,6 +935,7 @@ fn delete_dataset_revision(
     _: String,
     _: RwSignal<Option<String>>,
     _: RwSignal<Option<String>>,
+    _: RwSignal<bool>,
 ) {
 }
 
