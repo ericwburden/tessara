@@ -38,12 +38,24 @@ type WorkflowDefinition = WorkflowSummary & { versions: Array<{ id: string; stat
 type DatasetSummary = {
   id: string;
   name: string;
+  slug?: string;
   visibility_nodes: VisibilityNode[];
   current_revision_id: string | null;
   current_version_major?: number | null;
   current_version_minor?: number | null;
   current_version_patch?: number | null;
   major_versions?: number[];
+};
+type DatasetDefinition = DatasetSummary & {
+  slug: string;
+  initial_source: Record<string, unknown>;
+  operations: Array<Record<string, unknown>>;
+  restriction_policy?: Record<string, unknown> | null;
+};
+type DatasetDraftRevisionResponse = {
+  dataset_id: string;
+  revision_id: string;
+  status: "draft";
 };
 type DatasetTable = {
   rows: Array<{
@@ -1015,6 +1027,55 @@ test.describe.serial("capability + scope + ownership permissions", () => {
     expect(operations.dataset_readiness.datasets.some((item) => item.dataset_id === fixtures.inScopeDataset.id)).toBe(true);
     expect(operations.dataset_readiness.datasets.some((item) => item.dataset_id === fixtures.outOfScopeDataset.id)).toBe(false);
     expect(operations.workflow_assignments.every((item) => fixtures.inScopeNodeIds.has(item.node_id))).toBe(true);
+  });
+
+  test("dataset revision UI hides drafts from scoped readers", async ({ page }) => {
+    const dataset = await getJson<DatasetDefinition>(
+      fixtures.admin,
+      `/api/datasets/${fixtures.inScopeDataset.id}`,
+    );
+    const draft = await postJson<DatasetDraftRevisionResponse>(
+      fixtures.admin,
+      `/api/admin/datasets/${dataset.id}/draft-revision`,
+      {
+        name: `${dataset.name} Permission Draft`,
+        slug: dataset.slug,
+        grain: "submission",
+        visibility_node_ids: dataset.visibility_nodes.map((node) => node.node_id),
+        initial_source: dataset.initial_source,
+        operations: dataset.operations,
+        restriction_policy: dataset.restriction_policy ?? null,
+      },
+    );
+
+    try {
+      await signInPage(page, "admin@tessara.local", "tessara-dev-admin");
+      await page.goto(`/datasets/${dataset.id}/revisions`);
+      await expect(page.getByRole("heading", { level: 1, name: "Dataset Revisions" })).toBeVisible();
+      await expect(page.locator("tbody")).toContainText("Draft");
+      await page.goto(`/datasets/${dataset.id}/revisions/${draft.revision_id}`);
+      await expect(page.getByRole("heading", { level: 1, name: "Dataset Revision" })).toBeVisible();
+      await expect(page.locator(".route-panel__section").filter({ hasText: "Status" }).first()).toContainText("Draft");
+
+      await signInPage(page, `${RUN_ID}-scoped-manager@tessara.local`);
+      await page.goto(`/datasets/${dataset.id}/revisions`);
+      await expect(page.getByRole("heading", { level: 1, name: "Dataset Revisions" })).toBeVisible();
+      await expect(page.locator("tbody")).toContainText("Published current");
+      await expect(page.locator("tbody")).not.toContainText("Draft");
+      await expectStatus(
+        fixtures.scopedManager,
+        "get",
+        `/api/datasets/${dataset.id}/revisions/${draft.revision_id}`,
+        [403],
+      );
+    } finally {
+      await expectStatus(
+        fixtures.admin,
+        "delete",
+        `/api/admin/datasets/${dataset.id}/revisions/${draft.revision_id}`,
+        [200, 204, 404],
+      );
+    }
   });
 
   test("operations route is visible only to operations viewers", async ({ page }) => {
