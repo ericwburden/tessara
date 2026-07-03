@@ -718,13 +718,12 @@ fn dependency_kind_label(kind: &DatasetDependencyKind) -> &'static str {
 }
 
 fn dependency_binding_label(impact: &DatasetDependencyImpact) -> String {
-    if impact.binding_mode == "major_line" {
-        impact
+    match impact.binding_mode {
+        DatasetDependencyBindingMode::MajorLine => impact
             .pinned_version_major
             .map(|major| format!("Version {major}"))
-            .unwrap_or_else(|| "Version".to_string())
-    } else {
-        "Exact Revision".to_string()
+            .unwrap_or_else(|| "Version".to_string()),
+        DatasetDependencyBindingMode::ExactRevision => "Exact Revision".to_string(),
     }
 }
 

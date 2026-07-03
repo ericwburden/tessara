@@ -99,6 +99,13 @@ pub(crate) enum DatasetDependencyKind {
     Dashboard,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum DatasetDependencyBindingMode {
+    ExactRevision,
+    MajorLine,
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum DatasetCarryForwardState {
@@ -131,9 +138,18 @@ pub(crate) struct DatasetDependencyImpact {
     pub(crate) name: String,
     pub(crate) pinned_revision_id: String,
     pub(crate) pinned_version_major: Option<i32>,
-    pub(crate) binding_mode: String,
+    pub(crate) binding_mode: DatasetDependencyBindingMode,
     pub(crate) carry_forward_state: DatasetCarryForwardState,
     pub(crate) message: String,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub(crate) enum DatasetSemanticBump {
+    Initial,
+    Patch,
+    Minor,
+    Major,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -154,7 +170,7 @@ pub(crate) struct DatasetRevisionSummary {
     pub(crate) version_major: Option<i32>,
     pub(crate) version_minor: Option<i32>,
     pub(crate) version_patch: Option<i32>,
-    pub(crate) semantic_bump: Option<String>,
+    pub(crate) semantic_bump: Option<DatasetSemanticBump>,
     pub(crate) started_new_major_line: Option<bool>,
     pub(crate) status: DatasetRevisionStatus,
     pub(crate) is_current: bool,
@@ -178,7 +194,7 @@ pub(crate) struct DatasetRevisionDetail {
     pub(crate) version_major: Option<i32>,
     pub(crate) version_minor: Option<i32>,
     pub(crate) version_patch: Option<i32>,
-    pub(crate) semantic_bump: Option<String>,
+    pub(crate) semantic_bump: Option<DatasetSemanticBump>,
     pub(crate) started_new_major_line: Option<bool>,
     pub(crate) force_new_major_version: bool,
     pub(crate) status: DatasetRevisionStatus,
@@ -221,7 +237,7 @@ pub(crate) struct DatasetPublishRevisionResponse {
     pub(crate) version_major: i32,
     pub(crate) version_minor: i32,
     pub(crate) version_patch: i32,
-    pub(crate) semantic_bump: String,
+    pub(crate) semantic_bump: DatasetSemanticBump,
     pub(crate) started_new_major_line: bool,
     pub(crate) status: DatasetRevisionStatus,
     pub(crate) dependencies: DatasetDependencySummary,

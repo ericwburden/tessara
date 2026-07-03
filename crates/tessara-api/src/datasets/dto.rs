@@ -306,6 +306,14 @@ pub enum DatasetDependencyKind {
     Dashboard,
 }
 
+/// Binding mode used by a downstream dependency.
+#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum DatasetDependencyBindingMode {
+    ExactRevision,
+    MajorLine,
+}
+
 /// Sprint 3C carry-forward guidance; no downstream asset is repointed by publish.
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -342,9 +350,19 @@ pub struct DatasetDependencyImpact {
     pub(crate) name: String,
     pub(crate) pinned_revision_id: Uuid,
     pub(crate) pinned_version_major: Option<i32>,
-    pub(crate) binding_mode: String,
+    pub(crate) binding_mode: DatasetDependencyBindingMode,
     pub(crate) carry_forward_state: DatasetCarryForwardState,
     pub(crate) message: String,
+}
+
+/// Semantic version bump assigned when a dataset revision is published.
+#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum DatasetSemanticBump {
+    Initial,
+    Patch,
+    Minor,
+    Major,
 }
 
 /// Aggregate dependency counts and carry-forward state.
@@ -367,7 +385,7 @@ pub struct DatasetRevisionSummary {
     pub(crate) version_major: Option<i32>,
     pub(crate) version_minor: Option<i32>,
     pub(crate) version_patch: Option<i32>,
-    pub(crate) semantic_bump: Option<String>,
+    pub(crate) semantic_bump: Option<DatasetSemanticBump>,
     pub(crate) started_new_major_line: Option<bool>,
     pub(crate) force_new_major_version: bool,
     pub(crate) status: DatasetRevisionStatus,
@@ -392,7 +410,7 @@ pub struct DatasetRevisionDetail {
     pub(crate) version_major: Option<i32>,
     pub(crate) version_minor: Option<i32>,
     pub(crate) version_patch: Option<i32>,
-    pub(crate) semantic_bump: Option<String>,
+    pub(crate) semantic_bump: Option<DatasetSemanticBump>,
     pub(crate) started_new_major_line: Option<bool>,
     pub(crate) force_new_major_version: bool,
     pub(crate) status: DatasetRevisionStatus,
@@ -460,7 +478,7 @@ pub struct DatasetPublishRevisionResponse {
     pub(crate) version_major: i32,
     pub(crate) version_minor: i32,
     pub(crate) version_patch: i32,
-    pub(crate) semantic_bump: String,
+    pub(crate) semantic_bump: DatasetSemanticBump,
     pub(crate) started_new_major_line: bool,
     pub(crate) status: DatasetRevisionStatus,
     pub(crate) dependencies: DatasetDependencySummary,

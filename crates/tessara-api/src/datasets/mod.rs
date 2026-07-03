@@ -23,15 +23,16 @@ pub use dto::{
     CreateDatasetRequest, DatasetAggregationMetricRequest, DatasetAggregationRequest,
     DatasetCalculatedFieldRequest, DatasetCarryForwardState, DatasetCompatibilityFinding,
     DatasetCompatibilityState, DatasetCompatibilitySummary, DatasetDefinition,
-    DatasetDependencyImpact, DatasetDependencyKind, DatasetDependencySummary,
-    DatasetDraftRevisionResponse, DatasetFieldDefinition, DatasetJoinKeyRequest,
-    DatasetOperationRequest, DatasetProjectionFieldRequest, DatasetPublishRevisionResponse,
-    DatasetRestrictionPolicyRequest, DatasetRevisionDetail, DatasetRevisionFieldSummary,
-    DatasetRevisionLabelResponse, DatasetRevisionMetadata, DatasetRevisionStatus,
-    DatasetRevisionSummary, DatasetRowFilterRequest, DatasetRowPickerRequest,
-    DatasetSourceDefinition, DatasetSourceRequest, DatasetSqlPreview, DatasetSummary, DatasetTable,
-    DatasetTableRow, DatasetVersionImpact, DatasetVisibilityNodeSummary,
-    UpdateDatasetRevisionLabelRequest, UpdateDatasetRevisionOptionsRequest,
+    DatasetDependencyBindingMode, DatasetDependencyImpact, DatasetDependencyKind,
+    DatasetDependencySummary, DatasetDraftRevisionResponse, DatasetFieldDefinition,
+    DatasetJoinKeyRequest, DatasetOperationRequest, DatasetProjectionFieldRequest,
+    DatasetPublishRevisionResponse, DatasetRestrictionPolicyRequest, DatasetRevisionDetail,
+    DatasetRevisionFieldSummary, DatasetRevisionLabelResponse, DatasetRevisionMetadata,
+    DatasetRevisionStatus, DatasetRevisionSummary, DatasetRowFilterRequest,
+    DatasetRowPickerRequest, DatasetSemanticBump, DatasetSourceDefinition, DatasetSourceRequest,
+    DatasetSqlPreview, DatasetSummary, DatasetTable, DatasetTableRow, DatasetVersionImpact,
+    DatasetVisibilityNodeSummary, UpdateDatasetRevisionLabelRequest,
+    UpdateDatasetRevisionOptionsRequest,
 };
 
 use crate::{
@@ -279,7 +280,7 @@ struct DatasetRevisionSnapshot {
     version_major: Option<i32>,
     version_minor: Option<i32>,
     version_patch: Option<i32>,
-    semantic_bump: Option<String>,
+    semantic_bump: Option<DatasetSemanticBump>,
     started_new_major_line: Option<bool>,
     force_new_major_version: bool,
     status: DatasetRevisionStatus,
@@ -298,14 +299,6 @@ struct DatasetRevisionSnapshot {
     output_fields: Vec<DatasetFieldDefinition>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum DatasetSemanticBump {
-    Initial,
-    Patch,
-    Minor,
-    Major,
-}
-
 impl DatasetSemanticBump {
     fn as_str(self) -> &'static str {
         match self {
@@ -313,6 +306,16 @@ impl DatasetSemanticBump {
             Self::Patch => "PATCH",
             Self::Minor => "MINOR",
             Self::Major => "MAJOR",
+        }
+    }
+
+    fn parse(value: &str) -> Option<Self> {
+        match value {
+            "INITIAL" => Some(Self::Initial),
+            "PATCH" => Some(Self::Patch),
+            "MINOR" => Some(Self::Minor),
+            "MAJOR" => Some(Self::Major),
+            _ => None,
         }
     }
 }
@@ -724,7 +727,7 @@ pub async fn publish_dataset_revision(
         version_major: semantic_version.major,
         version_minor: semantic_version.minor,
         version_patch: semantic_version.patch,
-        semantic_bump: semantic_bump.as_str().into(),
+        semantic_bump,
         started_new_major_line: matches!(
             semantic_bump,
             DatasetSemanticBump::Initial | DatasetSemanticBump::Major
@@ -1850,7 +1853,10 @@ async fn load_revision_snapshot(
         version_major: row.try_get("version_major")?,
         version_minor: row.try_get("version_minor")?,
         version_patch: row.try_get("version_patch")?,
-        semantic_bump: row.try_get("semantic_bump")?,
+        semantic_bump: row
+            .try_get::<Option<String>, _>("semantic_bump")?
+            .as_deref()
+            .and_then(DatasetSemanticBump::parse),
         started_new_major_line: row.try_get("started_new_major_line")?,
         force_new_major_version: row.try_get("force_new_major_version")?,
         status: parse_revision_status(row.try_get::<String, _>("status")?.as_str())?,
@@ -2581,7 +2587,7 @@ async fn load_dependency_impacts(
             name: row.try_get("name")?,
             pinned_revision_id,
             pinned_version_major: None,
-            binding_mode: "exact_revision".into(),
+            binding_mode: DatasetDependencyBindingMode::ExactRevision,
             carry_forward_state,
             message: message.clone(),
         });
@@ -2621,7 +2627,7 @@ async fn load_dependency_impacts(
                 name: row.try_get("name")?,
                 pinned_revision_id,
                 pinned_version_major: Some(current_major),
-                binding_mode: "major_line".into(),
+                binding_mode: DatasetDependencyBindingMode::MajorLine,
                 carry_forward_state: major_line_state,
                 message: major_line_message.clone(),
             });
@@ -2648,7 +2654,7 @@ async fn load_dependency_impacts(
             name: row.try_get("name")?,
             pinned_revision_id,
             pinned_version_major: None,
-            binding_mode: "exact_revision".into(),
+            binding_mode: DatasetDependencyBindingMode::ExactRevision,
             carry_forward_state,
             message: message.clone(),
         });
@@ -2674,7 +2680,7 @@ async fn load_dependency_impacts(
             name: row.try_get("name")?,
             pinned_revision_id,
             pinned_version_major: None,
-            binding_mode: "exact_revision".into(),
+            binding_mode: DatasetDependencyBindingMode::ExactRevision,
             carry_forward_state,
             message: message.clone(),
         });
@@ -7224,7 +7230,7 @@ mod tests {
             version_major: Some(1),
             version_minor: Some(0),
             version_patch: Some(0),
-            semantic_bump: Some("INITIAL".into()),
+            semantic_bump: Some(DatasetSemanticBump::Initial),
             started_new_major_line: Some(true),
             force_new_major_version: false,
             status: DatasetRevisionStatus::Published,
