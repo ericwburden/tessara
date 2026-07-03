@@ -26,6 +26,7 @@ pub(crate) struct DatasetEditorState {
     pub(crate) load_error: RwSignal<Option<String>>,
     pub(crate) save_error: RwSignal<Option<String>>,
     pub(crate) save_message: RwSignal<Option<String>>,
+    pub(crate) editor_ready: RwSignal<bool>,
     pub(crate) sql_preview: RwSignal<Option<String>>,
     pub(crate) sql_preview_error: RwSignal<Option<String>>,
     pub(crate) sql_preview_expanded: RwSignal<bool>,
@@ -34,7 +35,7 @@ pub(crate) struct DatasetEditorState {
 }
 
 impl DatasetEditorState {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(editor_ready: bool) -> Self {
         Self {
             name: RwSignal::new(String::new()),
             slug: RwSignal::new(String::new()),
@@ -53,6 +54,7 @@ impl DatasetEditorState {
             load_error: RwSignal::new(None::<String>),
             save_error: RwSignal::new(None::<String>),
             save_message: RwSignal::new(None::<String>),
+            editor_ready: RwSignal::new(editor_ready),
             sql_preview: RwSignal::new(None::<String>),
             sql_preview_error: RwSignal::new(None::<String>),
             sql_preview_expanded: RwSignal::new(false),

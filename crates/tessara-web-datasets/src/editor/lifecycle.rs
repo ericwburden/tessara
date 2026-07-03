@@ -34,6 +34,7 @@ pub(crate) fn install_dataset_editor_loaders(
                     restriction_confidential_field_key: state.restriction_confidential_field_key,
                     sql_preview: state.sql_preview,
                     load_error: state.load_error,
+                    editor_ready: state.editor_ready,
                 },
             );
         } else if let Some(dataset_id) = dataset_id.clone() {
@@ -52,8 +53,11 @@ pub(crate) fn install_dataset_editor_loaders(
                     restriction_confidential_field_key: state.restriction_confidential_field_key,
                     sql_preview: state.sql_preview,
                     load_error: state.load_error,
+                    editor_ready: state.editor_ready,
                 },
             );
+        } else {
+            state.editor_ready.set(true);
         }
     });
 }

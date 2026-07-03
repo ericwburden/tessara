@@ -1691,6 +1691,15 @@ input {
   gap: 1rem;
 }
 
+.dataset-editor__fieldset {
+  display: grid;
+  gap: 1rem;
+  margin: 0;
+  border: 0;
+  padding: 0;
+  min-inline-size: 0;
+}
+
 .dataset-editor-section {
   border: 1px solid var(--color-border);
   border-radius: var(--radius);

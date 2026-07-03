@@ -35,6 +35,7 @@ pub(crate) struct DatasetEditLoadTargets {
     pub(crate) restriction_confidential_field_key: RwSignal<String>,
     pub(crate) sql_preview: RwSignal<Option<String>>,
     pub(crate) load_error: RwSignal<Option<String>>,
+    pub(crate) editor_ready: RwSignal<bool>,
 }
 
 #[cfg(feature = "hydrate")]
@@ -53,8 +54,10 @@ pub(crate) fn load_dataset_for_edit(dataset_id: String, targets: DatasetEditLoad
             restriction_confidential_field_key,
             sql_preview,
             load_error,
+            editor_ready,
         } = targets;
 
+        editor_ready.set(false);
         match api::fetch_dataset_detail(&dataset_id).await {
             Ok(Some(payload)) => {
                 name.set(payload.name);
@@ -175,8 +178,9 @@ pub(crate) fn load_dataset_for_edit(dataset_id: String, targets: DatasetEditLoad
                         .and_then(|policy| policy.confidential_field_key)
                         .unwrap_or_default(),
                 );
+                editor_ready.set(true);
             }
-            Ok(None) => {}
+            Ok(None) => load_error.set(Some("Dataset was not found.".into())),
             Err(message) => load_error.set(Some(message)),
         }
     });
@@ -202,8 +206,10 @@ pub(crate) fn load_dataset_revision_for_edit(
             restriction_confidential_field_key,
             sql_preview,
             load_error,
+            editor_ready,
         } = targets;
 
+        editor_ready.set(false);
         match api::fetch_dataset_revision(&dataset_id, &revision_id).await {
             Ok(Some(payload)) => {
                 name.set(payload.metadata.name);
@@ -311,8 +317,9 @@ pub(crate) fn load_dataset_revision_for_edit(
                         .and_then(|policy| policy.confidential_field_key)
                         .unwrap_or_default(),
                 );
+                editor_ready.set(true);
             }
-            Ok(None) => {}
+            Ok(None) => load_error.set(Some("Dataset revision was not found.".into())),
             Err(message) => load_error.set(Some(message)),
         }
     });

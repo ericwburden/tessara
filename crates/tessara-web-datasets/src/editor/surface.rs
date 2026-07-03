@@ -25,7 +25,7 @@ pub(crate) fn DatasetEditorSurface(
     } else {
         "Create Dataset"
     };
-    let state = DatasetEditorState::new();
+    let state = DatasetEditorState::new(!is_edit);
     install_dataset_editor_loaders(dataset_id.clone(), revision_id.clone(), state);
     let save_dataset_id = dataset_id.clone();
     let detail_href = dataset_id.as_ref().map(|id| format!("/datasets/{id}"));
@@ -86,61 +86,76 @@ pub(crate) fn DatasetEditorSurface(
                 load_error=state.load_error
                 save_error=state.save_error
                 save_message=state.save_message
+                editor_ready=state.editor_ready
             />
             <form id="dataset-editor-form" class="dataset-editor" on:submit=move |event| {
                 event.prevent_default();
-                submit_dataset_editor(save_dataset_id.clone(), state);
+                if state.editor_ready.get() {
+                    submit_dataset_editor(save_dataset_id.clone(), state);
+                }
             }>
-                <DatasetIdentitySection
-                    name=state.name
-                    slug=state.slug
-                />
-                <DatasetSourcesEditor
-                    initial_source=state.initial_source
-                    forms=state.forms
-                    datasets=state.datasets
-                    rendered_forms=state.rendered_forms
-                    operation_order=state.operation_order
-                />
-                <DatasetOperationSequence
-                    operation_order=state.operation_order
-                    initial_source=state.initial_source
-                    forms=state.forms
-                    datasets=state.datasets
-                    rendered_forms=state.rendered_forms
-                    nodes=state.nodes
-                    users=state.users
-                />
-                <DatasetRestrictionsEditor
-                    fields=final_fields
-                    restriction_internal_field_key=state.restriction_internal_field_key
-                    restriction_restricted_field_key=state.restriction_restricted_field_key
-                    restriction_confidential_field_key=state.restriction_confidential_field_key
-                />
-                <DatasetSqlPreviewPanel
-                    dataset_id=dataset_id.clone()
-                    name=state.name
-                    slug=state.slug
-                    visibility_node_ids=state.visibility_node_ids
-                    initial_source=state.initial_source
-                    operation_order=state.operation_order
-                    restriction_internal_field_key=state.restriction_internal_field_key
-                    restriction_restricted_field_key=state.restriction_restricted_field_key
-                    restriction_confidential_field_key=state.restriction_confidential_field_key
-                    sql_preview=state.sql_preview
-                    sql_preview_error=state.sql_preview_error
-                    expanded=state.sql_preview_expanded
-                />
-                <DatasetVisibilityEditor
-                    nodes=state.nodes
-                    visibility_node_ids=state.visibility_node_ids
-                    visibility_search=state.visibility_search
-                    expanded_node_ids=state.visibility_expanded_node_ids
-                />
+                <fieldset class="dataset-editor__fieldset" disabled=move || !state.editor_ready.get()>
+                    <DatasetIdentitySection
+                        name=state.name
+                        slug=state.slug
+                    />
+                    <DatasetSourcesEditor
+                        initial_source=state.initial_source
+                        forms=state.forms
+                        datasets=state.datasets
+                        rendered_forms=state.rendered_forms
+                        operation_order=state.operation_order
+                    />
+                    <DatasetOperationSequence
+                        operation_order=state.operation_order
+                        initial_source=state.initial_source
+                        forms=state.forms
+                        datasets=state.datasets
+                        rendered_forms=state.rendered_forms
+                        nodes=state.nodes
+                        users=state.users
+                    />
+                    <DatasetRestrictionsEditor
+                        fields=final_fields
+                        restriction_internal_field_key=state.restriction_internal_field_key
+                        restriction_restricted_field_key=state.restriction_restricted_field_key
+                        restriction_confidential_field_key=state.restriction_confidential_field_key
+                    />
+                    <DatasetSqlPreviewPanel
+                        dataset_id=dataset_id.clone()
+                        name=state.name
+                        slug=state.slug
+                        visibility_node_ids=state.visibility_node_ids
+                        initial_source=state.initial_source
+                        operation_order=state.operation_order
+                        restriction_internal_field_key=state.restriction_internal_field_key
+                        restriction_restricted_field_key=state.restriction_restricted_field_key
+                        restriction_confidential_field_key=state.restriction_confidential_field_key
+                        sql_preview=state.sql_preview
+                        sql_preview_error=state.sql_preview_error
+                        expanded=state.sql_preview_expanded
+                    />
+                    <DatasetVisibilityEditor
+                        nodes=state.nodes
+                        visibility_node_ids=state.visibility_node_ids
+                        visibility_search=state.visibility_search
+                        expanded_node_ids=state.visibility_expanded_node_ids
+                    />
+                </fieldset>
             </form>
             <div class="form-actions">
-                <button class="button" type="submit" form="dataset-editor-form">
-                    {if is_revision_edit { "Save Revision" } else if is_edit { "Save Dataset" } else { "Create Dataset" }}
+                <button class="button" type="submit" form="dataset-editor-form" disabled=move || !state.editor_ready.get()>
+                    {move || {
+                        if !state.editor_ready.get() {
+                            "Loading..."
+                        } else if is_revision_edit {
+                            "Save Revision"
+                        } else if is_edit {
+                            "Save Dataset"
+                        } else {
+                            "Create Dataset"
+                        }
+                    }}
                 </button>
             </div>
         </section>
