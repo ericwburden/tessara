@@ -1464,6 +1464,89 @@ test("admin can review and publish a dataset draft revision", async ({ page }) =
   await assertNoConsoleErrors();
 });
 
+test("dataset revision navigation handles repeated detail and error states", async ({ page }) => {
+  test.setTimeout(90_000);
+  const assertNoConsoleErrors = attachConsoleGuard(page);
+  await signInAsAdmin(page);
+  const seed = await seedDemo(page);
+  await cleanupPlaywrightDatasets(page);
+
+  const renderedForm = await expectJson<RenderedForm>(
+    await page.request.get(`/api/form-versions/${seed.form_version_id}/render`),
+  );
+  const formField = requireRenderedField(
+    renderedFields(renderedForm),
+    (field) => field.field_type === "number",
+    "numeric field for revision navigation",
+  );
+  const runId = Date.now();
+  const datasetPayload: DatasetPayload = {
+    name: `Playwright Revision Navigation ${runId}`,
+    slug: `${PW_DATASET_PREFIX}revision-navigation-${runId}`,
+    grain: "submission",
+    visibility_node_ids: [seed.program_node_id],
+    initial_source: {
+      kind: "form",
+      alias: "program",
+      form_id: seed.form_id,
+      form_version_id: seed.form_version_id,
+    },
+    operations: [
+      projectionOperation([
+        datasetField("program", formField.key, formField.label, 0),
+      ]),
+    ],
+  };
+
+  let datasetId: string | undefined;
+  try {
+    datasetId = await createDataset(page, datasetPayload);
+    const detail = await expectJson<DatasetDefinition>(
+      await page.request.get(`/api/datasets/${datasetId}`),
+    );
+    const revisionId = detail.current_revision_id!;
+    const missingRevisionId = "00000000-0000-4000-8000-000000000000";
+
+    for (let index = 0; index < 3; index += 1) {
+      await page.goto(`/datasets/${datasetId}/revisions`);
+      await expect(
+        page.getByRole("heading", { level: 1, name: "Dataset Revisions" }),
+      ).toBeVisible();
+      await expect(page.locator("tbody")).toContainText("Published current");
+
+      await page.goto(`/datasets/${datasetId}/revisions/${revisionId}`);
+      await expect(
+        page.getByRole("heading", { level: 1, name: "Dataset Revision" }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("heading", { name: "Changelog", exact: true }),
+      ).toBeVisible();
+      await expect(
+        page.locator(".route-panel__section").filter({ hasText: "Version" }).first(),
+      ).toContainText("v1.0.0");
+    }
+
+    await page.goto(`/datasets/${datasetId}/revisions/${missingRevisionId}`);
+    await expect(page.getByText("Revision unavailable")).toBeVisible();
+
+    await page.goto(`/datasets/${datasetId}/revisions/${revisionId}`);
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Dataset Revision" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Downstream Dependencies", exact: true }),
+    ).toBeVisible();
+  } finally {
+    if (datasetId) {
+      await deleteDataset(page, datasetId, 5_000).catch((error: unknown) => {
+        console.warn(`dataset cleanup failed for ${datasetId}: ${String(error)}`);
+      });
+    }
+  }
+
+  await assertNoConsoleErrors();
+});
+
 test("dataset SQL preview uses pre-projection join keys and stable field identities", async ({
   page,
 }) => {
