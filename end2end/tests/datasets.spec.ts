@@ -136,7 +136,7 @@ type DatasetRevisionDetail = DatasetRevisionSummary & {
     kind: "dataset" | "component_version" | "dashboard";
     id: string;
     name: string;
-    pinned_revision_id: string;
+    pinned_revision_id?: string | null;
     carry_forward_state: "safe" | "manual_review" | "blocked";
     message: string;
   }>;

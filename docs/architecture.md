@@ -200,7 +200,7 @@ This behavior applies most directly to:
 - component drafts bound to newer dataset revisions
 - dashboard composition when component versions change
 
-Dataset major-line sources use an append-all contract. A source labeled `Version N` resolves to a single prebuilt `dataset_major_materializations` table for major version `N`, populated from every published historical revision in that major line. Minor and patch publishes rebuild that table; a new major publish leaves prior-major consumers bound to their existing `Version N`.
+Dataset major-line sources use an append-all contract. A source labeled `Version N` resolves to a single prebuilt `dataset_major_materializations` table for major version `N`, populated from every published historical revision in that major line. Minor and patch publishes rebuild that table; a new major publish leaves prior-major consumers bound to their existing `Version N`. The major-line table uses the latest published contract in that major line as its schema; rows from older revisions project `NULL` for fields added later in the same major line.
 
 ## Relational Model Summary
 

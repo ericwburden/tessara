@@ -136,7 +136,7 @@ pub(crate) struct DatasetDependencyImpact {
     pub(crate) kind: DatasetDependencyKind,
     pub(crate) id: String,
     pub(crate) name: String,
-    pub(crate) pinned_revision_id: String,
+    pub(crate) pinned_revision_id: Option<String>,
     pub(crate) pinned_version_major: Option<i32>,
     pub(crate) binding_mode: DatasetDependencyBindingMode,
     pub(crate) carry_forward_state: DatasetCarryForwardState,

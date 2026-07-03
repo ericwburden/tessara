@@ -117,6 +117,7 @@ Dataset revisions use semantic version numbers to communicate the impact of a re
 - Empty revisions cannot be published; a publishable revision must have at least one changelog row.
 - Patch does not mean the materialized rows are guaranteed identical; it means the dataset contract observed by downstream consumers is unchanged.
 - A dataset source labeled `Version N` means the full major line for major version `N`. It reads from one prebuilt materialized table containing rows appended from all published historical revisions in that major.
+- The `Version N` materialized table uses the latest published revision contract in that major line; older revision rows fill fields added later in the major line with `NULL`.
 - New minor and patch publishes automatically rebuild the selected major-line table for consumers bound to that `Version N`; new major publishes do not move existing consumers until they are explicitly rebound.
 
 ## Migration And Verification Requirements

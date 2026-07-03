@@ -174,6 +174,60 @@ async fn demo_seed_uses_capability_scope_ownership_and_components() {
             .iter()
             .all(|impact| impact["kind"] != "component_version" && impact["kind"] != "dashboard")
     );
+    let admin_revision_history = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!(
+                "/api/datasets/{}/revisions",
+                seed["dataset_id"].as_str().expect("dataset id")
+            ),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    let admin_seeded_revision_summary = admin_revision_history
+        .as_array()
+        .expect("admin revision history")
+        .iter()
+        .find(|revision| revision["id"] == seed["dataset_revision_id"])
+        .expect("admin seeded revision summary");
+    assert_eq!(
+        admin_seeded_revision_summary["dependencies"]["component_version_count"],
+        1
+    );
+    assert_eq!(
+        admin_seeded_revision_summary["dependencies"]["dashboard_count"],
+        1
+    );
+    let scoped_revision_history = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!(
+                "/api/datasets/{}/revisions",
+                seed["dataset_id"].as_str().expect("dataset id")
+            ),
+            &operator_token,
+            None,
+        ),
+    )
+    .await;
+    let scoped_seeded_revision_summary = scoped_revision_history
+        .as_array()
+        .expect("scoped revision history")
+        .iter()
+        .find(|revision| revision["id"] == seed["dataset_revision_id"])
+        .expect("scoped seeded revision summary");
+    assert_eq!(
+        scoped_seeded_revision_summary["dependencies"]["component_version_count"],
+        0
+    );
+    assert_eq!(
+        scoped_seeded_revision_summary["dependencies"]["dashboard_count"],
+        0
+    );
     let label_update = request_json(
         app.clone(),
         authorized_request(
@@ -1300,6 +1354,7 @@ async fn dataset_revision_draft_publish_preserves_current_until_publish() {
             .any(|impact| {
                 impact["binding_mode"] == "major_line"
                     && impact["pinned_version_major"] == 1
+                    && impact["pinned_revision_id"] == Value::Null
                     && impact["id"] == major_dependent_dataset_id
             })
     );

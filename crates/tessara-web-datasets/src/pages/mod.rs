@@ -736,10 +736,16 @@ fn dependency_binding_label(impact: &DatasetDependencyImpact) -> String {
 }
 
 fn dependency_pinned_target(impact: &DatasetDependencyImpact) -> String {
-    impact
-        .pinned_version_major
-        .map(|major| format!("Version {major}"))
-        .unwrap_or_else(|| impact.pinned_revision_id.clone())
+    match impact.binding_mode {
+        DatasetDependencyBindingMode::MajorLine => impact
+            .pinned_version_major
+            .map(|major| format!("Version {major}"))
+            .unwrap_or_else(|| "Version".to_string()),
+        DatasetDependencyBindingMode::ExactRevision => impact
+            .pinned_revision_id
+            .clone()
+            .unwrap_or_else(|| "Exact Revision".to_string()),
+    }
 }
 
 fn carry_forward_label(state: &DatasetCarryForwardState) -> &'static str {

@@ -348,7 +348,7 @@ pub struct DatasetDependencyImpact {
     pub(crate) kind: DatasetDependencyKind,
     pub(crate) id: Uuid,
     pub(crate) name: String,
-    pub(crate) pinned_revision_id: Uuid,
+    pub(crate) pinned_revision_id: Option<Uuid>,
     pub(crate) pinned_version_major: Option<i32>,
     pub(crate) binding_mode: DatasetDependencyBindingMode,
     pub(crate) carry_forward_state: DatasetCarryForwardState,
