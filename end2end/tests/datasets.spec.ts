@@ -1448,6 +1448,45 @@ test("admin can review and publish a dataset draft revision", async ({ page }) =
       kind: "dataset",
       dataset_revision_id: initialRevisionId,
     });
+
+    const majorDraft = await saveDraftRevision(page, datasetId, {
+      ...initialPayload,
+      name: `${datasetName} Major`,
+      operations: [
+        projectionOperation([
+          datasetField("program", firstField.key, firstField.label, 0),
+          datasetField("program", secondField.key, secondField.label, 1),
+        ]),
+      ],
+    });
+    await page.goto(`/datasets/${datasetId}/revisions/${majorDraft.revision_id}`);
+    await expect(page.locator(".page-header")).toContainText(`${datasetName} Major`);
+    const majorPublishResponse = page.waitForResponse(
+      (response) =>
+        response
+          .url()
+          .includes(`/api/admin/datasets/${datasetId}/revisions/${majorDraft.revision_id}/publish`) &&
+        response.request().method() === "POST",
+    );
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.getByRole("button", { name: "Publish" }).click();
+    await page.getByRole("menuitem", { name: "New Major Version" }).click();
+    const majorPublish = await majorPublishResponse;
+    expect(majorPublish.ok()).toBeTruthy();
+    const majorRevision = (await getDatasetRevisions(page, datasetId)).find(
+      (revision) => revision.id === majorDraft.revision_id,
+    );
+    expect(majorRevision).toMatchObject({
+      version_major: 2,
+      version_minor: 0,
+      version_patch: 0,
+      started_new_major_line: true,
+      status: "published",
+      is_current: true,
+    });
+
+    await page.goto(`/datasets/${datasetId}/revisions`);
+    await expect(page.locator("tbody")).toContainText("v2.0.0");
   } finally {
     if (dependentDatasetId) {
       await deleteDataset(page, dependentDatasetId, 5_000).catch((error: unknown) => {
