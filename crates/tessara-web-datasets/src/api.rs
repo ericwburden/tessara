@@ -14,7 +14,7 @@ use super::types::{
 };
 
 #[cfg(feature = "hydrate")]
-use crate::http::{redirect_to_login, send_json_request};
+use crate::http::{fetch_json_request, send_json_request};
 
 #[cfg(feature = "hydrate")]
 /// Fetches the fetch json data.
@@ -22,22 +22,7 @@ async fn fetch_json<T>(url: &str, action: &str) -> Result<Option<T>, String>
 where
     T: serde::de::DeserializeOwned,
 {
-    match gloo_net::http::Request::get(url).send().await {
-        Ok(response) if response.status() == 401 => {
-            redirect_to_login();
-            Ok(None)
-        }
-        Ok(response) if response.ok() => response
-            .json::<T>()
-            .await
-            .map(Some)
-            .map_err(|_| format!("{action} could not be read.")),
-        Ok(response) => Err(format!(
-            "{action} failed with status {}.",
-            response.status()
-        )),
-        Err(_) => Err(format!("Could not reach the {action} API.")),
-    }
+    fetch_json_request(url, action).await
 }
 
 #[cfg(feature = "hydrate")]
@@ -115,17 +100,11 @@ pub(super) async fn fetch_users() -> Result<Option<Vec<DatasetUserOption>>, Stri
 pub(super) async fn fetch_rendered_form(
     form_version_id: &str,
 ) -> Result<Option<DatasetRenderedForm>, String> {
-    match gloo_net::http::Request::get(&format!("/api/form-versions/{form_version_id}/render"))
-        .send()
-        .await
-    {
-        Ok(response) if response.ok() => response
-            .json::<DatasetRenderedForm>()
-            .await
-            .map(Some)
-            .map_err(|_| "Rendered form could not be read.".to_string()),
-        _ => Ok(None),
-    }
+    fetch_json(
+        &format!("/api/form-versions/{form_version_id}/render"),
+        "Rendered form",
+    )
+    .await
 }
 
 #[cfg(feature = "hydrate")]
