@@ -547,12 +547,12 @@ pub async fn save_dataset_draft_revision(
         &compiled,
     )
     .await?;
+    let (semantic_version, semantic_bump) =
+        compute_dataset_publish_semantic_version_tx(&mut tx, dataset_id, revision_id).await?;
+    update_revision_semantic_fields_tx(&mut tx, revision_id, semantic_version, semantic_bump)
+        .await?;
     tx.commit().await?;
 
-    let (semantic_version, semantic_bump) =
-        compute_dataset_publish_semantic_version(&state.pool, dataset_id, revision_id).await?;
-    update_revision_semantic_fields(&state.pool, revision_id, semantic_version, semantic_bump)
-        .await?;
     let dependency_scope = dependency_impact_scope(&state.pool, &account).await?;
     let review =
         load_dataset_revision_review(&state.pool, &dependency_scope, dataset_id, revision_id)
@@ -1755,6 +1755,42 @@ async fn compute_dataset_publish_semantic_version(
     Ok((current_version.increment(bump), bump))
 }
 
+async fn compute_dataset_publish_semantic_version_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    dataset_id: Uuid,
+    revision_id: Uuid,
+) -> ApiResult<(DatasetSemanticVersion, DatasetSemanticBump)> {
+    let candidate = load_revision_snapshot_tx(tx, dataset_id, revision_id).await?;
+    let Some(current_id) = current_published_revision_id_tx(tx, dataset_id).await? else {
+        return Ok((
+            DatasetSemanticVersion {
+                major: 1,
+                minor: 0,
+                patch: 0,
+            },
+            DatasetSemanticBump::Initial,
+        ));
+    };
+    if current_id == revision_id {
+        let version = current_semantic_version(&candidate).unwrap_or(DatasetSemanticVersion {
+            major: 1,
+            minor: 0,
+            patch: 0,
+        });
+        return Ok((version, DatasetSemanticBump::Patch));
+    }
+    let current = load_revision_snapshot_tx(tx, dataset_id, current_id).await?;
+    let current_version = current_semantic_version(&current).unwrap_or(DatasetSemanticVersion {
+        major: 1,
+        minor: 0,
+        patch: 0,
+    });
+    let findings = compatibility_findings(&current, &candidate);
+    let summary = compatibility_summary(&findings);
+    let bump = semantic_bump_for_publish(&summary, candidate.force_new_major_version);
+    Ok((current_version.increment(bump), bump))
+}
+
 fn current_semantic_version(snapshot: &DatasetRevisionSnapshot) -> Option<DatasetSemanticVersion> {
     Some(DatasetSemanticVersion {
         major: snapshot.version_major?,
@@ -2146,6 +2182,57 @@ async fn load_revision_snapshot(
         compatibility_findings,
         generated_sql: row.try_get("generated_sql")?,
         output_fields,
+    })
+}
+
+async fn load_revision_snapshot_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    dataset_id: Uuid,
+    revision_id: Uuid,
+) -> ApiResult<DatasetRevisionSnapshot> {
+    let fallback_metadata = load_current_dataset_revision_metadata_tx(tx, dataset_id).await?;
+    let row = sqlx::query(
+        r#"
+        SELECT id, dataset_id, version_number, version_label, revision_notes, version_major, version_minor,
+               version_patch, semantic_bump, started_new_major_line, force_new_major_version,
+               status::text AS status,
+               initial_source, operations, restriction_policy, definition_metadata, compatibility_findings,
+               generated_sql, output_fields, materialized_schema, materialized_table,
+               materialized_row_count, materialized_at, published_at, created_at
+        FROM dataset_revisions
+        WHERE id = $1
+          AND dataset_id = $2
+        "#,
+    )
+    .bind(revision_id)
+    .bind(dataset_id)
+    .fetch_optional(&mut **tx)
+    .await?
+    .ok_or_else(|| ApiError::NotFound(format!("dataset revision {revision_id}")))?;
+    revision_snapshot_from_row(row, &fallback_metadata)
+}
+
+async fn load_current_dataset_revision_metadata_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    dataset_id: Uuid,
+) -> ApiResult<DatasetRevisionMetadata> {
+    let row = sqlx::query("SELECT name, slug, grain FROM datasets WHERE id = $1")
+        .bind(dataset_id)
+        .fetch_optional(&mut **tx)
+        .await?
+        .ok_or_else(|| ApiError::NotFound(format!("dataset {dataset_id}")))?;
+    let visibility_node_ids = sqlx::query_scalar(
+        "SELECT node_id FROM dataset_scope_nodes WHERE dataset_id = $1 ORDER BY node_id",
+    )
+    .bind(dataset_id)
+    .fetch_all(&mut **tx)
+    .await?;
+    Ok(DatasetRevisionMetadata {
+        name: row.try_get("name")?,
+        slug: row.try_get("slug")?,
+        grain: row.try_get("grain")?,
+        force_new_major_version: false,
+        visibility_node_ids,
     })
 }
 
