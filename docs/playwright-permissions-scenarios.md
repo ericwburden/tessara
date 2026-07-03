@@ -12,9 +12,11 @@ The suite creates Playwright-owned fixtures with a `pw-permissions-*` prefix thr
 
 ## Fixture Lifecycle
 
-Permission fixtures are intentionally durable local records. The suite creates them through supported admin APIs and does not perform direct database cleanup because users, roles, assignments, drafts, submissions, and delegations are linked across the authorization model. Reusing supported APIs keeps the test setup representative of production behavior and avoids a hidden cleanup path that can drift from the app.
+Permission fixtures are created through supported admin APIs, then the suite removes Playwright-owned records with a direct `docker compose exec postgres psql` cleanup pass before and after the run. The cleanup is intentionally limited to records with the `pw-permissions-*` prefix and dependent rows discovered from those records.
 
-When local fixture volume gets noisy, reset the development database with `.\scripts\local-launch.ps1 -FreshData` before rerunning Playwright. Future cleanup work should prefer supported admin lifecycle APIs if user or role deletion/deactivation becomes a product feature; until then, keep fixture names prefixed with `pw-permissions-*` so they remain easy to identify.
+Direct SQL cleanup is a pragmatic local test harness choice until user, role, dataset, and workflow lifecycle APIs are complete. Keep fixture names prefixed with `pw-permissions-*`, and update the cleanup SQL whenever new permission fixtures create additional linked records such as dataset revisions, major-line materializations, components, dashboards, submissions, assignments, or workflow instances.
+
+When local fixture volume gets noisy or cleanup falls out of sync with schema changes, reset the development database with `.\scripts\local-launch.ps1 -FreshData` before rerunning Playwright.
 
 | Fixture | Role capabilities | Scope/delegation purpose |
 | --- | --- | --- |
