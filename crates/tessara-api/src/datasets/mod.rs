@@ -53,8 +53,8 @@ use restriction_tiers::{
     tier_access_predicate,
 };
 use review::{
-    DependencyImpactScope, compatibility_findings, compatibility_summary, dependency_summary,
-    load_dependency_impacts,
+    DependencyImpactScope, carry_forward_state_for, compatibility_findings, compatibility_summary,
+    dependency_summary, load_dependency_impacts,
 };
 pub(crate) use routes::routes;
 
@@ -1393,11 +1393,98 @@ async fn load_dataset_revision_summaries(
         return Ok(Vec::new());
     }
 
+    let current_revision_id = visible_snapshots
+        .iter()
+        .find(|snapshot| snapshot.status == DatasetRevisionStatus::Published)
+        .map(|snapshot| snapshot.id);
+    let current_snapshot = current_revision_id
+        .and_then(|id| visible_snapshots.iter().find(|snapshot| snapshot.id == id))
+        .cloned();
+    let dependency_revision_ids = visible_snapshots
+        .iter()
+        .filter_map(|snapshot| {
+            if snapshot.status == DatasetRevisionStatus::Draft {
+                current_revision_id
+            } else {
+                Some(snapshot.id)
+            }
+        })
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    let dependency_majors = visible_snapshots
+        .iter()
+        .filter_map(|snapshot| {
+            if snapshot.status == DatasetRevisionStatus::Draft {
+                current_snapshot
+                    .as_ref()
+                    .and_then(|snapshot| snapshot.version_major)
+            } else {
+                snapshot.version_major
+            }
+        })
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    let dependency_counts = load_dependency_summary_counts(
+        pool,
+        dependency_scope,
+        dataset_id,
+        &dependency_revision_ids,
+        &dependency_majors,
+    )
+    .await?;
+
     let mut summaries = Vec::with_capacity(visible_snapshots.len());
     for snapshot in visible_snapshots {
         let output_field_count = snapshot.output_fields.len();
-        let review =
-            load_dataset_revision_review(pool, dependency_scope, dataset_id, snapshot.id).await?;
+        let compatibility_findings = if snapshot.status == DatasetRevisionStatus::Draft {
+            current_snapshot
+                .as_ref()
+                .map(|published| compatibility_findings(published, &snapshot))
+                .unwrap_or_default()
+        } else {
+            snapshot.compatibility_findings.clone()
+        };
+        let compatibility = compatibility_summary(&compatibility_findings);
+        let dependency_revision_id = if snapshot.status == DatasetRevisionStatus::Draft {
+            current_revision_id
+        } else {
+            Some(snapshot.id)
+        };
+        let dependency_major = if snapshot.status == DatasetRevisionStatus::Draft {
+            current_snapshot
+                .as_ref()
+                .and_then(|snapshot| snapshot.version_major)
+        } else {
+            snapshot.version_major
+        };
+        let dependencies = dependency_summary_from_counts(
+            dependency_revision_id
+                .and_then(|id| {
+                    dependency_counts
+                        .exact_dataset_by_revision
+                        .get(&id)
+                        .copied()
+                })
+                .unwrap_or(0),
+            dependency_major
+                .and_then(|major| {
+                    dependency_counts
+                        .major_dataset_by_major
+                        .get(&major)
+                        .copied()
+                })
+                .unwrap_or(0),
+            dependency_revision_id
+                .and_then(|id| dependency_counts.component_by_revision.get(&id).copied())
+                .unwrap_or(0),
+            dependency_revision_id
+                .and_then(|id| dependency_counts.dashboard_by_revision.get(&id).copied())
+                .unwrap_or(0),
+            compatibility.state,
+            dependency_major == snapshot.version_major,
+        );
         summaries.push(DatasetRevisionSummary {
             id: snapshot.id,
             dataset_id: snapshot.dataset_id,
@@ -1410,14 +1497,15 @@ async fn load_dataset_revision_summaries(
             started_new_major_line: snapshot.started_new_major_line,
             force_new_major_version: snapshot.force_new_major_version,
             status: snapshot.status,
-            is_current: review.is_current,
+            is_current: current_revision_id == Some(snapshot.id)
+                && snapshot.status == DatasetRevisionStatus::Published,
             created_at: snapshot.created_at,
             published_at: snapshot.published_at,
             materialized_at: snapshot.materialized_at,
             materialized_row_count: snapshot.materialized_row_count,
             output_field_count,
-            compatibility: review.compatibility,
-            dependencies: review.dependencies,
+            compatibility,
+            dependencies,
         });
     }
     Ok(summaries)
@@ -1486,6 +1574,301 @@ fn revision_snapshot_from_row(
         generated_sql: row.try_get("generated_sql")?,
         output_fields,
     })
+}
+
+struct DependencySummaryCounts {
+    exact_dataset_by_revision: BTreeMap<Uuid, usize>,
+    major_dataset_by_major: BTreeMap<i32, usize>,
+    component_by_revision: BTreeMap<Uuid, usize>,
+    dashboard_by_revision: BTreeMap<Uuid, usize>,
+}
+
+async fn load_dependency_summary_counts(
+    pool: &sqlx::PgPool,
+    scope: &DependencyImpactScope,
+    source_dataset_id: Uuid,
+    revision_ids: &[Uuid],
+    version_majors: &[i32],
+) -> ApiResult<DependencySummaryCounts> {
+    Ok(DependencySummaryCounts {
+        exact_dataset_by_revision: load_exact_dataset_dependency_counts(
+            pool,
+            &scope.datasets,
+            revision_ids,
+        )
+        .await?,
+        major_dataset_by_major: load_major_line_dataset_dependency_counts(
+            pool,
+            &scope.datasets,
+            source_dataset_id,
+            version_majors,
+        )
+        .await?,
+        component_by_revision: load_component_dependency_counts(
+            pool,
+            &scope.components,
+            revision_ids,
+        )
+        .await?,
+        dashboard_by_revision: load_dashboard_dependency_counts(
+            pool,
+            &scope.dashboards,
+            revision_ids,
+        )
+        .await?,
+    })
+}
+
+async fn load_exact_dataset_dependency_counts(
+    pool: &sqlx::PgPool,
+    boundary: &auth::CapabilityBoundary,
+    revision_ids: &[Uuid],
+) -> ApiResult<BTreeMap<Uuid, usize>> {
+    if revision_ids.is_empty() {
+        return Ok(BTreeMap::new());
+    }
+    let rows = match boundary {
+        auth::CapabilityBoundary::Global => {
+            sqlx::query(
+                r#"
+        SELECT dataset_sources.dataset_revision_id AS dependency_key,
+               COUNT(DISTINCT datasets.id)::bigint AS dependency_count
+        FROM dataset_sources
+        JOIN datasets ON datasets.id = dataset_sources.dataset_id
+        WHERE dataset_sources.dataset_revision_id = ANY($1)
+        GROUP BY dataset_sources.dataset_revision_id
+        "#,
+            )
+            .bind(revision_ids)
+            .fetch_all(pool)
+            .await?
+        }
+        auth::CapabilityBoundary::Scoped(scope_ids) => {
+            sqlx::query(
+                r#"
+        SELECT dataset_sources.dataset_revision_id AS dependency_key,
+               COUNT(DISTINCT datasets.id)::bigint AS dependency_count
+        FROM dataset_sources
+        JOIN datasets ON datasets.id = dataset_sources.dataset_id
+        JOIN dataset_scope_nodes ON dataset_scope_nodes.dataset_id = datasets.id
+        WHERE dataset_sources.dataset_revision_id = ANY($1)
+          AND dataset_scope_nodes.node_id = ANY($2)
+        GROUP BY dataset_sources.dataset_revision_id
+        "#,
+            )
+            .bind(revision_ids)
+            .bind(scope_ids)
+            .fetch_all(pool)
+            .await?
+        }
+        auth::CapabilityBoundary::None => Vec::new(),
+    };
+    count_map_from_uuid_rows(rows)
+}
+
+async fn load_major_line_dataset_dependency_counts(
+    pool: &sqlx::PgPool,
+    boundary: &auth::CapabilityBoundary,
+    source_dataset_id: Uuid,
+    version_majors: &[i32],
+) -> ApiResult<BTreeMap<i32, usize>> {
+    if version_majors.is_empty() {
+        return Ok(BTreeMap::new());
+    }
+    let rows = match boundary {
+        auth::CapabilityBoundary::Global => {
+            sqlx::query(
+                r#"
+        SELECT dataset_sources.dataset_version_major AS dependency_key,
+               COUNT(DISTINCT datasets.id)::bigint AS dependency_count
+        FROM dataset_sources
+        JOIN datasets ON datasets.id = dataset_sources.dataset_id
+        WHERE dataset_sources.source_dataset_id = $1
+          AND dataset_sources.dataset_version_major = ANY($2)
+        GROUP BY dataset_sources.dataset_version_major
+        "#,
+            )
+            .bind(source_dataset_id)
+            .bind(version_majors)
+            .fetch_all(pool)
+            .await?
+        }
+        auth::CapabilityBoundary::Scoped(scope_ids) => {
+            sqlx::query(
+                r#"
+        SELECT dataset_sources.dataset_version_major AS dependency_key,
+               COUNT(DISTINCT datasets.id)::bigint AS dependency_count
+        FROM dataset_sources
+        JOIN datasets ON datasets.id = dataset_sources.dataset_id
+        JOIN dataset_scope_nodes ON dataset_scope_nodes.dataset_id = datasets.id
+        WHERE dataset_sources.source_dataset_id = $1
+          AND dataset_sources.dataset_version_major = ANY($2)
+          AND dataset_scope_nodes.node_id = ANY($3)
+        GROUP BY dataset_sources.dataset_version_major
+        "#,
+            )
+            .bind(source_dataset_id)
+            .bind(version_majors)
+            .bind(scope_ids)
+            .fetch_all(pool)
+            .await?
+        }
+        auth::CapabilityBoundary::None => Vec::new(),
+    };
+    count_map_from_i32_rows(rows)
+}
+
+async fn load_component_dependency_counts(
+    pool: &sqlx::PgPool,
+    boundary: &auth::CapabilityBoundary,
+    revision_ids: &[Uuid],
+) -> ApiResult<BTreeMap<Uuid, usize>> {
+    if revision_ids.is_empty() {
+        return Ok(BTreeMap::new());
+    }
+    let rows = match boundary {
+        auth::CapabilityBoundary::Global => {
+            sqlx::query(
+                r#"
+        SELECT component_versions.dataset_revision_id AS dependency_key,
+               COUNT(DISTINCT component_versions.id)::bigint AS dependency_count
+        FROM component_versions
+        WHERE component_versions.dataset_revision_id = ANY($1)
+        GROUP BY component_versions.dataset_revision_id
+        "#,
+            )
+            .bind(revision_ids)
+            .fetch_all(pool)
+            .await?
+        }
+        auth::CapabilityBoundary::Scoped(scope_ids) => {
+            sqlx::query(
+                r#"
+        SELECT component_versions.dataset_revision_id AS dependency_key,
+               COUNT(DISTINCT component_versions.id)::bigint AS dependency_count
+        FROM component_versions
+        JOIN dataset_revisions ON dataset_revisions.id = component_versions.dataset_revision_id
+        JOIN dataset_scope_nodes ON dataset_scope_nodes.dataset_id = dataset_revisions.dataset_id
+        WHERE component_versions.dataset_revision_id = ANY($1)
+          AND dataset_scope_nodes.node_id = ANY($2)
+        GROUP BY component_versions.dataset_revision_id
+        "#,
+            )
+            .bind(revision_ids)
+            .bind(scope_ids)
+            .fetch_all(pool)
+            .await?
+        }
+        auth::CapabilityBoundary::None => Vec::new(),
+    };
+    count_map_from_uuid_rows(rows)
+}
+
+async fn load_dashboard_dependency_counts(
+    pool: &sqlx::PgPool,
+    boundary: &auth::CapabilityBoundary,
+    revision_ids: &[Uuid],
+) -> ApiResult<BTreeMap<Uuid, usize>> {
+    if revision_ids.is_empty() {
+        return Ok(BTreeMap::new());
+    }
+    let rows = match boundary {
+        auth::CapabilityBoundary::Global => {
+            sqlx::query(
+                r#"
+        SELECT component_versions.dataset_revision_id AS dependency_key,
+               COUNT(DISTINCT dashboards.id)::bigint AS dependency_count
+        FROM dashboard_components
+        JOIN dashboards ON dashboards.id = dashboard_components.dashboard_id
+        JOIN component_versions ON component_versions.id = dashboard_components.component_version_id
+        WHERE component_versions.dataset_revision_id = ANY($1)
+        GROUP BY component_versions.dataset_revision_id
+        "#,
+            )
+            .bind(revision_ids)
+            .fetch_all(pool)
+            .await?
+        }
+        auth::CapabilityBoundary::Scoped(scope_ids) => {
+            sqlx::query(
+                r#"
+        SELECT component_versions.dataset_revision_id AS dependency_key,
+               COUNT(DISTINCT dashboards.id)::bigint AS dependency_count
+        FROM dashboard_components
+        JOIN dashboards ON dashboards.id = dashboard_components.dashboard_id
+        JOIN dashboard_scope_nodes ON dashboard_scope_nodes.dashboard_id = dashboards.id
+        JOIN component_versions ON component_versions.id = dashboard_components.component_version_id
+        WHERE component_versions.dataset_revision_id = ANY($1)
+          AND dashboard_scope_nodes.node_id = ANY($2)
+        GROUP BY component_versions.dataset_revision_id
+        "#,
+            )
+            .bind(revision_ids)
+            .bind(scope_ids)
+            .fetch_all(pool)
+            .await?
+        }
+        auth::CapabilityBoundary::None => Vec::new(),
+    };
+    count_map_from_uuid_rows(rows)
+}
+
+fn count_map_from_uuid_rows(rows: Vec<PgRow>) -> ApiResult<BTreeMap<Uuid, usize>> {
+    rows.into_iter()
+        .map(|row| {
+            let key: Uuid = row.try_get("dependency_key")?;
+            let dependency_count: i64 = row.try_get("dependency_count")?;
+            Ok((key, dependency_count as usize))
+        })
+        .collect::<Result<BTreeMap<_, _>, sqlx::Error>>()
+        .map_err(ApiError::from)
+}
+
+fn count_map_from_i32_rows(rows: Vec<PgRow>) -> ApiResult<BTreeMap<i32, usize>> {
+    rows.into_iter()
+        .map(|row| {
+            let key: i32 = row.try_get("dependency_key")?;
+            let dependency_count: i64 = row.try_get("dependency_count")?;
+            Ok((key, dependency_count as usize))
+        })
+        .collect::<Result<BTreeMap<_, _>, sqlx::Error>>()
+        .map_err(ApiError::from)
+}
+
+fn dependency_summary_from_counts(
+    exact_dataset_count: usize,
+    major_line_dataset_count: usize,
+    component_version_count: usize,
+    dashboard_count: usize,
+    compatibility_state: DatasetCompatibilityState,
+    major_line_stays_current: bool,
+) -> DatasetDependencySummary {
+    let dataset_count = exact_dataset_count + major_line_dataset_count;
+    let dependency_count = dataset_count + component_version_count + dashboard_count;
+    let exact_state = carry_forward_state_for(compatibility_state);
+    let major_line_state = if major_line_dataset_count > 0 && !major_line_stays_current {
+        DatasetCarryForwardState::ManualReview
+    } else {
+        DatasetCarryForwardState::Safe
+    };
+    let carry_forward_state = if exact_state == DatasetCarryForwardState::Blocked
+        || major_line_state == DatasetCarryForwardState::Blocked
+    {
+        DatasetCarryForwardState::Blocked
+    } else if exact_state == DatasetCarryForwardState::ManualReview
+        || major_line_state == DatasetCarryForwardState::ManualReview
+    {
+        DatasetCarryForwardState::ManualReview
+    } else {
+        DatasetCarryForwardState::Safe
+    };
+    DatasetDependencySummary {
+        dependency_count,
+        dataset_count,
+        component_version_count,
+        dashboard_count,
+        carry_forward_state,
+    }
 }
 
 async fn validate_existing_dataset_mutation(

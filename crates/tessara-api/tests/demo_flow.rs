@@ -5,10 +5,11 @@ use axum::{
     http::{Request, StatusCode, header},
 };
 use serde_json::{Value, json};
-use sqlx::postgres::PgPoolOptions;
+use sqlx::{Row, postgres::PgPoolOptions};
 use tessara_api::{config::Config, db, router};
 use tower::ServiceExt;
 use tracing_subscriber::EnvFilter;
+use uuid::Uuid;
 
 #[path = "support/datasets.rs"]
 mod dataset_support;
@@ -1309,6 +1310,7 @@ async fn dataset_revision_draft_publish_preserves_current_until_publish() {
         major_dependent_before_count * 2,
         "major-line consumers should be rematerialized from every revision in the selected major"
     );
+    assert_major_line_null_fills_added_field(dataset_id, 1, &second_key).await;
 
     let history_after_publish = request_json(
         app.clone(),
@@ -2482,6 +2484,68 @@ async fn create_scoped_dataset_manager_token(
     .await;
 
     login_token_for(app, email, password).await
+}
+
+async fn assert_major_line_null_fills_added_field(
+    dataset_id: &str,
+    version_major: i32,
+    field_key: &str,
+) {
+    let database_url = std::env::var("TEST_DATABASE_URL").expect("TEST_DATABASE_URL should be set");
+    let pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&database_url)
+        .await
+        .expect("connect test database");
+    let materialization = sqlx::query(
+        r#"
+        SELECT materialized_schema, materialized_table
+        FROM dataset_major_materializations
+        WHERE dataset_id = $1
+          AND version_major = $2
+          AND rebuild_status = 'ready'
+        "#,
+    )
+    .bind(Uuid::parse_str(dataset_id).expect("dataset id uuid"))
+    .bind(version_major)
+    .fetch_one(&pool)
+    .await
+    .expect("major-line materialization");
+    let schema: String = materialization
+        .try_get("materialized_schema")
+        .expect("materialized schema");
+    let table: String = materialization
+        .try_get("materialized_table")
+        .expect("materialized table");
+    let row = sqlx::query(&format!(
+        r#"
+        SELECT
+            COUNT(*) FILTER (WHERE {field} IS NULL)::bigint AS null_count,
+            COUNT(*) FILTER (WHERE {field} IS NOT NULL)::bigint AS populated_count
+        FROM {schema}.{table}
+        "#,
+        schema = quote_test_identifier(&schema),
+        table = quote_test_identifier(&table),
+        field = quote_test_identifier(field_key),
+    ))
+    .fetch_one(&pool)
+    .await
+    .expect("major-line null-fill counts");
+    let null_count: i64 = row.try_get("null_count").expect("null count");
+    let populated_count: i64 = row.try_get("populated_count").expect("populated count");
+    pool.close().await;
+    assert!(
+        null_count > 0,
+        "older rows in the major-line materialization should NULL-fill fields added later"
+    );
+    assert!(
+        populated_count > 0,
+        "newer rows in the major-line materialization should populate fields added in that revision"
+    );
+}
+
+fn quote_test_identifier(identifier: &str) -> String {
+    format!("\"{}\"", identifier.replace('"', "\"\""))
 }
 
 async fn request_json(app: axum::Router, request: Request<Body>) -> Value {
