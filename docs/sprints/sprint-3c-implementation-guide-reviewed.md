@@ -18,7 +18,7 @@ The plan needs several current-state constraints before it can safely serve as a
 
 1. **Datasets already has an extracted web feature crate.** The current workspace has `tessara-web` as the Leptos application/root route crate, `tessara-web-datasets` as the Datasets feature UI crate, and `tessara-datasets` as a small pure domain crate. Sprint 3C should extend `tessara-web-datasets` for dataset feature UI while keeping route registration, route parameters, shell/auth policy, document integration, hydration entrypoints, CSS, and public assets in root `tessara-web`.
 2. **The database already has the core revision table and status enum, but the application does not yet expose the revision lifecycle.** `dataset_revisions` already stores revision status, version number, source/operation/restriction/output JSON snapshots, generated SQL, and materialization metadata. `dataset_revision_status` already has `draft`, `published`, and `superseded` values. The missing work is mostly service/API/UI behavior and typed application contracts, not inventing revisions from scratch.
-3. **The current update flow directly publishes.** `PUT /api/admin/datasets/{dataset_id}` currently recompiles the submitted definition, deletes and replaces current `dataset_sources` and `dataset_fields`, inserts a new published revision, supersedes the previous published revision, materializes the new revision, and commits. Sprint 3C must split this into draft save plus explicit publish.
+3. **The update flow must not directly publish.** Sprint 3C splits existing dataset edits into draft save plus explicit publish. The accepted route surface removes the legacy `PUT /api/admin/datasets/{dataset_id}` direct-publish mutation path from normal application behavior.
 4. **Draft 1 probably underestimates persistence needs for draft metadata and visibility.** Current `dataset_revisions` stores definition snapshots for source, operations, restriction policy, SQL, and output fields, but it does not store draft `name`, `slug`, `grain`, or `visibility_node_ids`. Because the existing editor payload includes all of those fields and Draft 1 says existing edits should save as draft, Sprint 3C should either add a small revision metadata snapshot column or explicitly constrain metadata/visibility changes to publish-only behavior. The recommended plan is to add a small `definition_metadata` JSON snapshot to `dataset_revisions` and backfill existing revisions.
 5. **Dependency visibility can be implemented using existing references.** Downstream dependent datasets are visible from current `dataset_sources.dataset_revision_id`; component versions already bind to `component_versions.dataset_revision_id`; dashboards are reachable through `dashboard_components -> component_versions`. The architecture mentions `dataset_revision_dependencies`, but the current baseline migration does not define that table. Sprint 3C should not add a new dependency table unless implementation discovers a narrow blocker.
 6. **Carry-forward should be inspect-first in Sprint 3C.** The sprint should not automatically repoint dependent datasets, component versions, or dashboards. It should report typed safe/manual-review/blocked guidance that later Sprint 5C upgrade and stale-dependency flows can consume.
@@ -69,7 +69,8 @@ The same architecture establishes important constraints for this sprint:
 
 - stable dependency edges bind to immutable revisions or versions;
 - materialized physical relations may be evicted and rebuilt while semantic revision metadata remains stable;
-- compatibility findings classify as `compatible`, `warning`, or `blocking` when a dependent draft is rebound to a newer dependency;
+- changelog entries classify dataset-definition changes by `version_impact`: `patch`, `minor`, or `major`;
+- revision review derives compatibility state from those changelog impacts: no major/minor entries is `compatible`, minor-only changes require `review`, and major changes are `breaking`;
 - users may skip some carry-forward work rather than resolving every dependent asset immediately.
 
 The requirements also state that datasets have mutable logical identity with immutable `DatasetRevision`, and that revision history and compatibility behavior must be visible in the application.
@@ -111,13 +112,19 @@ The current dataset API routes are approximately:
 - `POST /api/admin/datasets`
 - `POST /api/admin/datasets/sql-preview`
 - `POST /api/admin/datasets/{dataset_id}/sql-preview`
-- `PUT /api/admin/datasets/{dataset_id}`
 - `DELETE /api/admin/datasets/{dataset_id}`
+- `POST /api/admin/datasets/{dataset_id}/draft-revision`
+- `POST /api/admin/datasets/{dataset_id}/revisions/{revision_id}/publish`
+- `PATCH /api/admin/datasets/{dataset_id}/revisions/{revision_id}/label`
+- `PATCH /api/admin/datasets/{dataset_id}/revisions/{revision_id}/options`
+- `DELETE /api/admin/datasets/{dataset_id}/revisions/{revision_id}`
 - `GET /api/datasets`
 - `GET /api/datasets/{dataset_id}`
+- `GET /api/datasets/{dataset_id}/revisions`
+- `GET /api/datasets/{dataset_id}/revisions/{revision_id}`
 - `GET /api/datasets/{dataset_id}/table`
 
-Current create behavior is already close to the desired first-revision behavior: it creates the logical dataset, compiles the definition, inserts current `dataset_sources` and `dataset_fields`, inserts a published revision, materializes it, and commits.
+Current create behavior is already close to the desired first-revision behavior: it creates the logical dataset, compiles the definition, inserts current `dataset_sources` and `dataset_fields`, inserts a published revision, materializes it, and commits. After creation, published dataset state changes must flow through the draft-revision and publish routes. The legacy direct `PUT /api/admin/datasets/{dataset_id}` mutation route is intentionally not part of the Sprint 3C contract.
 
 Current update behavior is the main mismatch: it directly replaces the dataset metadata/current catalog, inserts a published revision, supersedes the old published revision, materializes immediately, and commits. That behavior must stop being the normal editor save behavior for existing datasets.
 
@@ -131,13 +138,13 @@ Sprint 3C should preserve those current-published semantics for normal detail an
 
 ### 3.4 Existing DTO Baseline
 
-`crates/tessara-api/src/datasets/dto.rs` currently has request/response types for dataset creation/replacement, source composition, projection, aggregation, calculated fields, row filters, restriction policy, summary, detail, SQL preview, and table rows.
+`crates/tessara-api/src/datasets/dto.rs` has request/response types for dataset creation, draft revision save/publish, source composition, projection, aggregation, calculated fields, row filters, restriction policy, summary, detail, SQL preview, and table rows.
 
-The current DTO layer lacks typed public contracts for:
+The Sprint 3C DTO layer should keep typed public contracts for:
 
 - dataset revision status;
 - revision summary/detail;
-- compatibility severity/state;
+- changelog version impact and compatibility state;
 - dependency kind/state;
 - carry-forward state;
 - publish eligibility;
@@ -378,16 +385,16 @@ pub enum DatasetRevisionStatus {
     Superseded,
 }
 
-pub enum DatasetCompatibilitySeverity {
-    Info,
-    Warning,
-    Blocking,
+pub enum DatasetVersionImpact {
+    Patch,
+    Minor,
+    Major,
 }
 
 pub enum DatasetCompatibilityState {
     Compatible,
-    ReviewRequired,
-    Blocked,
+    Review,
+    Breaking,
 }
 
 pub enum DatasetCompatibilityFindingKind {
@@ -455,25 +462,24 @@ Add or equivalent DTOs in `crates/tessara-api/src/datasets/dto.rs`.
   "version_number": 3,
   "version_label": "Draft revision 3",
   "status": "draft",
-  "is_current_published": false,
+  "is_current": false,
   "created_at": "2026-06-28T12:00:00Z",
   "published_at": null,
   "materialized_at": null,
   "materialized_row_count": null,
   "output_field_count": 12,
-  "dependency_summary": {
-    "dependent_dataset_count": 1,
+  "dependencies": {
+    "dependency_count": 4,
+    "dataset_count": 1,
     "component_version_count": 2,
     "dashboard_count": 1,
-    "safe_count": 2,
-    "manual_review_count": 1,
-    "blocked_count": 1
+    "carry_forward_state": "manual_review"
   },
-  "compatibility_summary": {
-    "state": "review_required",
-    "info_count": 2,
-    "warning_count": 1,
-    "blocking_count": 0
+  "compatibility": {
+    "state": "review",
+    "major_count": 0,
+    "minor_count": 1,
+    "patch_count": 2
   }
 }
 ```
@@ -482,32 +488,20 @@ Add or equivalent DTOs in `crates/tessara-api/src/datasets/dto.rs`.
 
 ```json
 {
-  "summary": { "...": "..." },
   "metadata": { "...": "..." },
-  "visibility_nodes": [],
   "initial_source": { "kind": "form" },
   "operations": [],
   "restriction_policy": null,
   "generated_sql": "SELECT ...",
-  "materialization": {
-    "schema": "dataset_materialized",
-    "table": "dataset_...",
-    "row_count": 200,
-    "materialized_at": "2026-06-28T12:00:00Z"
-  },
+  "materialized_schema": "dataset_materialized",
+  "materialized_table": "dataset_...",
+  "materialized_row_count": 200,
+  "materialized_at": "2026-06-28T12:00:00Z",
   "output_fields": [],
-  "compatibility": {
-    "state": "review_required",
-    "findings": []
-  },
-  "dependencies": {
-    "items": [],
-    "summary": {}
-  },
-  "publish_eligibility": {
-    "state": "publishable",
-    "reasons": []
-  }
+  "compatibility": { "...": "..." },
+  "compatibility_findings": [],
+  "dependencies": { "...": "..." },
+  "dependency_impacts": []
 }
 ```
 
@@ -515,15 +509,11 @@ Add or equivalent DTOs in `crates/tessara-api/src/datasets/dto.rs`.
 
 ```json
 {
-  "kind": "output_field_removed",
-  "severity": "blocking",
-  "state": "blocked",
+  "version_impact": "major",
+  "state": "breaking",
+  "code": "output_field_removed",
   "field_key": "participant_age",
-  "field_label": "Participant Age",
-  "previous_value": "number",
-  "candidate_value": null,
-  "message": "Output field participant_age was removed.",
-  "dependency_notes": ["Dependent table components using this field cannot be carried forward automatically."]
+  "message": "Output field 'Participant Age' was removed."
 }
 ```
 
@@ -646,16 +636,11 @@ The struct can be reused mechanically while naming is improved.
 
 Only draft revisions can be published. Published or superseded revisions must return a typed conflict/bad-request error.
 
-### 9.7 Adapt Or Deprecate Existing Update Route
+### 9.7 Remove Existing Update Route
 
-`PUT /api/admin/datasets/{dataset_id}` currently performs direct publish. Sprint 3C should stop relying on this route from the web editor.
+The accepted Sprint 3C route surface removes the legacy `PUT /api/admin/datasets/{dataset_id}` mutation path. Existing dataset edits use `POST /api/admin/datasets/{dataset_id}/draft-revision`, then publish through `POST /api/admin/datasets/{dataset_id}/revisions/{revision_id}/publish`.
 
-Recommended behavior:
-
-- Prefer changing this route to the new draft-save behavior or removing normal application reliance on it entirely.
-- Do not preserve direct-publish semantics for backwards compatibility. Tessara is pre-production, so browser code, tests, scripts, and seed paths should migrate to the accepted revision lifecycle.
-- Keep a temporary adapter only if it materially reduces sprint implementation risk; if kept, isolate it, document the removal path, and prove normal browser edit save does not direct-publish through it.
-- Prefer the new draft route from all browser editor code.
+Do not preserve direct-publish semantics for backwards compatibility. Tessara is pre-production, so browser code, tests, scripts, and seed paths should migrate to the accepted revision lifecycle.
 - Add a regression proving browser edit save does not direct-publish through the old path.
 
 Do not leave the old direct-publish path reachable from normal application UI after Sprint 3C.
@@ -830,43 +815,43 @@ Compare a candidate draft revision to the current published revision for the sam
 If there is no current published revision, return:
 
 - `state = compatible`
-- no blocking findings
-- optional informational finding: `no_published_baseline`
+- no changelog entries unless the initial publish needs explicit audit rows
 
 ### 13.2 Output Field Contract Rules
 
 Compare output fields by stable `key`.
 
-| Change | Severity | Compatibility State | Carry-Forward State | Notes |
+| Change | Version Impact | Compatibility State | Carry-Forward State | Notes |
 | --- | --- | --- | --- | --- |
-| Output field added | `info` | `compatible` | `safe` | Existing dependents should not break. |
-| Output field removed | `blocking` | `blocked` | `blocked` | Downstream consumers may reference the field. |
-| Output field type changed | `blocking` | `blocked` | `blocked` | Treat as breaking even if name/key stays stable. |
-| Output field label changed | `info` | `compatible` or `review_required` | `safe` or `manual_review` | Usually display-only; warn only if known dependent config stores labels. |
-| Output field position changed | `info` | `compatible` | `safe` | Field order is not a semantic dependency unless a consumer is known to rely on it. |
-| Output field source alias changed with same key/type | `warning` | `review_required` | `manual_review` | Semantics may have changed even if contract shape did not. |
-| Output field source field key changed with same key/type | `warning` | `review_required` | `manual_review` | Semantics may have changed. |
+| Output field added | `minor` | `review` | `safe` | Existing dependents should not break, but major-line consumers receive additional rows/columns after publish. |
+| Output field removed | `major` | `breaking` | `blocked` | Downstream consumers may reference the field. |
+| Output field type changed | `major` | `breaking` | `blocked` | Treat as breaking even if name/key stays stable. |
+| Output field label changed | `patch` | `compatible` | `safe` | Display-only metadata change. |
+| Output field position changed | `patch` | `compatible` | `safe` | Field order is not a semantic dependency unless a consumer is known to rely on it. |
+| Output field source alias changed with same key/type | `minor` | `review` | `manual_review` | Semantics may have changed even if contract shape did not. |
+| Output field source field key changed with same key/type | `minor` | `review` | `manual_review` | Semantics may have changed. |
 
 ### 13.3 Restriction Policy Rules
 
-| Change | Severity | Compatibility State | Carry-Forward State | Notes |
+| Change | Version Impact | Compatibility State | Carry-Forward State | Notes |
 | --- | --- | --- | --- | --- |
-| Restriction policy added | `warning` | `review_required` | `manual_review` | Rows visible to some readers may shrink. |
-| Restriction policy removed | `warning` | `review_required` | `manual_review` | Rows visible to some readers may expand. |
-| Restriction tier field changed | `warning` | `review_required` | `manual_review` | Needs human review. |
+| Restriction policy added | `minor` | `review` | `manual_review` | Rows visible to some readers may shrink. |
+| Restriction policy removed | `minor` | `review` | `manual_review` | Rows visible to some readers may expand. |
+| Restriction tier field changed | `minor` | `review` | `manual_review` | Needs human review. |
 | No restriction policy change | none | unchanged | unchanged | No finding needed. |
 
 Restriction changes are not simply display changes. They affect row access. They should always appear in the review screen.
 
 ### 13.4 Source And Operation Rules
 
-| Change | Severity | Compatibility State | Carry-Forward State | Notes |
+| Change | Version Impact | Compatibility State | Carry-Forward State | Notes |
 | --- | --- | --- | --- | --- |
-| Source composition changed but output fields unchanged | `warning` | `review_required` | `manual_review` | Semantics or row counts may change. |
-| Filter operation changed but output fields unchanged | `warning` | `review_required` | `manual_review` | Row population may change. |
-| Calculation pipeline changed for an output field with same type | `warning` | `review_required` | `manual_review` | Field meaning may change. |
-| Aggregation changed with output fields unchanged | `warning` | `review_required` | `manual_review` | Row grain or values may change. |
-| Generated SQL changed but no structural change detected | `info` | `compatible` or `review_required` | `safe` or `manual_review` | Prefer more specific operation findings when possible. |
+| Source composition changed but output fields unchanged | `minor` | `review` | `manual_review` | Semantics or row counts may change. |
+| Filter operation changed but output fields unchanged | `minor` | `review` | `manual_review` | Row population may change. |
+| Calculation pipeline changed with same output field type | `patch` | `compatible` | `safe` | Field meaning changed without changing the dataset contract shape. |
+| Calculation pipeline changes output field type | `major` | `breaking` | `blocked` | Type changes can break consumers. |
+| Aggregation changed with output fields unchanged | `minor` | `review` | `manual_review` | Row grain or values may change. |
+| Generated SQL changed but no structural change detected | none | unchanged | unchanged | Prefer specific source, operation, restriction, or output-field findings instead. |
 
 Do not flood users with duplicate low-value findings. Group operation-level changes where detailed diffing is not yet reliable.
 
@@ -874,15 +859,15 @@ Do not flood users with duplicate low-value findings. Group operation-level chan
 
 Derive the summary from findings:
 
-- any blocking finding -> `blocked`;
-- else any warning finding -> `review_required`;
+- any `major` changelog entry -> `breaking`;
+- else any `minor` changelog entry -> `review`;
 - else -> `compatible`.
 
 For dependency carry-forward:
 
-- direct affected blocking field -> `blocked`;
-- warning-only or unknown consumer field usage -> `manual_review`;
-- info-only changes or additions -> `safe`.
+- direct affected `major` field change -> `blocked`;
+- `minor` changes or unknown consumer field usage -> `manual_review`;
+- `patch` changes or additions that do not affect a pinned exact-revision dependency -> `safe`.
 
 ## 14. Dependency Discovery And Impact Rules
 
@@ -1063,7 +1048,7 @@ crates/tessara-datasets/src/
 Good candidates for this crate:
 
 - revision status enum;
-- compatibility severity/state enums;
+- changelog version-impact and compatibility-state enums;
 - dependency and carry-forward state enums;
 - pure output-field comparison based on small structs;
 - summary-state derivation.
