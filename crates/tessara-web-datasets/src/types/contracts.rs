@@ -233,6 +233,7 @@ pub(crate) struct DatasetPublishRevisionResponse {
     pub(crate) dataset_id: String,
     pub(crate) revision_id: String,
     pub(crate) superseded_revision_id: Option<String>,
+    pub(crate) semantic_version: String,
     pub(crate) version_label: String,
     pub(crate) version_major: i32,
     pub(crate) version_minor: i32,
