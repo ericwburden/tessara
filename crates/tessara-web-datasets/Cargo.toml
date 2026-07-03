@@ -1,0 +1,25 @@
+[package]
+name = "tessara-web-datasets"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[features]
+default = []
+hydrate = [
+    "leptos/hydrate",
+]
+ssr = [
+    "leptos/ssr",
+]
+
+[dependencies]
+gloo-net = { workspace = true }
+icons = { workspace = true }
+js-sys = { workspace = true }
+leptos = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tessara-web-ui = { path = "../tessara-web-ui" }
+wasm-bindgen = { workspace = true }
+web-sys = { workspace = true }

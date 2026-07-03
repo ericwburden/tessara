@@ -3,15 +3,20 @@
 //! Keep derived frontend models and lightweight state shapes here when they are shared by multiple Administration pages or helpers.
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
-
-use crate::features::organization::AdminRoleSummary;
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 pub(crate) struct AdminCapabilitySummary {
     pub(crate) id: String,
     pub(crate) key: String,
     pub(crate) description: String,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub(crate) struct AdminRoleSummary {
+    pub(crate) id: String,
+    pub(crate) name: String,
+    pub(crate) capability_count: i64,
+    pub(crate) account_count: i64,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -124,19 +129,92 @@ pub(crate) struct UpdateAdminUserAccessPayload {
     pub(crate) delegate_account_ids: Vec<String>,
 }
 
-#[derive(Serialize)]
-#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
-pub(crate) struct CreateNodePayload {
-    pub(crate) node_type_id: String,
-    pub(crate) parent_node_id: Option<String>,
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub(crate) struct NodeTypeCatalogEntry {
+    pub(crate) id: String,
     pub(crate) name: String,
-    pub(crate) metadata: serde_json::Map<String, Value>,
+    pub(crate) slug: String,
+    pub(crate) singular_label: String,
+    pub(crate) plural_label: String,
+    pub(crate) is_root_type: bool,
+    pub(crate) node_count: i64,
+    #[serde(default)]
+    pub(crate) parent_relationships: Vec<NodeTypePeerLink>,
+    #[serde(default)]
+    pub(crate) child_relationships: Vec<NodeTypePeerLink>,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub(crate) struct NodeTypePeerLink {
+    pub(crate) node_type_id: String,
+    pub(crate) node_type_name: String,
+    pub(crate) node_type_slug: String,
+    pub(crate) singular_label: String,
+    pub(crate) plural_label: String,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
-pub(crate) struct UpdateNodePayload {
-    pub(crate) parent_node_id: Option<String>,
+pub(crate) struct NodeTypeDefinition {
+    pub(crate) id: String,
     pub(crate) name: String,
-    pub(crate) metadata: serde_json::Map<String, Value>,
+    pub(crate) slug: String,
+    pub(crate) singular_label: String,
+    pub(crate) plural_label: String,
+    pub(crate) is_root_type: bool,
+    pub(crate) node_count: i64,
+    #[serde(default)]
+    pub(crate) parent_relationships: Vec<NodeTypePeerLink>,
+    #[serde(default)]
+    pub(crate) child_relationships: Vec<NodeTypePeerLink>,
+    #[serde(default)]
+    pub(crate) metadata_fields: Vec<NodeMetadataFieldSummary>,
+    #[serde(default)]
+    pub(crate) scoped_forms: Vec<NodeTypeFormLink>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub(crate) struct NodeTypeFormLink {
+    pub(crate) form_id: String,
+    pub(crate) form_name: String,
+    pub(crate) form_slug: String,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub(crate) struct NodeMetadataFieldSummary {
+    pub(crate) id: String,
+    pub(crate) node_type_id: String,
+    pub(crate) node_type_name: String,
+    pub(crate) key: String,
+    pub(crate) label: String,
+    pub(crate) field_type: String,
+    pub(crate) required: bool,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub(crate) struct NodeTypeUpsertRequest {
+    pub(crate) name: String,
+    pub(crate) slug: String,
+    pub(crate) plural_label: Option<String>,
+    pub(crate) parent_node_type_ids: Vec<String>,
+    pub(crate) child_node_type_ids: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+pub(crate) struct CreateNodeMetadataFieldRequest {
+    pub(crate) node_type_id: String,
+    pub(crate) key: String,
+    pub(crate) label: String,
+    pub(crate) field_type: String,
+    pub(crate) required: bool,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+pub(crate) struct UpdateNodeMetadataFieldRequest {
+    pub(crate) key: String,
+    pub(crate) label: String,
+    pub(crate) field_type: String,
+    pub(crate) required: bool,
 }

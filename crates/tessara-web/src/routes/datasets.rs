@@ -6,11 +6,17 @@ use leptos::prelude::*;
 use leptos_router::components::Route;
 use leptos_router::{MatchNestedRoutes, path};
 
-use crate::features::datasets::{
-    DatasetsDetailPage, DatasetsEditPage, DatasetsNewPage, DatasetsPage, DatasetsPreviewPage,
-};
-
+use crate::features::auth::require_authenticated_route;
 use crate::routes::PRIMARY_SSR_MODE;
+use crate::types::route_params::{
+    DatasetRevisionRouteParams, DatasetRouteParams, require_route_params,
+};
+use crate::ui::AppShell;
+use tessara_web_datasets::{
+    DatasetDetailContent, DatasetEditorContent, DatasetPreviewContent,
+    DatasetRevisionDetailContent, DatasetRevisionEditorContent, DatasetRevisionHistoryContent,
+    DatasetsIndexContent,
+};
 
 pub fn dataset_routes() -> impl MatchNestedRoutes + Clone {
     view! {
@@ -28,10 +34,114 @@ pub fn dataset_routes() -> impl MatchNestedRoutes + Clone {
                 ssr=PRIMARY_SSR_MODE
             />
             <Route
+                path=path!("/datasets/:dataset_id/revisions")
+                view=DatasetsRevisionHistoryPage
+                ssr=PRIMARY_SSR_MODE
+            />
+            <Route
+                path=path!("/datasets/:dataset_id/revisions/:revision_id/edit")
+                view=DatasetsRevisionEditPage
+                ssr=PRIMARY_SSR_MODE
+            />
+            <Route
+                path=path!("/datasets/:dataset_id/revisions/:revision_id")
+                view=DatasetsRevisionDetailPage
+                ssr=PRIMARY_SSR_MODE
+            />
+            <Route
                 path=path!("/datasets/:dataset_id/edit")
                 view=DatasetsEditPage
                 ssr=PRIMARY_SSR_MODE
             />
         </>
     }
+}
+
+#[component]
+fn DatasetsPage() -> impl IntoView {
+    view! {
+        <AppShell active_route="datasets" title="Datasets">
+            <DatasetsIndexContent/>
+        </AppShell>
+    }
+}
+
+#[component]
+fn DatasetsNewPage() -> impl IntoView {
+    view! {
+        <AppShell active_route="datasets" title="Create Dataset">
+            <DatasetEditorContent dataset_id=None/>
+        </AppShell>
+    }
+}
+
+#[component]
+fn DatasetsDetailPage() -> impl IntoView {
+    let params = require_route_params::<DatasetRouteParams>();
+    let dataset_id = params.dataset_id;
+
+    view! {
+        <AppShell active_route="datasets" title="Dataset Detail">
+            <DatasetDetailContent dataset_id/>
+        </AppShell>
+    }
+}
+
+#[component]
+fn DatasetsEditPage() -> impl IntoView {
+    let params = require_route_params::<DatasetRouteParams>();
+    let dataset_id = params.dataset_id;
+
+    view! {
+        <AppShell active_route="datasets" title="Edit Dataset">
+            <DatasetEditorContent dataset_id=Some(dataset_id)/>
+        </AppShell>
+    }
+}
+
+#[component]
+fn DatasetsRevisionHistoryPage() -> impl IntoView {
+    let params = require_route_params::<DatasetRouteParams>();
+    let dataset_id = params.dataset_id;
+
+    view! {
+        <AppShell active_route="datasets" title="Dataset Revisions">
+            <DatasetRevisionHistoryContent dataset_id/>
+        </AppShell>
+    }
+}
+
+#[component]
+fn DatasetsRevisionDetailPage() -> impl IntoView {
+    let params = require_route_params::<DatasetRevisionRouteParams>();
+    let dataset_id = params.dataset_id;
+    let revision_id = params.revision_id;
+
+    view! {
+        <AppShell active_route="datasets" title="Dataset Revision">
+            <DatasetRevisionDetailContent dataset_id revision_id/>
+        </AppShell>
+    }
+}
+
+#[component]
+fn DatasetsRevisionEditPage() -> impl IntoView {
+    let params = require_route_params::<DatasetRevisionRouteParams>();
+    let dataset_id = params.dataset_id;
+    let revision_id = params.revision_id;
+
+    view! {
+        <AppShell active_route="datasets" title="Edit Revision">
+            <DatasetRevisionEditorContent dataset_id revision_id/>
+        </AppShell>
+    }
+}
+
+#[component]
+fn DatasetsPreviewPage() -> impl IntoView {
+    require_authenticated_route("datasets");
+    let params = require_route_params::<DatasetRouteParams>();
+    let dataset_id = params.dataset_id;
+
+    view! { <DatasetPreviewContent dataset_id/> }
 }

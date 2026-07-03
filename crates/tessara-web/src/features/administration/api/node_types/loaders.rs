@@ -1,6 +1,6 @@
 //! Node type administration API loaders.
 
-use crate::features::organization::{NodeTypeCatalogEntry, NodeTypeDefinition};
+use crate::features::administration::models::{NodeTypeCatalogEntry, NodeTypeDefinition};
 #[cfg(feature = "hydrate")]
 use crate::http::redirect_to_login;
 use leptos::prelude::*;

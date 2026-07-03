@@ -1,7 +1,7 @@
 //! Relationship option helpers for the node-type editor.
 
 use super::super::graph::{node_type_ancestor_ids, node_type_descendant_ids};
-use crate::features::organization::NodeTypeCatalogEntry;
+use crate::features::administration::models::NodeTypeCatalogEntry;
 use std::collections::HashSet;
 
 pub(super) fn eligible_parent_node_types(

@@ -1,7 +1,7 @@
 //! Edit context loader for administration user screens.
 
+use crate::features::administration::models::AdminRoleSummary;
 use crate::features::administration::models::AdminUserDetail;
-use crate::features::organization::AdminRoleSummary;
 #[cfg(feature = "hydrate")]
 use crate::http::redirect_to_login;
 use leptos::prelude::*;

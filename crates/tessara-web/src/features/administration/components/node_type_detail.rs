@@ -1,7 +1,7 @@
 //! Node type detail collection components.
 
 use super::node_type_metadata_fields::NodeTypeMetadataList;
-use crate::features::organization::{NodeTypeDefinition, NodeTypeFormLink};
+use crate::features::administration::models::{NodeTypeDefinition, NodeTypeFormLink};
 use crate::ui::TablePaginationFooter;
 use crate::utils::pagination::pagination_page_start;
 use icons::Search;

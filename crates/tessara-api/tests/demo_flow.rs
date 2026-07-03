@@ -5,10 +5,11 @@ use axum::{
     http::{Request, StatusCode, header},
 };
 use serde_json::{Value, json};
-use sqlx::postgres::PgPoolOptions;
+use sqlx::{Row, postgres::PgPoolOptions};
 use tessara_api::{config::Config, db, router};
 use tower::ServiceExt;
 use tracing_subscriber::EnvFilter;
+use uuid::Uuid;
 
 #[path = "support/datasets.rs"]
 mod dataset_support;
@@ -101,6 +102,44 @@ async fn demo_seed_uses_capability_scope_ownership_and_components() {
             .iter()
             .any(|component| component["component_version_id"] == seed["component_version_id"])
     );
+    let seeded_revision = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!(
+                "/api/datasets/{}/revisions/{}",
+                seed["dataset_id"].as_str().expect("dataset id"),
+                seed["dataset_revision_id"]
+                    .as_str()
+                    .expect("dataset revision id")
+            ),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(
+        seeded_revision["dependencies"]["component_version_count"],
+        1
+    );
+    assert_eq!(seeded_revision["dependencies"]["dashboard_count"], 1);
+    assert!(
+        seeded_revision["dependency_impacts"]
+            .as_array()
+            .expect("dependency impacts")
+            .iter()
+            .any(|impact| {
+                impact["kind"] == "component_version"
+                    && impact["id"] == seed["component_version_id"]
+            })
+    );
+    assert!(
+        seeded_revision["dependency_impacts"]
+            .as_array()
+            .expect("dependency impacts")
+            .iter()
+            .any(|impact| impact["kind"] == "dashboard" && impact["id"] == seed["dashboard_id"])
+    );
 
     let operator_token = login_token_for(
         app.clone(),
@@ -108,6 +147,156 @@ async fn demo_seed_uses_capability_scope_ownership_and_components() {
         "tessara-dev-operator",
     )
     .await;
+    let scoped_seeded_revision = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!(
+                "/api/datasets/{}/revisions/{}",
+                seed["dataset_id"].as_str().expect("dataset id"),
+                seed["dataset_revision_id"]
+                    .as_str()
+                    .expect("dataset revision id")
+            ),
+            &operator_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(
+        scoped_seeded_revision["dependencies"]["component_version_count"],
+        1
+    );
+    assert_eq!(scoped_seeded_revision["dependencies"]["dashboard_count"], 1);
+    assert!(
+        scoped_seeded_revision["dependency_impacts"]
+            .as_array()
+            .expect("scoped dependency impacts")
+            .iter()
+            .any(|impact| impact["kind"] == "component_version")
+    );
+    assert!(
+        scoped_seeded_revision["dependency_impacts"]
+            .as_array()
+            .expect("scoped dependency impacts")
+            .iter()
+            .any(|impact| impact["kind"] == "dashboard")
+    );
+    let admin_revision_history = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!(
+                "/api/datasets/{}/revisions",
+                seed["dataset_id"].as_str().expect("dataset id")
+            ),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    let admin_seeded_revision_summary = admin_revision_history
+        .as_array()
+        .expect("admin revision history")
+        .iter()
+        .find(|revision| revision["id"] == seed["dataset_revision_id"])
+        .expect("admin seeded revision summary");
+    assert_eq!(
+        admin_seeded_revision_summary["dependencies"]["component_version_count"],
+        1
+    );
+    assert_eq!(
+        admin_seeded_revision_summary["dependencies"]["dashboard_count"],
+        1
+    );
+    let scoped_revision_history = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!(
+                "/api/datasets/{}/revisions",
+                seed["dataset_id"].as_str().expect("dataset id")
+            ),
+            &operator_token,
+            None,
+        ),
+    )
+    .await;
+    let scoped_seeded_revision_summary = scoped_revision_history
+        .as_array()
+        .expect("scoped revision history")
+        .iter()
+        .find(|revision| revision["id"] == seed["dataset_revision_id"])
+        .expect("scoped seeded revision summary");
+    assert_eq!(
+        scoped_seeded_revision_summary["dependencies"]["component_version_count"],
+        1
+    );
+    assert_eq!(
+        scoped_seeded_revision_summary["dependencies"]["dashboard_count"],
+        1
+    );
+    let label_update = request_json(
+        app.clone(),
+        authorized_request(
+            "PATCH",
+            &format!(
+                "/api/admin/datasets/{}/revisions/{}/label",
+                seed["dataset_id"].as_str().expect("dataset id"),
+                seed["dataset_revision_id"]
+                    .as_str()
+                    .expect("dataset revision id")
+            ),
+            &admin_token,
+            Some(json!({
+                "version_label": "Initial Seed",
+                "revision_notes": "Seeded baseline notes"
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(label_update["version_label"], "Initial Seed");
+    assert_eq!(label_update["revision_notes"], "Seeded baseline notes");
+    let partial_label_update = request_json(
+        app.clone(),
+        authorized_request(
+            "PATCH",
+            &format!(
+                "/api/admin/datasets/{}/revisions/{}/label",
+                seed["dataset_id"].as_str().expect("dataset id"),
+                seed["dataset_revision_id"]
+                    .as_str()
+                    .expect("dataset revision id")
+            ),
+            &admin_token,
+            Some(json!({ "version_label": "Retitled Seed" })),
+        ),
+    )
+    .await;
+    assert_eq!(partial_label_update["version_label"], "Retitled Seed");
+    assert_eq!(
+        partial_label_update["revision_notes"],
+        "Seeded baseline notes"
+    );
+    let partial_notes_update = request_json(
+        app.clone(),
+        authorized_request(
+            "PATCH",
+            &format!(
+                "/api/admin/datasets/{}/revisions/{}/label",
+                seed["dataset_id"].as_str().expect("dataset id"),
+                seed["dataset_revision_id"]
+                    .as_str()
+                    .expect("dataset revision id")
+            ),
+            &admin_token,
+            Some(json!({ "revision_notes": "Updated notes only" })),
+        ),
+    )
+    .await;
+    assert_eq!(partial_notes_update["version_label"], "Retitled Seed");
+    assert_eq!(partial_notes_update["revision_notes"], "Updated notes only");
+
     let operator_me = request_json(
         app.clone(),
         authorized_request("GET", "/api/me", &operator_token, None),
@@ -158,6 +347,36 @@ async fn demo_seed_uses_capability_scope_ownership_and_components() {
             .iter()
             .all(|submission| submission["assigned_to_display_name"]
                 == respondent_me["display_name"])
+    );
+}
+
+#[tokio::test]
+async fn demo_seed_requires_an_empty_domain_database() {
+    let _guard = TEST_DATABASE_LOCK.lock().await;
+    let Some(app) = test_app().await else { return };
+    let admin_token =
+        login_token_for(app.clone(), "admin@tessara.local", "tessara-dev-admin").await;
+
+    let seed = request_json(
+        app.clone(),
+        authorized_request("POST", "/api/demo/seed", &admin_token, None),
+    )
+    .await;
+    assert_eq!(seed["seed_version"], "uat-demo-v1");
+
+    let (status, body) = request_status_and_json(
+        app.clone(),
+        authorized_request("POST", "/api/demo/seed", &admin_token, None),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["code"], "bad_request");
+    assert!(
+        body["message"]
+            .as_str()
+            .expect("error message should be a string")
+            .contains("requires an empty database")
     );
 }
 
@@ -403,10 +622,10 @@ async fn dataset_advanced_authoring_compiles_typed_fields_and_restriction_preced
     assert!(preview_sql.contains("snot"));
     assert!(
         preview_sql
-            .find("\"restricted_flag\"")
+            .find("WHEN LOWER(COALESCE(\"restricted_flag\", '')) IN")
             .expect("restricted flag tier branch")
             < preview_sql
-                .find("\"internal_flag\"")
+                .find("WHEN LOWER(COALESCE(\"internal_flag\", '')) IN")
                 .expect("internal flag tier branch"),
         "the more sensitive restricted tier should be evaluated before internal when multiple flags are true"
     );
@@ -534,6 +753,724 @@ async fn dataset_advanced_authoring_compiles_typed_fields_and_restriction_preced
     )
     .await;
     assert_eq!(invalid_argument_status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn dataset_revision_draft_publish_preserves_current_until_publish() {
+    let _guard = TEST_DATABASE_LOCK.lock().await;
+    let Some(app) = test_app().await else { return };
+    let admin_token =
+        login_token_for(app.clone(), "admin@tessara.local", "tessara-dev-admin").await;
+
+    let seed = request_json(
+        app.clone(),
+        authorized_request("POST", "/api/demo/seed", &admin_token, None),
+    )
+    .await;
+    let form_id = seed["form_id"].as_str().expect("seed form id");
+    let form_version_id = seed["form_version_id"]
+        .as_str()
+        .expect("seed form version id");
+    let visibility_node_id = seed["program_node_id"]
+        .as_str()
+        .expect("seed program node id");
+
+    let rendered_form = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/form-versions/{form_version_id}/render"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    let fields = rendered_form["sections"]
+        .as_array()
+        .expect("rendered sections")
+        .iter()
+        .flat_map(|section| {
+            section["fields"]
+                .as_array()
+                .expect("rendered fields")
+                .iter()
+        })
+        .collect::<Vec<_>>();
+    let first_field = fields.first().expect("demo form should include fields");
+    let second_field = fields
+        .iter()
+        .copied()
+        .find(|field| field["key"] != first_field["key"])
+        .expect("demo form should include a second field");
+    let first_key = first_field["key"].as_str().expect("first field key");
+    let first_label = first_field["label"].as_str().expect("first field label");
+    let second_key = second_field["key"].as_str().expect("second field key");
+    let second_label = second_field["label"].as_str().expect("second field label");
+
+    let initial_payload = dataset_revision_payload(
+        "Revision Lifecycle Dataset",
+        "revision-lifecycle-dataset",
+        form_id,
+        form_version_id,
+        visibility_node_id,
+        json!([{
+            "key": first_key,
+            "label": first_label,
+            "source_alias": "form_a",
+            "source_field_key": first_key,
+            "position": 0
+        }]),
+    );
+    let created = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/datasets",
+            &admin_token,
+            Some(initial_payload.clone()),
+        ),
+    )
+    .await;
+    let dataset_id = created["id"].as_str().expect("created dataset id");
+    let legacy_update_status = request_status(
+        app.clone(),
+        authorized_request(
+            "PUT",
+            &format!("/api/admin/datasets/{dataset_id}"),
+            &admin_token,
+            Some(initial_payload.clone()),
+        ),
+    )
+    .await;
+    assert!(
+        matches!(
+            legacy_update_status,
+            StatusCode::METHOD_NOT_ALLOWED | StatusCode::NOT_FOUND
+        ),
+        "legacy dataset update route should not accept published-state mutations"
+    );
+    let published_detail = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/datasets/{dataset_id}"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    let initial_revision_id = published_detail["current_revision_id"]
+        .as_str()
+        .expect("initial current revision id")
+        .to_string();
+    assert_dataset_fields(&published_detail, &[first_key], &[second_key]);
+    let published_table = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/datasets/{dataset_id}/table"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_table_values(&published_table, &[first_key], &[second_key]);
+    let no_op_draft = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            &format!("/api/admin/datasets/{dataset_id}/draft-revision"),
+            &admin_token,
+            Some(initial_payload.clone()),
+        ),
+    )
+    .await;
+    let no_op_draft_revision_id = no_op_draft["revision_id"]
+        .as_str()
+        .expect("no-op draft revision id");
+    let no_op_publish_status = request_status(
+        app.clone(),
+        authorized_request(
+            "POST",
+            &format!(
+                "/api/admin/datasets/{dataset_id}/revisions/{no_op_draft_revision_id}/publish"
+            ),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(no_op_publish_status, StatusCode::BAD_REQUEST);
+    let dependent_payload = json!({
+        "name": "Revision Lifecycle Dependent Dataset",
+        "slug": "revision-lifecycle-dependent-dataset",
+        "grain": "submission",
+        "visibility_node_ids": [visibility_node_id],
+        "initial_source": {
+            "kind": "dataset",
+            "alias": "upstream",
+            "dataset_id": dataset_id,
+            "dataset_revision_id": initial_revision_id
+        },
+        "operations": [
+            projection_operation(json!([{
+                "key": "dependent_value",
+                "label": "Dependent Value",
+                "source_alias": "upstream",
+                "source_field_key": first_key,
+                "position": 0
+            }]), 0)
+        ],
+        "restriction_policy": null
+    });
+    let dependent_created = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/datasets",
+            &admin_token,
+            Some(dependent_payload),
+        ),
+    )
+    .await;
+    let dependent_dataset_id = dependent_created["id"]
+        .as_str()
+        .expect("dependent dataset id")
+        .to_string();
+    let major_dependent_payload = json!({
+        "name": "Revision Lifecycle Major Dependent Dataset",
+        "slug": "revision-lifecycle-major-dependent-dataset",
+        "grain": "submission",
+        "visibility_node_ids": [visibility_node_id],
+        "initial_source": {
+            "kind": "dataset_major",
+            "alias": "upstream",
+            "dataset_id": dataset_id,
+            "version_major": 1
+        },
+        "operations": [
+            projection_operation(json!([{
+                "key": "major_dependent_value",
+                "label": "Major Dependent Value",
+                "source_alias": "upstream",
+                "source_field_key": first_key,
+                "position": 0
+            }]), 0)
+        ],
+        "restriction_policy": null
+    });
+    let major_dependent_created = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/datasets",
+            &admin_token,
+            Some(major_dependent_payload.clone()),
+        ),
+    )
+    .await;
+    let major_dependent_dataset_id = major_dependent_created["id"]
+        .as_str()
+        .expect("major dependent dataset id")
+        .to_string();
+    let major_dependent_before_publish = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/datasets/{major_dependent_dataset_id}/table"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    let major_dependent_before_count = major_dependent_before_publish["rows"]
+        .as_array()
+        .expect("major dependent rows")
+        .len();
+
+    let draft_payload = dataset_revision_payload(
+        "Revision Lifecycle Dataset Draft",
+        "revision-lifecycle-dataset",
+        form_id,
+        form_version_id,
+        visibility_node_id,
+        json!([{
+            "key": first_key,
+            "label": first_label,
+            "source_alias": "form_a",
+            "source_field_key": first_key,
+            "position": 0
+        }, {
+            "key": second_key,
+            "label": second_label,
+            "source_alias": "form_a",
+            "source_field_key": second_key,
+            "position": 1
+        }]),
+    );
+    let draft = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            &format!("/api/admin/datasets/{dataset_id}/draft-revision"),
+            &admin_token,
+            Some(draft_payload),
+        ),
+    )
+    .await;
+    assert_eq!(draft["status"], "draft");
+    let draft_revision_id = draft["revision_id"]
+        .as_str()
+        .expect("draft revision id")
+        .to_string();
+    assert_ne!(draft_revision_id, initial_revision_id);
+
+    let detail_after_draft = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/datasets/{dataset_id}"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(
+        detail_after_draft["current_revision_id"],
+        initial_revision_id
+    );
+    assert_eq!(detail_after_draft["name"], "Revision Lifecycle Dataset");
+    assert_dataset_fields(&detail_after_draft, &[first_key], &[second_key]);
+    let table_after_draft = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/datasets/{dataset_id}/table"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_table_values(&table_after_draft, &[first_key], &[second_key]);
+
+    let draft_detail = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/datasets/{dataset_id}/revisions/{draft_revision_id}"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(draft_detail["status"], "draft");
+    assert_eq!(
+        draft_detail["metadata"]["name"],
+        "Revision Lifecycle Dataset Draft"
+    );
+    assert_eq!(draft_detail["materialized_table"], Value::Null);
+    assert_revision_fields(&draft_detail, &[first_key, second_key]);
+    assert_eq!(draft_detail["dependencies"]["dataset_count"], 2);
+    assert!(
+        draft_detail["dependency_impacts"]
+            .as_array()
+            .expect("dependency impacts")
+            .iter()
+            .any(|impact| { impact["kind"] == "dataset" && impact["id"] == dependent_dataset_id })
+    );
+    assert!(
+        draft_detail["dependency_impacts"]
+            .as_array()
+            .expect("dependency impacts")
+            .iter()
+            .any(|impact| {
+                impact["kind"] == "dataset"
+                    && impact["binding_mode"] == "major_line"
+                    && impact["pinned_version_major"] == 1
+            })
+    );
+    assert!(
+        draft_detail["compatibility_findings"]
+            .as_array()
+            .expect("compatibility findings")
+            .iter()
+            .any(|finding| {
+                finding["code"] == "added_output_field" && finding["field_key"] == second_key
+            })
+    );
+    let operator_token = login_token_for(
+        app.clone(),
+        "operator@tessara.local",
+        "tessara-dev-operator",
+    )
+    .await;
+    request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/datasets/{dataset_id}/revisions/{initial_revision_id}"),
+            &operator_token,
+            None,
+        ),
+    )
+    .await;
+    let operator_draft_status = request_status(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/datasets/{dataset_id}/revisions/{draft_revision_id}"),
+            &operator_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(operator_draft_status, StatusCode::FORBIDDEN);
+    let operator_publish_status = request_status(
+        app.clone(),
+        authorized_request(
+            "POST",
+            &format!("/api/admin/datasets/{dataset_id}/revisions/{draft_revision_id}/publish"),
+            &operator_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(operator_publish_status, StatusCode::FORBIDDEN);
+
+    let scoped_manager_token = create_scoped_dataset_manager_token(
+        app.clone(),
+        &admin_token,
+        "scoped-dataset-manager@tessara.local",
+        "Scoped Dataset Manager",
+        "tessara-dev-scoped-manager",
+        visibility_node_id,
+    )
+    .await;
+    let scoped_manager_draft_detail = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/datasets/{dataset_id}/revisions/{draft_revision_id}"),
+            &scoped_manager_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(scoped_manager_draft_detail["status"], "draft");
+
+    let out_of_scope_manager_token = create_scoped_dataset_manager_token(
+        app.clone(),
+        &admin_token,
+        "out-of-scope-dataset-manager@tessara.local",
+        "Out Of Scope Dataset Manager",
+        "tessara-dev-out-of-scope-manager",
+        seed["activity_node_id"]
+            .as_str()
+            .expect("seed activity node id"),
+    )
+    .await;
+    let out_of_scope_draft_status = request_status(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/datasets/{dataset_id}/revisions/{draft_revision_id}"),
+            &out_of_scope_manager_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(out_of_scope_draft_status, StatusCode::FORBIDDEN);
+    let out_of_scope_publish_status = request_status(
+        app.clone(),
+        authorized_request(
+            "POST",
+            &format!("/api/admin/datasets/{dataset_id}/revisions/{draft_revision_id}/publish"),
+            &out_of_scope_manager_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(out_of_scope_publish_status, StatusCode::FORBIDDEN);
+
+    let history_after_draft = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/datasets/{dataset_id}/revisions"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_revision_statuses(
+        &history_after_draft,
+        &[
+            (&initial_revision_id, "published", true),
+            (&draft_revision_id, "draft", false),
+        ],
+    );
+    let operator_history_after_draft = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/datasets/{dataset_id}/revisions"),
+            &operator_token,
+            None,
+        ),
+    )
+    .await;
+    assert_revision_statuses(
+        &operator_history_after_draft,
+        &[(&initial_revision_id, "published", true)],
+    );
+    assert!(
+        operator_history_after_draft
+            .as_array()
+            .expect("operator revision history")
+            .iter()
+            .all(|revision| revision["id"] != draft_revision_id)
+    );
+    let scoped_manager_history_after_draft = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/datasets/{dataset_id}/revisions"),
+            &scoped_manager_token,
+            None,
+        ),
+    )
+    .await;
+    assert_revision_statuses(
+        &scoped_manager_history_after_draft,
+        &[
+            (&initial_revision_id, "published", true),
+            (&draft_revision_id, "draft", false),
+        ],
+    );
+
+    let published = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            &format!("/api/admin/datasets/{dataset_id}/revisions/{draft_revision_id}/publish"),
+            &scoped_manager_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(published["status"], "published");
+    assert_eq!(published["revision_id"], draft_revision_id);
+    assert_eq!(published["superseded_revision_id"], initial_revision_id);
+
+    let detail_after_publish = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/datasets/{dataset_id}"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(
+        detail_after_publish["current_revision_id"],
+        draft_revision_id
+    );
+    assert_eq!(
+        detail_after_publish["name"],
+        "Revision Lifecycle Dataset Draft"
+    );
+    assert_dataset_fields(&detail_after_publish, &[first_key, second_key], &[]);
+    let table_after_publish = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/datasets/{dataset_id}/table"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_table_values(&table_after_publish, &[first_key, second_key], &[]);
+    let exact_dependent_after_publish = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/datasets/{dependent_dataset_id}/table"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(
+        exact_dependent_after_publish["rows"]
+            .as_array()
+            .expect("exact dependent rows")
+            .len(),
+        major_dependent_before_count,
+        "exact revision consumers should remain pinned to the original materialized revision"
+    );
+    let major_dependent_after_publish = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/datasets/{major_dependent_dataset_id}/table"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(
+        major_dependent_after_publish["rows"]
+            .as_array()
+            .expect("major dependent rows after publish")
+            .len(),
+        major_dependent_before_count * 2,
+        "major-line consumers should be rematerialized from every revision in the selected major"
+    );
+    assert_major_line_null_fills_added_field(dataset_id, 1, &second_key).await;
+
+    let history_after_publish = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/datasets/{dataset_id}/revisions"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_revision_statuses(
+        &history_after_publish,
+        &[
+            (&initial_revision_id, "superseded", false),
+            (&draft_revision_id, "published", true),
+        ],
+    );
+    let superseded_detail = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/datasets/{dataset_id}/revisions/{initial_revision_id}"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert!(
+        superseded_detail["dependency_impacts"]
+            .as_array()
+            .expect("superseded dependency impacts")
+            .iter()
+            .any(|impact| {
+                impact["binding_mode"] == "exact_revision" && impact["id"] == dependent_dataset_id
+            })
+    );
+    assert!(
+        superseded_detail["dependency_impacts"]
+            .as_array()
+            .expect("superseded dependency impacts")
+            .iter()
+            .any(|impact| {
+                impact["binding_mode"] == "major_line"
+                    && impact["pinned_version_major"] == 1
+                    && impact["pinned_revision_id"] == Value::Null
+                    && impact["id"] == major_dependent_dataset_id
+            })
+    );
+
+    let mut major_two_payload = dataset_revision_payload(
+        "Revision Lifecycle Dataset V2",
+        "revision-lifecycle-dataset",
+        form_id,
+        form_version_id,
+        visibility_node_id,
+        json!([{
+            "key": first_key,
+            "label": first_label,
+            "source_alias": "form_a",
+            "source_field_key": first_key,
+            "position": 0
+        }, {
+            "key": second_key,
+            "label": second_label,
+            "source_alias": "form_a",
+            "source_field_key": second_key,
+            "position": 1
+        }]),
+    );
+    major_two_payload["force_new_major_version"] = json!(true);
+    let major_two_draft = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            &format!("/api/admin/datasets/{dataset_id}/draft-revision"),
+            &admin_token,
+            Some(major_two_payload),
+        ),
+    )
+    .await;
+    let major_two_revision_id = major_two_draft["revision_id"]
+        .as_str()
+        .expect("major two draft revision id");
+    let major_two_publish = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            &format!("/api/admin/datasets/{dataset_id}/revisions/{major_two_revision_id}/publish"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(major_two_publish["semantic_version"], "v2.0.0");
+    let major_dependent_after_new_major = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/datasets/{major_dependent_dataset_id}/table"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(
+        major_dependent_after_new_major["rows"]
+            .as_array()
+            .expect("major dependent rows after new major")
+            .len(),
+        major_dependent_before_count * 2,
+        "Version 1 consumers should remain on the Version 1 major-line table after Version 2 publishes"
+    );
+    let mut major_dependent_draft_payload = major_dependent_payload;
+    major_dependent_draft_payload["name"] =
+        json!("Revision Lifecycle Major Dependent Dataset Draft");
+    let major_dependent_draft = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            &format!("/api/admin/datasets/{major_dependent_dataset_id}/draft-revision"),
+            &admin_token,
+            Some(major_dependent_draft_payload),
+        ),
+    )
+    .await;
+    let major_dependent_draft_revision_id = major_dependent_draft["revision_id"]
+        .as_str()
+        .expect("major dependent draft revision id");
+    let major_dependent_publish = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            &format!(
+                "/api/admin/datasets/{major_dependent_dataset_id}/revisions/{major_dependent_draft_revision_id}/publish"
+            ),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(major_dependent_publish["status"], "published");
 }
 
 #[tokio::test]
@@ -1022,15 +1959,8 @@ async fn admin_dataset_query_designer_materializes_generated_sql() {
             projection_operation(json!([{
                 "key": "public_value",
                 "label": "Public Value",
-                "source_alias": "public_form",
-                "source_field_key": field_key,
+                "input_field_key": format!("union_1__{field_key}"),
                 "position": 0
-            }, {
-                "key": "restricted_value",
-                "label": "Restricted Value",
-                "source_alias": "restricted_source",
-                "source_field_key": field_key,
-                "position": 1
             }]), 1),
             aggregation_operation(json!([]), json!([{
                 "key": "mixed_count",
@@ -1412,7 +2342,7 @@ async fn admin_dataset_query_designer_materializes_generated_sql() {
                     "source_field_key": field_key,
                     "position": 1
                 }
-            ]), 0)
+            ]), 1)
         ]
     });
     let hidden_join_key_preview = request_json(
@@ -1496,6 +2426,146 @@ async fn login_token_for(app: axum::Router, email: &str, password: &str) -> Stri
         .to_string()
 }
 
+async fn create_scoped_dataset_manager_token(
+    app: axum::Router,
+    admin_token: &str,
+    email: &str,
+    display_name: &str,
+    password: &str,
+    scope_node_id: &str,
+) -> String {
+    let capabilities = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/admin/capabilities", admin_token, None),
+    )
+    .await;
+    let datasets_manage_capability_id = capabilities
+        .as_array()
+        .expect("capability list")
+        .iter()
+        .find(|capability| capability["key"] == "datasets:manage")
+        .and_then(|capability| capability["id"].as_str())
+        .expect("datasets:manage capability id");
+    let forms_read_capability_id = capabilities
+        .as_array()
+        .expect("capability list")
+        .iter()
+        .find(|capability| capability["key"] == "forms:read")
+        .and_then(|capability| capability["id"].as_str())
+        .expect("forms:read capability id");
+
+    let role = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/roles",
+            admin_token,
+            Some(json!({
+                "name": format!("{display_name} Role"),
+                "capability_ids": [datasets_manage_capability_id, forms_read_capability_id]
+            })),
+        ),
+    )
+    .await;
+    let role_id = role["id"].as_str().expect("created scoped role id");
+
+    let user = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/users",
+            admin_token,
+            Some(json!({
+                "email": email,
+                "display_name": display_name,
+                "password": password,
+                "is_active": true,
+                "role_ids": [role_id]
+            })),
+        ),
+    )
+    .await;
+    let account_id = user["id"].as_str().expect("created scoped user id");
+
+    request_json(
+        app.clone(),
+        authorized_request(
+            "PUT",
+            &format!("/api/admin/users/{account_id}/access"),
+            admin_token,
+            Some(json!({
+                "scope_node_ids": [scope_node_id],
+                "delegate_account_ids": []
+            })),
+        ),
+    )
+    .await;
+
+    login_token_for(app, email, password).await
+}
+
+async fn assert_major_line_null_fills_added_field(
+    dataset_id: &str,
+    version_major: i32,
+    field_key: &str,
+) {
+    let database_url = std::env::var("TEST_DATABASE_URL").expect("TEST_DATABASE_URL should be set");
+    let pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&database_url)
+        .await
+        .expect("connect test database");
+    let materialization = sqlx::query(
+        r#"
+        SELECT materialized_schema, materialized_table
+        FROM dataset_major_materializations
+        WHERE dataset_id = $1
+          AND version_major = $2
+          AND rebuild_status = 'ready'
+        "#,
+    )
+    .bind(Uuid::parse_str(dataset_id).expect("dataset id uuid"))
+    .bind(version_major)
+    .fetch_one(&pool)
+    .await
+    .expect("major-line materialization");
+    let schema: String = materialization
+        .try_get("materialized_schema")
+        .expect("materialized schema");
+    let table: String = materialization
+        .try_get("materialized_table")
+        .expect("materialized table");
+    let row = sqlx::query(&format!(
+        r#"
+        SELECT
+            COUNT(*) FILTER (WHERE {field} IS NULL)::bigint AS null_count,
+            COUNT(*) FILTER (WHERE {field} IS NOT NULL)::bigint AS populated_count
+        FROM {schema}.{table}
+        "#,
+        schema = quote_test_identifier(&schema),
+        table = quote_test_identifier(&table),
+        field = quote_test_identifier(field_key),
+    ))
+    .fetch_one(&pool)
+    .await
+    .expect("major-line null-fill counts");
+    let null_count: i64 = row.try_get("null_count").expect("null count");
+    let populated_count: i64 = row.try_get("populated_count").expect("populated count");
+    pool.close().await;
+    assert!(
+        null_count > 0,
+        "older rows in the major-line materialization should NULL-fill fields added later"
+    );
+    assert!(
+        populated_count > 0,
+        "newer rows in the major-line materialization should populate fields added in that revision"
+    );
+}
+
+fn quote_test_identifier(identifier: &str) -> String {
+    format!("\"{}\"", identifier.replace('"', "\"\""))
+}
+
 async fn request_json(app: axum::Router, request: Request<Body>) -> Value {
     let method = request.method().clone();
     let uri = request.uri().clone();
@@ -1538,6 +2608,103 @@ fn authorized_request(method: &str, uri: &str, token: &str, body: Option<Value>)
             None => Body::empty(),
         })
         .expect("valid authorized request")
+}
+
+fn dataset_revision_payload(
+    name: &str,
+    slug: &str,
+    form_id: &str,
+    form_version_id: &str,
+    visibility_node_id: &str,
+    projection_fields: Value,
+) -> Value {
+    json!({
+        "name": name,
+        "slug": slug,
+        "grain": "submission",
+        "visibility_node_ids": [visibility_node_id],
+        "initial_source": {
+            "kind": "form",
+            "alias": "form_a",
+            "form_id": form_id,
+            "form_version_id": form_version_id
+        },
+        "operations": [
+            projection_operation(projection_fields, 0)
+        ],
+        "restriction_policy": null
+    })
+}
+
+fn assert_dataset_fields(detail: &Value, expected: &[&str], absent: &[&str]) {
+    let fields = detail["output_fields"]
+        .as_array()
+        .expect("dataset detail should include output fields");
+    for key in expected {
+        assert!(
+            fields.iter().any(|field| field["key"] == *key),
+            "dataset detail should include output field {key}"
+        );
+    }
+    for key in absent {
+        assert!(
+            fields.iter().all(|field| field["key"] != *key),
+            "dataset detail should not include output field {key}"
+        );
+    }
+}
+
+fn assert_revision_fields(detail: &Value, expected: &[&str]) {
+    let fields = detail["output_fields"]
+        .as_array()
+        .expect("revision detail should include output fields");
+    for key in expected {
+        assert!(
+            fields.iter().any(|field| field["key"] == *key),
+            "revision detail should include output field {key}"
+        );
+    }
+}
+
+fn assert_table_values(table: &Value, expected: &[&str], absent: &[&str]) {
+    let rows = table["rows"]
+        .as_array()
+        .expect("dataset table should include rows");
+    assert!(
+        !rows.is_empty(),
+        "dataset table should include preview rows"
+    );
+    for row in rows {
+        let values = row["values"]
+            .as_object()
+            .expect("dataset table row should include values");
+        for key in expected {
+            assert!(
+                values.contains_key(*key),
+                "dataset table row should include value {key}"
+            );
+        }
+        for key in absent {
+            assert!(
+                !values.contains_key(*key),
+                "dataset table row should not include value {key}"
+            );
+        }
+    }
+}
+
+fn assert_revision_statuses(history: &Value, expected: &[(&str, &str, bool)]) {
+    let revisions = history
+        .as_array()
+        .expect("revision history should be an array");
+    for (revision_id, status, is_current) in expected {
+        let revision = revisions
+            .iter()
+            .find(|revision| revision["id"] == *revision_id)
+            .unwrap_or_else(|| panic!("revision history should include {revision_id}"));
+        assert_eq!(revision["status"], *status);
+        assert_eq!(revision["is_current"], *is_current);
+    }
 }
 
 fn detail_operation<'a>(detail: &'a Value, kind: &str) -> &'a Value {

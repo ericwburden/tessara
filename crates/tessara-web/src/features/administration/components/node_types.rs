@@ -1,7 +1,7 @@
 //! Node type Administration components.
 
 use super::super::graph::{node_type_ancestor_ids, node_type_descendant_ids};
-use crate::features::organization::{NodeTypeCatalogEntry, NodeTypeDefinition};
+use crate::features::administration::models::{NodeTypeCatalogEntry, NodeTypeDefinition};
 use crate::features::shared::status_badge_class;
 use leptos::prelude::*;
 use std::collections::HashSet;

@@ -1,5 +1,5 @@
 use serde_json::{Value, json};
-use sqlx::PgPool;
+use sqlx::{PgPool, Row};
 use std::collections::BTreeSet;
 use uuid::Uuid;
 
@@ -147,24 +147,51 @@ pub(super) async fn ensure_dataset(
             })
         }).collect::<Vec<_>>()
     }]);
+    let output_fields = json!(
+        resolved_bindings
+            .iter()
+            .enumerate()
+            .map(|(position, binding)| {
+                json!({
+                    "id": Uuid::nil(),
+                    "key": binding.key,
+                    "label": binding.label,
+                    "source_alias": source_alias,
+                    "source_field_key": binding.source_field_key,
+                    "field_type": binding.field_type,
+                    "position": position as i32
+                })
+            })
+            .collect::<Vec<_>>()
+    );
+    let definition_metadata = json!({
+        "name": name,
+        "slug": slug,
+        "grain": "submission",
+        "visibility_node_ids": visibility_node_ids
+    });
     let generated_sql = generated_dataset_sql(form_version_id, &resolved_bindings);
     let revision_id = sqlx::query_scalar(
         r#"
         INSERT INTO dataset_revisions
-            (dataset_id, version_number, version_label, status, published_at, initial_source, operations, generated_sql)
-        VALUES ($1, $2, $3, 'published'::dataset_revision_status, now(), $4, $5, $6)
+            (dataset_id, version_number, version_label, version_major, version_minor, version_patch, semantic_bump, started_new_major_line, status, published_at, initial_source, operations, generated_sql, output_fields, definition_metadata)
+        VALUES ($1, $2, $3, 1, 0, GREATEST($2 - 1, 0), $4, $2 = 1, 'published'::dataset_revision_status, now(), $5, $6, $7, $8, $9)
         RETURNING id
         "#,
     )
     .bind(dataset_id)
     .bind(version_number)
     .bind(version_number.to_string())
+    .bind(if version_number == 1 { "INITIAL" } else { "PATCH" })
     .bind(initial_source)
     .bind(operations)
     .bind(&generated_sql)
+    .bind(output_fields)
+    .bind(definition_metadata)
     .fetch_one(pool)
     .await?;
     materialize_dataset_revision(pool, revision_id, &generated_sql).await?;
+    rebuild_dataset_major_materialization(pool, dataset_id, 1, &resolved_bindings).await?;
 
     Ok((dataset_id, revision_id))
 }
@@ -344,6 +371,109 @@ async fn materialize_dataset_revision(
     .bind(&table_name)
     .bind(row_count)
     .bind(revision_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+async fn rebuild_dataset_major_materialization(
+    pool: &PgPool,
+    dataset_id: Uuid,
+    version_major: i32,
+    bindings: &[ResolvedDatasetFieldBinding<'_>],
+) -> ApiResult<()> {
+    let table_name = format!("dataset_major_{}_v{}", dataset_id.simple(), version_major);
+    let full_name = format!(
+        "{}.{}",
+        quote_identifier("dataset_materialized"),
+        quote_identifier(&table_name)
+    );
+    sqlx::query(&format!("DROP TABLE IF EXISTS {full_name}"))
+        .execute(pool)
+        .await?;
+
+    let revision_rows = sqlx::query(
+        r#"
+        SELECT id, materialized_schema, materialized_table
+        FROM dataset_revisions
+        WHERE dataset_id = $1
+          AND version_major = $2
+          AND status IN ('published'::dataset_revision_status, 'superseded'::dataset_revision_status)
+          AND materialized_schema IS NOT NULL
+          AND materialized_table IS NOT NULL
+        ORDER BY version_major, version_minor, version_patch, version_number
+        "#,
+    )
+    .bind(dataset_id)
+    .bind(version_major)
+    .fetch_all(pool)
+    .await?;
+
+    let field_select = bindings
+        .iter()
+        .map(|binding| quote_identifier(&binding.key))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let selects = revision_rows
+        .iter()
+        .map(|row| -> Result<String, sqlx::Error> {
+            let revision_id: Uuid = row.try_get("id")?;
+            let schema: String = row.try_get("materialized_schema")?;
+            let table: String = row.try_get("materialized_table")?;
+            Ok(format!(
+                "SELECT '{}:' || __row_id AS __row_id, '{}'::uuid AS __source_dataset_revision_id, {}::integer AS __source_dataset_version_major, {field_select} FROM {}.{}",
+                revision_id,
+                revision_id,
+                version_major,
+                quote_identifier(&schema),
+                quote_identifier(&table)
+            ))
+        })
+        .collect::<Result<Vec<_>, sqlx::Error>>()?;
+    let union_sql = if selects.is_empty() {
+        let empty_fields = bindings
+            .iter()
+            .map(|binding| format!("NULL::text AS {}", quote_identifier(&binding.key)))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!(
+            "SELECT NULL::text AS __row_id, NULL::uuid AS __source_dataset_revision_id, NULL::integer AS __source_dataset_version_major, {empty_fields} WHERE false"
+        )
+    } else {
+        selects.join("\nUNION ALL\n")
+    };
+    sqlx::query(&format!("CREATE TABLE {full_name} AS {union_sql}"))
+        .execute(pool)
+        .await?;
+    sqlx::query(&format!("CREATE INDEX ON {full_name} (__row_id)"))
+        .execute(pool)
+        .await?;
+    sqlx::query(&format!(
+        "CREATE INDEX ON {full_name} (__source_dataset_revision_id)"
+    ))
+    .execute(pool)
+    .await?;
+    let row_count: i64 = sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {full_name}"))
+        .fetch_one(pool)
+        .await?;
+    sqlx::query(
+        r#"
+        INSERT INTO dataset_major_materializations
+            (dataset_id, version_major, materialized_schema, materialized_table, materialized_row_count, materialized_at, rebuild_status, updated_at)
+        VALUES ($1, $2, 'dataset_materialized', $3, $4, now(), 'ready', now())
+        ON CONFLICT (dataset_id, version_major) DO UPDATE
+        SET materialized_schema = EXCLUDED.materialized_schema,
+            materialized_table = EXCLUDED.materialized_table,
+            materialized_row_count = EXCLUDED.materialized_row_count,
+            materialized_at = EXCLUDED.materialized_at,
+            rebuild_status = EXCLUDED.rebuild_status,
+            updated_at = now()
+        "#,
+    )
+    .bind(dataset_id)
+    .bind(version_major)
+    .bind(&table_name)
+    .bind(row_count)
     .execute(pool)
     .await?;
     Ok(())

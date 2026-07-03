@@ -3,7 +3,7 @@
 use super::node_type_metadata_field_sheet::NodeTypeMetadataFieldSheet;
 use super::node_type_metadata_field_table::NodeTypeMetadataFieldTable;
 use super::node_type_metadata_mobile_cards::NodeTypeMetadataMobileCards;
-use crate::features::organization::NodeMetadataFieldSummary;
+use crate::features::administration::models::NodeMetadataFieldSummary;
 use icons::{Plus, Search};
 use leptos::prelude::*;
 

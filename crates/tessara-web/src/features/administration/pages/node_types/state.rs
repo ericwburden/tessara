@@ -1,6 +1,6 @@
 //! Signal state for the node-type administration page.
 
-use crate::features::organization::{NodeTypeCatalogEntry, NodeTypeDefinition};
+use crate::features::administration::models::{NodeTypeCatalogEntry, NodeTypeDefinition};
 use leptos::prelude::*;
 use std::collections::HashSet;
 

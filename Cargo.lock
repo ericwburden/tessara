@@ -4442,6 +4442,102 @@ dependencies = [
  "leptos_router",
  "serde",
  "serde_json",
+ "tessara-web-datasets",
+ "tessara-web-forms",
+ "tessara-web-organization",
+ "tessara-web-responses",
+ "tessara-web-ui",
+ "tessara-web-workflows",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+]
+
+[[package]]
+name = "tessara-web-datasets"
+version = "0.1.0"
+dependencies = [
+ "gloo-net",
+ "icons",
+ "js-sys",
+ "leptos",
+ "serde",
+ "serde_json",
+ "tessara-web-ui",
+ "wasm-bindgen",
+ "web-sys",
+]
+
+[[package]]
+name = "tessara-web-forms"
+version = "0.1.0"
+dependencies = [
+ "gloo-net",
+ "icons",
+ "js-sys",
+ "leptos",
+ "serde",
+ "serde_json",
+ "tessara-web-ui",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+]
+
+[[package]]
+name = "tessara-web-organization"
+version = "0.1.0"
+dependencies = [
+ "gloo-net",
+ "icons",
+ "js-sys",
+ "leptos",
+ "serde",
+ "serde_json",
+ "tessara-web-ui",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+]
+
+[[package]]
+name = "tessara-web-responses"
+version = "0.1.0"
+dependencies = [
+ "gloo-net",
+ "icons",
+ "js-sys",
+ "leptos",
+ "serde",
+ "serde_json",
+ "tessara-web-ui",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+]
+
+[[package]]
+name = "tessara-web-ui"
+version = "0.1.0"
+dependencies = [
+ "icons",
+ "js-sys",
+ "leptos",
+ "wasm-bindgen",
+ "web-sys",
+]
+
+[[package]]
+name = "tessara-web-workflows"
+version = "0.1.0"
+dependencies = [
+ "gloo-net",
+ "icons",
+ "js-sys",
+ "leptos",
+ "serde",
+ "serde_json",
+ "tessara-web-ui",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",

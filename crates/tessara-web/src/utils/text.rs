@@ -20,28 +20,3 @@ pub(crate) fn nonempty_text(value: Option<&str>, fallback: &'static str) -> Stri
         .map(str::to_string)
         .unwrap_or_else(|| fallback.to_string())
 }
-
-#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
-pub(crate) trait IntoNonemptyString {
-    fn into_nonempty(self) -> Option<String>;
-}
-
-impl IntoNonemptyString for String {
-    fn into_nonempty(self) -> Option<String> {
-        if self.is_empty() { None } else { Some(self) }
-    }
-}
-
-pub(crate) fn sentence_label(value: &str) -> String {
-    value
-        .split('_')
-        .map(|part| {
-            let mut chars = part.chars();
-            match chars.next() {
-                Some(first) => format!("{}{}", first.to_uppercase(), chars.as_str()),
-                None => String::new(),
-            }
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
-}

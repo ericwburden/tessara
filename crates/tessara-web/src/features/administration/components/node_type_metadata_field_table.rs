@@ -1,7 +1,7 @@
 //! Desktop table for node type metadata fields.
 
 use super::node_type_metadata_field_actions::delete_node_type_metadata_field;
-use crate::features::organization::NodeMetadataFieldSummary;
+use crate::features::administration::models::NodeMetadataFieldSummary;
 use crate::ui::{DataTable, DropdownMenu};
 use crate::utils::metadata::metadata_label;
 use icons::{Pencil, Trash2};

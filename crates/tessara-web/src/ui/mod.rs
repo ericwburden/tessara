@@ -9,39 +9,15 @@ pub(crate) fn empty_view() -> AnyView {
     Fragment::new(Vec::<AnyView>::new()).into()
 }
 
-mod breadcrumb;
-mod button;
-mod combobox;
-mod data_table;
-mod draggable_panel_list;
 pub mod dropdown;
-mod empty_state;
-mod info_list;
-mod page_header;
-mod segmented_toggle;
 pub mod shell;
 mod status_badge;
-mod table_filter;
-mod table_pagination;
-mod tabs;
-mod timestamp;
 
-pub(crate) use breadcrumb::*;
-pub(crate) use button::*;
-pub(crate) use combobox::{Combobox, ComboboxOption};
-pub(crate) use data_table::{DataTable, SearchableDataTable};
-pub(crate) use draggable_panel_list::{
-    DraggablePanelList, DraggablePanelListAnchor, DraggablePanelListDraggable,
-    DraggablePanelListDropZone, DraggablePanelListItem, DraggablePanelListMove,
-};
 pub(crate) use dropdown::DropdownMenu;
-pub(crate) use empty_state::*;
-pub(crate) use info_list::{InfoListTable, InfoRow};
-pub(crate) use page_header::*;
-pub(crate) use segmented_toggle::{SegmentedToggle, SegmentedToggleOption};
 pub(crate) use shell::AppShell;
 pub(crate) use status_badge::*;
-pub(crate) use table_filter::TableFilterHeader;
-pub(crate) use table_pagination::TablePaginationFooter;
-pub(crate) use tabs::{Tabs, TabsContent, TabsList, TabsTrigger};
-pub(crate) use timestamp::*;
+pub(crate) use tessara_web_ui::{
+    Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator, DataTable,
+    EmptyState, InfoListTable, InfoRow, PageHeader, TableFilterHeader, TablePaginationFooter,
+    Timestamp,
+};

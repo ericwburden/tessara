@@ -1,6 +1,6 @@
 //! Node type relationship picker components.
 
-use crate::features::organization::NodeTypeCatalogEntry;
+use crate::features::administration::models::NodeTypeCatalogEntry;
 use leptos::prelude::*;
 use std::collections::HashSet;
 

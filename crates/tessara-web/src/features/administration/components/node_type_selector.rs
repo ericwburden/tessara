@@ -1,6 +1,6 @@
 //! Node type selector component.
 
-use crate::features::organization::NodeTypeCatalogEntry;
+use crate::features::administration::models::NodeTypeCatalogEntry;
 use icons::{ChevronDown, ListFilter, Search};
 use leptos::prelude::*;
 

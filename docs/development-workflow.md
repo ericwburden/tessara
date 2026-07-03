@@ -47,7 +47,9 @@ What this does:
 - rebuilds only the `api` image unless `-SkipBuild` is supplied
 - recreates only the `api` container
 - waits for `/health` and `/`
-- reseeds demo data unless `-SkipSeed` is supplied
+- seeds demo data only when the app database is empty; use
+  `.\scripts\local-launch.ps1 -FreshData` when demo data should be recreated
+  from scratch
 
 Use this loop when:
 
@@ -98,10 +100,11 @@ Use the loops in this order:
 That keeps the common development path fast while preserving the existing
 review-grade deployment path.
 
-## Sprint 2C Working Agreement
+## Working Agreement
 
-For Sprint 2C UI and Playwright expectation tweaks, the default loop is the
-fast loop. Use host-run Tessara with Docker Postgres where possible, or use
+For routine UI, API, feature-crate, and Playwright expectation tweaks, the
+default loop is the fast loop. Use host-run Tessara with Docker Postgres where
+possible, or use
 `.\scripts\local-refresh-api.ps1` / `.\scripts\local-launch.ps1 -SkipBuild`
 when a containerized app refresh is enough.
 
@@ -109,3 +112,9 @@ Do a full teardown, rebuild, and redeploy only when the change touches Docker,
 dependencies, migrations, release-build behavior, closeout validation, smoke, or
 manual UAT. Routine UI copy, selector, layout, and Playwright expectation
 changes should not pay the full rebuild cost.
+
+When changing an extracted frontend feature area, prefer the focused crate loop
+first, then run root integration checks before closeout. Major new frontend
+feature areas should start in their own `tessara-web-*` crate with root
+`tessara-web` retaining route adapters, shell, auth/session/navigation policy,
+hydration, document integration, CSS, and assets.

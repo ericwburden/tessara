@@ -1,8 +1,8 @@
 //! Administration user account edit form.
 
 use crate::features::administration::api::submit_update_admin_user;
+use crate::features::administration::models::AdminRoleSummary;
 use crate::features::administration::state::toggle_string_selection;
-use crate::features::organization::AdminRoleSummary;
 use crate::ui::PageHeader;
 use leptos::prelude::*;
 

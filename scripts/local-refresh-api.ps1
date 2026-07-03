@@ -65,6 +65,32 @@ function Wait-ForHttpOk {
     throw "Timed out waiting for $Uri to return HTTP 200"
 }
 
+function Test-DemoSeedTargetEmpty {
+    $sql = @"
+SELECT
+    (SELECT COUNT(*) FROM accounts WHERE email <> 'admin@tessara.local')
+  + (SELECT COUNT(*) FROM node_types)
+  + (SELECT COUNT(*) FROM nodes)
+  + (SELECT COUNT(*) FROM forms)
+  + (SELECT COUNT(*) FROM form_versions)
+  + (SELECT COUNT(*) FROM submissions)
+  + (SELECT COUNT(*) FROM workflows)
+  + (SELECT COUNT(*) FROM workflow_versions)
+  + (SELECT COUNT(*) FROM datasets)
+  + (SELECT COUNT(*) FROM dataset_revisions)
+  + (SELECT COUNT(*) FROM components)
+  + (SELECT COUNT(*) FROM component_versions)
+  + (SELECT COUNT(*) FROM dashboards);
+"@
+
+    $rawCount = docker compose exec -T postgres psql -U tessara -d tessara -Atc $sql
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not inspect database before demo seeding."
+    }
+
+    return ([int64]$rawCount.Trim()) -eq 0
+}
+
 Push-Location $repoRoot
 try {
     Invoke-CheckedStep -Label "Ensuring Postgres is running" -Command {
@@ -87,10 +113,13 @@ try {
     Wait-ForHttpOk -Uri "http://127.0.0.1:8080/health"
     Wait-ForHttpOk -Uri "http://127.0.0.1:8080/"
 
-    if (-not $SkipSeed) {
+    if (-not $SkipSeed -and (Test-DemoSeedTargetEmpty)) {
         Invoke-CheckedStep -Label "Ensuring UAT demo data" -Command {
             & $seedScript
         }
+    } elseif (-not $SkipSeed) {
+        Write-Host "`n==> Skipping demo seed because the database already contains app data" -ForegroundColor Cyan
+        Write-Host "Use .\scripts\local-launch.ps1 -FreshData to recreate and reseed the local database." -ForegroundColor Yellow
     } else {
         Write-Host "`n==> Skipping demo seed" -ForegroundColor Cyan
     }

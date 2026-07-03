@@ -1,6 +1,6 @@
 # Tessara UI Screen Inventory
 
-This inventory is the migration map for the native Leptos SSR reset worktree. The reference worktree is `C:\Users\eric-dev\Projects\tessara`; this reset worktree is treated as a new application that only migrates functional/domain code forward intentionally.
+This inventory is a historical migration map for the native Leptos SSR reset. It is retained as reference for why old `/app/*` surfaces moved to root-level routes and which functional code was preserved. It is not current route or source-path authority; use `docs/roadmap.md`, `docs/architecture.md`, and the live `crates/tessara-web/src/routes` tree for current application shape.
 
 | Old path | New path | Nav section | Data/API dependencies | Actions | Overlays | Tables/forms | Functional code worth preserving |
 | --- | --- | --- | --- | --- | --- | --- | --- |

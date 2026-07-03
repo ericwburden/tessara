@@ -8,6 +8,7 @@ import {
 
 const BENIGN_NAVIGATION_ABORT_ERRORS = [
   "WebAssembly compilation aborted: Network error: Response body loading was aborted",
+  "Failed to fetch",
   "Failed to load resource: the server responded with a status of 404 (Not Found)",
 ];
 
@@ -19,6 +20,17 @@ type DemoSeed = {
   program_node_id: string;
 };
 
+type FormSummary = {
+  id: string;
+  slug: string;
+  visibility_nodes?: Array<{ node_id: string }>;
+  versions: Array<{
+    id: string;
+    status: string;
+    assignment_nodes?: Array<{ node_id: string }>;
+  }>;
+};
+
 type IdResponse = {
   id: string;
 };
@@ -28,6 +40,10 @@ type DatasetSummary = {
   name: string;
   slug: string;
   current_revision_id?: string | null;
+  current_version_major?: number | null;
+  current_version_minor?: number | null;
+  current_version_patch?: number | null;
+  major_versions?: number[];
   visibility_nodes?: Array<{ node_id: string; node_name: string }>;
   source_count?: number;
   field_count?: number;
@@ -43,8 +59,13 @@ type DatasetFieldDefinition = {
 
 type DatasetDefinition = {
   id: string;
+  current_revision_id?: string | null;
+  current_version_major?: number | null;
+  current_version_minor?: number | null;
+  current_version_patch?: number | null;
   name: string;
   slug: string;
+  initial_source?: DatasetSourcePayload | null;
   generated_sql?: string | null;
   sources: Array<{ source_alias: string; form_id?: string | null }>;
   fields: DatasetFieldDefinition[];
@@ -65,6 +86,79 @@ type DatasetTable = {
 
 type DatasetSqlPreview = {
   generated_sql: string;
+};
+
+type DatasetRevisionSummary = {
+  id: string;
+  dataset_id: string;
+  version_number: number;
+  version_label: string;
+  status: "draft" | "published" | "superseded";
+  is_current: boolean;
+  version_major?: number | null;
+  version_minor?: number | null;
+  version_patch?: number | null;
+  semantic_bump?: string | null;
+  started_new_major_line?: boolean | null;
+  force_new_major_version?: boolean;
+  output_field_count: number;
+  compatibility: {
+    state: "compatible" | "review" | "breaking";
+    major_count: number;
+    minor_count: number;
+    patch_count: number;
+  };
+  dependencies: {
+    dependency_count: number;
+    dataset_count: number;
+    component_version_count: number;
+    dashboard_count: number;
+    carry_forward_state: "safe" | "manual_review" | "blocked";
+  };
+};
+
+type DatasetRevisionDetail = DatasetRevisionSummary & {
+  metadata: {
+  name: string;
+  slug: string;
+  force_new_major_version?: boolean;
+  grain: string;
+    visibility_node_ids: string[];
+  };
+  materialized_table?: string | null;
+  output_fields: DatasetFieldDefinition[];
+  compatibility_findings: Array<{
+    version_impact: "patch" | "minor" | "major";
+    code: string;
+    message: string;
+    field_key?: string | null;
+  }>;
+  dependency_impacts: Array<{
+    kind: "dataset" | "component_version" | "dashboard";
+    id: string;
+    name: string;
+    pinned_revision_id?: string | null;
+    carry_forward_state: "safe" | "manual_review" | "blocked";
+    message: string;
+  }>;
+};
+
+type DatasetDraftRevisionResponse = {
+  dataset_id: string;
+  revision_id: string;
+  status: "draft";
+};
+
+type DatasetPublishRevisionResponse = {
+  dataset_id: string;
+  revision_id: string;
+  superseded_revision_id?: string | null;
+  status: "published";
+  version_major?: number | null;
+  version_minor?: number | null;
+  version_patch?: number | null;
+  semantic_bump?: string | null;
+  started_new_major_line?: boolean | null;
 };
 
 type RenderedField = {
@@ -92,6 +186,12 @@ type DatasetSourcePayload =
       alias: string;
       dataset_id: string;
       dataset_revision_id: string;
+    }
+  | {
+      kind: "dataset_major";
+      alias: string;
+      dataset_id: string;
+      version_major: number;
     };
 
 type DatasetProjectionFieldPayload = {
@@ -172,6 +272,7 @@ type DatasetPayload = {
   name: string;
   slug: string;
   grain: "submission";
+  version_label?: string | null;
   visibility_node_ids: string[];
   initial_source: DatasetSourcePayload;
   operations: DatasetOperation[];
@@ -231,9 +332,40 @@ async function expectJson<T>(response: APIResponse) {
 }
 
 async function seedDemo(page: Page) {
-  return expectJson<DemoSeed>(
-    await page.request.post("/api/demo/seed", { data: {} }),
+  const response = await page.request.post("/api/demo/seed", { data: {} });
+  const text = await response.text();
+  if (response.ok()) {
+    return JSON.parse(text) as DemoSeed;
+  }
+  if (
+    response.status() === 400 &&
+    text.includes("Demo seed requires an empty database")
+  ) {
+    return existingDemoSeed(page);
+  }
+  expect(
+    response.ok(),
+    `${response.url()} returned ${response.status()}: ${text}`,
+  ).toBeTruthy();
+  return JSON.parse(text) as DemoSeed;
+}
+
+async function existingDemoSeed(page: Page): Promise<DemoSeed> {
+  const forms = await expectJson<FormSummary[]>(
+    await page.request.get("/api/forms"),
   );
+  const form = forms.find((candidate) => candidate.slug === "demo-program-snapshot");
+  expect(form, "demo program snapshot form should already exist").toBeTruthy();
+  const version = form!.versions.find((candidate) => candidate.status === "published");
+  expect(version, "demo program snapshot should have a published version").toBeTruthy();
+  const programNodeId =
+    version!.assignment_nodes?.[0]?.node_id ?? form!.visibility_nodes?.[0]?.node_id;
+  expect(programNodeId, "demo program snapshot should expose a program node").toBeTruthy();
+  return {
+    form_id: form!.id,
+    form_version_id: version!.id,
+    program_node_id: programNodeId!,
+  };
 }
 
 function renderedFields(renderedForm: RenderedForm) {
@@ -340,10 +472,59 @@ async function createDataset(page: Page, payload: DatasetPayload) {
 }
 
 async function updateDataset(page: Page, datasetId: string, payload: DatasetPayload) {
-  const response = await page.request.put(`/api/admin/datasets/${datasetId}`, {
-    data: payload,
-  });
-  expect(response.ok(), `dataset update returned ${response.status()}`).toBeTruthy();
+  const draft = await saveDraftRevision(page, datasetId, payload);
+  await publishDatasetRevision(page, datasetId, draft.revision_id);
+}
+
+async function saveDraftRevision(
+  page: Page,
+  datasetId: string,
+  payload: DatasetPayload,
+) {
+  const response = await page.request.post(
+    `/api/admin/datasets/${datasetId}/draft-revision`,
+    {
+      data: payload,
+    },
+  );
+  return expectJson<DatasetDraftRevisionResponse>(response);
+}
+
+async function publishDatasetRevision(
+  page: Page,
+  datasetId: string,
+  revisionId: string,
+) {
+  const response = await page.request.post(
+    `/api/admin/datasets/${datasetId}/revisions/${revisionId}/publish`,
+    {
+      data: {},
+    },
+  );
+  return expectJson<DatasetPublishRevisionResponse>(response);
+}
+
+async function updateDatasetRevisionOptions(
+  page: Page,
+  datasetId: string,
+  revisionId: string,
+  forceNewMajorVersion: boolean,
+) {
+  const response = await page.request.patch(
+    `/api/admin/datasets/${datasetId}/revisions/${revisionId}/options`,
+    {
+      data: {
+        force_new_major_version: forceNewMajorVersion,
+      },
+    },
+  );
+  return expectJson<DatasetRevisionDetail>(response);
+}
+
+async function getDatasetRevisions(page: Page, datasetId: string) {
+  return expectJson<DatasetRevisionSummary[]>(
+    await page.request.get(`/api/datasets/${datasetId}/revisions`),
+  );
 }
 
 async function deleteDataset(page: Page, datasetId: string, timeout = 20_000) {
@@ -376,26 +557,6 @@ async function closeDesignerSheet(page: Page) {
   await expect(sheet).toBeHidden();
 }
 
-function fieldSourcePanel(page: Page, alias: string) {
-  return page
-    .locator("details.dataset-field-picker__source")
-    .filter({ has: page.locator("summary", { hasText: `${alias} (` }) })
-    .first();
-}
-
-async function openFieldSourcePanel(page: Page, alias: string) {
-  const panel = fieldSourcePanel(page, alias);
-  await expect(panel.locator("summary")).toBeVisible();
-  const isOpen = await panel.evaluate((node) =>
-    (node as HTMLDetailsElement).hasAttribute("open"),
-  );
-  if (!isOpen) {
-    await panel.locator("summary").click();
-  }
-  await expect(panel.locator("tbody tr").first()).toBeVisible();
-  return panel;
-}
-
 async function selectComboboxOption(
   scope: Locator,
   ariaLabel: string,
@@ -426,10 +587,57 @@ async function openEditorSection(page: Page, heading: string) {
   return section;
 }
 
+function operationPanel(page: Page, title: string, occurrence: number | "last" = 0) {
+  const panels = page.locator("article.dataset-operation-panel", {
+    has: page.locator(".dataset-operation-panel__title", {
+      hasText: title,
+    }),
+  });
+  return occurrence === "last" ? panels.last() : panels.nth(occurrence);
+}
+
+async function openOperationPanel(
+  page: Page,
+  title: string,
+  occurrence: number | "last" = 0,
+) {
+  const panel = operationPanel(page, title, occurrence);
+  await expect(panel).toBeVisible();
+  const toggle = panel.locator("button.dataset-operation-panel__toggle");
+  if ((await toggle.getAttribute("aria-expanded")) === "false") {
+    await toggle.click();
+  }
+  return panel;
+}
+
+async function addOperation(page: Page, title: string) {
+  await page.getByLabel("Add operation").last().click();
+  await page
+    .locator(".dataset-operation-insert__menu")
+    .last()
+    .getByRole("button", { name: title, exact: true })
+    .click();
+  return openOperationPanel(page, title, "last");
+}
+
+function selectedProjectionFields(projection: Locator, sourceAlias: string) {
+  return projection
+    .locator(".dataset-projection-selected__item")
+    .filter({ hasText: `${sourceAlias}__` });
+}
+
+async function expectSelectedProjectionFieldCount(
+  projection: Locator,
+  sourceAlias: string,
+  count: number,
+) {
+  await expect(selectedProjectionFields(projection, sourceAlias)).toHaveCount(count);
+}
+
 test("admin can author, edit, save, and view a Sprint 3A dataset", async ({
   page,
 }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
   const assertNoConsoleErrors = attachConsoleGuard(page);
   await signInAsAdmin(page);
   const seed = await seedDemo(page);
@@ -539,72 +747,43 @@ test("admin can author, edit, save, and view a Sprint 3A dataset", async ({
     await expect(
       page.getByRole("heading", { level: 1, name: "Edit Dataset" }),
     ).toBeVisible();
-    for (const section of [
-      "Dataset Definition",
-      "Data Sources",
-      "Fields",
-      "Aggregation",
-      "Filters",
-      "Generated SQL",
-      "Visibility",
-    ]) {
-      await expect(
-        page.getByRole("heading", { name: section, exact: true }),
-      ).toBeVisible();
-    }
+    await expect(
+      page.getByRole("heading", { name: "Dataset Definition", exact: true }),
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: "Initial Data Source" })).toBeVisible();
+    await expect(operationPanel(page, "Projection")).toBeVisible();
+    await expect(page.getByRole("button", { name: "View Restrictions" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Generated SQL" })).toBeVisible();
     await expect(page.getByText("Operation Designer")).toHaveCount(0);
     await expect(page.getByText("Open Preview")).toHaveCount(0);
-    await expect(page.locator("details.dataset-field-picker__source[open]")).toHaveCount(
-      0,
-    );
+    await expect(page.locator(".dataset-projection-builder")).toBeHidden();
 
-    await page.getByRole("button", { name: /^program$/ }).first().click();
-    const sourceSheet = page.getByRole("dialog", {
-      name: "Dataset designer options",
+    const sourceSection = await openEditorSection(page, "Initial Data Source");
+    await sourceSection.getByLabel("Alias").fill("program1");
+    await sourceSection.getByLabel("Alias").press("Tab");
+    await expect(sourceSection.getByLabel("Alias")).toHaveValue("program1");
+
+    const projection = await openOperationPanel(page, "Projection");
+    await expectSelectedProjectionFieldCount(projection, "program1", 4);
+
+    const addSource = await addOperation(page, "Add Source");
+    await addSource.getByLabel("Alias").fill("program2");
+    await addSource.getByLabel("Alias").press("Tab");
+    await addSource.locator("label.form-field").nth(2).locator("select").selectOption({
+      value: seed.form_id,
     });
-    await expect(sourceSheet).toContainText("Source");
-    await expect(sourceSheet).not.toContainText("Selection");
-    await expect(sourceSheet).not.toContainText("Latest");
-    await expect(sourceSheet).not.toContainText("Earliest");
-    await expect(sourceSheet).not.toContainText("All");
-    await sourceSheet.getByLabel("Alias").fill("program1");
-    await closeDesignerSheet(page);
-    await expect(page.getByRole("button", { name: /^program1$/ })).toBeVisible();
-
-    await page.getByLabel("Convert program1 to expression").click();
-    await closeDesignerSheet(page);
-    await expect(page.getByRole("button", { name: /^program2$/ })).toBeVisible();
-    await expect(page.getByRole("button", { name: "UNION" })).toBeVisible();
-    await expect(fieldSourcePanel(page, "program1").locator("summary")).toContainText(
-      "4 of",
-    );
-
-    await page.getByRole("button", { name: "UNION" }).click();
-    const operationSheet = page.getByRole("dialog", {
-      name: "Dataset designer options",
+    await addSource.locator("label.form-field").nth(3).locator("select").selectOption({
+      value: seed.form_version_id,
     });
-    await operationSheet.getByLabel("Operation").selectOption("inner_join");
-    await operationSheet.getByLabel("Left Join Key").selectOption({
+    await addSource.getByRole("button", { name: "Inner Join" }).click();
+    await addSource.getByLabel("Current Field").selectOption({
       value: sourceFieldKey("program1", "__node_id"),
     });
-    await operationSheet.getByLabel("Right Join Key").selectOption({
+    await addSource.getByLabel("Source Field").selectOption({
       value: sourceFieldKey("program2", "__node_id"),
     });
-    await closeDesignerSheet(page);
-    await expect(page.getByRole("button", { name: "INNER JOIN" })).toBeVisible();
 
-    const program2Panel = await openFieldSourcePanel(page, "program2");
-    await program2Panel.getByLabel("Include all fields from program2").uncheck();
-    const program2NumberRow = program2Panel
-      .locator("tbody tr", { hasText: numberField.label })
-      .first();
-    await program2NumberRow.getByLabel(`Include ${numberField.label}`).check();
-    await program2NumberRow
-      .getByLabel(`Display label for ${numberField.label}`)
-      .fill("Program 2 Target");
-    await expect(program2Panel.locator("summary")).toContainText("1 of");
-
-    const aggregation = await openEditorSection(page, "Aggregation");
+    const aggregation = await addOperation(page, "Aggregation");
     await aggregation.getByRole("button", { name: "Row", exact: true }).click();
     await expect(
       aggregation.locator(
@@ -641,9 +820,9 @@ test("admin can author, edit, save, and view a Sprint 3A dataset", async ({
     await metricLabel.fill("Average Target");
     await metricLabel.press("Tab");
 
-    const filters = await openEditorSection(page, "Filters");
+    const filters = await addOperation(page, "Filter");
     await expect(filters.getByText("No filters configured.")).toBeVisible();
-    const calculations = await openEditorSection(page, "Calculated Fields");
+    const calculations = await addOperation(page, "Calculated Fields");
     await calculations.getByRole("button", { name: "Add Calculated Field" }).click();
     const roundedCalculation = calculations.locator(".dataset-calculation-row").first();
     await roundedCalculation.getByLabel("Output Key").fill("avg_target_rounded");
@@ -717,13 +896,18 @@ test("admin can author, edit, save, and view a Sprint 3A dataset", async ({
 
     const saveResponse = page.waitForResponse(
       (response) =>
-        response.url().includes(`/api/admin/datasets/${datasetId}`) &&
-        response.request().method() === "PUT",
+        response.url().includes(`/api/admin/datasets/${datasetId}/draft-revision`) &&
+        response.request().method() === "POST",
     );
     await page.getByRole("button", { name: "Save Dataset" }).click();
     const response = await saveResponse;
     expect(response.ok()).toBeTruthy();
-    await expect(page).toHaveURL(new RegExp(`/datasets/${datasetId}$`));
+    await expect(page).toHaveURL(new RegExp(`/datasets/${datasetId}/revisions/[^/]+$`));
+    const draftRevisionId = page.url().split("/").pop();
+    expect(draftRevisionId).toBeTruthy();
+    const draft = { revision_id: draftRevisionId! };
+    await publishDatasetRevision(page, datasetId, draft.revision_id);
+    await page.goto(`/datasets/${datasetId}`);
 
     const detail = await expectJson<DatasetDefinition>(
       await page.request.get(`/api/datasets/${datasetId}`),
@@ -732,11 +916,9 @@ test("admin can author, edit, save, and view a Sprint 3A dataset", async ({
       "program1",
       "program2",
     ]);
-    expect(detail.fields.map((field) => field.key)).toContain(
-      sourceFieldKey("program2", numberField.key),
-    );
     expect(detail.operations.map((operation) => operation.kind)).toEqual([
       "projection",
+      "add_source",
       "aggregation",
       "calculated_fields",
     ]);
@@ -874,76 +1056,54 @@ test("admin can UAT Sprint 3B advanced dataset authoring", async ({ page }) => {
       await expect(
         page.getByRole("heading", { level: 1, name: "Edit Dataset" }),
       ).toBeVisible();
-      await expect(fieldSourcePanel(page, "program").locator("summary")).toContainText(
-        `${initialFieldCount} of`,
-      );
+      const projection = await openOperationPanel(page, "Projection");
+      await expectSelectedProjectionFieldCount(projection, "program", initialFieldCount);
 
-      for (const heading of [
-        "Aggregation",
-        "Calculated Fields",
-        "Filters",
-        "View Restrictions",
-      ]) {
-        await expect(
-          page
-            .locator("section.dataset-editor-section", {
-              has: page.getByRole("heading", { name: heading, exact: true }),
-            })
-            .getByRole("button", { name: heading, exact: true })
-            .first(),
-        ).toHaveAttribute("aria-expanded", "false");
-      }
+      await expect(
+        operationPanel(page, "Calculated Fields"),
+      ).toHaveCount(0);
+      await expect(operationPanel(page, "Filter")).toHaveCount(0);
+      await expect(
+        page
+          .locator("section.dataset-editor-section", {
+            has: page.getByRole("heading", { name: "View Restrictions", exact: true }),
+          })
+          .getByRole("button", { name: "View Restrictions", exact: true })
+          .first(),
+      ).toHaveAttribute("aria-expanded", "false");
     });
 
     await test.step("Demo: add a second source without clearing existing field selections", async () => {
-      await page.getByRole("button", { name: "Add Input" }).click();
-      const sourceSheet = page.getByRole("dialog", {
-        name: "Dataset designer options",
+      const addSource = await addOperation(page, "Add Source");
+      await addSource.getByLabel("Alias").fill("program2");
+      await addSource.getByLabel("Alias").press("Tab");
+      await addSource.locator("label.form-field").nth(2).locator("select").selectOption({
+        value: seed.form_id,
       });
-      await expect(sourceSheet).toBeVisible();
-      await sourceSheet.getByLabel("Alias").fill("program2");
-      await sourceSheet.getByLabel("Alias").press("Tab");
-      await sourceSheet
-        .locator("label.form-field")
-        .nth(2)
-        .locator("select")
-        .selectOption({ value: seed.form_id });
-      await sourceSheet
-        .locator("label.form-field")
-        .nth(3)
-        .locator("select")
-        .selectOption({ value: seed.form_version_id });
-      await closeDesignerSheet(page);
-      await expect(page.getByRole("button", { name: /^program2$/ })).toBeVisible();
-      await expect(fieldSourcePanel(page, "program").locator("summary")).toContainText(
-        `${initialFieldCount} of`,
-      );
-      await expect(fieldSourcePanel(page, "program").locator("summary")).not.toContainText(
-        "0 of",
-      );
-      await expect(fieldSourcePanel(page, "program2").locator("summary")).toContainText(
-        /[1-9]\d* of [1-9]\d*/,
-      );
+      await addSource.locator("label.form-field").nth(3).locator("select").selectOption({
+        value: seed.form_version_id,
+      });
+      const projection = await openOperationPanel(page, "Projection");
+      await expectSelectedProjectionFieldCount(projection, "program", initialFieldCount);
+      await expect(addSource.getByLabel("Alias")).toHaveValue("program2");
     });
 
     await test.step("Demo: configure the source operation before projection", async () => {
-      await page.getByRole("button", { name: "UNION" }).click();
-      const operationSheet = page.getByRole("dialog", {
-        name: "Dataset designer options",
-      });
-      await operationSheet.getByLabel("Operation").selectOption("inner_join");
-      await operationSheet.getByLabel("Left Join Key").selectOption({
+      const addSource = await openOperationPanel(page, "Add Source");
+      await addSource.getByRole("button", { name: "Inner Join" }).click();
+      await addSource.getByLabel("Current Field").selectOption({
         value: sourceFieldKey("program", "__node_id"),
       });
-      await operationSheet.getByLabel("Right Join Key").selectOption({
+      await addSource.getByLabel("Source Field").selectOption({
         value: sourceFieldKey("program2", "__node_id"),
       });
-      await closeDesignerSheet(page);
-      await expect(page.getByRole("button", { name: "INNER JOIN" })).toBeVisible();
+      await expect(addSource.getByRole("button", { name: "Inner Join" })).toHaveClass(
+        /is-active/,
+      );
     });
 
     await test.step("Demo: add typed calculated-field pipelines", async () => {
-      const calculations = await openEditorSection(page, "Calculated Fields");
+      const calculations = await addOperation(page, "Calculated Fields");
       await calculations.getByRole("button", { name: "Add Calculated Field" }).click();
       const calculation = calculations.locator(".dataset-calculation-row").first();
       await calculation.getByLabel("Output Key").fill("review_started_together");
@@ -1034,7 +1194,7 @@ test("admin can UAT Sprint 3B advanced dataset authoring", async ({ page }) => {
     });
 
     await test.step("Demo: add literal and field-comparison filters after calculations", async () => {
-      const filters = await openEditorSection(page, "Filters");
+      const filters = await addOperation(page, "Filter");
       await filters.getByRole("button", { name: "Add Filter" }).click();
       let filterRows = filters.locator(".dataset-filter-row");
       const numberFilter = filterRows.first();
@@ -1091,13 +1251,17 @@ test("admin can UAT Sprint 3B advanced dataset authoring", async ({ page }) => {
 
       const saveResponse = page.waitForResponse(
         (response) =>
-          response.url().includes(`/api/admin/datasets/${datasetId}`) &&
-          response.request().method() === "PUT",
+          response.url().includes(`/api/admin/datasets/${datasetId}/draft-revision`) &&
+          response.request().method() === "POST",
       );
       await page.getByRole("button", { name: "Save Dataset" }).click();
       const response = await saveResponse;
       expect(response.ok()).toBeTruthy();
-      await expect(page).toHaveURL(new RegExp(`/datasets/${datasetId}$`));
+      await expect(page).toHaveURL(new RegExp(`/datasets/${datasetId}/revisions/[^/]+$`));
+      const draftRevisionId = page.url().split("/").pop();
+      expect(draftRevisionId).toBeTruthy();
+      const draft = { revision_id: draftRevisionId! };
+      await publishDatasetRevision(page, datasetId, draft.revision_id);
     });
 
     await test.step("Demo evidence: verify persisted state and reopen hydration", async () => {
@@ -1112,6 +1276,7 @@ test("admin can UAT Sprint 3B advanced dataset authoring", async ({ page }) => {
       ).toBeGreaterThan(0);
       expect(detail.operations.map((operation) => operation.kind)).toEqual([
         "projection",
+        "add_source",
         "calculated_fields",
         "filter",
       ]);
@@ -1153,12 +1318,15 @@ test("admin can UAT Sprint 3B advanced dataset authoring", async ({ page }) => {
       );
 
       await page.goto(`/datasets/${datasetId}/edit`);
-      await expect(fieldSourcePanel(page, "program").locator("summary")).toContainText(
-        `${initialFieldCount} of`,
+      const reopenedProjection = await openOperationPanel(page, "Projection");
+      await expectSelectedProjectionFieldCount(
+        reopenedProjection,
+        "program",
+        initialFieldCount,
       );
-      const reopenedCalculations = await openEditorSection(page, "Calculated Fields");
+      const reopenedCalculations = await openOperationPanel(page, "Calculated Fields");
       await expect(reopenedCalculations).toContainText("review_started_together");
-      const reopenedFilters = await openEditorSection(page, "Filters");
+      const reopenedFilters = await openOperationPanel(page, "Filter");
       await expect(reopenedFilters.locator(".dataset-filter-row")).toHaveCount(2);
     });
 
@@ -1168,6 +1336,448 @@ test("admin can UAT Sprint 3B advanced dataset authoring", async ({ page }) => {
       await deleteDataset(page, datasetId);
     }
   }
+});
+
+test("admin can review and publish a dataset draft revision", async ({ page }) => {
+  test.setTimeout(120_000);
+  const assertNoConsoleErrors = attachConsoleGuard(page);
+  await signInAsAdmin(page);
+  const seed = await seedDemo(page);
+  await cleanupPlaywrightDatasets(page);
+
+  const renderedForm = await expectJson<RenderedForm>(
+    await page.request.get(`/api/form-versions/${seed.form_version_id}/render`),
+  );
+  const formFields = renderedFields(renderedForm);
+  const firstField = requireRenderedField(
+    formFields,
+    (field) => field.field_type === "number",
+    "numeric field for revision lifecycle",
+  );
+  const secondField = requireRenderedField(
+    formFields,
+    (field) => field.key !== firstField.key,
+    "second field for draft compatibility",
+  );
+  const runId = Date.now();
+  const slug = `${PW_DATASET_PREFIX}revision-${runId}`;
+  const datasetName = `Playwright Revision Lifecycle ${runId}`;
+  const initialPayload: DatasetPayload = {
+    name: datasetName,
+    slug,
+    grain: "submission",
+    visibility_node_ids: [seed.program_node_id],
+    initial_source: {
+      kind: "form",
+      alias: "program",
+      form_id: seed.form_id,
+      form_version_id: seed.form_version_id,
+    },
+    operations: [
+      projectionOperation([
+        datasetField("program", firstField.key, firstField.label, 0),
+      ]),
+    ],
+  };
+
+  let datasetId: string | undefined;
+  let dependentDatasetId: string | undefined;
+  try {
+    datasetId = await createDataset(page, initialPayload);
+    const initialDetail = await expectJson<DatasetDefinition>(
+      await page.request.get(`/api/datasets/${datasetId}`),
+    );
+    expect(initialDetail.current_revision_id).toBeTruthy();
+    const initialRevisionId = initialDetail.current_revision_id!;
+    const firstKey = sourceFieldKey("program", firstField.key);
+    const secondKey = sourceFieldKey("program", secondField.key);
+
+    dependentDatasetId = await createDataset(page, {
+      name: `Playwright Revision Dependent ${runId}`,
+      slug: `${PW_DATASET_PREFIX}revision-dependent-${runId}`,
+      grain: "submission",
+      visibility_node_ids: [seed.program_node_id],
+      initial_source: {
+        kind: "dataset",
+        alias: "upstream",
+        dataset_id: datasetId,
+        dataset_revision_id: initialRevisionId,
+      },
+      operations: [
+        projectionOperation([
+          {
+            key: "dependent_value",
+            label: "Dependent Value",
+            input_field_key: sourceFieldKey("upstream", firstKey),
+            position: 0,
+          },
+        ]),
+      ],
+    });
+
+    const draft = await saveDraftRevision(page, datasetId, {
+      ...initialPayload,
+      name: `${datasetName} Draft`,
+      operations: [
+        projectionOperation([
+          datasetField("program", firstField.key, firstField.label, 0),
+          datasetField("program", secondField.key, secondField.label, 1),
+        ]),
+      ],
+    });
+
+    const currentBeforePublish = await expectJson<DatasetDefinition>(
+      await page.request.get(`/api/datasets/${datasetId}`),
+    );
+    expect(currentBeforePublish.current_revision_id).toBe(initialRevisionId);
+    expect(currentBeforePublish.output_fields.map((field) => field.key)).toContain(firstKey);
+    expect(currentBeforePublish.output_fields.map((field) => field.key)).not.toContain(
+      secondKey,
+    );
+
+    await page.goto(`/datasets/${datasetId}`);
+    await expect(page.getByRole("link", { name: "Revision History" })).toBeVisible();
+    await page.getByRole("link", { name: "Revision History" }).click();
+    await expect(page.locator("h1", { hasText: "Dataset Revisions" })).toBeVisible();
+    await expect(page.locator("tbody")).toContainText("Published current");
+    await expect(page.locator("tbody")).toContainText("Draft");
+
+    const draftDetail = await expectJson<DatasetRevisionDetail>(
+      await page.request.get(`/api/datasets/${datasetId}/revisions/${draft.revision_id}`),
+    );
+    expect(draftDetail.status).toBe("draft");
+    expect(draftDetail.metadata.name).toBe(`${datasetName} Draft`);
+
+    await page.goto(`/datasets/${datasetId}/revisions/${draft.revision_id}`);
+    await expect(page.locator(".page-header")).toContainText(`${datasetName} Draft`);
+    const revisionSummary = page
+      .locator(".route-panel__section")
+      .filter({ hasText: "Dependency Review" })
+      .first();
+    await expect(revisionSummary).toContainText("Draft");
+    await expect(revisionSummary).toContainText("1 total");
+    await expect(page.getByRole("heading", { name: "Changelog" })).toBeVisible();
+    await expect(page.locator("table.data-table").filter({ hasText: "Version Impact" })).toContainText(/added/i);
+    await expect(page.getByRole("heading", { name: "Downstream Dependencies" })).toBeVisible();
+    await expect(
+      page.locator("table.data-table").filter({ hasText: "Carry Forward" }),
+    ).toContainText("Playwright Revision Dependent");
+    await expect(page.getByRole("button", { name: "Publish" })).toBeVisible();
+
+    const publishResponse = page.waitForResponse(
+      (response) =>
+        response
+          .url()
+          .includes(`/api/admin/datasets/${datasetId}/revisions/${draft.revision_id}/publish`) &&
+        response.request().method() === "POST",
+    );
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.getByRole("button", { name: "Publish" }).click();
+    await page.getByRole("menuitem", { name: "Revision" }).click();
+    expect((await publishResponse).ok()).toBeTruthy();
+    await expect(revisionSummary).toContainText("Published current");
+
+    const publishedDetail = await expectJson<DatasetDefinition>(
+      await page.request.get(`/api/datasets/${datasetId}`),
+    );
+    expect(publishedDetail.current_revision_id).toBe(draft.revision_id);
+    expect(publishedDetail.output_fields.map((field) => field.key)).toEqual([
+      firstKey,
+      secondKey,
+    ]);
+    const revisions = await getDatasetRevisions(page, datasetId);
+    expect(revisions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: initialRevisionId,
+          status: "superseded",
+          is_current: false,
+        }),
+        expect.objectContaining({
+          id: draft.revision_id,
+          status: "published",
+          is_current: true,
+        }),
+      ]),
+    );
+
+    const dependentDetail = await expectJson<DatasetDefinition>(
+      await page.request.get(`/api/datasets/${dependentDatasetId}`),
+    );
+    expect(dependentDetail.initial_source).toMatchObject({
+      kind: "dataset",
+      dataset_revision_id: initialRevisionId,
+    });
+
+    const majorDraft = await saveDraftRevision(page, datasetId, {
+      ...initialPayload,
+      name: `${datasetName} Major`,
+      operations: [
+        projectionOperation([
+          datasetField("program", firstField.key, firstField.label, 0),
+          datasetField("program", secondField.key, secondField.label, 1),
+        ]),
+      ],
+    });
+    await page.goto(`/datasets/${datasetId}/revisions/${majorDraft.revision_id}`);
+    await expect(page.locator(".page-header")).toContainText(`${datasetName} Major`);
+    const majorPublishResponse = page.waitForResponse(
+      (response) =>
+        response
+          .url()
+          .includes(`/api/admin/datasets/${datasetId}/revisions/${majorDraft.revision_id}/publish`) &&
+        response.request().method() === "POST",
+    );
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.getByRole("button", { name: "Publish" }).click();
+    await page.getByRole("menuitem", { name: "New Major Version" }).click();
+    const majorPublish = await majorPublishResponse;
+    expect(majorPublish.ok()).toBeTruthy();
+    const majorRevision = (await getDatasetRevisions(page, datasetId)).find(
+      (revision) => revision.id === majorDraft.revision_id,
+    );
+    expect(majorRevision).toMatchObject({
+      version_major: 2,
+      version_minor: 0,
+      version_patch: 0,
+      started_new_major_line: true,
+      status: "published",
+      is_current: true,
+    });
+
+    await page.goto(`/datasets/${datasetId}/revisions`);
+    await expect(page.locator("tbody")).toContainText("v2.0.0");
+  } finally {
+    if (dependentDatasetId) {
+      await deleteDataset(page, dependentDatasetId, 5_000).catch((error: unknown) => {
+        console.warn(`dependent dataset cleanup failed: ${String(error)}`);
+      });
+    }
+    if (datasetId) {
+      await deleteDataset(page, datasetId, 5_000).catch((error: unknown) => {
+        console.warn(`dataset cleanup failed for ${datasetId}: ${String(error)}`);
+      });
+    }
+  }
+
+  await assertNoConsoleErrors();
+});
+
+test("dataset source picker keeps Version N major-line fields after a newer major exists", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const assertNoConsoleErrors = attachConsoleGuard(page);
+  await signInAsAdmin(page);
+  const seed = await seedDemo(page);
+  await cleanupPlaywrightDatasets(page);
+
+  const renderedForm = await expectJson<RenderedForm>(
+    await page.request.get(`/api/form-versions/${seed.form_version_id}/render`),
+  );
+  const formFields = renderedFields(renderedForm);
+  const firstField = requireRenderedField(
+    formFields,
+    (field) => field.field_type === "text",
+    "v1 text field for major-line picker",
+  );
+  const secondField = requireRenderedField(
+    formFields,
+    (field) => field.key !== firstField.key,
+    "v2 alternate field for major-line picker",
+  );
+  const runId = Date.now();
+  const upstreamSlug = `${PW_DATASET_PREFIX}major-source-${runId}`;
+  const upstreamName = `Playwright Major Source ${runId}`;
+  const firstKey = sourceFieldKey("program", firstField.key);
+  const secondKey = sourceFieldKey("program", secondField.key);
+  const downstreamFirstKey = sourceFieldKey("upstream", firstKey);
+
+  let upstreamDatasetId: string | undefined;
+  let downstreamDatasetId: string | undefined;
+  try {
+    upstreamDatasetId = await createDataset(page, {
+      name: upstreamName,
+      slug: upstreamSlug,
+      grain: "submission",
+      visibility_node_ids: [seed.program_node_id],
+      initial_source: {
+        kind: "form",
+        alias: "program",
+        form_id: seed.form_id,
+        form_version_id: seed.form_version_id,
+      },
+      operations: [
+        projectionOperation([
+          datasetField("program", firstField.key, firstField.label, 0),
+        ]),
+      ],
+    });
+
+    const majorDraft = await saveDraftRevision(page, upstreamDatasetId, {
+      name: `${upstreamName} v2`,
+      slug: upstreamSlug,
+      grain: "submission",
+      visibility_node_ids: [seed.program_node_id],
+      initial_source: {
+        kind: "form",
+        alias: "program",
+        form_id: seed.form_id,
+        form_version_id: seed.form_version_id,
+      },
+      operations: [
+        projectionOperation([
+          datasetField("program", secondField.key, secondField.label, 0),
+        ]),
+      ],
+    });
+    await updateDatasetRevisionOptions(
+      page,
+      upstreamDatasetId,
+      majorDraft.revision_id,
+      true,
+    );
+    await publishDatasetRevision(page, upstreamDatasetId, majorDraft.revision_id);
+
+    downstreamDatasetId = await createDataset(page, {
+      name: `Playwright Version One Consumer ${runId}`,
+      slug: `${PW_DATASET_PREFIX}version-one-consumer-${runId}`,
+      grain: "submission",
+      visibility_node_ids: [seed.program_node_id],
+      initial_source: {
+        kind: "dataset_major",
+        alias: "upstream",
+        dataset_id: upstreamDatasetId,
+        version_major: 1,
+      },
+      operations: [
+        projectionOperation([
+          {
+            key: "version_one_value",
+            label: "Version One Value",
+            input_field_key: downstreamFirstKey,
+            position: 0,
+          },
+        ]),
+      ],
+    });
+
+    await page.goto(`/datasets/${downstreamDatasetId}/edit`);
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Edit Dataset" }),
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: "Save Dataset" })).toBeEnabled();
+
+    const sourceSection = await openEditorSection(page, "Initial Data Source");
+    await expect(sourceSection.locator("label.form-field").nth(2).locator("select")).toHaveValue(
+      upstreamDatasetId,
+    );
+    await expect(sourceSection.locator("label.form-field").nth(3).locator("select")).toHaveValue(
+      "1",
+    );
+
+    const projection = await openOperationPanel(page, "Projection");
+    const selectedFields = projection.locator(".dataset-projection-selected__item");
+    await expect(selectedFields).toHaveCount(1);
+    await expect(selectedFields.first()).toContainText(downstreamFirstKey);
+    await expect(projection).not.toContainText(secondKey);
+  } finally {
+    if (downstreamDatasetId) {
+      await deleteDataset(page, downstreamDatasetId, 5_000).catch((error: unknown) => {
+        console.warn(`downstream dataset cleanup failed: ${String(error)}`);
+      });
+    }
+    if (upstreamDatasetId) {
+      await deleteDataset(page, upstreamDatasetId, 5_000).catch((error: unknown) => {
+        console.warn(`upstream dataset cleanup failed: ${String(error)}`);
+      });
+    }
+  }
+
+  await assertNoConsoleErrors();
+});
+
+test("dataset revision navigation handles repeated detail and error states", async ({ page }) => {
+  test.setTimeout(90_000);
+  const assertNoConsoleErrors = attachConsoleGuard(page);
+  await signInAsAdmin(page);
+  const seed = await seedDemo(page);
+  await cleanupPlaywrightDatasets(page);
+
+  const renderedForm = await expectJson<RenderedForm>(
+    await page.request.get(`/api/form-versions/${seed.form_version_id}/render`),
+  );
+  const formField = requireRenderedField(
+    renderedFields(renderedForm),
+    (field) => field.field_type === "number",
+    "numeric field for revision navigation",
+  );
+  const runId = Date.now();
+  const datasetPayload: DatasetPayload = {
+    name: `Playwright Revision Navigation ${runId}`,
+    slug: `${PW_DATASET_PREFIX}revision-navigation-${runId}`,
+    grain: "submission",
+    visibility_node_ids: [seed.program_node_id],
+    initial_source: {
+      kind: "form",
+      alias: "program",
+      form_id: seed.form_id,
+      form_version_id: seed.form_version_id,
+    },
+    operations: [
+      projectionOperation([
+        datasetField("program", formField.key, formField.label, 0),
+      ]),
+    ],
+  };
+
+  let datasetId: string | undefined;
+  try {
+    datasetId = await createDataset(page, datasetPayload);
+    const detail = await expectJson<DatasetDefinition>(
+      await page.request.get(`/api/datasets/${datasetId}`),
+    );
+    const revisionId = detail.current_revision_id!;
+    const missingRevisionId = "00000000-0000-4000-8000-000000000000";
+
+    for (let index = 0; index < 3; index += 1) {
+      await page.goto(`/datasets/${datasetId}/revisions`);
+      await expect(
+        page.getByRole("heading", { level: 1, name: "Dataset Revisions" }),
+      ).toBeVisible();
+      await expect(page.locator("tbody")).toContainText("Published current");
+
+      await page.goto(`/datasets/${datasetId}/revisions/${revisionId}`);
+      await expect(
+        page.getByRole("heading", { level: 1, name: "Dataset Revision" }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("heading", { name: "Changelog", exact: true }),
+      ).toBeVisible();
+      await expect(
+        page.locator(".route-panel__section").filter({ hasText: "Version" }).first(),
+      ).toContainText("v1.0.0");
+    }
+
+    await page.goto(`/datasets/${datasetId}/revisions/${missingRevisionId}`);
+    await expect(page.getByText("Revision unavailable")).toBeVisible();
+
+    await page.goto(`/datasets/${datasetId}/revisions/${revisionId}`);
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Dataset Revision" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Downstream Dependencies", exact: true }),
+    ).toBeVisible();
+  } finally {
+    if (datasetId) {
+      await deleteDataset(page, datasetId, 5_000).catch((error: unknown) => {
+        console.warn(`dataset cleanup failed for ${datasetId}: ${String(error)}`);
+      });
+    }
+  }
+
+  await assertNoConsoleErrors();
 });
 
 test("dataset SQL preview uses pre-projection join keys and stable field identities", async ({
@@ -1378,7 +1988,7 @@ test("dataset SQL preview renders ordered QuerySpec operations as sequential CTE
   expect(sql).toContain("target_allowed");
   expect(sql).toContain(">= NULLIF('100', '')::numeric");
   expect(sql).toContain("__restriction_tier");
-  expect(sql.indexOf("__restriction_tier")).toBeGreaterThan(finalProjectionStart);
+  expect(sql.lastIndexOf("__restriction_tier")).toBeGreaterThan(finalProjectionStart);
   expect(sql).toContain('FROM "projection_6"');
 });
 

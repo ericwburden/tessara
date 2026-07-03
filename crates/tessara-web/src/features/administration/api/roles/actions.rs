@@ -2,10 +2,10 @@
 
 #[cfg(feature = "hydrate")]
 use super::{load_admin_role_detail, load_admin_roles_context};
+use crate::features::administration::models::AdminRoleSummary;
 use crate::features::administration::models::{AdminCapabilitySummary, AdminRoleDetail};
 #[cfg(feature = "hydrate")]
 use crate::features::administration::models::{CreateAdminRolePayload, UpdateAdminRolePayload};
-use crate::features::organization::AdminRoleSummary;
 #[cfg(feature = "hydrate")]
 use crate::http::send_json_id_request;
 use leptos::prelude::*;

@@ -1,6 +1,6 @@
 # Tessara Roadmap
 
-This roadmap is authoritative as of June 5, 2026. It starts from the current implemented baseline after the native UI refresh and RBAC route coverage cleanup, identifies the transition from the current reporting stack to the re-aligned target model, and defines future delivery as explicit vertical-slice sprints.
+This roadmap is authoritative as of June 28, 2026. It starts from the current implemented baseline after the native UI refresh, RBAC route coverage cleanup, dataset authoring work, and web feature-crate refactoring pass, identifies the transition from the current reporting stack to the re-aligned target model, and defines future delivery as explicit vertical-slice sprints.
 
 ## Delivery Rule
 
@@ -54,6 +54,7 @@ The codebase already includes a substantial vertical foundation:
 - reporting/storage slices for datasets, reports, aggregations, charts, and dashboards
 - legacy fixture validation, dry-run, import rehearsal, and demo seed paths
 - a Leptos SSR shell with root-level native product routes for Home, Organization, Forms, Workflows, Responses, Components, Datasets, Dashboards, Administration, and Migration
+- extracted Leptos feature crates for shared UI, Datasets, Forms, Workflows, Responses, and Organization, with root-owned route adapters preserving shell, auth, route parsing, hydration, CSS, and cargo-leptos ownership
 - Sprint 2B authentication hardening: Argon2id credential storage, server-side session expiry/revocation/last-seen tracking, same-origin `HttpOnly` browser cookies, stable auth/session errors, and native SSR login/session behavior
 - UI Overhaul 2.0 detour work: approved shell navigation posture, access-denied redirect plus transient feedback, sidebar footer account/scope/theme context, queue-first home posture, explorer-oriented organization work, section-oriented form-builder UI, and section description/column-count persistence
 
@@ -62,7 +63,7 @@ The codebase already includes a substantial vertical foundation:
 The application shell already exposes meaningful user-testable surfaces:
 
 - role-aware login and shared home entry
-- product-area navigation for Home, Organization, Forms, Workflows, Responses, Components, Dashboards, and admin-area Datasets, Administration, and Migration
+- product-area navigation for Home, Organization, Forms, Workflows, Responses, Components, Dashboards, Datasets, Administration, and Migration
 - dedicated list/detail/create/edit flows for major top-level entities
 - dedicated administration list/detail/create/edit/access flows for users and roles
 - visible separation between product-facing and internal/operator areas
@@ -79,6 +80,20 @@ The main gaps are no longer raw backend feasibility. The remaining work is to:
 - transition deprecated analytical endpoints into adapter-only paths behind the target `Dataset -> Component -> Dashboard` model
 - close scoped analytical visibility gaps as dataset, component, and dashboard execution surfaces become real application features
 - maintain a green dependency-audit posture and document any accepted advisory exceptions
+- keep future frontend crate movement evidence-driven: preserve root ownership of route adapters, shell, auth/session/navigation policy, document integration, CSS/assets, and cargo-leptos entrypoints unless a new proposal proves a better boundary
+
+### Frontend feature-crate architecture follow-up
+
+The completed web refactoring pass retained the extracted feature crates because the measured development-loop results were positive and route behavior stayed intact. Future frontend work must treat that outcome as a baseline, not as automatic approval for more crate splitting.
+
+- Before extracting another feature area, write a focused proposal with source-size/churn inventory, dependency-boundary review, public facade, route-adapter plan, watch/build/browser validation, bundle-size comparison, and rollback path.
+- Keep feature crates exposing content components only; root route adapters continue to own `AppShell`, route parsing, auth guards, route titles, document integration, hydration entrypoints, CSS, and public assets.
+- Keep API DTOs and web DTOs separate by default. Promote shared contracts only when the shape is stable, ownership is clear, adapter duplication is causing real maintenance cost, and WASM dependency cost has been measured.
+- Do not create a shared `tessara-web-platform` crate by default. Reassess only if repeated transport/helper copies become real maintenance drag and a small policy-neutral crate can avoid root auth/session/navigation coupling.
+- Treat Administration as deliberately deferred. When it is revisited, replace the current broad Administration grouping with individual feature areas for User Management, Roles and Access, and Organization Schema rather than assuming one large `tessara-web-administration` extraction. Datasets is already its own feature area, and Components should become its own planned feature area and frontend crate rather than being absorbed into Administration.
+- Use release frontend artifacts for production bundle decisions. Dev-profile bundle measurements may remain a trend signal, but release-size regressions are the decision-grade data.
+- Run a focused Leptos lazy-loading/code-splitting pilot before broad bundle work. `cargo leptos build --split` and `#[lazy]`/`#[lazy_route]` boundaries should be tested on one extracted route area before adopting any router exceptions inside feature crates.
+- Consider future service extraction only for runtime or operational triggers such as durable materialization jobs, retry isolation, independent scaling, or deploy isolation; do not use service extraction as a frontend compile-time remedy.
 
 ## Current Transitional Architecture
 
@@ -122,15 +137,44 @@ This roadmap plans the transition toward:
 - mutable `Dashboard` composed from `ComponentVersion`
 - printable reports as a later separate artifact, not a core v1 analytical asset
 
-## Approved Carry-Forward Backlog
+## Durable Carry-Forward Backlog
 
-The following items were accepted during Sprint 1A and Sprint 1B review and should be treated as scheduled follow-up work rather than open-ended notes.
+The items below preserve still-valid future work from completed sprint plans, handoff notes, UAT findings, and review artifacts. They are not active sprint scope unless a later roadmap slice explicitly pulls them forward.
 
-Sprint 1C mandatory acceptance points (must be present to close Sprint 1C):
+Access and administrative feature areas:
 
-- Scope-aware naming: when the highest assigned scope is `Partner`, the primary organization list shows `Partner List` instead of `Organization List`.
-- Hierarchy navigation: replace the flat organization card layout with a fuller-width tree navigator so scoped users can browse the tree structure directly.
-- New User Screen: add an in-app `/administration/users/new` flow so admins can create users without direct API calls, including email, display name, password, active status, initial roles, and a clear follow-up path to scope/delegation access assignment.
+- Add an in-app `/administration/users/new` flow so admins can create users without direct API calls, including email, display name, password, active status, initial roles, and a clear follow-up path to scope/delegation access assignment.
+- Replace the current broad Administration grouping with individual future feature areas for User Management, Roles and Access, and Organization Schema. Do not preserve an Administration landing page after that split. Datasets is already its own application feature area, and Components should be developed as its own planned feature area and `tessara-web-components` crate.
+- Add direct user capability-assignment affordances only after a role-template and capability-drift model is explicit enough that administrators can understand deviations from role bundles.
+- Add a dedicated administrative workflow assignment detail route when assignment operations grow beyond filtered list management. Future scope should include reassignment, admin completion, deactivation/reactivation, mutation authorization, and capability decisions.
+
+Workflow and response runtime:
+
+- Improve workflow assignment lists with table-grade sort and filter controls for workflow, node, assignee, assignment status, and acting context.
+- Decide whether workflow assignments need explicit one-time versus recurring behavior before introducing recurring assignment UX or scheduling semantics.
+- Review workflow publish semantics for branching and sibling step form scopes. Older workflow-runtime expectations treated some branching/sibling scope combinations as invalid at publish time, while the current workflow publisher permits them. Decide whether this was stale test coverage or a dropped product rule; then either implement and document publish-time validation with regression coverage, or document the permissive behavior and keep tests aligned with it.
+- Extend workflow runtime beyond same-assignee automatic handoff only when there is a complete model for per-step assignees, operator-mediated handoff, and capability-aware reassignment.
+- Define the durable form/workflow version lifecycle model: at most one draft and one active version, publish retires the prior active version, retained responses stay pinned to retired versions, and operators choose whether retired-version assignments migrate to the new active version.
+- Keep response starts assignment-only. Form-first starts should continue to flow through generated single-form workflow shortcuts and then start a workflow assignment.
+- Make workflow steps the owner of target/context semantics, including explicit workflow availability nodes, step target metadata, cross-step data passing, prefills, hidden or locked carried-forward values, derived target nodes, and future nonlinear branching.
+- Redesign Home delegated-work discovery so accounts with accessible delegate work can discover, switch, or default into delegated work without relying on the Responses route first.
+
+Datasets, components, dashboards, and operations:
+
+- Before the next substantial dataset compiler or materialization feature, split `crates/tessara-api/src/datasets/mod.rs` mechanically into focused handler, access, repository, materialization, and compiler modules.
+- Sprint 3C review adoption intentionally defers that `datasets/mod.rs` split to a mechanical follow-up branch so blocker fixes stay focused on publish/materialization semantics.
+- After the dataset module split, or when another internal pipeline column is added beyond `__row_id` and `__restriction_tier`, introduce a small pipeline schema abstraction that separates internal CTE columns from user-visible dataset fields.
+- Split revision field loading from `DatasetSummary` if `/api/datasets` payload size, latency, or call-site needs show that output fields and revision field summaries are too heavy by default.
+- Continue the ordered dataset operation-pipeline direction: projection, aggregation, calculated fields, filters, and view restrictions should be composable in saved operation-list order, including multiple operation instances where useful.
+- Keep legacy reporting endpoints adapter-only while the target model moves through `DatasetRevision -> ComponentVersion -> Dashboard`; dashboard composition should depend on component versions rather than legacy report/chart nouns.
+- Treat `/operations` and `operations:view` as read-only status visibility. Keep it separate from `analytics:refresh`, refresh/admin mutations, row-level analytical data, and report execution details unless a later sprint explicitly defines scoped mutation capabilities.
+- Add a refresh ledger or job-history model only if Operations grows beyond derived readiness/status.
+
+UI and migration:
+
+- Preserve long response values in readable table/detail presentations with wrapping, truncation, or drill-in behavior before expanding dense review surfaces.
+- Review RBAC-heavy tables and details as Administration grows, especially capability bundle display, scope/delegation density, and capability-drift affordances.
+- Keep migration/operator verification pointed at canonical application routes and remove legacy adapter surfaces once their replacement route, validation, and rollback path are explicit.
 
 ## Frontend Platform Foundation
 
@@ -485,7 +529,7 @@ This section records the completed foundation sequence that led to the current n
 
 **Completed reconciliation:**
 
-- table, queue, picker, and detail-readout surfaces now have approved Rust/UI-style direction in `docs/ui-table-inventory.md`
+- table, queue, picker, and detail-readout surfaces now follow the canonical shared UI guidance and the current native SSR shell posture
 - workflow, assignment, response, form, organization, administration user, and administration role tables have approved pagination, row-count, search/filter, mobile, and action treatments where applicable
 - RBAC route coverage cleanup landed after the detour planning notes and updated the permissions scenario documentation
 - `style/main.css` remains the documented active stylesheet entrypoint through the Cargo Leptos pipeline for the next functionality sprint
@@ -566,7 +610,7 @@ This section records the completed foundation sequence that led to the current n
 
 **User-testable exit condition:** a tester can add a row filter and calculated field to a dataset, preview the resulting rows, save the definition, and verify any explicit restriction rules behave as authored.
 
-### Sprint 3C: Dataset Revision And Compatibility Slice (Next)
+### Sprint 3C: Dataset Revision And Compatibility Slice (Complete)
 
 **Outcome:** revision behavior is visible and manageable.
 
@@ -587,12 +631,13 @@ This section records the completed foundation sequence that led to the current n
 
 ## Phase 4: Components
 
-### Sprint 4A: Table Component Slice
+### Sprint 4A: Table Component Slice (Next)
 
 **Outcome:** table-oriented presentation assets become first-class components.
 
 **Build:**
 
+- implement Component frontend surfaces in a dedicated `tessara-web-components` crate from the start, with root `tessara-web` retaining route adapters, shell/auth/session/navigation policy, hydration, document integration, CSS, and assets
 - `DetailTable` and `AggregateTable` authoring
 - component versioning and publication
 - validation and dataset-revision binding behavior
@@ -673,7 +718,7 @@ This section records the completed foundation sequence that led to the current n
 
 **Build:**
 
-- warning/blocking findings
+- changelog version impacts plus any separate publish-blocking validation outcomes
 - carry-forward and rebinding flows
 - publication guards for incompatible changes
 - stale dependency, carry-forward, and rebinding flows operating on typed dataset, component, and dashboard relationships
@@ -735,3 +780,5 @@ This section records the completed foundation sequence that led to the current n
 - full visual dashboard designer beyond the required composition flows
 - fuzzy joins, complex window functions, and other analytical features not required for v1
 - broader home-surface specialization after the shared shell and role-ready flows are stable
+- Decomposition of the current broad Administration grouping into User Management, Roles and Access, and Organization Schema feature areas, with no retained Administration landing page after the split, pending a dedicated future sprint
+- Leptos lazy-loading/code-splitting pilot for one extracted route area before broader bundle splitting

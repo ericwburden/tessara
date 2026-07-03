@@ -12,8 +12,17 @@ members = [
     "crates/tessara-jobs",
     "crates/tessara-submissions",
     "crates/tessara-web",
+    "crates/tessara-web-datasets",
+    "crates/tessara-web-forms",
+    "crates/tessara-web-organization",
+    "crates/tessara-web-responses",
+    "crates/tessara-web-workflows",
+    "crates/tessara-web-ui",
 ]
 resolver = "3"
+
+[profile.test]
+debug = 1
 
 [workspace.package]
 edition = "2024"

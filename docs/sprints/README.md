@@ -6,7 +6,6 @@ Use the generated `sprint-<label>-plan.md` file as the implementation contract f
 
 Out-of-roadmap sprint proposals and migration plans may also live here when they need the same level of delivery detail before they are admitted to the roadmap.
 
-The current UI migration planning set lives here:
+## Drafts Under Review
 
-- [out-of-roadmap-ui-migration-plan.md](./out-of-roadmap-ui-migration-plan.md)
-- [out-of-roadmap-ui-migration-github-ready.md](./out-of-roadmap-ui-migration-github-ready.md)
+- [Sprint 3C Implementation Guide Draft 1](./sprint-3c-plan.md)

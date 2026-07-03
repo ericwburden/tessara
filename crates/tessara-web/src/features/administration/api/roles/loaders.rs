@@ -1,7 +1,7 @@
 //! Role-management API loaders.
 
+use crate::features::administration::models::AdminRoleSummary;
 use crate::features::administration::models::{AdminCapabilitySummary, AdminRoleDetail};
-use crate::features::organization::AdminRoleSummary;
 #[cfg(feature = "hydrate")]
 use crate::http::redirect_to_login;
 use leptos::prelude::*;

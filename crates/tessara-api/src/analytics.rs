@@ -30,6 +30,8 @@ pub async fn refresh_analytics(
 }
 
 pub async fn refresh_projection(pool: &sqlx::PgPool) -> ApiResult<AnalyticsStatus> {
+    const ANALYTICS_REFRESH_LOCK_KEY: i64 = 872_387_585_246_991_884;
+
     let statements = [
         "DELETE FROM analytics.submission_value_fact",
         "DELETE FROM analytics.submission_fact",
@@ -122,11 +124,33 @@ pub async fn refresh_projection(pool: &sqlx::PgPool) -> ApiResult<AnalyticsStatu
         "#,
     ];
 
+    let mut tx = pool.begin().await?;
+    sqlx::query("SELECT pg_advisory_xact_lock($1)")
+        .bind(ANALYTICS_REFRESH_LOCK_KEY)
+        .execute(&mut *tx)
+        .await?;
+
     for statement in statements {
-        sqlx::query(statement).execute(pool).await?;
+        sqlx::query(statement).execute(&mut *tx).await?;
     }
 
-    analytics_status_for_pool(pool).await
+    let node_count = sqlx::query_scalar("SELECT COUNT(*) FROM analytics.node_dim")
+        .fetch_one(&mut *tx)
+        .await?;
+    let submitted_count = sqlx::query_scalar("SELECT COUNT(*) FROM analytics.submission_fact")
+        .fetch_one(&mut *tx)
+        .await?;
+    let value_count = sqlx::query_scalar("SELECT COUNT(*) FROM analytics.submission_value_fact")
+        .fetch_one(&mut *tx)
+        .await?;
+
+    tx.commit().await?;
+
+    Ok(AnalyticsStatus {
+        node_count,
+        submitted_count,
+        value_count,
+    })
 }
 
 pub async fn analytics_status(

@@ -1,6 +1,6 @@
 //! Role-management Administration list component.
 
-use crate::features::organization::AdminRoleSummary;
+use crate::features::administration::models::AdminRoleSummary;
 use crate::ui::{DataTable, DropdownMenu, TablePaginationFooter};
 use crate::utils::pagination::pagination_page_start;
 use icons::{PanelRight, Search};

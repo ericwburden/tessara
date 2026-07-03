@@ -32,6 +32,12 @@ pub(crate) struct DatasetRouteParams {
 }
 
 #[derive(PartialEq, Clone, Debug)]
+pub(crate) struct DatasetRevisionRouteParams {
+    pub dataset_id: String,
+    pub revision_id: String,
+}
+
+#[derive(PartialEq, Clone, Debug)]
 pub(crate) struct AccountRouteParams {
     pub account_id: String,
 }
@@ -77,6 +83,15 @@ impl Params for DatasetRouteParams {
     fn from_map(map: &ParamsMap) -> Result<Self, ParamsError> {
         Ok(Self {
             dataset_id: require_map_value(map, "dataset_id")?,
+        })
+    }
+}
+
+impl Params for DatasetRevisionRouteParams {
+    fn from_map(map: &ParamsMap) -> Result<Self, ParamsError> {
+        Ok(Self {
+            dataset_id: require_map_value(map, "dataset_id")?,
+            revision_id: require_map_value(map, "revision_id")?,
         })
     }
 }
