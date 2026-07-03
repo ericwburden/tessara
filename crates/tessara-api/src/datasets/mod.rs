@@ -2646,7 +2646,7 @@ impl<'a> QuerySpecBuilder<'a> {
             .iter()
             .map(|field| SourceCompileField {
                 key: field.key.clone(),
-                source_field_key: field.source_field_key.clone(),
+                source_field_key: field.key.clone(),
                 source_field_id: None,
             })
             .collect::<Vec<_>>();
@@ -2734,14 +2734,28 @@ impl<'a> QuerySpecBuilder<'a> {
             dataset_version_major: Some(version_major),
             position: self.sources.len() as i32,
         };
-        let fields =
+        let raw_fields =
             load_dataset_major_source_catalog(self.pool, dataset_id, version_major).await?;
-        let source_fields = fields
+        let source_fields = raw_fields
             .iter()
             .map(|field| SourceCompileField {
-                key: field.key.clone(),
-                source_field_key: field.source_field_key.clone(),
+                key: canonical_source_column_key(alias, &field.key),
+                source_field_key: field.key.clone(),
                 source_field_id: None,
+            })
+            .collect::<Vec<_>>();
+        let fields = raw_fields
+            .into_iter()
+            .enumerate()
+            .map(|(index, field)| ValidatedDatasetField {
+                id: None,
+                key: canonical_source_column_key(alias, &field.key),
+                label: field.label,
+                source_alias: alias.to_string(),
+                source_field_key: field.key,
+                source_field_id: None,
+                field_type: field.field_type,
+                position: index as i32,
             })
             .collect::<Vec<_>>();
         let select_columns = source_fields

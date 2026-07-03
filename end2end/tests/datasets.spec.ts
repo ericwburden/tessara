@@ -19,6 +19,17 @@ type DemoSeed = {
   program_node_id: string;
 };
 
+type FormSummary = {
+  id: string;
+  slug: string;
+  visibility_nodes?: Array<{ node_id: string }>;
+  versions: Array<{
+    id: string;
+    status: string;
+    assignment_nodes?: Array<{ node_id: string }>;
+  }>;
+};
+
 type IdResponse = {
   id: string;
 };
@@ -320,9 +331,40 @@ async function expectJson<T>(response: APIResponse) {
 }
 
 async function seedDemo(page: Page) {
-  return expectJson<DemoSeed>(
-    await page.request.post("/api/demo/seed", { data: {} }),
+  const response = await page.request.post("/api/demo/seed", { data: {} });
+  const text = await response.text();
+  if (response.ok()) {
+    return JSON.parse(text) as DemoSeed;
+  }
+  if (
+    response.status() === 400 &&
+    text.includes("Demo seed requires an empty database")
+  ) {
+    return existingDemoSeed(page);
+  }
+  expect(
+    response.ok(),
+    `${response.url()} returned ${response.status()}: ${text}`,
+  ).toBeTruthy();
+  return JSON.parse(text) as DemoSeed;
+}
+
+async function existingDemoSeed(page: Page): Promise<DemoSeed> {
+  const forms = await expectJson<FormSummary[]>(
+    await page.request.get("/api/forms"),
   );
+  const form = forms.find((candidate) => candidate.slug === "demo-program-snapshot");
+  expect(form, "demo program snapshot form should already exist").toBeTruthy();
+  const version = form!.versions.find((candidate) => candidate.status === "published");
+  expect(version, "demo program snapshot should have a published version").toBeTruthy();
+  const programNodeId =
+    version!.assignment_nodes?.[0]?.node_id ?? form!.visibility_nodes?.[0]?.node_id;
+  expect(programNodeId, "demo program snapshot should expose a program node").toBeTruthy();
+  return {
+    form_id: form!.id,
+    form_version_id: version!.id,
+    program_node_id: programNodeId!,
+  };
 }
 
 function renderedFields(renderedForm: RenderedForm) {
@@ -459,6 +501,23 @@ async function publishDatasetRevision(
     },
   );
   return expectJson<DatasetPublishRevisionResponse>(response);
+}
+
+async function updateDatasetRevisionOptions(
+  page: Page,
+  datasetId: string,
+  revisionId: string,
+  forceNewMajorVersion: boolean,
+) {
+  const response = await page.request.patch(
+    `/api/admin/datasets/${datasetId}/revisions/${revisionId}/options`,
+    {
+      data: {
+        force_new_major_version: forceNewMajorVersion,
+      },
+    },
+  );
+  return expectJson<DatasetRevisionDetail>(response);
 }
 
 async function getDatasetRevisions(page: Page, datasetId: string) {
@@ -1496,6 +1555,140 @@ test("admin can review and publish a dataset draft revision", async ({ page }) =
     if (datasetId) {
       await deleteDataset(page, datasetId, 5_000).catch((error: unknown) => {
         console.warn(`dataset cleanup failed for ${datasetId}: ${String(error)}`);
+      });
+    }
+  }
+
+  await assertNoConsoleErrors();
+});
+
+test("dataset source picker keeps Version N major-line fields after a newer major exists", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const assertNoConsoleErrors = attachConsoleGuard(page);
+  await signInAsAdmin(page);
+  const seed = await seedDemo(page);
+  await cleanupPlaywrightDatasets(page);
+
+  const renderedForm = await expectJson<RenderedForm>(
+    await page.request.get(`/api/form-versions/${seed.form_version_id}/render`),
+  );
+  const formFields = renderedFields(renderedForm);
+  const firstField = requireRenderedField(
+    formFields,
+    (field) => field.field_type === "text",
+    "v1 text field for major-line picker",
+  );
+  const secondField = requireRenderedField(
+    formFields,
+    (field) => field.key !== firstField.key,
+    "v2 alternate field for major-line picker",
+  );
+  const runId = Date.now();
+  const upstreamSlug = `${PW_DATASET_PREFIX}major-source-${runId}`;
+  const upstreamName = `Playwright Major Source ${runId}`;
+  const firstKey = sourceFieldKey("program", firstField.key);
+  const secondKey = sourceFieldKey("program", secondField.key);
+  const downstreamFirstKey = sourceFieldKey("upstream", firstKey);
+
+  let upstreamDatasetId: string | undefined;
+  let downstreamDatasetId: string | undefined;
+  try {
+    upstreamDatasetId = await createDataset(page, {
+      name: upstreamName,
+      slug: upstreamSlug,
+      grain: "submission",
+      visibility_node_ids: [seed.program_node_id],
+      initial_source: {
+        kind: "form",
+        alias: "program",
+        form_id: seed.form_id,
+        form_version_id: seed.form_version_id,
+      },
+      operations: [
+        projectionOperation([
+          datasetField("program", firstField.key, firstField.label, 0),
+        ]),
+      ],
+    });
+
+    const majorDraft = await saveDraftRevision(page, upstreamDatasetId, {
+      name: `${upstreamName} v2`,
+      slug: upstreamSlug,
+      grain: "submission",
+      visibility_node_ids: [seed.program_node_id],
+      initial_source: {
+        kind: "form",
+        alias: "program",
+        form_id: seed.form_id,
+        form_version_id: seed.form_version_id,
+      },
+      operations: [
+        projectionOperation([
+          datasetField("program", secondField.key, secondField.label, 0),
+        ]),
+      ],
+    });
+    await updateDatasetRevisionOptions(
+      page,
+      upstreamDatasetId,
+      majorDraft.revision_id,
+      true,
+    );
+    await publishDatasetRevision(page, upstreamDatasetId, majorDraft.revision_id);
+
+    downstreamDatasetId = await createDataset(page, {
+      name: `Playwright Version One Consumer ${runId}`,
+      slug: `${PW_DATASET_PREFIX}version-one-consumer-${runId}`,
+      grain: "submission",
+      visibility_node_ids: [seed.program_node_id],
+      initial_source: {
+        kind: "dataset_major",
+        alias: "upstream",
+        dataset_id: upstreamDatasetId,
+        version_major: 1,
+      },
+      operations: [
+        projectionOperation([
+          {
+            key: "version_one_value",
+            label: "Version One Value",
+            input_field_key: downstreamFirstKey,
+            position: 0,
+          },
+        ]),
+      ],
+    });
+
+    await page.goto(`/datasets/${downstreamDatasetId}/edit`);
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Edit Dataset" }),
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: "Save Dataset" })).toBeEnabled();
+
+    const sourceSection = await openEditorSection(page, "Initial Data Source");
+    await expect(sourceSection.locator("label.form-field").nth(2).locator("select")).toHaveValue(
+      upstreamDatasetId,
+    );
+    await expect(sourceSection.locator("label.form-field").nth(3).locator("select")).toHaveValue(
+      "1",
+    );
+
+    const projection = await openOperationPanel(page, "Projection");
+    const selectedFields = projection.locator(".dataset-projection-selected__item");
+    await expect(selectedFields).toHaveCount(1);
+    await expect(selectedFields.first()).toContainText(downstreamFirstKey);
+    await expect(projection).not.toContainText(secondKey);
+  } finally {
+    if (downstreamDatasetId) {
+      await deleteDataset(page, downstreamDatasetId, 5_000).catch((error: unknown) => {
+        console.warn(`downstream dataset cleanup failed: ${String(error)}`);
+      });
+    }
+    if (upstreamDatasetId) {
+      await deleteDataset(page, upstreamDatasetId, 5_000).catch((error: unknown) => {
+        console.warn(`upstream dataset cleanup failed: ${String(error)}`);
       });
     }
   }
