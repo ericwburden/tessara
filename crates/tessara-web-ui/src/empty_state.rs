@@ -5,7 +5,7 @@
 use leptos::prelude::*;
 
 #[component]
-pub fn EmptyState(title: &'static str, message: &'static str) -> impl IntoView {
+pub fn EmptyState(#[prop(into)] title: String, #[prop(into)] message: String) -> impl IntoView {
     view! {
         <section class="empty-state">
             <h3>{title}</h3>

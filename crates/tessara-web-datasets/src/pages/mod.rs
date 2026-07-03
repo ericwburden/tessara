@@ -70,7 +70,7 @@ pub fn DatasetsIndexContent() -> impl IntoView {
                 if is_loading.get() {
                     view! { <EmptyState title="Loading datasets" message="Fetching visible datasets."/> }.into_any()
                 } else if let Some(message) = load_error.get() {
-                    view! { <EmptyState title="Datasets unavailable" message=Box::leak(message.into_boxed_str())/> }.into_any()
+                    view! { <EmptyState title="Datasets unavailable" message=message/> }.into_any()
                 } else if datasets.get().is_empty() {
                     view! { <EmptyState title="No visible datasets" message="No datasets are visible for the current account."/> }.into_any()
                 } else {
@@ -135,15 +135,15 @@ pub fn DatasetRevisionHistoryContent(dataset_id: String) -> impl IntoView {
             {move || {
                 let title = dataset
                     .get()
-                    .map(|dataset| Box::leak(dataset.name.into_boxed_str()) as &'static str)
-                    .unwrap_or("Dataset Revisions");
+                    .map(|dataset| dataset.name)
+                    .unwrap_or_else(|| "Dataset Revisions".to_string());
                 view! { <PageHeader title/> }
             }}
             {move || {
                 if is_loading.get() {
                     view! { <EmptyState title="Loading revisions" message="Fetching dataset revision history."/> }.into_any()
                 } else if let Some(message) = load_error.get() {
-                    view! { <EmptyState title="Revision history unavailable" message=Box::leak(message.into_boxed_str())/> }.into_any()
+                    view! { <EmptyState title="Revision history unavailable" message=message/> }.into_any()
                 } else if revisions.get().is_empty() {
                     view! { <EmptyState title="No revisions" message="This dataset does not have revisions yet."/> }.into_any()
                 } else {
@@ -243,7 +243,7 @@ pub fn DatasetRevisionDetailContent(dataset_id: String, revision_id: String) -> 
                 if is_loading.get() {
                     view! { <EmptyState title="Loading revision" message="Fetching dataset revision detail."/> }.into_any()
                 } else if let Some(message) = load_error.get() {
-                    view! { <EmptyState title="Revision unavailable" message=Box::leak(message.into_boxed_str())/> }.into_any()
+                    view! { <EmptyState title="Revision unavailable" message=message/> }.into_any()
                 } else if let Some(loaded) = revision.get() {
                     let detail_href = format!("/datasets/{}", loaded.dataset_id);
                     let history_href_for_breadcrumb = format!("/datasets/{}/revisions", loaded.dataset_id);
@@ -292,7 +292,7 @@ pub fn DatasetRevisionDetailContent(dataset_id: String, revision_id: String) -> 
                                 <BreadcrumbPage>"Dataset Revision"</BreadcrumbPage>
                             </BreadcrumbItem>
                         </Breadcrumb>
-                        <PageHeader title=Box::leak(loaded.metadata.name.clone().into_boxed_str())/>
+                        <PageHeader title=loaded.metadata.name.clone()/>
                         {move || publish_error.get().map(|message| view! { <p class="form-status is-error">{message}</p> })}
                         {move || publish_message.get().map(|message| view! { <p class="form-status is-success">{message}</p> })}
                         {move || options_error.get().map(|message| view! { <p class="form-status is-error">{message}</p> })}
@@ -542,7 +542,7 @@ pub fn DatasetPreviewContent(dataset_id: String) -> impl IntoView {
                 if is_loading.get() {
                     view! { <EmptyState title="Loading preview" message="Fetching dataset preview rows."/> }.into_any()
                 } else if let Some(message) = load_error.get() {
-                    view! { <EmptyState title="Preview unavailable" message=Box::leak(message.into_boxed_str())/> }.into_any()
+                    view! { <EmptyState title="Preview unavailable" message=message/> }.into_any()
                 } else if let Some(loaded) = dataset.get() {
                     view! {
                         <section class="dataset-preview-page__content">

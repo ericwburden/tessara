@@ -47,7 +47,7 @@ pub(crate) fn DatasetDetailSurface(dataset_id: String, edit: bool) -> impl IntoV
                 if is_loading.get() {
                     view! { <EmptyState title="Loading dataset" message="Fetching dataset definition."/> }.into_any()
                 } else if let Some(message) = load_error.get() {
-                    view! { <EmptyState title="Dataset unavailable" message=Box::leak(message.into_boxed_str())/> }.into_any()
+                    view! { <EmptyState title="Dataset unavailable" message=message/> }.into_any()
                 } else if let Some(loaded) = dataset.get() {
                     let edit_href = format!("/datasets/{}/edit", loaded.id);
                     let revisions_href = format!("/datasets/{}/revisions", loaded.id);
@@ -63,7 +63,7 @@ pub(crate) fn DatasetDetailSurface(dataset_id: String, edit: bool) -> impl IntoV
                                 <BreadcrumbPage>"Dataset Detail"</BreadcrumbPage>
                             </BreadcrumbItem>
                         </Breadcrumb>
-                        <PageHeader title=Box::leak(loaded.name.clone().into_boxed_str())>
+                        <PageHeader title=loaded.name.clone()>
                             {move || if can_manage() && !edit {
                                 view! {
                                     <div class="button-row">
@@ -168,7 +168,7 @@ pub(crate) fn DatasetPreviewTable(
     error: Option<String>,
 ) -> impl IntoView {
     if let Some(message) = error {
-        return view! { <EmptyState title="Preview unavailable" message=Box::leak(message.into_boxed_str())/> }.into_any();
+        return view! { <EmptyState title="Preview unavailable" message=message/> }.into_any();
     }
     let Some(table) = table else {
         return view! { <EmptyState title="Loading preview" message="Fetching dataset preview rows."/> }.into_any();

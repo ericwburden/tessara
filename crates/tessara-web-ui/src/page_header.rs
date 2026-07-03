@@ -6,8 +6,8 @@ use leptos::prelude::*;
 
 #[component]
 pub fn PageHeader(
-    title: &'static str,
-    #[prop(optional)] description: Option<&'static str>,
+    #[prop(into)] title: String,
+    #[prop(optional, into)] description: Option<String>,
     #[prop(optional)] children: Option<Children>,
 ) -> impl IntoView {
     view! {
