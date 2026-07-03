@@ -53,8 +53,8 @@ use restriction_tiers::{
     tier_access_predicate,
 };
 use review::{
-    carry_forward_state_for, compatibility_findings, compatibility_summary, dependency_summary,
-    load_dependency_impacts,
+    DependencyImpactScope, carry_forward_state_for, compatibility_findings, compatibility_summary,
+    dependency_summary, load_dependency_impacts,
 };
 pub(crate) use routes::routes;
 
@@ -553,7 +553,10 @@ pub async fn save_dataset_draft_revision(
         compute_dataset_publish_semantic_version(&state.pool, dataset_id, revision_id).await?;
     update_revision_semantic_fields(&state.pool, revision_id, semantic_version, semantic_bump)
         .await?;
-    let review = load_dataset_revision_review(&state.pool, dataset_id, revision_id).await?;
+    let dependency_scope = dependency_impact_scope(&state.pool, &account).await?;
+    let review =
+        load_dataset_revision_review(&state.pool, &dependency_scope, dataset_id, revision_id)
+            .await?;
     Ok(Json(DatasetDraftRevisionResponse {
         dataset_id,
         revision_id,
@@ -606,7 +609,10 @@ pub async fn publish_dataset_revision(
             .await?;
     let (semantic_version, semantic_bump) =
         compute_dataset_publish_semantic_version(&state.pool, dataset_id, revision_id).await?;
-    let draft_review = load_dataset_revision_review(&state.pool, dataset_id, revision_id).await?;
+    let dependency_scope = dependency_impact_scope(&state.pool, &account).await?;
+    let draft_review =
+        load_dataset_revision_review(&state.pool, &dependency_scope, dataset_id, revision_id)
+            .await?;
     require_publishable_changelog(&draft_review.compatibility_findings)?;
 
     let mut tx = state.pool.begin().await?;
@@ -692,7 +698,9 @@ pub async fn publish_dataset_revision(
     refresh_major_line_consumers(&mut tx, dataset_id, semantic_version.major).await?;
     tx.commit().await?;
 
-    let review = load_dataset_revision_review(&state.pool, dataset_id, revision_id).await?;
+    let review =
+        load_dataset_revision_review(&state.pool, &dependency_scope, dataset_id, revision_id)
+            .await?;
     Ok(Json(DatasetPublishRevisionResponse {
         dataset_id,
         revision_id,
@@ -848,7 +856,10 @@ pub async fn update_dataset_revision_options(
     update_revision_semantic_fields(&state.pool, revision_id, semantic_version, semantic_bump)
         .await?;
 
-    let review = load_dataset_revision_review(&state.pool, dataset_id, revision_id).await?;
+    let dependency_scope = dependency_impact_scope(&state.pool, &account).await?;
+    let review =
+        load_dataset_revision_review(&state.pool, &dependency_scope, dataset_id, revision_id)
+            .await?;
     Ok(Json(dataset_revision_detail_from_review(review)))
 }
 
@@ -1262,7 +1273,10 @@ pub async fn get_dataset_revision(
     require_dataset_visible_for_boundary(&state.pool, dataset_id, &boundary, "datasets:read")
         .await?;
 
-    let review = load_dataset_revision_review(&state.pool, dataset_id, revision_id).await?;
+    let dependency_scope = dependency_impact_scope(&state.pool, &account).await?;
+    let review =
+        load_dataset_revision_review(&state.pool, &dependency_scope, dataset_id, revision_id)
+            .await?;
     if review.snapshot.status == DatasetRevisionStatus::Draft
         && !dataset_fully_in_capability_scope(&state.pool, &account, "datasets:manage", dataset_id)
             .await?
@@ -1947,6 +1961,7 @@ async fn upsert_dataset_draft_revision(
 
 async fn load_dataset_revision_review(
     pool: &sqlx::PgPool,
+    dependency_scope: &DependencyImpactScope,
     dataset_id: Uuid,
     revision_id: Uuid,
 ) -> ApiResult<DatasetRevisionReview> {
@@ -1973,6 +1988,7 @@ async fn load_dataset_revision_review(
                 let current = load_revision_snapshot(pool, dataset_id, current_id).await?;
                 load_dependency_impacts(
                     pool,
+                    dependency_scope,
                     current_id,
                     dataset_id,
                     current.version_major,
@@ -1987,6 +2003,7 @@ async fn load_dataset_revision_review(
         DatasetRevisionStatus::Published | DatasetRevisionStatus::Superseded => {
             load_dependency_impacts(
                 pool,
+                dependency_scope,
                 snapshot.id,
                 dataset_id,
                 snapshot.version_major,
@@ -2005,6 +2022,17 @@ async fn load_dataset_revision_review(
         compatibility_findings,
         dependencies,
         dependency_impacts,
+    })
+}
+
+async fn dependency_impact_scope(
+    pool: &sqlx::PgPool,
+    account: &auth::AccountContext,
+) -> ApiResult<DependencyImpactScope> {
+    Ok(DependencyImpactScope {
+        datasets: auth::capability_boundary(pool, account, "datasets:read").await?,
+        components: auth::capability_boundary(pool, account, "components:read").await?,
+        dashboards: auth::capability_boundary(pool, account, "dashboards:read").await?,
     })
 }
 

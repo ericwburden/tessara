@@ -624,6 +624,7 @@ fn restriction_policy_json(
 
 pub(super) async fn load_dependency_impacts(
     pool: &sqlx::PgPool,
+    scope: &DependencyImpactScope,
     pinned_revision_id: Uuid,
     source_dataset_id: Uuid,
     current_version_major: Option<i32>,
@@ -634,19 +635,41 @@ pub(super) async fn load_dependency_impacts(
     let message = carry_forward_message(carry_forward_state).to_string();
     let mut impacts = Vec::new();
 
-    for row in sqlx::query(
-        r#"
+    let dataset_rows = match &scope.datasets {
+        auth::CapabilityBoundary::Global => {
+            sqlx::query(
+                r#"
         SELECT datasets.id, datasets.name
         FROM dataset_sources
         JOIN datasets ON datasets.id = dataset_sources.dataset_id
         WHERE dataset_sources.dataset_revision_id = $1
         ORDER BY datasets.name
         "#,
-    )
-    .bind(pinned_revision_id)
-    .fetch_all(pool)
-    .await?
-    {
+            )
+            .bind(pinned_revision_id)
+            .fetch_all(pool)
+            .await?
+        }
+        auth::CapabilityBoundary::Scoped(scope_ids) => {
+            sqlx::query(
+                r#"
+        SELECT DISTINCT datasets.id, datasets.name
+        FROM dataset_sources
+        JOIN datasets ON datasets.id = dataset_sources.dataset_id
+        JOIN dataset_scope_nodes ON dataset_scope_nodes.dataset_id = datasets.id
+        WHERE dataset_sources.dataset_revision_id = $1
+          AND dataset_scope_nodes.node_id = ANY($2)
+        ORDER BY datasets.name
+        "#,
+            )
+            .bind(pinned_revision_id)
+            .bind(scope_ids)
+            .fetch_all(pool)
+            .await?
+        }
+        auth::CapabilityBoundary::None => Vec::new(),
+    };
+    for row in dataset_rows {
         impacts.push(DatasetDependencyImpact {
             kind: DatasetDependencyKind::Dataset,
             id: row.try_get("id")?,
@@ -672,8 +695,10 @@ pub(super) async fn load_dependency_impacts(
         } else {
             DatasetCarryForwardState::ManualReview
         };
-        for row in sqlx::query(
-            r#"
+        let major_line_rows = match &scope.datasets {
+            auth::CapabilityBoundary::Global => {
+                sqlx::query(
+                    r#"
             SELECT datasets.id, datasets.name
             FROM dataset_sources
             JOIN datasets ON datasets.id = dataset_sources.dataset_id
@@ -681,12 +706,34 @@ pub(super) async fn load_dependency_impacts(
               AND dataset_sources.dataset_version_major = $2
             ORDER BY datasets.name
             "#,
-        )
-        .bind(source_dataset_id)
-        .bind(current_major)
-        .fetch_all(pool)
-        .await?
-        {
+                )
+                .bind(source_dataset_id)
+                .bind(current_major)
+                .fetch_all(pool)
+                .await?
+            }
+            auth::CapabilityBoundary::Scoped(scope_ids) => {
+                sqlx::query(
+                    r#"
+            SELECT DISTINCT datasets.id, datasets.name
+            FROM dataset_sources
+            JOIN datasets ON datasets.id = dataset_sources.dataset_id
+            JOIN dataset_scope_nodes ON dataset_scope_nodes.dataset_id = datasets.id
+            WHERE dataset_sources.source_dataset_id = $1
+              AND dataset_sources.dataset_version_major = $2
+              AND dataset_scope_nodes.node_id = ANY($3)
+            ORDER BY datasets.name
+            "#,
+                )
+                .bind(source_dataset_id)
+                .bind(current_major)
+                .bind(scope_ids)
+                .fetch_all(pool)
+                .await?
+            }
+            auth::CapabilityBoundary::None => Vec::new(),
+        };
+        for row in major_line_rows {
             impacts.push(DatasetDependencyImpact {
                 kind: DatasetDependencyKind::Dataset,
                 id: row.try_get("id")?,
@@ -700,8 +747,10 @@ pub(super) async fn load_dependency_impacts(
         }
     }
 
-    for row in sqlx::query(
-        r#"
+    let component_rows = match &scope.components {
+        auth::CapabilityBoundary::Global => {
+            sqlx::query(
+                r#"
         SELECT component_versions.id,
                components.name || ' ' || component_versions.version_label AS name
         FROM component_versions
@@ -709,11 +758,33 @@ pub(super) async fn load_dependency_impacts(
         WHERE component_versions.dataset_revision_id = $1
         ORDER BY components.name, component_versions.version_number
         "#,
-    )
-    .bind(pinned_revision_id)
-    .fetch_all(pool)
-    .await?
-    {
+            )
+            .bind(pinned_revision_id)
+            .fetch_all(pool)
+            .await?
+        }
+        auth::CapabilityBoundary::Scoped(scope_ids) => {
+            sqlx::query(
+                r#"
+        SELECT DISTINCT component_versions.id,
+               components.name || ' ' || component_versions.version_label AS name
+        FROM component_versions
+        JOIN components ON components.id = component_versions.component_id
+        JOIN dataset_revisions ON dataset_revisions.id = component_versions.dataset_revision_id
+        JOIN dataset_scope_nodes ON dataset_scope_nodes.dataset_id = dataset_revisions.dataset_id
+        WHERE component_versions.dataset_revision_id = $1
+          AND dataset_scope_nodes.node_id = ANY($2)
+        ORDER BY name
+        "#,
+            )
+            .bind(pinned_revision_id)
+            .bind(scope_ids)
+            .fetch_all(pool)
+            .await?
+        }
+        auth::CapabilityBoundary::None => Vec::new(),
+    };
+    for row in component_rows {
         impacts.push(DatasetDependencyImpact {
             kind: DatasetDependencyKind::ComponentVersion,
             id: row.try_get("id")?,
@@ -726,8 +797,10 @@ pub(super) async fn load_dependency_impacts(
         });
     }
 
-    for row in sqlx::query(
-        r#"
+    let dashboard_rows = match &scope.dashboards {
+        auth::CapabilityBoundary::Global => {
+            sqlx::query(
+                r#"
         SELECT dashboards.id, dashboards.name
         FROM dashboard_components
         JOIN dashboards ON dashboards.id = dashboard_components.dashboard_id
@@ -735,11 +808,32 @@ pub(super) async fn load_dependency_impacts(
         WHERE component_versions.dataset_revision_id = $1
         ORDER BY dashboards.name
         "#,
-    )
-    .bind(pinned_revision_id)
-    .fetch_all(pool)
-    .await?
-    {
+            )
+            .bind(pinned_revision_id)
+            .fetch_all(pool)
+            .await?
+        }
+        auth::CapabilityBoundary::Scoped(scope_ids) => {
+            sqlx::query(
+                r#"
+        SELECT DISTINCT dashboards.id, dashboards.name
+        FROM dashboard_components
+        JOIN dashboards ON dashboards.id = dashboard_components.dashboard_id
+        JOIN dashboard_scope_nodes ON dashboard_scope_nodes.dashboard_id = dashboards.id
+        JOIN component_versions ON component_versions.id = dashboard_components.component_version_id
+        WHERE component_versions.dataset_revision_id = $1
+          AND dashboard_scope_nodes.node_id = ANY($2)
+        ORDER BY dashboards.name
+        "#,
+            )
+            .bind(pinned_revision_id)
+            .bind(scope_ids)
+            .fetch_all(pool)
+            .await?
+        }
+        auth::CapabilityBoundary::None => Vec::new(),
+    };
+    for row in dashboard_rows {
         impacts.push(DatasetDependencyImpact {
             kind: DatasetDependencyKind::Dashboard,
             id: row.try_get("id")?,
@@ -753,6 +847,12 @@ pub(super) async fn load_dependency_impacts(
     }
 
     Ok(impacts)
+}
+
+pub(super) struct DependencyImpactScope {
+    pub(super) datasets: auth::CapabilityBoundary,
+    pub(super) components: auth::CapabilityBoundary,
+    pub(super) dashboards: auth::CapabilityBoundary,
 }
 
 pub(super) fn dependency_summary(impacts: &[DatasetDependencyImpact]) -> DatasetDependencySummary {

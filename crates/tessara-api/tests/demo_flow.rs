@@ -139,6 +139,41 @@ async fn demo_seed_uses_capability_scope_ownership_and_components() {
             .iter()
             .any(|impact| impact["kind"] == "dashboard" && impact["id"] == seed["dashboard_id"])
     );
+
+    let operator_token = login_token_for(
+        app.clone(),
+        "operator@tessara.local",
+        "tessara-dev-operator",
+    )
+    .await;
+    let scoped_seeded_revision = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!(
+                "/api/datasets/{}/revisions/{}",
+                seed["dataset_id"].as_str().expect("dataset id"),
+                seed["dataset_revision_id"]
+                    .as_str()
+                    .expect("dataset revision id")
+            ),
+            &operator_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(
+        scoped_seeded_revision["dependencies"]["component_version_count"],
+        0
+    );
+    assert_eq!(scoped_seeded_revision["dependencies"]["dashboard_count"], 0);
+    assert!(
+        scoped_seeded_revision["dependency_impacts"]
+            .as_array()
+            .expect("scoped dependency impacts")
+            .iter()
+            .all(|impact| impact["kind"] != "component_version" && impact["kind"] != "dashboard")
+    );
     let label_update = request_json(
         app.clone(),
         authorized_request(
@@ -200,12 +235,6 @@ async fn demo_seed_uses_capability_scope_ownership_and_components() {
     assert_eq!(partial_notes_update["version_label"], "Retitled Seed");
     assert_eq!(partial_notes_update["revision_notes"], "Updated notes only");
 
-    let operator_token = login_token_for(
-        app.clone(),
-        "operator@tessara.local",
-        "tessara-dev-operator",
-    )
-    .await;
     let operator_me = request_json(
         app.clone(),
         authorized_request("GET", "/api/me", &operator_token, None),
