@@ -51,12 +51,6 @@ pub(crate) fn SourceOptionsFields(
                                     <span>"Dataset"</span>
                                     <select prop:value=source.dataset_id.clone() on:change=move |event| {
                                         let dataset_id = event_target_value(&event);
-                                        let revision_id = datasets
-                                            .get()
-                                            .into_iter()
-                                            .find(|dataset| dataset.id == dataset_id)
-                                            .and_then(|dataset| dataset.current_revision_id)
-                                            .unwrap_or_default();
                                         let selected_dataset = datasets
                                             .get()
                                             .into_iter()
@@ -67,7 +61,7 @@ pub(crate) fn SourceOptionsFields(
                                             .or_else(|| selected_dataset.and_then(|dataset| dataset.major_versions.first().copied()));
                                         let mut next_source = source_signal.get();
                                         next_source.dataset_id = dataset_id;
-                                        next_source.dataset_revision_id = revision_id;
+                                        next_source.dataset_revision_id.clear();
                                         next_source.dataset_version_major = version_major;
                                         on_source_change.run(next_source);
                                     }>

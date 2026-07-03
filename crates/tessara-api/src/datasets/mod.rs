@@ -986,10 +986,10 @@ pub async fn list_datasets(
     };
     let visibility_nodes =
         load_dataset_visibility_nodes(&state.pool, &dataset_ids, visible_node_filter).await?;
-    let mut output_fields_by_revision = BTreeMap::<Uuid, Vec<DatasetFieldDefinition>>::new();
+    let mut revision_fields_by_id = BTreeMap::<Uuid, DatasetRevisionFieldSummary>::new();
     let revision_rows = sqlx::query(
         r#"
-        SELECT dataset_id, id, version_major, status::text AS status
+        SELECT dataset_id, id, version_number, version_major, version_minor, version_patch, status::text AS status
         FROM dataset_revisions
         WHERE dataset_id = ANY($1)
         ORDER BY dataset_id, version_number
@@ -1003,7 +1003,10 @@ pub async fn list_datasets(
     for row in revision_rows {
         let dataset_id: Uuid = row.try_get("dataset_id")?;
         let revision_id: Uuid = row.try_get("id")?;
+        let version_number: i32 = row.try_get("version_number")?;
         let version_major: Option<i32> = row.try_get("version_major")?;
+        let version_minor: Option<i32> = row.try_get("version_minor")?;
+        let version_patch: Option<i32> = row.try_get("version_patch")?;
         let status: String = row.try_get("status")?;
         if status != "draft" {
             if let Some(version_major) = version_major {
@@ -1022,7 +1025,17 @@ pub async fn list_datasets(
             .iter()
             .map(dataset_field_definition)
             .collect::<Vec<_>>();
-        output_fields_by_revision.insert(revision_id, fields);
+        revision_fields_by_id.insert(
+            revision_id,
+            DatasetRevisionFieldSummary {
+                id: revision_id,
+                version_number,
+                version_major,
+                version_minor,
+                version_patch,
+                output_fields: fields,
+            },
+        );
     }
 
     let datasets = rows
@@ -1049,19 +1062,17 @@ pub async fn list_datasets(
                 source_count: row.try_get("source_count")?,
                 field_count: row.try_get("field_count")?,
                 output_fields: current_revision_id
-                    .and_then(|revision_id| output_fields_by_revision.get(&revision_id).cloned())
+                    .and_then(|revision_id| {
+                        revision_fields_by_id
+                            .get(&revision_id)
+                            .map(|revision| revision.output_fields.clone())
+                    })
                     .unwrap_or_default(),
                 revisions: revisions_by_dataset
                     .get(&id)
                     .into_iter()
                     .flat_map(|revision_ids| revision_ids.iter())
-                    .map(|revision_id| DatasetRevisionFieldSummary {
-                        id: *revision_id,
-                        output_fields: output_fields_by_revision
-                            .get(revision_id)
-                            .cloned()
-                            .unwrap_or_default(),
-                    })
+                    .filter_map(|revision_id| revision_fields_by_id.get(revision_id).cloned())
                     .collect(),
             })
         })

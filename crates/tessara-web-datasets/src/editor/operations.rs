@@ -1427,6 +1427,10 @@ mod tests {
             output_fields: output_fields.clone(),
             revisions: vec![crate::types::DatasetRevisionFieldSummary {
                 id: revision_id.into(),
+                version_number: 1,
+                version_major: Some(1),
+                version_minor: Some(0),
+                version_patch: Some(0),
                 output_fields,
             }],
         }
@@ -1625,6 +1629,10 @@ mod tests {
             .revisions
             .push(crate::types::DatasetRevisionFieldSummary {
                 id: "revision_1".into(),
+                version_number: 1,
+                version_major: Some(1),
+                version_minor: Some(0),
+                version_patch: Some(0),
                 output_fields: vec![
                     DatasetFieldDefinition {
                         key: "source_1__focus_tags".into(),
@@ -1653,6 +1661,76 @@ mod tests {
             vec![
                 "upstream__source_1__focus_tags".to_string(),
                 "upstream__source_1__submitted_at".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn dataset_major_source_catalog_uses_selected_major_line_output_fields() {
+        let mut source = dataset_source("upstream", "dataset_1", "");
+        source.dataset_version_major = Some(1);
+        let mut dataset = dataset_summary(
+            "dataset_1",
+            "revision_3",
+            vec![("source_1__major_two_only", "Major Two Only", "text")],
+        );
+        dataset.current_version_major = Some(2);
+        dataset.major_versions = vec![1, 2];
+        dataset.revisions[0].version_number = 3;
+        dataset.revisions[0].version_major = Some(2);
+        dataset
+            .revisions
+            .push(crate::types::DatasetRevisionFieldSummary {
+                id: "revision_1".into(),
+                version_number: 1,
+                version_major: Some(1),
+                version_minor: Some(0),
+                version_patch: Some(0),
+                output_fields: vec![DatasetFieldDefinition {
+                    key: "source_1__major_one_field".into(),
+                    label: "Major One Field".into(),
+                    source_alias: "source_1".into(),
+                    source_field_key: "source_1__major_one_field".into(),
+                    field_type: "number".into(),
+                    position: 0,
+                }],
+            });
+        dataset
+            .revisions
+            .push(crate::types::DatasetRevisionFieldSummary {
+                id: "revision_2".into(),
+                version_number: 2,
+                version_major: Some(1),
+                version_minor: Some(1),
+                version_patch: Some(0),
+                output_fields: vec![
+                    DatasetFieldDefinition {
+                        key: "source_1__major_one_field".into(),
+                        label: "Major One Field".into(),
+                        source_alias: "source_1".into(),
+                        source_field_key: "source_1__major_one_field".into(),
+                        field_type: "number".into(),
+                        position: 0,
+                    },
+                    DatasetFieldDefinition {
+                        key: "source_1__major_one_added".into(),
+                        label: "Major One Added".into(),
+                        source_alias: "source_1".into(),
+                        source_field_key: "source_1__major_one_added".into(),
+                        field_type: "text".into(),
+                        position: 1,
+                    },
+                ],
+            });
+        let datasets = vec![dataset];
+
+        let fields = source_fields_for_source(&source, &datasets, &[], &BTreeMap::new());
+
+        assert_eq!(
+            field_keys(fields),
+            vec![
+                "upstream__source_1__major_one_added".to_string(),
+                "upstream__source_1__major_one_field".to_string(),
             ]
         );
     }

@@ -278,6 +278,10 @@ pub(crate) struct DatasetVisibilityNode {
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 pub(crate) struct DatasetRevisionFieldSummary {
     pub(crate) id: String,
+    pub(crate) version_number: i32,
+    pub(crate) version_major: Option<i32>,
+    pub(crate) version_minor: Option<i32>,
+    pub(crate) version_patch: Option<i32>,
     #[serde(default)]
     pub(crate) output_fields: Vec<DatasetFieldDefinition>,
 }

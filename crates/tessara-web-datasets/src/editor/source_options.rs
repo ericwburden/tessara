@@ -62,10 +62,27 @@ pub(crate) fn source_field_options(
                         == Some(source.dataset_revision_id.as_str())
             })
             .map(|dataset| {
-                let fields = dataset
-                    .revisions
-                    .iter()
-                    .find(|revision| revision.id == source.dataset_revision_id)
+                let fields = source
+                    .dataset_version_major
+                    .and_then(|version_major| {
+                        dataset
+                            .revisions
+                            .iter()
+                            .filter(|revision| revision.version_major == Some(version_major))
+                            .max_by_key(|revision| {
+                                (
+                                    revision.version_minor.unwrap_or_default(),
+                                    revision.version_patch.unwrap_or_default(),
+                                    revision.version_number,
+                                )
+                            })
+                    })
+                    .or_else(|| {
+                        dataset
+                            .revisions
+                            .iter()
+                            .find(|revision| revision.id == source.dataset_revision_id)
+                    })
                     .map(|revision| revision.output_fields.as_slice())
                     .unwrap_or(dataset.output_fields.as_slice());
                 fields
