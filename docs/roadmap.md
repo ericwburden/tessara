@@ -152,6 +152,7 @@ Workflow and response runtime:
 
 - Improve workflow assignment lists with table-grade sort and filter controls for workflow, node, assignee, assignment status, and acting context.
 - Decide whether workflow assignments need explicit one-time versus recurring behavior before introducing recurring assignment UX or scheduling semantics.
+- Review workflow publish semantics for branching and sibling step form scopes. Older workflow-runtime expectations treated some branching/sibling scope combinations as invalid at publish time, while the current workflow publisher permits them. Decide whether this was stale test coverage or a dropped product rule; then either implement and document publish-time validation with regression coverage, or document the permissive behavior and keep tests aligned with it.
 - Extend workflow runtime beyond same-assignee automatic handoff only when there is a complete model for per-step assignees, operator-mediated handoff, and capability-aware reassignment.
 - Define the durable form/workflow version lifecycle model: at most one draft and one active version, publish retires the prior active version, retained responses stay pinned to retired versions, and operators choose whether retired-version assignments migrate to the new active version.
 - Keep response starts assignment-only. Form-first starts should continue to flow through generated single-form workflow shortcuts and then start a workflow assignment.

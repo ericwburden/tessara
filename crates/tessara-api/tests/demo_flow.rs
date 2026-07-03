@@ -165,15 +165,22 @@ async fn demo_seed_uses_capability_scope_ownership_and_components() {
     .await;
     assert_eq!(
         scoped_seeded_revision["dependencies"]["component_version_count"],
-        0
+        1
     );
-    assert_eq!(scoped_seeded_revision["dependencies"]["dashboard_count"], 0);
+    assert_eq!(scoped_seeded_revision["dependencies"]["dashboard_count"], 1);
     assert!(
         scoped_seeded_revision["dependency_impacts"]
             .as_array()
             .expect("scoped dependency impacts")
             .iter()
-            .all(|impact| impact["kind"] != "component_version" && impact["kind"] != "dashboard")
+            .any(|impact| impact["kind"] == "component_version")
+    );
+    assert!(
+        scoped_seeded_revision["dependency_impacts"]
+            .as_array()
+            .expect("scoped dependency impacts")
+            .iter()
+            .any(|impact| impact["kind"] == "dashboard")
     );
     let admin_revision_history = request_json(
         app.clone(),
@@ -223,11 +230,11 @@ async fn demo_seed_uses_capability_scope_ownership_and_components() {
         .expect("scoped seeded revision summary");
     assert_eq!(
         scoped_seeded_revision_summary["dependencies"]["component_version_count"],
-        0
+        1
     );
     assert_eq!(
         scoped_seeded_revision_summary["dependencies"]["dashboard_count"],
-        0
+        1
     );
     let label_update = request_json(
         app.clone(),
@@ -615,10 +622,10 @@ async fn dataset_advanced_authoring_compiles_typed_fields_and_restriction_preced
     assert!(preview_sql.contains("snot"));
     assert!(
         preview_sql
-            .find("\"restricted_flag\"")
+            .find("WHEN LOWER(COALESCE(\"restricted_flag\", '')) IN")
             .expect("restricted flag tier branch")
             < preview_sql
-                .find("\"internal_flag\"")
+                .find("WHEN LOWER(COALESCE(\"internal_flag\", '')) IN")
                 .expect("internal flag tier branch"),
         "the more sensitive restricted tier should be evaluated before internal when multiple flags are true"
     );
@@ -1063,13 +1070,24 @@ async fn dataset_revision_draft_publish_preserves_current_until_publish() {
     );
     assert_eq!(draft_detail["materialized_table"], Value::Null);
     assert_revision_fields(&draft_detail, &[first_key, second_key]);
-    assert_eq!(draft_detail["dependencies"]["dataset_count"], 1);
+    assert_eq!(draft_detail["dependencies"]["dataset_count"], 2);
     assert!(
         draft_detail["dependency_impacts"]
             .as_array()
             .expect("dependency impacts")
             .iter()
             .any(|impact| { impact["kind"] == "dataset" && impact["id"] == dependent_dataset_id })
+    );
+    assert!(
+        draft_detail["dependency_impacts"]
+            .as_array()
+            .expect("dependency impacts")
+            .iter()
+            .any(|impact| {
+                impact["kind"] == "dataset"
+                    && impact["binding_mode"] == "major_line"
+                    && impact["pinned_version_major"] == 1
+            })
     );
     assert!(
         draft_detail["compatibility_findings"]
@@ -1941,15 +1959,8 @@ async fn admin_dataset_query_designer_materializes_generated_sql() {
             projection_operation(json!([{
                 "key": "public_value",
                 "label": "Public Value",
-                "source_alias": "public_form",
-                "source_field_key": field_key,
+                "input_field_key": format!("union_1__{field_key}"),
                 "position": 0
-            }, {
-                "key": "restricted_value",
-                "label": "Restricted Value",
-                "source_alias": "restricted_source",
-                "source_field_key": field_key,
-                "position": 1
             }]), 1),
             aggregation_operation(json!([]), json!([{
                 "key": "mixed_count",
@@ -2331,7 +2342,7 @@ async fn admin_dataset_query_designer_materializes_generated_sql() {
                     "source_field_key": field_key,
                     "position": 1
                 }
-            ]), 0)
+            ]), 1)
         ]
     });
     let hidden_join_key_preview = request_json(
@@ -2435,6 +2446,13 @@ async fn create_scoped_dataset_manager_token(
         .find(|capability| capability["key"] == "datasets:manage")
         .and_then(|capability| capability["id"].as_str())
         .expect("datasets:manage capability id");
+    let forms_read_capability_id = capabilities
+        .as_array()
+        .expect("capability list")
+        .iter()
+        .find(|capability| capability["key"] == "forms:read")
+        .and_then(|capability| capability["id"].as_str())
+        .expect("forms:read capability id");
 
     let role = request_json(
         app.clone(),
@@ -2444,7 +2462,7 @@ async fn create_scoped_dataset_manager_token(
             admin_token,
             Some(json!({
                 "name": format!("{display_name} Role"),
-                "capability_ids": [datasets_manage_capability_id]
+                "capability_ids": [datasets_manage_capability_id, forms_read_capability_id]
             })),
         ),
     )

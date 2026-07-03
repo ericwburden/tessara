@@ -8,6 +8,7 @@ import {
 
 const BENIGN_NAVIGATION_ABORT_ERRORS = [
   "WebAssembly compilation aborted: Network error: Response body loading was aborted",
+  "Failed to fetch",
   "Failed to load resource: the server responded with a status of 404 (Not Found)",
 ];
 

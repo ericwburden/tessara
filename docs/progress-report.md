@@ -5,6 +5,86 @@ artifacts, old sprint worktrees, `/app/*` routes, or earlier crate names. Use
 `docs/roadmap.md`, `docs/architecture.md`, and `docs/README.md` for current
 project direction.
 
+## 2026-07-03 - Sprint 3C Final Closeout Validation
+
+- Completed:
+  - reran Sprint 3C on a clean local deployment and reconciled validation drift found by the full closeout suite
+  - aligned dataset revision tests with the current `Version N` append-all materialization model and scoped component/dashboard visibility
+  - kept publish response display semantics explicit with `semantic_version` returning `vM.m.p`
+  - updated smoke validation to accept append-all major-line rows and aliased dataset output keys
+  - updated Playwright permission setup so the full browser suite can reuse an already seeded clean deployment instead of failing the empty-database seed guard
+  - refreshed workflow integration fixtures to match current workflow create payloads using `available_node_ids`
+- Validation:
+  - `cargo fmt --all` and `git diff --check` - passed
+  - `cargo test -p tessara-api --test demo_flow` - passed: 6/6 tests
+  - `.\scripts\smoke.ps1` - passed
+  - `cargo test -p tessara-api` - passed: 41 unit tests, 6 demo-flow tests, 25 workflow-runtime tests, and doc tests
+  - `cargo test -p tessara-web` - passed: 4 web tests and doc tests
+  - `.\scripts\local-launch.ps1 -FreshData` - passed and launched a seeded local stack at `http://localhost:8080`
+  - `npx playwright test` from `end2end/` - passed: 36/36 browser tests
+  - `.\scripts\local-launch.ps1 -FreshData -SkipSeed; .\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"` - passed for organization, forms, datasets, and seed flows against an empty refreshed database
+- Current local handoff state:
+  - the Tessara stack is running at `http://localhost:8080`
+  - demo accounts remain `admin@tessara.local`, `operator@tessara.local`, `delegator@tessara.local`, `respondent@tessara.local`, and `delegate@tessara.local` with their standard `tessara-dev-*` passwords
+  - the current database was refreshed during UAT and seeded by the UAT script
+- Next Sprint:
+  - Sprint 4A: Table Component Slice
+- Future Work:
+  - Add a full workflow publish-scope review for branching and sibling step form scopes. The current workflow publisher allows combinations that older workflow-runtime expectations treated as publish-invalid; that appears unrelated to Sprint 3C dataset work, but it needs a product decision and follow-up tests so the behavior is intentional rather than accidental.
+
+### Sprint Handoff / Demo Instructions
+
+#### Dataset Major-Line Revision Flow
+- Role: admin
+- Paths:
+  - `http://localhost:8080/datasets`
+  - `http://localhost:8080/datasets/{dataset_id}/edit`
+  - `http://localhost:8080/datasets/{dataset_id}/revisions`
+  - `http://localhost:8080/datasets/{dataset_id}/revisions/{revision_id}`
+- Steps:
+  1. Sign in as `admin@tessara.local`.
+  2. Open a seeded dataset and review the current `vM.m.p` revision history.
+  3. Edit the dataset, save a draft revision, add a revision label/notes, and review the Changelog.
+  4. Publish normally or choose the publish menu's new-major path.
+  5. Use another dataset's source picker to choose an upstream `Version N`.
+- Expected:
+  - revision detail shows semantic version, optional label, notes, changelog, dependency review, output fields, and generated SQL
+  - `Version N` means the prebuilt append-all major-line table for that major version
+  - compatible minor/patch publishes update consumers bound to that major line; new major publishes leave existing `Version N` consumers unchanged
+- Acceptance check:
+  - pass when exact revisions remain pinned, major-line sources compile from `dataset_major_materializations`, and source picker fields stay on the selected major line after a newer major exists
+- Evidence location:
+  - `crates/tessara-api/tests/demo_flow.rs` -> `dataset_revision_draft_publish_preserves_current_until_publish`
+  - `end2end/tests/datasets.spec.ts` -> `dataset source picker keeps Version N major-line fields after a newer major exists`
+
+#### Closeout Validation Reproduction
+- Role: developer
+- Commands:
+  - `cargo fmt --all`
+  - `cargo test -p tessara-api`
+  - `cargo test -p tessara-web`
+  - `.\scripts\smoke.ps1`
+  - `.\scripts\local-launch.ps1 -FreshData`
+  - from `end2end/`: `npx playwright test`
+  - `.\scripts\local-launch.ps1 -FreshData -SkipSeed; .\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`
+- Expected:
+  - all commands pass
+  - UAT seed path starts from an empty refreshed database
+  - the app remains available at `http://localhost:8080` for manual review
+
+### Acceptance Mapping
+
+- Semantic revision publishing:
+  - covered by API demo-flow tests for draft save, no-op publish guard, normal publish, new-major publish, semantic version response, exact-revision pinning, and `Version N` major-line retention
+- Major-line materialization:
+  - covered by API assertions that same-major publishes rebuild append-all tables, older rows NULL-fill fields added later, and major-line consumers remain previewable/editable/publishable after upstream moves to a newer major
+- Changelog and publish guard:
+  - covered by dataset unit tests for major/minor/patch version-impact classification and the no-empty-changelog publish guard
+- Scoped dependency visibility:
+  - covered by API and Playwright permission tests for scoped revision history/detail behavior and scoped dependency summary visibility
+- Native dataset UI:
+  - covered by Playwright dataset revision history/detail/publish paths, source picker `Version N` fields, repeated navigation, SQL preview, and operation state reload coverage
+
 ## 2026-06-28 - Sprint 3C Dataset Revision And Compatibility Closeout
 
 - Completed:

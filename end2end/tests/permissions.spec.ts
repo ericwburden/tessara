@@ -156,6 +156,18 @@ async function expectJson<T>(response: APIResponse): Promise<T> {
   return JSON.parse(text) as T;
 }
 
+async function ensureDemoSeed(admin: APIRequestContext) {
+  const response = await admin.post("/api/demo/seed", { data: {} });
+  const text = await response.text();
+  if (response.ok()) {
+    return;
+  }
+  if (response.status() === 400 && text.includes("Demo seed requires an empty database")) {
+    return;
+  }
+  expect(response.ok(), `${response.url()} returned ${response.status()}: ${text}`).toBeTruthy();
+}
+
 async function getJson<T>(context: APIRequestContext, url: string) {
   return expectJson<T>(await context.get(url));
 }
@@ -263,7 +275,7 @@ async function createAssignmentFor(
 async function setupFixtures(): Promise<FixtureState> {
   const admin = await newContext();
   await signIn(admin, "admin@tessara.local", "tessara-dev-admin");
-  await postJson(admin, "/api/demo/seed", {});
+  await ensureDemoSeed(admin);
 
   const [
     noAccessRole,

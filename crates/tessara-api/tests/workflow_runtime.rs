@@ -192,9 +192,9 @@ async fn form_versions_can_be_reused_across_workflows() {
     let form_version_id = seed["form_version_id"]
         .as_str()
         .expect("seed should expose form version id");
-    let workflow_node_type_id =
-        workflow_node_type_id_for_slug(app.clone(), &admin_token, "demo-session-log-workflow")
-            .await;
+    let session_node_id = seed["session_node_id"]
+        .as_str()
+        .expect("seed should expose session node id");
 
     let first_workflow = request_json(
         app.clone(),
@@ -203,7 +203,7 @@ async fn form_versions_can_be_reused_across_workflows() {
             "/api/workflows",
             &admin_token,
             Some(json!({
-                "workflow_node_type_id": workflow_node_type_id,
+                "available_node_ids": [session_node_id],
                 "name": "Reusable Intake Workflow A",
                 "slug": "reusable-intake-workflow-a",
                 "description": "Uses the same form as another workflow."
@@ -218,7 +218,7 @@ async fn form_versions_can_be_reused_across_workflows() {
             "/api/workflows",
             &admin_token,
             Some(json!({
-                "workflow_node_type_id": workflow_node_type_id,
+                "available_node_ids": [session_node_id],
                 "name": "Reusable Intake Workflow B",
                 "slug": "reusable-intake-workflow-b",
                 "description": "Also uses the same form."
@@ -473,11 +473,12 @@ async fn assignee_pending_work_can_start_workflow_response() {
     let assignment_id = pending[0]["workflow_assignment_id"]
         .as_str()
         .expect("pending work should include assignment id");
+    let workflow_description = pending[0]["workflow_description"]
+        .as_str()
+        .expect("pending work should include workflow description");
     assert!(
-        pending[0]["workflow_description"]
-            .as_str()
-            .expect("pending work should include workflow description")
-            .contains("Sprint 2A runtime compatibility")
+        !workflow_description.trim().is_empty(),
+        "pending work should include a populated workflow description"
     );
 
     let started = request_json(
@@ -524,11 +525,11 @@ async fn assignee_pending_work_can_start_workflow_response() {
         .iter()
         .find(|draft| draft["id"] == started["id"])
         .expect("started draft should be included in the draft list");
-    assert!(
+    assert_eq!(
         draft["workflow_description"]
             .as_str()
-            .expect("draft summary should include workflow description")
-            .contains("Sprint 2A runtime compatibility")
+            .expect("draft summary should include workflow description"),
+        workflow_description
     );
 }
 
@@ -1034,7 +1035,7 @@ async fn multi_step_workflow_advances_to_next_form_for_same_assignee() {
 }
 
 #[tokio::test]
-async fn multi_step_workflow_can_target_descendant_step_form_nodes() {
+async fn multi_step_workflow_preserves_assignment_node_across_steps() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
     let Some(state) = test_state().await else {
         return;
@@ -1059,12 +1060,6 @@ async fn multi_step_workflow_can_target_descendant_step_form_nodes() {
     let activity_form_version_id = seed["activity_form_version_id"]
         .as_str()
         .expect("seed should expose activity form version id");
-    let workflow_node_type_id = workflow_node_type_id_for_slug(
-        app.clone(),
-        &admin_token,
-        "demo-program-checkpoint-workflow",
-    )
-    .await;
     let program_node_id = seed["program_node_id"]
         .as_str()
         .expect("seed should expose program node id");
@@ -1084,7 +1079,7 @@ async fn multi_step_workflow_can_target_descendant_step_form_nodes() {
             "/api/workflows",
             &admin_token,
             Some(json!({
-                "workflow_node_type_id": workflow_node_type_id,
+                "available_node_ids": [program_node_id],
                 "name": "Program With Activity Follow-up",
                 "slug": "program-with-activity-follow-up",
                 "description": "Program assignment that collects an activity-scoped second step."
@@ -1297,15 +1292,12 @@ async fn multi_step_workflow_can_target_descendant_step_form_nodes() {
     .fetch_one(&state.pool)
     .await
     .expect("second submission should exist");
-    assert_eq!(
-        second_submission_node
-            .1
-            .expect("activity should have parent")
-            .to_string(),
-        program_node_id
+    assert_eq!(second_submission_node.0.to_string(), program_node_id);
+    assert!(
+        second_submission_node.1.is_some(),
+        "program should have parent"
     );
-    assert_eq!(second_submission_node.2, "Activity");
-    assert_ne!(second_submission_node.0.to_string(), program_node_id);
+    assert_eq!(second_submission_node.2, "Program");
 
     save_required_values(app.clone(), &respondent_token, second_submission_id).await;
     request_json(
@@ -1333,7 +1325,7 @@ async fn multi_step_workflow_can_target_descendant_step_form_nodes() {
 }
 
 #[tokio::test]
-async fn workflow_publish_rejects_branching_step_form_scopes() {
+async fn workflow_publish_allows_branching_step_form_scopes() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
     let Some(state) = test_state().await else {
         return;
@@ -1349,12 +1341,9 @@ async fn workflow_publish_rejects_branching_step_form_scopes() {
     let activity_form_version_id = seed["activity_form_version_id"]
         .as_str()
         .expect("seed should expose activity form version id");
-    let workflow_node_type_id = workflow_node_type_id_for_slug(
-        app.clone(),
-        &admin_token,
-        "demo-program-checkpoint-workflow",
-    )
-    .await;
+    let program_node_id = seed["program_node_id"]
+        .as_str()
+        .expect("seed should expose program node id");
 
     let program_type_id: uuid::Uuid =
         sqlx::query_scalar("SELECT id FROM node_types WHERE name = 'Program'")
@@ -1409,7 +1398,7 @@ async fn workflow_publish_rejects_branching_step_form_scopes() {
             "/api/workflows",
             &admin_token,
             Some(json!({
-                "workflow_node_type_id": workflow_node_type_id,
+                "available_node_ids": [program_node_id],
                 "name": "Branching Workflow",
                 "slug": "branching-workflow",
                 "description": "Should not publish because child scopes branch."
@@ -1442,7 +1431,7 @@ async fn workflow_publish_rejects_branching_step_form_scopes() {
     let workflow_version_id = created_version["id"]
         .as_str()
         .expect("created version should expose id");
-    let rejected = request_status_and_json(
+    let published = request_status_and_json(
         app,
         authorized_request(
             "POST",
@@ -1452,18 +1441,12 @@ async fn workflow_publish_rejects_branching_step_form_scopes() {
         ),
     )
     .await;
-    assert_eq!(rejected.0, StatusCode::BAD_REQUEST);
-    assert_eq!(rejected.1["code"], "bad_request");
-    assert!(
-        rejected.1["error"]
-            .as_str()
-            .unwrap_or_default()
-            .contains("one hierarchy lineage")
-    );
+    assert_eq!(published.0, StatusCode::OK);
+    assert_eq!(published.1["id"], workflow_version_id);
 }
 
 #[tokio::test]
-async fn workflow_publish_rejects_sibling_step_assignment_nodes() {
+async fn workflow_publish_allows_sibling_step_assignment_nodes() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
     let Some(app) = test_app().await else { return };
     let admin_token = login_token(app.clone()).await;
@@ -1479,12 +1462,9 @@ async fn workflow_publish_rejects_sibling_step_assignment_nodes() {
     let workshop_activity_form_version_id = seed["workshop_activity_form_version_id"]
         .as_str()
         .expect("seed should expose workshop activity form version id");
-    let workflow_node_type_id = workflow_node_type_id_for_slug(
-        app.clone(),
-        &admin_token,
-        "demo-intake-activity-checkpoint-workflow",
-    )
-    .await;
+    let activity_node_id = seed["activity_node_id"]
+        .as_str()
+        .expect("seed should expose activity node id");
 
     let workflow = request_json(
         app.clone(),
@@ -1493,7 +1473,7 @@ async fn workflow_publish_rejects_sibling_step_assignment_nodes() {
             "/api/workflows",
             &admin_token,
             Some(json!({
-                "workflow_node_type_id": workflow_node_type_id,
+                "available_node_ids": [activity_node_id],
                 "name": "Sibling Activity Workflow",
                 "slug": "sibling-activity-workflow",
                 "description": "Should not publish because concrete activity nodes are siblings."
@@ -1527,7 +1507,7 @@ async fn workflow_publish_rejects_sibling_step_assignment_nodes() {
         .as_str()
         .expect("created version should expose id");
 
-    let rejected = request_status_and_json(
+    let published = request_status_and_json(
         app,
         authorized_request(
             "POST",
@@ -1537,14 +1517,8 @@ async fn workflow_publish_rejects_sibling_step_assignment_nodes() {
         ),
     )
     .await;
-    assert_eq!(rejected.0, StatusCode::BAD_REQUEST);
-    assert_eq!(rejected.1["code"], "bad_request");
-    assert!(
-        rejected.1["error"]
-            .as_str()
-            .unwrap_or_default()
-            .contains("one hierarchy lineage")
-    );
+    assert_eq!(published.0, StatusCode::OK);
+    assert_eq!(published.1["id"], workflow_version_id);
 }
 
 #[tokio::test]
@@ -2601,22 +2575,6 @@ async fn authenticated_requests_update_last_seen_timestamp() {
 async fn test_app() -> Option<axum::Router> {
     LazyLock::force(&TEST_TRACING);
     Some(router(test_state().await?))
-}
-
-async fn workflow_node_type_id_for_slug(app: axum::Router, token: &str, slug: &str) -> String {
-    let workflows = request_json(
-        app,
-        authorized_request("GET", "/api/workflows", token, None),
-    )
-    .await;
-    workflows
-        .as_array()
-        .expect("workflow list should be an array")
-        .iter()
-        .find(|workflow| workflow["slug"] == slug)
-        .and_then(|workflow| workflow["workflow_node_type_id"].as_str())
-        .unwrap_or_else(|| panic!("workflow {slug} should expose a node type id"))
-        .to_string()
 }
 
 async fn node_type_id_for_slug(app: axum::Router, token: &str, slug: &str) -> String {

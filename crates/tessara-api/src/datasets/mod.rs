@@ -330,6 +330,10 @@ impl DatasetSemanticVersion {
     fn label(self) -> String {
         format!("{}.{}.{}", self.major, self.minor, self.patch)
     }
+
+    fn display_label(self) -> String {
+        format!("v{}", self.label())
+    }
 }
 
 struct DatasetRevisionReview {
@@ -705,7 +709,7 @@ pub async fn publish_dataset_revision(
         dataset_id,
         revision_id,
         superseded_revision_id,
-        semantic_version: semantic_version.label(),
+        semantic_version: semantic_version.display_label(),
         version_label: draft.version_label,
         version_major: semantic_version.major,
         version_minor: semantic_version.minor,

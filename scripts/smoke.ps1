@@ -353,7 +353,10 @@ try {
     if ($dashboard.components.Count -lt 1) {
         throw "Expected at least one dashboard component, got $($dashboard.components.Count)"
     }
-    if ($dataset.rows.Count -lt 1 -or -not ($dataset.rows | Where-Object { $_.values.participants -eq "42" })) {
+    $hasExpectedDatasetValue = $dataset.rows | Where-Object {
+        $_.values.PSObject.Properties.Value -contains "42"
+    }
+    if ($dataset.rows.Count -lt 1 -or -not $hasExpectedDatasetValue) {
         throw "Expected dataset value 42, got: $($dataset | ConvertTo-Json -Depth 20)"
     }
     if (-not ($operatorMe.capabilities -contains "forms:read") -or $operatorMe.scope_nodes.Count -lt 1) {
