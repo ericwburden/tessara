@@ -989,7 +989,8 @@ pub async fn list_datasets(
     let mut revision_fields_by_id = BTreeMap::<Uuid, DatasetRevisionFieldSummary>::new();
     let revision_rows = sqlx::query(
         r#"
-        SELECT dataset_id, id, version_number, version_major, version_minor, version_patch, status::text AS status
+        SELECT dataset_id, id, version_number, version_major, version_minor, version_patch,
+               status::text AS status, output_fields
         FROM dataset_revisions
         WHERE dataset_id = ANY($1)
         ORDER BY dataset_id, version_number
@@ -1020,11 +1021,10 @@ pub async fn list_datasets(
             .entry(dataset_id)
             .or_default()
             .push(revision_id);
-        let fields = load_dataset_revision_output_fields(&state.pool, revision_id)
-            .await?
-            .iter()
-            .map(dataset_field_definition)
-            .collect::<Vec<_>>();
+        let fields = parse_json_or_default::<Vec<DatasetFieldDefinition>>(
+            row.try_get("output_fields")?,
+            "stored dataset revision output fields",
+        )?;
         revision_fields_by_id.insert(
             revision_id,
             DatasetRevisionFieldSummary {
