@@ -26,10 +26,16 @@ pub fn HomePage() -> impl IntoView {
     view! {
         <AppShell active_route="home" title="Home">
             <section class="route-panel home-page">
+                <PageHeader title="Home"/>
                 <section class="organization-detail-card organization-detail-card--wide">
-                    <PageHeader title="Assigned to Me">
-                        <a class="button button--secondary" href="/responses/new">"Start Response"</a>
-                    </PageHeader>
+                    <header class="page-header">
+                        <div>
+                            <h2>"Assigned to Me"</h2>
+                        </div>
+                        <div class="page-header__actions">
+                            <a class="button button--secondary" href="/responses/new">"Start Response"</a>
+                        </div>
+                    </header>
                     {move || {
                         if pending_work_loading.get() {
                             view! {

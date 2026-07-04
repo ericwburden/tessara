@@ -10,6 +10,7 @@ crate-type = ["cdylib", "rlib"]
 default = ["ssr"]
 hydrate = [
     "leptos/hydrate",
+    "tessara-web-components/hydrate",
     "tessara-web-datasets/hydrate",
     "tessara-web-forms/hydrate",
     "tessara-web-organization/hydrate",
@@ -21,6 +22,7 @@ ssr = [
     "leptos/ssr",
     "leptos_meta/ssr",
     "leptos_router/ssr",
+    "tessara-web-components/ssr",
     "tessara-web-datasets/ssr",
     "tessara-web-forms/ssr",
     "tessara-web-organization/ssr",
@@ -40,6 +42,7 @@ leptos_meta = { workspace = true }
 leptos_router = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+tessara-web-components = { path = "../tessara-web-components", default-features = false }
 tessara-web-datasets = { path = "../tessara-web-datasets" }
 tessara-web-forms = { path = "../tessara-web-forms", default-features = false }
 tessara-web-organization = { path = "../tessara-web-organization", default-features = false }

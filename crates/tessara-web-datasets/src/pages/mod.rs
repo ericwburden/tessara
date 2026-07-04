@@ -133,11 +133,10 @@ pub fn DatasetRevisionHistoryContent(dataset_id: String) -> impl IntoView {
                 </BreadcrumbItem>
             </Breadcrumb>
             {move || {
-                let title = dataset
-                    .get()
-                    .map(|dataset| dataset.name)
-                    .unwrap_or_else(|| "Dataset Revisions".to_string());
-                view! { <PageHeader title/> }
+                view! {
+                    <PageHeader title="Dataset Revisions"/>
+                    {dataset.get().map(|dataset| view! { <h2>{dataset.name}</h2> })}
+                }
             }}
             {move || {
                 if is_loading.get() {
@@ -294,7 +293,7 @@ pub fn DatasetRevisionDetailContent(dataset_id: String, revision_id: String) -> 
                                 <BreadcrumbPage>"Dataset Revision"</BreadcrumbPage>
                             </BreadcrumbItem>
                         </Breadcrumb>
-                        <PageHeader title=loaded.metadata.name.clone()/>
+                        <PageHeader title="Dataset Revision" description=loaded.metadata.name.clone()/>
                         {move || publish_error.get().map(|message| view! { <p class="form-status is-error">{message}</p> })}
                         {move || publish_message.get().map(|message| view! { <p class="form-status is-success">{message}</p> })}
                         {move || options_error.get().map(|message| view! { <p class="form-status is-error">{message}</p> })}

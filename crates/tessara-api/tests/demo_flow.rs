@@ -875,6 +875,130 @@ async fn dataset_revision_draft_publish_preserves_current_until_publish() {
     )
     .await;
     assert_table_values(&published_table, &[first_key], &[second_key]);
+    let initial_major_line_row_count = published_table["rows"]
+        .as_array()
+        .expect("initial dataset rows")
+        .len();
+    let component_slug = "revision-lifecycle-component-table";
+    let created_component = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/components",
+            &admin_token,
+            Some(json!({
+                "name": "Revision Lifecycle Component Table",
+                "slug": component_slug,
+                "description": "Component bound to Dataset major version 1 for revision lifecycle coverage.",
+                "version": {
+                    "dataset_id": dataset_id,
+                    "dataset_version_major": 1,
+                    "component_type": "detail_table",
+                    "config": {
+                        "columns": [first_key]
+                    },
+                    "publish": true
+                }
+            })),
+        ),
+    )
+    .await;
+    let component_id = created_component["id"]
+        .as_str()
+        .expect("revision lifecycle component id")
+        .to_string();
+    let component_table_before_publish = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/components/{component_slug}/table"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(component_table_before_publish["dataset_version_major"], 1);
+    assert_eq!(
+        component_table_before_publish["rows"]
+            .as_array()
+            .expect("component rows before publish")
+            .len(),
+        initial_major_line_row_count
+    );
+    let concurrent_draft_payload = json!({
+        "dataset_id": dataset_id,
+        "dataset_version_major": 1,
+        "component_type": "detail_table",
+        "config": {
+            "columns": [first_key],
+            "page_size": 25
+        },
+        "publish": false
+    });
+    let (first_concurrent_draft, second_concurrent_draft) = tokio::join!(
+        request_json(
+            app.clone(),
+            authorized_request(
+                "POST",
+                &format!("/api/admin/components/{component_id}/versions"),
+                &admin_token,
+                Some(concurrent_draft_payload.clone()),
+            ),
+        ),
+        request_json(
+            app.clone(),
+            authorized_request(
+                "POST",
+                &format!("/api/admin/components/{component_id}/versions"),
+                &admin_token,
+                Some(concurrent_draft_payload),
+            ),
+        )
+    );
+    assert_eq!(first_concurrent_draft["id"], second_concurrent_draft["id"]);
+    let component_after_concurrent_drafts = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/admin/components/{component_slug}"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    let versions_after_concurrent_drafts = component_after_concurrent_drafts["versions"]
+        .as_array()
+        .expect("component versions after concurrent drafts");
+    assert_eq!(
+        versions_after_concurrent_drafts
+            .iter()
+            .filter(|version| version["status"] == "draft")
+            .count(),
+        1,
+        "concurrent draft writes should converge on the one working draft"
+    );
+    assert_eq!(
+        versions_after_concurrent_drafts
+            .iter()
+            .filter(|version| version["status"] == "published")
+            .count(),
+        1,
+        "published component version should remain current while a draft is edited"
+    );
+    let revision_with_component_draft = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/datasets/{dataset_id}/revisions/{initial_revision_id}"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(
+        revision_with_component_draft["dependencies"]["component_version_count"], 1,
+        "working component drafts should not inflate published-history dependency counts"
+    );
     let no_op_draft = request_json(
         app.clone(),
         authorized_request(
@@ -1328,6 +1452,28 @@ async fn dataset_revision_draft_publish_preserves_current_until_publish() {
         major_dependent_before_count * 2,
         "major-line consumers should be rematerialized from every revision in the selected major"
     );
+    let component_table_after_major_one_publish = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/components/{component_slug}/table"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(
+        component_table_after_major_one_publish["dataset_version_major"],
+        1
+    );
+    assert_eq!(
+        component_table_after_major_one_publish["rows"]
+            .as_array()
+            .expect("component rows after major one publish")
+            .len(),
+        initial_major_line_row_count * 2,
+        "component bound to Dataset v1 should include compatible v1 minor/patch rows"
+    );
     assert_major_line_null_fills_added_field(dataset_id, 1, &second_key).await;
 
     let history_after_publish = request_json(
@@ -1442,6 +1588,28 @@ async fn dataset_revision_draft_publish_preserves_current_until_publish() {
         major_dependent_before_count * 2,
         "Version 1 consumers should remain on the Version 1 major-line table after Version 2 publishes"
     );
+    let component_table_after_major_two_publish = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/components/{component_slug}/table"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(
+        component_table_after_major_two_publish["dataset_version_major"],
+        1
+    );
+    assert_eq!(
+        component_table_after_major_two_publish["rows"]
+            .as_array()
+            .expect("component rows after major two publish")
+            .len(),
+        initial_major_line_row_count * 2,
+        "component bound to Dataset v1 should not include Dataset v2 rows"
+    );
     let mut major_dependent_draft_payload = major_dependent_payload;
     major_dependent_draft_payload["name"] =
         json!("Revision Lifecycle Major Dependent Dataset Draft");
@@ -1471,6 +1639,229 @@ async fn dataset_revision_draft_publish_preserves_current_until_publish() {
     )
     .await;
     assert_eq!(major_dependent_publish["status"], "published");
+
+    let concurrent_publish_slug = "revision-lifecycle-concurrent-publish-component";
+    let concurrent_publish_component = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/components",
+            &admin_token,
+            Some(json!({
+                "name": "Revision Lifecycle Concurrent Publish Component",
+                "slug": concurrent_publish_slug,
+                "description": "Component publish concurrency invariant coverage.",
+                "version": {
+                    "dataset_id": dataset_id,
+                    "dataset_version_major": 1,
+                    "component_type": "detail_table",
+                    "config": {
+                        "columns": [first_key]
+                    },
+                    "publish": false
+                }
+            })),
+        ),
+    )
+    .await;
+    let concurrent_publish_component_id = concurrent_publish_component["id"]
+        .as_str()
+        .expect("concurrent publish component id");
+    let concurrent_publish_component_detail = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/admin/components/{concurrent_publish_slug}"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    let concurrent_publish_version_id = concurrent_publish_component["current_version"]["id"]
+        .as_str()
+        .or_else(|| {
+            concurrent_publish_component_detail["versions"]
+                .as_array()
+                .and_then(|versions| versions.first())
+                .and_then(|version| version["id"].as_str())
+        })
+        .expect("concurrent publish component version id");
+    let (first_publish_attempt, second_publish_attempt) = tokio::join!(
+        request_status_and_json(
+            app.clone(),
+            authorized_request(
+                "POST",
+                &format!(
+                    "/api/admin/components/{concurrent_publish_component_id}/versions/{concurrent_publish_version_id}/publish"
+                ),
+                &admin_token,
+                None,
+            ),
+        ),
+        request_status_and_json(
+            app.clone(),
+            authorized_request(
+                "POST",
+                &format!(
+                    "/api/admin/components/{concurrent_publish_component_id}/versions/{concurrent_publish_version_id}/publish"
+                ),
+                &admin_token,
+                None,
+            ),
+        )
+    );
+    assert!(
+        first_publish_attempt.0.is_success() || second_publish_attempt.0.is_success(),
+        "at least one concurrent publish request should publish the draft"
+    );
+    let component_after_concurrent_publish = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/admin/components/{concurrent_publish_slug}"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    let versions_after_concurrent_publish = component_after_concurrent_publish["versions"]
+        .as_array()
+        .expect("component versions after concurrent publish");
+    assert_eq!(
+        versions_after_concurrent_publish
+            .iter()
+            .filter(|version| version["status"] == "published")
+            .count(),
+        1,
+        "concurrent publish attempts should leave exactly one published component version"
+    );
+    assert_eq!(
+        versions_after_concurrent_publish
+            .iter()
+            .filter(|version| version["status"] == "draft")
+            .count(),
+        0,
+        "concurrent publish attempts should consume the working draft"
+    );
+
+    set_major_line_materialization_status(dataset_id, 1, "failed").await;
+    let failed_component_table = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/components/{component_slug}/table"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(failed_component_table["materialization_state"], "failed");
+    assert!(
+        failed_component_table["rows"]
+            .as_array()
+            .expect("failed component rows")
+            .is_empty(),
+        "failed major-line materialization should render as a stable failed state"
+    );
+
+    let pending_component_slug = "revision-lifecycle-pending-component-table";
+    let pending_component = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/components",
+            &admin_token,
+            Some(json!({
+                "name": "Revision Lifecycle Pending Component Table",
+                "slug": pending_component_slug,
+                "description": "Component publish coverage when Dataset major-line materialization is missing.",
+                "version": {
+                    "dataset_id": dataset_id,
+                    "dataset_version_major": 1,
+                    "component_type": "detail_table",
+                    "config": {
+                        "columns": [first_key]
+                    },
+                    "publish": false
+                }
+            })),
+        ),
+    )
+    .await;
+    let pending_component_id = pending_component["id"]
+        .as_str()
+        .expect("pending materialization component id");
+    let pending_component_detail = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/admin/components/{pending_component_slug}"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    let pending_component_version_id = pending_component["current_version"]["id"]
+        .as_str()
+        .or_else(|| {
+            pending_component_detail["versions"]
+                .as_array()
+                .and_then(|versions| versions.first())
+                .and_then(|version| version["id"].as_str())
+        })
+        .expect("pending materialization component version id");
+
+    remove_major_line_materialization(dataset_id, 1).await;
+    let pending_publish = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            &format!(
+                "/api/admin/components/{pending_component_id}/versions/{pending_component_version_id}/publish"
+            ),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(pending_publish["id"], pending_component_version_id);
+    let pending_component_after_publish = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/admin/components/{pending_component_slug}"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert!(
+        pending_component_after_publish["versions"]
+            .as_array()
+            .expect("pending materialization component versions")
+            .iter()
+            .any(|version| version["id"] == pending_component_version_id
+                && version["status"] == "published"),
+        "pending materialization publish should mark the draft version published"
+    );
+    let pending_component_table = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/components/{pending_component_slug}/table"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(pending_component_table["materialization_state"], "pending");
+    assert!(
+        pending_component_table["rows"]
+            .as_array()
+            .expect("pending component rows")
+            .is_empty(),
+        "missing major-line materialization should render as pending empty rows, not a publish-time validation failure"
+    );
 }
 
 #[tokio::test]
@@ -1566,7 +1957,7 @@ async fn admin_dataset_query_designer_materializes_generated_sql() {
             }]), 1),
             filter_operation(json!([{
                 "field_key": field_key,
-                "operator": "is_not_empty",
+                "operator": "is_not_null",
                 "value_mode": "value",
                 "value": null,
                 "value_field_key": null,
@@ -1640,7 +2031,7 @@ async fn admin_dataset_query_designer_materializes_generated_sql() {
     assert!(generated_sql.contains("filtered_fields"));
     assert!(generated_sql.contains("calculated_fields"));
     assert!(generated_sql.contains("UPPER"));
-    assert!(generated_sql.contains(&format!("NULLIF(\"{field_key}\", '') IS NOT NULL")));
+    assert!(generated_sql.contains(&format!("\"{field_key}\" IS NOT NULL")));
     assert!(generated_sql.contains("submission_value_fact.field_id"));
     assert!(!generated_sql.contains("submission_value_fact.field_key"));
     assert!(!generated_sql.contains("field_dim.field_key"));
@@ -1657,7 +2048,7 @@ async fn admin_dataset_query_designer_materializes_generated_sql() {
     );
     assert_eq!(
         filter_detail_operation["filters"][0]["operator"],
-        "is_not_empty"
+        "is_not_null"
     );
     assert_eq!(
         calculated_detail_operation["fields"][0]["key"],
@@ -2560,6 +2951,61 @@ async fn assert_major_line_null_fills_added_field(
         populated_count > 0,
         "newer rows in the major-line materialization should populate fields added in that revision"
     );
+}
+
+async fn set_major_line_materialization_status(
+    dataset_id: &str,
+    version_major: i32,
+    rebuild_status: &str,
+) {
+    let database_url = std::env::var("TEST_DATABASE_URL").expect("TEST_DATABASE_URL should be set");
+    let pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&database_url)
+        .await
+        .expect("connect test database");
+    let result = sqlx::query(
+        r#"
+        UPDATE dataset_major_materializations
+        SET rebuild_status = $3
+        WHERE dataset_id = $1
+          AND version_major = $2
+        "#,
+    )
+    .bind(Uuid::parse_str(dataset_id).expect("dataset id uuid"))
+    .bind(version_major)
+    .bind(rebuild_status)
+    .execute(&pool)
+    .await
+    .expect("update major-line materialization status");
+    pool.close().await;
+    assert_eq!(
+        result.rows_affected(),
+        1,
+        "expected one major-line materialization status update"
+    );
+}
+
+async fn remove_major_line_materialization(dataset_id: &str, version_major: i32) {
+    let database_url = std::env::var("TEST_DATABASE_URL").expect("TEST_DATABASE_URL should be set");
+    let pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&database_url)
+        .await
+        .expect("connect test database");
+    sqlx::query(
+        r#"
+        DELETE FROM dataset_major_materializations
+        WHERE dataset_id = $1
+          AND version_major = $2
+        "#,
+    )
+    .bind(Uuid::parse_str(dataset_id).expect("dataset id uuid"))
+    .bind(version_major)
+    .execute(&pool)
+    .await
+    .expect("remove major-line materialization");
+    pool.close().await;
 }
 
 fn quote_test_identifier(identifier: &str) -> String {

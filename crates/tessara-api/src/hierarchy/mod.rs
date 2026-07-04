@@ -908,19 +908,27 @@ pub async fn get_node(
             dashboards.id AS dashboard_id,
             dashboards.name AS dashboard_name,
             dashboards.description,
-            COUNT(all_components.id) AS component_count
+            COUNT(placeable_component_versions.id) AS component_count
         FROM dashboards
         LEFT JOIN dashboard_components AS all_components
             ON all_components.dashboard_id = dashboards.id
+        LEFT JOIN component_versions AS placeable_component_versions
+            ON placeable_component_versions.id = all_components.component_version_id
+           AND placeable_component_versions.status IN (
+               'published'::component_version_status,
+               'superseded'::component_version_status
+           )
         WHERE EXISTS (
             SELECT 1
             FROM dashboard_components
             JOIN component_versions
                 ON component_versions.id = dashboard_components.component_version_id
-            JOIN dataset_revisions
-                ON dataset_revisions.id = component_versions.dataset_revision_id
+               AND component_versions.status IN (
+                   'published'::component_version_status,
+                   'superseded'::component_version_status
+               )
             JOIN dataset_sources
-                ON dataset_sources.dataset_id = dataset_revisions.dataset_id
+                ON dataset_sources.dataset_id = component_versions.dataset_id
             JOIN form_versions
                 ON form_versions.id = dataset_sources.form_version_id
                AND form_versions.status = 'published'::form_version_status

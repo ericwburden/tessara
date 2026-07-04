@@ -221,6 +221,9 @@ try {
         & $cargoCommand test -p tessara-api --test demo_flow | Out-Host
         Assert-LastExitCode "cargo test -p tessara-api --test demo_flow"
 
+        $null = Invoke-PostgresSqlWithRetry "DROP DATABASE tessara WITH (FORCE)"
+        $null = Invoke-PostgresSqlWithRetry "CREATE DATABASE tessara"
+
         $apiProcess = Start-Process `
             -FilePath $cargoCommand `
             -ArgumentList @("run", "-p", "tessara-api") `
@@ -316,6 +319,12 @@ try {
     $nodes = Invoke-Json -Method "Get" -Uri "$baseUrl/api/nodes" -Headers $headers
     $dashboard = Invoke-Json -Method "Get" -Uri "$baseUrl/api/dashboards/$($seed.dashboard_id)" -Headers $headers
     $dataset = Invoke-Json -Method "Get" -Uri "$baseUrl/api/datasets/$($seed.dataset_id)/table" -Headers $headers
+    $components = Invoke-Json -Method "Get" -Uri "$baseUrl/api/components" -Headers $headers
+    $seedComponent = $components | Where-Object { $_.current_version_id -eq $seed.component_version_id } | Select-Object -First 1
+    if (-not $seedComponent) {
+        throw "Expected seeded component version $($seed.component_version_id) to appear in the component directory"
+    }
+    $componentTable = Invoke-Json -Method "Get" -Uri "$baseUrl/api/components/$($seedComponent.slug)/table" -Headers $headers
     $operatorMe = Invoke-Json -Method "Get" -Uri "$baseUrl/api/me" -Headers $operatorHeaders
     $operatorNodes = Invoke-Json -Method "Get" -Uri "$baseUrl/api/nodes?q=Demo" -Headers $operatorHeaders
     $respondentOptions = Invoke-Json -Method "Get" -Uri "$baseUrl/api/responses/options" -Headers $respondentHeaders
@@ -358,6 +367,9 @@ try {
     }
     if ($dataset.rows.Count -lt 1 -or -not $hasExpectedDatasetValue) {
         throw "Expected dataset value 42, got: $($dataset | ConvertTo-Json -Depth 20)"
+    }
+    if ($componentTable.materialization_state -ne "ready" -or $componentTable.rows.Count -lt 1) {
+        throw "Expected seeded component table to render ready rows, got: $($componentTable | ConvertTo-Json -Depth 20)"
     }
     if (-not ($operatorMe.capabilities -contains "forms:read") -or $operatorMe.scope_nodes.Count -lt 1) {
         throw "Expected operator account context to include effective forms read capability and scoped nodes"
@@ -406,12 +418,25 @@ try {
     Assert-ProtectedShell -Content $datasetDetailPage -Needles @("Dataset Detail") -Context "dataset detail shell"
     $datasetEditPage = Invoke-Html -Uri "$baseUrl/datasets/$($seed.dataset_id)/edit" -CookieJarPath $adminBrowserSession
     Assert-ProtectedShell -Content $datasetEditPage -Needles @("Edit Dataset") -Context "dataset edit shell"
+    $componentsPage = Invoke-Html -Uri "$baseUrl/components" -CookieJarPath $adminBrowserSession
+    Assert-ProtectedShell -Content $componentsPage -Needles @("Components") -Context "component directory shell"
+    $componentNewPage = Invoke-Html -Uri "$baseUrl/components/new" -CookieJarPath $adminBrowserSession
+    Assert-ProtectedShell -Content $componentNewPage -Needles @("Create Component") -Context "component create shell"
+    $componentDetailPage = Invoke-Html -Uri "$baseUrl/components/$($seedComponent.slug)" -CookieJarPath $adminBrowserSession
+    Assert-ProtectedShell -Content $componentDetailPage -Needles @("Component Detail") -Context "component detail shell"
+    $componentEditPage = Invoke-Html -Uri "$baseUrl/components/$($seedComponent.slug)/edit" -CookieJarPath $adminBrowserSession
+    Assert-ProtectedShell -Content $componentEditPage -Needles @("Edit Component") -Context "component edit shell"
+    $componentPublishPage = Invoke-Html -Uri "$baseUrl/components/$($seedComponent.slug)/publish" -CookieJarPath $adminBrowserSession
+    Assert-ProtectedShell -Content $componentPublishPage -Needles @("Publish Component") -Context "component publish shell"
+    $componentViewerPage = Invoke-Html -Uri "$baseUrl/components/$($seedComponent.slug)/view" -CookieJarPath $adminBrowserSession
+    Assert-ProtectedShell -Content $componentViewerPage -Needles @("Component Viewer") -Context "component viewer shell"
 
     [pscustomobject]@{
         status = "passed"
         organization_node_id = $seed.organization_node_id
         dashboard_id = $seed.dashboard_id
         dataset_rows = $dataset.rows.Count
+        component_rows = $componentTable.rows.Count
         first_dataset_participants = $dataset.rows[0].values.participants
     } | ConvertTo-Json -Depth 10
 }

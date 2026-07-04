@@ -63,7 +63,7 @@ pub(crate) fn DatasetDetailSurface(dataset_id: String, edit: bool) -> impl IntoV
                                 <BreadcrumbPage>"Dataset Detail"</BreadcrumbPage>
                             </BreadcrumbItem>
                         </Breadcrumb>
-                        <PageHeader title=loaded.name.clone()>
+                        <PageHeader title="Dataset Detail">
                             {move || if can_manage() && !edit {
                                 view! {
                                     <div class="button-row">
@@ -77,6 +77,7 @@ pub(crate) fn DatasetDetailSurface(dataset_id: String, edit: bool) -> impl IntoV
                                 view! { <span></span> }.into_any()
                             }}
                         </PageHeader>
+                        <h2>{loaded.name.clone()}</h2>
                         <section class="dataset-detail-summary">
                             <MetricCard label="Slug" value=loaded.slug.clone()/>
                             <MetricCard label="Grain" value=sentence_label(&loaded.grain)/>

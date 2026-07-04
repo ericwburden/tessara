@@ -150,7 +150,8 @@ pub async fn add_dashboard_component(
         dashboard_id,
     )
     .await?;
-    require_component_version_exists(&state.pool, payload.component_version_id).await?;
+    require_dashboard_component_version_placeable(&state.pool, payload.component_version_id)
+        .await?;
     require_component_version_compatible_with_dashboard(
         &state.pool,
         &account,
@@ -182,7 +183,8 @@ pub async fn update_dashboard_component(
     Json(payload): Json<AddDashboardComponentRequest>,
 ) -> ApiResult<Json<IdResponse>> {
     let account = auth::require_capability(&state.pool, &headers, "dashboards:manage").await?;
-    require_component_version_exists(&state.pool, payload.component_version_id).await?;
+    require_dashboard_component_version_placeable(&state.pool, payload.component_version_id)
+        .await?;
     let dashboard_id = require_dashboard_component_dashboard_id(&state.pool, component_id).await?;
     require_dashboard_fully_in_capability_scope(
         &state.pool,
@@ -248,10 +250,16 @@ pub async fn list_dashboards(
             sqlx::query(
                 r#"
         SELECT dashboards.id, dashboards.name, dashboards.description,
-               COUNT(dashboard_components.id) AS component_count
+               COUNT(placeable_component_versions.id) AS component_count
         FROM dashboards
         JOIN dashboard_scope_nodes ON dashboard_scope_nodes.dashboard_id = dashboards.id
         LEFT JOIN dashboard_components ON dashboard_components.dashboard_id = dashboards.id
+        LEFT JOIN component_versions AS placeable_component_versions
+            ON placeable_component_versions.id = dashboard_components.component_version_id
+           AND placeable_component_versions.status IN (
+               'published'::component_version_status,
+               'superseded'::component_version_status
+           )
         WHERE dashboard_scope_nodes.node_id = ANY($1)
         GROUP BY dashboards.id, dashboards.name, dashboards.description
         ORDER BY dashboards.name, dashboards.id
@@ -265,9 +273,15 @@ pub async fn list_dashboards(
             sqlx::query(
                 r#"
         SELECT dashboards.id, dashboards.name, dashboards.description,
-               COUNT(dashboard_components.id) AS component_count
+               COUNT(placeable_component_versions.id) AS component_count
         FROM dashboards
         LEFT JOIN dashboard_components ON dashboard_components.dashboard_id = dashboards.id
+        LEFT JOIN component_versions AS placeable_component_versions
+            ON placeable_component_versions.id = dashboard_components.component_version_id
+           AND placeable_component_versions.status IN (
+               'published'::component_version_status,
+               'superseded'::component_version_status
+           )
         GROUP BY dashboards.id, dashboards.name, dashboards.description
         ORDER BY dashboards.name, dashboards.id
         "#,
@@ -335,24 +349,30 @@ pub async fn get_dashboard(
             component_versions.id AS component_version_id,
             component_versions.component_id,
             component_versions.component_type::text AS component_type,
+            component_versions.dataset_id,
+            component_versions.dataset_version_major,
+            component_versions.binding_mode,
             component_versions.dataset_revision_id,
             components.name AS component_name,
             components.slug AS component_slug
         FROM dashboard_components
         JOIN component_versions ON component_versions.id = dashboard_components.component_version_id
-        JOIN dataset_revisions ON dataset_revisions.id = component_versions.dataset_revision_id
         JOIN components ON components.id = component_versions.component_id
         WHERE dashboard_components.dashboard_id = $1
+          AND component_versions.status IN (
+              'published'::component_version_status,
+              'superseded'::component_version_status
+          )
           AND EXISTS (
               SELECT 1
               FROM dataset_scope_nodes
-              WHERE dataset_scope_nodes.dataset_id = dataset_revisions.dataset_id
+              WHERE dataset_scope_nodes.dataset_id = component_versions.dataset_id
                 AND dataset_scope_nodes.node_id = ANY($2)
           )
           AND NOT EXISTS (
               SELECT 1
               FROM dataset_scope_nodes
-              WHERE dataset_scope_nodes.dataset_id = dataset_revisions.dataset_id
+              WHERE dataset_scope_nodes.dataset_id = component_versions.dataset_id
                 AND NOT EXISTS (
                     SELECT 1
                     FROM dashboard_scope_nodes
@@ -378,18 +398,24 @@ pub async fn get_dashboard(
             component_versions.id AS component_version_id,
             component_versions.component_id,
             component_versions.component_type::text AS component_type,
+            component_versions.dataset_id,
+            component_versions.dataset_version_major,
+            component_versions.binding_mode,
             component_versions.dataset_revision_id,
             components.name AS component_name,
             components.slug AS component_slug
         FROM dashboard_components
         JOIN component_versions ON component_versions.id = dashboard_components.component_version_id
-        JOIN dataset_revisions ON dataset_revisions.id = component_versions.dataset_revision_id
         JOIN components ON components.id = component_versions.component_id
         WHERE dashboard_components.dashboard_id = $1
+          AND component_versions.status IN (
+              'published'::component_version_status,
+              'superseded'::component_version_status
+          )
           AND NOT EXISTS (
               SELECT 1
               FROM dataset_scope_nodes
-              WHERE dataset_scope_nodes.dataset_id = dataset_revisions.dataset_id
+              WHERE dataset_scope_nodes.dataset_id = component_versions.dataset_id
                 AND NOT EXISTS (
                     SELECT 1
                     FROM dashboard_scope_nodes
@@ -432,6 +458,9 @@ pub async fn get_dashboard(
                     component_name: row.try_get("component_name")?,
                     component_slug: row.try_get("component_slug")?,
                     component_type: row.try_get("component_type")?,
+                    dataset_id: row.try_get("dataset_id")?,
+                    dataset_version_major: row.try_get("dataset_version_major")?,
+                    binding_mode: row.try_get("binding_mode")?,
                     dataset_revision_id: row.try_get("dataset_revision_id")?,
                 })
             })
@@ -451,21 +480,31 @@ async fn require_dashboard_exists(pool: &sqlx::PgPool, dashboard_id: Uuid) -> Ap
     }
 }
 
-async fn require_component_version_exists(
+async fn require_dashboard_component_version_placeable(
     pool: &sqlx::PgPool,
     component_version_id: Uuid,
 ) -> ApiResult<()> {
-    let exists: bool =
-        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM component_versions WHERE id = $1)")
-            .bind(component_version_id)
-            .fetch_one(pool)
-            .await?;
-    if exists {
-        Ok(())
-    } else {
-        Err(ApiError::NotFound(format!(
+    let status: Option<String> = sqlx::query_scalar(
+        r#"
+        SELECT status::text
+        FROM component_versions
+        WHERE id = $1
+        "#,
+    )
+    .bind(component_version_id)
+    .fetch_optional(pool)
+    .await?;
+    match status.as_deref() {
+        Some("published" | "superseded") => Ok(()),
+        Some("draft") => Err(ApiError::BadRequest(format!(
+            "component version {component_version_id} is a draft and cannot be placed on a dashboard"
+        ))),
+        Some(other) => Err(ApiError::BadRequest(format!(
+            "component version {component_version_id} has unsupported status '{other}'"
+        ))),
+        None => Err(ApiError::NotFound(format!(
             "component version {component_version_id}"
-        )))
+        ))),
     }
 }
 
@@ -642,9 +681,8 @@ async fn require_component_version_compatible_with_dashboard(
 ) -> ApiResult<()> {
     let dataset_id: Uuid = sqlx::query_scalar(
         r#"
-        SELECT dataset_revisions.dataset_id
+        SELECT dataset_id
         FROM component_versions
-        JOIN dataset_revisions ON dataset_revisions.id = component_versions.dataset_revision_id
         WHERE component_versions.id = $1
         "#,
     )

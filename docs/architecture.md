@@ -82,7 +82,8 @@ The current frontend is a native Leptos SSR application with root route ownershi
 Feature crates own feature UI implementation and feature-local browser transport:
 
 - `tessara-web-ui` owns generic, policy-neutral UI primitives
-- `tessara-web-datasets`, `tessara-web-forms`, `tessara-web-workflows`, `tessara-web-responses`, and `tessara-web-organization` own their respective content components, loaders/actions, web DTOs, display helpers, and local support helpers
+- `tessara-web-data-ops` owns neutral data-operation authoring controls and draft contracts reused by feature crates, such as the aggregation editor shared by Dataset Aggregation operations and Component AggregateTable authoring
+- `tessara-web-datasets`, `tessara-web-components`, `tessara-web-forms`, `tessara-web-workflows`, `tessara-web-responses`, and `tessara-web-organization` own their respective content components, loaders/actions, web DTOs, display helpers, and local support helpers
 - feature crates expose narrow content facades and do not depend on root `tessara-web`, `tessara-api`, root route modules, `AppShell`, `leptos_router`, `leptos_meta`, auth/session/navigation policy, or sibling feature crates other than shared UI
 
 Frontend delivery should follow these rules:

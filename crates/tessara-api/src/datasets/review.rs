@@ -758,105 +758,116 @@ pub(super) async fn load_dependency_impacts(
                 message: major_line_message.clone(),
             });
         }
-    }
 
-    let component_rows = match &scope.components {
-        auth::CapabilityBoundary::Global => {
-            sqlx::query(
-                r#"
+        let component_rows = match &scope.components {
+            auth::CapabilityBoundary::Global => {
+                sqlx::query(
+                    r#"
         SELECT component_versions.id,
                components.name || ' ' || component_versions.version_label AS name
         FROM component_versions
         JOIN components ON components.id = component_versions.component_id
-        WHERE component_versions.dataset_revision_id = $1
+        WHERE component_versions.dataset_id = $1
+          AND component_versions.dataset_version_major = $2
+          AND component_versions.status IN ('published'::component_version_status, 'superseded'::component_version_status)
         ORDER BY components.name, component_versions.version_number
         "#,
-            )
-            .bind(pinned_revision_id)
-            .fetch_all(pool)
-            .await?
-        }
-        auth::CapabilityBoundary::Scoped(scope_ids) => {
-            sqlx::query(
-                r#"
+                )
+                .bind(source_dataset_id)
+                .bind(current_major)
+                .fetch_all(pool)
+                .await?
+            }
+            auth::CapabilityBoundary::Scoped(scope_ids) => {
+                sqlx::query(
+                    r#"
         SELECT DISTINCT component_versions.id,
                components.name || ' ' || component_versions.version_label AS name
         FROM component_versions
         JOIN components ON components.id = component_versions.component_id
-        JOIN dataset_revisions ON dataset_revisions.id = component_versions.dataset_revision_id
-        JOIN dataset_scope_nodes ON dataset_scope_nodes.dataset_id = dataset_revisions.dataset_id
-        WHERE component_versions.dataset_revision_id = $1
-          AND dataset_scope_nodes.node_id = ANY($2)
+        JOIN dataset_scope_nodes ON dataset_scope_nodes.dataset_id = component_versions.dataset_id
+        WHERE component_versions.dataset_id = $1
+          AND component_versions.dataset_version_major = $2
+          AND component_versions.status IN ('published'::component_version_status, 'superseded'::component_version_status)
+          AND dataset_scope_nodes.node_id = ANY($3)
         ORDER BY name
         "#,
-            )
-            .bind(pinned_revision_id)
-            .bind(scope_ids)
-            .fetch_all(pool)
-            .await?
+                )
+                .bind(source_dataset_id)
+                .bind(current_major)
+                .bind(scope_ids)
+                .fetch_all(pool)
+                .await?
+            }
+            auth::CapabilityBoundary::None => Vec::new(),
+        };
+        for row in component_rows {
+            impacts.push(DatasetDependencyImpact {
+                kind: DatasetDependencyKind::ComponentVersion,
+                id: row.try_get("id")?,
+                name: row.try_get("name")?,
+                pinned_revision_id: None,
+                pinned_version_major: Some(current_major),
+                binding_mode: DatasetDependencyBindingMode::MajorLine,
+                carry_forward_state: major_line_state,
+                message: major_line_message.clone(),
+            });
         }
-        auth::CapabilityBoundary::None => Vec::new(),
-    };
-    for row in component_rows {
-        impacts.push(DatasetDependencyImpact {
-            kind: DatasetDependencyKind::ComponentVersion,
-            id: row.try_get("id")?,
-            name: row.try_get("name")?,
-            pinned_revision_id: Some(pinned_revision_id),
-            pinned_version_major: None,
-            binding_mode: DatasetDependencyBindingMode::ExactRevision,
-            carry_forward_state,
-            message: message.clone(),
-        });
-    }
 
-    let dashboard_rows = match &scope.dashboards {
-        auth::CapabilityBoundary::Global => {
-            sqlx::query(
-                r#"
+        let dashboard_rows = match &scope.dashboards {
+            auth::CapabilityBoundary::Global => {
+                sqlx::query(
+                    r#"
         SELECT dashboards.id, dashboards.name
         FROM dashboard_components
         JOIN dashboards ON dashboards.id = dashboard_components.dashboard_id
         JOIN component_versions ON component_versions.id = dashboard_components.component_version_id
-        WHERE component_versions.dataset_revision_id = $1
+        WHERE component_versions.dataset_id = $1
+          AND component_versions.dataset_version_major = $2
+          AND component_versions.status IN ('published'::component_version_status, 'superseded'::component_version_status)
         ORDER BY dashboards.name
         "#,
-            )
-            .bind(pinned_revision_id)
-            .fetch_all(pool)
-            .await?
-        }
-        auth::CapabilityBoundary::Scoped(scope_ids) => {
-            sqlx::query(
-                r#"
+                )
+                .bind(source_dataset_id)
+                .bind(current_major)
+                .fetch_all(pool)
+                .await?
+            }
+            auth::CapabilityBoundary::Scoped(scope_ids) => {
+                sqlx::query(
+                    r#"
         SELECT DISTINCT dashboards.id, dashboards.name
         FROM dashboard_components
         JOIN dashboards ON dashboards.id = dashboard_components.dashboard_id
         JOIN dashboard_scope_nodes ON dashboard_scope_nodes.dashboard_id = dashboards.id
         JOIN component_versions ON component_versions.id = dashboard_components.component_version_id
-        WHERE component_versions.dataset_revision_id = $1
-          AND dashboard_scope_nodes.node_id = ANY($2)
+        WHERE component_versions.dataset_id = $1
+          AND component_versions.dataset_version_major = $2
+          AND component_versions.status IN ('published'::component_version_status, 'superseded'::component_version_status)
+          AND dashboard_scope_nodes.node_id = ANY($3)
         ORDER BY dashboards.name
         "#,
-            )
-            .bind(pinned_revision_id)
-            .bind(scope_ids)
-            .fetch_all(pool)
-            .await?
+                )
+                .bind(source_dataset_id)
+                .bind(current_major)
+                .bind(scope_ids)
+                .fetch_all(pool)
+                .await?
+            }
+            auth::CapabilityBoundary::None => Vec::new(),
+        };
+        for row in dashboard_rows {
+            impacts.push(DatasetDependencyImpact {
+                kind: DatasetDependencyKind::Dashboard,
+                id: row.try_get("id")?,
+                name: row.try_get("name")?,
+                pinned_revision_id: None,
+                pinned_version_major: Some(current_major),
+                binding_mode: DatasetDependencyBindingMode::MajorLine,
+                carry_forward_state: major_line_state,
+                message: major_line_message.clone(),
+            });
         }
-        auth::CapabilityBoundary::None => Vec::new(),
-    };
-    for row in dashboard_rows {
-        impacts.push(DatasetDependencyImpact {
-            kind: DatasetDependencyKind::Dashboard,
-            id: row.try_get("id")?,
-            name: row.try_get("name")?,
-            pinned_revision_id: Some(pinned_revision_id),
-            pinned_version_major: None,
-            binding_mode: DatasetDependencyBindingMode::ExactRevision,
-            carry_forward_state,
-            message: message.clone(),
-        });
     }
 
     Ok(impacts)

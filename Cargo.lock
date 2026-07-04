@@ -4366,6 +4366,7 @@ dependencies = [
  "sqlx",
  "tessara-core",
  "tessara-dashboards",
+ "tessara-data-ops",
  "tessara-datasets",
  "tessara-forms",
  "tessara-hierarchy",
@@ -4402,8 +4403,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "tessara-data-ops"
+version = "0.1.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "tessara-datasets"
 version = "0.1.0"
+dependencies = [
+ "tessara-data-ops",
+]
 
 [[package]]
 name = "tessara-db"
@@ -4442,6 +4453,7 @@ dependencies = [
  "leptos_router",
  "serde",
  "serde_json",
+ "tessara-web-components",
  "tessara-web-datasets",
  "tessara-web-forms",
  "tessara-web-organization",
@@ -4454,6 +4466,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "tessara-web-components"
+version = "0.1.0"
+dependencies = [
+ "gloo-net",
+ "leptos",
+ "serde",
+ "serde_json",
+ "tessara-web-data-ops",
+ "tessara-web-ui",
+ "web-sys",
+]
+
+[[package]]
+name = "tessara-web-data-ops"
+version = "0.1.0"
+dependencies = [
+ "icons",
+ "leptos",
+ "tessara-web-ui",
+]
+
+[[package]]
 name = "tessara-web-datasets"
 version = "0.1.0"
 dependencies = [
@@ -4463,6 +4497,7 @@ dependencies = [
  "leptos",
  "serde",
  "serde_json",
+ "tessara-web-data-ops",
  "tessara-web-ui",
  "wasm-bindgen",
  "web-sys",

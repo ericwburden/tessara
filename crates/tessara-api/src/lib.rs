@@ -266,6 +266,46 @@ pub fn router(state: AppState) -> Router {
             }),
         )
         .route(
+            "/components/new",
+            get(|| async {
+                native_app(
+                    "/components/new",
+                    "Create Component",
+                    "Create a Tessara component.",
+                )
+            }),
+        )
+        .route(
+            "/components/{component_ref}/edit",
+            get(|Path(component_ref): Path<String>| async move {
+                native_app(
+                    format!("/components/{component_ref}/edit"),
+                    "Edit Component",
+                    "Edit a Tessara component.",
+                )
+            }),
+        )
+        .route(
+            "/components/{component_ref}/publish",
+            get(|Path(component_ref): Path<String>| async move {
+                native_app(
+                    format!("/components/{component_ref}/publish"),
+                    "Publish Component",
+                    "Publish a Tessara component.",
+                )
+            }),
+        )
+        .route(
+            "/components/{component_ref}/view",
+            get(|Path(component_ref): Path<String>| async move {
+                native_app(
+                    format!("/components/{component_ref}/view"),
+                    "Component Viewer",
+                    "View a Tessara component.",
+                )
+            }),
+        )
+        .route(
             "/components/{component_ref}",
             get(|Path(component_ref): Path<String>| async move {
                 native_app(

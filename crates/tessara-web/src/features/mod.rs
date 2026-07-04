@@ -4,7 +4,6 @@
 
 pub mod administration;
 pub mod auth;
-pub mod components;
 pub mod dashboards;
 pub mod home;
 pub mod login;

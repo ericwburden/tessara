@@ -65,6 +65,10 @@ type DatasetTable = {
 };
 type ComponentSummary = { id: string; name: string; slug: string };
 type ComponentDefinition = { id: string; name: string; versions: unknown[] };
+type ComponentTable = {
+  materialization_state: string;
+  rows: Array<{ values: Record<string, string | null> }>;
+};
 type DashboardSummary = { id: string; name: string; visibility_nodes: VisibilityNode[] };
 type DashboardDefinition = DashboardSummary & { description: string | null };
 type OperationsStatus = {
@@ -113,10 +117,16 @@ type SessionAccount = {
   delegations: Array<{ account_id: string; email: string }>;
 };
 type SessionState = { authenticated: boolean; account: SessionAccount | null };
+type ApiErrorBody = {
+  code: string;
+  message: string;
+  error: string;
+};
 
 type FixtureState = {
   admin: APIRequestContext;
   scopedManager: APIRequestContext;
+  componentManager: APIRequestContext;
   owner: APIRequestContext;
   outOfScopeOwner: APIRequestContext;
   delegate: APIRequestContext;
@@ -194,6 +204,22 @@ async function expectStatus(
   return response;
 }
 
+async function expectErrorStatus(
+  context: APIRequestContext,
+  method: "get" | "post" | "put" | "delete",
+  url: string,
+  status: number,
+  code: string,
+  data?: Record<string, unknown>,
+) {
+  const response = await expectStatus(context, method, url, [status], data);
+  const body = (await response.json()) as ApiErrorBody;
+  expect(body.code).toBe(code);
+  expect(body.message).toBeTruthy();
+  expect(body.error).toBe(body.message);
+  return body;
+}
+
 async function signIn(context: APIRequestContext, email: string, password: string) {
   await postJson(context, "/api/auth/login", { email, password });
 }
@@ -254,6 +280,25 @@ function overlaps(nodes: VisibilityNode[], allowed: Set<string>) {
   return nodes.some((node) => allowed.has(node.node_id));
 }
 
+function datasetMajor(dataset: DatasetSummary) {
+  const major = dataset.major_versions?.[0] ?? dataset.current_version_major ?? undefined;
+  expect(major, `dataset ${dataset.name} should expose a major version`).toBeTruthy();
+  return major!;
+}
+
+function aggregateCountConfig() {
+  return {
+    group_fields: [],
+    metrics: [
+      {
+        key: "row_count",
+        label: "Rows",
+        function: "count",
+      },
+    ],
+  };
+}
+
 async function createAssignmentFor(
   admin: APIRequestContext,
   candidates: WorkflowAssignmentCandidate[],
@@ -281,6 +326,7 @@ async function setupFixtures(): Promise<FixtureState> {
     noAccessRole,
     ownerRole,
     scopedRole,
+    componentManagerRole,
     globalRole,
   ] = await Promise.all([
     createRole(admin, `${RUN_ID}-no-access`, []),
@@ -300,6 +346,11 @@ async function setupFixtures(): Promise<FixtureState> {
       "components:read",
       "dashboards:read",
       "dashboards:manage",
+    ]),
+    createRole(admin, `${RUN_ID}-component-manager`, [
+      "datasets:read",
+      "components:read",
+      "components:manage",
     ]),
     createRole(admin, `${RUN_ID}-global-reader-manager`, [
       "hierarchy:read",
@@ -322,6 +373,12 @@ async function setupFixtures(): Promise<FixtureState> {
       `${RUN_ID}-scoped-manager@tessara.local`,
       `${RUN_ID} Scoped Manager`,
       [scopedRole.id],
+    ),
+    componentManager: await createUser(
+      admin,
+      `${RUN_ID}-component-manager@tessara.local`,
+      `${RUN_ID} Component Manager`,
+      [componentManagerRole.id],
     ),
     owner: await createUser(admin, `${RUN_ID}-owner@tessara.local`, `${RUN_ID} Owner`, [
       ownerRole.id,
@@ -359,15 +416,18 @@ async function setupFixtures(): Promise<FixtureState> {
   );
 
   await assignAccess(admin, users.scopedManager.id, [inScopeNode.id]);
+  await assignAccess(admin, users.componentManager.id, [inScopeNode.id]);
   await assignAccess(admin, users.delegator.id, [], [users.delegate.id]);
 
   const scopedManager = await newContext();
+  const componentManager = await newContext();
   const owner = await newContext();
   const outOfScopeOwner = await newContext();
   const delegate = await newContext();
   const delegator = await newContext();
   const noAccess = await newContext();
   await signIn(scopedManager, `${RUN_ID}-scoped-manager@tessara.local`, PASSWORD);
+  await signIn(componentManager, `${RUN_ID}-component-manager@tessara.local`, PASSWORD);
   await signIn(owner, `${RUN_ID}-owner@tessara.local`, PASSWORD);
   await signIn(outOfScopeOwner, `${RUN_ID}-out-owner@tessara.local`, PASSWORD);
   await signIn(delegate, `${RUN_ID}-delegate@tessara.local`, PASSWORD);
@@ -475,6 +535,7 @@ async function setupFixtures(): Promise<FixtureState> {
   return {
     admin,
     scopedManager,
+    componentManager,
     owner,
     outOfScopeOwner,
     delegate,
@@ -482,6 +543,7 @@ async function setupFixtures(): Promise<FixtureState> {
     noAccess,
     userIds: {
       scopedManager: users.scopedManager.id,
+      componentManager: users.componentManager.id,
       owner: users.owner.id,
       outOfScopeOwner: users.outOfScopeOwner.id,
       delegate: users.delegate.id,
@@ -521,6 +583,11 @@ SELECT id FROM forms
 
 CREATE TEMP TABLE pw_cleanup_workflows AS
 SELECT id FROM workflows
+  WHERE name LIKE '${PLAYWRIGHT_ENTITY_PREFIX}%'
+     OR slug LIKE '${PLAYWRIGHT_ENTITY_PREFIX}%';
+
+CREATE TEMP TABLE pw_cleanup_components AS
+SELECT id FROM components
   WHERE name LIKE '${PLAYWRIGHT_ENTITY_PREFIX}%'
      OR slug LIKE '${PLAYWRIGHT_ENTITY_PREFIX}%';
 
@@ -578,6 +645,18 @@ WHERE id IN (SELECT id FROM pw_cleanup_workflow_assignments);
 DELETE FROM dashboards
 WHERE name LIKE '${PLAYWRIGHT_ENTITY_PREFIX}%';
 
+DELETE FROM dashboard_components
+WHERE component_version_id IN (
+  SELECT id FROM component_versions
+  WHERE component_id IN (SELECT id FROM pw_cleanup_components)
+);
+
+DELETE FROM component_versions
+WHERE component_id IN (SELECT id FROM pw_cleanup_components);
+
+DELETE FROM components
+WHERE id IN (SELECT id FROM pw_cleanup_components);
+
 DELETE FROM workflows
 WHERE name LIKE '${PLAYWRIGHT_ENTITY_PREFIX}%'
    OR slug LIKE '${PLAYWRIGHT_ENTITY_PREFIX}%';
@@ -631,6 +710,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       "/api/admin/roles",
       "/api/admin/users",
       "/api/admin/node-types",
+      "/api/admin/components",
       "/api/forms",
       `/api/form-versions/${inScopePublishedVersion!.id}/render`,
       "/api/workflows",
@@ -962,7 +1042,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
     expect(operations.dataset_readiness.datasets.some((item) => item.dataset_id === fixtures.outOfScopeDataset.id)).toBe(true);
   });
 
-  test("scoped manager reads in-scope surfaces and is denied out-of-scope surfaces", async () => {
+  test("scoped manager reads in-scope surfaces and is denied out-of-scope surfaces", async ({ page }) => {
     const forms = await getJson<FormSummary[]>(fixtures.scopedManager, "/api/forms");
     expect(forms.some((form) => form.id === fixtures.inScopeForm.id)).toBe(true);
     expect(forms.some((form) => form.id === fixtures.outOfScopeForm.id)).toBe(false);
@@ -1017,12 +1097,42 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       `/api/components/${fixtures.inScopeComponent.slug}`,
     );
     expect(inComponent.versions.length).toBeGreaterThan(0);
+    const componentTable = await getJson<ComponentTable>(
+      fixtures.scopedManager,
+      `/api/components/${fixtures.inScopeComponent.slug}/table`,
+    );
+    expect(componentTable.materialization_state).toBe("ready");
+    expect(componentTable.rows.length).toBeGreaterThan(0);
     await expectStatus(
       fixtures.scopedManager,
       "get",
       `/api/components/${fixtures.outOfScopeComponent.slug}`,
       [403],
     );
+    await expectStatus(
+      fixtures.scopedManager,
+      "get",
+      `/api/components/${fixtures.outOfScopeComponent.slug}/table`,
+      [403],
+    );
+    await signInPage(page, `${RUN_ID}-scoped-manager@tessara.local`);
+    await page.goto(`/components/${fixtures.inScopeComponent.slug}`);
+    await expect(
+      page.getByRole("heading", { level: 1, name: fixtures.inScopeComponent.name }),
+    ).toBeVisible();
+    await page.goto(`/components/${fixtures.inScopeComponent.slug}/view`);
+    await expect(
+      page.getByRole("heading", { level: 1, name: fixtures.inScopeComponent.slug }),
+    ).toBeVisible();
+    await expect(page.getByRole("table")).toBeVisible();
+    await page.goto(`/components/${fixtures.outOfScopeComponent.slug}`);
+    await expect(
+      page.getByRole("heading", { level: 3, name: "Component unavailable" }),
+    ).toBeVisible();
+    await page.goto(`/components/${fixtures.outOfScopeComponent.slug}/view`);
+    await expect(
+      page.getByRole("heading", { level: 3, name: "Component table unavailable" }),
+    ).toBeVisible();
 
     const dashboards = await getJson<DashboardSummary[]>(fixtures.scopedManager, "/api/dashboards");
     expect(dashboards.some((dashboard) => dashboard.id === fixtures.inScopeDashboard.id)).toBe(true);
@@ -1039,6 +1149,79 @@ test.describe.serial("capability + scope + ownership permissions", () => {
     expect(operations.dataset_readiness.datasets.some((item) => item.dataset_id === fixtures.inScopeDataset.id)).toBe(true);
     expect(operations.dataset_readiness.datasets.some((item) => item.dataset_id === fixtures.outOfScopeDataset.id)).toBe(false);
     expect(operations.workflow_assignments.every((item) => fixtures.inScopeNodeIds.has(item.node_id))).toBe(true);
+  });
+
+  test("scoped component manager cannot bind or publish out-of-scope dataset major lines", async () => {
+    const outOfScopeMajor = datasetMajor(fixtures.outOfScopeDataset);
+    const outOfScopeSlug = `${RUN_ID}-component-manage-out`;
+    const componentSession = await getJson<SessionState>(fixtures.componentManager, "/api/auth/session");
+    expect(componentSession.account?.capabilities).toContain("components:manage");
+    const manageableComponents = await getJson<ComponentSummary[]>(
+      fixtures.componentManager,
+      "/api/admin/components",
+    );
+    expect(manageableComponents.length).toBeGreaterThan(0);
+    const manageableComponent = manageableComponents[0];
+
+    const bindError = await expectErrorStatus(
+      fixtures.componentManager,
+      "post",
+      `/api/admin/components/${manageableComponent.id}/versions`,
+      403,
+      "forbidden",
+      {
+        dataset_id: fixtures.outOfScopeDataset.id,
+        dataset_version_major: outOfScopeMajor,
+        component_type: "aggregate_table",
+        config: aggregateCountConfig(),
+        publish: false,
+      },
+    );
+    expect(bindError.message).toContain("components:manage");
+
+    const validateError = await expectErrorStatus(
+      fixtures.componentManager,
+      "post",
+      "/api/admin/components/validate",
+      403,
+      "forbidden",
+      {
+        dataset_id: fixtures.outOfScopeDataset.id,
+        dataset_version_major: outOfScopeMajor,
+        component_type: "aggregate_table",
+        config: aggregateCountConfig(),
+        publish: false,
+      },
+    );
+    expect(validateError.message).toContain("components:manage");
+
+    const outOfScopeDraft = await postJson<IdResponse>(fixtures.admin, "/api/admin/components", {
+      name: `${RUN_ID} Out Component`,
+      slug: outOfScopeSlug,
+      description: "Out-of-scope component management permission fixture.",
+      version: {
+        dataset_id: fixtures.outOfScopeDataset.id,
+        dataset_version_major: outOfScopeMajor,
+        component_type: "aggregate_table",
+        config: aggregateCountConfig(),
+        publish: false,
+      },
+    });
+    const outOfScopeComponent = await getJson<ComponentDefinition>(
+      fixtures.admin,
+      `/api/admin/components/${outOfScopeDraft.id}`,
+    );
+    const outVersion = outOfScopeComponent.versions[0] as { id: string };
+
+    const publishError = await expectErrorStatus(
+      fixtures.componentManager,
+      "post",
+      `/api/admin/components/${outOfScopeDraft.id}/versions/${outVersion.id}/publish`,
+      403,
+      "forbidden",
+      {},
+    );
+    expect(publishError.message).toContain("components:manage");
   });
 
   test("dataset revision UI hides drafts from scoped readers", async ({ page }) => {

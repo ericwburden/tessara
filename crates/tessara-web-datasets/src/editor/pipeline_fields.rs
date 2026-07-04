@@ -63,7 +63,7 @@ fn aggregation_metric_field_type(
     source_field: Option<&DatasetFieldDraft>,
 ) -> String {
     match function {
-        "count_rows" | "count_values" | "sum" | "average" => "number".into(),
+        "count_rows" | "count_values" | "count_distinct" | "sum" | "average" => "number".into(),
         "min" | "max" => source_field
             .map(|field| field.field_type.clone())
             .unwrap_or_else(|| "text".into()),

@@ -20,6 +20,7 @@ mod submit;
 mod surface;
 mod visibility;
 
+pub use aggregation::DatasetAggregationEditor;
 pub(crate) use calculations::DatasetRestrictionsEditor;
 pub(crate) use identity::DatasetIdentitySection;
 pub(crate) use lifecycle::install_dataset_editor_loaders;

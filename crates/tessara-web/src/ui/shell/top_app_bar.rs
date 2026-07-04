@@ -15,7 +15,7 @@ pub fn TopAppBar(active_route: &'static str, title: &'static str) -> impl IntoVi
         <header class="top-app-bar">
             <div class="top-app-bar__title-row">
                 <MobileNav active_route/>
-                <h1>{title}</h1>
+                <span class="top-app-bar__title">{title}</span>
             </div>
             <div class="top-app-bar__actions">
                 <label class="search-field">

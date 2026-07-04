@@ -5,6 +5,8 @@
 
 use std::collections::HashSet;
 
+pub use tessara_data_ops as data_ops;
+
 /// Error returned when a dataset rule is violated.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DatasetRuleError {

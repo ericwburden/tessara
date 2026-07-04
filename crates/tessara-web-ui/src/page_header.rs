@@ -13,7 +13,7 @@ pub fn PageHeader(
     view! {
         <header class="page-header">
             <div>
-                <h2>{title}</h2>
+                <h1>{title}</h1>
                 {description
                     .map(|description| view! { <p>{description}</p> })}
             </div>

@@ -164,6 +164,34 @@ if (-not $datasetPreview.rows -or $datasetPreview.rows.Count -lt 1) {
     throw "Sprint UAT failure: dataset preview did not return seeded rows."
 }
 
+$components = Invoke-RestMethod -Uri "$BaseUrl/api/components" -Headers $headers -TimeoutSec 30
+$seedComponent = $components | Where-Object { $_.current_version_id -eq $seedSummary.component_version_id } | Select-Object -First 1
+if (-not $seedComponent) {
+    throw "Sprint UAT failure: seeded component version $($seedSummary.component_version_id) did not appear in the component directory."
+}
+$componentTable = Invoke-RestMethod -Uri "$BaseUrl/api/components/$($seedComponent.slug)/table" -Headers $headers -TimeoutSec 30
+if ($componentTable.materialization_state -ne "ready" -or -not $componentTable.rows -or $componentTable.rows.Count -lt 1) {
+    throw "Sprint UAT failure: seeded component table did not return ready rows."
+}
+
+$componentsList = Invoke-Html -Uri "$BaseUrl/components" -CookieJarPath $adminBrowserSession
+Assert-ProtectedShell -Content $componentsList -Needles @("Components") -Context "components list"
+
+$componentCreate = Invoke-Html -Uri "$BaseUrl/components/new" -CookieJarPath $adminBrowserSession
+Assert-ProtectedShell -Content $componentCreate -Needles @("Create Component") -Context "component create"
+
+$componentDetail = Invoke-Html -Uri "$BaseUrl/components/$($seedComponent.slug)" -CookieJarPath $adminBrowserSession
+Assert-ProtectedShell -Content $componentDetail -Needles @("Component Detail") -Context "component detail"
+
+$componentEdit = Invoke-Html -Uri "$BaseUrl/components/$($seedComponent.slug)/edit" -CookieJarPath $adminBrowserSession
+Assert-ProtectedShell -Content $componentEdit -Needles @("Edit Component") -Context "component edit"
+
+$componentPublish = Invoke-Html -Uri "$BaseUrl/components/$($seedComponent.slug)/publish" -CookieJarPath $adminBrowserSession
+Assert-ProtectedShell -Content $componentPublish -Needles @("Publish Component") -Context "component publish"
+
+$componentViewer = Invoke-Html -Uri "$BaseUrl/components/$($seedComponent.slug)/view" -CookieJarPath $adminBrowserSession
+Assert-ProtectedShell -Content $componentViewer -Needles @("Component Viewer") -Context "component viewer"
+
 $workflowsList = Invoke-Html -Uri "$BaseUrl/workflows" -CookieJarPath $adminBrowserSession
 Assert-ProtectedShell -Content $workflowsList -Needles @("Workflows") -Context "workflow directory"
 
@@ -200,5 +228,5 @@ foreach ($roleCheck in @(
     }
 }
 
-Write-Host "`n== Sprint UAT checks passed for organization, forms, datasets, and seed flows. ==" -ForegroundColor Green
+Write-Host "`n== Sprint UAT checks passed for organization, forms, datasets, components, and seed flows. ==" -ForegroundColor Green
 Write-Host "Next: if this was a sprint-completion run, keep the deployment open for UAT and log these pass markers."

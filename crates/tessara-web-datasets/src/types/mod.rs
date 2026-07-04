@@ -5,3 +5,7 @@ mod editor;
 
 pub(crate) use contracts::*;
 pub(crate) use editor::*;
+pub use editor::{
+    DatasetAggregationDraft, DatasetAggregationMetricDraft, DatasetFieldDraft,
+    DatasetRowPickerDraft, DatasetRowPickerSortDraft,
+};

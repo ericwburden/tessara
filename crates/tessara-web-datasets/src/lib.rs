@@ -20,8 +20,13 @@ mod permissions;
 mod text;
 mod types;
 mod validation;
+pub use editor::DatasetAggregationEditor;
 pub use pages::{
     DatasetDetailContent, DatasetEditorContent, DatasetPreviewContent,
     DatasetRevisionDetailContent, DatasetRevisionEditorContent, DatasetRevisionHistoryContent,
     DatasetsIndexContent,
+};
+pub use types::{
+    DatasetAggregationDraft, DatasetAggregationMetricDraft, DatasetFieldDraft,
+    DatasetRowPickerDraft, DatasetRowPickerSortDraft,
 };

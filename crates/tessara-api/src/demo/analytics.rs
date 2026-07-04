@@ -3,7 +3,7 @@ use sqlx::{PgPool, Row};
 use std::collections::BTreeSet;
 use uuid::Uuid;
 
-use crate::error::ApiResult;
+use crate::error::{ApiError, ApiResult};
 
 use super::forms::current_form_version;
 
@@ -514,6 +514,43 @@ pub(super) async fn ensure_component(
     slug: &str,
     dataset_revision_id: Uuid,
 ) -> ApiResult<(Uuid, Uuid)> {
+    let binding = sqlx::query(
+        r#"
+        SELECT dataset_id, version_major
+        FROM dataset_revisions
+        WHERE id = $1
+        "#,
+    )
+    .bind(dataset_revision_id)
+    .fetch_optional(pool)
+    .await?
+    .ok_or_else(|| ApiError::NotFound(format!("dataset revision {dataset_revision_id}")))?;
+    let dataset_id: Uuid = binding.try_get("dataset_id")?;
+    let dataset_version_major: i32 = binding
+        .try_get::<Option<i32>, _>("version_major")?
+        .ok_or_else(|| {
+            ApiError::BadRequest(format!(
+                "dataset revision {dataset_revision_id} has no major version"
+            ))
+        })?;
+    let output_fields: Value =
+        sqlx::query_scalar("SELECT output_fields FROM dataset_revisions WHERE id = $1")
+            .bind(dataset_revision_id)
+            .fetch_one(pool)
+            .await?;
+    let columns = output_fields
+        .as_array()
+        .unwrap_or(&Vec::new())
+        .iter()
+        .filter_map(|field| field.get("key").and_then(Value::as_str))
+        .map(|key| json!({ "key": key }))
+        .collect::<Vec<_>>();
+    if columns.is_empty() {
+        return Err(ApiError::BadRequest(format!(
+            "demo component '{slug}' requires dataset output fields"
+        )));
+    }
+
     let component_id = if let Some(id) =
         sqlx::query_scalar("SELECT id FROM components WHERE slug = $1")
             .bind(slug)
@@ -557,16 +594,18 @@ pub(super) async fn ensure_component(
     let component_version_id = sqlx::query_scalar(
         r#"
         INSERT INTO component_versions
-            (component_id, dataset_revision_id, component_type, version_number, version_label, status, config, published_at)
-        VALUES ($1, $2, 'detail_table'::component_type, $3, $4, 'published'::component_version_status, $5, now())
+            (component_id, dataset_id, dataset_version_major, binding_mode, dataset_revision_id, component_type, version_number, version_label, status, config, published_at)
+        VALUES ($1, $2, $3, 'major_line', $4, 'detail_table'::component_type, $5, $6, 'published'::component_version_status, $7, now())
         RETURNING id
         "#,
     )
     .bind(component_id)
+    .bind(dataset_id)
+    .bind(dataset_version_major)
     .bind(dataset_revision_id)
     .bind(version_number)
     .bind(version_number.to_string())
-    .bind(json!({"columns": "all"}))
+    .bind(json!({ "columns": columns }))
     .fetch_one(pool)
     .await?;
 

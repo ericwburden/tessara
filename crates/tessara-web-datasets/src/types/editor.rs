@@ -11,42 +11,10 @@ pub(crate) struct DatasetSourceDraft {
     pub(crate) dataset_version_major: Option<i32>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct DatasetFieldDraft {
-    pub(crate) key: String,
-    pub(crate) label: String,
-    pub(crate) source_alias: String,
-    pub(crate) source_field_key: String,
-    pub(crate) field_type: String,
-}
-
-#[derive(Clone, Debug, Default, PartialEq)]
-pub(crate) struct DatasetAggregationDraft {
-    pub(crate) enabled: bool,
-    pub(crate) group_fields: Vec<String>,
-    pub(crate) metrics: Vec<DatasetAggregationMetricDraft>,
-    pub(crate) row_picker: Option<DatasetRowPickerDraft>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct DatasetAggregationMetricDraft {
-    pub(crate) id: u64,
-    pub(crate) key: String,
-    pub(crate) label: String,
-    pub(crate) function: String,
-    pub(crate) source_field_key: String,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct DatasetRowPickerDraft {
-    pub(crate) sort_fields: Vec<DatasetRowPickerSortDraft>,
-    pub(crate) direction: String,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct DatasetRowPickerSortDraft {
-    pub(crate) field_key: String,
-}
+pub use tessara_web_data_ops::{
+    DatasetAggregationDraft, DatasetAggregationMetricDraft, DatasetFieldDraft,
+    DatasetRowPickerDraft, DatasetRowPickerSortDraft,
+};
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct DatasetRowFilterDraft {

@@ -478,7 +478,10 @@ CREATE TABLE components (
 CREATE TABLE component_versions (
     id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
     component_id uuid NOT NULL REFERENCES components(id) ON DELETE CASCADE,
-    dataset_revision_id uuid NOT NULL REFERENCES dataset_revisions(id) ON DELETE RESTRICT,
+    dataset_id uuid NOT NULL REFERENCES datasets(id) ON DELETE RESTRICT,
+    dataset_version_major integer NOT NULL,
+    binding_mode text NOT NULL DEFAULT 'major_line',
+    dataset_revision_id uuid REFERENCES dataset_revisions(id) ON DELETE RESTRICT,
     component_type component_type NOT NULL,
     version_number integer NOT NULL,
     version_label text NOT NULL,
@@ -492,6 +495,11 @@ CREATE TABLE component_versions (
 CREATE UNIQUE INDEX component_versions_one_published_idx
     ON component_versions (component_id)
     WHERE status = 'published';
+CREATE UNIQUE INDEX component_versions_one_draft_idx
+    ON component_versions (component_id)
+    WHERE status = 'draft';
+CREATE INDEX component_versions_dataset_major_idx
+    ON component_versions (dataset_id, dataset_version_major);
 
 CREATE TABLE dashboards (
     id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),

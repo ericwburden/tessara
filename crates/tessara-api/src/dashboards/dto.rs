@@ -61,5 +61,8 @@ pub struct DashboardComponentResponse {
     pub(crate) component_name: String,
     pub(crate) component_slug: String,
     pub(crate) component_type: String,
-    pub(crate) dataset_revision_id: Uuid,
+    pub(crate) dataset_id: Uuid,
+    pub(crate) dataset_version_major: i32,
+    pub(crate) binding_mode: String,
+    pub(crate) dataset_revision_id: Option<Uuid>,
 }

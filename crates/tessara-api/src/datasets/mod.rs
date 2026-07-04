@@ -12,6 +12,10 @@ use axum::{
     http::HeaderMap,
 };
 use sqlx::{Column, Postgres, Row, Transaction, postgres::PgRow};
+use tessara_data_ops::{
+    AggregateFunction, AggregateMetric, AggregationPlan, DataField, FieldType, FilterOperator,
+    validate_aggregation_plan,
+};
 use tessara_datasets::DatasetGrain;
 use uuid::Uuid;
 
@@ -128,7 +132,7 @@ struct ValidatedAggregation {
 struct ValidatedAggregationMetric {
     key: String,
     label: String,
-    function: AggregationFunction,
+    function: AggregateFunction,
     source_field_key: Option<String>,
     field_type: String,
     position: i32,
@@ -150,7 +154,7 @@ struct ValidatedRowPickerSort {
 struct ValidatedRowFilter {
     field_key: String,
     field_type: String,
-    operator: RowFilterOperator,
+    operator: FilterOperator,
     value: Option<String>,
     value_field_key: Option<String>,
 }
@@ -208,29 +212,6 @@ struct ValidatedRestrictionPolicy {
     internal_field_key: Option<String>,
     restricted_field_key: Option<String>,
     confidential_field_key: Option<String>,
-}
-
-#[derive(Clone, Copy)]
-enum RowFilterOperator {
-    Equals,
-    NotEquals,
-    Contains,
-    GreaterThan,
-    GreaterThanOrEqual,
-    LessThan,
-    LessThanOrEqual,
-    IsEmpty,
-    IsNotEmpty,
-}
-
-#[derive(Clone, Copy)]
-enum AggregationFunction {
-    CountRows,
-    CountValues,
-    Sum,
-    Average,
-    Min,
-    Max,
 }
 
 #[derive(Clone)]
@@ -1480,11 +1461,11 @@ async fn load_dataset_revision_summaries(
                         .copied()
                 })
                 .unwrap_or(0),
-            dependency_revision_id
-                .and_then(|id| dependency_counts.component_by_revision.get(&id).copied())
+            dependency_major
+                .and_then(|major| dependency_counts.component_by_major.get(&major).copied())
                 .unwrap_or(0),
-            dependency_revision_id
-                .and_then(|id| dependency_counts.dashboard_by_revision.get(&id).copied())
+            dependency_major
+                .and_then(|major| dependency_counts.dashboard_by_major.get(&major).copied())
                 .unwrap_or(0),
             compatibility.state,
             dependency_major == snapshot.version_major,
@@ -1583,8 +1564,8 @@ fn revision_snapshot_from_row(
 struct DependencySummaryCounts {
     exact_dataset_by_revision: BTreeMap<Uuid, usize>,
     major_dataset_by_major: BTreeMap<i32, usize>,
-    component_by_revision: BTreeMap<Uuid, usize>,
-    dashboard_by_revision: BTreeMap<Uuid, usize>,
+    component_by_major: BTreeMap<i32, usize>,
+    dashboard_by_major: BTreeMap<i32, usize>,
 }
 
 async fn load_dependency_summary_counts(
@@ -1608,16 +1589,18 @@ async fn load_dependency_summary_counts(
             version_majors,
         )
         .await?,
-        component_by_revision: load_component_dependency_counts(
+        component_by_major: load_component_dependency_counts(
             pool,
             &scope.components,
-            revision_ids,
+            source_dataset_id,
+            version_majors,
         )
         .await?,
-        dashboard_by_revision: load_dashboard_dependency_counts(
+        dashboard_by_major: load_dashboard_dependency_counts(
             pool,
             &scope.dashboards,
-            revision_ids,
+            source_dataset_id,
+            version_majors,
         )
         .await?,
     })
@@ -1725,96 +1708,109 @@ async fn load_major_line_dataset_dependency_counts(
 async fn load_component_dependency_counts(
     pool: &sqlx::PgPool,
     boundary: &auth::CapabilityBoundary,
-    revision_ids: &[Uuid],
-) -> ApiResult<BTreeMap<Uuid, usize>> {
-    if revision_ids.is_empty() {
+    source_dataset_id: Uuid,
+    version_majors: &[i32],
+) -> ApiResult<BTreeMap<i32, usize>> {
+    if version_majors.is_empty() {
         return Ok(BTreeMap::new());
     }
     let rows = match boundary {
         auth::CapabilityBoundary::Global => {
             sqlx::query(
                 r#"
-        SELECT component_versions.dataset_revision_id AS dependency_key,
+        SELECT component_versions.dataset_version_major AS dependency_key,
                COUNT(DISTINCT component_versions.id)::bigint AS dependency_count
         FROM component_versions
-        WHERE component_versions.dataset_revision_id = ANY($1)
-        GROUP BY component_versions.dataset_revision_id
+        WHERE component_versions.dataset_id = $1
+          AND component_versions.dataset_version_major = ANY($2)
+          AND component_versions.status IN ('published'::component_version_status, 'superseded'::component_version_status)
+        GROUP BY component_versions.dataset_version_major
         "#,
             )
-            .bind(revision_ids)
+            .bind(source_dataset_id)
+            .bind(version_majors)
             .fetch_all(pool)
             .await?
         }
         auth::CapabilityBoundary::Scoped(scope_ids) => {
             sqlx::query(
                 r#"
-        SELECT component_versions.dataset_revision_id AS dependency_key,
+        SELECT component_versions.dataset_version_major AS dependency_key,
                COUNT(DISTINCT component_versions.id)::bigint AS dependency_count
         FROM component_versions
-        JOIN dataset_revisions ON dataset_revisions.id = component_versions.dataset_revision_id
-        JOIN dataset_scope_nodes ON dataset_scope_nodes.dataset_id = dataset_revisions.dataset_id
-        WHERE component_versions.dataset_revision_id = ANY($1)
-          AND dataset_scope_nodes.node_id = ANY($2)
-        GROUP BY component_versions.dataset_revision_id
+        JOIN dataset_scope_nodes ON dataset_scope_nodes.dataset_id = component_versions.dataset_id
+        WHERE component_versions.dataset_id = $1
+          AND component_versions.dataset_version_major = ANY($2)
+          AND component_versions.status IN ('published'::component_version_status, 'superseded'::component_version_status)
+          AND dataset_scope_nodes.node_id = ANY($3)
+        GROUP BY component_versions.dataset_version_major
         "#,
             )
-            .bind(revision_ids)
+            .bind(source_dataset_id)
+            .bind(version_majors)
             .bind(scope_ids)
             .fetch_all(pool)
             .await?
         }
         auth::CapabilityBoundary::None => Vec::new(),
     };
-    count_map_from_uuid_rows(rows)
+    count_map_from_i32_rows(rows)
 }
 
 async fn load_dashboard_dependency_counts(
     pool: &sqlx::PgPool,
     boundary: &auth::CapabilityBoundary,
-    revision_ids: &[Uuid],
-) -> ApiResult<BTreeMap<Uuid, usize>> {
-    if revision_ids.is_empty() {
+    source_dataset_id: Uuid,
+    version_majors: &[i32],
+) -> ApiResult<BTreeMap<i32, usize>> {
+    if version_majors.is_empty() {
         return Ok(BTreeMap::new());
     }
     let rows = match boundary {
         auth::CapabilityBoundary::Global => {
             sqlx::query(
                 r#"
-        SELECT component_versions.dataset_revision_id AS dependency_key,
+        SELECT component_versions.dataset_version_major AS dependency_key,
                COUNT(DISTINCT dashboards.id)::bigint AS dependency_count
         FROM dashboard_components
         JOIN dashboards ON dashboards.id = dashboard_components.dashboard_id
         JOIN component_versions ON component_versions.id = dashboard_components.component_version_id
-        WHERE component_versions.dataset_revision_id = ANY($1)
-        GROUP BY component_versions.dataset_revision_id
+        WHERE component_versions.dataset_id = $1
+          AND component_versions.dataset_version_major = ANY($2)
+          AND component_versions.status IN ('published'::component_version_status, 'superseded'::component_version_status)
+        GROUP BY component_versions.dataset_version_major
         "#,
             )
-            .bind(revision_ids)
+            .bind(source_dataset_id)
+            .bind(version_majors)
             .fetch_all(pool)
             .await?
         }
         auth::CapabilityBoundary::Scoped(scope_ids) => {
             sqlx::query(
                 r#"
-        SELECT component_versions.dataset_revision_id AS dependency_key,
+        SELECT component_versions.dataset_version_major AS dependency_key,
                COUNT(DISTINCT dashboards.id)::bigint AS dependency_count
         FROM dashboard_components
         JOIN dashboards ON dashboards.id = dashboard_components.dashboard_id
         JOIN dashboard_scope_nodes ON dashboard_scope_nodes.dashboard_id = dashboards.id
         JOIN component_versions ON component_versions.id = dashboard_components.component_version_id
-        WHERE component_versions.dataset_revision_id = ANY($1)
-          AND dashboard_scope_nodes.node_id = ANY($2)
-        GROUP BY component_versions.dataset_revision_id
+        WHERE component_versions.dataset_id = $1
+          AND component_versions.dataset_version_major = ANY($2)
+          AND component_versions.status IN ('published'::component_version_status, 'superseded'::component_version_status)
+          AND dashboard_scope_nodes.node_id = ANY($3)
+        GROUP BY component_versions.dataset_version_major
         "#,
             )
-            .bind(revision_ids)
+            .bind(source_dataset_id)
+            .bind(version_majors)
             .bind(scope_ids)
             .fetch_all(pool)
             .await?
         }
         auth::CapabilityBoundary::None => Vec::new(),
     };
-    count_map_from_uuid_rows(rows)
+    count_map_from_i32_rows(rows)
 }
 
 fn count_map_from_uuid_rows(rows: Vec<PgRow>) -> ApiResult<BTreeMap<Uuid, usize>> {
@@ -3775,13 +3771,26 @@ fn validate_dataset_row_filters(
                 filter.field_key
             ))
         })?;
-        let operator = RowFilterOperator::parse(&filter.operator)?;
-        operator.validate_field_type(&field.field_type, &filter.field_key)?;
+        let operator = FilterOperator::parse(&filter.operator).map_err(data_op_error)?;
+        operator
+            .validate_for_field(&data_field_from_validated(field))
+            .map_err(data_op_error)?;
         let value_mode = filter.value_mode.trim().to_string();
         if !matches!(value_mode.as_str(), "value" | "field") {
             return Err(ApiError::BadRequest(format!(
                 "row filter on '{}' has unsupported value mode '{}'",
                 filter.field_key, filter.value_mode
+            )));
+        }
+        if matches!(
+            operator,
+            FilterOperator::Between | FilterOperator::NotBetween
+        ) && value_mode == "field"
+        {
+            return Err(ApiError::BadRequest(format!(
+                "row filter on '{}' does not support field value mode for operator '{}'",
+                filter.field_key,
+                operator.as_str()
             )));
         }
         let value_field_key = if value_mode == "field" {
@@ -3827,7 +3836,21 @@ fn validate_dataset_row_filters(
                 filter.field_key
             )));
         }
-        if operator.requires_value() && value_mode == "value" {
+        if matches!(
+            operator,
+            FilterOperator::Between | FilterOperator::NotBetween
+        ) {
+            let (lower, upper) = split_between_value(value.as_deref().unwrap_or_default())
+                .ok_or_else(|| {
+                    ApiError::BadRequest(format!(
+                        "row filter on '{}' requires two values for operator '{}'",
+                        filter.field_key,
+                        operator.as_str()
+                    ))
+                })?;
+            validate_filter_literal(&field.field_type, &lower)?;
+            validate_filter_literal(&field.field_type, &upper)?;
+        } else if operator.requires_value() && value_mode == "value" {
             validate_filter_literal(&field.field_type, value.as_deref().unwrap_or_default())?;
         }
         filters.push(ValidatedRowFilter {
@@ -3839,6 +3862,14 @@ fn validate_dataset_row_filters(
         });
     }
     Ok(filters)
+}
+
+fn split_between_value(value: &str) -> Option<(String, String)> {
+    value
+        .split_once("..")
+        .or_else(|| value.split_once(','))
+        .map(|(lower, upper)| (lower.trim().to_string(), upper.trim().to_string()))
+        .filter(|(lower, upper)| !lower.is_empty() && !upper.is_empty())
 }
 
 fn validate_filter_literal(field_type: &str, value: &str) -> ApiResult<()> {
@@ -4548,21 +4579,29 @@ fn row_filter_sql(filter: &ValidatedRowFilter) -> String {
     let field = quote_identifier(&filter.field_key);
     let operand = filter_operand_sql(filter);
     match filter.operator {
-        RowFilterOperator::Equals => equality_sql(&field, &operand, &filter.field_type),
-        RowFilterOperator::NotEquals => {
+        FilterOperator::Equals => equality_sql(&field, &operand, &filter.field_type),
+        FilterOperator::NotEquals => {
             let equality = equality_sql(&field, &operand, &filter.field_type);
             format!("NOT ({equality})")
         }
-        RowFilterOperator::Contains => format!(
+        FilterOperator::Contains => format!(
             "POSITION(LOWER({}) IN LOWER(COALESCE({field}, ''))) > 0",
             operand
         ),
-        RowFilterOperator::GreaterThan => comparison_filter_sql(&field, ">", filter),
-        RowFilterOperator::GreaterThanOrEqual => comparison_filter_sql(&field, ">=", filter),
-        RowFilterOperator::LessThan => comparison_filter_sql(&field, "<", filter),
-        RowFilterOperator::LessThanOrEqual => comparison_filter_sql(&field, "<=", filter),
-        RowFilterOperator::IsEmpty => format!("NULLIF({field}, '') IS NULL"),
-        RowFilterOperator::IsNotEmpty => format!("NULLIF({field}, '') IS NOT NULL"),
+        FilterOperator::NotContains => format!(
+            "POSITION(LOWER({}) IN LOWER(COALESCE({field}, ''))) = 0",
+            operand
+        ),
+        FilterOperator::Gt => comparison_filter_sql(&field, ">", filter),
+        FilterOperator::Gte => comparison_filter_sql(&field, ">=", filter),
+        FilterOperator::Lt => comparison_filter_sql(&field, "<", filter),
+        FilterOperator::Lte => comparison_filter_sql(&field, "<=", filter),
+        FilterOperator::Between => between_filter_sql(&field, filter, false),
+        FilterOperator::NotBetween => between_filter_sql(&field, filter, true),
+        FilterOperator::IsEmpty => format!("NULLIF({field}, '') IS NULL"),
+        FilterOperator::IsNotEmpty => format!("NULLIF({field}, '') IS NOT NULL"),
+        FilterOperator::IsNull => format!("{field} IS NULL"),
+        FilterOperator::IsNotNull => format!("{field} IS NOT NULL"),
     }
 }
 
@@ -4579,55 +4618,18 @@ fn comparison_filter_sql(field: &str, operator: &str, filter: &ValidatedRowFilte
     comparison_sql(field, operator, &operand, &filter.field_type)
 }
 
-impl RowFilterOperator {
-    fn parse(value: &str) -> ApiResult<Self> {
-        match value {
-            "equals" => Ok(Self::Equals),
-            "not_equals" => Ok(Self::NotEquals),
-            "contains" => Ok(Self::Contains),
-            "greater_than" => Ok(Self::GreaterThan),
-            "greater_than_or_equal" => Ok(Self::GreaterThanOrEqual),
-            "less_than" => Ok(Self::LessThan),
-            "less_than_or_equal" => Ok(Self::LessThanOrEqual),
-            "is_empty" => Ok(Self::IsEmpty),
-            "is_not_empty" => Ok(Self::IsNotEmpty),
-            other => Err(ApiError::BadRequest(format!(
-                "unsupported row filter operator '{other}'"
-            ))),
-        }
-    }
-
-    fn requires_value(self) -> bool {
-        matches!(
-            self,
-            Self::Equals
-                | Self::NotEquals
-                | Self::Contains
-                | Self::GreaterThan
-                | Self::GreaterThanOrEqual
-                | Self::LessThan
-                | Self::LessThanOrEqual
-        )
-    }
-
-    fn validate_field_type(self, field_type: &str, field_key: &str) -> ApiResult<()> {
-        if matches!(self, Self::Contains) && !matches!(field_type, "text" | "static_text") {
-            return Err(ApiError::BadRequest(format!(
-                "row filter operator 'contains' is not supported for field '{}' with type '{}'",
-                field_key, field_type
-            )));
-        }
-        if matches!(
-            self,
-            Self::GreaterThan | Self::GreaterThanOrEqual | Self::LessThan | Self::LessThanOrEqual
-        ) && !matches!(field_type, "number" | "date" | "datetime" | "timestamp")
-        {
-            return Err(ApiError::BadRequest(format!(
-                "row filter comparison is not supported for field '{}' with type '{}'",
-                field_key, field_type
-            )));
-        }
-        Ok(())
+fn between_filter_sql(field: &str, filter: &ValidatedRowFilter, negated: bool) -> String {
+    let (lower, upper) = split_between_value(filter.value.as_deref().unwrap_or_default())
+        .expect("between literal should be validated before SQL generation");
+    let lower = sql_literal(&lower);
+    let upper = sql_literal(&upper);
+    let lower_sql = comparison_sql(field, ">=", &lower, &filter.field_type);
+    let upper_sql = comparison_sql(field, "<=", &upper, &filter.field_type);
+    let predicate = format!("({lower_sql} AND {upper_sql})");
+    if negated {
+        format!("NOT {predicate}")
+    } else {
+        predicate
     }
 }
 
@@ -4648,77 +4650,40 @@ fn validate_dataset_aggregation(
         .iter()
         .map(|field| (field.key.as_str(), field))
         .collect::<HashMap<_, _>>();
-    let mut group_fields = Vec::new();
-    let mut seen_groups = BTreeSet::new();
-    for key in request.group_fields {
-        require_text("aggregation group field", &key)?;
-        if !field_by_key.contains_key(key.as_str()) {
-            return Err(ApiError::BadRequest(format!(
-                "aggregation group field '{key}' is not projected"
-            )));
-        }
-        if seen_groups.insert(key.clone()) {
-            group_fields.push(key);
-        }
-    }
-    let mut seen_metric_keys = BTreeSet::new();
-    let mut metrics = Vec::new();
-    for metric in request.metrics {
-        require_text("aggregation metric key", &metric.key)?;
-        require_text("aggregation metric label", &metric.label)?;
-        require_identifier("aggregation metric key", &metric.key)?;
-        if !seen_metric_keys.insert(metric.key.clone()) {
-            return Err(ApiError::BadRequest(format!(
-                "aggregation metric key '{}' is duplicated",
-                metric.key
-            )));
-        }
-        if field_by_key.contains_key(metric.key.as_str()) || seen_groups.contains(&metric.key) {
-            return Err(ApiError::BadRequest(format!(
-                "aggregation metric key '{}' conflicts with a projected field",
-                metric.key
-            )));
-        }
-        let function = AggregationFunction::parse(&metric.function)?;
-        let source_field = metric
-            .source_field_key
-            .as_deref()
-            .unwrap_or_default()
-            .trim();
-        let source = if function.requires_source_field() {
-            if source_field.is_empty() {
-                return Err(ApiError::BadRequest(format!(
-                    "aggregation metric '{}' requires a source field",
-                    metric.key
-                )));
-            }
-            let source = field_by_key.get(source_field).ok_or_else(|| {
-                ApiError::BadRequest(format!(
-                    "aggregation metric '{}' references unprojected field '{}'",
-                    metric.key, source_field
-                ))
-            })?;
-            function.validate_field_type(&source.field_type, &metric.key)?;
-            Some((*source).clone())
-        } else {
-            if !source_field.is_empty() {
-                return Err(ApiError::BadRequest(format!(
-                    "aggregation metric '{}' does not use a source field",
-                    metric.key
-                )));
-            }
-            None
-        };
-        let field_type = function.output_field_type(source.as_ref());
-        metrics.push(ValidatedAggregationMetric {
+    let plan = AggregationPlan {
+        group_fields: request.group_fields,
+        metrics: request
+            .metrics
+            .into_iter()
+            .map(|metric| {
+                Ok(AggregateMetric {
+                    key: metric.key,
+                    label: metric.label,
+                    function: AggregateFunction::parse(&metric.function).map_err(data_op_error)?,
+                    source_field_key: metric.source_field_key,
+                    position: metric.position,
+                })
+            })
+            .collect::<ApiResult<Vec<_>>>()?,
+    };
+    let data_fields = fields
+        .iter()
+        .map(data_field_from_validated)
+        .collect::<Vec<_>>();
+    let validated_plan = validate_aggregation_plan(plan, &data_fields).map_err(data_op_error)?;
+    let group_fields = validated_plan.group_fields;
+    let metrics = validated_plan
+        .metrics
+        .into_iter()
+        .map(|metric| ValidatedAggregationMetric {
             key: metric.key,
             label: metric.label,
-            function,
-            source_field_key: source.map(|field| field.key),
-            field_type,
+            function: metric.function,
+            source_field_key: metric.source_field_key,
+            field_type: metric.output_field_type.as_str().to_string(),
             position: metric.position,
-        });
-    }
+        })
+        .collect::<Vec<_>>();
     let row_picker = request
         .row_picker
         .map(|mut row_picker| {
@@ -4830,24 +4795,28 @@ fn require_dataset_output_fields(fields: &[ValidatedDatasetField]) -> ApiResult<
 fn aggregation_metric_sql(metric: &ValidatedAggregationMetric) -> String {
     let key = quote_identifier(&metric.key);
     match metric.function {
-        AggregationFunction::CountRows => format!("COUNT(*)::text AS {key}"),
-        AggregationFunction::CountValues => format!(
+        AggregateFunction::Count => format!("COUNT(*)::text AS {key}"),
+        AggregateFunction::CountValues => format!(
             "COUNT(NULLIF({}, ''))::text AS {key}",
             quote_identifier(metric.source_field_key.as_deref().unwrap_or_default())
         ),
-        AggregationFunction::Sum => format!(
+        AggregateFunction::CountDistinct => format!(
+            "COUNT(DISTINCT NULLIF({}, ''))::text AS {key}",
+            quote_identifier(metric.source_field_key.as_deref().unwrap_or_default())
+        ),
+        AggregateFunction::Sum => format!(
             "SUM(NULLIF({}, '')::numeric)::text AS {key}",
             quote_identifier(metric.source_field_key.as_deref().unwrap_or_default())
         ),
-        AggregationFunction::Average => format!(
+        AggregateFunction::Avg => format!(
             "AVG(NULLIF({}, '')::numeric)::text AS {key}",
             quote_identifier(metric.source_field_key.as_deref().unwrap_or_default())
         ),
-        AggregationFunction::Min => format!(
+        AggregateFunction::Min => format!(
             "MIN({})::text AS {key}",
             aggregation_source_value_sql(metric)
         ),
-        AggregationFunction::Max => format!(
+        AggregateFunction::Max => format!(
             "MAX({})::text AS {key}",
             aggregation_source_value_sql(metric)
         ),
@@ -4857,55 +4826,6 @@ fn aggregation_metric_sql(metric: &ValidatedAggregationMetric) -> String {
 fn aggregation_source_value_sql(metric: &ValidatedAggregationMetric) -> String {
     let source = quote_identifier(metric.source_field_key.as_deref().unwrap_or_default());
     typed_orderable_sql(&source, &metric.field_type)
-}
-
-impl AggregationFunction {
-    fn parse(value: &str) -> ApiResult<Self> {
-        match value {
-            "count_rows" => Ok(Self::CountRows),
-            "count_values" => Ok(Self::CountValues),
-            "sum" => Ok(Self::Sum),
-            "average" => Ok(Self::Average),
-            "min" => Ok(Self::Min),
-            "max" => Ok(Self::Max),
-            other => Err(ApiError::BadRequest(format!(
-                "unsupported aggregation function '{other}'"
-            ))),
-        }
-    }
-
-    fn requires_source_field(self) -> bool {
-        !matches!(self, Self::CountRows)
-    }
-
-    fn validate_field_type(self, field_type: &str, metric_key: &str) -> ApiResult<()> {
-        let allowed = match self {
-            Self::Sum | Self::Average => matches!(field_type, "number"),
-            Self::Min | Self::Max => {
-                matches!(
-                    field_type,
-                    "number" | "date" | "datetime" | "timestamp" | "single_choice" | "multi_choice"
-                )
-            }
-            Self::CountRows | Self::CountValues => true,
-        };
-        if allowed {
-            Ok(())
-        } else {
-            Err(ApiError::BadRequest(format!(
-                "aggregation metric '{metric_key}' cannot use field type '{field_type}'"
-            )))
-        }
-    }
-
-    fn output_field_type(self, source: Option<&ValidatedDatasetField>) -> String {
-        match self {
-            Self::CountRows | Self::CountValues | Self::Sum | Self::Average => "number".into(),
-            Self::Min | Self::Max => source
-                .map(|field| field.field_type.clone())
-                .unwrap_or_else(|| "text".into()),
-        }
-    }
 }
 
 fn dataset_field_definition(field: &ValidatedDatasetField) -> DatasetFieldDefinition {
@@ -4918,6 +4838,19 @@ fn dataset_field_definition(field: &ValidatedDatasetField) -> DatasetFieldDefini
         field_type: field.field_type.clone(),
         position: field.position,
     }
+}
+
+fn data_field_from_validated(field: &ValidatedDatasetField) -> DataField {
+    DataField {
+        key: field.key.clone(),
+        label: field.label.clone(),
+        field_type: FieldType::parse(&field.field_type),
+        position: field.position,
+    }
+}
+
+fn data_op_error(error: tessara_data_ops::DataOpError) -> ApiError {
+    ApiError::BadRequest(error.message().to_string())
 }
 
 async fn insert_dataset_sources(
@@ -5890,13 +5823,13 @@ mod tests {
         let min_metric = ValidatedAggregationMetric {
             key: "minimum_target".into(),
             label: "Minimum Target".into(),
-            function: AggregationFunction::Min,
+            function: AggregateFunction::Min,
             source_field_key: Some("program__participant_target".into()),
             field_type: "number".into(),
             position: 0,
         };
         let max_metric = ValidatedAggregationMetric {
-            function: AggregationFunction::Max,
+            function: AggregateFunction::Max,
             key: "maximum_target".into(),
             label: "Maximum Target".into(),
             source_field_key: Some("program__participant_target".into()),
@@ -5911,6 +5844,23 @@ mod tests {
         assert_eq!(
             aggregation_metric_sql(&max_metric),
             "MAX(NULLIF(\"program__participant_target\", '')::numeric)::text AS \"maximum_target\""
+        );
+    }
+
+    #[test]
+    fn count_distinct_aggregation_uses_distinct_non_empty_values() {
+        let metric = ValidatedAggregationMetric {
+            key: "distinct_programs".into(),
+            label: "Distinct Programs".into(),
+            function: AggregateFunction::CountDistinct,
+            source_field_key: Some("program__name".into()),
+            field_type: "number".into(),
+            position: 0,
+        };
+
+        assert_eq!(
+            aggregation_metric_sql(&metric),
+            "COUNT(DISTINCT NULLIF(\"program__name\", ''))::text AS \"distinct_programs\""
         );
     }
 
@@ -5953,7 +5903,7 @@ mod tests {
         let filter = ValidatedRowFilter {
             field_key: "program__participants".into(),
             field_type: "number".into(),
-            operator: RowFilterOperator::GreaterThanOrEqual,
+            operator: FilterOperator::Gte,
             value: None,
             value_field_key: Some("program2__participants".into()),
         };
@@ -5969,14 +5919,14 @@ mod tests {
         let numeric_filter = ValidatedRowFilter {
             field_key: "program__participants".into(),
             field_type: "number".into(),
-            operator: RowFilterOperator::Equals,
+            operator: FilterOperator::Equals,
             value: Some("135.0".into()),
             value_field_key: None,
         };
         let date_filter = ValidatedRowFilter {
             field_key: "program__review_window_start".into(),
             field_type: "date".into(),
-            operator: RowFilterOperator::Equals,
+            operator: FilterOperator::Equals,
             value: Some("2026-06-03".into()),
             value_field_key: None,
         };
@@ -5985,6 +5935,33 @@ mod tests {
         let date_sql = row_filter_sql(&date_filter);
         assert!(date_sql.contains("::date"));
         assert!(!date_sql.contains("::timestamptz"));
+    }
+
+    #[test]
+    fn shared_negative_and_range_filters_generate_sql() {
+        let not_contains = ValidatedRowFilter {
+            field_key: "program__name".into(),
+            field_type: "text".into(),
+            operator: FilterOperator::NotContains,
+            value: Some("archived".into()),
+            value_field_key: None,
+        };
+        let between = ValidatedRowFilter {
+            field_key: "program__participants".into(),
+            field_type: "number".into(),
+            operator: FilterOperator::Between,
+            value: Some("10, 20".into()),
+            value_field_key: None,
+        };
+
+        assert_eq!(
+            row_filter_sql(&not_contains),
+            "POSITION(LOWER('archived') IN LOWER(COALESCE(\"program__name\", ''))) = 0"
+        );
+        assert_eq!(
+            row_filter_sql(&between),
+            "(NULLIF(\"program__participants\", '')::numeric >= NULLIF('10', '')::numeric AND NULLIF(\"program__participants\", '')::numeric <= NULLIF('20', '')::numeric)"
+        );
     }
 
     #[test]
@@ -6058,7 +6035,7 @@ mod tests {
         let filter = ValidatedRowFilter {
             field_key: "program__funding_confirmed".into(),
             field_type: "boolean".into(),
-            operator: RowFilterOperator::Equals,
+            operator: FilterOperator::Equals,
             value: Some("yes".into()),
             value_field_key: None,
         };

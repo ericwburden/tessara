@@ -315,26 +315,30 @@ input {
   gap: 0.75rem;
 }
 
-.top-app-bar h1,
+.top-app-bar__title,
+.page-header h1,
 .page-header h2,
 .login-panel h1 {
   margin: 0;
   font-family: var(--font-heading);
 }
 
-.top-app-bar h1,
+.top-app-bar__title,
 .login-panel h1 {
+  display: block;
   font-size: 2rem;
   line-height: 2.5rem;
   font-weight: 750;
 }
 
+.page-header h1,
 .page-header h2 {
   font-size: 1.18rem;
   line-height: 1.45rem;
   font-weight: 750;
 }
 
+.page-header h1::after,
 .page-header h2::after {
   display: block;
   width: 3.2rem;
@@ -621,6 +625,28 @@ input {
   display: grid;
   gap: 0.75rem;
   min-width: 0;
+}
+
+.validation-findings ul {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+}
+
+.validation-finding {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  display: grid;
+  gap: 0.25rem;
+  list-style: none;
+  padding: 0.75rem;
+}
+
+.validation-finding span,
+.validation-finding p {
+  color: var(--color-muted);
+  margin: 0;
 }
 
 .page-header {
