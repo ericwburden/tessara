@@ -5,6 +5,24 @@ artifacts, old sprint worktrees, `/app/*` routes, or earlier crate names. Use
 `docs/roadmap.md`, `docs/architecture.md`, and `docs/README.md` for current
 project direction.
 
+## 2026-07-03 - Sprint 4A Kickoff
+
+- Sprint: Sprint 4A: Table Component Slice
+- Kickoff status: started from clean `main` with roadmap `(Next)` scope
+- Branch: `codex/sprint-4a`
+- Worktree: `C:\Users\eric-dev\Projects\tessara-sprint-4a`
+- Plan file: `docs/sprints/sprint-4a-plan.md`
+- Planned verification commands:
+  - `cargo fmt --all`
+  - `cargo test -p tessara-api`
+  - `cargo test -p tessara-web`
+  - `cargo test -p tessara-web-components` if the new crate exposes runnable tests
+  - `npx playwright test`
+  - `.\scripts\smoke.ps1`
+  - `.\scripts\local-launch.ps1`
+  - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`
+- Immediate implementation focus: inventory existing component/reporting contracts, define table component API/versioning/validation behavior, then create the `tessara-web-components` crate and root route adapters for component directory/detail/create/edit/publish/viewer flows.
+
 ## 2026-07-03 - Sprint 3C Final Closeout Validation
 
 - Completed:
