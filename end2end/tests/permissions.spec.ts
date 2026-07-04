@@ -495,9 +495,17 @@ async function setupFixtures(): Promise<FixtureState> {
     (dataset) => overlaps(dataset.visibility_nodes, inScopeNodeIds),
     "an in-scope dataset should exist",
   );
+  await assignAccess(
+    admin,
+    users.componentManager.id,
+    inScopeDataset.visibility_nodes.map((node) => node.node_id),
+  );
+  const componentManagerNodeIds = new Set(inScopeDataset.visibility_nodes.map((node) => node.node_id));
   const outOfScopeDataset = requireItem(
     adminDatasets,
-    (dataset) => disjointFrom(dataset.visibility_nodes, inScopeNodeIds),
+    (dataset) =>
+      disjointFrom(dataset.visibility_nodes, inScopeNodeIds) &&
+      disjointFrom(dataset.visibility_nodes, componentManagerNodeIds),
     "an out-of-scope dataset should exist",
   );
 
@@ -1152,16 +1160,34 @@ test.describe.serial("capability + scope + ownership permissions", () => {
   });
 
   test("scoped component manager cannot bind or publish out-of-scope dataset major lines", async () => {
+    const inScopeMajor = datasetMajor(fixtures.inScopeDataset);
     const outOfScopeMajor = datasetMajor(fixtures.outOfScopeDataset);
     const outOfScopeSlug = `${RUN_ID}-component-manage-out`;
+    const manageableSlug = `${RUN_ID}-component-manage-in`;
     const componentSession = await getJson<SessionState>(fixtures.componentManager, "/api/auth/session");
     expect(componentSession.account?.capabilities).toContain("components:manage");
+    const manageableComponent = await postJson<IdResponse>(
+      fixtures.componentManager,
+      "/api/admin/components",
+      {
+        name: `${RUN_ID} Manageable Component`,
+        slug: manageableSlug,
+        description: "In-scope component management permission fixture.",
+        version: {
+          dataset_id: fixtures.inScopeDataset.id,
+          dataset_version_major: inScopeMajor,
+          component_type: "aggregate_table",
+          config: aggregateCountConfig(),
+          publish: false,
+        },
+      },
+    );
     const manageableComponents = await getJson<ComponentSummary[]>(
       fixtures.componentManager,
       "/api/admin/components",
     );
     expect(manageableComponents.length).toBeGreaterThan(0);
-    const manageableComponent = manageableComponents[0];
+    expect(manageableComponents.some((component) => component.id === manageableComponent.id)).toBe(true);
 
     const bindError = await expectErrorStatus(
       fixtures.componentManager,

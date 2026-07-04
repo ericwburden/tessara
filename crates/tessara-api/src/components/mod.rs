@@ -129,7 +129,7 @@ pub async fn create_component(
     if let (Some(version), Some(binding)) = (payload.version.as_ref(), version_binding.as_ref()) {
         let version_id = upsert_component_draft_version(&mut tx, id, binding, version).await?;
         if version.publish.unwrap_or(false) {
-            publish_component_version_in_tx(&mut tx, id, version_id).await?;
+            publish_component_version_in_tx(&mut tx, &state.pool, &account, id, version_id).await?;
         }
     }
     tx.commit().await?;
@@ -170,14 +170,7 @@ pub async fn update_component(
 ) -> ApiResult<Json<IdResponse>> {
     let account = auth::require_capability(&state.pool, &headers, "components:manage").await?;
     require_component_exists(&state.pool, component_id).await?;
-    let boundary = auth::capability_boundary(&state.pool, &account, "components:manage").await?;
-    require_component_visible_for_boundary(
-        &state.pool,
-        component_id,
-        &boundary,
-        "components:manage",
-    )
-    .await?;
+    require_component_fully_manageable(&state.pool, &account, component_id).await?;
     require_text("component name", &payload.name)?;
     require_text("component slug", &payload.slug)?;
     sqlx::query(
@@ -279,6 +272,7 @@ pub async fn create_component_version(
 ) -> ApiResult<Json<IdResponse>> {
     let account = auth::require_capability(&state.pool, &headers, "components:manage").await?;
     require_component_exists(&state.pool, component_id).await?;
+    require_component_fully_manageable(&state.pool, &account, component_id).await?;
     let binding = resolve_component_dataset_binding(&state.pool, &payload).await?;
     require_dataset_major_line_exists(
         &state.pool,
@@ -305,7 +299,7 @@ pub async fn create_component_version(
     let mut tx = state.pool.begin().await?;
     let id = upsert_component_draft_version(&mut tx, component_id, &binding, &payload).await?;
     if payload.publish.unwrap_or(false) {
-        publish_component_version_in_tx(&mut tx, component_id, id).await?;
+        publish_component_version_in_tx(&mut tx, &state.pool, &account, component_id, id).await?;
     }
     tx.commit().await?;
     Ok(Json(IdResponse { id }))
@@ -319,8 +313,6 @@ pub async fn update_component_version(
     Json(payload): Json<CreateComponentVersionRequest>,
 ) -> ApiResult<Json<IdResponse>> {
     let account = auth::require_capability(&state.pool, &headers, "components:manage").await?;
-    require_component_exists(&state.pool, component_id).await?;
-    require_component_version_draft_row(&state.pool, component_id, version_id).await?;
     let binding = resolve_component_dataset_binding(&state.pool, &payload).await?;
     require_dataset_major_line_exists(
         &state.pool,
@@ -336,6 +328,11 @@ pub async fn update_component_version(
     )
     .await?;
     validate_component_type(&payload.component_type)?;
+
+    let mut tx = state.pool.begin().await?;
+    lock_component_in_tx(&mut tx, component_id).await?;
+    require_component_fully_manageable(&state.pool, &account, component_id).await?;
+    require_component_version_draft_row_in_tx(&mut tx, component_id, version_id).await?;
     let dataset_fields = load_dataset_major_line_fields(
         &state.pool,
         binding.dataset_id,
@@ -344,7 +341,7 @@ pub async fn update_component_version(
     .await?;
     validate_component_config(&payload.component_type, &payload.config, &dataset_fields)?;
 
-    sqlx::query(
+    let update_result = sqlx::query(
         r#"
         UPDATE component_versions
         SET dataset_id = $1,
@@ -363,8 +360,14 @@ pub async fn update_component_version(
     .bind(&payload.config)
     .bind(component_id)
     .bind(version_id)
-    .execute(&state.pool)
+    .execute(&mut *tx)
     .await?;
+    if update_result.rows_affected() != 1 {
+        return Err(ApiError::BadRequest(format!(
+            "component version {version_id} could not be updated because it is no longer a draft"
+        )));
+    }
+    tx.commit().await?;
     Ok(Json(IdResponse { id: version_id }))
 }
 
@@ -375,25 +378,9 @@ pub async fn publish_component_version(
     Path((component_id, version_id)): Path<(Uuid, Uuid)>,
 ) -> ApiResult<Json<IdResponse>> {
     let account = auth::require_capability(&state.pool, &headers, "components:manage").await?;
-    require_component_exists(&state.pool, component_id).await?;
-    let version = load_component_version_for_publish(&state.pool, component_id, version_id).await?;
-    require_dataset_fully_in_capability_scope(
-        &state.pool,
-        &account,
-        "components:manage",
-        version.dataset_id,
-    )
-    .await?;
-    let dataset_fields = load_dataset_major_line_fields(
-        &state.pool,
-        version.dataset_id,
-        version.dataset_version_major,
-    )
-    .await?;
-    validate_component_config(&version.component_type, &version.config, &dataset_fields)?;
-
     let mut tx = state.pool.begin().await?;
-    publish_component_version_in_tx(&mut tx, component_id, version_id).await?;
+    publish_component_version_in_tx(&mut tx, &state.pool, &account, component_id, version_id)
+        .await?;
     tx.commit().await?;
     Ok(Json(IdResponse { id: version_id }))
 }
@@ -439,27 +426,16 @@ async fn upsert_component_draft_version(
 
 async fn publish_component_version_in_tx(
     tx: &mut Transaction<'_, Postgres>,
+    pool: &sqlx::PgPool,
+    account: &auth::AccountContext,
     component_id: Uuid,
     version_id: Uuid,
 ) -> ApiResult<()> {
-    let component_locked: Option<Uuid> = sqlx::query_scalar(
+    lock_component_in_tx(tx, component_id).await?;
+    let row = sqlx::query(
         r#"
-        SELECT id
-        FROM components
-        WHERE id = $1
-        FOR UPDATE
-        "#,
-    )
-    .bind(component_id)
-    .fetch_optional(&mut **tx)
-    .await?;
-    if component_locked.is_none() {
-        return Err(ApiError::NotFound(format!("component {component_id}")));
-    }
-
-    let status: Option<String> = sqlx::query_scalar(
-        r#"
-        SELECT status::text
+        SELECT dataset_id, dataset_version_major, component_type::text AS component_type,
+               config, status::text AS status
         FROM component_versions
         WHERE component_id = $1
           AND id = $2
@@ -469,15 +445,23 @@ async fn publish_component_version_in_tx(
     .bind(component_id)
     .bind(version_id)
     .fetch_optional(&mut **tx)
-    .await?;
-    match status.as_deref() {
-        Some(status) => require_component_version_draft(version_id, status)?,
-        None => {
-            return Err(ApiError::NotFound(format!(
-                "component version {version_id}"
-            )));
-        }
-    }
+    .await?
+    .ok_or_else(|| ApiError::NotFound(format!("component version {version_id}")))?;
+    let status: String = row.try_get("status")?;
+    require_component_version_draft(version_id, &status)?;
+    let dataset_id: Uuid = row.try_get("dataset_id")?;
+    let dataset_version_major = row.try_get("dataset_version_major")?;
+    let component_type: String = row.try_get("component_type")?;
+    let config = row.try_get("config")?;
+
+    require_component_fully_manageable(pool, account, component_id).await?;
+    require_dataset_fully_in_capability_scope(pool, account, "components:manage", dataset_id)
+        .await?;
+    validate_component_type(&component_type)?;
+    let dataset_fields =
+        load_dataset_major_line_fields(pool, dataset_id, dataset_version_major).await?;
+    validate_component_config(&component_type, &config, &dataset_fields)?;
+
     sqlx::query(
         r#"
         UPDATE component_versions
@@ -619,13 +603,6 @@ struct ComponentRuntimeQuery {
     sort: Option<ComponentSortConfig>,
     visible_columns: Vec<String>,
     filters: Vec<ComponentFilterConfig>,
-}
-
-struct ComponentVersionForPublish {
-    dataset_id: Uuid,
-    dataset_version_major: i32,
-    component_type: String,
-    config: serde_json::Value,
 }
 
 struct MajorLineMaterialization {
@@ -1431,41 +1408,18 @@ async fn load_component_version_for_table(
         }
     })?;
     let component_id = row.try_get("component_id")?;
-    require_component_visible_for_boundary(pool, component_id, &boundary, "components:read")
-        .await?;
+    let dataset_id = row.try_get("dataset_id")?;
+    if version_id.is_some() {
+        require_dataset_visible_for_boundary(pool, dataset_id, &boundary, "components:read")
+            .await?;
+    } else {
+        require_component_visible_for_boundary(pool, component_id, &boundary, "components:read")
+            .await?;
+    }
     Ok(ComponentVersionForTable {
         id: row.try_get("id")?,
         component_id,
-        dataset_id: row.try_get("dataset_id")?,
-        dataset_version_major: row.try_get("dataset_version_major")?,
-        component_type: row.try_get("component_type")?,
-        config: row.try_get("config")?,
-    })
-}
-
-async fn load_component_version_for_publish(
-    pool: &sqlx::PgPool,
-    component_id: Uuid,
-    version_id: Uuid,
-) -> ApiResult<ComponentVersionForPublish> {
-    let row = sqlx::query(
-        r#"
-        SELECT dataset_id, dataset_version_major, component_type::text AS component_type, config,
-               status::text AS status
-        FROM component_versions
-        WHERE component_id = $1
-          AND id = $2
-        "#,
-    )
-    .bind(component_id)
-    .bind(version_id)
-    .fetch_optional(pool)
-    .await?
-    .ok_or_else(|| ApiError::NotFound(format!("component version {version_id}")))?;
-    let status: String = row.try_get("status")?;
-    require_component_version_draft(version_id, &status)?;
-    Ok(ComponentVersionForPublish {
-        dataset_id: row.try_get("dataset_id")?,
+        dataset_id,
         dataset_version_major: row.try_get("dataset_version_major")?,
         component_type: row.try_get("component_type")?,
         config: row.try_get("config")?,
@@ -1482,8 +1436,30 @@ fn require_component_version_draft(version_id: Uuid, status: &str) -> ApiResult<
     }
 }
 
-async fn require_component_version_draft_row(
-    pool: &sqlx::PgPool,
+async fn lock_component_in_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    component_id: Uuid,
+) -> ApiResult<()> {
+    let component_locked: Option<Uuid> = sqlx::query_scalar(
+        r#"
+        SELECT id
+        FROM components
+        WHERE id = $1
+        FOR UPDATE
+        "#,
+    )
+    .bind(component_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+    if component_locked.is_some() {
+        Ok(())
+    } else {
+        Err(ApiError::NotFound(format!("component {component_id}")))
+    }
+}
+
+async fn require_component_version_draft_row_in_tx(
+    tx: &mut Transaction<'_, Postgres>,
     component_id: Uuid,
     version_id: Uuid,
 ) -> ApiResult<()> {
@@ -1493,11 +1469,12 @@ async fn require_component_version_draft_row(
         FROM component_versions
         WHERE component_id = $1
           AND id = $2
+        FOR UPDATE
         "#,
     )
     .bind(component_id)
     .bind(version_id)
-    .fetch_optional(pool)
+    .fetch_optional(&mut **tx)
     .await?
     .ok_or_else(|| ApiError::NotFound(format!("component version {version_id}")))?;
     require_component_version_draft(version_id, &status)
@@ -1512,7 +1489,7 @@ async fn load_component_summaries(
         auth::CapabilityBoundary::Scoped(scope_ids) if capability == "components:manage" => {
             sqlx::query(
                 r#"
-        SELECT DISTINCT ON (components.id)
+        SELECT
             components.id,
             components.name,
             components.slug,
@@ -1520,15 +1497,18 @@ async fn load_component_summaries(
             current_versions.id AS current_version_id,
             current_versions.component_type::text AS current_component_type
         FROM components
-        JOIN component_versions AS visible_versions
-            ON visible_versions.component_id = components.id
-        JOIN dataset_scope_nodes
-            ON dataset_scope_nodes.dataset_id = visible_versions.dataset_id
-           AND dataset_scope_nodes.node_id = ANY($1)
         LEFT JOIN component_versions AS current_versions
             ON current_versions.component_id = components.id
            AND current_versions.status = 'published'::component_version_status
-        ORDER BY components.id, components.name
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM component_versions AS governed_versions
+            JOIN dataset_scope_nodes
+              ON dataset_scope_nodes.dataset_id = governed_versions.dataset_id
+            WHERE governed_versions.component_id = components.id
+              AND NOT (dataset_scope_nodes.node_id = ANY($1))
+        )
+        ORDER BY components.name, components.id
         "#,
             )
             .bind(scope_ids)
@@ -1606,7 +1586,11 @@ async fn load_component_definition(
     capability: &str,
 ) -> ApiResult<ComponentDefinition> {
     let boundary = auth::capability_boundary(pool, account, capability).await?;
-    require_component_visible_for_boundary(pool, component_id, &boundary, capability).await?;
+    if capability == "components:manage" {
+        require_component_fully_manageable(pool, account, component_id).await?;
+    } else {
+        require_component_visible_for_boundary(pool, component_id, &boundary, capability).await?;
+    }
     let component = sqlx::query("SELECT id, name, slug, description FROM components WHERE id = $1")
         .bind(component_id)
         .fetch_optional(pool)
@@ -2130,6 +2114,67 @@ async fn require_dataset_fully_in_capability_scope(
     auth::require_capability_contains_nodes(pool, account, capability, &node_ids).await
 }
 
+async fn require_component_fully_manageable(
+    pool: &sqlx::PgPool,
+    account: &auth::AccountContext,
+    component_id: Uuid,
+) -> ApiResult<()> {
+    let rows = sqlx::query(
+        r#"
+        SELECT DISTINCT dataset_scope_nodes.node_id
+        FROM component_versions
+        JOIN dataset_scope_nodes
+          ON dataset_scope_nodes.dataset_id = component_versions.dataset_id
+        WHERE component_versions.component_id = $1
+        "#,
+    )
+    .bind(component_id)
+    .fetch_all(pool)
+    .await?;
+    let node_ids = rows
+        .into_iter()
+        .map(|row| row.try_get("node_id"))
+        .collect::<Result<Vec<Uuid>, sqlx::Error>>()?;
+    if node_ids.is_empty() {
+        require_component_exists(pool, component_id).await
+    } else {
+        auth::require_capability_contains_nodes(pool, account, "components:manage", &node_ids).await
+    }
+}
+
+async fn require_dataset_visible_for_boundary(
+    pool: &sqlx::PgPool,
+    dataset_id: Uuid,
+    boundary: &auth::CapabilityBoundary,
+    capability: &str,
+) -> ApiResult<()> {
+    match boundary {
+        auth::CapabilityBoundary::Global => Ok(()),
+        auth::CapabilityBoundary::Scoped(scope_ids) => {
+            let visible = sqlx::query_scalar::<_, bool>(
+                r#"
+                SELECT EXISTS(
+                    SELECT 1
+                    FROM dataset_scope_nodes
+                    WHERE dataset_id = $1
+                      AND node_id = ANY($2)
+                )
+                "#,
+            )
+            .bind(dataset_id)
+            .bind(scope_ids)
+            .fetch_one(pool)
+            .await?;
+            if visible {
+                Ok(())
+            } else {
+                Err(ApiError::Forbidden(capability.into()))
+            }
+        }
+        auth::CapabilityBoundary::None => Err(ApiError::Forbidden(capability.into())),
+    }
+}
+
 async fn require_component_visible_for_boundary(
     pool: &sqlx::PgPool,
     component_id: Uuid,
@@ -2197,10 +2242,11 @@ mod tests {
 
     use super::{
         ComponentTableQuery, ComponentVersionForTable, CreateComponentRequest,
-        aggregate_metric_sql, aggregate_search_fields, component_filter_sql,
-        component_pagination_sql, detail_search_fields, effective_component_page_size,
-        parse_component_query_filters, parse_component_sort, require_component_version_draft,
-        table_order_by_sql, validate_component_config, visible_table_fields,
+        CreateComponentVersionRequest, aggregate_metric_sql, aggregate_search_fields,
+        component_filter_sql, component_pagination_sql, detail_search_fields,
+        effective_component_page_size, parse_component_query_filters, parse_component_sort,
+        require_component_version_draft, table_order_by_sql, validate_component_config,
+        visible_table_fields,
     };
 
     fn field(key: &str, field_type: FieldType) -> DataField {
@@ -2591,5 +2637,21 @@ mod tests {
         assert_eq!(version.dataset_id, Some(dataset_id));
         assert_eq!(version.dataset_version_major, Some(1));
         assert_eq!(version.component_type, "detail_table");
+    }
+
+    #[test]
+    fn component_version_payload_rejects_legacy_revision_binding() {
+        let error = match serde_json::from_value::<CreateComponentVersionRequest>(json!({
+            "dataset_revision_id": Uuid::nil(),
+            "component_type": "detail_table",
+            "config": {
+                "columns": ["program"]
+            }
+        })) {
+            Ok(_) => panic!("legacy revision-bound payload should be rejected"),
+            Err(error) => error,
+        };
+
+        assert!(error.to_string().contains("dataset_revision_id"));
     }
 }

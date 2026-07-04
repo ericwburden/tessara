@@ -480,7 +480,7 @@ CREATE TABLE component_versions (
     component_id uuid NOT NULL REFERENCES components(id) ON DELETE CASCADE,
     dataset_id uuid NOT NULL REFERENCES datasets(id) ON DELETE RESTRICT,
     dataset_version_major integer NOT NULL,
-    binding_mode text NOT NULL DEFAULT 'major_line',
+    binding_mode text NOT NULL DEFAULT 'major_line' CHECK (binding_mode = 'major_line'),
     component_type component_type NOT NULL,
     version_number integer NOT NULL,
     version_label text NOT NULL,

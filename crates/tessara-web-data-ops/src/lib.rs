@@ -687,8 +687,28 @@ fn metric_field_type_is_allowed(function: &str, field_type: &str) -> bool {
         "sum" | "average" => field_type == "number",
         "min" | "max" => matches!(
             field_type,
-            "number" | "date" | "datetime" | "timestamp" | "single_choice" | "multi_choice"
+            "text"
+                | "static_text"
+                | "number"
+                | "date"
+                | "datetime"
+                | "timestamp"
+                | "single_choice"
+                | "multi_choice"
         ),
         _ => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::metric_field_type_is_allowed;
+
+    #[test]
+    fn min_max_allow_text_and_static_text_fields() {
+        for function in ["min", "max"] {
+            assert!(metric_field_type_is_allowed(function, "text"));
+            assert!(metric_field_type_is_allowed(function, "static_text"));
+        }
     }
 }
