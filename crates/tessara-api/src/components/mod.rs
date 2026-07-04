@@ -454,7 +454,7 @@ async fn publish_component_version_in_tx(
     let component_type: String = row.try_get("component_type")?;
     let config = row.try_get("config")?;
 
-    require_component_fully_manageable(pool, account, component_id).await?;
+    require_component_fully_manageable_in_tx(tx, pool, account, component_id).await?;
     require_dataset_fully_in_capability_scope(pool, account, "components:manage", dataset_id)
         .await?;
     validate_component_type(&component_type)?;
@@ -1529,9 +1529,12 @@ async fn load_component_summaries(
         LEFT JOIN component_versions AS current_versions
             ON current_versions.component_id = components.id
            AND current_versions.status = 'published'::component_version_status
-        JOIN dataset_scope_nodes
-            ON dataset_scope_nodes.dataset_id = current_versions.dataset_id
-           AND dataset_scope_nodes.node_id = ANY($1)
+        WHERE EXISTS (
+            SELECT 1
+            FROM dataset_scope_nodes
+            WHERE dataset_scope_nodes.dataset_id = current_versions.dataset_id
+              AND dataset_scope_nodes.node_id = ANY($1)
+        )
         ORDER BY components.name, components.id
         "#,
             )
@@ -1706,10 +1709,14 @@ async fn load_component_versions(
                component_versions.component_type::text AS component_type,
                component_versions.status::text AS status, component_versions.version_label, component_versions.config
         FROM component_versions
-        JOIN dataset_scope_nodes ON dataset_scope_nodes.dataset_id = component_versions.dataset_id
         WHERE component_id = $1
-          AND dataset_scope_nodes.node_id = ANY($2)
           AND ($3 OR component_versions.status = 'published'::component_version_status)
+          AND EXISTS (
+              SELECT 1
+              FROM dataset_scope_nodes
+              WHERE dataset_scope_nodes.dataset_id = component_versions.dataset_id
+                AND dataset_scope_nodes.node_id = ANY($2)
+          )
         ORDER BY component_versions.version_number DESC, component_versions.created_at DESC
         "#,
         )
@@ -2137,6 +2144,35 @@ async fn require_component_fully_manageable(
         .collect::<Result<Vec<Uuid>, sqlx::Error>>()?;
     if node_ids.is_empty() {
         require_component_exists(pool, component_id).await
+    } else {
+        auth::require_capability_contains_nodes(pool, account, "components:manage", &node_ids).await
+    }
+}
+
+async fn require_component_fully_manageable_in_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    pool: &sqlx::PgPool,
+    account: &auth::AccountContext,
+    component_id: Uuid,
+) -> ApiResult<()> {
+    let rows = sqlx::query(
+        r#"
+        SELECT DISTINCT dataset_scope_nodes.node_id
+        FROM component_versions
+        JOIN dataset_scope_nodes
+          ON dataset_scope_nodes.dataset_id = component_versions.dataset_id
+        WHERE component_versions.component_id = $1
+        "#,
+    )
+    .bind(component_id)
+    .fetch_all(&mut **tx)
+    .await?;
+    let node_ids = rows
+        .into_iter()
+        .map(|row| row.try_get("node_id"))
+        .collect::<Result<Vec<Uuid>, sqlx::Error>>()?;
+    if node_ids.is_empty() {
+        Ok(())
     } else {
         auth::require_capability_contains_nodes(pool, account, "components:manage", &node_ids).await
     }

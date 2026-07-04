@@ -66,6 +66,7 @@ type DatasetTable = {
 type ComponentSummary = { id: string; name: string; slug: string };
 type ComponentDefinition = { id: string; name: string; versions: unknown[] };
 type ComponentTable = {
+  component_version_id: string;
   materialization_state: string;
   rows: Array<{ values: Record<string, string | null> }>;
 };
@@ -1248,6 +1249,60 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       {},
     );
     expect(publishError.message).toContain("components:manage");
+  });
+
+  test("explicit historical component table checks selected version dataset scope", async () => {
+    const inScopeMajor = datasetMajor(fixtures.inScopeDataset);
+    const outOfScopeMajor = datasetMajor(fixtures.outOfScopeDataset);
+    const slug = `${RUN_ID}-historical-component-scope`;
+    const component = await postJson<IdResponse>(fixtures.admin, "/api/admin/components", {
+      name: `${RUN_ID} Historical Component Scope`,
+      slug,
+      description: "Historical version selected-dataset permission fixture.",
+      version: {
+        dataset_id: fixtures.outOfScopeDataset.id,
+        dataset_version_major: outOfScopeMajor,
+        component_type: "aggregate_table",
+        config: aggregateCountConfig(),
+        publish: true,
+      },
+    });
+    const firstVersion = await getJson<ComponentDefinition>(
+      fixtures.admin,
+      `/api/admin/components/${component.id}`,
+    );
+    const hiddenHistoryVersion = firstVersion.versions[0] as { id: string };
+
+    const secondVersion = await postJson<IdResponse>(
+      fixtures.admin,
+      `/api/admin/components/${component.id}/versions`,
+      {
+        dataset_id: fixtures.inScopeDataset.id,
+        dataset_version_major: inScopeMajor,
+        component_type: "aggregate_table",
+        config: aggregateCountConfig(),
+        publish: true,
+      },
+    );
+
+    const currentTable = await getJson<ComponentTable>(
+      fixtures.scopedManager,
+      `/api/components/${slug}/table`,
+    );
+    expect(currentTable.materialization_state).toBe("ready");
+    expect(currentTable.rows.length).toBeGreaterThan(0);
+    expect(await getJson<ComponentTable>(fixtures.admin, `/api/components/${slug}/versions/${hiddenHistoryVersion.id}/table`))
+      .toMatchObject({ component_version_id: hiddenHistoryVersion.id });
+    await expectStatus(
+      fixtures.scopedManager,
+      "get",
+      `/api/components/${slug}/versions/${hiddenHistoryVersion.id}/table`,
+      [403],
+    );
+    await getJson<ComponentTable>(
+      fixtures.scopedManager,
+      `/api/components/${slug}/versions/${secondVersion.id}/table`,
+    );
   });
 
   test("dataset revision UI hides drafts from scoped readers", async ({ page }) => {
