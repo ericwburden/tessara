@@ -594,15 +594,14 @@ pub(super) async fn ensure_component(
     let component_version_id = sqlx::query_scalar(
         r#"
         INSERT INTO component_versions
-            (component_id, dataset_id, dataset_version_major, binding_mode, dataset_revision_id, component_type, version_number, version_label, status, config, published_at)
-        VALUES ($1, $2, $3, 'major_line', $4, 'detail_table'::component_type, $5, $6, 'published'::component_version_status, $7, now())
+            (component_id, dataset_id, dataset_version_major, binding_mode, component_type, version_number, version_label, status, config, published_at)
+        VALUES ($1, $2, $3, 'major_line', 'detail_table'::component_type, $4, $5, 'published'::component_version_status, $6, now())
         RETURNING id
         "#,
     )
     .bind(component_id)
     .bind(dataset_id)
     .bind(dataset_version_major)
-    .bind(dataset_revision_id)
     .bind(version_number)
     .bind(version_number.to_string())
     .bind(json!({ "columns": columns }))

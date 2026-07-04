@@ -17,8 +17,8 @@ Kickoff defaults:
 ## Settled Decisions
 
 - Sprint 4A authoring supports only `DetailTable` and `AggregateTable`. Future chart/stat component kinds remain in internal enums for compatibility, but Sprint 4A public authoring, validation, and publish flows reject unsupported kinds.
-- Component versions bind major-line only: store `dataset_id`, `dataset_version_major`, and `binding_mode = major_line`. Revision IDs remain only as audit/backfill metadata during migration, not as the durable binding or execution source.
-- The existing component API/schema is revision-bound today (`component_versions.dataset_revision_id`, create-version DTOs, component visibility joins, dashboard joins, demo seed logic, and dependency impact code). Sprint 4A must migrate these surfaces to major-line binding.
+- Component versions bind major-line only: store `dataset_id`, `dataset_version_major`, and `binding_mode = major_line`. Component versions do not retain a `dataset_revision_id` compatibility field.
+- The pre-Sprint component API/schema was revision-bound. Sprint 4A migrates component persistence, DTOs, visibility joins, dashboard joins, demo seed logic, and dependency impact code to major-line binding.
 - Component configs validate against the Dataset major-line field contract. The existing dataset major-line source catalog and `dataset_major_materializations` direction should be reused.
 - `DetailTable` presents row-level records from the full bound major-line data surface.
 - `AggregateTable` owns an aggregation plan over the full bound major-line data surface. It must reuse data-operation semantics from a dedicated shared crate used by both Datasets and Components; do not create a parallel component-only aggregation engine.
@@ -34,7 +34,7 @@ Kickoff defaults:
 - Reader lifecycle boundary: public reader routes list and load only published component versions. Management/admin routes expose the working draft plus published/superseded history to users with `components:manage`. Working drafts are authoring state and are not active downstream consumers.
 - Publish route: use an explicit publish endpoint as the canonical UI/test flow: `POST /api/admin/components/{component_id}/versions/{version_id}/publish`. The existing `publish` boolean on create-version may remain temporarily for compatibility, but the app should not rely on it.
 - Component shell metadata: `name`, `slug`, and `description` are mutable shell metadata and are not versioned in Sprint 4A. Add `PATCH /api/admin/components/{component_id}`. Slug changes update the canonical route; redirects are deferred.
-- Revision-to-major-line migration: add `dataset_id`, `dataset_version_major`, and `binding_mode`; backfill from the current `dataset_revision_id`; preserve nullable `dataset_revision_id` only as legacy/audit metadata through this sprint.
+- Revision-to-major-line migration: add `dataset_id`, `dataset_version_major`, and `binding_mode`; remove component-version `dataset_revision_id` from schema/API/frontend contracts rather than preserving a nullable legacy field.
 - Major-line field contract: use the latest published/superseded revision contract in the major line as the field surface, matching current major-line materialization behavior. Field keys and compatible field types are contract-bearing. Labels are display metadata for Sprint 4A and should not force a new major line by themselves.
 - Compatible same-major changes: adding rows, adding optional fields, adding compatible values, and non-breaking metadata/label changes.
 - Breaking changes: removing a used field, renaming a field key, changing field type incompatibly, tightening/nullability or semantics in a way that breaks filters/sorts/aggregates, or changing metric source compatibility.
@@ -44,9 +44,11 @@ Kickoff defaults:
 - Shared aggregate validation preserves Dataset `min`/`max` ordering semantics for text/static-text, choice-like, numeric, date, datetime, and timestamp fields. Components must not expose a narrower `min`/`max` rule than Datasets.
 - Materialization pending behavior: render returns an empty table with `materialization_state = pending` when major-line materialization is missing/expired and a ready table cannot be returned immediately. Synchronous rebuild can run behind the boundary, but the stable API state remains pending/loading/retry rather than a component validation error. TTL/expiration policy is out of scope.
 - Component table execution: server-driven by default. Use a simple opaque cursor, `page_size`, and single-sort only in Sprint 4A. Multi-sort is deferred.
+- Viewer projection contract: `visible_columns` controls rendered output columns only. Search, sort, and filter controls continue to use the full table contract so hiding a column does not remove it from server-side query behavior.
 - Dashboard placement boundary: dashboards may place only immutable published-history component versions (`published` or `superseded`). Draft component versions cannot be placed on dashboards.
+- Dashboard placement policy: a dashboard manager may place a published-history component version when they can manage the dashboard's full visibility scope, the dashboard visibility fully encompasses the component Dataset visibility, and the component version is immutable published history rather than a draft. Sprint 4A governs placement through dashboard manage scope plus visibility containment; it does not add a separate `components:manage` requirement for dashboard composition.
 - Dependency reporting boundary: Dataset revision history dependency summaries and dependency-impact rows count/show component versions only after publication (`published` or `superseded`). Working drafts do not inflate downstream dependency counts.
-- Authorization: require `components:manage` for create/edit/publish; require Dataset read visibility to list/select a Dataset major line; require component-management scope to bind/publish that Dataset major line. Do not require `datasets:manage` unless editing the Dataset itself.
+- Authorization: require `components:manage` for create/edit/publish; require Dataset read visibility to list/select a Dataset major line; require component-management scope to bind/publish that Dataset major line. Do not require `datasets:manage` unless editing the Dataset itself. Scoped read visibility is audience-based: a user with the required read capability may list or load an asset when at least one asset visibility node overlaps the user's scoped nodes. Scoped authoring authority is governance-based: a user with the required manage capability may create, bind, edit, publish, or place an asset only when their manage scope fully contains every visibility node implicated by the asset and its bound data sources.
 - Column picker persistence: component config stores default visible columns/order. Viewer interactions are session/view state and do not mutate the component version. Per-user persisted preferences are deferred.
 - Direct create flow: the backend exposes one canonical atomic create endpoint for shell plus first draft. The UI uses that endpoint; shell-only creation can remain an admin/test helper but is not the normal app flow.
 
@@ -135,6 +137,8 @@ findings[]: code, severity, field_path, message
 ```
 
 Publishing is blocked by any `error` finding.
+
+Validation findings are returned for visible, authorized component payloads with invalid contracts. Unauthorized or out-of-scope bindings return `403 forbidden` and do not disclose component validation details.
 
 Minimum stable validation codes:
 
@@ -350,6 +354,7 @@ Frontend/E2E scenarios:
 - hide/show columns with the column picker
 - reject unknown `visible_columns` values with a stable validation error
 - verify search/sort/filter still operate over configured server-side fields when visible columns are narrowed
+- add targeted overlap/containment authorization fixtures: read positive with asset scoped to A+B+C and user scoped to A, read negative with user scoped to D, authoring containment negative with user scoped only to A, and authoring containment positive with user scoped to A+B+C
 - paginate through server-driven results
 - scoped manager cannot bind hidden Dataset major line by guessed ID
 - scoped reader cannot direct-load hidden component detail or table viewer
@@ -358,8 +363,8 @@ Update `docs/playwright-permissions-scenarios.md` for component create/edit/publ
 
 ## Ordered Implementation Plan
 
-1. Inventory current component, dashboard, dependency-impact, demo seed, and legacy analytical endpoint contracts that still join through `dataset_revision_id`.
-2. Add major-line component API/data contracts and migrate component persistence from revision binding to `dataset_id + dataset_version_major + binding_mode`, preserving nullable `dataset_revision_id` only as audit/legacy metadata.
+1. Inventory current component, dashboard, dependency-impact, demo seed, and legacy analytical endpoint contracts that still join through revision-bound component contracts.
+2. Add major-line component API/data contracts and migrate component persistence from revision binding to `dataset_id + dataset_version_major + binding_mode`, removing component-version `dataset_revision_id` from schema/API/frontend contracts.
 3. Implement component shell update, one-draft version lifecycle, explicit publish endpoint, immutability checks, stable validation findings, and scoped list/detail/access checks.
 4. Add the component table execution API over Dataset major-line materialization with server-driven search/filter/sort/page/query parsing and materialization ready/pending/failed states.
 5. Extract pure Dataset operation contracts and validation into `crates/tessara-data-ops`; keep SQL compilation and database-aware execution in `tessara-api`.

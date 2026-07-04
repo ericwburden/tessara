@@ -32,7 +32,6 @@ pub(crate) struct ComponentVersionSummary {
     pub(crate) dataset_id: String,
     pub(crate) dataset_version_major: i32,
     pub(crate) binding_mode: String,
-    pub(crate) dataset_revision_id: Option<String>,
     pub(crate) component_type: String,
     pub(crate) status: String,
     pub(crate) version_label: String,
@@ -105,7 +104,6 @@ pub(crate) struct ComponentValidationFinding {
 pub(crate) struct CreateComponentVersionRequest {
     pub(crate) dataset_id: Option<String>,
     pub(crate) dataset_version_major: Option<i32>,
-    pub(crate) dataset_revision_id: Option<String>,
     pub(crate) component_type: String,
     pub(crate) config: Value,
     pub(crate) publish: Option<bool>,

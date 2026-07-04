@@ -352,7 +352,6 @@ pub async fn get_dashboard(
             component_versions.dataset_id,
             component_versions.dataset_version_major,
             component_versions.binding_mode,
-            component_versions.dataset_revision_id,
             components.name AS component_name,
             components.slug AS component_slug
         FROM dashboard_components
@@ -401,7 +400,6 @@ pub async fn get_dashboard(
             component_versions.dataset_id,
             component_versions.dataset_version_major,
             component_versions.binding_mode,
-            component_versions.dataset_revision_id,
             components.name AS component_name,
             components.slug AS component_slug
         FROM dashboard_components
@@ -461,7 +459,6 @@ pub async fn get_dashboard(
                     dataset_id: row.try_get("dataset_id")?,
                     dataset_version_major: row.try_get("dataset_version_major")?,
                     binding_mode: row.try_get("binding_mode")?,
-                    dataset_revision_id: row.try_get("dataset_revision_id")?,
                 })
             })
             .collect::<Result<Vec<_>, sqlx::Error>>()?,

@@ -23,13 +23,12 @@ pub struct UpdateComponentRequest {
 
 /// Payload for creating a component version bound to a dataset major line.
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct CreateComponentVersionRequest {
     #[serde(default)]
     pub(crate) dataset_id: Option<Uuid>,
     #[serde(default)]
     pub(crate) dataset_version_major: Option<i32>,
-    #[serde(default)]
-    pub(crate) dataset_revision_id: Option<Uuid>,
     pub(crate) component_type: String,
     pub(crate) config: Value,
     pub(crate) publish: Option<bool>,
@@ -80,7 +79,6 @@ pub struct ComponentVersionSummary {
     pub(crate) dataset_id: Uuid,
     pub(crate) dataset_version_major: i32,
     pub(crate) binding_mode: String,
-    pub(crate) dataset_revision_id: Option<Uuid>,
     pub(crate) component_type: String,
     pub(crate) status: String,
     pub(crate) version_label: String,

@@ -502,10 +502,11 @@ pub fn ComponentViewerContent(component_ref: String) -> impl IntoView {
                         }>
                             <option value="">"Default row order"</option>
                             {move || {
-                                if let Some(table) = table.get() {
+                                let columns = all_columns.get();
+                                if !columns.is_empty() {
                                     view! {
                                         <>
-                                            {table.columns.into_iter().map(|column| {
+                                            {columns.into_iter().map(|column| {
                                                 view! { <option value=column.key>{column.label}</option> }
                                             }).collect_view()}
                                         </>
@@ -534,10 +535,11 @@ pub fn ComponentViewerContent(component_ref: String) -> impl IntoView {
                         }>
                             <option value="">"No filter"</option>
                             {move || {
-                                if let Some(table) = table.get() {
+                                let columns = all_columns.get();
+                                if !columns.is_empty() {
                                     view! {
                                         <>
-                                            {table.columns.into_iter().map(|column| {
+                                            {columns.into_iter().map(|column| {
                                                 let label = format!("{} ({})", column.label, column.field_type);
                                                 view! { <option value=column.key>{label}</option> }
                                             }).collect_view()}
@@ -1807,7 +1809,6 @@ fn create_component_from_form(
         let version = CreateComponentVersionRequest {
             dataset_id: Some(dataset_id),
             dataset_version_major: Some(major),
-            dataset_revision_id: None,
             component_type,
             config,
             publish: Some(false),
@@ -1944,7 +1945,6 @@ fn validate_component_form(
         let payload = CreateComponentVersionRequest {
             dataset_id: Some(dataset_id),
             dataset_version_major: Some(major),
-            dataset_revision_id: None,
             component_type,
             config,
             publish: Some(false),
@@ -2000,7 +2000,6 @@ fn validate_component_draft(
         let payload = CreateComponentVersionRequest {
             dataset_id: Some(draft.dataset_id),
             dataset_version_major: Some(draft.dataset_version_major),
-            dataset_revision_id: None,
             component_type: draft.component_type,
             config: draft.config,
             publish: Some(false),
@@ -2488,7 +2487,6 @@ mod tests {
             dataset_id: "dataset-1".into(),
             dataset_version_major: 1,
             binding_mode: "major_line".into(),
-            dataset_revision_id: None,
             component_type: "detail_table".into(),
             status: status.into(),
             version_label: "1".into(),

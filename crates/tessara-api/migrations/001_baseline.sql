@@ -481,7 +481,6 @@ CREATE TABLE component_versions (
     dataset_id uuid NOT NULL REFERENCES datasets(id) ON DELETE RESTRICT,
     dataset_version_major integer NOT NULL,
     binding_mode text NOT NULL DEFAULT 'major_line',
-    dataset_revision_id uuid REFERENCES dataset_revisions(id) ON DELETE RESTRICT,
     component_type component_type NOT NULL,
     version_number integer NOT NULL,
     version_label text NOT NULL,

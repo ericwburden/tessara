@@ -36,7 +36,6 @@ type ComponentVersionSummary = {
   dataset_id: string;
   dataset_version_major: number;
   binding_mode: string;
-  dataset_revision_id?: string | null;
   component_type: string;
   status: string;
   version_label: string;
@@ -494,7 +493,7 @@ test.describe.serial("Sprint 4A component workflow", () => {
       component_type: "detail_table",
       status: "draft",
     });
-    expect(component.versions[0].dataset_revision_id).toBeFalsy();
+    expect(component.versions[0]).not.toHaveProperty("dataset_revision_id");
     const readerComponentsBeforePublish = await expectJson<Array<{ slug: string }>>(
       await page.request.get("/api/components"),
     );
@@ -671,11 +670,8 @@ VALUES ('${draftDashboard.id}', '${component.versions[0].id}', 99, '{}'::jsonb);
         },
       }),
     );
-    expect(countValuesValidation.valid).toBe(false);
-    expect(countValuesValidation.findings[0]).toMatchObject({
-      code: "COMPONENT_UNSUPPORTED_AGGREGATE_FUNCTION",
-      severity: "error",
-    });
+    expect(countValuesValidation.valid).toBe(true);
+    expect(countValuesValidation.findings).toEqual([]);
 
     const invalidValidation = await expectJson<ComponentValidationResponse>(
       await page.request.post("/api/admin/components/validate", {
@@ -881,6 +877,19 @@ VALUES ('${draftDashboard.id}', '${component.versions[0].id}', 99, '{}'::jsonb);
       "published",
     );
     expect(component.versions.some((version) => version.status === "superseded")).toBe(true);
+    const supersededAggregateTable = await expectJson<ComponentTable>(
+      await page.request.get(
+        `/api/components/${slug}/versions/${firstPublishedVersionId}/table`,
+        {
+          params: {
+            visible_columns: "row_count",
+          },
+        },
+      ),
+    );
+    expect(supersededAggregateTable.materialization_state).toBe("ready");
+    expect(supersededAggregateTable.component_version_id).toBe(firstPublishedVersionId);
+    expect(supersededAggregateTable.component_type).toBe("aggregate_table");
     await expectStatus(
       await page.request.patch(
         `/api/admin/components/${created.id}/versions/${secondDraft.id}`,

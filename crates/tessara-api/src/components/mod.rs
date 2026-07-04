@@ -39,7 +39,6 @@ use crate::{
 struct ComponentDatasetBinding {
     dataset_id: Uuid,
     dataset_version_major: i32,
-    legacy_dataset_revision_id: Option<Uuid>,
 }
 
 pub(crate) fn routes() -> Router<AppState> {
@@ -351,17 +350,15 @@ pub async fn update_component_version(
         SET dataset_id = $1,
             dataset_version_major = $2,
             binding_mode = 'major_line',
-            dataset_revision_id = $3,
-            component_type = $4::component_type,
-            config = $5
-        WHERE component_id = $6
-          AND id = $7
+            component_type = $3::component_type,
+            config = $4
+        WHERE component_id = $5
+          AND id = $6
           AND status = 'draft'::component_version_status
         "#,
     )
     .bind(binding.dataset_id)
     .bind(binding.dataset_version_major)
-    .bind(binding.legacy_dataset_revision_id)
     .bind(&payload.component_type)
     .bind(&payload.config)
     .bind(component_id)
@@ -415,17 +412,16 @@ async fn upsert_component_draft_version(
             WHERE component_id = $1
         )
         INSERT INTO component_versions
-            (component_id, dataset_id, dataset_version_major, binding_mode, dataset_revision_id,
+            (component_id, dataset_id, dataset_version_major, binding_mode,
              component_type, version_number, version_label, status, config)
-        SELECT $1, $2, $3, 'major_line', $4, $5::component_type,
+        SELECT $1, $2, $3, 'major_line', $4::component_type,
                next_version.version_number, next_version.version_number::text,
-               'draft'::component_version_status, $6
+               'draft'::component_version_status, $5
         FROM next_version
         ON CONFLICT (component_id) WHERE status = 'draft'::component_version_status
         DO UPDATE SET dataset_id = EXCLUDED.dataset_id,
                       dataset_version_major = EXCLUDED.dataset_version_major,
                       binding_mode = EXCLUDED.binding_mode,
-                      dataset_revision_id = EXCLUDED.dataset_revision_id,
                       component_type = EXCLUDED.component_type,
                       config = EXCLUDED.config
         RETURNING id
@@ -434,7 +430,6 @@ async fn upsert_component_draft_version(
     .bind(component_id)
     .bind(binding.dataset_id)
     .bind(binding.dataset_version_major)
-    .bind(binding.legacy_dataset_revision_id)
     .bind(&payload.component_type)
     .bind(&payload.config)
     .fetch_one(&mut **tx)
@@ -447,12 +442,28 @@ async fn publish_component_version_in_tx(
     component_id: Uuid,
     version_id: Uuid,
 ) -> ApiResult<()> {
+    let component_locked: Option<Uuid> = sqlx::query_scalar(
+        r#"
+        SELECT id
+        FROM components
+        WHERE id = $1
+        FOR UPDATE
+        "#,
+    )
+    .bind(component_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+    if component_locked.is_none() {
+        return Err(ApiError::NotFound(format!("component {component_id}")));
+    }
+
     let status: Option<String> = sqlx::query_scalar(
         r#"
         SELECT status::text
         FROM component_versions
         WHERE component_id = $1
           AND id = $2
+        FOR UPDATE
         "#,
     )
     .bind(component_id)
@@ -478,7 +489,7 @@ async fn publish_component_version_in_tx(
     .bind(component_id)
     .execute(&mut **tx)
     .await?;
-    sqlx::query(
+    let publish_result = sqlx::query(
         r#"
         UPDATE component_versions
         SET status = 'published'::component_version_status,
@@ -492,6 +503,11 @@ async fn publish_component_version_in_tx(
     .bind(version_id)
     .execute(&mut **tx)
     .await?;
+    if publish_result.rows_affected() != 1 {
+        return Err(ApiError::BadRequest(format!(
+            "component version {version_id} could not be published because it is no longer a draft"
+        )));
+    }
     Ok(())
 }
 
@@ -1386,11 +1402,20 @@ async fn load_component_version_for_table(
         FROM components
         JOIN component_versions ON component_versions.component_id = components.id
         WHERE (components.id::text = $1 OR components.slug = $1)
-          AND component_versions.status = 'published'::component_version_status
         "#,
     );
     if version_id.is_some() {
-        query.push_str(" AND component_versions.id = $2");
+        query.push_str(
+            r#"
+          AND component_versions.id = $2
+          AND component_versions.status IN (
+              'published'::component_version_status,
+              'superseded'::component_version_status
+          )
+        "#,
+        );
+    } else {
+        query.push_str(" AND component_versions.status = 'published'::component_version_status");
     }
     query.push_str(" ORDER BY component_versions.version_number DESC LIMIT 1");
 
@@ -1398,10 +1423,13 @@ async fn load_component_version_for_table(
     if let Some(version_id) = version_id {
         sql = sql.bind(version_id);
     }
-    let row = sql
-        .fetch_optional(pool)
-        .await?
-        .ok_or_else(|| ApiError::NotFound(format!("published component {component_ref}")))?;
+    let row = sql.fetch_optional(pool).await?.ok_or_else(|| {
+        if let Some(version_id) = version_id {
+            ApiError::NotFound(format!("published-history component version {version_id}"))
+        } else {
+            ApiError::NotFound(format!("published component {component_ref}"))
+        }
+    })?;
     let component_id = row.try_get("component_id")?;
     require_component_visible_for_boundary(pool, component_id, &boundary, "components:read")
         .await?;
@@ -1690,7 +1718,7 @@ async fn load_component_versions(
             r#"
         SELECT component_versions.id, component_versions.component_id,
                component_versions.dataset_id, component_versions.dataset_version_major,
-               component_versions.binding_mode, component_versions.dataset_revision_id,
+               component_versions.binding_mode,
                component_versions.component_type::text AS component_type,
                component_versions.status::text AS status, component_versions.version_label, component_versions.config
         FROM component_versions
@@ -1708,7 +1736,7 @@ async fn load_component_versions(
         .await?,
         auth::CapabilityBoundary::Global => sqlx::query(
             r#"
-        SELECT id, component_id, dataset_id, dataset_version_major, binding_mode, dataset_revision_id, component_type::text AS component_type,
+        SELECT id, component_id, dataset_id, dataset_version_major, binding_mode, component_type::text AS component_type,
                status::text AS status, version_label, config
         FROM component_versions
         WHERE component_id = $1
@@ -1731,7 +1759,6 @@ async fn load_component_versions(
                 dataset_id: row.try_get("dataset_id")?,
                 dataset_version_major: row.try_get("dataset_version_major")?,
                 binding_mode: row.try_get("binding_mode")?,
-                dataset_revision_id: row.try_get("dataset_revision_id")?,
                 component_type: row.try_get("component_type")?,
                 status: row.try_get("status")?,
                 version_label: row.try_get("version_label")?,
@@ -2050,44 +2077,14 @@ async fn require_component_exists(pool: &sqlx::PgPool, component_id: Uuid) -> Ap
 }
 
 async fn resolve_component_dataset_binding(
-    pool: &sqlx::PgPool,
+    _pool: &sqlx::PgPool,
     payload: &CreateComponentVersionRequest,
 ) -> ApiResult<ComponentDatasetBinding> {
-    match (
-        payload.dataset_id,
-        payload.dataset_version_major,
-        payload.dataset_revision_id,
-    ) {
-        (Some(dataset_id), Some(dataset_version_major), legacy_dataset_revision_id) => {
-            Ok(ComponentDatasetBinding {
-                dataset_id,
-                dataset_version_major,
-                legacy_dataset_revision_id,
-            })
-        }
-        (None, None, Some(dataset_revision_id)) => {
-            let row = sqlx::query(
-                r#"
-                SELECT dataset_id, version_major
-                FROM dataset_revisions
-                WHERE id = $1
-                "#,
-            )
-            .bind(dataset_revision_id)
-            .fetch_optional(pool)
-            .await?
-            .ok_or_else(|| ApiError::NotFound(format!("dataset revision {dataset_revision_id}")))?;
-            let dataset_version_major: Option<i32> = row.try_get("version_major")?;
-            Ok(ComponentDatasetBinding {
-                dataset_id: row.try_get("dataset_id")?,
-                dataset_version_major: dataset_version_major.ok_or_else(|| {
-                    ApiError::BadRequest(format!(
-                        "dataset revision {dataset_revision_id} has no major version"
-                    ))
-                })?,
-                legacy_dataset_revision_id: Some(dataset_revision_id),
-            })
-        }
+    match (payload.dataset_id, payload.dataset_version_major) {
+        (Some(dataset_id), Some(dataset_version_major)) => Ok(ComponentDatasetBinding {
+            dataset_id,
+            dataset_version_major,
+        }),
         _ => Err(ApiError::BadRequest(
             "component version requires dataset_id and dataset_version_major".into(),
         )),
