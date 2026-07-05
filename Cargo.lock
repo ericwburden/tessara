@@ -4473,7 +4473,6 @@ dependencies = [
  "leptos",
  "serde",
  "serde_json",
- "tessara-web-data-ops",
  "tessara-web-ui",
  "web-sys",
 ]

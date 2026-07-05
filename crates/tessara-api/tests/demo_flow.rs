@@ -931,6 +931,28 @@ async fn dataset_revision_draft_publish_preserves_current_until_publish() {
         ),
     )
     .await;
+    let (legacy_shell_status, legacy_shell_body) = request_status_and_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/components",
+            &admin_token,
+            Some(json!({
+                "name": "Legacy Revision Shell Component",
+                "slug": "legacy-revision-shell-component",
+                "description": "Should be rejected because component shells do not carry Dataset revision bindings.",
+                "dataset_revision_id": initial_revision_id
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(legacy_shell_status, StatusCode::BAD_REQUEST);
+    assert!(
+        legacy_shell_body["error"]
+            .as_str()
+            .expect("legacy shell error")
+            .contains("dataset_revision_id")
+    );
     let (legacy_component_status, legacy_component_body) = request_status_and_json(
         app.clone(),
         authorized_request(
@@ -981,6 +1003,52 @@ async fn dataset_revision_draft_publish_preserves_current_until_publish() {
             .as_str()
             .expect("legacy version error")
             .contains("dataset_revision_id")
+    );
+    let (legacy_kind_detail_status, legacy_kind_detail_body) = request_status_and_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/components/validate",
+            &admin_token,
+            Some(json!({
+                "dataset_id": dataset_id,
+                "dataset_version_major": 1,
+                "component_type": "detail_table",
+                "config": {
+                    "visible_columns": [first_key]
+                }
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(legacy_kind_detail_status, StatusCode::OK);
+    assert_eq!(legacy_kind_detail_body["valid"], false);
+    assert_eq!(
+        legacy_kind_detail_body["findings"][0]["code"],
+        "COMPONENT_UNSUPPORTED_KIND"
+    );
+    let (legacy_kind_aggregate_status, legacy_kind_aggregate_body) = request_status_and_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/components/validate",
+            &admin_token,
+            Some(json!({
+                "dataset_id": dataset_id,
+                "dataset_version_major": 1,
+                "component_type": "aggregate_table",
+                "config": {
+                    "visible_columns": [first_key]
+                }
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(legacy_kind_aggregate_status, StatusCode::OK);
+    assert_eq!(legacy_kind_aggregate_body["valid"], false);
+    assert_eq!(
+        legacy_kind_aggregate_body["findings"][0]["code"],
+        "COMPONENT_UNSUPPORTED_KIND"
     );
     let component_table_before_publish = request_json(
         app.clone(),
@@ -1815,6 +1883,123 @@ async fn dataset_revision_draft_publish_preserves_current_until_publish() {
             .count(),
         0,
         "concurrent publish attempts should consume the working draft"
+    );
+
+    let publish_update_race_slug = "revision-lifecycle-publish-update-race-component";
+    let publish_update_race_component = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/components",
+            &admin_token,
+            Some(json!({
+                "name": "Revision Lifecycle Publish Update Race Component",
+                "slug": publish_update_race_slug,
+                "description": "Component publish/update race invariant coverage.",
+                "version": {
+                    "dataset_id": dataset_id,
+                    "dataset_version_major": 1,
+                    "component_type": "table",
+                    "config": {
+                        "visible_columns": [first_key]
+                    },
+                }
+            })),
+        ),
+    )
+    .await;
+    let publish_update_race_component_id = publish_update_race_component["id"]
+        .as_str()
+        .expect("publish/update race component id");
+    let publish_update_race_component_detail = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/admin/components/{publish_update_race_slug}"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    let publish_update_race_version_id = publish_update_race_component["current_version"]["id"]
+        .as_str()
+        .or_else(|| {
+            publish_update_race_component_detail["versions"]
+                .as_array()
+                .and_then(|versions| versions.first())
+                .and_then(|version| version["id"].as_str())
+        })
+        .expect("publish/update race component version id");
+    let (publish_race_attempt, update_race_attempt) = tokio::join!(
+        request_status_and_json(
+            app.clone(),
+            authorized_request(
+                "POST",
+                &format!(
+                    "/api/admin/components/{publish_update_race_component_id}/versions/{publish_update_race_version_id}/publish"
+                ),
+                &admin_token,
+                None,
+            ),
+        ),
+        request_status_and_json(
+            app.clone(),
+            authorized_request(
+                "PATCH",
+                &format!(
+                    "/api/admin/components/{publish_update_race_component_id}/versions/{publish_update_race_version_id}"
+                ),
+                &admin_token,
+                Some(json!({
+                    "dataset_id": dataset_id,
+                    "dataset_version_major": 1,
+                    "component_type": "table",
+                    "config": {
+                        "visible_columns": [first_key],
+                        "page_size": 25
+                    },
+                })),
+            ),
+        )
+    );
+    assert!(
+        publish_race_attempt.0.is_success(),
+        "publish should eventually consume the draft in a publish/update race: {:?}",
+        publish_race_attempt.1
+    );
+    assert!(
+        update_race_attempt.0.is_success() || update_race_attempt.0 == StatusCode::BAD_REQUEST,
+        "update should either win before publish or fail deterministically after publish: {:?}",
+        update_race_attempt.1
+    );
+    let component_after_publish_update_race = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/admin/components/{publish_update_race_slug}"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    let versions_after_publish_update_race = component_after_publish_update_race["versions"]
+        .as_array()
+        .expect("component versions after publish/update race");
+    assert_eq!(
+        versions_after_publish_update_race
+            .iter()
+            .filter(|version| version["status"] == "published")
+            .count(),
+        1,
+        "publish/update race should leave exactly one published component version"
+    );
+    assert_eq!(
+        versions_after_publish_update_race
+            .iter()
+            .filter(|version| version["status"] == "draft")
+            .count(),
+        0,
+        "publish/update race should not leave a mutable draft behind"
     );
 
     set_major_line_materialization_status(dataset_id, 1, "failed").await;

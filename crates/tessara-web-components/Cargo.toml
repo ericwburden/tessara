@@ -8,11 +8,9 @@ publish = false
 default = []
 hydrate = [
     "leptos/hydrate",
-    "tessara-web-data-ops/hydrate",
 ]
 ssr = [
     "leptos/ssr",
-    "tessara-web-data-ops/ssr",
 ]
 
 [dependencies]
@@ -20,6 +18,5 @@ gloo-net = { workspace = true }
 leptos = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-tessara-web-data-ops = { path = "../tessara-web-data-ops" }
 tessara-web-ui = { path = "../tessara-web-ui" }
 web-sys = { workspace = true }

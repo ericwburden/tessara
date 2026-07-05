@@ -5,6 +5,7 @@ use uuid::Uuid;
 
 /// Payload for creating a component identity before versions exist.
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct CreateComponentRequest {
     pub(crate) name: String,
     pub(crate) slug: String,
@@ -15,6 +16,7 @@ pub struct CreateComponentRequest {
 
 /// Mutable shell metadata for a component identity.
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct UpdateComponentRequest {
     pub(crate) name: String,
     pub(crate) slug: String,

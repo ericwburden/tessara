@@ -1945,10 +1945,10 @@ mod tests {
 
     use super::{
         ComponentTableQuery, ComponentVersionForTable, CreateComponentRequest,
-        CreateComponentVersionRequest, component_filter_sql, component_pagination_sql,
-        effective_component_page_size, parse_component_query_filters, parse_component_sort,
-        require_component_version_draft, table_order_by_sql, table_search_fields,
-        validate_component_config, visible_table_fields,
+        CreateComponentVersionRequest, UpdateComponentRequest, component_filter_sql,
+        component_pagination_sql, effective_component_page_size, parse_component_query_filters,
+        parse_component_sort, require_component_version_draft, table_order_by_sql,
+        table_search_fields, validate_component_config, visible_table_fields,
     };
 
     fn field(key: &str, field_type: FieldType) -> DataField {
@@ -2242,6 +2242,54 @@ mod tests {
         assert_eq!(version.dataset_id, Some(dataset_id));
         assert_eq!(version.dataset_version_major, Some(1));
         assert_eq!(version.component_type, "table");
+    }
+
+    #[test]
+    fn component_shell_payloads_reject_unknown_fields() {
+        let create_error = match serde_json::from_value::<CreateComponentRequest>(json!({
+            "name": "Program table",
+            "slug": "program-table",
+            "description": "A first table component",
+            "dataset_revision_id": Uuid::nil()
+        })) {
+            Ok(_) => panic!("create component shell should reject legacy revision fields"),
+            Err(error) => error,
+        };
+        assert!(create_error.to_string().contains("dataset_revision_id"));
+
+        let update_error = match serde_json::from_value::<UpdateComponentRequest>(json!({
+            "name": "Program table",
+            "slug": "program-table",
+            "description": "Updated table component",
+            "dataset_revision_id": Uuid::nil()
+        })) {
+            Ok(_) => panic!("update component shell should reject legacy revision fields"),
+            Err(error) => error,
+        };
+        assert!(update_error.to_string().contains("dataset_revision_id"));
+    }
+
+    #[test]
+    fn atomic_component_version_payload_rejects_legacy_revision_binding() {
+        let error = match serde_json::from_value::<CreateComponentRequest>(json!({
+            "name": "Program table",
+            "slug": "program-table",
+            "description": "A first table component",
+            "version": {
+                "dataset_id": Uuid::nil(),
+                "dataset_version_major": 1,
+                "dataset_revision_id": Uuid::nil(),
+                "component_type": "table",
+                "config": {
+                    "visible_columns": ["program"]
+                }
+            }
+        })) {
+            Ok(_) => panic!("atomic create version should reject legacy revision fields"),
+            Err(error) => error,
+        };
+
+        assert!(error.to_string().contains("dataset_revision_id"));
     }
 
     #[test]
