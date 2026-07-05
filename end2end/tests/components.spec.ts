@@ -494,6 +494,12 @@ test.describe.serial("Sprint 4A component workflow", () => {
       await page.request.get("/api/components"),
     );
     expect(readerComponentsBeforePublish.some((item) => item.slug === slug)).toBe(false);
+    await page.goto(`/components/${slug}`);
+    await expect(
+      page.getByRole("heading", { level: 1, name }),
+    ).toBeVisible();
+    await expect(page.getByRole("cell", { name: "Draft" })).toBeVisible();
+    await expect(page.getByText("Component unavailable")).toHaveCount(0);
     const draftDashboard = await expectJson<IdResponse>(
       await page.request.post("/api/admin/dashboards", {
         data: {
@@ -847,7 +853,7 @@ VALUES ('${draftDashboard.id}', '${component.versions[0].id}', 99, '{}'::jsonb);
     await expect(page.getByRole("link", { name: "Publish" })).toBeVisible();
     await expect(page.getByRole("link", { name: "View" })).toBeVisible();
     await expect(page.locator("tbody")).toHaveText(/Published/);
-    await expect(page.locator("tbody")).not.toContainText("Draft");
+    await expect(page.locator("tbody")).toContainText("Draft");
     await expect(page.locator("tbody")).toContainText("Published");
     await expect(page.locator("tbody")).toContainText(`v${major}`);
 

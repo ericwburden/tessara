@@ -1546,13 +1546,23 @@ fn load_component(
     leptos::task::spawn_local(async move {
         is_loading.set(true);
         load_error.set(None);
-        match api::fetch_component(&component_ref).await {
+        match fetch_authoring_or_reader_component(&component_ref).await {
             Ok(Some(response)) => component.set(Some(response)),
             Ok(None) => component.set(None),
             Err(message) => load_error.set(Some(message)),
         }
         is_loading.set(false);
     });
+}
+
+#[cfg(feature = "hydrate")]
+async fn fetch_authoring_or_reader_component(
+    component_ref: &str,
+) -> Result<Option<ComponentDefinition>, String> {
+    match api::fetch_admin_component(component_ref).await {
+        Ok(response) => Ok(response),
+        Err(_) => api::fetch_component(component_ref).await,
+    }
 }
 
 #[cfg(feature = "hydrate")]
