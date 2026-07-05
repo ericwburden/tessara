@@ -631,16 +631,17 @@ This section records the completed foundation sequence that led to the current n
 
 ## Phase 4: Components
 
-### Sprint 4A: Table Component Slice (Next)
+### Sprint 4A: Dataset Catalog And Thin Table Components (Next)
 
-**Outcome:** table-oriented presentation assets become first-class components.
+**Outcome:** Dataset discovery improves and table-oriented presentation assets become thin display components over Dataset major-line outputs.
 
 **Build:**
 
 - implement Component frontend surfaces in a dedicated `tessara-web-components` crate from the start, with root `tessara-web` retaining route adapters, shell/auth/session/navigation policy, hydration, document integration, CSS, and assets
-- `DetailTable` and `AggregateTable` authoring
+- one public `table` component kind with presentation-only config: visible columns, default sort, page size, optional search fields, and display-label overrides
+- Dataset catalog tags, direct-source provenance summaries, and searchable Dataset directory/detail surfaces so authors can choose display-ready Datasets as the source of truth
 - component versioning and publication
-- validation and dataset-revision binding behavior
+- validation and Dataset major-line binding behavior; component versions do not bind Dataset revisions directly
 - any retained legacy analytical endpoints stay adapter-only; no new core behavior may deepen deprecated asset families
 - touched reporting and component routes continuing hybrid-shell removal rather than creating a second long-lived bridge
 - component list/detail endpoints enforce scoped dataset and component visibility with negative operator coverage
@@ -649,8 +650,9 @@ This section records the completed foundation sequence that led to the current n
 
 - component directory/detail/create/edit/publish flows
 - table viewers inside the application
+- Dataset catalog search, tags, and provenance context in Dataset and Component authoring surfaces
 
-**User-testable exit condition:** a tester can create, version, publish, and view table components in the app.
+**User-testable exit condition:** a tester can tag and discover Datasets, review direct provenance, then create, version, publish, and view thin table components in the app.
 
 ### Sprint 4B: Chart And Stat Component Slice
 

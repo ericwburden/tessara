@@ -5,6 +5,34 @@ artifacts, old sprint worktrees, `/app/*` routes, or earlier crate names. Use
 `docs/roadmap.md`, `docs/architecture.md`, and `docs/README.md` for current
 project direction.
 
+## 2026-07-05 - Sprint 4A Dataset Catalog And Thin Table Pivot
+
+- Sprint pivot:
+  - replaced the Detail Table / Aggregate Table split with one thin `table` component kind whose config is presentation-only
+  - moved analytical shaping back to Datasets as the source of truth; grouped or aggregated displays should bind to display-ready Dataset major lines
+  - added Dataset catalog tags and direct-source provenance summaries to improve Dataset discoverability as the catalog grows
+- Completed:
+  - rewrote `docs/sprints/sprint-4a-plan.md` around "Thin Table Components + Dataset provenance/search"
+  - added `dataset_tags`, tag update API, tag normalization, Dataset list/detail tag loading, and direct provenance summaries
+  - updated Dataset directory/detail UI so search includes tags, provenance names, field labels/keys, grain, and slug; detail shows editable tags and direct provenance
+  - simplified backend component validation/execution to a single `table` config with `visible_columns`, `search_fields`, `default_sort`, `page_size`, and display-label overrides
+  - simplified component authoring UI to one Table flow with Dataset catalog context, visible columns, default sort, and page size
+  - rewrote component Playwright coverage around thin table behavior instead of component-owned aggregation
+  - updated roadmap and permission-scenario docs to remove stale aggregate/detail component language
+- Validation so far:
+  - `cargo fmt --all --check` - passed
+  - `cargo test -p tessara-api` - passed: 59 unit tests, 6 demo-flow tests, 25 workflow-runtime tests, and doc tests
+  - `cargo test -p tessara-web` - passed: 4 tests and doc tests
+  - `cargo test -p tessara-web-components` - passed: 14 tests and doc tests
+  - `cargo test -p tessara-web-datasets` - passed: 27 tests and doc tests
+  - `.\scripts\smoke.ps1` - passed
+  - `.\scripts\local-launch.ps1 -FreshData -SkipSeed; .\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"` - passed for organization, forms, datasets, components, and seed flows
+  - from `end2end/`: `npx playwright test tests/components.spec.ts tests/permissions.spec.ts` - passed: 21/21
+  - from `end2end/`: `npx playwright test` - passed: 39/39
+- Current local handoff state:
+  - the Tessara stack is running at `http://localhost:8080`
+  - UAT seeded the refreshed database during the final validation pass
+
 ## 2026-07-03 - Sprint 4A Kickoff
 
 - Sprint: Sprint 4A: Table Component Slice
