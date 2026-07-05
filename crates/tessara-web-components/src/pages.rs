@@ -12,10 +12,6 @@ use super::types::{
     ComponentDefinition, ComponentSummary, ComponentTable, ComponentTableColumn,
     ComponentValidationFinding, ComponentVersionSummary, DatasetFieldDefinition, DatasetSummary,
 };
-use tessara_web_data_ops::{
-    DataOpsAggregationEditor, DatasetAggregationDraft, DatasetAggregationMetricDraft,
-    DatasetFieldDraft,
-};
 
 #[component]
 pub fn ComponentsIndexContent() -> impl IntoView {
@@ -123,18 +119,8 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
     let description = RwSignal::new(String::new());
     let dataset_id = RwSignal::new(String::new());
     let dataset_major = RwSignal::new(String::from("1"));
-    let component_type = RwSignal::new(String::from("detail_table"));
+    let component_type = RwSignal::new(String::from("table"));
     let columns = RwSignal::new(String::new());
-    let aggregation = RwSignal::new(default_component_aggregation());
-    let detail_filter_field = RwSignal::new(String::new());
-    let detail_filter_operator = RwSignal::new(String::from("equals"));
-    let detail_filter_value = RwSignal::new(String::new());
-    let pre_filter_field = RwSignal::new(String::new());
-    let pre_filter_operator = RwSignal::new(String::from("equals"));
-    let pre_filter_value = RwSignal::new(String::new());
-    let post_filter_field = RwSignal::new(String::new());
-    let post_filter_operator = RwSignal::new(String::from("equals"));
-    let post_filter_value = RwSignal::new(String::new());
     let sort_field = RwSignal::new(String::new());
     let sort_direction = RwSignal::new(String::from("asc"));
     let page_size = RwSignal::new(String::from("50"));
@@ -148,6 +134,12 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
             .find(|dataset| dataset.id == dataset_id.get())
             .map(|dataset| dataset.output_fields)
             .unwrap_or_default()
+    });
+    let selected_dataset = Memo::new(move |_| {
+        datasets
+            .get()
+            .into_iter()
+            .find(|dataset| dataset.id == dataset_id.get())
     });
 
     Effect::new(move |_| load_datasets(datasets, dataset_error));
@@ -166,16 +158,6 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
                     dataset_major,
                     component_type,
                     columns,
-                    aggregation,
-                    detail_filter_field,
-                    detail_filter_operator,
-                    detail_filter_value,
-                    pre_filter_field,
-                    pre_filter_operator,
-                    pre_filter_value,
-                    post_filter_field,
-                    post_filter_operator,
-                    post_filter_value,
                     sort_field,
                     sort_direction,
                     page_size,
@@ -198,18 +180,7 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
                     description.get_untracked(),
                     dataset_id.get_untracked(),
                     dataset_major.get_untracked(),
-                    component_type.get_untracked(),
                     columns.get_untracked(),
-                    aggregation.get_untracked(),
-                    detail_filter_field.get_untracked(),
-                    detail_filter_operator.get_untracked(),
-                    detail_filter_value.get_untracked(),
-                    pre_filter_field.get_untracked(),
-                    pre_filter_operator.get_untracked(),
-                    pre_filter_value.get_untracked(),
-                    post_filter_field.get_untracked(),
-                    post_filter_operator.get_untracked(),
-                    post_filter_value.get_untracked(),
                     sort_field.get_untracked(),
                     sort_direction.get_untracked(),
                     page_size.get_untracked(),
@@ -250,13 +221,6 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
                                     .collect::<Vec<_>>()
                                     .join(", ");
                                 columns.set(keys);
-                                let default_group = dataset
-                                    .output_fields
-                                    .iter()
-                                    .find(|field| field.field_type != "number")
-                                    .or_else(|| dataset.output_fields.first())
-                                    .map(|field| field.key.clone());
-                                aggregation.set(default_component_aggregation_with_group(default_group));
                                 sort_field.set(
                                     dataset
                                         .output_fields
@@ -271,80 +235,29 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
                         {move || datasets.get().into_iter().flat_map(|dataset| {
                             dataset_picker_majors(&dataset).into_iter().map(move |major| {
                                 let value = format!("{}|{}", dataset.id, major);
-                                let label = format!("{} · v{}", dataset.name, major);
+                                let label = dataset_catalog_option_label(&dataset, major);
                                 view! { <option value=value>{label}</option> }
                             }).collect::<Vec<_>>()
                         }).collect_view()}
                     </select>
                 </label>
-                <label class="form-field">
-                    <span>"Kind"</span>
-                    <select prop:value=move || component_type.get() on:change=move |event| component_type.set(event_target_value(&event))>
-                        <option value="detail_table">"Detail Table"</option>
-                        <option value="aggregate_table">"Aggregate Table"</option>
-                    </select>
-                </label>
-                {move || if component_type.get() == "aggregate_table" {
-                    view! {
-                        <AggregateAuthoringControls
-                            fields=selected_fields.get()
-                            aggregation
-                            pre_filter_field
-                            pre_filter_operator
-                            pre_filter_value
-                            post_filter_field
-                            post_filter_operator
-                            post_filter_value
-                        />
-                    }.into_any()
-                } else {
-                    view! {
-                        <DetailAuthoringControls
-                            fields=selected_fields.get()
-                            columns
-                            filter_field=detail_filter_field
-                            filter_operator=detail_filter_operator
-                            filter_value=detail_filter_value
-                        />
-                    }.into_any()
-                }}
-                {move || if component_type.get() == "aggregate_table" {
-                    view! {
-                        <AggregateTableDefaultsControls
-                            fields=selected_fields.get()
-                            aggregation
-                            sort_field
-                            sort_direction
-                            page_size
-                        />
-                    }.into_any()
-                } else {
-                    view! {
-                        <TableDefaultsControls
-                            fields=selected_fields.get()
-                            sort_field
-                            sort_direction
-                            page_size
-                        />
-                    }.into_any()
-                }}
+                <DatasetCatalogContext dataset=selected_dataset.get()/>
+                <DetailAuthoringControls
+                    fields=selected_fields.get()
+                    columns
+                />
+                <TableDefaultsControls
+                    fields=selected_fields.get()
+                    sort_field
+                    sort_direction
+                    page_size
+                />
                 <div class="form-actions">
                     <button class="button button--secondary" type="button" on:click=move |_| {
                         validate_component_form(
                             dataset_id.get_untracked(),
                             dataset_major.get_untracked(),
-                            component_type.get_untracked(),
                             columns.get_untracked(),
-                            aggregation.get_untracked(),
-                            detail_filter_field.get_untracked(),
-                            detail_filter_operator.get_untracked(),
-                            detail_filter_value.get_untracked(),
-                            pre_filter_field.get_untracked(),
-                            pre_filter_operator.get_untracked(),
-                            pre_filter_value.get_untracked(),
-                            post_filter_field.get_untracked(),
-                            post_filter_operator.get_untracked(),
-                            post_filter_value.get_untracked(),
                             sort_field.get_untracked(),
                             sort_direction.get_untracked(),
                             page_size.get_untracked(),
@@ -691,12 +604,41 @@ fn ValidationFindingsPanel(findings: Vec<ComponentValidationFinding>) -> impl In
 }
 
 #[component]
+fn DatasetCatalogContext(dataset: Option<DatasetSummary>) -> impl IntoView {
+    view! {
+        <section class="route-panel__section">
+            {if let Some(dataset) = dataset {
+                let tags = dataset_tag_label(&dataset.tags);
+                let provenance = dataset_provenance_label(&dataset.provenance);
+                let fields = dataset
+                    .output_fields
+                    .iter()
+                    .map(|field| format!("{} ({})", field.label, field.field_type))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                view! {
+                    <h2>"Dataset Context"</h2>
+                    <dl class="definition-list">
+                        <dt>"Grain"</dt><dd>{dataset.grain}</dd>
+                        <dt>"Tags"</dt><dd>{tags}</dd>
+                        <dt>"Provenance"</dt><dd>{provenance}</dd>
+                        <dt>"Fields"</dt><dd>{if fields.is_empty() { "No output fields".into() } else { fields }}</dd>
+                    </dl>
+                }.into_any()
+            } else {
+                view! {
+                    <h2>"Dataset Context"</h2>
+                    <p class="muted">"Select a Dataset version to review tags, provenance, and output fields."</p>
+                }.into_any()
+            }}
+        </section>
+    }
+}
+
+#[component]
 fn DetailAuthoringControls(
     fields: Vec<DatasetFieldDefinition>,
     columns: RwSignal<String>,
-    filter_field: RwSignal<String>,
-    filter_operator: RwSignal<String>,
-    filter_value: RwSignal<String>,
 ) -> impl IntoView {
     let column_fields = fields.clone();
     view! {
@@ -727,197 +669,6 @@ fn DetailAuthoringControls(
                     </div>
                 }.into_any()
             }}
-        </fieldset>
-        <FilterAuthoringControls
-            title="Default Filter"
-            fields=fields
-            filter_field
-            filter_operator
-            filter_value
-        />
-    }
-}
-
-#[component]
-fn AggregateAuthoringControls(
-    fields: Vec<DatasetFieldDefinition>,
-    aggregation: RwSignal<DatasetAggregationDraft>,
-    pre_filter_field: RwSignal<String>,
-    pre_filter_operator: RwSignal<String>,
-    pre_filter_value: RwSignal<String>,
-    post_filter_field: RwSignal<String>,
-    post_filter_operator: RwSignal<String>,
-    post_filter_value: RwSignal<String>,
-) -> impl IntoView {
-    let dataset_fields = fields
-        .iter()
-        .map(dataset_field_draft_from_component_field)
-        .collect::<Vec<_>>();
-    let fields_signal = Signal::derive(move || dataset_fields.clone());
-    let aggregation_signal = Signal::derive(move || aggregation.get());
-    let on_aggregation_change = Callback::new(move |draft: DatasetAggregationDraft| {
-        aggregation.set(draft);
-    });
-    view! {
-        {if fields.is_empty() {
-            view! {
-                <fieldset class="route-panel__section">
-                    <legend>"Aggregation"</legend>
-                    <p class="muted">"Select a Dataset version to configure grouping and metrics."</p>
-                </fieldset>
-            }.into_any()
-        } else {
-            view! {
-                <DataOpsAggregationEditor
-                    fields=fields_signal
-                    aggregation=aggregation_signal
-                    on_aggregation_change
-                    embedded=true
-                    metrics_only=true
-                />
-            }.into_any()
-        }}
-        <FilterAuthoringControls
-            title="Pre-Aggregation Filter"
-            fields=fields.clone()
-            filter_field=pre_filter_field
-            filter_operator=pre_filter_operator
-            filter_value=pre_filter_value
-        />
-        <AggregatePostFilterControls
-            fields
-            aggregation
-            post_filter_field
-            post_filter_operator
-            post_filter_value
-        />
-    }
-}
-
-#[component]
-fn AggregatePostFilterControls(
-    fields: Vec<DatasetFieldDefinition>,
-    aggregation: RwSignal<DatasetAggregationDraft>,
-    post_filter_field: RwSignal<String>,
-    post_filter_operator: RwSignal<String>,
-    post_filter_value: RwSignal<String>,
-) -> impl IntoView {
-    view! {
-        <fieldset class="route-panel__section">
-            <legend>"Post-Aggregation Filter"</legend>
-            <label class="form-field">
-                <span>"Field"</span>
-                <select prop:value=move || post_filter_field.get() on:change=move |event| post_filter_field.set(event_target_value(&event))>
-                    <option value="">"No filter"</option>
-                    {move || aggregate_output_fields(
-                        &fields,
-                        &aggregation.get(),
-                    ).into_iter().map(|field| {
-                        let label = format!("{} ({})", field.label, field.field_type);
-                        view! { <option value=field.key>{label}</option> }
-                    }).collect_view()}
-                </select>
-            </label>
-            <label class="form-field">
-                <span>"Operator"</span>
-                <select prop:value=move || post_filter_operator.get() on:change=move |event| post_filter_operator.set(event_target_value(&event))>
-                    <option value="equals">"Equals"</option>
-                    <option value="not_equals">"Not Equals"</option>
-                    <option value="contains">"Contains"</option>
-                    <option value="not_contains">"Not Contains"</option>
-                    <option value="is_null">"Is Null"</option>
-                    <option value="is_not_null">"Is Not Null"</option>
-                </select>
-            </label>
-            <label class="form-field">
-                <span>"Value"</span>
-                <input prop:value=move || post_filter_value.get() on:input=move |event| post_filter_value.set(event_target_value(&event))/>
-            </label>
-        </fieldset>
-    }
-}
-
-#[component]
-fn AggregateTableDefaultsControls(
-    fields: Vec<DatasetFieldDefinition>,
-    aggregation: RwSignal<DatasetAggregationDraft>,
-    sort_field: RwSignal<String>,
-    sort_direction: RwSignal<String>,
-    page_size: RwSignal<String>,
-) -> impl IntoView {
-    view! {
-        <fieldset class="route-panel__section">
-            <legend>"Table Defaults"</legend>
-            <label class="form-field">
-                <span>"Sort Field"</span>
-                <select prop:value=move || sort_field.get() on:change=move |event| sort_field.set(event_target_value(&event))>
-                    <option value="">"Default row order"</option>
-                    {move || aggregate_output_fields(
-                        &fields,
-                        &aggregation.get(),
-                    ).into_iter().map(|field| {
-                        let label = format!("{} ({})", field.label, field.field_type);
-                        view! { <option value=field.key>{label}</option> }
-                    }).collect_view()}
-                </select>
-            </label>
-            <label class="form-field">
-                <span>"Sort Direction"</span>
-                <select prop:value=move || sort_direction.get() on:change=move |event| sort_direction.set(event_target_value(&event))>
-                    <option value="asc">"Ascending"</option>
-                    <option value="desc">"Descending"</option>
-                </select>
-            </label>
-            <label class="form-field">
-                <span>"Page Size"</span>
-                <input
-                    type="number"
-                    min="1"
-                    max="200"
-                    prop:value=move || page_size.get()
-                    on:input=move |event| page_size.set(event_target_value(&event))
-                />
-            </label>
-        </fieldset>
-    }
-}
-
-#[component]
-fn FilterAuthoringControls(
-    title: &'static str,
-    fields: Vec<DatasetFieldDefinition>,
-    filter_field: RwSignal<String>,
-    filter_operator: RwSignal<String>,
-    filter_value: RwSignal<String>,
-) -> impl IntoView {
-    view! {
-        <fieldset class="route-panel__section">
-            <legend>{title}</legend>
-            <label class="form-field">
-                <span>"Field"</span>
-                <select prop:value=move || filter_field.get() on:change=move |event| filter_field.set(event_target_value(&event))>
-                    <option value="">"No filter"</option>
-                    {fields.into_iter().map(|field| {
-                        let label = format!("{} ({})", field.label, field.field_type);
-                        view! { <option value=field.key>{label}</option> }
-                    }).collect_view()}
-                </select>
-            </label>
-            <label class="form-field">
-                <span>"Operator"</span>
-                <select prop:value=move || filter_operator.get() on:change=move |event| filter_operator.set(event_target_value(&event))>
-                    <option value="equals">"Equals"</option>
-                    <option value="not_equals">"Not Equals"</option>
-                    <option value="contains">"Contains"</option>
-                    <option value="not_contains">"Not Contains"</option>
-                    <option value="is_null">"Is Null"</option>
-                    <option value="is_not_null">"Is Not Null"</option>
-                </select>
-            </label>
-            <label class="form-field">
-                <span>"Value"</span>
-                <input prop:value=move || filter_value.get() on:input=move |event| filter_value.set(event_target_value(&event))/>
-            </label>
         </fieldset>
     }
 }
@@ -1044,8 +795,7 @@ fn materialization_empty_state(state: &str) -> (&'static str, String) {
 
 fn component_type_label(component_type: &str) -> &'static str {
     match component_type {
-        "detail_table" => "Detail Table",
-        "aggregate_table" => "Aggregate Table",
+        "table" => "Table",
         _ => "Component",
     }
 }
@@ -1059,63 +809,37 @@ fn component_status_label(status: &str) -> &'static str {
     }
 }
 
-fn aggregate_output_fields(
-    fields: &[DatasetFieldDefinition],
-    aggregation: &DatasetAggregationDraft,
-) -> Vec<DatasetFieldDefinition> {
-    let mut output = Vec::new();
-    for group_field in &aggregation.group_fields {
-        if let Some(group) = fields.iter().find(|field| field.key == group_field.trim()) {
-            output.push(group.clone());
-        }
+fn dataset_catalog_option_label(dataset: &DatasetSummary, major: i32) -> String {
+    let mut parts = vec![format!("{} · v{}", dataset.name, major)];
+    if !dataset.tags.is_empty() {
+        parts.push(dataset.tags.join(", "));
     }
-    output.extend(aggregation.metrics.iter().filter_map(|metric| {
-        if metric.key.trim().is_empty() || metric.label.trim().is_empty() {
-            return None;
-        }
-        let metric_type = fields
-            .iter()
-            .find(|field| field.key == metric.source_field_key.trim())
-            .filter(|_| matches!(metric.function.as_str(), "min" | "max"))
-            .map(|field| field.field_type.clone())
-            .unwrap_or_else(|| "number".into());
-        Some(DatasetFieldDefinition {
-            key: metric.key.trim().into(),
-            label: metric.label.trim().into(),
-            field_type: metric_type,
-        })
-    }));
-    output
+    let provenance = dataset_provenance_label(&dataset.provenance);
+    if provenance != "No direct sources" {
+        parts.push(provenance);
+    }
+    parts.join(" · ")
 }
 
-fn dataset_field_draft_from_component_field(field: &DatasetFieldDefinition) -> DatasetFieldDraft {
-    DatasetFieldDraft {
-        key: field.key.clone(),
-        label: field.label.clone(),
-        source_alias: "component".into(),
-        source_field_key: field.key.clone(),
-        field_type: field.field_type.clone(),
+fn dataset_tag_label(tags: &[String]) -> String {
+    if tags.is_empty() {
+        "No tags".into()
+    } else {
+        tags.join(", ")
     }
 }
 
-fn default_component_aggregation() -> DatasetAggregationDraft {
-    default_component_aggregation_with_group(None)
-}
-
-fn default_component_aggregation_with_group(
-    group_field: Option<String>,
-) -> DatasetAggregationDraft {
-    DatasetAggregationDraft {
-        enabled: true,
-        group_fields: group_field.into_iter().collect(),
-        metrics: vec![DatasetAggregationMetricDraft {
-            id: 1,
-            key: "row_count".into(),
-            label: "Rows".into(),
-            function: "count_rows".into(),
-            source_field_key: String::new(),
-        }],
-        row_picker: None,
+fn dataset_provenance_label(provenance: &super::types::DatasetProvenanceSummary) -> String {
+    let forms = provenance.forms.iter().map(|item| item.name.clone());
+    let datasets = provenance
+        .datasets
+        .iter()
+        .map(|item| format!("Dataset: {}", item.name));
+    let sources = forms.chain(datasets).collect::<Vec<_>>();
+    if sources.is_empty() {
+        "No direct sources".into()
+    } else {
+        sources.join(", ")
     }
 }
 
@@ -1175,82 +899,18 @@ fn toggle_visible_column(value: &mut String, key: &str, all_keys: &[String]) {
 
 #[cfg_attr(not(any(feature = "hydrate", test)), allow(dead_code))]
 fn build_component_config(
-    component_type: &str,
     columns: &str,
-    aggregation: &DatasetAggregationDraft,
-    detail_filter_field: &str,
-    detail_filter_operator: &str,
-    detail_filter_value: &str,
-    pre_filter_field: &str,
-    pre_filter_operator: &str,
-    pre_filter_value: &str,
-    post_filter_field: &str,
-    post_filter_operator: &str,
-    post_filter_value: &str,
     sort_field: &str,
     sort_direction: &str,
     page_size: &str,
 ) -> Value {
     let fields = csv_field_keys(columns);
     let defaults = table_defaults_config(sort_field, sort_direction, page_size);
-    if component_type == "aggregate_table" {
-        let metrics = aggregation
-            .metrics
-            .iter()
-            .filter(|metric| {
-                !metric.key.trim().is_empty()
-                    && !metric.label.trim().is_empty()
-                    && !metric.function.trim().is_empty()
-            })
-            .map(|metric| {
-                let source_field_key = (metric.function != "count_rows")
-                    .then(|| metric.source_field_key.trim().to_string())
-                    .filter(|value| !value.is_empty());
-                json!({
-                    "key": metric.key.trim(),
-                    "label": metric.label.trim(),
-                    "function": metric.function.trim(),
-                    "source_field_key": source_field_key
-                })
-            })
-            .collect::<Vec<_>>();
-        let mut config = json!({
-            "group_fields": aggregation.group_fields.clone(),
-            "metrics": metrics,
-            "pre_filters": filter_array_config(pre_filter_field, pre_filter_operator, pre_filter_value),
-            "post_filters": filter_array_config(post_filter_field, post_filter_operator, post_filter_value)
-        });
-        merge_table_defaults(&mut config, defaults);
-        config
-    } else {
-        let mut config = json!({
-            "columns": fields,
-            "default_filters": filter_array_config(detail_filter_field, detail_filter_operator, detail_filter_value)
-        });
-        merge_table_defaults(&mut config, defaults);
-        config
-    }
-}
-
-fn filter_array_config(field: &str, operator: &str, value: &str) -> Value {
-    if field.trim().is_empty() {
-        return json!([]);
-    }
-    let operator = if operator.trim().is_empty() {
-        "equals"
-    } else {
-        operator.trim()
-    };
-    let value = value
-        .trim()
-        .is_empty()
-        .then(|| Value::Null)
-        .unwrap_or_else(|| json!(value.trim()));
-    json!([{
-        "field_key": field.trim(),
-        "operator": operator,
-        "value": value
-    }])
+    let mut config = json!({
+        "visible_columns": fields
+    });
+    merge_table_defaults(&mut config, defaults);
+    config
 }
 
 fn table_defaults_config(sort_field: &str, sort_direction: &str, page_size: &str) -> Value {
@@ -1306,9 +966,9 @@ fn editable_component_version(component: &ComponentDefinition) -> Option<Compone
 }
 
 #[cfg_attr(not(any(feature = "hydrate", test)), allow(dead_code))]
-fn detail_columns_from_config(config: &Value) -> String {
+fn table_visible_columns_from_config(config: &Value) -> String {
     config
-        .get("columns")
+        .get("visible_columns")
         .and_then(Value::as_array)
         .into_iter()
         .flatten()
@@ -1323,96 +983,6 @@ fn detail_columns_from_config(config: &Value) -> String {
         })
         .collect::<Vec<_>>()
         .join(", ")
-}
-
-#[cfg_attr(not(any(feature = "hydrate", test)), allow(dead_code))]
-fn aggregate_from_config(config: &Value) -> DatasetAggregationDraft {
-    let group_fields = config
-        .get("group_fields")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_str)
-        .map(str::to_string)
-        .collect::<Vec<_>>();
-    let metrics = config
-        .get("metrics")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .enumerate()
-        .map(|(index, metric)| DatasetAggregationMetricDraft {
-            id: index as u64 + 1,
-            key: metric
-                .get("key")
-                .and_then(Value::as_str)
-                .unwrap_or("metric")
-                .to_string(),
-            label: metric
-                .get("label")
-                .and_then(Value::as_str)
-                .unwrap_or("Metric")
-                .to_string(),
-            function: metric
-                .get("function")
-                .and_then(Value::as_str)
-                .unwrap_or("count_rows")
-                .to_string(),
-            source_field_key: metric
-                .get("source_field_key")
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_string(),
-        })
-        .collect::<Vec<_>>();
-    DatasetAggregationDraft {
-        enabled: true,
-        group_fields,
-        metrics: if metrics.is_empty() {
-            default_component_aggregation().metrics
-        } else {
-            metrics
-        },
-        row_picker: None,
-    }
-}
-
-#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
-fn first_filter_from_config(config: &Value, key: &str) -> (String, String, String) {
-    let Some(filter) = config
-        .get(key)
-        .and_then(Value::as_array)
-        .and_then(|filters| filters.first())
-    else {
-        return (String::new(), "equals".into(), String::new());
-    };
-    let field = filter
-        .get("field_key")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .to_string();
-    let operator = filter
-        .get("operator")
-        .and_then(Value::as_str)
-        .unwrap_or("equals")
-        .to_string();
-    let value = filter
-        .get("value")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .to_string();
-    (field, operator, value)
-}
-
-#[cfg(feature = "hydrate")]
-fn clear_filter_controls(
-    field: RwSignal<String>,
-    operator: RwSignal<String>,
-    value: RwSignal<String>,
-) {
-    field.set(String::new());
-    operator.set(String::from("equals"));
-    value.set(String::new());
 }
 
 #[cfg_attr(not(any(feature = "hydrate", test)), allow(dead_code))]
@@ -1607,16 +1177,6 @@ fn load_component_for_edit(
     dataset_major: RwSignal<String>,
     component_type: RwSignal<String>,
     columns: RwSignal<String>,
-    aggregation: RwSignal<DatasetAggregationDraft>,
-    detail_filter_field: RwSignal<String>,
-    detail_filter_operator: RwSignal<String>,
-    detail_filter_value: RwSignal<String>,
-    pre_filter_field: RwSignal<String>,
-    pre_filter_operator: RwSignal<String>,
-    pre_filter_value: RwSignal<String>,
-    post_filter_field: RwSignal<String>,
-    post_filter_operator: RwSignal<String>,
-    post_filter_value: RwSignal<String>,
     sort_field: RwSignal<String>,
     sort_direction: RwSignal<String>,
     page_size: RwSignal<String>,
@@ -1640,43 +1200,7 @@ fn load_component_for_edit(
                     sort_field.set(loaded_sort_field);
                     sort_direction.set(loaded_sort_direction);
                     page_size.set(table_page_size_from_config(&version.config));
-                    if version.component_type == "aggregate_table" {
-                        columns.set(String::new());
-                        clear_filter_controls(
-                            detail_filter_field,
-                            detail_filter_operator,
-                            detail_filter_value,
-                        );
-                        let (field, operator, value) =
-                            first_filter_from_config(&version.config, "pre_filters");
-                        pre_filter_field.set(field);
-                        pre_filter_operator.set(operator);
-                        pre_filter_value.set(value);
-                        let (field, operator, value) =
-                            first_filter_from_config(&version.config, "post_filters");
-                        post_filter_field.set(field);
-                        post_filter_operator.set(operator);
-                        post_filter_value.set(value);
-                        aggregation.set(aggregate_from_config(&version.config));
-                    } else {
-                        columns.set(detail_columns_from_config(&version.config));
-                        let (field, operator, value) =
-                            first_filter_from_config(&version.config, "default_filters");
-                        detail_filter_field.set(field);
-                        detail_filter_operator.set(operator);
-                        detail_filter_value.set(value);
-                        clear_filter_controls(
-                            pre_filter_field,
-                            pre_filter_operator,
-                            pre_filter_value,
-                        );
-                        clear_filter_controls(
-                            post_filter_field,
-                            post_filter_operator,
-                            post_filter_value,
-                        );
-                        aggregation.set(default_component_aggregation());
-                    }
+                    columns.set(table_visible_columns_from_config(&version.config));
                 }
             }
             Ok(None) => error.set(Some("Component could not be loaded.".into())),
@@ -1691,16 +1215,6 @@ fn load_component_for_edit(
     _: String,
     _: RwSignal<Option<String>>,
     _: RwSignal<Option<String>>,
-    _: RwSignal<String>,
-    _: RwSignal<String>,
-    _: RwSignal<String>,
-    _: RwSignal<String>,
-    _: RwSignal<String>,
-    _: RwSignal<String>,
-    _: RwSignal<String>,
-    _: RwSignal<DatasetAggregationDraft>,
-    _: RwSignal<String>,
-    _: RwSignal<String>,
     _: RwSignal<String>,
     _: RwSignal<String>,
     _: RwSignal<String>,
@@ -1775,18 +1289,7 @@ fn create_component_from_form(
     description: String,
     dataset_id: String,
     dataset_major: String,
-    component_type: String,
     columns: String,
-    aggregation: DatasetAggregationDraft,
-    detail_filter_field: String,
-    detail_filter_operator: String,
-    detail_filter_value: String,
-    pre_filter_field: String,
-    pre_filter_operator: String,
-    pre_filter_value: String,
-    post_filter_field: String,
-    post_filter_operator: String,
-    post_filter_value: String,
     sort_field: String,
     sort_direction: String,
     page_size: String,
@@ -1799,27 +1302,11 @@ fn create_component_from_form(
         error.set(None);
         findings.set(Vec::new());
         let major = dataset_major.trim().parse::<i32>().unwrap_or(1);
-        let config = build_component_config(
-            &component_type,
-            &columns,
-            &aggregation,
-            &detail_filter_field,
-            &detail_filter_operator,
-            &detail_filter_value,
-            &pre_filter_field,
-            &pre_filter_operator,
-            &pre_filter_value,
-            &post_filter_field,
-            &post_filter_operator,
-            &post_filter_value,
-            &sort_field,
-            &sort_direction,
-            &page_size,
-        );
+        let config = build_component_config(&columns, &sort_field, &sort_direction, &page_size);
         let version = CreateComponentVersionRequest {
             dataset_id: Some(dataset_id),
             dataset_version_major: Some(major),
-            component_type,
+            component_type: "table".into(),
             config,
         };
         let description = description
@@ -1887,17 +1374,6 @@ fn create_component_from_form(
     _: String,
     _: String,
     _: String,
-    _: DatasetAggregationDraft,
-    _: String,
-    _: String,
-    _: String,
-    _: String,
-    _: String,
-    _: String,
-    _: String,
-    _: String,
-    _: String,
-    _: String,
     _: String,
     _: String,
     _: RwSignal<Option<String>>,
@@ -1910,18 +1386,7 @@ fn create_component_from_form(
 fn validate_component_form(
     dataset_id: String,
     dataset_major: String,
-    component_type: String,
     columns: String,
-    aggregation: DatasetAggregationDraft,
-    detail_filter_field: String,
-    detail_filter_operator: String,
-    detail_filter_value: String,
-    pre_filter_field: String,
-    pre_filter_operator: String,
-    pre_filter_value: String,
-    post_filter_field: String,
-    post_filter_operator: String,
-    post_filter_value: String,
     sort_field: String,
     sort_direction: String,
     page_size: String,
@@ -1934,27 +1399,11 @@ fn validate_component_form(
         error.set(None);
         findings.set(Vec::new());
         let major = dataset_major.trim().parse::<i32>().unwrap_or(1);
-        let config = build_component_config(
-            &component_type,
-            &columns,
-            &aggregation,
-            &detail_filter_field,
-            &detail_filter_operator,
-            &detail_filter_value,
-            &pre_filter_field,
-            &pre_filter_operator,
-            &pre_filter_value,
-            &post_filter_field,
-            &post_filter_operator,
-            &post_filter_value,
-            &sort_field,
-            &sort_direction,
-            &page_size,
-        );
+        let config = build_component_config(&columns, &sort_field, &sort_direction, &page_size);
         let payload = CreateComponentVersionRequest {
             dataset_id: Some(dataset_id),
             dataset_version_major: Some(major),
-            component_type,
+            component_type: "table".into(),
             config,
         };
         match api::validate_component_version(payload).await {
@@ -1971,17 +1420,6 @@ fn validate_component_form(
 
 #[cfg(not(feature = "hydrate"))]
 fn validate_component_form(
-    _: String,
-    _: String,
-    _: String,
-    _: String,
-    _: DatasetAggregationDraft,
-    _: String,
-    _: String,
-    _: String,
-    _: String,
-    _: String,
-    _: String,
     _: String,
     _: String,
     _: String,
@@ -2064,15 +1502,13 @@ mod tests {
         ComponentDefinition, ComponentVersionSummary, DatasetSummary, build_component_config,
         dataset_picker_majors, toggle_csv_key, toggle_visible_column,
     };
-    use super::{
-        aggregate_from_config, aggregate_output_fields, component_redirect_ref,
-        default_component_aggregation, detail_columns_from_config, editable_component_version,
-        materialization_empty_state, selected_dataset_major_value, table_page_size_from_config,
-        table_sort_from_config,
-    };
     use super::{build_component_table_query, percent_encode_query_component};
-    use crate::types::DatasetFieldDefinition;
-    use tessara_web_data_ops::{DatasetAggregationDraft, DatasetAggregationMetricDraft};
+    use super::{
+        component_redirect_ref, dataset_catalog_option_label, dataset_provenance_label,
+        editable_component_version, materialization_empty_state, selected_dataset_major_value,
+        table_page_size_from_config, table_sort_from_config, table_visible_columns_from_config,
+    };
+    use crate::types::{DatasetProvenanceItem, DatasetProvenanceSummary};
 
     fn dataset(major_versions: Vec<i32>, current_version_major: Option<i32>) -> DatasetSummary {
         DatasetSummary {
@@ -2081,6 +1517,9 @@ mod tests {
             major_versions,
             name: "Dataset".into(),
             slug: "dataset".into(),
+            grain: "submission".into(),
+            tags: Vec::new(),
+            provenance: Default::default(),
             output_fields: Vec::new(),
         }
     }
@@ -2101,231 +1540,44 @@ mod tests {
         );
     }
 
-    fn aggregation_with_metrics(
-        group_fields: Vec<&str>,
-        metrics: Vec<(&str, &str, &str, &str)>,
-    ) -> DatasetAggregationDraft {
-        DatasetAggregationDraft {
-            enabled: true,
-            group_fields: group_fields.into_iter().map(str::to_string).collect(),
-            metrics: metrics
-                .into_iter()
-                .enumerate()
-                .map(|(index, (key, label, function, source_field_key))| {
-                    DatasetAggregationMetricDraft {
-                        id: index as u64 + 1,
-                        key: key.into(),
-                        label: label.into(),
-                        function: function.into(),
-                        source_field_key: source_field_key.into(),
-                    }
-                })
-                .collect(),
-            row_picker: None,
-        }
+    #[test]
+    fn dataset_catalog_option_includes_tags_and_provenance() {
+        let mut dataset = dataset(vec![1], Some(1));
+        dataset.tags = vec!["finance".into(), "display".into()];
+        dataset.provenance = DatasetProvenanceSummary {
+            forms: vec![DatasetProvenanceItem {
+                id: "form-1".into(),
+                name: "Intake Form".into(),
+                slug: Some("intake".into()),
+            }],
+            datasets: vec![DatasetProvenanceItem {
+                id: "dataset-2".into(),
+                name: "Analytical Source".into(),
+                slug: Some("analytical-source".into()),
+            }],
+        };
+
+        assert_eq!(
+            dataset_catalog_option_label(&dataset, 1),
+            "Dataset · v1 · finance, display · Intake Form, Dataset: Analytical Source"
+        );
+        assert_eq!(
+            dataset_provenance_label(&dataset.provenance),
+            "Intake Form, Dataset: Analytical Source"
+        );
     }
 
     #[test]
-    fn detail_table_config_uses_selected_columns() {
-        let config = build_component_config(
-            "detail_table",
-            "program, amount",
-            &default_component_aggregation(),
-            "program",
-            "not_equals",
-            "archived",
-            "",
-            "equals",
-            "",
-            "",
-            "equals",
-            "",
-            "program",
-            "desc",
-            "25",
-        );
+    fn table_config_uses_visible_columns_and_defaults() {
+        let config = build_component_config("program, amount", "program", "desc", "25");
 
-        assert_eq!(config["columns"], serde_json::json!(["program", "amount"]));
-        assert_eq!(config["default_filters"][0]["field_key"], "program");
-        assert_eq!(config["default_filters"][0]["operator"], "not_equals");
-        assert_eq!(config["default_filters"][0]["value"], "archived");
+        assert_eq!(
+            config["visible_columns"],
+            serde_json::json!(["program", "amount"])
+        );
         assert_eq!(config["default_sort"]["field_key"], "program");
         assert_eq!(config["default_sort"]["direction"], "desc");
         assert_eq!(config["page_size"], 25);
-    }
-
-    #[test]
-    fn aggregate_table_config_uses_group_and_metric_source() {
-        let aggregation =
-            aggregation_with_metrics(vec!["program"], vec![("total", "Total", "sum", "amount")]);
-        let config = build_component_config(
-            "aggregate_table",
-            "",
-            &aggregation,
-            "",
-            "equals",
-            "",
-            "program",
-            "equals",
-            "active",
-            "total",
-            "gt",
-            "0",
-            "program",
-            "asc",
-            "500",
-        );
-
-        assert_eq!(config["group_fields"], serde_json::json!(["program"]));
-        assert_eq!(config["metrics"][0]["function"], "sum");
-        assert_eq!(config["metrics"][0]["source_field_key"], "amount");
-        assert_eq!(config["pre_filters"][0]["field_key"], "program");
-        assert_eq!(config["post_filters"][0]["field_key"], "total");
-        assert_eq!(config["page_size"], 200);
-    }
-
-    #[test]
-    fn aggregate_count_metric_omits_source_field() {
-        let aggregation = default_component_aggregation();
-        let config = build_component_config(
-            "aggregate_table",
-            "",
-            &aggregation,
-            "",
-            "equals",
-            "",
-            "",
-            "equals",
-            "",
-            "",
-            "equals",
-            "",
-            "",
-            "asc",
-            "50",
-        );
-
-        assert_eq!(config["metrics"][0]["function"], "count_rows");
-        assert!(config["metrics"][0]["source_field_key"].is_null());
-        assert!(config["default_sort"].is_null());
-    }
-
-    #[test]
-    fn aggregate_config_supports_multiple_simultaneous_metrics() {
-        let aggregation = aggregation_with_metrics(
-            vec!["program"],
-            vec![
-                ("total_a", "Total A", "sum", "field_a"),
-                ("average_b", "Average B", "average", "field_b"),
-                (
-                    "present_a",
-                    "Count values present A",
-                    "count_values",
-                    "field_a",
-                ),
-                (
-                    "present_b",
-                    "Count values present B",
-                    "count_values",
-                    "field_b",
-                ),
-            ],
-        );
-        let config = build_component_config(
-            "aggregate_table",
-            "",
-            &aggregation,
-            "",
-            "equals",
-            "",
-            "",
-            "equals",
-            "",
-            "",
-            "equals",
-            "",
-            "",
-            "asc",
-            "50",
-        );
-
-        assert_eq!(config["metrics"].as_array().unwrap().len(), 4);
-        assert_eq!(config["metrics"][0]["function"], "sum");
-        assert_eq!(config["metrics"][0]["source_field_key"], "field_a");
-        assert_eq!(config["metrics"][1]["function"], "average");
-        assert_eq!(config["metrics"][1]["source_field_key"], "field_b");
-        assert_eq!(config["metrics"][2]["function"], "count_values");
-        assert_eq!(config["metrics"][2]["source_field_key"], "field_a");
-        assert_eq!(config["metrics"][3]["function"], "count_values");
-        assert_eq!(config["metrics"][3]["source_field_key"], "field_b");
-    }
-
-    #[test]
-    fn aggregate_output_fields_use_group_and_metric_key() {
-        let fields = vec![
-            DatasetFieldDefinition {
-                key: "program".into(),
-                label: "Program".into(),
-                field_type: "text".into(),
-            },
-            DatasetFieldDefinition {
-                key: "amount".into(),
-                label: "Amount".into(),
-                field_type: "number".into(),
-            },
-        ];
-
-        let aggregation =
-            aggregation_with_metrics(vec!["program"], vec![("total", "Total", "sum", "amount")]);
-        let output = aggregate_output_fields(&fields, &aggregation);
-
-        assert_eq!(output.len(), 2);
-        assert_eq!(output[0].key, "program");
-        assert_eq!(output[1].key, "total");
-        assert_eq!(output[1].label, "Total");
-        assert_eq!(output[1].field_type, "number");
-    }
-
-    #[test]
-    fn aggregate_output_fields_keep_min_max_source_type() {
-        let fields = vec![DatasetFieldDefinition {
-            key: "ended_at".into(),
-            label: "Ended At".into(),
-            field_type: "date".into(),
-        }];
-
-        let aggregation =
-            aggregation_with_metrics(Vec::new(), vec![("maximum", "Maximum", "max", "ended_at")]);
-        let output = aggregate_output_fields(&fields, &aggregation);
-
-        assert_eq!(output.len(), 1);
-        assert_eq!(output[0].key, "maximum");
-        assert_eq!(output[0].field_type, "date");
-    }
-
-    #[test]
-    fn aggregate_output_fields_count_values_is_numeric() {
-        let fields = vec![DatasetFieldDefinition {
-            key: "status".into(),
-            label: "Status".into(),
-            field_type: "text".into(),
-        }];
-
-        let aggregation = aggregation_with_metrics(
-            Vec::new(),
-            vec![(
-                "values_present_count",
-                "Count values present",
-                "count_values",
-                "status",
-            )],
-        );
-        let output = aggregate_output_fields(&fields, &aggregation);
-
-        assert_eq!(output.len(), 1);
-        assert_eq!(output[0].key, "values_present_count");
-        assert_eq!(output[0].label, "Count values present");
-        assert_eq!(output[0].field_type, "number");
     }
 
     #[test]
@@ -2350,9 +1602,9 @@ mod tests {
     }
 
     #[test]
-    fn detail_columns_parse_string_and_object_configs() {
+    fn table_visible_columns_parse_string_and_object_configs() {
         let config = serde_json::json!({
-            "columns": [
+            "visible_columns": [
                 "program",
                 { "field_key": "amount" },
                 { "key": "status" }
@@ -2360,29 +1612,14 @@ mod tests {
         });
 
         assert_eq!(
-            detail_columns_from_config(&config),
+            table_visible_columns_from_config(&config),
             "program, amount, status"
         );
     }
 
     #[test]
-    fn aggregate_config_extracts_groups_and_metrics() {
+    fn table_config_extracts_sort_and_page_size() {
         let config = serde_json::json!({
-            "group_fields": ["program", "status"],
-            "metrics": [
-                {
-                    "key": "total",
-                    "label": "Total",
-                    "function": "sum",
-                    "source_field_key": "amount"
-                },
-                {
-                    "key": "present_status",
-                    "label": "Count values present",
-                    "function": "count_values",
-                    "source_field_key": "status"
-                }
-            ],
             "default_sort": {
                 "field_key": "program",
                 "direction": "desc"
@@ -2390,13 +1627,6 @@ mod tests {
             "page_size": 25
         });
 
-        let aggregation = aggregate_from_config(&config);
-        assert_eq!(aggregation.group_fields, vec!["program", "status"]);
-        assert_eq!(aggregation.metrics.len(), 2);
-        assert_eq!(aggregation.metrics[0].function, "sum");
-        assert_eq!(aggregation.metrics[0].source_field_key, "amount");
-        assert_eq!(aggregation.metrics[1].function, "count_values");
-        assert_eq!(aggregation.metrics[1].source_field_key, "status");
         assert_eq!(
             table_sort_from_config(&config),
             ("program".into(), "desc".into())
@@ -2494,10 +1724,10 @@ mod tests {
             dataset_id: "dataset-1".into(),
             dataset_version_major: 1,
             binding_mode: "major_line".into(),
-            component_type: "detail_table".into(),
+            component_type: "table".into(),
             status: status.into(),
             version_label: "1".into(),
-            config: serde_json::json!({ "columns": ["program"] }),
+            config: serde_json::json!({ "visible_columns": ["program"] }),
         }
     }
 }
