@@ -15,8 +15,7 @@ CREATE TYPE form_version_status AS ENUM ('draft', 'published', 'superseded');
 CREATE TYPE submission_status AS ENUM ('draft', 'submitted');
 CREATE TYPE dataset_revision_status AS ENUM ('draft', 'published', 'superseded');
 CREATE TYPE component_type AS ENUM (
-    'detail_table',
-    'aggregate_table',
+    'table',
     'bar',
     'line',
     'pie',

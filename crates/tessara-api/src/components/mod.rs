@@ -14,10 +14,7 @@ use axum::{
 };
 use serde::Deserialize;
 use sqlx::{Column, Postgres, Row, Transaction};
-use tessara_data_ops::{
-    AggregateFunction, AggregateMetric, AggregationPlan, DataField, FieldType, FilterOperator,
-    ValidatedAggregationPlan, validate_aggregation_plan,
-};
+use tessara_data_ops::{DataField, FieldType, FilterOperator};
 use uuid::Uuid;
 
 mod dto;
@@ -628,17 +625,7 @@ async fn execute_component_table(
             Vec::new(),
         ));
     }
-    match version.component_type.as_str() {
-        "detail_table" => {
-            execute_detail_table(pool, account, version, materialization, &fields, query).await
-        }
-        "aggregate_table" => {
-            execute_aggregate_table(pool, account, version, materialization, &fields, query).await
-        }
-        other => Err(ApiError::BadRequest(format!(
-            "unsupported component type '{other}'"
-        ))),
-    }
+    execute_table_component(pool, account, version, materialization, &fields, query).await
 }
 
 async fn load_major_line_materialization(
@@ -691,7 +678,7 @@ fn empty_component_table(
     }
 }
 
-async fn execute_detail_table(
+async fn execute_table_component(
     pool: &sqlx::PgPool,
     account: &auth::AccountContext,
     version: ComponentVersionForTable,
@@ -699,19 +686,26 @@ async fn execute_detail_table(
     fields: &[DataField],
     query: ComponentRuntimeQuery,
 ) -> ApiResult<ComponentTable> {
-    let config: DetailTableConfig =
+    validate_component_type(&version.component_type)?;
+    let config: TableComponentConfig =
         serde_json::from_value(version.config.clone()).map_err(|error| {
-            ApiError::BadRequest(format!("detail table config is invalid: {error}"))
+            ApiError::BadRequest(format!("table component config is invalid: {error}"))
         })?;
-    let configured_fields = config
-        .columns
+    let field_refs = fields.iter().collect::<Vec<_>>();
+    let default_visible_columns = config
+        .visible_columns
         .iter()
-        .map(|column| require_component_field(fields, column.field_key(), "detail table column"))
-        .collect::<ApiResult<Vec<_>>>()?;
-    let selected_fields = visible_table_fields(&configured_fields, &query.visible_columns)?;
+        .map(|column| column.field_key().to_string())
+        .collect::<Vec<_>>();
+    let visible_columns = if query.visible_columns.is_empty() {
+        &default_visible_columns
+    } else {
+        &query.visible_columns
+    };
+    let selected_fields = visible_table_fields(&field_refs, visible_columns)?;
     let columns = selected_fields
         .iter()
-        .map(|field| component_table_column(field))
+        .map(|field| component_table_column(field, &config.display_labels))
         .collect::<Vec<_>>();
     let select_columns = selected_fields
         .iter()
@@ -719,17 +713,16 @@ async fn execute_detail_table(
         .collect::<Vec<_>>();
     let mut predicates =
         vec![tier_access_predicate_for_materialization(pool, account, &materialization).await?];
-    predicates.extend(component_filter_sql(&config.default_filters, fields)?);
     predicates.extend(component_filter_sql(&query.filters, fields)?);
     if let Some(search) = query.search.as_deref() {
-        let search_fields = detail_search_fields(&config, &configured_fields, fields)?;
+        let search_fields = table_search_fields(&config, fields)?;
         if !search_fields.is_empty() {
             predicates.push(search_predicate_sql(&search_fields, search));
         }
     }
     let full_name = materialized_full_name(&materialization);
     let sort = query.sort.or(config.default_sort);
-    let order_by = table_order_by_sql(sort.as_ref(), &configured_fields, "__row_id")?;
+    let order_by = table_order_by_sql(sort.as_ref(), &field_refs, "__row_id")?;
     let page_size = effective_component_page_size(query.page_size, config.page_size);
     let page = component_pagination_sql(query.offset, page_size);
     let sql = format!(
@@ -737,105 +730,6 @@ async fn execute_detail_table(
         select_columns.join(", "),
         predicates.join(" AND ")
     );
-    let (rows, pagination) = component_rows_from_query(pool, &sql, query.offset, page_size).await?;
-    Ok(ComponentTable {
-        component_id: version.component_id,
-        component_version_id: version.id,
-        dataset_id: version.dataset_id,
-        dataset_version_major: version.dataset_version_major,
-        component_type: version.component_type,
-        materialization_state: "ready".into(),
-        columns,
-        rows,
-        pagination,
-    })
-}
-
-async fn execute_aggregate_table(
-    pool: &sqlx::PgPool,
-    account: &auth::AccountContext,
-    version: ComponentVersionForTable,
-    materialization: MajorLineMaterialization,
-    fields: &[DataField],
-    query: ComponentRuntimeQuery,
-) -> ApiResult<ComponentTable> {
-    let config: AggregateTableConfig =
-        serde_json::from_value(version.config.clone()).map_err(|error| {
-            ApiError::BadRequest(format!("aggregate table config is invalid: {error}"))
-        })?;
-    let validated = validated_aggregation_plan_from_config(&config, fields)?;
-    let mut aggregate_fields = validated
-        .group_fields
-        .iter()
-        .filter_map(|key| fields.iter().find(|field| field.key == *key).cloned())
-        .collect::<Vec<_>>();
-    aggregate_fields.extend(validated.metrics.iter().map(|metric| DataField {
-        key: metric.key.clone(),
-        label: metric.label.clone(),
-        field_type: metric.output_field_type.clone(),
-        position: metric.position,
-    }));
-    let aggregate_field_refs = aggregate_fields.iter().collect::<Vec<_>>();
-    let selected_fields = visible_table_fields(&aggregate_field_refs, &query.visible_columns)?;
-    let columns = selected_fields
-        .iter()
-        .map(|field| component_table_column(field))
-        .collect::<Vec<_>>();
-    let mut source_predicates =
-        vec![tier_access_predicate_for_materialization(pool, account, &materialization).await?];
-    source_predicates.extend(component_filter_sql(&config.pre_filters, fields)?);
-    source_predicates.extend(source_runtime_filters(
-        &query.filters,
-        fields,
-        &aggregate_fields,
-    )?);
-    let group_selects = validated
-        .group_fields
-        .iter()
-        .map(|key| quote_identifier(key))
-        .collect::<Vec<_>>();
-    let metric_selects = validated
-        .metrics
-        .iter()
-        .map(aggregate_metric_sql)
-        .collect::<Vec<_>>();
-    let mut select_parts = group_selects.clone();
-    select_parts.extend(metric_selects);
-    let group_by = if group_selects.is_empty() {
-        String::new()
-    } else {
-        format!(" GROUP BY {}", group_selects.join(", "))
-    };
-    let full_name = materialized_full_name(&materialization);
-    let sort = query.sort.or(config.default_sort);
-    let order_by = table_order_by_sql(sort.as_ref(), &aggregate_field_refs, "__row_id")?;
-    let inner_sql = format!(
-        "SELECT md5(concat_ws('|', {})) AS __row_id, {} FROM {full_name} WHERE {}{group_by}",
-        aggregate_row_id_parts(&validated.group_fields),
-        select_parts.join(", "),
-        source_predicates.join(" AND ")
-    );
-    let post_predicates = component_filter_sql(&config.post_filters, &aggregate_fields)?;
-    let mut post_predicates = post_predicates;
-    post_predicates.extend(aggregate_runtime_filters(
-        &query.filters,
-        fields,
-        &aggregate_fields,
-    )?);
-    if let Some(search) = query.search.as_deref() {
-        let search_fields = aggregate_search_fields(&aggregate_field_refs);
-        if !search_fields.is_empty() {
-            post_predicates.push(search_predicate_sql(&search_fields, search));
-        }
-    }
-    let outer_where = if post_predicates.is_empty() {
-        String::new()
-    } else {
-        format!(" WHERE {}", post_predicates.join(" AND "))
-    };
-    let page_size = effective_component_page_size(query.page_size, config.page_size);
-    let page = component_pagination_sql(query.offset, page_size);
-    let sql = format!("SELECT * FROM ({inner_sql}) AS aggregate_rows{outer_where}{order_by}{page}");
     let (rows, pagination) = component_rows_from_query(pool, &sql, query.offset, page_size).await?;
     Ok(ComponentTable {
         component_id: version.component_id,
@@ -888,10 +782,16 @@ async fn component_rows_from_query(
     ))
 }
 
-fn component_table_column(field: &DataField) -> ComponentTableColumn {
+fn component_table_column(
+    field: &DataField,
+    display_labels: &BTreeMap<String, String>,
+) -> ComponentTableColumn {
     ComponentTableColumn {
         key: field.key.clone(),
-        label: field.label.clone(),
+        label: display_labels
+            .get(&field.key)
+            .cloned()
+            .unwrap_or_else(|| field.label.clone()),
         field_type: field.field_type.as_str().to_string(),
     }
 }
@@ -919,23 +819,18 @@ fn visible_table_fields<'a>(
     Ok(selected)
 }
 
-fn detail_search_fields<'a>(
-    config: &DetailTableConfig,
-    selected_fields: &[&'a DataField],
+fn table_search_fields<'a>(
+    config: &TableComponentConfig,
     fields: &'a [DataField],
 ) -> ApiResult<Vec<&'a DataField>> {
     if config.search_fields.is_empty() {
-        return Ok(selected_fields.to_vec());
+        return Ok(fields.iter().collect());
     }
     config
         .search_fields
         .iter()
-        .map(|key| require_component_field(fields, key, "detail table search field"))
+        .map(|key| require_component_field(fields, key, "table search field"))
         .collect()
-}
-
-fn aggregate_search_fields<'a>(aggregate_fields: &[&'a DataField]) -> Vec<&'a DataField> {
-    aggregate_fields.to_vec()
 }
 
 fn search_predicate_sql(fields: &[&DataField], search: &str) -> String {
@@ -994,54 +889,6 @@ fn effective_component_page_size(
         .or(config_page_size)
         .unwrap_or(50)
         .clamp(1, 200)
-}
-
-fn source_runtime_filters(
-    filters: &[ComponentFilterConfig],
-    source_fields: &[DataField],
-    aggregate_fields: &[DataField],
-) -> ApiResult<Vec<String>> {
-    filters
-        .iter()
-        .filter(|filter| {
-            source_fields
-                .iter()
-                .any(|field| field.key == filter.field_key)
-                && !aggregate_fields
-                    .iter()
-                    .any(|field| field.key == filter.field_key)
-        })
-        .map(|filter| filter_to_sql(filter, source_fields, "component source filter"))
-        .collect()
-}
-
-fn aggregate_runtime_filters(
-    filters: &[ComponentFilterConfig],
-    source_fields: &[DataField],
-    aggregate_fields: &[DataField],
-) -> ApiResult<Vec<String>> {
-    filters
-        .iter()
-        .map(|filter| {
-            if aggregate_fields
-                .iter()
-                .any(|field| field.key == filter.field_key)
-            {
-                filter_to_sql(filter, aggregate_fields, "component aggregate filter").map(Some)
-            } else if source_fields
-                .iter()
-                .any(|field| field.key == filter.field_key)
-            {
-                Ok(None)
-            } else {
-                Err(ApiError::BadRequest(format!(
-                    "component table filter references field '{}' outside the table contract",
-                    filter.field_key
-                )))
-            }
-        })
-        .filter_map(Result::transpose)
-        .collect()
 }
 
 fn filter_to_sql(
@@ -1141,54 +988,6 @@ fn materialized_full_name(materialization: &MajorLineMaterialization) -> String 
         quote_identifier(&materialization.schema),
         quote_identifier(&materialization.table)
     )
-}
-
-fn aggregate_metric_sql(metric: &tessara_data_ops::ValidatedAggregateMetric) -> String {
-    let key = quote_identifier(&metric.key);
-    match metric.function {
-        AggregateFunction::Count => format!("COUNT(*)::text AS {key}"),
-        AggregateFunction::CountValues => format!(
-            "COUNT(NULLIF({}, ''))::text AS {key}",
-            quote_identifier(metric.source_field_key.as_deref().unwrap_or_default())
-        ),
-        AggregateFunction::CountDistinct => format!(
-            "COUNT(DISTINCT NULLIF({}, ''))::text AS {key}",
-            quote_identifier(metric.source_field_key.as_deref().unwrap_or_default())
-        ),
-        AggregateFunction::Sum => format!(
-            "SUM(NULLIF({}, '')::numeric)::text AS {key}",
-            quote_identifier(metric.source_field_key.as_deref().unwrap_or_default())
-        ),
-        AggregateFunction::Avg => format!(
-            "AVG(NULLIF({}, '')::numeric)::text AS {key}",
-            quote_identifier(metric.source_field_key.as_deref().unwrap_or_default())
-        ),
-        AggregateFunction::Min => format!(
-            "MIN({})::text AS {key}",
-            typed_orderable_sql(
-                &quote_identifier(metric.source_field_key.as_deref().unwrap_or_default()),
-                metric.output_field_type.as_str()
-            )
-        ),
-        AggregateFunction::Max => format!(
-            "MAX({})::text AS {key}",
-            typed_orderable_sql(
-                &quote_identifier(metric.source_field_key.as_deref().unwrap_or_default()),
-                metric.output_field_type.as_str()
-            )
-        ),
-    }
-}
-
-fn aggregate_row_id_parts(group_fields: &[String]) -> String {
-    if group_fields.is_empty() {
-        return sql_literal("all");
-    }
-    group_fields
-        .iter()
-        .map(|field| format!("COALESCE({}::text, '')", quote_identifier(field)))
-        .collect::<Vec<_>>()
-        .join(", ")
 }
 
 fn component_filter_sql(
@@ -1638,28 +1437,12 @@ fn component_config_validation_finding(error: ApiError) -> ComponentValidationFi
     let lower = message.to_ascii_lowercase();
     let (code, field_path) = if lower.contains("unsupported component type") {
         ("COMPONENT_UNSUPPORTED_KIND", "component_type")
-    } else if lower.contains("duplicate") && lower.contains("metric") {
-        ("COMPONENT_DUPLICATE_METRIC_KEY", "config.metrics")
-    } else if lower.contains("unsupported aggregate function") {
-        ("COMPONENT_UNSUPPORTED_AGGREGATE_FUNCTION", "config.metrics")
-    } else if lower.contains("aggregate table pre-filter")
-        || lower.contains("aggregate table post-filter")
-        || lower.contains("detail table filter")
-        || lower.contains("filter operator")
-    {
+    } else if lower.contains("filter operator") {
         ("COMPONENT_FILTER_FIELD_NOT_IN_MAJOR_LINE", "config.filters")
     } else if lower.contains("sort") {
         (
             "COMPONENT_SORT_FIELD_NOT_IN_MAJOR_LINE",
             "config.default_sort",
-        )
-    } else if lower.contains("aggregation")
-        || lower.contains("aggregate")
-        || lower.contains("metric")
-    {
-        (
-            "COMPONENT_AGGREGATE_FIELD_NOT_IN_MAJOR_LINE",
-            "config.metrics",
         )
     } else {
         ("COMPONENT_FIELD_NOT_IN_MAJOR_LINE", "config")
@@ -1755,7 +1538,7 @@ async fn load_component_versions(
 
 fn validate_component_type(component_type: &str) -> ApiResult<()> {
     match component_type {
-        "detail_table" | "aggregate_table" => Ok(()),
+        "table" => Ok(()),
         other => Err(ApiError::BadRequest(format!(
             "unsupported component type '{other}'"
         ))),
@@ -1763,33 +1546,17 @@ fn validate_component_type(component_type: &str) -> ApiResult<()> {
 }
 
 #[derive(Deserialize)]
-struct DetailTableConfig {
+struct TableComponentConfig {
     #[serde(default)]
-    columns: Vec<ComponentFieldRef>,
-    #[serde(default)]
-    default_filters: Vec<ComponentFilterConfig>,
+    visible_columns: Vec<ComponentFieldRef>,
     #[serde(default)]
     search_fields: Vec<String>,
     #[serde(default)]
     default_sort: Option<ComponentSortConfig>,
     #[serde(default)]
     page_size: Option<usize>,
-}
-
-#[derive(Deserialize)]
-struct AggregateTableConfig {
     #[serde(default)]
-    pre_filters: Vec<ComponentFilterConfig>,
-    #[serde(default)]
-    group_fields: Vec<String>,
-    #[serde(default)]
-    metrics: Vec<ComponentAggregateMetricConfig>,
-    #[serde(default)]
-    post_filters: Vec<ComponentFilterConfig>,
-    #[serde(default)]
-    default_sort: Option<ComponentSortConfig>,
-    #[serde(default)]
-    page_size: Option<usize>,
+    display_labels: BTreeMap<String, String>,
 }
 
 #[derive(Clone, Deserialize)]
@@ -1829,83 +1596,34 @@ struct ComponentFilterConfig {
     value: Option<String>,
 }
 
-#[derive(Deserialize)]
-struct ComponentAggregateMetricConfig {
-    key: String,
-    label: String,
-    function: String,
-    #[serde(default)]
-    source_field_key: Option<String>,
-    #[serde(default)]
-    position: Option<i32>,
-}
-
 fn validate_component_config(
     component_type: &str,
     config: &serde_json::Value,
     fields: &[DataField],
 ) -> ApiResult<()> {
     match component_type {
-        "detail_table" => validate_detail_table_config(config, fields),
-        "aggregate_table" => validate_aggregate_table_config(config, fields),
+        "table" => validate_table_component_config(config, fields),
         _ => validate_component_type(component_type),
     }
 }
 
-fn validate_detail_table_config(config: &serde_json::Value, fields: &[DataField]) -> ApiResult<()> {
-    let config: DetailTableConfig = serde_json::from_value(config.clone()).map_err(|error| {
-        ApiError::BadRequest(format!("detail table config is invalid: {error}"))
-    })?;
-    if config.columns.is_empty() {
-        return Err(ApiError::BadRequest(
-            "detail table config requires at least one column".into(),
-        ));
-    }
-    for column in &config.columns {
-        require_component_field(fields, column.field_key(), "detail table column")?;
-    }
-    for field_key in &config.search_fields {
-        require_component_field(fields, field_key, "detail table search field")?;
-    }
-    validate_component_filters(&config.default_filters, fields, "detail table filter")?;
-    validate_component_sort(&config.default_sort, fields, "detail table sort")
-}
-
-fn validate_aggregate_table_config(
+fn validate_table_component_config(
     config: &serde_json::Value,
     fields: &[DataField],
 ) -> ApiResult<()> {
-    let config: AggregateTableConfig = serde_json::from_value(config.clone()).map_err(|error| {
-        ApiError::BadRequest(format!("aggregate table config is invalid: {error}"))
+    let config: TableComponentConfig = serde_json::from_value(config.clone()).map_err(|error| {
+        ApiError::BadRequest(format!("table component config is invalid: {error}"))
     })?;
-    if config.metrics.is_empty() {
-        return Err(ApiError::BadRequest(
-            "aggregate table config requires at least one metric".into(),
-        ));
+    for column in &config.visible_columns {
+        require_component_field(fields, column.field_key(), "table visible column")?;
     }
-    validate_component_filters(&config.pre_filters, fields, "aggregate table pre-filter")?;
-    let validated_plan = validated_aggregation_plan_from_config(&config, fields)?;
-    let mut aggregate_fields = validated_plan
-        .group_fields
-        .into_iter()
-        .filter_map(|key| fields.iter().find(|field| field.key == key).cloned())
-        .collect::<Vec<_>>();
-    aggregate_fields.extend(validated_plan.metrics.into_iter().map(|metric| DataField {
-        key: metric.key,
-        label: metric.label,
-        field_type: metric.output_field_type,
-        position: metric.position,
-    }));
-    validate_component_filters(
-        &config.post_filters,
-        &aggregate_fields,
-        "aggregate table post-filter",
-    )?;
-    validate_component_sort(
-        &config.default_sort,
-        &aggregate_fields,
-        "aggregate table sort",
-    )
+    for field_key in &config.search_fields {
+        require_component_field(fields, field_key, "table search field")?;
+    }
+    for field_key in config.display_labels.keys() {
+        require_component_field(fields, field_key, "table display label")?;
+    }
+    validate_component_sort(&config.default_sort, fields, "table sort")
 }
 
 fn validate_component_sort(
@@ -1925,64 +1643,6 @@ fn validate_component_sort(
         }
     }
     Ok(())
-}
-
-fn validate_component_filters(
-    filters: &[ComponentFilterConfig],
-    fields: &[DataField],
-    label: &str,
-) -> ApiResult<()> {
-    for filter in filters {
-        let field = require_component_field(fields, &filter.field_key, label)?;
-        let operator = FilterOperator::parse(&filter.operator).map_err(component_data_op_error)?;
-        operator
-            .validate_for_field(field)
-            .map_err(component_data_op_error)?;
-        if operator.requires_value()
-            && filter
-                .value
-                .as_deref()
-                .map(str::trim)
-                .unwrap_or_default()
-                .is_empty()
-        {
-            return Err(ApiError::BadRequest(format!(
-                "{label} on '{}' requires a value for operator '{}'",
-                filter.field_key,
-                operator.as_str()
-            )));
-        }
-    }
-    Ok(())
-}
-
-fn validated_aggregation_plan_from_config(
-    config: &AggregateTableConfig,
-    fields: &[DataField],
-) -> ApiResult<ValidatedAggregationPlan> {
-    let plan = AggregationPlan {
-        group_fields: config.group_fields.clone(),
-        metrics: config
-            .metrics
-            .iter()
-            .enumerate()
-            .map(|(index, metric)| {
-                let function = component_aggregate_function(&metric.function)?;
-                Ok(AggregateMetric {
-                    key: metric.key.clone(),
-                    label: metric.label.clone(),
-                    function,
-                    source_field_key: metric.source_field_key.clone(),
-                    position: metric.position.unwrap_or(index as i32),
-                })
-            })
-            .collect::<ApiResult<Vec<_>>>()?,
-    };
-    validate_aggregation_plan(plan, fields).map_err(component_data_op_error)
-}
-
-fn component_aggregate_function(function: &str) -> ApiResult<AggregateFunction> {
-    AggregateFunction::parse(function).map_err(component_data_op_error)
 }
 
 fn require_component_field<'a>(
@@ -2265,18 +1925,17 @@ async fn require_component_visible_for_boundary(
 #[cfg(test)]
 mod tests {
     use serde_json::json;
-    use std::collections::HashMap;
+    use std::collections::{BTreeMap, HashMap};
     use tessara_data_ops::{DataField, FieldType};
 
     use uuid::Uuid;
 
     use super::{
         ComponentTableQuery, ComponentVersionForTable, CreateComponentRequest,
-        CreateComponentVersionRequest, aggregate_metric_sql, aggregate_search_fields,
-        component_filter_sql, component_pagination_sql, detail_search_fields,
+        CreateComponentVersionRequest, component_filter_sql, component_pagination_sql,
         effective_component_page_size, parse_component_query_filters, parse_component_sort,
-        require_component_version_draft, table_order_by_sql, validate_component_config,
-        visible_table_fields,
+        require_component_version_draft, table_order_by_sql, table_search_fields,
+        validate_component_config, visible_table_fields,
     };
 
     fn field(key: &str, field_type: FieldType) -> DataField {
@@ -2289,138 +1948,63 @@ mod tests {
     }
 
     #[test]
-    fn aggregate_table_config_validates_with_shared_data_ops() {
+    fn table_config_validates_presentation_fields() {
         let fields = vec![
             field("program", FieldType::Text),
             field("amount", FieldType::Number),
         ];
         let config = json!({
-            "group_fields": ["program"],
-            "metrics": [{
-                "key": "total_amount",
-                "label": "Total amount",
-                "function": "sum",
-                "source_field_key": "amount"
-            }],
-            "pre_filters": [{
-                "field_key": "program",
-                "operator": "not_contains",
-                "value": "archived"
-            }],
-            "post_filters": [{
-                "field_key": "total_amount",
-                "operator": "gt",
-                "value": "0"
-            }]
-        });
-
-        validate_component_config("aggregate_table", &config, &fields)
-            .expect("valid aggregate table config should pass");
-    }
-
-    #[test]
-    fn aggregate_table_config_accepts_public_component_functions() {
-        let fields = vec![
-            field("program", FieldType::Text),
-            field("amount", FieldType::Number),
-        ];
-
-        for (function, source_field_key) in [
-            ("count", None),
-            ("count_values", Some("program")),
-            ("count_distinct", Some("program")),
-            ("sum", Some("amount")),
-            ("avg", Some("amount")),
-            ("min", Some("program")),
-            ("max", Some("program")),
-        ] {
-            let mut metric = json!({
-                "key": format!("{function}_metric"),
-                "label": format!("{function} metric"),
-                "function": function,
-            });
-            if let Some(source_field_key) = source_field_key {
-                metric["source_field_key"] = json!(source_field_key);
+            "visible_columns": ["program", "amount"],
+            "search_fields": ["program"],
+            "default_sort": {
+                "field_key": "amount",
+                "direction": "desc"
+            },
+            "page_size": 25,
+            "display_labels": {
+                "amount": "Award Amount"
             }
-            let config = json!({
-                "group_fields": ["program"],
-                "metrics": [metric]
-            });
-
-            validate_component_config("aggregate_table", &config, &fields)
-                .unwrap_or_else(|error| panic!("{function} should validate: {error}"));
-        }
-    }
-
-    #[test]
-    fn aggregate_table_config_accepts_count_values_for_present_source_values() {
-        let fields = vec![field("program", FieldType::Text)];
-        let config = json!({
-            "group_fields": ["program"],
-            "metrics": [{
-                "key": "value_count",
-                "label": "Values",
-                "function": "count_values",
-                "source_field_key": "program"
-            }]
         });
 
-        validate_component_config("aggregate_table", &config, &fields)
-            .expect("count_values should be exposed for component aggregate tables");
+        validate_component_config("table", &config, &fields)
+            .expect("valid table component config should pass");
     }
 
     #[test]
-    fn count_values_aggregation_counts_non_empty_source_values() {
-        let metric = tessara_data_ops::ValidatedAggregateMetric {
-            key: "present_count".into(),
-            label: "Present Values".into(),
-            function: tessara_data_ops::AggregateFunction::CountValues,
-            source_field_key: Some("program".into()),
-            output_field_type: FieldType::Number,
-            position: 0,
-        };
+    fn table_config_rejects_missing_visible_column() {
+        let fields = vec![field("program", FieldType::Text)];
+        let config = json!({
+            "visible_columns": ["program", "amount"]
+        });
 
-        assert_eq!(
-            aggregate_metric_sql(&metric),
-            "COUNT(NULLIF(\"program\", ''))::text AS \"present_count\""
+        let error = validate_component_config("table", &config, &fields)
+            .expect_err("unknown visible column should fail");
+        assert!(
+            error
+                .to_string()
+                .contains("table visible column references field 'amount'")
         );
     }
 
     #[test]
-    fn aggregate_table_config_rejects_missing_metric_source_field() {
+    fn old_component_table_kinds_are_rejected() {
         let fields = vec![field("program", FieldType::Text)];
-        let config = json!({
-            "group_fields": ["program"],
-            "metrics": [{
-                "key": "total_amount",
-                "label": "Total amount",
-                "function": "sum",
-                "source_field_key": "amount"
-            }]
-        });
+        let config = json!({ "visible_columns": ["program"] });
 
-        let error = validate_component_config("aggregate_table", &config, &fields)
-            .expect_err("missing metric source should fail");
+        let detail_error = validate_component_config("detail_table", &config, &fields)
+            .expect_err("old detail kind should fail");
+        let aggregate_error = validate_component_config("aggregate_table", &config, &fields)
+            .expect_err("old aggregate kind should fail");
+
         assert!(
-            error
+            detail_error
                 .to_string()
-                .contains("references field 'amount' outside the field contract")
+                .contains("unsupported component type")
         );
-    }
-
-    #[test]
-    fn detail_table_config_rejects_missing_columns() {
-        let fields = vec![field("program", FieldType::Text)];
-        let config = json!({
-            "columns": ["program", "amount"]
-        });
-
-        let error = validate_component_config("detail_table", &config, &fields)
-            .expect_err("unknown detail column should fail");
         assert!(
-            error
+            aggregate_error
                 .to_string()
-                .contains("detail table column references field 'amount'")
+                .contains("unsupported component type")
         );
     }
 
@@ -2529,60 +2113,38 @@ mod tests {
     }
 
     #[test]
-    fn detail_search_defaults_to_configured_columns_not_visible_subset() {
-        let config = super::DetailTableConfig {
-            columns: vec![
-                super::ComponentFieldRef::Key("program".into()),
-                super::ComponentFieldRef::Key("score".into()),
-            ],
-            default_sort: None,
-            default_filters: Vec::new(),
+    fn table_search_defaults_to_output_contract_not_visible_subset() {
+        let config = super::TableComponentConfig {
+            visible_columns: vec![super::ComponentFieldRef::Key("score".into())],
             search_fields: Vec::new(),
+            default_sort: None,
             page_size: None,
+            display_labels: BTreeMap::new(),
         };
         let fields = vec![
             field("program", FieldType::Text),
             field("score", FieldType::Number),
         ];
-        let configured = fields.iter().collect::<Vec<_>>();
 
-        let search_fields =
-            detail_search_fields(&config, &configured, &fields).expect("search fields");
-
-        assert_eq!(
-            search_fields
-                .iter()
-                .map(|field| field.key.as_str())
-                .collect::<Vec<_>>(),
-            vec!["program", "score"]
-        );
-    }
-
-    #[test]
-    fn aggregate_search_defaults_to_output_contract_not_visible_subset() {
-        let fields = vec![
-            field("program", FieldType::Text),
-            field("row_count", FieldType::Number),
-        ];
         let refs = fields.iter().collect::<Vec<_>>();
-        let selected = visible_table_fields(&refs, &["row_count".into()])
+        let selected = visible_table_fields(&refs, &["score".into()])
             .expect("visible column projection should pass");
 
-        let search_fields = aggregate_search_fields(&refs);
+        let search_fields = table_search_fields(&config, &fields).expect("search fields");
 
         assert_eq!(
             selected
                 .iter()
                 .map(|field| field.key.as_str())
                 .collect::<Vec<_>>(),
-            vec!["row_count"]
+            vec!["score"]
         );
         assert_eq!(
             search_fields
                 .iter()
                 .map(|field| field.key.as_str())
                 .collect::<Vec<_>>(),
-            vec!["program", "row_count"]
+            vec!["program", "score"]
         );
     }
 
