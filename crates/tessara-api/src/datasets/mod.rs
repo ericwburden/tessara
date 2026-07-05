@@ -32,13 +32,14 @@ pub use dto::{
     DatasetDependencyBindingMode, DatasetDependencyImpact, DatasetDependencyKind,
     DatasetDependencySummary, DatasetDraftRevisionResponse, DatasetFieldDefinition,
     DatasetJoinKeyRequest, DatasetOperationRequest, DatasetProjectionFieldRequest,
-    DatasetPublishRevisionResponse, DatasetRestrictionPolicyRequest, DatasetRevisionDetail,
-    DatasetRevisionFieldSummary, DatasetRevisionLabelResponse, DatasetRevisionMetadata,
-    DatasetRevisionStatus, DatasetRevisionSummary, DatasetRowFilterRequest,
-    DatasetRowPickerRequest, DatasetSemanticBump, DatasetSourceDefinition, DatasetSourceRequest,
-    DatasetSqlPreview, DatasetSummary, DatasetTable, DatasetTableRow, DatasetVersionImpact,
-    DatasetVisibilityNodeSummary, UpdateDatasetRevisionLabelRequest,
-    UpdateDatasetRevisionOptionsRequest,
+    DatasetProvenanceItem, DatasetProvenanceSummary, DatasetPublishRevisionResponse,
+    DatasetRestrictionPolicyRequest, DatasetRevisionDetail, DatasetRevisionFieldSummary,
+    DatasetRevisionLabelResponse, DatasetRevisionMetadata, DatasetRevisionStatus,
+    DatasetRevisionSummary, DatasetRowFilterRequest, DatasetRowPickerRequest, DatasetSemanticBump,
+    DatasetSourceDefinition, DatasetSourceRequest, DatasetSqlPreview, DatasetSummary, DatasetTable,
+    DatasetTableRow, DatasetVersionImpact, DatasetVisibilityNodeSummary,
+    UpdateDatasetRevisionLabelRequest, UpdateDatasetRevisionOptionsRequest,
+    UpdateDatasetTagsRequest,
 };
 
 use crate::{
@@ -867,6 +868,25 @@ pub async fn delete_dataset(
     Ok(Json(IdResponse { id: dataset_id }))
 }
 
+/// Replaces searchable Dataset catalog tags.
+pub async fn update_dataset_tags(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(dataset_id): Path<Uuid>,
+    Json(payload): Json<UpdateDatasetTagsRequest>,
+) -> ApiResult<Json<IdResponse>> {
+    let account = auth::require_capability(&state.pool, &headers, "datasets:manage").await?;
+    require_dataset_exists(&state.pool, dataset_id).await?;
+    require_dataset_fully_in_capability_scope(&state.pool, &account, "datasets:manage", dataset_id)
+        .await?;
+    let tags = normalize_dataset_tags(payload.tags)?;
+    let mut tx = state.pool.begin().await?;
+    lock_dataset_for_update(&mut tx, dataset_id).await?;
+    replace_dataset_tags_tx(&mut tx, dataset_id, &tags).await?;
+    tx.commit().await?;
+    Ok(Json(IdResponse { id: dataset_id }))
+}
+
 /// Lists dataset definitions for the admin reporting workbench.
 pub async fn list_datasets(
     State(state): State<AppState>,
@@ -971,6 +991,8 @@ pub async fn list_datasets(
     };
     let visibility_nodes =
         load_dataset_visibility_nodes(&state.pool, &dataset_ids, visible_node_filter).await?;
+    let tags_by_dataset = load_dataset_tags(&state.pool, &dataset_ids).await?;
+    let provenance_by_dataset = load_dataset_provenance(&state.pool, &dataset_ids).await?;
     let mut revision_fields_by_id = BTreeMap::<Uuid, DatasetRevisionFieldSummary>::new();
     let revision_rows = sqlx::query(
         r#"
@@ -1041,6 +1063,8 @@ pub async fn list_datasets(
                 name: row.try_get("name")?,
                 slug: row.try_get("slug")?,
                 grain: row.try_get("grain")?,
+                tags: tags_by_dataset.get(&id).cloned().unwrap_or_default(),
+                provenance: provenance_by_dataset.get(&id).cloned().unwrap_or_default(),
                 materialized_row_count: row.try_get("materialized_row_count")?,
                 materialized_at: row.try_get("materialized_at")?,
                 visibility_nodes: visibility_nodes.get(&id).cloned().unwrap_or_default(),
@@ -1146,6 +1170,8 @@ pub async fn get_dataset(
 
     let visibility_nodes =
         load_dataset_visibility_nodes(&state.pool, &[dataset_id], visible_node_filter).await?;
+    let tags_by_dataset = load_dataset_tags(&state.pool, &[dataset_id]).await?;
+    let provenance_by_dataset = load_dataset_provenance(&state.pool, &[dataset_id]).await?;
     let operations = dataset
         .try_get::<Option<serde_json::Value>, _>("operations")?
         .map(serde_json::from_value::<Vec<DatasetOperationRequest>>)
@@ -1198,6 +1224,14 @@ pub async fn get_dataset(
         name: dataset.try_get("name")?,
         slug: dataset.try_get("slug")?,
         grain: dataset.try_get("grain")?,
+        tags: tags_by_dataset
+            .get(&dataset_id)
+            .cloned()
+            .unwrap_or_default(),
+        provenance: provenance_by_dataset
+            .get(&dataset_id)
+            .cloned()
+            .unwrap_or_default(),
         initial_source: dataset
             .try_get::<Option<serde_json::Value>, _>("initial_source")?
             .map(serde_json::from_value)
@@ -5227,6 +5261,147 @@ async fn replace_dataset_scope_nodes_tx(
         .await?;
     }
     Ok(())
+}
+
+fn normalize_dataset_tags(tags: Vec<String>) -> ApiResult<Vec<String>> {
+    let mut normalized = Vec::new();
+    let mut seen = BTreeSet::new();
+    for tag in tags {
+        let trimmed = tag.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if trimmed.chars().count() > 48 {
+            return Err(ApiError::BadRequest(
+                "dataset tags must be 48 characters or fewer".into(),
+            ));
+        }
+        let value = trimmed.to_string();
+        let key = value.to_ascii_lowercase();
+        if seen.insert(key) {
+            normalized.push(value);
+        }
+    }
+    if normalized.len() > 20 {
+        return Err(ApiError::BadRequest(
+            "datasets can have at most 20 tags".into(),
+        ));
+    }
+    Ok(normalized)
+}
+
+async fn replace_dataset_tags_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    dataset_id: Uuid,
+    tags: &[String],
+) -> ApiResult<()> {
+    sqlx::query("DELETE FROM dataset_tags WHERE dataset_id = $1")
+        .bind(dataset_id)
+        .execute(&mut **tx)
+        .await?;
+    for tag in tags {
+        sqlx::query(
+            "INSERT INTO dataset_tags (dataset_id, tag) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+        )
+        .bind(dataset_id)
+        .bind(tag)
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(())
+}
+
+async fn load_dataset_tags(
+    pool: &sqlx::PgPool,
+    dataset_ids: &[Uuid],
+) -> ApiResult<BTreeMap<Uuid, Vec<String>>> {
+    if dataset_ids.is_empty() {
+        return Ok(BTreeMap::new());
+    }
+    let rows = sqlx::query(
+        r#"
+        SELECT dataset_id, tag
+        FROM dataset_tags
+        WHERE dataset_id = ANY($1)
+        ORDER BY lower(tag), tag
+        "#,
+    )
+    .bind(dataset_ids)
+    .fetch_all(pool)
+    .await?;
+    let mut tags = BTreeMap::<Uuid, Vec<String>>::new();
+    for row in rows {
+        tags.entry(row.try_get("dataset_id")?)
+            .or_default()
+            .push(row.try_get("tag")?);
+    }
+    Ok(tags)
+}
+
+async fn load_dataset_provenance(
+    pool: &sqlx::PgPool,
+    dataset_ids: &[Uuid],
+) -> ApiResult<BTreeMap<Uuid, DatasetProvenanceSummary>> {
+    if dataset_ids.is_empty() {
+        return Ok(BTreeMap::new());
+    }
+    let form_rows = sqlx::query(
+        r#"
+        SELECT DISTINCT
+            dataset_sources.dataset_id,
+            forms.id AS source_id,
+            forms.name AS source_name
+        FROM dataset_sources
+        JOIN forms ON forms.id = dataset_sources.form_id
+        WHERE dataset_sources.dataset_id = ANY($1)
+        ORDER BY forms.name, forms.id
+        "#,
+    )
+    .bind(dataset_ids)
+    .fetch_all(pool)
+    .await?;
+    let dataset_rows = sqlx::query(
+        r#"
+        SELECT DISTINCT
+            dataset_sources.dataset_id,
+            upstream.id AS source_id,
+            upstream.name AS source_name,
+            upstream.slug AS source_slug
+        FROM dataset_sources
+        JOIN datasets AS upstream ON upstream.id = dataset_sources.source_dataset_id
+        WHERE dataset_sources.dataset_id = ANY($1)
+        ORDER BY upstream.name, upstream.id
+        "#,
+    )
+    .bind(dataset_ids)
+    .fetch_all(pool)
+    .await?;
+    let mut provenance = BTreeMap::<Uuid, DatasetProvenanceSummary>::new();
+    for row in form_rows {
+        let dataset_id: Uuid = row.try_get("dataset_id")?;
+        provenance
+            .entry(dataset_id)
+            .or_default()
+            .forms
+            .push(DatasetProvenanceItem {
+                id: row.try_get("source_id")?,
+                name: row.try_get("source_name")?,
+                slug: None,
+            });
+    }
+    for row in dataset_rows {
+        let dataset_id: Uuid = row.try_get("dataset_id")?;
+        provenance
+            .entry(dataset_id)
+            .or_default()
+            .datasets
+            .push(DatasetProvenanceItem {
+                id: row.try_get("source_id")?,
+                name: row.try_get("source_name")?,
+                slug: row.try_get("source_slug")?,
+            });
+    }
+    Ok(provenance)
 }
 
 async fn load_dataset_visibility_nodes(

@@ -1,5 +1,7 @@
 //! Dataset detail surface and preview table.
 
+#[cfg(feature = "hydrate")]
+use super::super::super::api;
 use super::super::super::display::visibility_label;
 use super::super::super::loaders::{load_account, load_dataset_detail, load_dataset_table};
 use super::super::super::permissions::can_manage_datasets;
@@ -25,6 +27,10 @@ pub(crate) fn DatasetDetailSurface(dataset_id: String, edit: bool) -> impl IntoV
     let table_error = RwSignal::new(None::<String>);
     let active_tab = RwSignal::new("preview".to_string());
     let visibility_sheet_open = RwSignal::new(false);
+    let tag_draft = RwSignal::new(String::new());
+    let tag_loaded_dataset_id = RwSignal::new(None::<String>);
+    let tag_message = RwSignal::new(None::<String>);
+    let tag_error = RwSignal::new(None::<String>);
 
     Effect::new({
         let dataset_id = dataset_id.clone();
@@ -40,6 +46,19 @@ pub(crate) fn DatasetDetailSurface(dataset_id: String, edit: bool) -> impl IntoV
             .get()
             .is_some_and(|account| can_manage_datasets(&account))
     };
+
+    Effect::new(move |_| {
+        if let Some(loaded) = dataset.get() {
+            let should_refresh = tag_loaded_dataset_id
+                .get()
+                .as_ref()
+                .is_none_or(|loaded_id| loaded_id != &loaded.id);
+            if should_refresh {
+                tag_draft.set(loaded.tags.join(", "));
+                tag_loaded_dataset_id.set(Some(loaded.id));
+            }
+        }
+    });
 
     view! {
         <section class="route-panel datasets-page">
@@ -81,11 +100,52 @@ pub(crate) fn DatasetDetailSurface(dataset_id: String, edit: bool) -> impl IntoV
                         <section class="dataset-detail-summary">
                             <MetricCard label="Slug" value=loaded.slug.clone()/>
                             <MetricCard label="Grain" value=sentence_label(&loaded.grain)/>
+                            <MetricCard label="Tags" value=tag_summary(&loaded.tags)/>
+                            <MetricCard label="Provenance" value=provenance_summary(&loaded.provenance)/>
                             <button class="metric-card metric-card--button" type="button" aria-label="Show dataset visibility nodes" on:click=move |_| visibility_sheet_open.set(true)>
                                 <span>"Visibility"</span>
                                 <strong>{visibility_label(&loaded.visibility_nodes)}</strong>
                             </button>
                         </section>
+                        {move || if can_manage() {
+                            let dataset_id = loaded.id.clone();
+                            view! {
+                                <section class="route-panel__section">
+                                    <h3>"Catalog Tags"</h3>
+                                    <div class="form-grid">
+                                        <label>
+                                            <span>"Tags"</span>
+                                            <input
+                                                type="text"
+                                                aria-label="Dataset tags"
+                                                prop:value=move || tag_draft.get()
+                                                on:input=move |event| tag_draft.set(event_target_value(&event))
+                                            />
+                                        </label>
+                                    </div>
+                                    <div class="button-row">
+                                        <button
+                                            class="button button--secondary"
+                                            type="button"
+                                            on:click=move |_| save_dataset_tags(
+                                                dataset_id.clone(),
+                                                tag_draft,
+                                                dataset,
+                                                tag_message,
+                                                tag_error,
+                                            )
+                                        >
+                                            "Save Tags"
+                                        </button>
+                                    </div>
+                                    {move || tag_message.get().map(|message| view! { <p class="form-message">{message}</p> })}
+                                    {move || tag_error.get().map(|message| view! { <p class="form-error">{message}</p> })}
+                                </section>
+                            }.into_any()
+                        } else {
+                            view! { <span></span> }.into_any()
+                        }}
+                        <DatasetProvenancePanel provenance=loaded.provenance.clone()/>
                         <div class="tabs" data-active=move || active_tab.get()>
                             <div class="tabs-list" role="tablist">
                                 <button class=tab_class(active_tab, "preview") type="button" on:click=move |_| active_tab.set("preview".into())>"Preview"</button>
@@ -111,6 +171,113 @@ pub(crate) fn DatasetDetailSurface(dataset_id: String, edit: bool) -> impl IntoV
             }}
         </section>
     }
+}
+
+#[component]
+fn DatasetProvenancePanel(provenance: DatasetProvenanceSummary) -> impl IntoView {
+    view! {
+        <section class="route-panel__section">
+            <h3>"Provenance"</h3>
+            {if provenance.forms.is_empty() && provenance.datasets.is_empty() {
+                view! { <p class="muted">"No direct source provenance is available."</p> }.into_any()
+            } else {
+                view! {
+                    <div class="dataset-provenance-list">
+                        {(!provenance.forms.is_empty()).then(|| view! {
+                            <div class="data-table__stacked-label">
+                                <strong>"Forms"</strong>
+                                <span class="data-table__secondary-text">
+                                    {provenance.forms.iter().map(|source| source.name.clone()).collect::<Vec<_>>().join(", ")}
+                                </span>
+                            </div>
+                        })}
+                        {(!provenance.datasets.is_empty()).then(|| view! {
+                            <div class="data-table__stacked-label">
+                                <strong>"Datasets"</strong>
+                                <span class="data-table__secondary-text">
+                                    {provenance.datasets.iter().map(|source| source.name.clone()).collect::<Vec<_>>().join(", ")}
+                                </span>
+                            </div>
+                        })}
+                    </div>
+                }.into_any()
+            }}
+        </section>
+    }
+}
+
+fn tag_summary(tags: &[String]) -> String {
+    if tags.is_empty() {
+        "No tags".into()
+    } else {
+        tags.join(", ")
+    }
+}
+
+fn provenance_summary(provenance: &DatasetProvenanceSummary) -> String {
+    let form_count = provenance.forms.len();
+    let dataset_count = provenance.datasets.len();
+    match (form_count, dataset_count) {
+        (0, 0) => "No direct sources".into(),
+        (forms, 0) => format!("{forms} form source{}", plural_suffix(forms)),
+        (0, datasets) => format!("{datasets} dataset source{}", plural_suffix(datasets)),
+        (forms, datasets) => format!(
+            "{forms} form source{}, {datasets} dataset source{}",
+            plural_suffix(forms),
+            plural_suffix(datasets)
+        ),
+    }
+}
+
+fn plural_suffix(count: usize) -> &'static str {
+    if count == 1 { "" } else { "s" }
+}
+
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+fn parse_tag_draft(value: &str) -> Vec<String> {
+    value
+        .split(',')
+        .map(str::trim)
+        .filter(|tag| !tag.is_empty())
+        .map(ToOwned::to_owned)
+        .collect()
+}
+
+#[cfg(feature = "hydrate")]
+fn save_dataset_tags(
+    dataset_id: String,
+    tag_draft: RwSignal<String>,
+    dataset: RwSignal<Option<DatasetDefinition>>,
+    tag_message: RwSignal<Option<String>>,
+    tag_error: RwSignal<Option<String>>,
+) {
+    leptos::task::spawn_local(async move {
+        tag_message.set(None);
+        tag_error.set(None);
+        let tags = parse_tag_draft(&tag_draft.get_untracked());
+        match api::update_dataset_tags(&dataset_id, tags.clone()).await {
+            Ok(_) => {
+                dataset.update(|dataset| {
+                    if let Some(dataset) = dataset {
+                        dataset.tags = tags.clone();
+                    }
+                });
+                tag_draft.set(tags.join(", "));
+                tag_message.set(Some("Dataset tags saved.".into()));
+            }
+            Err(message) => tag_error.set(Some(message)),
+        }
+    });
+}
+
+#[cfg(not(feature = "hydrate"))]
+fn save_dataset_tags(
+    _: String,
+    _: RwSignal<String>,
+    _: RwSignal<Option<DatasetDefinition>>,
+    _: RwSignal<Option<String>>,
+    _: RwSignal<Option<String>>,
+) {
 }
 
 #[component]

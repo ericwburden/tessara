@@ -234,6 +234,8 @@ pub struct DatasetSummary {
     pub(crate) name: String,
     pub(crate) slug: String,
     pub(crate) grain: String,
+    pub(crate) tags: Vec<String>,
+    pub(crate) provenance: DatasetProvenanceSummary,
     pub(crate) materialized_row_count: Option<i64>,
     pub(crate) materialized_at: Option<chrono::DateTime<chrono::Utc>>,
     pub(crate) visibility_nodes: Vec<DatasetVisibilityNodeSummary>,
@@ -256,6 +258,8 @@ pub struct DatasetDefinition {
     pub(crate) name: String,
     pub(crate) slug: String,
     pub(crate) grain: String,
+    pub(crate) tags: Vec<String>,
+    pub(crate) provenance: DatasetProvenanceSummary,
     pub(crate) initial_source: Option<DatasetSourceRequest>,
     pub(crate) operations: Vec<DatasetOperationRequest>,
     pub(crate) restriction_policy: Option<DatasetRestrictionPolicyRequest>,
@@ -268,6 +272,29 @@ pub struct DatasetDefinition {
     pub(crate) sources: Vec<DatasetSourceDefinition>,
     pub(crate) fields: Vec<DatasetFieldDefinition>,
     pub(crate) output_fields: Vec<DatasetFieldDefinition>,
+}
+
+/// Searchable direct-source provenance for Dataset catalog surfaces.
+#[derive(Clone, Default, Serialize)]
+pub struct DatasetProvenanceSummary {
+    pub(crate) forms: Vec<DatasetProvenanceItem>,
+    pub(crate) datasets: Vec<DatasetProvenanceItem>,
+}
+
+/// One compact upstream source reference for Dataset provenance.
+#[derive(Clone, Serialize)]
+pub struct DatasetProvenanceItem {
+    pub(crate) id: Uuid,
+    pub(crate) name: String,
+    pub(crate) slug: Option<String>,
+}
+
+/// Dataset tag update payload.
+#[derive(Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct UpdateDatasetTagsRequest {
+    #[serde(default)]
+    pub(crate) tags: Vec<String>,
 }
 
 /// Stable revision lifecycle state exposed to web clients.

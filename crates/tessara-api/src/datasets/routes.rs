@@ -7,7 +7,7 @@ use super::{
     create_dataset, delete_dataset, delete_dataset_revision, get_dataset, get_dataset_revision,
     list_dataset_revisions, list_datasets, preview_dataset_sql, preview_existing_dataset_sql,
     publish_dataset_revision, run_dataset_table, save_dataset_draft_revision,
-    update_dataset_revision_label, update_dataset_revision_options,
+    update_dataset_revision_label, update_dataset_revision_options, update_dataset_tags,
 };
 use crate::db::AppState;
 
@@ -20,6 +20,10 @@ pub(crate) fn routes() -> Router<AppState> {
             post(preview_existing_dataset_sql),
         )
         .route("/api/admin/datasets/{dataset_id}", delete(delete_dataset))
+        .route(
+            "/api/admin/datasets/{dataset_id}/tags",
+            patch(update_dataset_tags),
+        )
         .route(
             "/api/admin/datasets/{dataset_id}/draft-revision",
             post(save_dataset_draft_revision),

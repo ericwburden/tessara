@@ -43,6 +43,7 @@ pub(crate) fn DatasetDirectoryTable(
                 <thead>
                     <tr>
                         <th scope="col">"Dataset"</th>
+                        <th scope="col">"Catalog"</th>
                         <th scope="col">"Grain"</th>
                         <th scope="col">"Visibility"</th>
                         <th scope="col" class="data-table__cell--center">"Sources"</th>
@@ -71,12 +72,18 @@ pub(crate) fn DatasetDirectoryTable(
 #[component]
 fn DatasetSummaryRow(dataset: DatasetSummary) -> impl IntoView {
     let href = format!("/datasets/{}", dataset.id);
+    let tag_text = tag_label(&dataset.tags);
+    let provenance_text = provenance_label(&dataset);
     view! {
         <tr>
             <th scope="row" class="data-table__stacked-label">
                 <a class="data-table__primary-link" href=href>{dataset.name}</a>
                 <span class="data-table__secondary-text">{dataset.slug}</span>
             </th>
+            <td class="data-table__stacked-label">
+                <span>{tag_text}</span>
+                <span class="data-table__secondary-text">{provenance_text}</span>
+            </td>
             <td>{sentence_label(&dataset.grain)}</td>
             <td>{visibility_label(&dataset.visibility_nodes)}</td>
             <td class="data-table__cell--center">{dataset.source_count}</td>
@@ -104,11 +111,15 @@ fn DatasetMobileCards(
                 .into_iter()
                 .map(|dataset| {
                     let href = format!("/datasets/{}", dataset.id);
+                    let tag_text = tag_label(&dataset.tags);
+                    let provenance_text = provenance_label(&dataset);
                     view! {
                         <article class="related-work-mobile-card">
                             <h4><a href=href>{dataset.name}</a></h4>
                             <dl>
                                 <dt>"Grain"</dt><dd>{sentence_label(&dataset.grain)}</dd>
+                                <dt>"Tags"</dt><dd>{tag_text}</dd>
+                                <dt>"Provenance"</dt><dd>{provenance_text}</dd>
                                 <dt>"Visibility"</dt><dd>{visibility_label(&dataset.visibility_nodes)}</dd>
                                 <dt>"Sources"</dt><dd>{dataset.source_count}</dd>
                                 <dt>"Fields"</dt><dd>{dataset.field_count}</dd>
@@ -119,4 +130,31 @@ fn DatasetMobileCards(
                 .collect_view()}
         </div>
     }
+}
+
+fn tag_label(tags: &[String]) -> String {
+    if tags.is_empty() {
+        "No tags".into()
+    } else {
+        tags.join(", ")
+    }
+}
+
+fn provenance_label(dataset: &DatasetSummary) -> String {
+    let form_count = dataset.provenance.forms.len();
+    let dataset_count = dataset.provenance.datasets.len();
+    match (form_count, dataset_count) {
+        (0, 0) => "No source provenance".into(),
+        (forms, 0) => format!("{forms} form source{}", plural_suffix(forms)),
+        (0, datasets) => format!("{datasets} dataset source{}", plural_suffix(datasets)),
+        (forms, datasets) => format!(
+            "{forms} form source{}, {datasets} dataset source{}",
+            plural_suffix(forms),
+            plural_suffix(datasets)
+        ),
+    }
+}
+
+fn plural_suffix(count: usize) -> &'static str {
+    if count == 1 { "" } else { "s" }
 }

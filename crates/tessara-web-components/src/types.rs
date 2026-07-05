@@ -120,7 +120,28 @@ pub(crate) struct DatasetSummary {
     pub(crate) major_versions: Vec<i32>,
     pub(crate) name: String,
     pub(crate) slug: String,
+    #[serde(default)]
+    pub(crate) grain: String,
+    #[serde(default)]
+    pub(crate) tags: Vec<String>,
+    #[serde(default)]
+    pub(crate) provenance: DatasetProvenanceSummary,
     pub(crate) output_fields: Vec<DatasetFieldDefinition>,
+}
+
+#[derive(Clone, Default, Deserialize, PartialEq, Eq)]
+pub(crate) struct DatasetProvenanceSummary {
+    #[serde(default)]
+    pub(crate) forms: Vec<DatasetProvenanceItem>,
+    #[serde(default)]
+    pub(crate) datasets: Vec<DatasetProvenanceItem>,
+}
+
+#[derive(Clone, Deserialize, PartialEq, Eq)]
+pub(crate) struct DatasetProvenanceItem {
+    pub(crate) id: String,
+    pub(crate) name: String,
+    pub(crate) slug: Option<String>,
 }
 
 #[derive(Clone, Deserialize, PartialEq, Eq)]

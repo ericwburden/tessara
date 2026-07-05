@@ -39,14 +39,33 @@ pub fn DatasetsIndexContent() -> impl IntoView {
             .get()
             .into_iter()
             .filter(|dataset| {
-                text_matches(
-                    &query,
-                    &[
-                        dataset.name.as_str(),
-                        dataset.slug.as_str(),
-                        dataset.grain.as_str(),
-                    ],
-                )
+                let mut searchable = vec![
+                    dataset.name.as_str(),
+                    dataset.slug.as_str(),
+                    dataset.grain.as_str(),
+                ];
+                searchable.extend(dataset.tags.iter().map(String::as_str));
+                searchable.extend(
+                    dataset
+                        .output_fields
+                        .iter()
+                        .flat_map(|field| [field.key.as_str(), field.label.as_str()]),
+                );
+                searchable.extend(
+                    dataset
+                        .provenance
+                        .forms
+                        .iter()
+                        .map(|source| source.name.as_str()),
+                );
+                searchable.extend(
+                    dataset
+                        .provenance
+                        .datasets
+                        .iter()
+                        .map(|source| source.name.as_str()),
+                );
+                text_matches(&query, &searchable)
             })
             .collect::<Vec<_>>()
     });

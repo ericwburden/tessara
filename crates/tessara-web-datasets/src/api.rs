@@ -10,7 +10,7 @@ use super::types::{
     DatasetPublishRevisionResponse, DatasetRenderedForm, DatasetRevisionDetail,
     DatasetRevisionLabelRequest, DatasetRevisionLabelResponse, DatasetRevisionOptionsRequest,
     DatasetRevisionSummary, DatasetSummary, DatasetTable, DatasetUserOption, NodeResponse,
-    SessionAccount,
+    SessionAccount, UpdateDatasetTagsRequest,
 };
 
 #[cfg(feature = "hydrate")]
@@ -210,6 +210,22 @@ pub(super) async fn update_dataset_revision_options(
         )),
         Some(body),
         "dataset revision options",
+    )
+    .await
+}
+
+#[cfg(feature = "hydrate")]
+pub(super) async fn update_dataset_tags(
+    dataset_id: &str,
+    tags: Vec<String>,
+) -> Result<serde_json::Value, String> {
+    let body = serde_json::to_string(&UpdateDatasetTagsRequest { tags })
+        .map_err(|_| "Dataset tags could not be prepared.".to_string())?;
+
+    send_json_request(
+        gloo_net::http::Request::patch(&format!("/api/admin/datasets/{dataset_id}/tags")),
+        Some(body),
+        "dataset tags",
     )
     .await
 }

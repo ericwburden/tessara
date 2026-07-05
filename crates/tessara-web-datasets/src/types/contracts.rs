@@ -21,6 +21,10 @@ pub(crate) struct DatasetSummary {
     pub(crate) name: String,
     pub(crate) slug: String,
     pub(crate) grain: String,
+    #[serde(default)]
+    pub(crate) tags: Vec<String>,
+    #[serde(default)]
+    pub(crate) provenance: DatasetProvenanceSummary,
     pub(crate) materialized_row_count: Option<i64>,
     pub(crate) materialized_at: Option<String>,
     pub(crate) visibility_nodes: Vec<DatasetVisibilityNode>,
@@ -44,6 +48,10 @@ pub(crate) struct DatasetDefinition {
     pub(crate) name: String,
     pub(crate) slug: String,
     pub(crate) grain: String,
+    #[serde(default)]
+    pub(crate) tags: Vec<String>,
+    #[serde(default)]
+    pub(crate) provenance: DatasetProvenanceSummary,
     pub(crate) initial_source: Option<DatasetSourcePayload>,
     pub(crate) operations: Vec<DatasetOperationPayload>,
     pub(crate) restriction_policy: Option<DatasetRestrictionPolicyPayload>,
@@ -56,6 +64,27 @@ pub(crate) struct DatasetDefinition {
     pub(crate) sources: Vec<DatasetSourceDefinition>,
     pub(crate) fields: Vec<DatasetFieldDefinition>,
     pub(crate) output_fields: Vec<DatasetFieldDefinition>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, PartialEq)]
+pub(crate) struct DatasetProvenanceSummary {
+    #[serde(default)]
+    pub(crate) forms: Vec<DatasetProvenanceItem>,
+    #[serde(default)]
+    pub(crate) datasets: Vec<DatasetProvenanceItem>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub(crate) struct DatasetProvenanceItem {
+    pub(crate) id: String,
+    pub(crate) name: String,
+    pub(crate) slug: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq)]
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+pub(crate) struct UpdateDatasetTagsRequest {
+    pub(crate) tags: Vec<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]

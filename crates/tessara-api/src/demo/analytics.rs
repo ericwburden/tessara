@@ -64,7 +64,20 @@ pub(super) async fn ensure_dataset(
         .bind(dataset_id)
         .execute(pool)
         .await?;
+    sqlx::query("DELETE FROM dataset_tags WHERE dataset_id = $1")
+        .bind(dataset_id)
+        .execute(pool)
+        .await?;
     replace_dataset_scope_nodes(pool, dataset_id, visibility_node_ids).await?;
+    for tag in demo_dataset_tags(slug, source_alias) {
+        sqlx::query(
+            "INSERT INTO dataset_tags (dataset_id, tag) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+        )
+        .bind(dataset_id)
+        .bind(tag)
+        .execute(pool)
+        .await?;
+    }
 
     sqlx::query(
         r#"
@@ -194,6 +207,19 @@ pub(super) async fn ensure_dataset(
     rebuild_dataset_major_materialization(pool, dataset_id, 1, &resolved_bindings).await?;
 
     Ok((dataset_id, revision_id))
+}
+
+fn demo_dataset_tags(slug: &str, source_alias: &str) -> Vec<String> {
+    let mut tags = vec!["demo".to_string(), source_alias.replace('_', " ")];
+    tags.extend(
+        slug.split('-')
+            .filter(|part| part.len() > 2)
+            .take(3)
+            .map(ToOwned::to_owned),
+    );
+    tags.sort_by_key(|tag| tag.to_ascii_lowercase());
+    tags.dedup_by(|left, right| left.eq_ignore_ascii_case(right));
+    tags
 }
 
 fn generated_dataset_sql(

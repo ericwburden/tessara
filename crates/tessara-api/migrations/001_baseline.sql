@@ -355,6 +355,17 @@ CREATE TABLE dataset_scope_nodes (
 CREATE INDEX dataset_scope_nodes_node_id_idx
     ON dataset_scope_nodes (node_id, dataset_id);
 
+CREATE TABLE dataset_tags (
+    dataset_id uuid NOT NULL REFERENCES datasets(id) ON DELETE CASCADE,
+    tag text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (dataset_id, tag),
+    CHECK (btrim(tag) <> '')
+);
+
+CREATE INDEX dataset_tags_tag_idx
+    ON dataset_tags (lower(tag), dataset_id);
+
 CREATE TABLE dataset_revisions (
     id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
     dataset_id uuid NOT NULL REFERENCES datasets(id) ON DELETE CASCADE,
