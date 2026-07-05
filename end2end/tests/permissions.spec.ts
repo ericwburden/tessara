@@ -128,6 +128,7 @@ type FixtureState = {
   admin: APIRequestContext;
   scopedManager: APIRequestContext;
   componentManager: APIRequestContext;
+  partialComponentManager: APIRequestContext;
   owner: APIRequestContext;
   outOfScopeOwner: APIRequestContext;
   delegate: APIRequestContext;
@@ -381,6 +382,12 @@ async function setupFixtures(): Promise<FixtureState> {
       `${RUN_ID} Component Manager`,
       [componentManagerRole.id],
     ),
+    partialComponentManager: await createUser(
+      admin,
+      `${RUN_ID}-partial-component-manager@tessara.local`,
+      `${RUN_ID} Partial Component Manager`,
+      [componentManagerRole.id],
+    ),
     owner: await createUser(admin, `${RUN_ID}-owner@tessara.local`, `${RUN_ID} Owner`, [
       ownerRole.id,
     ]),
@@ -418,10 +425,12 @@ async function setupFixtures(): Promise<FixtureState> {
 
   await assignAccess(admin, users.scopedManager.id, [inScopeNode.id]);
   await assignAccess(admin, users.componentManager.id, [inScopeNode.id]);
+  await assignAccess(admin, users.partialComponentManager.id, [inScopeNode.id]);
   await assignAccess(admin, users.delegator.id, [], [users.delegate.id]);
 
   const scopedManager = await newContext();
   const componentManager = await newContext();
+  const partialComponentManager = await newContext();
   const owner = await newContext();
   const outOfScopeOwner = await newContext();
   const delegate = await newContext();
@@ -429,6 +438,7 @@ async function setupFixtures(): Promise<FixtureState> {
   const noAccess = await newContext();
   await signIn(scopedManager, `${RUN_ID}-scoped-manager@tessara.local`, PASSWORD);
   await signIn(componentManager, `${RUN_ID}-component-manager@tessara.local`, PASSWORD);
+  await signIn(partialComponentManager, `${RUN_ID}-partial-component-manager@tessara.local`, PASSWORD);
   await signIn(owner, `${RUN_ID}-owner@tessara.local`, PASSWORD);
   await signIn(outOfScopeOwner, `${RUN_ID}-out-owner@tessara.local`, PASSWORD);
   await signIn(delegate, `${RUN_ID}-delegate@tessara.local`, PASSWORD);
@@ -493,8 +503,10 @@ async function setupFixtures(): Promise<FixtureState> {
   const adminDatasets = await getJson<DatasetSummary[]>(admin, "/api/datasets");
   const inScopeDataset = requireItem(
     adminDatasets,
-    (dataset) => overlaps(dataset.visibility_nodes, inScopeNodeIds),
-    "an in-scope dataset should exist",
+    (dataset) =>
+      overlaps(dataset.visibility_nodes, inScopeNodeIds) &&
+      dataset.visibility_nodes.some((node) => !inScopeNodeIds.has(node.node_id)),
+    "a partial-overlap in-scope dataset should exist",
   );
   await assignAccess(
     admin,
@@ -545,6 +557,7 @@ async function setupFixtures(): Promise<FixtureState> {
     admin,
     scopedManager,
     componentManager,
+    partialComponentManager,
     owner,
     outOfScopeOwner,
     delegate,
@@ -553,6 +566,7 @@ async function setupFixtures(): Promise<FixtureState> {
     userIds: {
       scopedManager: users.scopedManager.id,
       componentManager: users.componentManager.id,
+      partialComponentManager: users.partialComponentManager.id,
       owner: users.owner.id,
       outOfScopeOwner: users.outOfScopeOwner.id,
       delegate: users.delegate.id,
@@ -1167,6 +1181,28 @@ test.describe.serial("capability + scope + ownership permissions", () => {
     const manageableSlug = `${RUN_ID}-component-manage-in`;
     const componentSession = await getJson<SessionState>(fixtures.componentManager, "/api/auth/session");
     expect(componentSession.account?.capabilities).toContain("components:manage");
+    const partialSession = await getJson<SessionState>(fixtures.partialComponentManager, "/api/auth/session");
+    expect(partialSession.account?.capabilities).toContain("components:manage");
+    expect(fixtures.inScopeDataset.visibility_nodes.length).toBeGreaterThan(1);
+    await expectErrorStatus(
+      fixtures.partialComponentManager,
+      "post",
+      "/api/admin/components",
+      403,
+      "forbidden",
+      {
+        name: `${RUN_ID} Partial Containment Component`,
+        slug: `${RUN_ID}-partial-containment-component`,
+        description: "Partial-overlap authoring containment fixture.",
+        version: {
+          dataset_id: fixtures.inScopeDataset.id,
+          dataset_version_major: inScopeMajor,
+          component_type: "aggregate_table",
+          config: aggregateCountConfig(),
+          publish: false,
+        },
+      },
+    );
     const manageableComponent = await postJson<IdResponse>(
       fixtures.componentManager,
       "/api/admin/components",

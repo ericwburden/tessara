@@ -907,6 +907,59 @@ async fn dataset_revision_draft_publish_preserves_current_until_publish() {
         .as_str()
         .expect("revision lifecycle component id")
         .to_string();
+    let (legacy_component_status, legacy_component_body) = request_status_and_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/components",
+            &admin_token,
+            Some(json!({
+                "name": "Legacy Revision Bound Component",
+                "slug": "legacy-revision-bound-component",
+                "description": "Should be rejected because component versions bind Dataset major lines.",
+                "version": {
+                    "dataset_revision_id": initial_revision_id,
+                    "component_type": "detail_table",
+                    "config": {
+                        "columns": [first_key]
+                    },
+                    "publish": false
+                }
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(legacy_component_status, StatusCode::BAD_REQUEST);
+    assert!(
+        legacy_component_body["error"]
+            .as_str()
+            .expect("legacy component error")
+            .contains("dataset_revision_id")
+    );
+    let (legacy_version_status, legacy_version_body) = request_status_and_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            &format!("/api/admin/components/{component_id}/versions"),
+            &admin_token,
+            Some(json!({
+                "dataset_revision_id": initial_revision_id,
+                "component_type": "detail_table",
+                "config": {
+                    "columns": [first_key]
+                },
+                "publish": false
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(legacy_version_status, StatusCode::BAD_REQUEST);
+    assert!(
+        legacy_version_body["error"]
+            .as_str()
+            .expect("legacy version error")
+            .contains("dataset_revision_id")
+    );
     let component_table_before_publish = request_json(
         app.clone(),
         authorized_request(
