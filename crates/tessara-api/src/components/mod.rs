@@ -8,6 +8,7 @@ use std::collections::{BTreeMap, HashMap};
 
 use axum::{
     Json, Router,
+    body::Bytes,
     extract::{Path, Query, State},
     http::HeaderMap,
     routing::{get, post},
@@ -36,6 +37,14 @@ use crate::{
 struct ComponentDatasetBinding {
     dataset_id: Uuid,
     dataset_version_major: i32,
+}
+
+fn parse_component_payload<T>(body: &[u8]) -> ApiResult<T>
+where
+    T: for<'de> Deserialize<'de>,
+{
+    serde_json::from_slice(body)
+        .map_err(|error| ApiError::BadRequest(format!("invalid component payload: {error}")))
 }
 
 pub(crate) fn routes() -> Router<AppState> {
@@ -77,8 +86,9 @@ pub(crate) fn routes() -> Router<AppState> {
 pub async fn create_component(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Json(payload): Json<CreateComponentRequest>,
+    body: Bytes,
 ) -> ApiResult<Json<IdResponse>> {
+    let payload = parse_component_payload::<CreateComponentRequest>(&body)?;
     let account = auth::require_capability(&state.pool, &headers, "components:manage").await?;
     require_text("component name", &payload.name)?;
     require_text("component slug", &payload.slug)?;
@@ -189,8 +199,9 @@ pub async fn update_component(
 pub async fn validate_component(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Json(payload): Json<CreateComponentVersionRequest>,
+    body: Bytes,
 ) -> ApiResult<Json<ComponentValidationResponse>> {
+    let payload = parse_component_payload::<CreateComponentVersionRequest>(&body)?;
     let account = auth::require_capability(&state.pool, &headers, "components:manage").await?;
     let mut findings = Vec::new();
     let binding = match resolve_component_dataset_binding(&state.pool, &payload).await {
@@ -262,8 +273,9 @@ pub async fn create_component_version(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(component_id): Path<Uuid>,
-    Json(payload): Json<CreateComponentVersionRequest>,
+    body: Bytes,
 ) -> ApiResult<Json<IdResponse>> {
+    let payload = parse_component_payload::<CreateComponentVersionRequest>(&body)?;
     let account = auth::require_capability(&state.pool, &headers, "components:manage").await?;
     let binding = resolve_component_dataset_binding(&state.pool, &payload).await?;
     require_dataset_major_line_exists(
@@ -301,8 +313,9 @@ pub async fn update_component_version(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path((component_id, version_id)): Path<(Uuid, Uuid)>,
-    Json(payload): Json<CreateComponentVersionRequest>,
+    body: Bytes,
 ) -> ApiResult<Json<IdResponse>> {
+    let payload = parse_component_payload::<CreateComponentVersionRequest>(&body)?;
     let account = auth::require_capability(&state.pool, &headers, "components:manage").await?;
     let binding = resolve_component_dataset_binding(&state.pool, &payload).await?;
     require_dataset_major_line_exists(
@@ -2176,8 +2189,8 @@ mod tests {
             component_id: Uuid::new_v4(),
             dataset_id: Uuid::new_v4(),
             dataset_version_major: 1,
-            component_type: "detail_table".into(),
-            config: json!({ "columns": ["program"] }),
+            component_type: "table".into(),
+            config: json!({ "visible_columns": ["program"] }),
         };
 
         let table = super::empty_component_table(version, "pending", Vec::new());
@@ -2195,8 +2208,8 @@ mod tests {
             component_id: Uuid::new_v4(),
             dataset_id: Uuid::new_v4(),
             dataset_version_major: 1,
-            component_type: "aggregate_table".into(),
-            config: json!({ "metrics": [{ "key": "row_count", "label": "Rows", "function": "count" }] }),
+            component_type: "table".into(),
+            config: json!({ "visible_columns": ["program"] }),
         };
 
         let table = super::empty_component_table(version, "failed", Vec::new());
@@ -2216,9 +2229,9 @@ mod tests {
             "version": {
                 "dataset_id": dataset_id,
                 "dataset_version_major": 1,
-                "component_type": "detail_table",
+                "component_type": "table",
                 "config": {
-                    "columns": ["program"]
+                    "visible_columns": ["program"]
                 }
             }
         }))
@@ -2228,16 +2241,16 @@ mod tests {
         let version = payload.version.expect("version should be present");
         assert_eq!(version.dataset_id, Some(dataset_id));
         assert_eq!(version.dataset_version_major, Some(1));
-        assert_eq!(version.component_type, "detail_table");
+        assert_eq!(version.component_type, "table");
     }
 
     #[test]
     fn component_version_payload_rejects_legacy_revision_binding() {
         let error = match serde_json::from_value::<CreateComponentVersionRequest>(json!({
             "dataset_revision_id": Uuid::nil(),
-            "component_type": "detail_table",
+            "component_type": "table",
             "config": {
-                "columns": ["program"]
+                "visible_columns": ["program"]
             }
         })) {
             Ok(_) => panic!("legacy revision-bound payload should be rejected"),
@@ -2252,9 +2265,9 @@ mod tests {
         let error = match serde_json::from_value::<CreateComponentVersionRequest>(json!({
             "dataset_id": Uuid::nil(),
             "dataset_version_major": 1,
-            "component_type": "detail_table",
+            "component_type": "table",
             "config": {
-                "columns": ["program"]
+                "visible_columns": ["program"]
             },
             "publish": true
         })) {

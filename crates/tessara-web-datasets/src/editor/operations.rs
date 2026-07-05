@@ -1419,6 +1419,8 @@ mod tests {
             name: dataset_id.into(),
             slug: dataset_id.into(),
             grain: "submission".into(),
+            tags: Vec::new(),
+            provenance: Default::default(),
             materialized_row_count: Some(0),
             materialized_at: None,
             visibility_nodes: Vec::new(),

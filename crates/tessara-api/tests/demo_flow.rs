@@ -893,9 +893,9 @@ async fn dataset_revision_draft_publish_preserves_current_until_publish() {
                 "version": {
                     "dataset_id": dataset_id,
                     "dataset_version_major": 1,
-                    "component_type": "detail_table",
+                    "component_type": "table",
                     "config": {
-                        "columns": [first_key]
+                        "visible_columns": [first_key]
                     }
                 }
             })),
@@ -943,9 +943,9 @@ async fn dataset_revision_draft_publish_preserves_current_until_publish() {
                 "description": "Should be rejected because component versions bind Dataset major lines.",
                 "version": {
                     "dataset_revision_id": initial_revision_id,
-                    "component_type": "detail_table",
+                    "component_type": "table",
                     "config": {
-                        "columns": [first_key]
+                        "visible_columns": [first_key]
                     },
                 }
             })),
@@ -967,9 +967,9 @@ async fn dataset_revision_draft_publish_preserves_current_until_publish() {
             &admin_token,
             Some(json!({
                 "dataset_revision_id": initial_revision_id,
-                "component_type": "detail_table",
+                "component_type": "table",
                 "config": {
-                    "columns": [first_key]
+                    "visible_columns": [first_key]
                 },
             })),
         ),
@@ -1003,9 +1003,9 @@ async fn dataset_revision_draft_publish_preserves_current_until_publish() {
     let concurrent_draft_payload = json!({
         "dataset_id": dataset_id,
         "dataset_version_major": 1,
-        "component_type": "detail_table",
+        "component_type": "table",
         "config": {
-            "columns": [first_key],
+            "visible_columns": [first_key],
             "page_size": 25
         },
     });
@@ -1728,9 +1728,9 @@ async fn dataset_revision_draft_publish_preserves_current_until_publish() {
                 "version": {
                     "dataset_id": dataset_id,
                     "dataset_version_major": 1,
-                    "component_type": "detail_table",
+                    "component_type": "table",
                     "config": {
-                        "columns": [first_key]
+                        "visible_columns": [first_key]
                     },
                 }
             })),
@@ -1851,9 +1851,9 @@ async fn dataset_revision_draft_publish_preserves_current_until_publish() {
                 "version": {
                     "dataset_id": dataset_id,
                     "dataset_version_major": 1,
-                    "component_type": "detail_table",
+                    "component_type": "table",
                     "config": {
-                        "columns": [first_key]
+                        "visible_columns": [first_key]
                     },
                 }
             })),
