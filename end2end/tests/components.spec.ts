@@ -264,7 +264,6 @@ async function createComponentDraft(
         dataset_version_major: major,
         component_type: "detail_table",
         config: detailConfig(dataset.output_fields),
-        publish: false,
       },
     },
   });
@@ -285,7 +284,6 @@ async function saveAggregateDraft(
         dataset_version_major: major,
         component_type: "aggregate_table",
         config: aggregateConfig(dataset.output_fields, preFilterValue),
-        publish: false,
       },
     }),
   );
@@ -306,7 +304,6 @@ async function saveDetailDraft(
         config: {
           columns: [dataset.output_fields[0].key],
         },
-        publish: false,
       },
     }),
   );
@@ -330,7 +327,6 @@ async function patchDetailDraft(
           config: {
             columns: [dataset.output_fields[0].key],
           },
-          publish: false,
         },
       },
     ),
@@ -899,7 +895,6 @@ VALUES ('${draftDashboard.id}', '${component.versions[0].id}', 99, '{}'::jsonb);
             dataset_version_major: major,
             component_type: "detail_table",
             config: detailConfig(dataset.output_fields),
-            publish: false,
           },
         },
       ),

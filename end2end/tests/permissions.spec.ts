@@ -1199,7 +1199,6 @@ test.describe.serial("capability + scope + ownership permissions", () => {
           dataset_version_major: inScopeMajor,
           component_type: "aggregate_table",
           config: aggregateCountConfig(),
-          publish: false,
         },
       },
     );
@@ -1215,7 +1214,6 @@ test.describe.serial("capability + scope + ownership permissions", () => {
           dataset_version_major: inScopeMajor,
           component_type: "aggregate_table",
           config: aggregateCountConfig(),
-          publish: false,
         },
       },
     );
@@ -1237,7 +1235,6 @@ test.describe.serial("capability + scope + ownership permissions", () => {
         dataset_version_major: outOfScopeMajor,
         component_type: "aggregate_table",
         config: aggregateCountConfig(),
-        publish: false,
       },
     );
     expect(bindError.message).toContain("components:manage");
@@ -1253,7 +1250,6 @@ test.describe.serial("capability + scope + ownership permissions", () => {
         dataset_version_major: outOfScopeMajor,
         component_type: "aggregate_table",
         config: aggregateCountConfig(),
-        publish: false,
       },
     );
     expect(validateError.message).toContain("components:manage");
@@ -1267,7 +1263,6 @@ test.describe.serial("capability + scope + ownership permissions", () => {
         dataset_version_major: outOfScopeMajor,
         component_type: "aggregate_table",
         config: aggregateCountConfig(),
-        publish: false,
       },
     });
     const outOfScopeComponent = await getJson<ComponentDefinition>(
@@ -1300,7 +1295,6 @@ test.describe.serial("capability + scope + ownership permissions", () => {
         dataset_version_major: outOfScopeMajor,
         component_type: "aggregate_table",
         config: aggregateCountConfig(),
-        publish: true,
       },
     });
     const firstVersion = await getJson<ComponentDefinition>(
@@ -1308,6 +1302,11 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       `/api/admin/components/${component.id}`,
     );
     const hiddenHistoryVersion = firstVersion.versions[0] as { id: string };
+    await postJson<IdResponse>(
+      fixtures.admin,
+      `/api/admin/components/${component.id}/versions/${hiddenHistoryVersion.id}/publish`,
+      {},
+    );
 
     const secondVersion = await postJson<IdResponse>(
       fixtures.admin,
@@ -1317,8 +1316,12 @@ test.describe.serial("capability + scope + ownership permissions", () => {
         dataset_version_major: inScopeMajor,
         component_type: "aggregate_table",
         config: aggregateCountConfig(),
-        publish: true,
       },
+    );
+    await postJson<IdResponse>(
+      fixtures.admin,
+      `/api/admin/components/${component.id}/versions/${secondVersion.id}/publish`,
+      {},
     );
 
     const currentTable = await getJson<ComponentTable>(

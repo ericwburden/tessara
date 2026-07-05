@@ -127,10 +127,7 @@ pub async fn create_component(
     .fetch_one(&mut *tx)
     .await?;
     if let (Some(version), Some(binding)) = (payload.version.as_ref(), version_binding.as_ref()) {
-        let version_id = upsert_component_draft_version(&mut tx, id, binding, version).await?;
-        if version.publish.unwrap_or(false) {
-            publish_component_version_in_tx(&mut tx, &state.pool, &account, id, version_id).await?;
-        }
+        upsert_component_draft_version(&mut tx, id, binding, version).await?;
     }
     tx.commit().await?;
 
@@ -263,7 +260,7 @@ pub async fn validate_component(
     Ok(Json(component_validation_response(findings)))
 }
 
-/// Creates a draft or published component version over a dataset major line.
+/// Creates or updates a draft component version over a dataset major line.
 pub async fn create_component_version(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -271,8 +268,6 @@ pub async fn create_component_version(
     Json(payload): Json<CreateComponentVersionRequest>,
 ) -> ApiResult<Json<IdResponse>> {
     let account = auth::require_capability(&state.pool, &headers, "components:manage").await?;
-    require_component_exists(&state.pool, component_id).await?;
-    require_component_fully_manageable(&state.pool, &account, component_id).await?;
     let binding = resolve_component_dataset_binding(&state.pool, &payload).await?;
     require_dataset_major_line_exists(
         &state.pool,
@@ -297,10 +292,9 @@ pub async fn create_component_version(
     validate_component_config(&payload.component_type, &payload.config, &dataset_fields)?;
 
     let mut tx = state.pool.begin().await?;
+    lock_component_in_tx(&mut tx, component_id).await?;
+    require_component_fully_manageable_in_tx(&mut tx, &state.pool, &account, component_id).await?;
     let id = upsert_component_draft_version(&mut tx, component_id, &binding, &payload).await?;
-    if payload.publish.unwrap_or(false) {
-        publish_component_version_in_tx(&mut tx, &state.pool, &account, component_id, id).await?;
-    }
     tx.commit().await?;
     Ok(Json(IdResponse { id }))
 }
@@ -2689,5 +2683,23 @@ mod tests {
         };
 
         assert!(error.to_string().contains("dataset_revision_id"));
+    }
+
+    #[test]
+    fn component_version_payload_rejects_inline_publish_flag() {
+        let error = match serde_json::from_value::<CreateComponentVersionRequest>(json!({
+            "dataset_id": Uuid::nil(),
+            "dataset_version_major": 1,
+            "component_type": "detail_table",
+            "config": {
+                "columns": ["program"]
+            },
+            "publish": true
+        })) {
+            Ok(_) => panic!("inline publish flag should be rejected"),
+            Err(error) => error,
+        };
+
+        assert!(error.to_string().contains("publish"));
     }
 }

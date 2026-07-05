@@ -1811,7 +1811,6 @@ fn create_component_from_form(
             dataset_version_major: Some(major),
             component_type,
             config,
-            publish: Some(false),
         };
         let description = description
             .trim()
@@ -1947,7 +1946,6 @@ fn validate_component_form(
             dataset_version_major: Some(major),
             component_type,
             config,
-            publish: Some(false),
         };
         match api::validate_component_version(payload).await {
             Ok(response) if response.valid => {
@@ -2002,7 +2000,6 @@ fn validate_component_draft(
             dataset_version_major: Some(draft.dataset_version_major),
             component_type: draft.component_type,
             config: draft.config,
-            publish: Some(false),
         };
         match api::validate_component_version(payload).await {
             Ok(response) if response.valid => {

@@ -106,7 +106,6 @@ pub(crate) struct CreateComponentVersionRequest {
     pub(crate) dataset_version_major: Option<i32>,
     pub(crate) component_type: String,
     pub(crate) config: Value,
-    pub(crate) publish: Option<bool>,
 }
 
 #[derive(Clone, Deserialize, PartialEq, Eq)]

@@ -896,8 +896,7 @@ async fn dataset_revision_draft_publish_preserves_current_until_publish() {
                     "component_type": "detail_table",
                     "config": {
                         "columns": [first_key]
-                    },
-                    "publish": true
+                    }
                 }
             })),
         ),
@@ -907,6 +906,31 @@ async fn dataset_revision_draft_publish_preserves_current_until_publish() {
         .as_str()
         .expect("revision lifecycle component id")
         .to_string();
+    let component_detail = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/admin/components/{component_slug}"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    let initial_component_version_id = component_detail["versions"][0]["id"]
+        .as_str()
+        .expect("initial component version id");
+    request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            &format!(
+                "/api/admin/components/{component_id}/versions/{initial_component_version_id}/publish"
+            ),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
     let (legacy_component_status, legacy_component_body) = request_status_and_json(
         app.clone(),
         authorized_request(
@@ -923,7 +947,6 @@ async fn dataset_revision_draft_publish_preserves_current_until_publish() {
                     "config": {
                         "columns": [first_key]
                     },
-                    "publish": false
                 }
             })),
         ),
@@ -948,7 +971,6 @@ async fn dataset_revision_draft_publish_preserves_current_until_publish() {
                 "config": {
                     "columns": [first_key]
                 },
-                "publish": false
             })),
         ),
     )
@@ -986,7 +1008,6 @@ async fn dataset_revision_draft_publish_preserves_current_until_publish() {
             "columns": [first_key],
             "page_size": 25
         },
-        "publish": false
     });
     let (first_concurrent_draft, second_concurrent_draft) = tokio::join!(
         request_json(
@@ -1711,7 +1732,6 @@ async fn dataset_revision_draft_publish_preserves_current_until_publish() {
                     "config": {
                         "columns": [first_key]
                     },
-                    "publish": false
                 }
             })),
         ),
@@ -1835,7 +1855,6 @@ async fn dataset_revision_draft_publish_preserves_current_until_publish() {
                     "config": {
                         "columns": [first_key]
                     },
-                    "publish": false
                 }
             })),
         ),

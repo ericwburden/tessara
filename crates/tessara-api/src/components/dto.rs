@@ -31,7 +31,6 @@ pub struct CreateComponentVersionRequest {
     pub(crate) dataset_version_major: Option<i32>,
     pub(crate) component_type: String,
     pub(crate) config: Value,
-    pub(crate) publish: Option<bool>,
 }
 
 /// Component validation response used by authoring and pre-publish flows.
