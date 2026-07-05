@@ -170,8 +170,9 @@ pub async fn update_component(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(component_id): Path<Uuid>,
-    Json(payload): Json<UpdateComponentRequest>,
+    body: Bytes,
 ) -> ApiResult<Json<IdResponse>> {
+    let payload = parse_component_payload::<UpdateComponentRequest>(&body)?;
     let account = auth::require_capability(&state.pool, &headers, "components:manage").await?;
     require_component_exists(&state.pool, component_id).await?;
     require_component_fully_manageable(&state.pool, &account, component_id).await?;

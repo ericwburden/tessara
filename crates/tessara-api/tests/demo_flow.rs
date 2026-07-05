@@ -953,6 +953,32 @@ async fn dataset_revision_draft_publish_preserves_current_until_publish() {
             .expect("legacy shell error")
             .contains("dataset_revision_id")
     );
+    assert_eq!(legacy_shell_body["code"], "bad_request");
+    assert!(legacy_shell_body["message"].is_string());
+    let (legacy_shell_update_status, legacy_shell_update_body) = request_status_and_json(
+        app.clone(),
+        authorized_request(
+            "PATCH",
+            &format!("/api/admin/components/{component_id}"),
+            &admin_token,
+            Some(json!({
+                "name": "Revision Lifecycle Component Table",
+                "slug": component_slug,
+                "description": "Should be rejected through Tessara's API error envelope.",
+                "dataset_revision_id": initial_revision_id
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(legacy_shell_update_status, StatusCode::BAD_REQUEST);
+    assert_eq!(legacy_shell_update_body["code"], "bad_request");
+    assert!(legacy_shell_update_body["message"].is_string());
+    assert!(
+        legacy_shell_update_body["error"]
+            .as_str()
+            .expect("legacy shell update error")
+            .contains("dataset_revision_id")
+    );
     let (legacy_component_status, legacy_component_body) = request_status_and_json(
         app.clone(),
         authorized_request(
