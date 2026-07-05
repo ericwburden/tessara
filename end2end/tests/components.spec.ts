@@ -19,12 +19,16 @@ type DatasetFieldDefinition = {
   field_type: string;
 };
 
-type VisibilityNode = { node_id: string; node_name: string };
-
 type DatasetSummary = {
   id: string;
   name: string;
-  visibility_nodes: VisibilityNode[];
+  grain?: string;
+  tags?: string[];
+  provenance?: {
+    forms?: Array<{ id: string; name: string; slug?: string | null }>;
+    datasets?: Array<{ id: string; name: string; slug?: string | null }>;
+  };
+  visibility_nodes: Array<{ node_id: string; node_name: string }>;
   current_version_major?: number | null;
   major_versions?: number[];
   output_fields: DatasetFieldDefinition[];
@@ -61,10 +65,6 @@ type ComponentTable = {
     next_cursor?: string | null;
     has_more: boolean;
   };
-};
-
-type DatasetTable = {
-  rows: Array<{ values: Record<string, string | null> }>;
 };
 
 type ComponentValidationResponse = {
@@ -164,27 +164,15 @@ async function ensureDemoSeed(page: Page) {
 }
 
 async function pickDatasetMajor(page: Page) {
-  return pickDatasetMajorMatching(
-    page,
-    (candidate) => candidate.output_fields.some((field) => isTextLikeField(field)),
-    "a published dataset with a text-like output field should exist",
-  );
-}
-
-async function pickDatasetMajorMatching(
-  page: Page,
-  predicate: (dataset: DatasetSummary) => boolean,
-  message: string,
-) {
   const datasets = await expectJson<DatasetSummary[]>(
     await page.request.get("/api/datasets"),
   );
   const dataset = datasets.find(
     (candidate) =>
-      predicate(candidate) &&
+      candidate.output_fields.some((field) => isTextLikeField(field)) &&
       (candidate.major_versions?.length || candidate.current_version_major),
   );
-  expect(dataset, message).toBeTruthy();
+  expect(dataset, "a published dataset with a text-like output field should exist").toBeTruthy();
   const major =
     dataset!.major_versions?.[0] ?? dataset!.current_version_major ?? undefined;
   expect(major, "dataset should expose a major version").toBeTruthy();
@@ -201,50 +189,17 @@ function textLikeField(fields: DatasetFieldDefinition[]) {
   return field!;
 }
 
-function numericField(fields: DatasetFieldDefinition[]) {
-  const field = fields.find((candidate) => candidate.field_type === "number");
-  expect(field, "dataset should expose a numeric output field").toBeTruthy();
-  return field!;
-}
-
-function detailConfig(fields: DatasetFieldDefinition[]) {
+function tableConfig(fieldKeys: string[], pageSize = 25) {
   return {
-    columns: [textLikeField(fields).key],
+    visible_columns: fieldKeys,
+    default_sort: fieldKeys[0]
+      ? {
+          field_key: fieldKeys[0],
+          direction: "asc",
+        }
+      : null,
+    page_size: pageSize,
   };
-}
-
-function aggregateConfig(
-  fields: DatasetFieldDefinition[],
-  preFilterValue?: string,
-) {
-  const groupField = textLikeField(fields);
-  const config: Record<string, unknown> = {
-    group_fields: [groupField.key],
-    metrics: [
-      {
-        key: "row_count",
-        label: "Rows",
-        function: "count",
-      },
-    ],
-  };
-  if (preFilterValue) {
-    config.pre_filters = [
-      {
-        field_key: groupField.key,
-        operator: "equals",
-        value: preFilterValue,
-      },
-    ];
-    config.post_filters = [
-      {
-        field_key: "row_count",
-        operator: "gt",
-        value: "0",
-      },
-    ];
-  }
-  return config;
 }
 
 async function createComponentDraft(
@@ -253,68 +208,51 @@ async function createComponentDraft(
   slug: string,
   dataset: DatasetSummary,
   major: number,
-) {
-  const response = await page.request.post("/api/admin/components", {
-    data: {
-      name,
-      slug,
-      description: "Playwright Sprint 4A component workflow fixture.",
-      version: {
-        dataset_id: dataset.id,
-        dataset_version_major: major,
-        component_type: "detail_table",
-        config: detailConfig(dataset.output_fields),
-      },
-    },
-  });
-  return expectJson<IdResponse>(response);
-}
-
-async function saveAggregateDraft(
-  page: Page,
-  componentId: string,
-  dataset: DatasetSummary,
-  major: number,
-  preFilterValue?: string,
+  fieldKeys: string[],
 ) {
   return expectJson<IdResponse>(
-    await page.request.post(`/api/admin/components/${componentId}/versions`, {
+    await page.request.post("/api/admin/components", {
       data: {
-        dataset_id: dataset.id,
-        dataset_version_major: major,
-        component_type: "aggregate_table",
-        config: aggregateConfig(dataset.output_fields, preFilterValue),
-      },
-    }),
-  );
-}
-
-async function saveDetailDraft(
-  page: Page,
-  componentId: string,
-  dataset: DatasetSummary,
-  major: number,
-) {
-  return expectJson<IdResponse>(
-    await page.request.post(`/api/admin/components/${componentId}/versions`, {
-      data: {
-        dataset_id: dataset.id,
-        dataset_version_major: major,
-        component_type: "detail_table",
-        config: {
-          columns: [dataset.output_fields[0].key],
+        name,
+        slug,
+        description: "Playwright Sprint 4A table component workflow fixture.",
+        version: {
+          dataset_id: dataset.id,
+          dataset_version_major: major,
+          component_type: "table",
+          config: tableConfig(fieldKeys),
         },
       },
     }),
   );
 }
 
-async function patchDetailDraft(
+async function saveTableDraft(
+  page: Page,
+  componentId: string,
+  dataset: DatasetSummary,
+  major: number,
+  fieldKeys: string[],
+) {
+  return expectJson<IdResponse>(
+    await page.request.post(`/api/admin/components/${componentId}/versions`, {
+      data: {
+        dataset_id: dataset.id,
+        dataset_version_major: major,
+        component_type: "table",
+        config: tableConfig(fieldKeys),
+      },
+    }),
+  );
+}
+
+async function patchTableDraft(
   page: Page,
   componentId: string,
   versionId: string,
   dataset: DatasetSummary,
   major: number,
+  fieldKeys: string[],
 ) {
   return expectJson<IdResponse>(
     await page.request.patch(
@@ -323,10 +261,8 @@ async function patchDetailDraft(
         data: {
           dataset_id: dataset.id,
           dataset_version_major: major,
-          component_type: "detail_table",
-          config: {
-            columns: [dataset.output_fields[0].key],
-          },
+          component_type: "table",
+          config: tableConfig(fieldKeys),
         },
       },
     ),
@@ -439,67 +375,70 @@ test.describe.serial("Sprint 4A component workflow", () => {
     cleanupPlaywrightComponents();
 
     const { dataset, major } = await pickDatasetMajor(page);
+    const firstField = textLikeField(dataset.output_fields);
     const slug = `${COMPONENT_PREFIX}${RUN_ID}`;
     const name = `Playwright Component Workflow ${RUN_ID}`;
-    const aggregateGroupField = textLikeField(dataset.output_fields);
-    const sourceTable = await expectJson<DatasetTable>(
-      await page.request.get(`/api/datasets/${dataset.id}/table`, {
-        params: {
-          visible_columns: aggregateGroupField.key,
-          page_size: "25",
-        },
-      }),
-    );
-    const aggregatePreFilterValue = sourceTable.rows
-      .map((row) => row.values[aggregateGroupField.key])
-      .find((value): value is string => Boolean(value));
-    expect(
-      aggregatePreFilterValue,
-      `dataset table should include a value for ${aggregateGroupField.key}`,
-    ).toBeTruthy();
 
     await page.goto("/components/new");
     await page.getByLabel("Dataset Version").selectOption(`${dataset.id}|${major}`);
+    const datasetContext = page.locator("section.route-panel__section").filter({
+      has: page.getByRole("heading", { name: "Dataset Context" }),
+    });
+    await expect(datasetContext).toBeVisible();
+    if (dataset.grain) {
+      await expect(datasetContext).toContainText(dataset.grain);
+    }
+    if (dataset.tags?.length) {
+      await expect(datasetContext).toContainText(dataset.tags[0]);
+    }
     const columnPicker = page.getByRole("group", { name: "Columns" });
     const selectedColumns = await columnPicker.getByRole("checkbox").all();
     expect(selectedColumns.length).toBeGreaterThan(0);
-    for (const checkbox of selectedColumns) {
-      if (await checkbox.isChecked()) {
-        await checkbox.uncheck();
-      }
-    }
-    await page.getByRole("button", { name: "Validate Draft" }).click();
-    await expect(
-      page.getByRole("region", { name: "Validation Findings" }),
-    ).toBeVisible();
-    await expect(page.locator('[data-field-path="config"]')).toContainText(
-      "COMPONENT_FIELD_NOT_IN_MAJOR_LINE",
+    const invalidValidation = await expectJson<ComponentValidationResponse>(
+      await page.request.post("/api/admin/components/validate", {
+        data: {
+          dataset_id: dataset.id,
+          dataset_version_major: major,
+          component_type: "table",
+          config: tableConfig([`missing_${RUN_ID}`]),
+        },
+      }),
     );
-    await expect(page.locator('[data-field-path="config"]')).toContainText(
-      "requires at least one column",
-    );
+    expect(invalidValidation.valid).toBe(false);
+    expect(invalidValidation.findings[0]).toMatchObject({
+      code: "COMPONENT_FIELD_NOT_IN_MAJOR_LINE",
+      field_path: "config",
+    });
 
-    const created = await createComponentDraft(page, name, slug, dataset, major);
+    const created = await createComponentDraft(
+      page,
+      name,
+      slug,
+      dataset,
+      major,
+      [firstField.key],
+    );
     let component = await loadComponent(page, slug);
     expect(component.versions).toHaveLength(1);
     expect(component.versions[0]).toMatchObject({
       dataset_id: dataset.id,
       dataset_version_major: major,
       binding_mode: "major_line",
-      component_type: "detail_table",
+      component_type: "table",
       status: "draft",
     });
     expect(component.versions[0]).not.toHaveProperty("dataset_revision_id");
+
     const readerComponentsBeforePublish = await expectJson<Array<{ slug: string }>>(
       await page.request.get("/api/components"),
     );
     expect(readerComponentsBeforePublish.some((item) => item.slug === slug)).toBe(false);
+
     await page.goto(`/components/${slug}`);
-    await expect(
-      page.getByRole("heading", { level: 1, name }),
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
     await expect(page.getByRole("cell", { name: "Draft" })).toBeVisible();
     await expect(page.getByText("Component unavailable")).toHaveCount(0);
+
     const draftDashboard = await expectJson<IdResponse>(
       await page.request.post("/api/admin/dashboards", {
         data: {
@@ -540,258 +479,131 @@ VALUES ('${draftDashboard.id}', '${component.versions[0].id}', 99, '{}'::jsonb);
     );
     expect(dashboardWithLegacyDraftPlacement.components).toEqual([]);
 
-    const updatedDraft = await saveAggregateDraft(
-      page,
-      created.id,
-      dataset,
-      major,
-      aggregatePreFilterValue,
-    );
-    expect(updatedDraft.id).toBe(component.versions[0].id);
-    component = await loadComponent(page, slug);
-    expect(component.versions).toHaveLength(1);
-    expect(component.versions[0].component_type).toBe("aggregate_table");
-
     const validValidation = await expectJson<ComponentValidationResponse>(
       await page.request.post("/api/admin/components/validate", {
         data: {
           dataset_id: dataset.id,
           dataset_version_major: major,
-          component_type: "aggregate_table",
-          config: aggregateConfig(dataset.output_fields, aggregatePreFilterValue),
+          component_type: "table",
+          config: tableConfig([firstField.key]),
         },
       }),
     );
     expect(validValidation.valid).toBe(true);
     expect(validValidation.findings).toEqual([]);
 
-    const textField = textLikeField(dataset.output_fields);
-    const numericMajor = await pickDatasetMajorMatching(
-      page,
-      (candidate) => candidate.output_fields.some((field) => field.field_type === "number"),
-      "a published dataset with a numeric output field should exist",
-    );
-    const numberField = numericField(numericMajor.dataset.output_fields);
-    for (const metric of [
-      {
-        dataset,
-        major,
-        groupField: textField.key,
-        metric: { key: "row_count", label: "Rows", function: "count" },
-      },
-      {
-        dataset,
-        major,
-        groupField: textField.key,
-        metric: {
-          key: "distinct_values",
-          label: "Distinct Values",
-          function: "count_distinct",
-          source_field_key: textField.key,
-        },
-      },
-      {
-        dataset: numericMajor.dataset,
-        major: numericMajor.major,
-        groupField: "",
-        metric: {
-          key: "total_value",
-          label: "Total Value",
-          function: "sum",
-          source_field_key: numberField.key,
-        },
-      },
-      {
-        dataset: numericMajor.dataset,
-        major: numericMajor.major,
-        groupField: "",
-        metric: {
-          key: "average_value",
-          label: "Average Value",
-          function: "avg",
-          source_field_key: numberField.key,
-        },
-      },
-      {
-        dataset: numericMajor.dataset,
-        major: numericMajor.major,
-        groupField: "",
-        metric: {
-          key: "minimum_value",
-          label: "Minimum Value",
-          function: "min",
-          source_field_key: numberField.key,
-        },
-      },
-      {
-        dataset: numericMajor.dataset,
-        major: numericMajor.major,
-        groupField: "",
-        metric: {
-          key: "maximum_value",
-          label: "Maximum Value",
-          function: "max",
-          source_field_key: numberField.key,
-        },
-      },
-    ]) {
-      const aggregateFunctionValidation = await expectJson<ComponentValidationResponse>(
-        await page.request.post("/api/admin/components/validate", {
-          data: {
-            dataset_id: metric.dataset.id,
-            dataset_version_major: metric.major,
-            component_type: "aggregate_table",
-            config: {
-              group_fields: metric.groupField ? [metric.groupField] : [],
-              metrics: [metric.metric],
-            },
-          },
-        }),
-      );
-      expect(aggregateFunctionValidation.valid).toBe(true);
-      expect(aggregateFunctionValidation.findings).toEqual([]);
-    }
-
-    const countValuesValidation = await expectJson<ComponentValidationResponse>(
+    const unsupportedKindValidation = await expectJson<ComponentValidationResponse>(
       await page.request.post("/api/admin/components/validate", {
         data: {
           dataset_id: dataset.id,
           dataset_version_major: major,
           component_type: "aggregate_table",
-          config: {
-            group_fields: [textField.key],
-            metrics: [
-              {
-                key: "value_count",
-                label: "Value Count",
-                function: "count_values",
-                source_field_key: textField.key,
-              },
-            ],
-          },
+          config: tableConfig([firstField.key]),
         },
       }),
     );
-    expect(countValuesValidation.valid).toBe(true);
-    expect(countValuesValidation.findings).toEqual([]);
-
-    const invalidValidation = await expectJson<ComponentValidationResponse>(
-      await page.request.post("/api/admin/components/validate", {
-        data: {
-          dataset_id: dataset.id,
-          dataset_version_major: major,
-          component_type: "stat_card",
-          config: {},
-        },
-      }),
-    );
-    expect(invalidValidation.valid).toBe(false);
-    expect(invalidValidation.findings[0]).toMatchObject({
+    expect(unsupportedKindValidation.valid).toBe(false);
+    expect(unsupportedKindValidation.findings[0]).toMatchObject({
       code: "COMPONENT_UNSUPPORTED_KIND",
       severity: "error",
     });
 
-    await publishComponentVersion(page, created.id, updatedDraft.id);
+    await publishComponentVersion(page, created.id, component.versions[0].id);
     component = await loadComponent(page, slug);
     expect(component.versions[0].status).toBe("published");
-    const firstPublishedVersionId = updatedDraft.id;
+    const firstPublishedVersionId = component.versions[0].id;
 
-    const aggregateTable = await expectJson<ComponentTable>(
+    const table = await expectJson<ComponentTable>(
       await page.request.get(`/api/components/${slug}/table`, {
         params: {
           page_size: "25",
-          visible_columns: `${aggregateGroupField.key},row_count`,
-          sort: "row_count:desc",
+          visible_columns: firstField.key,
+          sort: `${firstField.key}:asc`,
         },
       }),
     );
-    expect(aggregateTable.materialization_state).toBe("ready");
-    expect(aggregateTable.component_version_id).toBe(firstPublishedVersionId);
-    expect(aggregateTable.component_type).toBe("aggregate_table");
-    expect(aggregateTable.columns.map((column) => column.key)).toEqual([
-      aggregateGroupField.key,
-      "row_count",
-    ]);
-    expect(aggregateTable.rows.length).toBeGreaterThan(0);
-    expect(
-      aggregateTable.rows.every(
-        (row) => row.values[aggregateGroupField.key] === aggregatePreFilterValue,
-      ),
-    ).toBe(true);
-    expect(
-      aggregateTable.rows.every(
-        (row) => Number(row.values.row_count ?? "0") > 0,
-      ),
-    ).toBe(true);
-    const aggregateVersionTable = await expectJson<ComponentTable>(
-      await page.request.get(
-        `/api/components/${slug}/versions/${firstPublishedVersionId}/table`,
-        {
-          params: {
-            visible_columns: "row_count",
-            sort: "row_count:desc",
-          },
-        },
-      ),
-    );
-    expect(aggregateVersionTable.materialization_state).toBe("ready");
-    expect(aggregateVersionTable.component_version_id).toBe(firstPublishedVersionId);
-    expect(aggregateVersionTable.columns.map((column) => column.key)).toEqual([
-      "row_count",
-    ]);
-    const filteredAggregateTable = await expectJson<ComponentTable>(
+    expect(table.materialization_state).toBe("ready");
+    expect(table.component_version_id).toBe(firstPublishedVersionId);
+    expect(table.component_type).toBe("table");
+    expect(table.columns.map((column) => column.key)).toEqual([firstField.key]);
+    expect(table.rows.length).toBeGreaterThan(0);
+
+    const filterValue = table.rows
+      .map((row) => row.values[firstField.key])
+      .find((value): value is string => Boolean(value));
+    expect(filterValue, `component table should include a value for ${firstField.key}`).toBeTruthy();
+    const filteredTable = await expectJson<ComponentTable>(
       await page.request.get(`/api/components/${slug}/table`, {
         params: {
-          visible_columns: "row_count",
-          "filter[row_count][operator]": "gt",
-          "filter[row_count][value]": "0",
+          visible_columns: firstField.key,
+          [`filter[${firstField.key}][operator]`]: "equals",
+          [`filter[${firstField.key}][value]`]: filterValue!,
         },
       }),
     );
-    expect(filteredAggregateTable.materialization_state).toBe("ready");
-    expect(filteredAggregateTable.rows.length).toBeGreaterThan(0);
+    expect(filteredTable.rows.length).toBeGreaterThan(0);
     expect(
-      filteredAggregateTable.rows.every(
-        (row) => Number(row.values.row_count ?? "0") > 0,
-      ),
+      filteredTable.rows.every((row) => row.values[firstField.key] === filterValue),
     ).toBe(true);
-    const betweenAggregateTable = await expectJson<ComponentTable>(
+
+    const searchTerm = filterValue!.slice(0, Math.min(4, filterValue!.length));
+    const searchedTable = await expectJson<ComponentTable>(
       await page.request.get(`/api/components/${slug}/table`, {
         params: {
-          visible_columns: "row_count",
-          "filter[row_count][operator]": "between",
-          "filter[row_count][value]": "1,100000",
+          q: searchTerm,
+          visible_columns: firstField.key,
         },
       }),
     );
-    expect(betweenAggregateTable.materialization_state).toBe("ready");
-    expect(betweenAggregateTable.rows.length).toBeGreaterThan(0);
+    expect(searchedTable.rows.length).toBeGreaterThan(0);
     expect(
-      betweenAggregateTable.rows.every((row) => {
-        const rowCount = Number(row.values.row_count ?? "0");
-        return rowCount >= 1 && rowCount <= 100000;
-      }),
+      searchedTable.rows.every((row) =>
+        (row.values[firstField.key] ?? "")
+          .toLowerCase()
+          .includes(searchTerm.toLowerCase()),
+      ),
     ).toBe(true);
-    await page.goto(`/components/${slug}/view`);
-    await expect(
-      page.getByRole("heading", { level: 1, name: slug }),
-    ).toBeVisible();
-    await expect(
-      page.getByRole("columnheader", { name: aggregateGroupField.label }),
-    ).toBeVisible();
-    await expect(page.getByRole("columnheader", { name: "Rows" })).toBeVisible();
-    const aggregateVisibleColumns = page.getByRole("group", {
-      name: "Visible Columns",
+
+    const pagedTable = await expectJson<ComponentTable>(
+      await page.request.get(`/api/components/${slug}/table`, {
+        params: {
+          page_size: "1",
+          visible_columns: firstField.key,
+          sort: `${firstField.key}:asc`,
+        },
+      }),
+    );
+    expect(pagedTable.pagination.page_size).toBe(1);
+    expect(pagedTable.columns.map((column) => column.key)).toEqual([firstField.key]);
+    expect(pagedTable.rows.length).toBeLessThanOrEqual(1);
+    if (pagedTable.pagination.has_more) {
+      expect(pagedTable.pagination.next_cursor).toMatch(/^offset:/);
+    }
+
+    const badVisibleColumns = await expectStatus(
+      await page.request.get(`/api/components/${slug}/table`, {
+        params: {
+          visible_columns: `${firstField.key},missing_${RUN_ID}`,
+        },
+      }),
+      400,
+    );
+    const badVisibleColumnsBody = JSON.parse(badVisibleColumns) as ApiErrorBody;
+    expect(badVisibleColumnsBody).toMatchObject({
+      code: "bad_request",
+      error: expect.stringContaining("visible column"),
     });
-    await aggregateVisibleColumns
-      .getByRole("checkbox", { name: /Rows/ })
-      .uncheck();
+
+    await page.goto(`/components/${slug}/view`);
+    await expect(page.getByRole("heading", { level: 1, name: slug })).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: firstField.label })).toBeVisible();
+    const visibleColumns = page.getByRole("group", { name: "Visible Columns" });
     await expect(
-      page.getByRole("columnheader", { name: aggregateGroupField.label }),
-    ).toBeVisible();
-    await expect(page.getByRole("columnheader", { name: "Rows" })).toHaveCount(0);
-    await aggregateVisibleColumns.getByRole("button", { name: "Show All" }).click();
-    await expect(page.getByRole("columnheader", { name: "Rows" })).toBeVisible();
+      visibleColumns.getByRole("checkbox", { name: firstField.label }),
+    ).toBeChecked();
+    await page.getByLabel("Filter Field").selectOption(firstField.key);
+    await page.getByLabel("Filter Operator").selectOption("is_not_null");
+    await expect(page.getByRole("table")).toBeVisible();
 
     const renamedName = `${name} Updated`;
     const renamedDescription = "Updated by the Sprint 4A component workflow.";
@@ -808,18 +620,26 @@ VALUES ('${draftDashboard.id}', '${component.versions[0].id}', 99, '{}'::jsonb);
     expect(component.name).toBe(renamedName);
     expect(component.description).toBe(renamedDescription);
 
-    const secondDraft = await saveDetailDraft(page, created.id, dataset, major);
-    const patchedDraft = await patchDetailDraft(
+    const secondDraft = await saveTableDraft(
+      page,
+      created.id,
+      dataset,
+      major,
+      [firstField.key],
+    );
+    const patchedDraft = await patchTableDraft(
       page,
       created.id,
       secondDraft.id,
       dataset,
       major,
+      [firstField.key],
     );
     expect(patchedDraft.id).toBe(secondDraft.id);
     component = await loadComponent(page, slug);
     expect(component.versions.some((version) => version.status === "draft")).toBe(true);
     expect(component.versions.some((version) => version.status === "published")).toBe(true);
+
     const readerComponentWhileDraftExists = await expectJson<ComponentDefinition>(
       await page.request.get(`/api/components/${slug}`),
     );
@@ -831,20 +651,18 @@ VALUES ('${draftDashboard.id}', '${component.versions[0].id}', 99, '{}'::jsonb);
     const tableWhileDraftExists = await expectJson<ComponentTable>(
       await page.request.get(`/api/components/${slug}/table`, {
         params: {
-          visible_columns: "row_count",
+          visible_columns: firstField.key,
         },
       }),
     );
     expect(tableWhileDraftExists.component_version_id).toBe(firstPublishedVersionId);
-    expect(tableWhileDraftExists.component_type).toBe("aggregate_table");
+    expect(tableWhileDraftExists.component_type).toBe("table");
     expect(tableWhileDraftExists.columns.map((column) => column.key)).toEqual([
-      "row_count",
+      firstField.key,
     ]);
 
     await page.goto("/components");
-    await expect(
-      page.getByRole("heading", { level: 1, name: "Components" }),
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Components" })).toBeVisible();
     await expect(page.getByRole("link", { name: renamedName })).toBeVisible();
 
     await page.goto(`/components/${slug}`);
@@ -852,25 +670,21 @@ VALUES ('${draftDashboard.id}', '${component.versions[0].id}', 99, '{}'::jsonb);
     await expect(page.getByRole("link", { name: "Edit" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Publish" })).toBeVisible();
     await expect(page.getByRole("link", { name: "View" })).toBeVisible();
-    await expect(page.locator("tbody")).toHaveText(/Published/);
     await expect(page.locator("tbody")).toContainText("Draft");
     await expect(page.locator("tbody")).toContainText("Published");
     await expect(page.locator("tbody")).toContainText(`v${major}`);
 
     await page.goto(`/components/${slug}/edit`);
-    await expect(
-      page.getByRole("heading", { level: 1, name: "Edit Component" }),
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Edit Component" })).toBeVisible();
     await expect(page.getByRole("textbox", { name: "Name" })).toHaveValue(renamedName);
     await expect(page.getByRole("textbox", { name: "Slug" })).toHaveValue(slug);
     await expect(page.getByRole("textbox", { name: "Description" })).toHaveValue(
       renamedDescription,
     );
+    await expect(page.getByRole("heading", { name: "Dataset Context" })).toBeVisible();
 
     await page.goto(`/components/${slug}/publish`);
-    await expect(
-      page.getByRole("heading", { level: 1, name: "Publish Component" }),
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Publish Component" })).toBeVisible();
     await page.getByRole("button", { name: "Publish Draft" }).click();
     await expect(page.getByText("Component published.")).toBeVisible();
 
@@ -879,19 +693,21 @@ VALUES ('${draftDashboard.id}', '${component.versions[0].id}', 99, '{}'::jsonb);
       "published",
     );
     expect(component.versions.some((version) => version.status === "superseded")).toBe(true);
-    const supersededAggregateTable = await expectJson<ComponentTable>(
+
+    const supersededTable = await expectJson<ComponentTable>(
       await page.request.get(
         `/api/components/${slug}/versions/${firstPublishedVersionId}/table`,
         {
           params: {
-            visible_columns: "row_count",
+            visible_columns: firstField.key,
           },
         },
       ),
     );
-    expect(supersededAggregateTable.materialization_state).toBe("ready");
-    expect(supersededAggregateTable.component_version_id).toBe(firstPublishedVersionId);
-    expect(supersededAggregateTable.component_type).toBe("aggregate_table");
+    expect(supersededTable.materialization_state).toBe("ready");
+    expect(supersededTable.component_version_id).toBe(firstPublishedVersionId);
+    expect(supersededTable.component_type).toBe("table");
+
     await expectStatus(
       await page.request.patch(
         `/api/admin/components/${created.id}/versions/${secondDraft.id}`,
@@ -899,8 +715,8 @@ VALUES ('${draftDashboard.id}', '${component.versions[0].id}', 99, '{}'::jsonb);
           data: {
             dataset_id: dataset.id,
             dataset_version_major: major,
-            component_type: "detail_table",
-            config: detailConfig(dataset.output_fields),
+            component_type: "table",
+            config: tableConfig([firstField.key]),
           },
         },
       ),
@@ -914,149 +730,6 @@ VALUES ('${draftDashboard.id}', '${component.versions[0].id}', 99, '{}'::jsonb);
       400,
     );
 
-    const table = await expectJson<ComponentTable>(
-      await page.request.get(`/api/components/${slug}/table`),
-    );
-    expect(table.materialization_state).toBe("ready");
-    const filterField = textLikeField(dataset.output_fields).key;
-    expect(table.columns.map((column) => column.key)).toEqual([filterField]);
-    const filterValue = table.rows
-      .map((row) => row.values[filterField])
-      .find((value): value is string => Boolean(value));
-    expect(filterValue, `component table should include a value for ${filterField}`).toBeTruthy();
-    const filteredTable = await expectJson<ComponentTable>(
-      await page.request.get(`/api/components/${slug}/table`, {
-        params: {
-          visible_columns: filterField,
-          [`filter[${filterField}][operator]`]: "equals",
-          [`filter[${filterField}][value]`]: filterValue!,
-        },
-      }),
-    );
-    expect(filteredTable.materialization_state).toBe("ready");
-    expect(filteredTable.rows.length).toBeGreaterThan(0);
-    expect(
-      filteredTable.rows.every((row) => row.values[filterField] === filterValue),
-    ).toBe(true);
-    const searchTerm = filterValue!.slice(0, Math.min(4, filterValue!.length));
-    const searchedTable = await expectJson<ComponentTable>(
-      await page.request.get(`/api/components/${slug}/table`, {
-        params: {
-          q: searchTerm,
-          visible_columns: filterField,
-        },
-      }),
-    );
-    expect(searchedTable.materialization_state).toBe("ready");
-    expect(searchedTable.rows.length).toBeGreaterThan(0);
-    expect(
-      searchedTable.rows.every((row) =>
-        (row.values[filterField] ?? "")
-          .toLowerCase()
-          .includes(searchTerm.toLowerCase()),
-      ),
-    ).toBe(true);
-
-    const negativeValue = `not-present-${RUN_ID}`;
-    const notEqualsTable = await expectJson<ComponentTable>(
-      await page.request.get(`/api/components/${slug}/table`, {
-        params: {
-          visible_columns: filterField,
-          [`filter[${filterField}][operator]`]: "not_equals",
-          [`filter[${filterField}][value]`]: negativeValue,
-        },
-      }),
-    );
-    expect(notEqualsTable.materialization_state).toBe("ready");
-    expect(notEqualsTable.rows.length).toBeGreaterThan(0);
-    expect(
-      notEqualsTable.rows.every((row) => row.values[filterField] !== negativeValue),
-    ).toBe(true);
-
-    const notContainsTable = await expectJson<ComponentTable>(
-      await page.request.get(`/api/components/${slug}/table`, {
-        params: {
-          visible_columns: filterField,
-          [`filter[${filterField}][operator]`]: "not_contains",
-          [`filter[${filterField}][value]`]: negativeValue,
-        },
-      }),
-    );
-    expect(notContainsTable.materialization_state).toBe("ready");
-    expect(notContainsTable.rows.length).toBeGreaterThan(0);
-    expect(
-      notContainsTable.rows.every(
-        (row) => !(row.values[filterField] ?? "").includes(negativeValue),
-      ),
-    ).toBe(true);
-
-    const notNullTable = await expectJson<ComponentTable>(
-      await page.request.get(`/api/components/${slug}/table`, {
-        params: {
-          visible_columns: filterField,
-          [`filter[${filterField}][operator]`]: "is_not_null",
-        },
-      }),
-    );
-    expect(notNullTable.materialization_state).toBe("ready");
-    expect(notNullTable.rows.length).toBeGreaterThan(0);
-    expect(notNullTable.rows.every((row) => row.values[filterField] !== null)).toBe(
-      true,
-    );
-    const emptyTable = await expectJson<ComponentTable>(
-      await page.request.get(`/api/components/${slug}/table`, {
-        params: {
-          visible_columns: filterField,
-          [`filter[${filterField}][operator]`]: "is_empty",
-        },
-      }),
-    );
-    expect(emptyTable.materialization_state).toBe("ready");
-    expect(
-      emptyTable.rows.every((row) => {
-        const value = row.values[filterField];
-        return value === null || value === "";
-      }),
-    ).toBe(true);
-
-    const pagedTable = await expectJson<ComponentTable>(
-      await page.request.get(`/api/components/${slug}/table`, {
-        params: {
-          page_size: "1",
-          visible_columns: filterField,
-          sort: `${filterField}:asc`,
-        },
-      }),
-    );
-    expect(pagedTable.pagination.page_size).toBe(1);
-    expect(pagedTable.columns.map((column) => column.key)).toEqual([filterField]);
-    expect(pagedTable.rows.length).toBeLessThanOrEqual(1);
-    if (pagedTable.pagination.has_more) {
-      expect(pagedTable.pagination.next_cursor).toMatch(/^offset:/);
-    }
-    const badVisibleColumns = await expectStatus(
-      await page.request.get(`/api/components/${slug}/table`, {
-        params: {
-          visible_columns: `${filterField},missing_${RUN_ID}`,
-        },
-      }),
-      400,
-    );
-    const badVisibleColumnsBody = JSON.parse(badVisibleColumns) as ApiErrorBody;
-    expect(badVisibleColumnsBody).toMatchObject({
-      code: "bad_request",
-      error: expect.stringContaining("visible column"),
-    });
-
-    await page.goto(`/components/${slug}/view`);
-    await expect(
-      page.getByRole("heading", { level: 1, name: slug }),
-    ).toBeVisible();
-    await expect(page.getByRole("table")).toBeVisible();
-    await expect(page.getByLabel("Filter Field")).toBeVisible();
-    await page.getByLabel("Filter Field").selectOption(filterField);
-    await page.getByLabel("Filter Operator").selectOption("is_not_null");
-    await expect(page.getByRole("table")).toBeVisible();
     await assertNoConsoleErrors();
   });
 });

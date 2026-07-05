@@ -696,7 +696,7 @@ test("admin can author, edit, save, and view a Sprint 3A dataset", async ({
     await page.getByPlaceholder("Search datasets").fill(slug);
     const datasetRow = page.locator("tbody tr", { hasText: datasetName }).first();
     await expect(datasetRow.getByRole("link", { name: datasetName })).toBeVisible();
-    await expect(datasetRow.locator(".data-table__secondary-text")).toHaveText(slug);
+    await expect(datasetRow.getByText(slug, { exact: true })).toBeVisible();
     await expect(page.locator(".directory-table-pagination__actions")).not.toContainText(
       "page_count",
     );

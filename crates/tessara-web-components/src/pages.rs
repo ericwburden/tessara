@@ -241,13 +241,13 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
                         }).collect_view()}
                     </select>
                 </label>
-                <DatasetCatalogContext dataset=selected_dataset.get()/>
+                <DatasetCatalogContext dataset=Signal::derive(move || selected_dataset.get())/>
                 <DetailAuthoringControls
-                    fields=selected_fields.get()
+                    fields=Signal::derive(move || selected_fields.get())
                     columns
                 />
                 <TableDefaultsControls
-                    fields=selected_fields.get()
+                    fields=Signal::derive(move || selected_fields.get())
                     sort_field
                     sort_direction
                     page_size
@@ -604,10 +604,10 @@ fn ValidationFindingsPanel(findings: Vec<ComponentValidationFinding>) -> impl In
 }
 
 #[component]
-fn DatasetCatalogContext(dataset: Option<DatasetSummary>) -> impl IntoView {
+fn DatasetCatalogContext(dataset: Signal<Option<DatasetSummary>>) -> impl IntoView {
     view! {
         <section class="route-panel__section">
-            {if let Some(dataset) = dataset {
+            {move || if let Some(dataset) = dataset.get() {
                 let tags = dataset_tag_label(&dataset.tags);
                 let provenance = dataset_provenance_label(&dataset.provenance);
                 let fields = dataset
@@ -637,16 +637,16 @@ fn DatasetCatalogContext(dataset: Option<DatasetSummary>) -> impl IntoView {
 
 #[component]
 fn DetailAuthoringControls(
-    fields: Vec<DatasetFieldDefinition>,
+    fields: Signal<Vec<DatasetFieldDefinition>>,
     columns: RwSignal<String>,
 ) -> impl IntoView {
-    let column_fields = fields.clone();
     view! {
         <fieldset class="route-panel__section">
             <legend>"Columns"</legend>
-            {if fields.is_empty() {
+            {move || if fields.get().is_empty() {
                 view! { <p class="muted">"Select a Dataset version to choose columns."</p> }.into_any()
             } else {
+                let column_fields = fields.get();
                 view! {
                     <div class="component-field-picker">
                         {column_fields.into_iter().map(|field| {
@@ -675,7 +675,7 @@ fn DetailAuthoringControls(
 
 #[component]
 fn TableDefaultsControls(
-    fields: Vec<DatasetFieldDefinition>,
+    fields: Signal<Vec<DatasetFieldDefinition>>,
     sort_field: RwSignal<String>,
     sort_direction: RwSignal<String>,
     page_size: RwSignal<String>,
@@ -687,7 +687,7 @@ fn TableDefaultsControls(
                 <span>"Sort Field"</span>
                 <select prop:value=move || sort_field.get() on:change=move |event| sort_field.set(event_target_value(&event))>
                     <option value="">"Default row order"</option>
-                    {fields.into_iter().map(|field| {
+                    {move || fields.get().into_iter().map(|field| {
                         let label = format!("{} ({})", field.label, field.field_type);
                         view! { <option value=field.key>{label}</option> }
                     }).collect_view()}

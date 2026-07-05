@@ -288,16 +288,11 @@ function datasetMajor(dataset: DatasetSummary) {
   return major!;
 }
 
-function aggregateCountConfig() {
+function tableConfig(dataset: DatasetSummary) {
+  const firstField = dataset.output_fields[0]?.key;
+  expect(firstField, `dataset ${dataset.name} should expose output fields`).toBeTruthy();
   return {
-    group_fields: [],
-    metrics: [
-      {
-        key: "row_count",
-        label: "Rows",
-        function: "count",
-      },
-    ],
+    visible_columns: [firstField],
   };
 }
 
@@ -1197,8 +1192,8 @@ test.describe.serial("capability + scope + ownership permissions", () => {
         version: {
           dataset_id: fixtures.inScopeDataset.id,
           dataset_version_major: inScopeMajor,
-          component_type: "aggregate_table",
-          config: aggregateCountConfig(),
+          component_type: "table",
+          config: tableConfig(fixtures.inScopeDataset),
         },
       },
     );
@@ -1212,8 +1207,8 @@ test.describe.serial("capability + scope + ownership permissions", () => {
         version: {
           dataset_id: fixtures.inScopeDataset.id,
           dataset_version_major: inScopeMajor,
-          component_type: "aggregate_table",
-          config: aggregateCountConfig(),
+          component_type: "table",
+          config: tableConfig(fixtures.inScopeDataset),
         },
       },
     );
@@ -1233,8 +1228,8 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       {
         dataset_id: fixtures.outOfScopeDataset.id,
         dataset_version_major: outOfScopeMajor,
-        component_type: "aggregate_table",
-        config: aggregateCountConfig(),
+        component_type: "table",
+        config: tableConfig(fixtures.outOfScopeDataset),
       },
     );
     expect(bindError.message).toContain("components:manage");
@@ -1248,8 +1243,8 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       {
         dataset_id: fixtures.outOfScopeDataset.id,
         dataset_version_major: outOfScopeMajor,
-        component_type: "aggregate_table",
-        config: aggregateCountConfig(),
+        component_type: "table",
+        config: tableConfig(fixtures.outOfScopeDataset),
       },
     );
     expect(validateError.message).toContain("components:manage");
@@ -1261,8 +1256,8 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       version: {
         dataset_id: fixtures.outOfScopeDataset.id,
         dataset_version_major: outOfScopeMajor,
-        component_type: "aggregate_table",
-        config: aggregateCountConfig(),
+        component_type: "table",
+        config: tableConfig(fixtures.outOfScopeDataset),
       },
     });
     const outOfScopeComponent = await getJson<ComponentDefinition>(
@@ -1293,8 +1288,8 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       version: {
         dataset_id: fixtures.outOfScopeDataset.id,
         dataset_version_major: outOfScopeMajor,
-        component_type: "aggregate_table",
-        config: aggregateCountConfig(),
+        component_type: "table",
+        config: tableConfig(fixtures.outOfScopeDataset),
       },
     });
     const firstVersion = await getJson<ComponentDefinition>(
@@ -1314,8 +1309,8 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       {
         dataset_id: fixtures.inScopeDataset.id,
         dataset_version_major: inScopeMajor,
-        component_type: "aggregate_table",
-        config: aggregateCountConfig(),
+        component_type: "table",
+        config: tableConfig(fixtures.inScopeDataset),
       },
     );
     await postJson<IdResponse>(
