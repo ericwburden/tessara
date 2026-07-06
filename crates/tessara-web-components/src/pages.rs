@@ -51,7 +51,7 @@ pub fn ComponentsIndexContent() -> impl IntoView {
 }
 
 #[component]
-pub fn ComponentDetailContent(component_ref: String) -> impl IntoView {
+pub fn ComponentVersionsContent(component_ref: String) -> impl IntoView {
     let component = RwSignal::new(None::<ComponentDefinition>);
     let is_loading = RwSignal::new(true);
     let load_error = RwSignal::new(None::<String>);
@@ -70,37 +70,18 @@ pub fn ComponentDetailContent(component_ref: String) -> impl IntoView {
                     view! { <EmptyState title="Component unavailable" message=message/> }.into_any()
                 } else if let Some(component) = component.get() {
                     let edit_href = format!("/components/{}/edit", component.slug);
-                    let publish_href = format!("/components/{}/publish", component.slug);
-                    let view_href = format!("/components/{}/view", component.slug);
+                    let view_href = format!("/components/{}", component.slug);
                     view! {
-                        <ComponentsBreadcrumb current=component.name.clone()/>
+                        <ComponentNestedBreadcrumb
+                            component_href=view_href.clone()
+                            component_label=component.name.clone()
+                            current="Versions"
+                        />
                         <PageHeader title=component.name.clone()>
                             <a class="button button--secondary" href=edit_href>"Edit"</a>
-                            <a class="button button--secondary" href=publish_href>"Publish"</a>
                             <a class="button" href=view_href>"View"</a>
                         </PageHeader>
-                        <section class="route-panel__section">
-                            <DataTable>
-                                <thead>
-                                    <tr>
-                                        <th>"Version"</th>
-                                        <th>"Status"</th>
-                                        <th>"Kind"</th>
-                                        <th>"Dataset Version"</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {component.versions.into_iter().map(|version| view! {
-                                        <tr>
-                                            <td>{version.version_label}</td>
-                                            <td>{component_status_label(&version.status)}</td>
-                                            <td>{component_type_label(&version.component_type)}</td>
-                                            <td>{format!("v{}", version.dataset_version_major)}</td>
-                                        </tr>
-                                    }).collect_view()}
-                                </tbody>
-                            </DataTable>
-                        </section>
+                        <ComponentVersionsSection versions=component.versions/>
                     }.into_any()
                 } else {
                     view! { <EmptyState title="Component unavailable" message="Component detail could not be loaded."/> }.into_any()
@@ -356,6 +337,9 @@ pub fn ComponentPublishContent(component_ref: String) -> impl IntoView {
 
 #[component]
 pub fn ComponentViewerContent(component_ref: String) -> impl IntoView {
+    let component = RwSignal::new(None::<ComponentDefinition>);
+    let component_loading = RwSignal::new(true);
+    let component_error = RwSignal::new(None::<String>);
     let table = RwSignal::new(None::<ComponentTable>);
     let all_columns = RwSignal::new(Vec::<ComponentTableColumn>::new());
     let error = RwSignal::new(None::<String>);
@@ -368,7 +352,19 @@ pub fn ComponentViewerContent(component_ref: String) -> impl IntoView {
     let filter_operator = RwSignal::new(String::from("equals"));
     let filter_value = RwSignal::new(String::new());
     let visible_columns = RwSignal::new(String::new());
+    let component_ref_for_title = component_ref.clone();
 
+    Effect::new({
+        let component_ref = component_ref.clone();
+        move |_| {
+            load_component(
+                component_ref.clone(),
+                component,
+                component_loading,
+                component_error,
+            )
+        }
+    });
     Effect::new({
         let component_ref = component_ref.clone();
         move |_| {
@@ -402,10 +398,15 @@ pub fn ComponentViewerContent(component_ref: String) -> impl IntoView {
     view! {
         <section class="dataset-preview-page">
             <section class="dataset-preview-page__content">
-                <ComponentsBreadcrumb current="Component Viewer"/>
+                <ComponentsBreadcrumb current=component_ref.clone()/>
                 <header class="dataset-preview-page__header">
-                    <p>"Component Viewer"</p>
-                    <h1>{component_ref.clone()}</h1>
+                    <p>"Component"</p>
+                    <h1>{move || {
+                        component
+                            .get()
+                            .map(|component| component.name)
+                            .unwrap_or_else(|| component_ref_for_title.clone())
+                    }}</h1>
                 </header>
                 <section class="route-panel__section form-grid">
                     <label class="form-field">
@@ -588,6 +589,17 @@ pub fn ComponentViewerContent(component_ref: String) -> impl IntoView {
                         view! { <EmptyState title="Loading table" message="Fetching component rows."/> }.into_any()
                     }
                 }}
+                {move || {
+                    if component_loading.get() {
+                        view! { <EmptyState title="Loading versions" message="Fetching component version history."/> }.into_any()
+                    } else if let Some(message) = component_error.get() {
+                        view! { <EmptyState title="Versions unavailable" message=message/> }.into_any()
+                    } else if let Some(component) = component.get() {
+                        view! { <ComponentVersionsSection versions=component.versions/> }.into_any()
+                    } else {
+                        view! { <EmptyState title="Versions unavailable" message="Component version history could not be loaded."/> }.into_any()
+                    }
+                }}
             </section>
         </section>
     }
@@ -745,6 +757,58 @@ fn ComponentsBreadcrumb(#[prop(into)] current: String) -> impl IntoView {
 }
 
 #[component]
+fn ComponentNestedBreadcrumb(
+    #[prop(into)] component_href: String,
+    #[prop(into)] component_label: String,
+    #[prop(into)] current: String,
+) -> impl IntoView {
+    view! {
+        <Breadcrumb>
+            <BreadcrumbItem>
+                <BreadcrumbLink href="/components">"Components"</BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator/>
+            <BreadcrumbItem>
+                <BreadcrumbLink href=component_href>{component_label}</BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator/>
+            <BreadcrumbItem>
+                <BreadcrumbPage>{current}</BreadcrumbPage>
+            </BreadcrumbItem>
+        </Breadcrumb>
+    }
+}
+
+#[component]
+fn ComponentVersionsSection(versions: Vec<ComponentVersionSummary>) -> impl IntoView {
+    view! {
+        <section class="route-panel__section">
+            <h2>"Versions"</h2>
+            <DataTable>
+                <thead>
+                    <tr>
+                        <th>"Version"</th>
+                        <th>"Status"</th>
+                        <th>"Kind"</th>
+                        <th>"Dataset Version"</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {versions.into_iter().map(|version| view! {
+                        <tr>
+                            <td>{version.version_label}</td>
+                            <td>{component_status_label(&version.status)}</td>
+                            <td>{component_type_label(&version.component_type)}</td>
+                            <td>{format!("v{}", version.dataset_version_major)}</td>
+                        </tr>
+                    }).collect_view()}
+                </tbody>
+            </DataTable>
+        </section>
+    }
+}
+
+#[component]
 fn ComponentsTable(components: Vec<ComponentSummary>) -> impl IntoView {
     let search = RwSignal::new(String::new());
     let kind_filter = RwSignal::new(String::from("all"));
@@ -829,6 +893,7 @@ fn ComponentsTable(components: Vec<ComponentSummary>) -> impl IntoView {
                                         options=table_status_options.clone()
                                     />
                                 </th>
+                                <th class="data-table__cell--center" scope="col">"Actions"</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -837,7 +902,7 @@ fn ComponentsTable(components: Vec<ComponentSummary>) -> impl IntoView {
                                 if components.is_empty() {
                                     view! {
                                         <tr>
-                                            <td class="data-table__empty" colspan="3">"No Components to Display"</td>
+                                            <td class="data-table__empty" colspan="4">"No Components to Display"</td>
                                         </tr>
                                     }
                                     .into_any()
@@ -848,6 +913,8 @@ fn ComponentsTable(components: Vec<ComponentSummary>) -> impl IntoView {
                                         .take(page_size.get())
                                         .map(|component| {
                                             let href = format!("/components/{}", component.slug);
+                                            let edit_href = format!("/components/{}/edit", component.slug);
+                                            let versions_href = format!("/components/{}/versions", component.slug);
                                             let kind_label = component_summary_kind_label(&component);
                                             let status_label = component_summary_status_label(&component);
                                             view! {
@@ -857,6 +924,12 @@ fn ComponentsTable(components: Vec<ComponentSummary>) -> impl IntoView {
                                                     </th>
                                                     <td class="data-table__cell--center">{kind_label}</td>
                                                     <td class="data-table__cell--center">{status_label}</td>
+                                                    <td class="data-table__cell--center">
+                                                        <div class="components-list-actions">
+                                                            <a class="button button--compact button--secondary" href=edit_href>"Edit"</a>
+                                                            <a class="button button--compact button--secondary" href=versions_href>"Versions"</a>
+                                                        </div>
+                                                    </td>
                                                 </tr>
                                             }
                                         })
@@ -913,6 +986,8 @@ fn ComponentsMobileCards(
                         .take(page_size.get())
                         .map(|component| {
                             let href = format!("/components/{}", component.slug);
+                            let edit_href = format!("/components/{}/edit", component.slug);
+                            let versions_href = format!("/components/{}/versions", component.slug);
                             let kind_label = component_summary_kind_label(&component);
                             let status_label = component_summary_status_label(&component);
                             view! {
@@ -930,6 +1005,10 @@ fn ComponentsMobileCards(
                                             <dd>{status_label}</dd>
                                         </div>
                                     </dl>
+                                    <div class="forms-list-mobile-card__actions components-list-mobile-card__actions">
+                                        <a class="button button--compact button--secondary" href=edit_href>"Edit"</a>
+                                        <a class="button button--compact button--secondary" href=versions_href>"Versions"</a>
+                                    </div>
                                 </article>
                             }
                         })

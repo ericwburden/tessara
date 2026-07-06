@@ -899,6 +899,7 @@ fn publish_dataset_revision(
 }
 
 #[cfg(not(feature = "hydrate"))]
+#[allow(clippy::too_many_arguments)]
 fn publish_dataset_revision(
     _: String,
     _: String,

@@ -594,10 +594,9 @@ VALUES ('${draftDashboard.id}', '${component.versions[0].id}', 99, '{}'::jsonb);
       error: expect.stringContaining("visible column"),
     });
 
-    await page.goto(`/components/${slug}/view`);
+    await page.goto(`/components/${slug}`);
     await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toContainText("Components");
-    await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toContainText("Component Viewer");
-    await expect(page.getByRole("heading", { level: 1, name: slug })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
     await expect(page.getByRole("columnheader", { name: firstField.label })).toBeVisible();
     const visibleColumns = page.getByRole("group", { name: "Visible Columns" });
     await expect(
@@ -605,7 +604,7 @@ VALUES ('${draftDashboard.id}', '${component.versions[0].id}', 99, '{}'::jsonb);
     ).toBeChecked();
     await page.getByLabel("Filter Field").selectOption(firstField.key);
     await page.getByLabel("Filter Operator").selectOption("is_not_null");
-    await expect(page.getByRole("table")).toBeVisible();
+    await expect(page.getByRole("table").filter({ hasText: firstField.label })).toBeVisible();
 
     const renamedName = `${name} Updated`;
     const renamedDescription = "Updated by the Sprint 4A component workflow.";
@@ -667,6 +666,14 @@ VALUES ('${draftDashboard.id}', '${component.versions[0].id}', 99, '{}'::jsonb);
     await expect(page.getByRole("link", { name: "Create Component" })).toBeVisible();
     await page.getByRole("searchbox", { name: "Search components by name" }).fill(renamedName);
     await expect(page.getByRole("link", { name: renamedName })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Edit" }).first()).toHaveAttribute(
+      "href",
+      `/components/${slug}/edit`,
+    );
+    await expect(page.getByRole("link", { name: "Versions" }).first()).toHaveAttribute(
+      "href",
+      `/components/${slug}/versions`,
+    );
     await page.getByRole("button", { name: "Filter Kind" }).click();
     await page.getByRole("menuitemradio", { name: "Table" }).click();
     await page.getByRole("button", { name: "Filter Status" }).click();
@@ -689,14 +696,26 @@ VALUES ('${draftDashboard.id}', '${component.versions[0].id}', 99, '{}'::jsonb);
 
     await page.goto(`/components/${slug}`);
     await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toContainText("Components");
+    await expect(page.getByRole("heading", { level: 1, name: renamedName })).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: firstField.label })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: "Versions" })).toBeVisible();
+    let versionsTable = page.getByRole("table").filter({ hasText: "Dataset Version" });
+    await expect(versionsTable).toContainText("Draft");
+    await expect(versionsTable).toContainText("Published");
+    await expect(versionsTable).toContainText(`v${major}`);
+
+    await page.goto(`/components/${slug}/versions`);
+    await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toContainText("Components");
     await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toContainText(renamedName);
+    await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toContainText("Versions");
     await expect(page.getByRole("heading", { level: 1, name: renamedName })).toBeVisible();
     await expect(page.getByRole("link", { name: "Edit" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Publish" })).toBeVisible();
     await expect(page.getByRole("link", { name: "View" })).toBeVisible();
-    await expect(page.locator("tbody")).toContainText("Draft");
-    await expect(page.locator("tbody")).toContainText("Published");
-    await expect(page.locator("tbody")).toContainText(`v${major}`);
+    await expect(page.getByRole("link", { name: "Publish" })).toHaveCount(0);
+    versionsTable = page.getByRole("table").filter({ hasText: "Dataset Version" });
+    await expect(versionsTable).toContainText("Draft");
+    await expect(versionsTable).toContainText("Published");
+    await expect(versionsTable).toContainText(`v${major}`);
 
     await page.goto(`/components/${slug}/edit`);
     await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toContainText("Components");

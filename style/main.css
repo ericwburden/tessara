@@ -1255,6 +1255,18 @@ input {
   display: none;
 }
 
+.components-list-actions,
+.components-list-mobile-card__actions {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.components-list-actions {
+  justify-content: center;
+}
+
 .form-versions-load-more {
   justify-self: start;
   margin-top: 0.85rem;

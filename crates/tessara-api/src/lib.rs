@@ -300,8 +300,18 @@ pub fn router(state: AppState) -> Router {
             get(|Path(component_ref): Path<String>| async move {
                 native_app(
                     format!("/components/{component_ref}/view"),
-                    "Component Viewer",
+                    "Tessara Component",
                     "View a Tessara component.",
+                )
+            }),
+        )
+        .route(
+            "/components/{component_ref}/versions",
+            get(|Path(component_ref): Path<String>| async move {
+                native_app(
+                    format!("/components/{component_ref}/versions"),
+                    "Component Versions",
+                    "Review Tessara component version history.",
                 )
             }),
         )
@@ -310,8 +320,8 @@ pub fn router(state: AppState) -> Router {
             get(|Path(component_ref): Path<String>| async move {
                 native_app(
                     format!("/components/{component_ref}"),
-                    "Component Detail",
-                    "Inspect a Tessara component.",
+                    "Tessara Component",
+                    "View a Tessara component.",
                 )
             }),
         )

@@ -10,7 +10,7 @@ use crate::routes::PRIMARY_SSR_MODE;
 use crate::types::route_params::{ComponentRouteParams, require_route_params};
 use crate::ui::AppShell;
 use tessara_web_components::{
-    ComponentDetailContent, ComponentEditorContent, ComponentPublishContent,
+    ComponentEditorContent, ComponentPublishContent, ComponentVersionsContent,
     ComponentViewerContent, ComponentsIndexContent,
 };
 
@@ -43,8 +43,13 @@ pub fn component_routes() -> impl MatchNestedRoutes + Clone {
                 ssr=PRIMARY_SSR_MODE
             />
             <Route
+                path=path!("/components/:component_ref/versions")
+                view=ComponentsVersionsPage
+                ssr=PRIMARY_SSR_MODE
+            />
+            <Route
                 path=path!("/components/:component_ref")
-                view=ComponentsDetailPage
+                view=ComponentsViewerPage
                 ssr=PRIMARY_SSR_MODE
             />
         </>
@@ -70,16 +75,6 @@ fn ComponentsCreatePage() -> impl IntoView {
 }
 
 #[component]
-fn ComponentsDetailPage() -> impl IntoView {
-    let params = require_route_params::<ComponentRouteParams>();
-    view! {
-        <AppShell active_route="components" title="Component Detail">
-            <ComponentDetailContent component_ref=params.component_ref/>
-        </AppShell>
-    }
-}
-
-#[component]
 fn ComponentsEditPage() -> impl IntoView {
     let params = require_route_params::<ComponentRouteParams>();
     view! {
@@ -100,10 +95,20 @@ fn ComponentsPublishPage() -> impl IntoView {
 }
 
 #[component]
+fn ComponentsVersionsPage() -> impl IntoView {
+    let params = require_route_params::<ComponentRouteParams>();
+    view! {
+        <AppShell active_route="components" title="Component Versions">
+            <ComponentVersionsContent component_ref=params.component_ref/>
+        </AppShell>
+    }
+}
+
+#[component]
 fn ComponentsViewerPage() -> impl IntoView {
     let params = require_route_params::<ComponentRouteParams>();
     view! {
-        <AppShell active_route="components" title="Component Viewer">
+        <AppShell active_route="components" title="Component">
             <ComponentViewerContent component_ref=params.component_ref/>
         </AppShell>
     }
