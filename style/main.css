@@ -5837,6 +5837,7 @@ input {
     align-items: stretch;
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
+    margin-bottom: 0.75rem;
   }
 
   .components-list__mobile-filter-button {
@@ -5844,11 +5845,22 @@ input {
     width: var(--table-control-height);
     height: var(--table-control-height);
     align-self: stretch;
+    border: 1px solid var(--color-border);
+    background: var(--color-control);
+    color: var(--color-text);
+  }
+
+  .components-list__mobile-filter-button:hover,
+  .components-list__mobile-filter-button:focus-visible {
+    background: var(--color-control-strong);
+    color: var(--color-text);
   }
 
   .components-list__mobile-filter-button.is-filtered,
   .components-list__mobile-filter-button[aria-label*="active"] {
-    color: var(--semantic-primary);
+    border-color: var(--semantic-primary);
+    box-shadow: inset 0 0 0 1px var(--semantic-primary);
+    color: var(--color-text);
   }
 
   .operations-responsive-table > .table-wrap {
