@@ -835,6 +835,7 @@ fn load_revision_detail(
 }
 
 #[cfg(feature = "hydrate")]
+#[allow(clippy::too_many_arguments)]
 fn publish_dataset_revision(
     dataset_id: String,
     revision_id: String,

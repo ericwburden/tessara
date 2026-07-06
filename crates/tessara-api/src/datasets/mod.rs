@@ -1016,13 +1016,13 @@ pub async fn list_datasets(
         let version_minor: Option<i32> = row.try_get("version_minor")?;
         let version_patch: Option<i32> = row.try_get("version_patch")?;
         let status: String = row.try_get("status")?;
-        if status != "draft" {
-            if let Some(version_major) = version_major {
-                major_versions_by_dataset
-                    .entry(dataset_id)
-                    .or_default()
-                    .insert(version_major);
-            }
+        if status != "draft"
+            && let Some(version_major) = version_major
+        {
+            major_versions_by_dataset
+                .entry(dataset_id)
+                .or_default()
+                .insert(version_major);
         }
         revisions_by_dataset
             .entry(dataset_id)

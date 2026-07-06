@@ -1642,7 +1642,7 @@ async fn dataset_revision_draft_publish_preserves_current_until_publish() {
         initial_major_line_row_count * 2,
         "component bound to Dataset v1 should include compatible v1 minor/patch rows"
     );
-    assert_major_line_null_fills_added_field(dataset_id, 1, &second_key).await;
+    assert_major_line_null_fills_added_field(dataset_id, 1, second_key).await;
 
     let history_after_publish = request_json(
         app.clone(),

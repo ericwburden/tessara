@@ -2084,7 +2084,7 @@ mod tests {
 
     #[test]
     fn component_table_sort_and_page_sql_are_server_driven() {
-        let fields = vec![
+        let fields = [
             field("program", FieldType::Text),
             field("score", FieldType::Number),
         ];
@@ -2102,7 +2102,7 @@ mod tests {
 
     #[test]
     fn visible_table_fields_preserves_requested_order_and_rejects_unknown_columns() {
-        let fields = vec![
+        let fields = [
             field("program", FieldType::Text),
             field("score", FieldType::Number),
         ];

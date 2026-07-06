@@ -175,15 +175,17 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
                 create_component_from_form(
                     editing_component_id.get_untracked(),
                     editing_version_id.get_untracked(),
-                    name.get_untracked(),
-                    slug.get_untracked(),
-                    description.get_untracked(),
-                    dataset_id.get_untracked(),
-                    dataset_major.get_untracked(),
-                    columns.get_untracked(),
-                    sort_field.get_untracked(),
-                    sort_direction.get_untracked(),
-                    page_size.get_untracked(),
+                    ComponentFormValues {
+                        name: name.get_untracked(),
+                        slug: slug.get_untracked(),
+                        description: description.get_untracked(),
+                        dataset_id: dataset_id.get_untracked(),
+                        dataset_major: dataset_major.get_untracked(),
+                        columns: columns.get_untracked(),
+                        sort_field: sort_field.get_untracked(),
+                        sort_direction: sort_direction.get_untracked(),
+                        page_size: page_size.get_untracked(),
+                    },
                     message,
                     error,
                     validation_findings,
@@ -255,12 +257,14 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
                 <div class="form-actions">
                     <button class="button button--secondary" type="button" on:click=move |_| {
                         validate_component_form(
-                            dataset_id.get_untracked(),
-                            dataset_major.get_untracked(),
-                            columns.get_untracked(),
-                            sort_field.get_untracked(),
-                            sort_direction.get_untracked(),
-                            page_size.get_untracked(),
+                            ComponentValidationValues {
+                                dataset_id: dataset_id.get_untracked(),
+                                dataset_major: dataset_major.get_untracked(),
+                                columns: columns.get_untracked(),
+                                sort_field: sort_field.get_untracked(),
+                                sort_direction: sort_direction.get_untracked(),
+                                page_size: page_size.get_untracked(),
+                            },
                             message,
                             error,
                             validation_findings,
@@ -360,17 +364,17 @@ pub fn ComponentViewerContent(component_ref: String) -> impl IntoView {
         move |_| {
             load_component_table(
                 component_ref.clone(),
-                build_component_table_query(
-                    &search.get(),
-                    &page_size.get(),
-                    &cursor.get(),
-                    &sort_field.get(),
-                    &sort_direction.get(),
-                    &filter_field.get(),
-                    &filter_operator.get(),
-                    &filter_value.get(),
-                    &visible_columns.get(),
-                ),
+                build_component_table_query(ComponentTableQueryInput {
+                    search: &search.get(),
+                    page_size: &page_size.get(),
+                    cursor: &cursor.get(),
+                    sort_field: &sort_field.get(),
+                    sort_direction: &sort_direction.get(),
+                    filter_field: &filter_field.get(),
+                    filter_operator: &filter_operator.get(),
+                    filter_value: &filter_value.get(),
+                    visible_columns: &visible_columns.get(),
+                }),
                 table,
                 error,
             )
@@ -378,10 +382,10 @@ pub fn ComponentViewerContent(component_ref: String) -> impl IntoView {
     });
 
     Effect::new(move |_| {
-        if let Some(table) = table.get() {
-            if visible_columns.get().trim().is_empty() || all_columns.get_untracked().is_empty() {
-                all_columns.set(table.columns);
-            }
+        if let Some(table) = table.get()
+            && (visible_columns.get().trim().is_empty() || all_columns.get_untracked().is_empty())
+        {
+            all_columns.set(table.columns);
         }
     });
 
@@ -425,7 +429,7 @@ pub fn ComponentViewerContent(component_ref: String) -> impl IntoView {
                                         </>
                                     }.into_any()
                                 } else {
-                                    view! { <></> }.into_any()
+                                    ().into_any()
                                 }
                             }}
                         </select>
@@ -459,7 +463,7 @@ pub fn ComponentViewerContent(component_ref: String) -> impl IntoView {
                                         </>
                                     }.into_any()
                                 } else {
-                                    view! { <></> }.into_any()
+                                    ().into_any()
                                 }
                             }}
                         </select>
@@ -925,11 +929,16 @@ fn table_defaults_config(sort_field: &str, sort_direction: &str, page_size: &str
     } else {
         "asc"
     };
-    json!({
-        "default_sort": sort_field.trim().is_empty().then(|| Value::Null).unwrap_or_else(|| json!({
+    let default_sort = if sort_field.trim().is_empty() {
+        Value::Null
+    } else {
+        json!({
             "field_key": sort_field.trim(),
             "direction": direction
-        })),
+        })
+    };
+    json!({
+        "default_sort": default_sort,
         "page_size": parsed_page_size
     })
 }
@@ -1012,23 +1021,26 @@ fn table_page_size_from_config(config: &Value) -> String {
 }
 
 #[cfg_attr(not(any(feature = "hydrate", test)), allow(dead_code))]
-fn build_component_table_query(
-    search: &str,
-    page_size: &str,
-    cursor: &str,
-    sort_field: &str,
-    sort_direction: &str,
-    filter_field: &str,
-    filter_operator: &str,
-    filter_value: &str,
-    visible_columns: &str,
-) -> String {
+struct ComponentTableQueryInput<'a> {
+    search: &'a str,
+    page_size: &'a str,
+    cursor: &'a str,
+    sort_field: &'a str,
+    sort_direction: &'a str,
+    filter_field: &'a str,
+    filter_operator: &'a str,
+    filter_value: &'a str,
+    visible_columns: &'a str,
+}
+
+#[cfg_attr(not(any(feature = "hydrate", test)), allow(dead_code))]
+fn build_component_table_query(input: ComponentTableQueryInput<'_>) -> String {
     let mut params = Vec::new();
-    push_query_param(&mut params, "q", search);
-    push_query_param(&mut params, "page_size", page_size);
-    push_query_param(&mut params, "cursor", cursor);
-    if !sort_field.trim().is_empty() {
-        let direction = if sort_direction.trim() == "desc" {
+    push_query_param(&mut params, "q", input.search);
+    push_query_param(&mut params, "page_size", input.page_size);
+    push_query_param(&mut params, "cursor", input.cursor);
+    if !input.sort_field.trim().is_empty() {
+        let direction = if input.sort_direction.trim() == "desc" {
             "desc"
         } else {
             "asc"
@@ -1036,23 +1048,23 @@ fn build_component_table_query(
         push_query_param(
             &mut params,
             "sort",
-            &format!("{}:{direction}", sort_field.trim()),
+            &format!("{}:{direction}", input.sort_field.trim()),
         );
     }
-    let filter_field = filter_field.trim();
+    let filter_field = input.filter_field.trim();
     if !filter_field.is_empty() {
         push_query_param(
             &mut params,
             &format!("filter[{filter_field}][operator]"),
-            filter_operator,
+            input.filter_operator,
         );
         push_query_param(
             &mut params,
             &format!("filter[{filter_field}][value]"),
-            filter_value,
+            input.filter_value,
         );
     }
-    push_query_param(&mut params, "visible_columns", visible_columns);
+    push_query_param(&mut params, "visible_columns", input.visible_columns);
     params.join("&")
 }
 
@@ -1280,10 +1292,8 @@ fn load_component_table(
 ) {
 }
 
-#[cfg(feature = "hydrate")]
-fn create_component_from_form(
-    editing_component_id: Option<String>,
-    editing_version_id: Option<String>,
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+struct ComponentFormValues {
     name: String,
     slug: String,
     description: String,
@@ -1293,6 +1303,23 @@ fn create_component_from_form(
     sort_field: String,
     sort_direction: String,
     page_size: String,
+}
+
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+struct ComponentValidationValues {
+    dataset_id: String,
+    dataset_major: String,
+    columns: String,
+    sort_field: String,
+    sort_direction: String,
+    page_size: String,
+}
+
+#[cfg(feature = "hydrate")]
+fn create_component_from_form(
+    editing_component_id: Option<String>,
+    editing_version_id: Option<String>,
+    values: ComponentFormValues,
     message: RwSignal<Option<String>>,
     error: RwSignal<Option<String>>,
     findings: RwSignal<Vec<ComponentValidationFinding>>,
@@ -1301,26 +1328,31 @@ fn create_component_from_form(
         message.set(None);
         error.set(None);
         findings.set(Vec::new());
-        let major = dataset_major.trim().parse::<i32>().unwrap_or(1);
-        let config = build_component_config(&columns, &sort_field, &sort_direction, &page_size);
+        let major = values.dataset_major.trim().parse::<i32>().unwrap_or(1);
+        let config = build_component_config(
+            &values.columns,
+            &values.sort_field,
+            &values.sort_direction,
+            &values.page_size,
+        );
         let version = CreateComponentVersionRequest {
-            dataset_id: Some(dataset_id),
+            dataset_id: Some(values.dataset_id),
             dataset_version_major: Some(major),
             component_type: "table".into(),
             config,
         };
-        let description = description
-            .trim()
-            .is_empty()
-            .then(|| None)
-            .unwrap_or_else(|| Some(description.trim().to_string()));
-        let redirect_ref = component_redirect_ref(&slug);
+        let description = if values.description.trim().is_empty() {
+            None
+        } else {
+            Some(values.description.trim().to_string())
+        };
+        let redirect_ref = component_redirect_ref(&values.slug);
         let result = if let Some(component_id) = editing_component_id {
             match api::update_component(
                 &component_id,
                 UpdateComponentRequest {
-                    name,
-                    slug,
+                    name: values.name,
+                    slug: values.slug,
                     description,
                 },
             )
@@ -1337,8 +1369,8 @@ fn create_component_from_form(
             }
         } else {
             api::create_component(CreateComponentRequest {
-                name,
-                slug,
+                name: values.name,
+                slug: values.slug,
                 description,
                 version: Some(version),
             })
@@ -1367,15 +1399,7 @@ fn component_redirect_ref(slug: &str) -> String {
 fn create_component_from_form(
     _: Option<String>,
     _: Option<String>,
-    _: String,
-    _: String,
-    _: String,
-    _: String,
-    _: String,
-    _: String,
-    _: String,
-    _: String,
-    _: String,
+    _: ComponentFormValues,
     _: RwSignal<Option<String>>,
     _: RwSignal<Option<String>>,
     _: RwSignal<Vec<ComponentValidationFinding>>,
@@ -1384,12 +1408,7 @@ fn create_component_from_form(
 
 #[cfg(feature = "hydrate")]
 fn validate_component_form(
-    dataset_id: String,
-    dataset_major: String,
-    columns: String,
-    sort_field: String,
-    sort_direction: String,
-    page_size: String,
+    values: ComponentValidationValues,
     message: RwSignal<Option<String>>,
     error: RwSignal<Option<String>>,
     findings: RwSignal<Vec<ComponentValidationFinding>>,
@@ -1398,10 +1417,15 @@ fn validate_component_form(
         message.set(None);
         error.set(None);
         findings.set(Vec::new());
-        let major = dataset_major.trim().parse::<i32>().unwrap_or(1);
-        let config = build_component_config(&columns, &sort_field, &sort_direction, &page_size);
+        let major = values.dataset_major.trim().parse::<i32>().unwrap_or(1);
+        let config = build_component_config(
+            &values.columns,
+            &values.sort_field,
+            &values.sort_direction,
+            &values.page_size,
+        );
         let payload = CreateComponentVersionRequest {
-            dataset_id: Some(dataset_id),
+            dataset_id: Some(values.dataset_id),
             dataset_version_major: Some(major),
             component_type: "table".into(),
             config,
@@ -1420,12 +1444,7 @@ fn validate_component_form(
 
 #[cfg(not(feature = "hydrate"))]
 fn validate_component_form(
-    _: String,
-    _: String,
-    _: String,
-    _: String,
-    _: String,
-    _: String,
+    _: ComponentValidationValues,
     _: RwSignal<Option<String>>,
     _: RwSignal<Option<String>>,
     _: RwSignal<Vec<ComponentValidationFinding>>,
@@ -1502,7 +1521,9 @@ mod tests {
         ComponentDefinition, ComponentVersionSummary, DatasetSummary, build_component_config,
         dataset_picker_majors, toggle_csv_key, toggle_visible_column,
     };
-    use super::{build_component_table_query, percent_encode_query_component};
+    use super::{
+        ComponentTableQueryInput, build_component_table_query, percent_encode_query_component,
+    };
     use super::{
         component_redirect_ref, dataset_catalog_option_label, dataset_provenance_label,
         editable_component_version, materialization_empty_state, selected_dataset_major_value,
@@ -1636,17 +1657,17 @@ mod tests {
 
     #[test]
     fn component_table_query_encodes_server_driven_view_state() {
-        let query = build_component_table_query(
-            "family outreach",
-            "25",
-            "offset:25",
-            "program",
-            "desc",
-            "row_count",
-            "between",
-            "1,10",
-            "program, row_count",
-        );
+        let query = build_component_table_query(ComponentTableQueryInput {
+            search: "family outreach",
+            page_size: "25",
+            cursor: "offset:25",
+            sort_field: "program",
+            sort_direction: "desc",
+            filter_field: "row_count",
+            filter_operator: "between",
+            filter_value: "1,10",
+            visible_columns: "program, row_count",
+        });
 
         assert_eq!(
             query,
@@ -1657,7 +1678,17 @@ mod tests {
     #[test]
     fn component_table_query_omits_blank_optional_params() {
         assert_eq!(
-            build_component_table_query("", "50", "", "", "asc", "", "equals", "", ""),
+            build_component_table_query(ComponentTableQueryInput {
+                search: "",
+                page_size: "50",
+                cursor: "",
+                sort_field: "",
+                sort_direction: "asc",
+                filter_field: "",
+                filter_operator: "equals",
+                filter_value: "",
+                visible_columns: "",
+            }),
             "page_size=50"
         );
         assert_eq!(percent_encode_query_component("a/b?c"), "a%2Fb%3Fc");
