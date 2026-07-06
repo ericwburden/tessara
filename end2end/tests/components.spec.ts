@@ -670,6 +670,10 @@ VALUES ('${draftDashboard.id}', '${component.versions[0].id}', 99, '{}'::jsonb);
     await page.getByRole("button", { name: "Filter Status" }).click();
     await page.getByRole("menuitemradio", { name: "Published" }).click();
     await expect(page.getByRole("link", { name: renamedName })).toBeVisible();
+    await page.setViewportSize({ width: 544, height: 912 });
+    await expect(page.locator(".components-list-mobile-card").filter({ hasText: renamedName })).toBeVisible();
+    await expect(page.locator(".components-list-responsive-table .table-wrap")).toBeHidden();
+    await page.setViewportSize({ width: 1491, height: 912 });
 
     await page.goto(`/components/${slug}`);
     await expect(page.getByRole("heading", { level: 1, name: renamedName })).toBeVisible();

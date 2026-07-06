@@ -744,6 +744,7 @@ fn ComponentsTable(components: Vec<ComponentSummary>) -> impl IntoView {
             .collect::<Vec<_>>()
     });
     let total_count = Memo::new(move |_| filtered_components.get().len());
+    let mobile_components = Memo::new(move |_| filtered_components.get());
 
     Effect::new(move |_| {
         search.get();
@@ -754,75 +755,132 @@ fn ComponentsTable(components: Vec<ComponentSummary>) -> impl IntoView {
 
     view! {
         <section class="route-panel__section">
-            <SearchableDataTable
-                search_label="Search components by name"
-                placeholder="Search components"
-                search=search
-            >
-                <thead>
-                    <tr>
-                        <th scope="col">"Name"</th>
-                        <th class="data-table__cell--center" scope="col">
-                            <TableFilterHeader
-                                label="Kind"
-                                all_label="All kinds"
-                                filter=kind_filter
-                                options=kind_options.clone()
-                            />
-                        </th>
-                        <th class="data-table__cell--center" scope="col">
-                            <TableFilterHeader
-                                label="Status"
-                                all_label="All statuses"
-                                filter=status_filter
-                                options=status_options.clone()
-                            />
-                        </th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {move || {
-                        let components = filtered_components.get();
-                        if components.is_empty() {
-                            view! {
-                                <tr>
-                                    <td class="data-table__empty" colspan="3">"No Components to Display"</td>
-                                </tr>
-                            }
-                            .into_any()
-                        } else {
-                            components
-                                .into_iter()
-                                .skip(component_pagination_page_start(total_count.get(), page_size.get(), page_index.get()))
-                                .take(page_size.get())
-                                .map(|component| {
-                                    let href = format!("/components/{}", component.slug);
-                                    let kind_label = component_summary_kind_label(&component);
-                                    let status_label = component_summary_status_label(&component);
-                                    view! {
-                                        <tr>
-                                            <th scope="row">
-                                                <a class="data-table__primary-link" href=href>{component.name}</a>
-                                            </th>
-                                            <td class="data-table__cell--center">{kind_label}</td>
-                                            <td class="data-table__cell--center">{status_label}</td>
-                                        </tr>
-                                    }
-                                })
-                                .collect_view()
+            <div class="forms-list-responsive-table components-list-responsive-table">
+                <SearchableDataTable
+                    search_label="Search components by name"
+                    placeholder="Search components"
+                    search=search
+                >
+                    <thead>
+                        <tr>
+                            <th scope="col">"Name"</th>
+                            <th class="data-table__cell--center" scope="col">
+                                <TableFilterHeader
+                                    label="Kind"
+                                    all_label="All kinds"
+                                    filter=kind_filter
+                                    options=kind_options.clone()
+                                />
+                            </th>
+                            <th class="data-table__cell--center" scope="col">
+                                <TableFilterHeader
+                                    label="Status"
+                                    all_label="All statuses"
+                                    filter=status_filter
+                                    options=status_options.clone()
+                                />
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {move || {
+                            let components = filtered_components.get();
+                            if components.is_empty() {
+                                view! {
+                                    <tr>
+                                        <td class="data-table__empty" colspan="3">"No Components to Display"</td>
+                                    </tr>
+                                }
                                 .into_any()
-                        }
-                    }}
-                </tbody>
-            </SearchableDataTable>
-            <TablePaginationFooter
-                aria_label="Components table pagination"
-                item_label="components"
-                total_count=total_count
-                page_size=page_size
-                page_index=page_index
-            />
+                            } else {
+                                components
+                                    .into_iter()
+                                    .skip(component_pagination_page_start(total_count.get(), page_size.get(), page_index.get()))
+                                    .take(page_size.get())
+                                    .map(|component| {
+                                        let href = format!("/components/{}", component.slug);
+                                        let kind_label = component_summary_kind_label(&component);
+                                        let status_label = component_summary_status_label(&component);
+                                        view! {
+                                            <tr>
+                                                <th scope="row">
+                                                    <a class="data-table__primary-link" href=href>{component.name}</a>
+                                                </th>
+                                                <td class="data-table__cell--center">{kind_label}</td>
+                                                <td class="data-table__cell--center">{status_label}</td>
+                                            </tr>
+                                        }
+                                    })
+                                    .collect_view()
+                                    .into_any()
+                            }
+                        }}
+                    </tbody>
+                </SearchableDataTable>
+                <ComponentsMobileCards
+                    components=mobile_components
+                    total_count=total_count
+                    page_size=page_size
+                    page_index=page_index
+                />
+                <TablePaginationFooter
+                    aria_label="Components table pagination"
+                    item_label="components"
+                    total_count=total_count
+                    page_size=page_size
+                    page_index=page_index
+                />
+            </div>
         </section>
+    }
+}
+
+#[component]
+fn ComponentsMobileCards(
+    components: Memo<Vec<ComponentSummary>>,
+    total_count: Memo<usize>,
+    page_size: RwSignal<usize>,
+    page_index: RwSignal<usize>,
+) -> impl IntoView {
+    view! {
+        <div class="forms-list-mobile-cards components-list-mobile-cards">
+            {move || {
+                let components = components.get();
+                if components.is_empty() {
+                    view! { <p class="forms-list-mobile-empty">"No Components to Display"</p> }
+                        .into_any()
+                } else {
+                    components
+                        .into_iter()
+                        .skip(component_pagination_page_start(total_count.get(), page_size.get(), page_index.get()))
+                        .take(page_size.get())
+                        .map(|component| {
+                            let href = format!("/components/{}", component.slug);
+                            let kind_label = component_summary_kind_label(&component);
+                            let status_label = component_summary_status_label(&component);
+                            view! {
+                                <article class="forms-list-mobile-card components-list-mobile-card">
+                                    <div class="forms-list-mobile-card__header">
+                                        <h3><a href=href>{component.name}</a></h3>
+                                    </div>
+                                    <dl>
+                                        <div>
+                                            <dt>"Kind"</dt>
+                                            <dd>{kind_label}</dd>
+                                        </div>
+                                        <div>
+                                            <dt>"Status"</dt>
+                                            <dd>{status_label}</dd>
+                                        </div>
+                                    </dl>
+                                </article>
+                            }
+                        })
+                        .collect_view()
+                        .into_any()
+                }
+            }}
+        </div>
     }
 }
 
