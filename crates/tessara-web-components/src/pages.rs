@@ -733,6 +733,10 @@ fn ComponentsTable(components: Vec<ComponentSummary>) -> impl IntoView {
     let page_index = RwSignal::new(0usize);
     let kind_options = component_kind_filter_options(&components);
     let status_options = component_status_filter_options(&components);
+    let table_kind_options = kind_options.clone();
+    let table_status_options = status_options.clone();
+    let mobile_kind_options = kind_options.clone();
+    let mobile_status_options = status_options.clone();
     let filtered_components = Memo::new(move |_| {
         let query = search.get();
         let kind = kind_filter.get();
@@ -769,7 +773,7 @@ fn ComponentsTable(components: Vec<ComponentSummary>) -> impl IntoView {
                                     label="Kind"
                                     all_label="All kinds"
                                     filter=kind_filter
-                                    options=kind_options.clone()
+                                    options=table_kind_options.clone()
                                 />
                             </th>
                             <th class="data-table__cell--center" scope="col">
@@ -777,7 +781,7 @@ fn ComponentsTable(components: Vec<ComponentSummary>) -> impl IntoView {
                                     label="Status"
                                     all_label="All statuses"
                                     filter=status_filter
-                                    options=status_options.clone()
+                                    options=table_status_options.clone()
                                 />
                             </th>
                         </tr>
@@ -817,6 +821,34 @@ fn ComponentsTable(components: Vec<ComponentSummary>) -> impl IntoView {
                         }}
                     </tbody>
                 </SearchableDataTable>
+                <div class="components-list-mobile-filters">
+                    <label class="searchable-data-table__filter searchable-data-table__control">
+                        <span>"Kind"</span>
+                        <select
+                            aria-label="Filter components by kind"
+                            prop:value=move || kind_filter.get()
+                            on:change=move |event| kind_filter.set(event_target_value(&event))
+                        >
+                            <option value="all">"All kinds"</option>
+                            {mobile_kind_options.clone().into_iter().map(|option| {
+                                view! { <option value=option.clone()>{option.clone()}</option> }
+                            }).collect_view()}
+                        </select>
+                    </label>
+                    <label class="searchable-data-table__filter searchable-data-table__control">
+                        <span>"Status"</span>
+                        <select
+                            aria-label="Filter components by status"
+                            prop:value=move || status_filter.get()
+                            on:change=move |event| status_filter.set(event_target_value(&event))
+                        >
+                            <option value="all">"All statuses"</option>
+                            {mobile_status_options.clone().into_iter().map(|option| {
+                                view! { <option value=option.clone()>{option.clone()}</option> }
+                            }).collect_view()}
+                        </select>
+                    </label>
+                </div>
                 <ComponentsMobileCards
                     components=mobile_components
                     total_count=total_count

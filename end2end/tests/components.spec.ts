@@ -671,6 +671,8 @@ VALUES ('${draftDashboard.id}', '${component.versions[0].id}', 99, '{}'::jsonb);
     await page.getByRole("menuitemradio", { name: "Published" }).click();
     await expect(page.getByRole("link", { name: renamedName })).toBeVisible();
     await page.setViewportSize({ width: 544, height: 912 });
+    await page.getByLabel("Filter components by kind").selectOption("Table");
+    await page.getByLabel("Filter components by status").selectOption("Published");
     await expect(page.locator(".components-list-mobile-card").filter({ hasText: renamedName })).toBeVisible();
     await expect(page.locator(".components-list-responsive-table .table-wrap")).toBeHidden();
     await page.setViewportSize({ width: 1491, height: 912 });
