@@ -980,6 +980,18 @@ fn ComponentsMobileFilterSheet(
                             </select>
                         </label>
                     </section>
+                    <div class="sheet-panel__footer components-filter-sheet__footer">
+                        <button
+                            class="button button--secondary"
+                            type="button"
+                            on:click=move |_| {
+                                kind_filter.set("all".to_string());
+                                status_filter.set("all".to_string());
+                            }
+                        >
+                            "Clear All"
+                        </button>
+                    </div>
                 </aside>
             </section>
         </Show>

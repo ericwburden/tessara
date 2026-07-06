@@ -5141,6 +5141,15 @@ input {
   border-top: 1px solid var(--color-border);
 }
 
+.sheet-panel__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-border);
+  margin-top: auto;
+}
+
 .sheet-panel__section h3 {
   font-size: 0.95rem;
   color: var(--semantic-primary);
@@ -5861,6 +5870,11 @@ input {
     border-color: var(--semantic-primary);
     box-shadow: inset 0 0 0 1px var(--semantic-primary);
     color: var(--color-text);
+  }
+
+  .components-list__mobile-filter-button.is-filtered svg,
+  .components-list__mobile-filter-button[aria-label*="active"] svg {
+    color: var(--semantic-primary);
   }
 
   .operations-responsive-table > .table-wrap {
