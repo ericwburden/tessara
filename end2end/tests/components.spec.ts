@@ -595,6 +595,8 @@ VALUES ('${draftDashboard.id}', '${component.versions[0].id}', 99, '{}'::jsonb);
     });
 
     await page.goto(`/components/${slug}/view`);
+    await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toContainText("Components");
+    await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toContainText("Component Viewer");
     await expect(page.getByRole("heading", { level: 1, name: slug })).toBeVisible();
     await expect(page.getByRole("columnheader", { name: firstField.label })).toBeVisible();
     const visibleColumns = page.getByRole("group", { name: "Visible Columns" });
@@ -686,6 +688,8 @@ VALUES ('${draftDashboard.id}', '${component.versions[0].id}', 99, '{}'::jsonb);
     await page.setViewportSize({ width: 1491, height: 912 });
 
     await page.goto(`/components/${slug}`);
+    await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toContainText("Components");
+    await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toContainText(renamedName);
     await expect(page.getByRole("heading", { level: 1, name: renamedName })).toBeVisible();
     await expect(page.getByRole("link", { name: "Edit" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Publish" })).toBeVisible();
@@ -695,6 +699,8 @@ VALUES ('${draftDashboard.id}', '${component.versions[0].id}', 99, '{}'::jsonb);
     await expect(page.locator("tbody")).toContainText(`v${major}`);
 
     await page.goto(`/components/${slug}/edit`);
+    await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toContainText("Components");
+    await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toContainText("Edit Component");
     await expect(page.getByRole("heading", { level: 1, name: "Edit Component" })).toBeVisible();
     await expect(page.getByRole("textbox", { name: "Name" })).toHaveValue(renamedName);
     await expect(page.getByRole("textbox", { name: "Slug" })).toHaveValue(slug);
@@ -704,6 +710,8 @@ VALUES ('${draftDashboard.id}', '${component.versions[0].id}', 99, '{}'::jsonb);
     await expect(page.getByRole("heading", { name: "Dataset Context" })).toBeVisible();
 
     await page.goto(`/components/${slug}/publish`);
+    await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toContainText("Components");
+    await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toContainText("Publish Component");
     await expect(page.getByRole("heading", { level: 1, name: "Publish Component" })).toBeVisible();
     await page.getByRole("button", { name: "Publish Draft" }).click();
     await expect(page.getByText("Component published.")).toBeVisible();

@@ -5,7 +5,10 @@ use super::types::{CreateComponentRequest, CreateComponentVersionRequest, Update
 use icons::{ListFilter, Search, X};
 use leptos::prelude::*;
 use serde_json::{Value, json};
-use tessara_web_ui::{DataTable, EmptyState, PageHeader, TableFilterHeader, TablePaginationFooter};
+use tessara_web_ui::{
+    Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator, DataTable,
+    EmptyState, PageHeader, TableFilterHeader, TablePaginationFooter,
+};
 
 #[cfg(feature = "hydrate")]
 use super::api;
@@ -70,6 +73,7 @@ pub fn ComponentDetailContent(component_ref: String) -> impl IntoView {
                     let publish_href = format!("/components/{}/publish", component.slug);
                     let view_href = format!("/components/{}/view", component.slug);
                     view! {
+                        <ComponentsBreadcrumb current=component.name.clone()/>
                         <PageHeader title=component.name.clone()>
                             <a class="button button--secondary" href=edit_href>"Edit"</a>
                             <a class="button button--secondary" href=publish_href>"Publish"</a>
@@ -173,6 +177,7 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
 
     view! {
         <section class="route-panel components-page">
+            <ComponentsBreadcrumb current=title/>
             <PageHeader title/>
             <form class="route-panel__section form-grid" on:submit=move |event| {
                 event.prevent_default();
@@ -306,6 +311,7 @@ pub fn ComponentPublishContent(component_ref: String) -> impl IntoView {
 
     view! {
         <section class="route-panel components-page">
+            <ComponentsBreadcrumb current="Publish Component"/>
             <PageHeader title="Publish Component"/>
             {move || publish_error.get().map(|message| view! { <p class="form-status is-error">{message}</p> })}
             {move || publish_message.get().map(|message| view! { <p class="form-status is-success">{message}</p> })}
@@ -396,6 +402,7 @@ pub fn ComponentViewerContent(component_ref: String) -> impl IntoView {
     view! {
         <section class="dataset-preview-page">
             <section class="dataset-preview-page__content">
+                <ComponentsBreadcrumb current="Component Viewer"/>
                 <header class="dataset-preview-page__header">
                     <p>"Component Viewer"</p>
                     <h1>{component_ref.clone()}</h1>
@@ -719,6 +726,21 @@ fn TableDefaultsControls(
                 />
             </label>
         </fieldset>
+    }
+}
+
+#[component]
+fn ComponentsBreadcrumb(#[prop(into)] current: String) -> impl IntoView {
+    view! {
+        <Breadcrumb>
+            <BreadcrumbItem>
+                <BreadcrumbLink href="/components">"Components"</BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator/>
+            <BreadcrumbItem>
+                <BreadcrumbPage>{current}</BreadcrumbPage>
+            </BreadcrumbItem>
+        </Breadcrumb>
     }
 }
 
