@@ -2,12 +2,10 @@
 
 #[cfg(feature = "hydrate")]
 use super::types::{CreateComponentRequest, CreateComponentVersionRequest, UpdateComponentRequest};
+use icons::{ListFilter, Search, X};
 use leptos::prelude::*;
 use serde_json::{Value, json};
-use tessara_web_ui::{
-    DataTable, EmptyState, PageHeader, SearchableDataTable, TableFilterHeader,
-    TablePaginationFooter,
-};
+use tessara_web_ui::{DataTable, EmptyState, PageHeader, TableFilterHeader, TablePaginationFooter};
 
 #[cfg(feature = "hydrate")]
 use super::api;
@@ -729,6 +727,7 @@ fn ComponentsTable(components: Vec<ComponentSummary>) -> impl IntoView {
     let search = RwSignal::new(String::new());
     let kind_filter = RwSignal::new(String::from("all"));
     let status_filter = RwSignal::new(String::from("all"));
+    let mobile_filter_open = RwSignal::new(false);
     let page_size = RwSignal::new(10usize);
     let page_index = RwSignal::new(0usize);
     let kind_options = component_kind_filter_options(&components);
@@ -760,95 +759,99 @@ fn ComponentsTable(components: Vec<ComponentSummary>) -> impl IntoView {
     view! {
         <section class="route-panel__section">
             <div class="forms-list-responsive-table components-list-responsive-table">
-                <SearchableDataTable
-                    search_label="Search components by name"
-                    placeholder="Search components"
-                    search=search
-                >
-                    <thead>
-                        <tr>
-                            <th scope="col">"Name"</th>
-                            <th class="data-table__cell--center" scope="col">
-                                <TableFilterHeader
-                                    label="Kind"
-                                    all_label="All kinds"
-                                    filter=kind_filter
-                                    options=table_kind_options.clone()
-                                />
-                            </th>
-                            <th class="data-table__cell--center" scope="col">
-                                <TableFilterHeader
-                                    label="Status"
-                                    all_label="All statuses"
-                                    filter=status_filter
-                                    options=table_status_options.clone()
-                                />
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {move || {
-                            let components = filtered_components.get();
-                            if components.is_empty() {
-                                view! {
-                                    <tr>
-                                        <td class="data-table__empty" colspan="3">"No Components to Display"</td>
-                                    </tr>
-                                }
-                                .into_any()
-                            } else {
-                                components
-                                    .into_iter()
-                                    .skip(component_pagination_page_start(total_count.get(), page_size.get(), page_index.get()))
-                                    .take(page_size.get())
-                                    .map(|component| {
-                                        let href = format!("/components/{}", component.slug);
-                                        let kind_label = component_summary_kind_label(&component);
-                                        let status_label = component_summary_status_label(&component);
-                                        view! {
-                                            <tr>
-                                                <th scope="row">
-                                                    <a class="data-table__primary-link" href=href>{component.name}</a>
-                                                </th>
-                                                <td class="data-table__cell--center">{kind_label}</td>
-                                                <td class="data-table__cell--center">{status_label}</td>
-                                            </tr>
-                                        }
-                                    })
-                                    .collect_view()
+                <div class="searchable-data-table">
+                    <div class="searchable-data-table__toolbar components-list__toolbar">
+                        <label class="searchable-data-table__search searchable-data-table__control">
+                            <Search class="searchable-data-table__control-icon"/>
+                            <span class="sr-only">"Search components by name"</span>
+                            <input
+                                type="search"
+                                placeholder="Search components"
+                                prop:value=move || search.get()
+                                on:input=move |event| search.set(event_target_value(&event))
+                            />
+                        </label>
+                        <button
+                            class="icon-button components-list__mobile-filter-button"
+                            type="button"
+                            aria-label=move || component_mobile_filter_button_label(
+                                &kind_filter.get(),
+                                &status_filter.get(),
+                            )
+                            title=move || component_mobile_filter_button_label(
+                                &kind_filter.get(),
+                                &status_filter.get(),
+                            )
+                            on:click=move |_| mobile_filter_open.set(true)
+                        >
+                            <ListFilter/>
+                        </button>
+                    </div>
+                    <DataTable>
+                        <thead>
+                            <tr>
+                                <th scope="col">"Name"</th>
+                                <th class="data-table__cell--center" scope="col">
+                                    <TableFilterHeader
+                                        label="Kind"
+                                        all_label="All kinds"
+                                        filter=kind_filter
+                                        options=table_kind_options.clone()
+                                    />
+                                </th>
+                                <th class="data-table__cell--center" scope="col">
+                                    <TableFilterHeader
+                                        label="Status"
+                                        all_label="All statuses"
+                                        filter=status_filter
+                                        options=table_status_options.clone()
+                                    />
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {move || {
+                                let components = filtered_components.get();
+                                if components.is_empty() {
+                                    view! {
+                                        <tr>
+                                            <td class="data-table__empty" colspan="3">"No Components to Display"</td>
+                                        </tr>
+                                    }
                                     .into_any()
-                            }
-                        }}
-                    </tbody>
-                </SearchableDataTable>
-                <div class="components-list-mobile-filters">
-                    <label class="searchable-data-table__filter searchable-data-table__control">
-                        <span>"Kind"</span>
-                        <select
-                            aria-label="Filter components by kind"
-                            prop:value=move || kind_filter.get()
-                            on:change=move |event| kind_filter.set(event_target_value(&event))
-                        >
-                            <option value="all">"All kinds"</option>
-                            {mobile_kind_options.clone().into_iter().map(|option| {
-                                view! { <option value=option.clone()>{option.clone()}</option> }
-                            }).collect_view()}
-                        </select>
-                    </label>
-                    <label class="searchable-data-table__filter searchable-data-table__control">
-                        <span>"Status"</span>
-                        <select
-                            aria-label="Filter components by status"
-                            prop:value=move || status_filter.get()
-                            on:change=move |event| status_filter.set(event_target_value(&event))
-                        >
-                            <option value="all">"All statuses"</option>
-                            {mobile_status_options.clone().into_iter().map(|option| {
-                                view! { <option value=option.clone()>{option.clone()}</option> }
-                            }).collect_view()}
-                        </select>
-                    </label>
+                                } else {
+                                    components
+                                        .into_iter()
+                                        .skip(component_pagination_page_start(total_count.get(), page_size.get(), page_index.get()))
+                                        .take(page_size.get())
+                                        .map(|component| {
+                                            let href = format!("/components/{}", component.slug);
+                                            let kind_label = component_summary_kind_label(&component);
+                                            let status_label = component_summary_status_label(&component);
+                                            view! {
+                                                <tr>
+                                                    <th scope="row">
+                                                        <a class="data-table__primary-link" href=href>{component.name}</a>
+                                                    </th>
+                                                    <td class="data-table__cell--center">{kind_label}</td>
+                                                    <td class="data-table__cell--center">{status_label}</td>
+                                                </tr>
+                                            }
+                                        })
+                                        .collect_view()
+                                        .into_any()
+                                }
+                            }}
+                        </tbody>
+                    </DataTable>
                 </div>
+                <ComponentsMobileFilterSheet
+                    is_open=mobile_filter_open
+                    kind_filter=kind_filter
+                    status_filter=status_filter
+                    kind_options=mobile_kind_options
+                    status_options=mobile_status_options
+                />
                 <ComponentsMobileCards
                     components=mobile_components
                     total_count=total_count
@@ -913,6 +916,73 @@ fn ComponentsMobileCards(
                 }
             }}
         </div>
+    }
+}
+
+#[component]
+fn ComponentsMobileFilterSheet(
+    is_open: RwSignal<bool>,
+    kind_filter: RwSignal<String>,
+    status_filter: RwSignal<String>,
+    kind_options: Vec<String>,
+    status_options: Vec<String>,
+) -> impl IntoView {
+    view! {
+        <Show when=move || is_open.get()>
+            <section class="sheet-overlay components-filter-overlay" aria-label="Component filters">
+                <button
+                    class="sheet-overlay__scrim"
+                    type="button"
+                    aria-label="Close component filters"
+                    on:click=move |_| is_open.set(false)
+                ></button>
+                <aside class="sheet-panel blurred-surface components-filter-sheet" role="dialog" aria-modal="true" aria-label="Component filters">
+                    <div class="sheet-panel__actions">
+                        <button
+                            class="icon-button sheet-panel__close"
+                            type="button"
+                            aria-label="Close component filters"
+                            title="Close component filters"
+                            on:click=move |_| is_open.set(false)
+                        >
+                            <X/>
+                        </button>
+                    </div>
+                    <header class="sheet-panel__header">
+                        <span>"Filters"</span>
+                        <h2>"Components"</h2>
+                    </header>
+                    <section class="sheet-panel__section components-filter-sheet__controls">
+                        <label class="form-field">
+                            <span>"Kind"</span>
+                            <select
+                                aria-label="Filter components by kind"
+                                prop:value=move || kind_filter.get()
+                                on:change=move |event| kind_filter.set(event_target_value(&event))
+                            >
+                                <option value="all">"All kinds"</option>
+                                {kind_options.clone().into_iter().map(|option| {
+                                    view! { <option value=option.clone()>{option.clone()}</option> }
+                                }).collect_view()}
+                            </select>
+                        </label>
+                        <label class="form-field">
+                            <span>"Status"</span>
+                            <select
+                                aria-label="Filter components by status"
+                                prop:value=move || status_filter.get()
+                                on:change=move |event| status_filter.set(event_target_value(&event))
+                            >
+                                <option value="all">"All statuses"</option>
+                                {status_options.clone().into_iter().map(|option| {
+                                    view! { <option value=option.clone()>{option.clone()}</option> }
+                                }).collect_view()}
+                            </select>
+                        </label>
+                    </section>
+                </aside>
+            </section>
+        </Show>
     }
 }
 
@@ -1027,6 +1097,18 @@ fn component_matches_filters(
     component_text_matches(search, &[&component.name])
         && (kind_filter == "all" || component_summary_kind_label(component) == kind_filter)
         && (status_filter == "all" || component_summary_status_label(component) == status_filter)
+}
+
+fn component_mobile_filter_button_label(kind_filter: &str, status_filter: &str) -> String {
+    let active_count = [kind_filter, status_filter]
+        .into_iter()
+        .filter(|value| *value != "all")
+        .count();
+    if active_count == 0 {
+        "Open component filters".into()
+    } else {
+        format!("Open component filters ({active_count} active)")
+    }
 }
 
 fn component_text_matches(query: &str, values: &[&str]) -> bool {
