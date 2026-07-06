@@ -662,7 +662,13 @@ VALUES ('${draftDashboard.id}', '${component.versions[0].id}', 99, '{}'::jsonb);
     ]);
 
     await page.goto("/components");
-    await expect(page.getByRole("heading", { level: 1, name: "Components" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Create Component" })).toBeVisible();
+    await page.getByRole("searchbox", { name: "Search components by name" }).fill(renamedName);
+    await expect(page.getByRole("link", { name: renamedName })).toBeVisible();
+    await page.getByRole("button", { name: "Filter Kind" }).click();
+    await page.getByRole("menuitemradio", { name: "Table" }).click();
+    await page.getByRole("button", { name: "Filter Status" }).click();
+    await page.getByRole("menuitemradio", { name: "Published" }).click();
     await expect(page.getByRole("link", { name: renamedName })).toBeVisible();
 
     await page.goto(`/components/${slug}`);

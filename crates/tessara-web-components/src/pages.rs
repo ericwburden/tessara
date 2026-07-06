@@ -4,7 +4,10 @@
 use super::types::{CreateComponentRequest, CreateComponentVersionRequest, UpdateComponentRequest};
 use leptos::prelude::*;
 use serde_json::{Value, json};
-use tessara_web_ui::{DataTable, EmptyState, PageHeader};
+use tessara_web_ui::{
+    DataTable, EmptyState, PageHeader, SearchableDataTable, TableFilterHeader,
+    TablePaginationFooter,
+};
 
 #[cfg(feature = "hydrate")]
 use super::api;
@@ -25,9 +28,12 @@ pub fn ComponentsIndexContent() -> impl IntoView {
 
     view! {
         <section class="route-panel components-page">
-            <PageHeader title="Components">
-                <a class="button" href="/components/new">"Create Component"</a>
-            </PageHeader>
+            <div class="page-header">
+                <div></div>
+                <div class="page-header__actions">
+                    <a class="button" href="/components/new">"Create Component"</a>
+                </div>
+            </div>
             {move || {
                 if is_loading.get() {
                     view! { <EmptyState title="Loading components" message="Fetching visible components."/> }.into_any()
@@ -720,29 +726,102 @@ fn TableDefaultsControls(
 
 #[component]
 fn ComponentsTable(components: Vec<ComponentSummary>) -> impl IntoView {
+    let search = RwSignal::new(String::new());
+    let kind_filter = RwSignal::new(String::from("all"));
+    let status_filter = RwSignal::new(String::from("all"));
+    let page_size = RwSignal::new(10usize);
+    let page_index = RwSignal::new(0usize);
+    let kind_options = component_kind_filter_options(&components);
+    let status_options = component_status_filter_options(&components);
+    let filtered_components = Memo::new(move |_| {
+        let query = search.get();
+        let kind = kind_filter.get();
+        let status = status_filter.get();
+        components
+            .iter()
+            .filter(|component| component_matches_filters(component, &query, &kind, &status))
+            .cloned()
+            .collect::<Vec<_>>()
+    });
+    let total_count = Memo::new(move |_| filtered_components.get().len());
+
+    Effect::new(move |_| {
+        search.get();
+        kind_filter.get();
+        status_filter.get();
+        page_index.set(0);
+    });
+
     view! {
         <section class="route-panel__section">
-            <DataTable>
+            <SearchableDataTable
+                search_label="Search components by name"
+                placeholder="Search components"
+                search=search
+            >
                 <thead>
                     <tr>
-                        <th>"Name"</th>
-                        <th>"Kind"</th>
-                        <th>"Status"</th>
+                        <th scope="col">"Name"</th>
+                        <th class="data-table__cell--center" scope="col">
+                            <TableFilterHeader
+                                label="Kind"
+                                all_label="All kinds"
+                                filter=kind_filter
+                                options=kind_options.clone()
+                            />
+                        </th>
+                        <th class="data-table__cell--center" scope="col">
+                            <TableFilterHeader
+                                label="Status"
+                                all_label="All statuses"
+                                filter=status_filter
+                                options=status_options.clone()
+                            />
+                        </th>
                     </tr>
                 </thead>
                 <tbody>
-                    {components.into_iter().map(|component| {
-                        let href = format!("/components/{}", component.slug);
-                        view! {
-                            <tr>
-                                <td><a href=href>{component.name}</a></td>
-                                <td>{component.current_component_type.as_deref().map(component_type_label).unwrap_or("Draft")}</td>
-                                <td>{if component.current_version_id.is_some() { "Published" } else { "Draft" }}</td>
-                            </tr>
+                    {move || {
+                        let components = filtered_components.get();
+                        if components.is_empty() {
+                            view! {
+                                <tr>
+                                    <td class="data-table__empty" colspan="3">"No Components to Display"</td>
+                                </tr>
+                            }
+                            .into_any()
+                        } else {
+                            components
+                                .into_iter()
+                                .skip(component_pagination_page_start(total_count.get(), page_size.get(), page_index.get()))
+                                .take(page_size.get())
+                                .map(|component| {
+                                    let href = format!("/components/{}", component.slug);
+                                    let kind_label = component_summary_kind_label(&component);
+                                    let status_label = component_summary_status_label(&component);
+                                    view! {
+                                        <tr>
+                                            <th scope="row">
+                                                <a class="data-table__primary-link" href=href>{component.name}</a>
+                                            </th>
+                                            <td class="data-table__cell--center">{kind_label}</td>
+                                            <td class="data-table__cell--center">{status_label}</td>
+                                        </tr>
+                                    }
+                                })
+                                .collect_view()
+                                .into_any()
                         }
-                    }).collect_view()}
+                    }}
                 </tbody>
-            </DataTable>
+            </SearchableDataTable>
+            <TablePaginationFooter
+                aria_label="Components table pagination"
+                item_label="components"
+                total_count=total_count
+                page_size=page_size
+                page_index=page_index
+            />
         </section>
     }
 }
@@ -810,6 +889,74 @@ fn component_status_label(status: &str) -> &'static str {
         "published" => "Published",
         "superseded" => "Superseded",
         _ => "Unknown",
+    }
+}
+
+fn component_summary_kind_label(component: &ComponentSummary) -> &'static str {
+    component
+        .current_component_type
+        .as_deref()
+        .map(component_type_label)
+        .unwrap_or("Draft")
+}
+
+fn component_summary_status_label(component: &ComponentSummary) -> &'static str {
+    if component.current_version_id.is_some() {
+        "Published"
+    } else {
+        "Draft"
+    }
+}
+
+fn component_kind_filter_options(components: &[ComponentSummary]) -> Vec<String> {
+    let mut options = components
+        .iter()
+        .map(|component| component_summary_kind_label(component).to_string())
+        .collect::<Vec<_>>();
+    options.sort();
+    options.dedup();
+    options
+}
+
+fn component_status_filter_options(components: &[ComponentSummary]) -> Vec<String> {
+    let mut options = components
+        .iter()
+        .map(|component| component_summary_status_label(component).to_string())
+        .collect::<Vec<_>>();
+    options.sort();
+    options.dedup();
+    options
+}
+
+fn component_matches_filters(
+    component: &ComponentSummary,
+    search: &str,
+    kind_filter: &str,
+    status_filter: &str,
+) -> bool {
+    component_text_matches(search, &[&component.name])
+        && (kind_filter == "all" || component_summary_kind_label(component) == kind_filter)
+        && (status_filter == "all" || component_summary_status_label(component) == status_filter)
+}
+
+fn component_text_matches(query: &str, values: &[&str]) -> bool {
+    let query = query.trim().to_lowercase();
+    query.is_empty()
+        || values
+            .iter()
+            .any(|value| value.to_lowercase().contains(&query))
+}
+
+fn component_pagination_page_start(
+    total_count: usize,
+    page_size: usize,
+    page_index: usize,
+) -> usize {
+    if total_count == 0 {
+        0
+    } else {
+        let page_count = total_count.div_ceil(page_size);
+        page_index.min(page_count.saturating_sub(1)) * page_size
     }
 }
 
@@ -1525,11 +1672,14 @@ mod tests {
         ComponentTableQueryInput, build_component_table_query, percent_encode_query_component,
     };
     use super::{
+        component_kind_filter_options, component_matches_filters, component_status_filter_options,
+    };
+    use super::{
         component_redirect_ref, dataset_catalog_option_label, dataset_provenance_label,
         editable_component_version, materialization_empty_state, selected_dataset_major_value,
         table_page_size_from_config, table_sort_from_config, table_visible_columns_from_config,
     };
-    use crate::types::{DatasetProvenanceItem, DatasetProvenanceSummary};
+    use crate::types::{ComponentSummary, DatasetProvenanceItem, DatasetProvenanceSummary};
 
     fn dataset(major_versions: Vec<i32>, current_version_major: Option<i32>) -> DatasetSummary {
         DatasetSummary {
@@ -1542,6 +1692,21 @@ mod tests {
             tags: Vec::new(),
             provenance: Default::default(),
             output_fields: Vec::new(),
+        }
+    }
+
+    fn component_summary(
+        name: &str,
+        component_type: Option<&str>,
+        published: bool,
+    ) -> ComponentSummary {
+        ComponentSummary {
+            id: format!("{name}-id"),
+            name: name.into(),
+            slug: name.to_lowercase().replace(' ', "-"),
+            description: None,
+            current_version_id: published.then(|| format!("{name}-version")),
+            current_component_type: component_type.map(str::to_string),
         }
     }
 
@@ -1586,6 +1751,40 @@ mod tests {
             dataset_provenance_label(&dataset.provenance),
             "Intake Form, Dataset: Analytical Source"
         );
+    }
+
+    #[test]
+    fn component_list_filters_match_name_kind_and_status() {
+        let published_table = component_summary("Program Snapshot", Some("table"), true);
+        let draft_component = component_summary("Program Draft", None, false);
+        let components = vec![published_table.clone(), draft_component.clone()];
+
+        assert_eq!(
+            component_kind_filter_options(&components),
+            vec!["Draft", "Table"]
+        );
+        assert_eq!(
+            component_status_filter_options(&components),
+            vec!["Draft", "Published"]
+        );
+        assert!(component_matches_filters(
+            &published_table,
+            "snapshot",
+            "Table",
+            "Published"
+        ));
+        assert!(!component_matches_filters(
+            &published_table,
+            "snapshot",
+            "Draft",
+            "Published"
+        ));
+        assert!(component_matches_filters(
+            &draft_component,
+            "program",
+            "Draft",
+            "Draft"
+        ));
     }
 
     #[test]
