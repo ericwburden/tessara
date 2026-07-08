@@ -2,6 +2,7 @@
 //!
 //! This module owns footer markup and row-range summaries for paginated feature tables.
 
+use icons::{ChevronLeft, ChevronRight};
 use leptos::prelude::*;
 
 #[component]
@@ -43,14 +44,16 @@ pub fn TablePaginationFooter(
                     </select>
                 </label>
                 <button
-                    class="button button--compact button--secondary"
+                    class="interactive-data-table__page-button"
                     type="button"
+                    aria-label="Previous page"
+                    title="Previous page"
                     disabled=move || pagination_current_page(total_count.get(), page_size.get(), page_index.get()) == 0
                     on:click=move |_| {
                         page_index.update(|page| *page = page.saturating_sub(1));
                     }
                 >
-                    "Previous"
+                    <ChevronLeft/>
                 </button>
                 <span>{move || {
                     format!(
@@ -60,8 +63,10 @@ pub fn TablePaginationFooter(
                     )
                 }}</span>
                 <button
-                    class="button button--compact button--secondary"
+                    class="interactive-data-table__page-button"
                     type="button"
+                    aria-label="Next page"
+                    title="Next page"
                     disabled=move || {
                         pagination_current_page(total_count.get(), page_size.get(), page_index.get()) + 1
                             >= pagination_page_count(total_count.get(), page_size.get())
@@ -71,7 +76,7 @@ pub fn TablePaginationFooter(
                         page_index.update(|page| *page = (*page + 1).min(last_page));
                     }
                 >
-                    "Next"
+                    <ChevronRight/>
                 </button>
             </div>
         </div>

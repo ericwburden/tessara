@@ -15,6 +15,11 @@ pub(crate) async fn fetch_components() -> Result<Option<Vec<ComponentSummary>>, 
 }
 
 #[cfg(feature = "hydrate")]
+pub(crate) async fn fetch_admin_components() -> Result<Option<Vec<ComponentSummary>>, String> {
+    fetch_json_request("/api/admin/components", "Component list").await
+}
+
+#[cfg(feature = "hydrate")]
 pub(crate) async fn fetch_component(
     component_ref: &str,
 ) -> Result<Option<ComponentDefinition>, String> {
@@ -111,6 +116,38 @@ pub(crate) async fn update_component_version(
         serde_json::to_string(&payload)
             .map_err(|_| "Component version payload is invalid.".to_string())?,
         "Update component draft",
+    )
+    .await
+}
+
+#[cfg(feature = "hydrate")]
+pub(crate) async fn update_published_component_version(
+    component_id: &str,
+    version_id: &str,
+    payload: CreateComponentVersionRequest,
+) -> Result<IdResponse, String> {
+    send_json_request(
+        gloo_net::http::Request::patch(&format!(
+            "/api/admin/components/{component_id}/versions/{version_id}/published"
+        )),
+        serde_json::to_string(&payload)
+            .map_err(|_| "Component version payload is invalid.".to_string())?,
+        "Update published component version",
+    )
+    .await
+}
+
+#[cfg(feature = "hydrate")]
+pub(crate) async fn delete_component_version(
+    component_id: &str,
+    version_id: &str,
+) -> Result<IdResponse, String> {
+    send_json_request(
+        gloo_net::http::Request::delete(&format!(
+            "/api/admin/components/{component_id}/versions/{version_id}"
+        )),
+        "{}".into(),
+        "Delete component draft",
     )
     .await
 }

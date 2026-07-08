@@ -19,5 +19,6 @@ icons = { workspace = true }
 leptos = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+tessara-web-data-ops = { path = "../tessara-web-data-ops" }
 tessara-web-ui = { path = "../tessara-web-ui" }
 web-sys = { workspace = true }

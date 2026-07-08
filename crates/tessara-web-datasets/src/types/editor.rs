@@ -13,18 +13,8 @@ pub(crate) struct DatasetSourceDraft {
 
 pub use tessara_web_data_ops::{
     DatasetAggregationDraft, DatasetAggregationMetricDraft, DatasetFieldDraft,
-    DatasetRowPickerDraft, DatasetRowPickerSortDraft,
+    DatasetRowFilterDraft, DatasetRowPickerDraft, DatasetRowPickerSortDraft,
 };
-
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct DatasetRowFilterDraft {
-    pub(crate) id: u64,
-    pub(crate) field_key: String,
-    pub(crate) operator: String,
-    pub(crate) value: String,
-    pub(crate) value_mode: String,
-    pub(crate) value_field_key: String,
-}
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct DatasetCalculatedFieldDraft {

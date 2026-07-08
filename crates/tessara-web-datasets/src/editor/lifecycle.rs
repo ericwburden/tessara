@@ -24,6 +24,7 @@ pub(crate) fn install_dataset_editor_loaders(
                 DatasetEditLoadTargets {
                     name: state.name,
                     slug: state.slug,
+                    tags: state.tags,
                     visibility_node_ids: state.visibility_node_ids,
                     initial_source: state.initial_source,
                     operation_order: state.operation_order,
@@ -43,6 +44,7 @@ pub(crate) fn install_dataset_editor_loaders(
                 DatasetEditLoadTargets {
                     name: state.name,
                     slug: state.slug,
+                    tags: state.tags,
                     visibility_node_ids: state.visibility_node_ids,
                     initial_source: state.initial_source,
                     operation_order: state.operation_order,

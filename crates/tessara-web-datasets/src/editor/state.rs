@@ -11,6 +11,9 @@ use std::collections::{BTreeMap, BTreeSet};
 pub(crate) struct DatasetEditorState {
     pub(crate) name: RwSignal<String>,
     pub(crate) slug: RwSignal<String>,
+    pub(crate) tags: RwSignal<Vec<String>>,
+    pub(crate) known_tags: RwSignal<Vec<String>>,
+    pub(crate) tag_input: RwSignal<String>,
     pub(crate) force_new_major_version: RwSignal<bool>,
     pub(crate) visibility_node_ids: RwSignal<BTreeSet<String>>,
     pub(crate) initial_source: RwSignal<DatasetSourceDraft>,
@@ -39,6 +42,9 @@ impl DatasetEditorState {
         Self {
             name: RwSignal::new(String::new()),
             slug: RwSignal::new(String::new()),
+            tags: RwSignal::new(Vec::<String>::new()),
+            known_tags: RwSignal::new(Vec::<String>::new()),
+            tag_input: RwSignal::new(String::new()),
             force_new_major_version: RwSignal::new(false),
             visibility_node_ids: RwSignal::new(BTreeSet::<String>::new()),
             initial_source: RwSignal::new(DatasetSourceDraft::default()),

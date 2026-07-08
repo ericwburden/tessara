@@ -11,18 +11,64 @@ pub(super) fn DatasetSourcesTable(sources: Vec<DatasetSourceDefinition>) -> impl
         <section class="route-panel__section">
             <h3>"Sources"</h3>
             <DataTable>
-                <thead><tr><th>"Alias"</th><th>"Form"</th><th>"Version"</th></tr></thead>
+                <thead><tr><th>"Alias"</th><th>"Source"</th><th>"Source Type"</th><th>"Version"</th></tr></thead>
                 <tbody>
-                    {sources.into_iter().map(|source| view! {
-                        <tr>
-                            <th scope="row">{source.source_alias}</th>
-                            <td>{source.form_name.unwrap_or_else(|| "Unavailable form".into())}</td>
-                            <td>{source.form_version_id.unwrap_or_else(|| "Dataset revision".into())}</td>
-                        </tr>
-                    }).collect_view()}
+                    {sources.into_iter().map(source_row).collect_view()}
                 </tbody>
             </DataTable>
         </section>
+    }
+}
+
+fn source_row(source: DatasetSourceDefinition) -> impl IntoView {
+    let source_type = if source.form_id.is_some() {
+        "Form"
+    } else if source.source_dataset_id.is_some() {
+        "Dataset"
+    } else {
+        "Unavailable"
+    };
+    let source_label = source
+        .form_name
+        .clone()
+        .or_else(|| source.source_dataset_name.clone())
+        .unwrap_or_else(|| "Unavailable source".into());
+    let source_href = source
+        .form_id
+        .as_ref()
+        .map(|id| format!("/forms/{id}"))
+        .or_else(|| {
+            source
+                .source_dataset_id
+                .as_ref()
+                .map(|id| format!("/datasets/{id}"))
+        });
+    let version_label = source_version_label(&source);
+    view! {
+        <tr>
+            <th scope="row">{source.source_alias}</th>
+            <td>
+                {if let Some(href) = source_href {
+                    view! { <a class="data-table__primary-link" href=href>{source_label}</a> }.into_any()
+                } else {
+                    view! { <span>{source_label}</span> }.into_any()
+                }}
+            </td>
+            <td>{source_type}</td>
+            <td>{version_label}</td>
+        </tr>
+    }
+}
+
+fn source_version_label(source: &DatasetSourceDefinition) -> String {
+    if let Some(label) = source.form_version_label.as_deref() {
+        label.to_string()
+    } else if let Some(label) = source.dataset_revision_label.as_deref() {
+        label.to_string()
+    } else if let Some(major) = source.dataset_version_major {
+        format!("v{major}")
+    } else {
+        "Unknown version".into()
     }
 }
 

@@ -25,6 +25,7 @@ use std::collections::BTreeSet;
 pub(crate) struct DatasetEditLoadTargets {
     pub(crate) name: RwSignal<String>,
     pub(crate) slug: RwSignal<String>,
+    pub(crate) tags: RwSignal<Vec<String>>,
     pub(crate) visibility_node_ids: RwSignal<BTreeSet<String>>,
     pub(crate) initial_source: RwSignal<DatasetSourceDraft>,
     pub(crate) operation_order: RwSignal<Vec<DatasetOperationDraft>>,
@@ -44,6 +45,7 @@ pub(crate) fn load_dataset_for_edit(dataset_id: String, targets: DatasetEditLoad
         let DatasetEditLoadTargets {
             name,
             slug,
+            tags,
             visibility_node_ids,
             initial_source,
             operation_order,
@@ -62,6 +64,7 @@ pub(crate) fn load_dataset_for_edit(dataset_id: String, targets: DatasetEditLoad
             Ok(Some(payload)) => {
                 name.set(payload.name);
                 slug.set(payload.slug);
+                tags.set(payload.tags);
                 force_new_major_version.set(false);
                 sql_preview.set(None);
                 visibility_node_ids.set(
@@ -196,6 +199,7 @@ pub(crate) fn load_dataset_revision_for_edit(
         let DatasetEditLoadTargets {
             name,
             slug,
+            tags,
             visibility_node_ids,
             initial_source,
             operation_order,
@@ -210,6 +214,9 @@ pub(crate) fn load_dataset_revision_for_edit(
         } = targets;
 
         editor_ready.set(false);
+        if let Ok(Some(dataset)) = api::fetch_dataset_detail(&dataset_id).await {
+            tags.set(dataset.tags);
+        }
         match api::fetch_dataset_revision(&dataset_id, &revision_id).await {
             Ok(Some(payload)) => {
                 name.set(payload.metadata.name);

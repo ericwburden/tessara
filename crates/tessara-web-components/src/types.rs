@@ -13,7 +13,10 @@ pub(crate) struct ComponentSummary {
     pub(crate) slug: String,
     pub(crate) description: Option<String>,
     pub(crate) current_version_id: Option<String>,
+    pub(crate) current_version_label: Option<String>,
     pub(crate) current_component_type: Option<String>,
+    pub(crate) draft_version_id: Option<String>,
+    pub(crate) draft_version_label: Option<String>,
 }
 
 #[derive(Clone, Deserialize, PartialEq)]
@@ -35,6 +38,8 @@ pub(crate) struct ComponentVersionSummary {
     pub(crate) component_type: String,
     pub(crate) status: String,
     pub(crate) version_label: String,
+    #[serde(default)]
+    pub(crate) version_note: String,
     pub(crate) config: Value,
 }
 
@@ -106,6 +111,8 @@ pub(crate) struct CreateComponentVersionRequest {
     pub(crate) dataset_version_major: Option<i32>,
     pub(crate) component_type: String,
     pub(crate) config: Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) version_note: Option<String>,
 }
 
 #[derive(Clone, Deserialize, PartialEq, Eq)]

@@ -1,7 +1,7 @@
 //! Dataset detail surface and preview table.
 
-#[cfg(feature = "hydrate")]
-use super::super::super::api;
+use std::collections::BTreeMap;
+
 use super::super::super::display::visibility_label;
 use super::super::super::loaders::{load_account, load_dataset_detail, load_dataset_table};
 use super::super::super::permissions::can_manage_datasets;
@@ -9,12 +9,12 @@ use super::super::super::types::*;
 use super::summary::{MetricCard, tab_class};
 use super::tables::{DatasetFieldsTable, DatasetSourcesTable, DatasetSqlPanel};
 use crate::text::sentence_label;
-use icons::X;
+use icons::{ChevronDown, ChevronRight, Database, FileText, X};
 use leptos::portal::Portal;
 use leptos::prelude::*;
 use tessara_web_ui::{
-    Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator, DataTable,
-    EmptyState, PageHeader,
+    Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator, EmptyState,
+    InteractiveDataTable, InteractiveTableColumn, InteractiveTableRow, PageHeader,
 };
 
 #[component]
@@ -27,10 +27,6 @@ pub(crate) fn DatasetDetailSurface(dataset_id: String, edit: bool) -> impl IntoV
     let table_error = RwSignal::new(None::<String>);
     let active_tab = RwSignal::new("preview".to_string());
     let visibility_sheet_open = RwSignal::new(false);
-    let tag_draft = RwSignal::new(String::new());
-    let tag_loaded_dataset_id = RwSignal::new(None::<String>);
-    let tag_message = RwSignal::new(None::<String>);
-    let tag_error = RwSignal::new(None::<String>);
 
     Effect::new({
         let dataset_id = dataset_id.clone();
@@ -46,19 +42,6 @@ pub(crate) fn DatasetDetailSurface(dataset_id: String, edit: bool) -> impl IntoV
             .get()
             .is_some_and(|account| can_manage_datasets(&account))
     };
-
-    Effect::new(move |_| {
-        if let Some(loaded) = dataset.get() {
-            let should_refresh = tag_loaded_dataset_id
-                .get()
-                .as_ref()
-                .is_none_or(|loaded_id| loaded_id != &loaded.id);
-            if should_refresh {
-                tag_draft.set(loaded.tags.join(", "));
-                tag_loaded_dataset_id.set(Some(loaded.id));
-            }
-        }
-    });
 
     view! {
         <section class="route-panel datasets-page">
@@ -107,56 +90,23 @@ pub(crate) fn DatasetDetailSurface(dataset_id: String, edit: bool) -> impl IntoV
                                 <strong>{visibility_label(&loaded.visibility_nodes)}</strong>
                             </button>
                         </section>
-                        {move || if can_manage() {
-                            let dataset_id = loaded.id.clone();
-                            view! {
-                                <section class="route-panel__section">
-                                    <h3>"Catalog Tags"</h3>
-                                    <div class="form-grid">
-                                        <label>
-                                            <span>"Tags"</span>
-                                            <input
-                                                type="text"
-                                                aria-label="Dataset tags"
-                                                prop:value=move || tag_draft.get()
-                                                on:input=move |event| tag_draft.set(event_target_value(&event))
-                                            />
-                                        </label>
-                                    </div>
-                                    <div class="button-row">
-                                        <button
-                                            class="button button--secondary"
-                                            type="button"
-                                            on:click=move |_| save_dataset_tags(
-                                                dataset_id.clone(),
-                                                tag_draft,
-                                                dataset,
-                                                tag_message,
-                                                tag_error,
-                                            )
-                                        >
-                                            "Save Tags"
-                                        </button>
-                                    </div>
-                                    {move || tag_message.get().map(|message| view! { <p class="form-message">{message}</p> })}
-                                    {move || tag_error.get().map(|message| view! { <p class="form-error">{message}</p> })}
-                                </section>
-                            }.into_any()
-                        } else {
-                            view! { <span></span> }.into_any()
-                        }}
-                        <DatasetProvenancePanel provenance=loaded.provenance.clone()/>
                         <div class="tabs" data-active=move || active_tab.get()>
                             <div class="tabs-list" role="tablist">
                                 <button class=tab_class(active_tab, "preview") type="button" on:click=move |_| active_tab.set("preview".into())>"Preview"</button>
                                 <button class=tab_class(active_tab, "sources") type="button" on:click=move |_| active_tab.set("sources".into())>"Sources"</button>
                                 <button class=tab_class(active_tab, "fields") type="button" on:click=move |_| active_tab.set("fields".into())>"Fields"</button>
+                                <button class=tab_class(active_tab, "tags") type="button" on:click=move |_| active_tab.set("tags".into())>"Tags"</button>
+                                <button class=tab_class(active_tab, "provenance") type="button" on:click=move |_| active_tab.set("provenance".into())>"Provenance"</button>
                                 <button class=tab_class(active_tab, "sql") type="button" on:click=move |_| active_tab.set("sql".into())>"SQL"</button>
                             </div>
                             {move || if active_tab.get() == "preview" {
                                 view! { <DatasetPreviewTable dataset=tab_dataset.clone() table=table.get() error=table_error.get()/> }.into_any()
                             } else if active_tab.get() == "sources" {
                                 view! { <DatasetSourcesTable sources=tab_dataset.sources.clone()/> }.into_any()
+                            } else if active_tab.get() == "tags" {
+                                view! { <DatasetTagsPanel tags=tab_dataset.tags.clone()/> }.into_any()
+                            } else if active_tab.get() == "provenance" {
+                                view! { <DatasetProvenancePanel lineage=tab_dataset.lineage.clone()/> }.into_any()
                             } else if active_tab.get() == "sql" {
                                 view! { <DatasetSqlPanel sql=tab_dataset.generated_sql.clone()/> }.into_any()
                             } else {
@@ -174,36 +124,99 @@ pub(crate) fn DatasetDetailSurface(dataset_id: String, edit: bool) -> impl IntoV
 }
 
 #[component]
-fn DatasetProvenancePanel(provenance: DatasetProvenanceSummary) -> impl IntoView {
+fn DatasetTagsPanel(tags: Vec<String>) -> impl IntoView {
     view! {
         <section class="route-panel__section">
-            <h3>"Provenance"</h3>
-            {if provenance.forms.is_empty() && provenance.datasets.is_empty() {
-                view! { <p class="muted">"No direct source provenance is available."</p> }.into_any()
+            {if tags.is_empty() {
+                view! { <p class="muted">"No catalog tags are assigned."</p> }.into_any()
             } else {
                 view! {
-                    <div class="dataset-provenance-list">
-                        {(!provenance.forms.is_empty()).then(|| view! {
-                            <div class="data-table__stacked-label">
-                                <strong>"Forms"</strong>
-                                <span class="data-table__secondary-text">
-                                    {provenance.forms.iter().map(|source| source.name.clone()).collect::<Vec<_>>().join(", ")}
-                                </span>
-                            </div>
-                        })}
-                        {(!provenance.datasets.is_empty()).then(|| view! {
-                            <div class="data-table__stacked-label">
-                                <strong>"Datasets"</strong>
-                                <span class="data-table__secondary-text">
-                                    {provenance.datasets.iter().map(|source| source.name.clone()).collect::<Vec<_>>().join(", ")}
-                                </span>
-                            </div>
-                        })}
+                    <div class="dataset-tag-list">
+                        {tags.into_iter().map(|tag| view! {
+                            <span class="dataset-tag-chip">{tag}</span>
+                        }).collect_view()}
                     </div>
                 }.into_any()
             }}
         </section>
     }
+}
+
+#[component]
+fn DatasetProvenancePanel(lineage: DatasetLineageNode) -> impl IntoView {
+    view! {
+        <section class="route-panel__section">
+            <div class="dataset-lineage-tree" role="tree">
+                <LineageTreeNode node=lineage is_root=true/>
+            </div>
+        </section>
+    }
+}
+
+#[component]
+fn LineageTreeNode(node: DatasetLineageNode, is_root: bool) -> impl IntoView {
+    let children = node.children;
+    let has_children = !children.is_empty();
+    let expanded = RwSignal::new(true);
+    let source_type = node.source_type;
+    let version_label = node.version_label;
+    let id = node.id;
+    let name = node.name;
+    let href = match source_type.as_str() {
+        "dataset" if !is_root => Some(format!("/datasets/{id}")),
+        "form" => Some(format!("/forms/{id}")),
+        _ => None,
+    };
+    let icon = if source_type == "dataset" {
+        view! { <Database class="dataset-lineage-node__type-icon"/> }.into_any()
+    } else {
+        view! { <FileText class="dataset-lineage-node__type-icon"/> }.into_any()
+    };
+
+    view! {
+        <div class=if is_root { "dataset-lineage-node dataset-lineage-node--root" } else { "dataset-lineage-node" } role="treeitem" aria-expanded=move || if has_children { Some(expanded.get().to_string()) } else { None }>
+            <div class="dataset-lineage-node__row">
+                {if has_children {
+                    view! {
+                        <button
+                            class="dataset-lineage-node__toggle"
+                            type="button"
+                            aria-label=move || if expanded.get() { "Collapse lineage branch" } else { "Expand lineage branch" }
+                            on:click=move |_| expanded.update(|value| *value = !*value)
+                        >
+                            {move || if expanded.get() {
+                                view! { <ChevronDown class="dataset-lineage-node__toggle-icon"/> }.into_any()
+                            } else {
+                                view! { <ChevronRight class="dataset-lineage-node__toggle-icon"/> }.into_any()
+                            }}
+                        </button>
+                    }.into_any()
+                } else {
+                    view! { <span class="dataset-lineage-node__toggle-spacer" aria-hidden="true"></span> }.into_any()
+                }}
+                <span class="dataset-lineage-node__icon" aria-hidden="true">{icon}</span>
+                <span class="dataset-lineage-node__label">
+                    {if let Some(href) = href {
+                        view! { <a class="data-table__primary-link" href=href>{name.clone()}</a> }.into_any()
+                    } else {
+                        view! { <span>{name.clone()}</span> }.into_any()
+                    }}
+                </span>
+                {version_label.map(|label| view! { <span class="dataset-lineage-node__version">{label}</span> })}
+            </div>
+            {move || if has_children && expanded.get() {
+                view! {
+                    <div class="dataset-lineage-node__children" role="group">
+                        {children.clone().into_iter().map(|child| view! {
+                            <LineageTreeNode node=child is_root=false/>
+                        }).collect_view()}
+                    </div>
+                }.into_any()
+            } else {
+                view! { <span></span> }.into_any()
+            }}
+        </div>
+    }.into_any()
 }
 
 fn tag_summary(tags: &[String]) -> String {
@@ -231,53 +244,6 @@ fn provenance_summary(provenance: &DatasetProvenanceSummary) -> String {
 
 fn plural_suffix(count: usize) -> &'static str {
     if count == 1 { "" } else { "s" }
-}
-
-#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
-fn parse_tag_draft(value: &str) -> Vec<String> {
-    value
-        .split(',')
-        .map(str::trim)
-        .filter(|tag| !tag.is_empty())
-        .map(ToOwned::to_owned)
-        .collect()
-}
-
-#[cfg(feature = "hydrate")]
-fn save_dataset_tags(
-    dataset_id: String,
-    tag_draft: RwSignal<String>,
-    dataset: RwSignal<Option<DatasetDefinition>>,
-    tag_message: RwSignal<Option<String>>,
-    tag_error: RwSignal<Option<String>>,
-) {
-    leptos::task::spawn_local(async move {
-        tag_message.set(None);
-        tag_error.set(None);
-        let tags = parse_tag_draft(&tag_draft.get_untracked());
-        match api::update_dataset_tags(&dataset_id, tags.clone()).await {
-            Ok(_) => {
-                dataset.update(|dataset| {
-                    if let Some(dataset) = dataset {
-                        dataset.tags = tags.clone();
-                    }
-                });
-                tag_draft.set(tags.join(", "));
-                tag_message.set(Some("Dataset tags saved.".into()));
-            }
-            Err(message) => tag_error.set(Some(message)),
-        }
-    });
-}
-
-#[cfg(not(feature = "hydrate"))]
-fn save_dataset_tags(
-    _: String,
-    _: RwSignal<String>,
-    _: RwSignal<Option<DatasetDefinition>>,
-    _: RwSignal<Option<String>>,
-    _: RwSignal<Option<String>>,
-) {
 }
 
 #[component]
@@ -345,31 +311,51 @@ pub(crate) fn DatasetPreviewTable(
         return view! { <EmptyState title="No preview rows" message="This dataset has no submitted response rows available for preview."/> }.into_any();
     }
     let fields = detail_output_fields(&dataset);
+    let columns = fields
+        .iter()
+        .map(|field| {
+            InteractiveTableColumn::new(
+                field.key.clone(),
+                field.label.clone(),
+                sentence_label(&field.field_type),
+            )
+        })
+        .collect::<Vec<_>>();
+    let rows = table
+        .rows
+        .into_iter()
+        .map(|row| {
+            let values = fields
+                .iter()
+                .map(|field| {
+                    let value = row
+                        .values
+                        .get(&field.key)
+                        .and_then(|value| value.clone())
+                        .unwrap_or_default();
+                    (
+                        field.key.clone(),
+                        display_preview_value(&field.field_type, &value),
+                    )
+                })
+                .collect::<BTreeMap<_, _>>();
+            InteractiveTableRow::new(row.submission_id, values)
+        })
+        .collect::<Vec<_>>();
+
     view! {
         <section class="route-panel__section">
-            <h3>"Preview"</h3>
-            <DataTable>
-                <thead>
-                    <tr>
-                        {fields.iter().map(|field| view! { <th>{field.label.clone()}</th> }).collect_view()}
-                    </tr>
-                </thead>
-                <tbody>
-                    {table.rows.into_iter().map(|row| {
-                        let values = row.values.clone();
-                        view! {
-                            <tr>
-                                {fields.iter().map(|field| {
-                                    let value = values.get(&field.key).and_then(|value| value.clone()).unwrap_or_default();
-                                    view! { <td>{display_preview_value(&field.field_type, &value)}</td> }
-                                }).collect_view()}
-                            </tr>
-                        }
-                    }).collect_view()}
-                </tbody>
-            </DataTable>
+            <InteractiveDataTable
+                columns
+                rows
+                search_label="Search preview rows"
+                search_placeholder="Search preview"
+                item_label="preview rows"
+                empty_message="No preview rows match the current table controls."
+            />
         </section>
-    }.into_any()
+    }
+    .into_any()
 }
 
 fn detail_output_fields(dataset: &DatasetDefinition) -> Vec<DatasetFieldDefinition> {

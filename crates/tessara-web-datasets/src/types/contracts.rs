@@ -52,6 +52,7 @@ pub(crate) struct DatasetDefinition {
     pub(crate) tags: Vec<String>,
     #[serde(default)]
     pub(crate) provenance: DatasetProvenanceSummary,
+    pub(crate) lineage: DatasetLineageNode,
     pub(crate) initial_source: Option<DatasetSourcePayload>,
     pub(crate) operations: Vec<DatasetOperationPayload>,
     pub(crate) restriction_policy: Option<DatasetRestrictionPolicyPayload>,
@@ -79,6 +80,16 @@ pub(crate) struct DatasetProvenanceItem {
     pub(crate) id: String,
     pub(crate) name: String,
     pub(crate) slug: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub(crate) struct DatasetLineageNode {
+    pub(crate) id: String,
+    pub(crate) name: String,
+    pub(crate) slug: Option<String>,
+    pub(crate) source_type: String,
+    pub(crate) version_label: Option<String>,
+    pub(crate) children: Vec<DatasetLineageNode>,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq)]
@@ -321,8 +332,12 @@ pub(crate) struct DatasetSourceDefinition {
     pub(crate) form_id: Option<String>,
     pub(crate) form_name: Option<String>,
     pub(crate) form_version_id: Option<String>,
+    pub(crate) form_version_label: Option<String>,
     pub(crate) source_dataset_id: Option<String>,
+    pub(crate) source_dataset_name: Option<String>,
+    pub(crate) source_dataset_slug: Option<String>,
     pub(crate) dataset_revision_id: Option<String>,
+    pub(crate) dataset_revision_label: Option<String>,
     pub(crate) dataset_version_major: Option<i32>,
     pub(crate) position: i32,
 }

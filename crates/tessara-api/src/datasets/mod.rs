@@ -31,15 +31,15 @@ pub use dto::{
     DatasetCompatibilityState, DatasetCompatibilitySummary, DatasetDefinition,
     DatasetDependencyBindingMode, DatasetDependencyImpact, DatasetDependencyKind,
     DatasetDependencySummary, DatasetDraftRevisionResponse, DatasetFieldDefinition,
-    DatasetJoinKeyRequest, DatasetOperationRequest, DatasetProjectionFieldRequest,
-    DatasetProvenanceItem, DatasetProvenanceSummary, DatasetPublishRevisionResponse,
-    DatasetRestrictionPolicyRequest, DatasetRevisionDetail, DatasetRevisionFieldSummary,
-    DatasetRevisionLabelResponse, DatasetRevisionMetadata, DatasetRevisionStatus,
-    DatasetRevisionSummary, DatasetRowFilterRequest, DatasetRowPickerRequest, DatasetSemanticBump,
-    DatasetSourceDefinition, DatasetSourceRequest, DatasetSqlPreview, DatasetSummary, DatasetTable,
-    DatasetTableRow, DatasetVersionImpact, DatasetVisibilityNodeSummary,
-    UpdateDatasetRevisionLabelRequest, UpdateDatasetRevisionOptionsRequest,
-    UpdateDatasetTagsRequest,
+    DatasetJoinKeyRequest, DatasetLineageNode, DatasetOperationRequest,
+    DatasetProjectionFieldRequest, DatasetProvenanceItem, DatasetProvenanceSummary,
+    DatasetPublishRevisionResponse, DatasetRestrictionPolicyRequest, DatasetRevisionDetail,
+    DatasetRevisionFieldSummary, DatasetRevisionLabelResponse, DatasetRevisionMetadata,
+    DatasetRevisionStatus, DatasetRevisionSummary, DatasetRowFilterRequest,
+    DatasetRowPickerRequest, DatasetSemanticBump, DatasetSourceDefinition, DatasetSourceRequest,
+    DatasetSqlPreview, DatasetSummary, DatasetTable, DatasetTableRow, DatasetVersionImpact,
+    DatasetVisibilityNodeSummary, UpdateDatasetRevisionLabelRequest,
+    UpdateDatasetRevisionOptionsRequest, UpdateDatasetTagsRequest,
 };
 
 use crate::{
@@ -399,6 +399,55 @@ fn coalesced_join_expression(
         (false, true) => format!("r.{quoted} AS {quoted}"),
         (false, false) => format!("NULL::text AS {quoted}"),
     }
+}
+
+async fn materialized_restriction_tier_select(
+    pool: &sqlx::PgPool,
+    schema: &str,
+    table: &str,
+) -> ApiResult<String> {
+    Ok(materialized_restriction_tier_select_for_column(
+        materialized_table_has_column(pool, schema, table, "__restriction_tier").await?,
+    ))
+}
+
+fn materialized_restriction_tier_select_for_column(has_restriction_tier: bool) -> String {
+    if has_restriction_tier {
+        format!(
+            "{} AS {}",
+            quote_identifier("__restriction_tier"),
+            quote_identifier("__restriction_tier")
+        )
+    } else {
+        format!(
+            "'public'::text AS {}",
+            quote_identifier("__restriction_tier")
+        )
+    }
+}
+
+async fn materialized_table_has_column(
+    pool: &sqlx::PgPool,
+    schema: &str,
+    table: &str,
+    column: &str,
+) -> ApiResult<bool> {
+    Ok(sqlx::query_scalar::<_, bool>(
+        r#"
+        SELECT EXISTS (
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_schema = $1
+              AND table_name = $2
+              AND column_name = $3
+        )
+        "#,
+    )
+    .bind(schema)
+    .bind(table)
+    .bind(column)
+    .fetch_one(pool)
+    .await?)
 }
 
 /// Compiles a dataset draft and returns generated SQL without saving it.
@@ -1142,12 +1191,19 @@ pub async fn get_dataset(
             dataset_sources.form_id,
             forms.name AS form_name,
             dataset_sources.form_version_id,
+            form_versions.version_label AS form_version_label,
             dataset_sources.source_dataset_id,
+            source_datasets.name AS source_dataset_name,
+            source_datasets.slug AS source_dataset_slug,
             dataset_sources.dataset_revision_id,
+            dataset_revisions.version_label AS dataset_revision_label,
             dataset_sources.dataset_version_major,
             dataset_sources.position
         FROM dataset_sources
         LEFT JOIN forms ON forms.id = dataset_sources.form_id
+        LEFT JOIN form_versions ON form_versions.id = dataset_sources.form_version_id
+        LEFT JOIN datasets AS source_datasets ON source_datasets.id = dataset_sources.source_dataset_id
+        LEFT JOIN dataset_revisions ON dataset_revisions.id = dataset_sources.dataset_revision_id
         WHERE dataset_sources.dataset_id = $1
         ORDER BY dataset_sources.position, dataset_sources.source_alias
         "#,
@@ -1172,6 +1228,7 @@ pub async fn get_dataset(
         load_dataset_visibility_nodes(&state.pool, &[dataset_id], visible_node_filter).await?;
     let tags_by_dataset = load_dataset_tags(&state.pool, &[dataset_id]).await?;
     let provenance_by_dataset = load_dataset_provenance(&state.pool, &[dataset_id]).await?;
+    let lineage = load_dataset_lineage(&state.pool, dataset_id).await?;
     let operations = dataset
         .try_get::<Option<serde_json::Value>, _>("operations")?
         .map(serde_json::from_value::<Vec<DatasetOperationRequest>>)
@@ -1232,6 +1289,7 @@ pub async fn get_dataset(
             .get(&dataset_id)
             .cloned()
             .unwrap_or_default(),
+        lineage,
         initial_source: dataset
             .try_get::<Option<serde_json::Value>, _>("initial_source")?
             .map(serde_json::from_value)
@@ -1261,8 +1319,12 @@ pub async fn get_dataset(
                     form_id: row.try_get("form_id")?,
                     form_name: row.try_get("form_name")?,
                     form_version_id: row.try_get("form_version_id")?,
+                    form_version_label: row.try_get("form_version_label")?,
                     source_dataset_id: row.try_get("source_dataset_id")?,
+                    source_dataset_name: row.try_get("source_dataset_name")?,
+                    source_dataset_slug: row.try_get("source_dataset_slug")?,
                     dataset_revision_id: row.try_get("dataset_revision_id")?,
+                    dataset_revision_label: row.try_get("dataset_revision_label")?,
                     dataset_version_major: row.try_get("dataset_version_major")?,
                     position: row.try_get("position")?,
                 })
@@ -2903,6 +2965,8 @@ impl<'a> QuerySpecBuilder<'a> {
         })?;
         let schema: String = row.try_get("materialized_schema")?;
         let table: String = row.try_get("materialized_table")?;
+        let restriction_tier_select =
+            materialized_restriction_tier_select(self.pool, &schema, &table).await?;
         let cte_name = self.next_cte_name(alias)?;
         let source = ValidatedDatasetSource {
             source_alias: alias.to_string(),
@@ -2942,7 +3006,7 @@ impl<'a> QuerySpecBuilder<'a> {
             r#"{cte_name} AS (
             SELECT
                 __row_id,
-                __restriction_tier{extra_select_columns}
+                {restriction_tier_select}{extra_select_columns}
             FROM {schema}.{table}
         )"#,
             schema = quote_identifier(&schema),
@@ -2996,6 +3060,8 @@ impl<'a> QuerySpecBuilder<'a> {
         })?;
         let schema: String = row.try_get("materialized_schema")?;
         let table: String = row.try_get("materialized_table")?;
+        let restriction_tier_select =
+            materialized_restriction_tier_select(self.pool, &schema, &table).await?;
         let cte_name = self.next_cte_name(alias)?;
         let source = ValidatedDatasetSource {
             source_alias: alias.to_string(),
@@ -3050,7 +3116,7 @@ impl<'a> QuerySpecBuilder<'a> {
             r#"{cte_name} AS (
             SELECT
                 __row_id,
-                __restriction_tier{extra_select_columns}
+                {restriction_tier_select}{extra_select_columns}
             FROM {schema}.{table}
         )"#,
             schema = quote_identifier(&schema),
@@ -5404,6 +5470,187 @@ async fn load_dataset_provenance(
     Ok(provenance)
 }
 
+async fn load_dataset_lineage(
+    pool: &sqlx::PgPool,
+    dataset_id: Uuid,
+) -> ApiResult<DatasetLineageNode> {
+    let dataset_rows = sqlx::query(
+        r#"
+        WITH RECURSIVE dataset_tree AS (
+            SELECT
+                datasets.id,
+                datasets.name,
+                datasets.slug,
+                current_revisions.version_label,
+                NULL::uuid AS parent_dataset_id,
+                0::integer AS source_position,
+                ARRAY[datasets.id] AS path,
+                0::integer AS depth
+            FROM datasets
+            LEFT JOIN dataset_revisions AS current_revisions
+                ON current_revisions.dataset_id = datasets.id
+               AND current_revisions.status = 'published'::dataset_revision_status
+            WHERE datasets.id = $1
+
+            UNION ALL
+
+            SELECT
+                source_datasets.id,
+                source_datasets.name,
+                source_datasets.slug,
+                COALESCE(
+                    source_revisions.version_label,
+                    'v' || dataset_sources.dataset_version_major::text
+                ) AS version_label,
+                dataset_tree.id AS parent_dataset_id,
+                dataset_sources.position AS source_position,
+                dataset_tree.path || source_datasets.id,
+                dataset_tree.depth + 1
+            FROM dataset_tree
+            JOIN dataset_sources
+                ON dataset_sources.dataset_id = dataset_tree.id
+               AND dataset_sources.source_dataset_id IS NOT NULL
+            JOIN datasets AS source_datasets
+                ON source_datasets.id = dataset_sources.source_dataset_id
+            LEFT JOIN dataset_revisions AS source_revisions
+                ON source_revisions.id = dataset_sources.dataset_revision_id
+            WHERE NOT source_datasets.id = ANY(dataset_tree.path)
+              AND dataset_tree.depth < 12
+        )
+        SELECT id, name, slug, version_label, parent_dataset_id, source_position, depth
+        FROM dataset_tree
+        ORDER BY depth, source_position, name, id
+        "#,
+    )
+    .bind(dataset_id)
+    .fetch_all(pool)
+    .await?;
+
+    let form_rows = sqlx::query(
+        r#"
+        WITH RECURSIVE dataset_tree AS (
+            SELECT
+                datasets.id,
+                ARRAY[datasets.id] AS path,
+                0::integer AS depth
+            FROM datasets
+            WHERE datasets.id = $1
+
+            UNION ALL
+
+            SELECT
+                source_datasets.id,
+                dataset_tree.path || source_datasets.id,
+                dataset_tree.depth + 1
+            FROM dataset_tree
+            JOIN dataset_sources
+                ON dataset_sources.dataset_id = dataset_tree.id
+               AND dataset_sources.source_dataset_id IS NOT NULL
+            JOIN datasets AS source_datasets
+                ON source_datasets.id = dataset_sources.source_dataset_id
+            WHERE NOT source_datasets.id = ANY(dataset_tree.path)
+              AND dataset_tree.depth < 12
+        )
+        SELECT
+            dataset_tree.id AS parent_dataset_id,
+            forms.id,
+            forms.name,
+            form_versions.version_label,
+            dataset_sources.position AS source_position
+        FROM dataset_tree
+        JOIN dataset_sources
+            ON dataset_sources.dataset_id = dataset_tree.id
+           AND dataset_sources.form_id IS NOT NULL
+        JOIN forms ON forms.id = dataset_sources.form_id
+        LEFT JOIN form_versions ON form_versions.id = dataset_sources.form_version_id
+        ORDER BY dataset_tree.depth, dataset_sources.position, forms.name, forms.id
+        "#,
+    )
+    .bind(dataset_id)
+    .fetch_all(pool)
+    .await?;
+
+    let mut dataset_nodes = BTreeMap::<Uuid, DatasetLineageNode>::new();
+    let mut dataset_children = BTreeMap::<Uuid, Vec<(i32, Uuid)>>::new();
+    for row in dataset_rows {
+        let id: Uuid = row.try_get("id")?;
+        let parent_dataset_id: Option<Uuid> = row.try_get("parent_dataset_id")?;
+        let source_position: i32 = row.try_get("source_position")?;
+        dataset_nodes.insert(
+            id,
+            DatasetLineageNode {
+                id,
+                name: row.try_get("name")?,
+                slug: row.try_get("slug")?,
+                source_type: "dataset".into(),
+                version_label: row.try_get("version_label")?,
+                children: Vec::new(),
+            },
+        );
+        if let Some(parent_dataset_id) = parent_dataset_id {
+            dataset_children
+                .entry(parent_dataset_id)
+                .or_default()
+                .push((source_position, id));
+        }
+    }
+
+    let mut form_children = BTreeMap::<Uuid, Vec<(i32, DatasetLineageNode)>>::new();
+    for row in form_rows {
+        let parent_dataset_id: Uuid = row.try_get("parent_dataset_id")?;
+        let id: Uuid = row.try_get("id")?;
+        form_children.entry(parent_dataset_id).or_default().push((
+            row.try_get("source_position")?,
+            DatasetLineageNode {
+                id,
+                name: row.try_get("name")?,
+                slug: None,
+                source_type: "form".into(),
+                version_label: row.try_get("version_label")?,
+                children: Vec::new(),
+            },
+        ));
+    }
+
+    assemble_dataset_lineage(
+        dataset_id,
+        &dataset_nodes,
+        &mut dataset_children,
+        &mut form_children,
+    )
+    .ok_or_else(|| ApiError::NotFound(format!("dataset {dataset_id}")))
+}
+
+fn assemble_dataset_lineage(
+    dataset_id: Uuid,
+    dataset_nodes: &BTreeMap<Uuid, DatasetLineageNode>,
+    dataset_children: &mut BTreeMap<Uuid, Vec<(i32, Uuid)>>,
+    form_children: &mut BTreeMap<Uuid, Vec<(i32, DatasetLineageNode)>>,
+) -> Option<DatasetLineageNode> {
+    let mut node = dataset_nodes.get(&dataset_id)?.clone();
+    let mut children = Vec::new();
+    if let Some(mut forms) = form_children.remove(&dataset_id) {
+        forms.sort_by(|left, right| {
+            left.0
+                .cmp(&right.0)
+                .then_with(|| left.1.name.cmp(&right.1.name))
+        });
+        children.extend(forms.into_iter().map(|(_, child)| child));
+    }
+    if let Some(mut datasets) = dataset_children.remove(&dataset_id) {
+        datasets.sort_by_key(|(position, _)| *position);
+        for (_, child_id) in datasets {
+            if let Some(child) =
+                assemble_dataset_lineage(child_id, dataset_nodes, dataset_children, form_children)
+            {
+                children.push(child);
+            }
+        }
+    }
+    node.children = children;
+    Some(node)
+}
+
 async fn load_dataset_visibility_nodes(
     pool: &sqlx::PgPool,
     dataset_ids: &[Uuid],
@@ -5854,6 +6101,18 @@ mod tests {
         assert!(sql.contains("GREATEST"));
         assert!(sql.contains("\"__restriction_tier\""));
         assert!(sql.contains("WHEN 'confidential' THEN 3"));
+    }
+
+    #[test]
+    fn materialized_dataset_source_defaults_missing_restriction_tier_to_public() {
+        assert_eq!(
+            materialized_restriction_tier_select_for_column(false),
+            r#"'public'::text AS "__restriction_tier""#
+        );
+        assert_eq!(
+            materialized_restriction_tier_select_for_column(true),
+            r#""__restriction_tier" AS "__restriction_tier""#
+        );
     }
 
     #[test]

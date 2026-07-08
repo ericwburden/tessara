@@ -13,6 +13,7 @@ pub(super) fn save_dataset(
     dataset_id: Option<String>,
     name: String,
     slug: String,
+    tags: Vec<String>,
     force_new_major_version: bool,
     visibility_node_ids: Vec<String>,
     initial_source: DatasetSourceDraft,
@@ -26,6 +27,7 @@ pub(super) fn save_dataset(
     leptos::task::spawn_local(async move {
         save_error.set(None);
         save_message.set(None);
+        let should_update_tags_after_save = dataset_id.is_none();
         let payload = match dataset_payload_from_drafts(DatasetPayloadDrafts {
             name,
             slug,
@@ -51,6 +53,13 @@ pub(super) fn save_dataset(
                     .and_then(|value| value.as_str())
                     .unwrap_or_default()
                     .to_string();
+                if should_update_tags_after_save
+                    && !id.is_empty()
+                    && let Err(message) = api::update_dataset_tags(&id, tags).await
+                {
+                    save_error.set(Some(message));
+                    return;
+                }
                 let revision_id = value
                     .get("revision_id")
                     .and_then(|value| value.as_str())
@@ -83,6 +92,7 @@ pub(super) fn save_dataset(
     _: Option<String>,
     _: String,
     _: String,
+    _: Vec<String>,
     _: bool,
     _: Vec<String>,
     _: DatasetSourceDraft,

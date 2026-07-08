@@ -1,20 +1,27 @@
 //! Route-level page composition for the Components feature.
 
+use std::collections::BTreeMap;
+
 #[cfg(feature = "hydrate")]
 use super::types::{CreateComponentRequest, CreateComponentVersionRequest, UpdateComponentRequest};
-use icons::{ListFilter, Search, X};
+use icons::{ChevronDown, History, ListFilter, Pencil, Search, X};
 use leptos::prelude::*;
 use serde_json::{Value, json};
+use tessara_web_data_ops::{
+    DataOpsFiltersEditor, DataOpsProjectionEditor, DatasetFieldDraft as DataOpsDatasetFieldDraft,
+    DatasetRowFilterDraft as DataOpsRowFilterDraft,
+};
 use tessara_web_ui::{
     Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator, DataTable,
-    EmptyState, PageHeader, TableFilterHeader, TablePaginationFooter,
+    EmptyState, InteractiveDataTable, InteractiveTableColumn, InteractiveTableRow, PageHeader,
+    TableFilterHeader, TablePaginationFooter,
 };
 
 #[cfg(feature = "hydrate")]
 use super::api;
 use super::types::{
-    ComponentDefinition, ComponentSummary, ComponentTable, ComponentTableColumn,
-    ComponentValidationFinding, ComponentVersionSummary, DatasetFieldDefinition, DatasetSummary,
+    ComponentDefinition, ComponentSummary, ComponentTable, ComponentValidationFinding,
+    ComponentVersionSummary, DatasetFieldDefinition, DatasetSummary,
 };
 
 #[component]
@@ -109,12 +116,19 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
     let dataset_id = RwSignal::new(String::new());
     let dataset_major = RwSignal::new(String::from("1"));
     let component_type = RwSignal::new(String::from("table"));
-    let columns = RwSignal::new(String::new());
+    let columns = RwSignal::new(Vec::<DataOpsDatasetFieldDraft>::new());
+    let filters = RwSignal::new(Vec::<DataOpsRowFilterDraft>::new());
+    let projection_active_source_tab = RwSignal::new(None::<String>);
     let sort_field = RwSignal::new(String::new());
     let sort_direction = RwSignal::new(String::from("asc"));
     let page_size = RwSignal::new(String::from("50"));
     let editing_component_id = RwSignal::new(None::<String>);
     let editing_version_id = RwSignal::new(None::<String>);
+    let current_published_version_id = RwSignal::new(None::<String>);
+    let publish_menu_open = RwSignal::new(false);
+    let consumer_modal_open = RwSignal::new(false);
+    let consumer_search = RwSignal::new(String::new());
+    let new_version_note = RwSignal::new(String::new());
 
     let selected_fields = Memo::new(move |_| {
         datasets
@@ -140,6 +154,7 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
                     component_ref,
                     editing_component_id,
                     editing_version_id,
+                    current_published_version_id,
                     name,
                     slug,
                     description,
@@ -147,6 +162,7 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
                     dataset_major,
                     component_type,
                     columns,
+                    filters,
                     sort_field,
                     sort_direction,
                     page_size,
@@ -160,11 +176,14 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
         <section class="route-panel components-page">
             <ComponentsBreadcrumb current=title/>
             <PageHeader title/>
-            <form class="route-panel__section form-grid" on:submit=move |event| {
+            <form class="route-panel__section form-grid component-editor-form" on:submit=move |event| {
                 event.prevent_default();
                 create_component_from_form(
                     editing_component_id.get_untracked(),
                     editing_version_id.get_untracked(),
+                    current_published_version_id.get_untracked(),
+                    ComponentPublishAction::SaveDraft,
+                    None,
                     ComponentFormValues {
                         name: name.get_untracked(),
                         slug: slug.get_untracked(),
@@ -172,6 +191,7 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
                         dataset_id: dataset_id.get_untracked(),
                         dataset_major: dataset_major.get_untracked(),
                         columns: columns.get_untracked(),
+                        filters: filters.get_untracked(),
                         sort_field: sort_field.get_untracked(),
                         sort_direction: sort_direction.get_untracked(),
                         page_size: page_size.get_untracked(),
@@ -183,7 +203,11 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
             }>
                 <label class="form-field">
                     <span>"Name"</span>
-                    <input prop:value=move || name.get() on:input=move |event| name.set(event_target_value(&event))/>
+                    <input
+                        prop:value=move || name.get()
+                        on:change=move |event| commit_component_name(name, slug, event_target_value(&event))
+                        on:blur=move |event| commit_component_name(name, slug, event_target_value(&event))
+                    />
                 </label>
                 <label class="form-field">
                     <span>"Slug"</span>
@@ -200,69 +224,239 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
                         if let Some((selected_dataset_id, selected_major)) = value.split_once('|') {
                             dataset_id.set(selected_dataset_id.to_string());
                             dataset_major.set(selected_major.to_string());
-                            if let Some(dataset) = datasets
-                                .get_untracked()
-                                .into_iter()
-                                .find(|dataset| dataset.id == selected_dataset_id)
-                            {
-                                let keys = dataset
-                                    .output_fields
-                                    .iter()
-                                    .map(|field| field.key.clone())
-                                    .take(6)
-                                    .collect::<Vec<_>>()
-                                    .join(", ");
-                                columns.set(keys);
-                                sort_field.set(
-                                    dataset
-                                        .output_fields
-                                        .first()
-                                        .map(|field| field.key.clone())
-                                        .unwrap_or_default(),
-                                );
-                            }
+                            columns.set(Vec::new());
+                            filters.set(Vec::new());
+                            sort_field.set(String::new());
                         }
                     }>
-                        <option value="">"Select a Dataset version"</option>
+                        <option value="" prop:selected=move || selected_dataset_major_value(&dataset_id.get(), &dataset_major.get()).is_empty()>"Select a Dataset version"</option>
                         {move || datasets.get().into_iter().flat_map(|dataset| {
                             dataset_picker_majors(&dataset).into_iter().map(move |major| {
                                 let value = format!("{}|{}", dataset.id, major);
+                                let selected_value = value.clone();
                                 let label = dataset_catalog_option_label(&dataset, major);
-                                view! { <option value=value>{label}</option> }
+                                view! {
+                                    <option
+                                        value=value
+                                        prop:selected=move || selected_dataset_major_value(&dataset_id.get(), &dataset_major.get()) == selected_value
+                                    >
+                                        {label}
+                                    </option>
+                                }
                             }).collect::<Vec<_>>()
                         }).collect_view()}
                     </select>
                 </label>
-                <DatasetCatalogContext dataset=Signal::derive(move || selected_dataset.get())/>
-                <DetailAuthoringControls
-                    fields=Signal::derive(move || selected_fields.get())
-                    columns
+                <div class="component-editor__dataset-subpanels">
+                    <DatasetCatalogContext dataset=Signal::derive(move || selected_dataset.get())/>
+                    <TableDefaultsControls
+                        fields=Signal::derive(move || selected_fields.get())
+                        sort_field
+                        sort_direction
+                        page_size
+                    />
+                </div>
+                <DataOpsProjectionEditor
+                    available_fields=Signal::derive(move || {
+                        selected_fields
+                            .get()
+                            .into_iter()
+                            .map(|field| component_data_ops_field(&field))
+                            .collect::<Vec<_>>()
+                    })
+                    fields=Signal::derive(move || columns.get())
+                    active_source_tab=Signal::derive(move || projection_active_source_tab.get())
+                    on_active_source_tab_change=Callback::new(move |tab| projection_active_source_tab.set(tab))
+                    on_fields_change=Callback::new(move |fields| columns.set(fields))
+                    title="Displayed Fields"
+                    collapsible=true
+                    initially_open=false
                 />
-                <TableDefaultsControls
-                    fields=Signal::derive(move || selected_fields.get())
-                    sort_field
-                    sort_direction
-                    page_size
+                <DataOpsFiltersEditor
+                    fields=Signal::derive(move || {
+                        selected_fields
+                            .get()
+                            .into_iter()
+                            .map(|field| component_data_ops_field(&field))
+                            .collect::<Vec<_>>()
+                    })
+                    row_filters=Signal::derive(move || filters.get())
+                    on_row_filters_change=Callback::new(move |row_filters| filters.set(row_filters))
+                    title="Default Filters"
+                    collapsible=true
+                    initially_open=false
                 />
                 <div class="form-actions">
-                    <button class="button button--secondary" type="button" on:click=move |_| {
-                        validate_component_form(
-                            ComponentValidationValues {
-                                dataset_id: dataset_id.get_untracked(),
-                                dataset_major: dataset_major.get_untracked(),
-                                columns: columns.get_untracked(),
-                                sort_field: sort_field.get_untracked(),
-                                sort_direction: sort_direction.get_untracked(),
-                                page_size: page_size.get_untracked(),
-                            },
-                            message,
-                            error,
-                            validation_findings,
-                        );
-                    }>"Validate Draft"</button>
-                    <button class="button" type="submit">"Save Draft"</button>
+                    {move || editing_version_id.get().map(|version_id| {
+                        let component_id = editing_component_id.get_untracked().unwrap_or_default();
+                        view! {
+                            <button class="button button--danger" type="button" on:click=move |_| {
+                                delete_component_draft(
+                                    component_id.clone(),
+                                    version_id.clone(),
+                                    message,
+                                    error,
+                                    validation_findings,
+                                );
+                            }>"Delete Draft"</button>
+                        }
+                    })}
+                    <button class="button button--secondary" type="submit">"Save Draft"</button>
+                    <div class=move || if publish_menu_open.get() {
+                        "dropdown-menu component-editor__publish-menu is-open"
+                    } else {
+                        "dropdown-menu component-editor__publish-menu"
+                    }>
+                        <button
+                            class="button component-editor__publish-button"
+                            type="button"
+                            aria-expanded=move || publish_menu_open.get().to_string()
+                            on:click=move |_| publish_menu_open.update(|open| *open = !*open)
+                        >
+                            "Save and Publish"
+                            <ChevronDown class="button__icon"/>
+                        </button>
+                        <button
+                            class="dropdown-menu__scrim"
+                            type="button"
+                            aria-label="Close publish options"
+                            on:click=move |_| publish_menu_open.set(false)
+                        ></button>
+                        <div class="dropdown-menu__content component-editor__publish-options" role="menu">
+                            <button
+                                class="dropdown-menu__item"
+                                type="button"
+                                role="menuitem"
+                                disabled=move || current_published_version_id.get().is_none()
+                                on:click=move |_| {
+                                publish_menu_open.set(false);
+                                create_component_from_form(
+                                    editing_component_id.get_untracked(),
+                                    editing_version_id.get_untracked(),
+                                    current_published_version_id.get_untracked(),
+                                    ComponentPublishAction::UpdateExistingVersion,
+                                    None,
+                                    ComponentFormValues {
+                                        name: name.get_untracked(),
+                                        slug: slug.get_untracked(),
+                                        description: description.get_untracked(),
+                                        dataset_id: dataset_id.get_untracked(),
+                                        dataset_major: dataset_major.get_untracked(),
+                                        columns: columns.get_untracked(),
+                                        filters: filters.get_untracked(),
+                                        sort_field: sort_field.get_untracked(),
+                                        sort_direction: sort_direction.get_untracked(),
+                                        page_size: page_size.get_untracked(),
+                                    },
+                                    message,
+                                    error,
+                                    validation_findings,
+                                );
+                            }>
+                                "Update Existing Version"
+                            </button>
+                            <button class="dropdown-menu__item" type="button" role="menuitem" on:click=move |_| {
+                                publish_menu_open.set(false);
+                                consumer_search.set(String::new());
+                                new_version_note.set(String::new());
+                                consumer_modal_open.set(true);
+                            }>
+                                "Create New Version"
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </form>
+            {move || consumer_modal_open.get().then(|| {
+                view! {
+                    <section class="component-consumers-modal" aria-label="Review component consumers">
+                        <button
+                            class="component-consumers-modal__scrim"
+                            type="button"
+                            aria-label="Close consumer review"
+                            on:click=move |_| consumer_modal_open.set(false)
+                        ></button>
+                        <aside class="component-consumers-modal__panel blurred-surface" role="dialog" aria-modal="true" aria-label="Review component consumers">
+                            <header class="component-consumers-modal__header">
+                                <div>
+                                    <p class="eyebrow">"Create New Version"</p>
+                                    <h2>"Review Consumers"</h2>
+                                </div>
+                                <button
+                                    class="icon-button"
+                                    type="button"
+                                    aria-label="Close consumer review"
+                                    on:click=move |_| consumer_modal_open.set(false)
+                                >
+                                    <X class="icon-button__icon"/>
+                                </button>
+                            </header>
+                            <p class="component-consumers-modal__intro">
+                                "Consumers pinned to the current version can be repinned to the new version. Deselect any consumer that should remain on the current version."
+                            </p>
+                            <label class="form-field component-consumers-modal__search">
+                                <span>"Search consumers"</span>
+                                <input
+                                    type="search"
+                                    placeholder="Search by dashboard, report, or placement"
+                                    prop:value=move || consumer_search.get()
+                                    on:input=move |event| consumer_search.set(event_target_value(&event))
+                                />
+                            </label>
+                            <div class="component-consumers-modal__list" role="list">
+                                <EmptyState
+                                    title="No consumers found"
+                                    message="No dashboards or reports are currently pinned to this component version. Creating a new version will not repin any consumers yet."
+                                />
+                            </div>
+                            <label class="form-field component-consumers-modal__note">
+                                <span>"New Version Note"</span>
+                                <textarea
+                                    placeholder="Summarize what changed in this version"
+                                    prop:value=move || new_version_note.get()
+                                    on:input=move |event| new_version_note.set(event_target_value(&event))
+                                ></textarea>
+                            </label>
+                            <footer class="component-consumers-modal__footer">
+                                <button
+                                    class="button button--secondary"
+                                    type="button"
+                                    on:click=move |_| consumer_modal_open.set(false)
+                                >
+                                    "Cancel"
+                                </button>
+                                <button class="button" type="button" on:click=move |_| {
+                                    consumer_modal_open.set(false);
+                                    create_component_from_form(
+                                        editing_component_id.get_untracked(),
+                                        editing_version_id.get_untracked(),
+                                        current_published_version_id.get_untracked(),
+                                        ComponentPublishAction::CreateNewVersion,
+                                        Some(new_version_note.get_untracked()),
+                                        ComponentFormValues {
+                                            name: name.get_untracked(),
+                                            slug: slug.get_untracked(),
+                                            description: description.get_untracked(),
+                                            dataset_id: dataset_id.get_untracked(),
+                                            dataset_major: dataset_major.get_untracked(),
+                                            columns: columns.get_untracked(),
+                                            filters: filters.get_untracked(),
+                                            sort_field: sort_field.get_untracked(),
+                                            sort_direction: sort_direction.get_untracked(),
+                                            page_size: page_size.get_untracked(),
+                                        },
+                                        message,
+                                        error,
+                                        validation_findings,
+                                    );
+                                }>
+                                    "Create New Version"
+                                </button>
+                            </footer>
+                        </aside>
+                    </section>
+                }
+            })}
             {move || dataset_error.get().map(|message| view! { <p class="form-status is-error">{message}</p> })}
             {move || message.get().map(|message| view! { <p class="form-status is-success">{message}</p> })}
             {move || error.get().map(|message| view! { <p class="form-status is-error">{message}</p> })}
@@ -341,17 +535,7 @@ pub fn ComponentViewerContent(component_ref: String) -> impl IntoView {
     let component_loading = RwSignal::new(true);
     let component_error = RwSignal::new(None::<String>);
     let table = RwSignal::new(None::<ComponentTable>);
-    let all_columns = RwSignal::new(Vec::<ComponentTableColumn>::new());
     let error = RwSignal::new(None::<String>);
-    let search = RwSignal::new(String::new());
-    let page_size = RwSignal::new(String::from("50"));
-    let cursor = RwSignal::new(String::new());
-    let sort_field = RwSignal::new(String::new());
-    let sort_direction = RwSignal::new(String::from("asc"));
-    let filter_field = RwSignal::new(String::new());
-    let filter_operator = RwSignal::new(String::from("equals"));
-    let filter_value = RwSignal::new(String::new());
-    let visible_columns = RwSignal::new(String::new());
     let component_ref_for_title = component_ref.clone();
 
     Effect::new({
@@ -367,240 +551,37 @@ pub fn ComponentViewerContent(component_ref: String) -> impl IntoView {
     });
     Effect::new({
         let component_ref = component_ref.clone();
-        move |_| {
-            load_component_table(
-                component_ref.clone(),
-                build_component_table_query(ComponentTableQueryInput {
-                    search: &search.get(),
-                    page_size: &page_size.get(),
-                    cursor: &cursor.get(),
-                    sort_field: &sort_field.get(),
-                    sort_direction: &sort_direction.get(),
-                    filter_field: &filter_field.get(),
-                    filter_operator: &filter_operator.get(),
-                    filter_value: &filter_value.get(),
-                    visible_columns: &visible_columns.get(),
-                }),
-                table,
-                error,
-            )
-        }
-    });
-
-    Effect::new(move |_| {
-        if let Some(table) = table.get()
-            && (visible_columns.get().trim().is_empty() || all_columns.get_untracked().is_empty())
-        {
-            all_columns.set(table.columns);
-        }
+        move |_| load_component_table(component_ref.clone(), String::new(), table, error)
     });
 
     view! {
-        <section class="dataset-preview-page">
-            <section class="dataset-preview-page__content">
-                <ComponentsBreadcrumb current=component_ref.clone()/>
-                <header class="dataset-preview-page__header">
-                    <p>"Component"</p>
+        <section class="route-panel components-page">
+            <ComponentViewerBreadcrumb component_ref=component_ref.clone() component=component/>
+            <header class="page-header">
+                <div>
                     <h1>{move || {
                         component
                             .get()
                             .map(|component| component.name)
                             .unwrap_or_else(|| component_ref_for_title.clone())
                     }}</h1>
-                </header>
-                <section class="route-panel__section form-grid">
-                    <label class="form-field">
-                        <span>"Search"</span>
-                        <input prop:value=move || search.get() on:input=move |event| {
-                            cursor.set(String::new());
-                            search.set(event_target_value(&event));
-                        }/>
-                    </label>
-                    <label class="form-field">
-                        <span>"Page Size"</span>
-                        <input type="number" min="1" max="200" prop:value=move || page_size.get() on:input=move |event| {
-                            cursor.set(String::new());
-                            page_size.set(event_target_value(&event));
-                        }/>
-                    </label>
-                    <label class="form-field">
-                        <span>"Sort Field"</span>
-                        <select prop:value=move || sort_field.get() on:change=move |event| {
-                            cursor.set(String::new());
-                            sort_field.set(event_target_value(&event));
-                        }>
-                            <option value="">"Default row order"</option>
-                            {move || {
-                                let columns = all_columns.get();
-                                if !columns.is_empty() {
-                                    view! {
-                                        <>
-                                            {columns.into_iter().map(|column| {
-                                                view! { <option value=column.key>{column.label}</option> }
-                                            }).collect_view()}
-                                        </>
-                                    }.into_any()
-                                } else {
-                                    ().into_any()
-                                }
-                            }}
-                        </select>
-                    </label>
-                    <label class="form-field">
-                        <span>"Sort Direction"</span>
-                        <select prop:value=move || sort_direction.get() on:change=move |event| {
-                            cursor.set(String::new());
-                            sort_direction.set(event_target_value(&event));
-                        }>
-                            <option value="asc">"Ascending"</option>
-                            <option value="desc">"Descending"</option>
-                        </select>
-                    </label>
-                    <label class="form-field">
-                        <span>"Filter Field"</span>
-                        <select prop:value=move || filter_field.get() on:change=move |event| {
-                            cursor.set(String::new());
-                            filter_field.set(event_target_value(&event));
-                        }>
-                            <option value="">"No filter"</option>
-                            {move || {
-                                let columns = all_columns.get();
-                                if !columns.is_empty() {
-                                    view! {
-                                        <>
-                                            {columns.into_iter().map(|column| {
-                                                let label = format!("{} ({})", column.label, column.field_type);
-                                                view! { <option value=column.key>{label}</option> }
-                                            }).collect_view()}
-                                        </>
-                                    }.into_any()
-                                } else {
-                                    ().into_any()
-                                }
-                            }}
-                        </select>
-                    </label>
-                    <label class="form-field">
-                        <span>"Filter Operator"</span>
-                        <select prop:value=move || filter_operator.get() on:change=move |event| {
-                            cursor.set(String::new());
-                            filter_operator.set(event_target_value(&event));
-                        }>
-                            <option value="equals">"Equals"</option>
-                            <option value="not_equals">"Not Equals"</option>
-                            <option value="contains">"Contains"</option>
-                            <option value="not_contains">"Not Contains"</option>
-                            <option value="lt">"Less Than"</option>
-                            <option value="lte">"Less Than Or Equal"</option>
-                            <option value="gt">"Greater Than"</option>
-                            <option value="gte">"Greater Than Or Equal"</option>
-                            <option value="between">"Between"</option>
-                            <option value="not_between">"Not Between"</option>
-                            <option value="is_empty">"Is Empty"</option>
-                            <option value="is_not_empty">"Is Not Empty"</option>
-                            <option value="is_null">"Is Null"</option>
-                            <option value="is_not_null">"Is Not Null"</option>
-                        </select>
-                    </label>
-                    <label class="form-field">
-                        <span>"Filter Value"</span>
-                        <input prop:value=move || filter_value.get() on:input=move |event| {
-                            cursor.set(String::new());
-                            filter_value.set(event_target_value(&event));
-                        }/>
-                    </label>
-                    <fieldset class="form-field form-field--wide component-field-picker">
-                        <legend>"Visible Columns"</legend>
-                        {move || {
-                            let columns = all_columns.get();
-                            if columns.is_empty() {
-                                view! { <p class="muted">"Columns load with the table."</p> }.into_any()
-                            } else {
-                                let all_keys = columns.iter().map(|column| column.key.clone()).collect::<Vec<_>>();
-                                view! {
-                                    <>
-                                        <button
-                                            class="button button--secondary"
-                                            type="button"
-                                            on:click=move |_| {
-                                                cursor.set(String::new());
-                                                visible_columns.set(String::new());
-                                            }
-                                        >"Show All"</button>
-                                        {columns.into_iter().map(|column| {
-                                            let key = column.key.clone();
-                                            let key_for_toggle = column.key.clone();
-                                            let keys_for_toggle = all_keys.clone();
-                                            let label = format!("{} ({})", column.label, column.field_type);
-                                            view! {
-                                                <label class="checkbox-row">
-                                                    <input
-                                                        type="checkbox"
-                                                        prop:checked=move || {
-                                                            let selected = visible_columns.get();
-                                                            selected.trim().is_empty() || csv_contains(&selected, &key)
-                                                        }
-                                                        on:change=move |_| {
-                                                            cursor.set(String::new());
-                                                            visible_columns.update(|value| {
-                                                                toggle_visible_column(value, &key_for_toggle, &keys_for_toggle);
-                                                            });
-                                                        }
-                                                    />
-                                                    <span>{label}</span>
-                                                </label>
-                                            }
-                                        }).collect_view()}
-                                    </>
-                                }.into_any()
-                            }
-                        }}
-                    </fieldset>
-                </section>
-                {move || {
-                    if let Some(message) = error.get() {
-                        view! { <EmptyState title="Component table unavailable" message=message/> }.into_any()
-                    } else if let Some(table) = table.get() {
-                        let next_cursor = table.pagination.next_cursor.clone();
-                        let next_cursor_for_disabled = next_cursor.clone();
-                        let next_cursor_for_click = next_cursor.clone();
-                        view! {
-                            <ComponentTableView table/>
-                            <section class="route-panel__section form-actions">
-                                <button
-                                    class="button button--secondary"
-                                    type="button"
-                                    disabled=move || cursor.get().is_empty()
-                                    on:click=move |_| cursor.set(String::new())
-                                >"First Page"</button>
-                                <button
-                                    class="button"
-                                    type="button"
-                                    disabled=move || next_cursor_for_disabled.is_none()
-                                    on:click=move |_| {
-                                        if let Some(next) = next_cursor_for_click.clone() {
-                                            cursor.set(next);
-                                        }
-                                    }
-                                >"Next Page"</button>
-                            </section>
-                        }.into_any()
+                </div>
+            </header>
+            {move || {
+                if component_loading.get() {
+                    view! { <EmptyState title="Loading configuration" message="Fetching component configuration."/> }.into_any()
+                } else if let Some(message) = component_error.get() {
+                    view! { <EmptyState title="Configuration unavailable" message=message/> }.into_any()
+                } else if let Some(component) = component.get() {
+                    if component.versions.iter().any(|version| version.status == "published") {
+                        view! { <ComponentTablePreviewSection table=table.get() table_error=error.get()/> }.into_any()
                     } else {
-                        view! { <EmptyState title="Loading table" message="Fetching component rows."/> }.into_any()
+                        view! { <EmptyState title="No published version" message="This component does not have a published table yet."/> }.into_any()
                     }
-                }}
-                {move || {
-                    if component_loading.get() {
-                        view! { <EmptyState title="Loading versions" message="Fetching component version history."/> }.into_any()
-                    } else if let Some(message) = component_error.get() {
-                        view! { <EmptyState title="Versions unavailable" message=message/> }.into_any()
-                    } else if let Some(component) = component.get() {
-                        view! { <ComponentVersionsSection versions=component.versions/> }.into_any()
-                    } else {
-                        view! { <EmptyState title="Versions unavailable" message="Component version history could not be loaded."/> }.into_any()
-                    }
-                }}
-            </section>
+                } else {
+                    view! { <EmptyState title="Component unavailable" message="Component data could not be loaded."/> }.into_any()
+                }
+            }}
         </section>
     }
 }
@@ -633,24 +614,19 @@ fn ValidationFindingsPanel(findings: Vec<ComponentValidationFinding>) -> impl In
 #[component]
 fn DatasetCatalogContext(dataset: Signal<Option<DatasetSummary>>) -> impl IntoView {
     view! {
-        <section class="route-panel__section">
+        <section class="route-panel__section component-editor__subpanel">
             {move || if let Some(dataset) = dataset.get() {
                 let tags = dataset_tag_label(&dataset.tags);
                 let provenance = dataset_provenance_label(&dataset.provenance);
-                let fields = dataset
-                    .output_fields
-                    .iter()
-                    .map(|field| format!("{} ({})", field.label, field.field_type))
-                    .collect::<Vec<_>>()
-                    .join(", ");
                 view! {
                     <h2>"Dataset Context"</h2>
-                    <dl class="definition-list">
-                        <dt>"Grain"</dt><dd>{dataset.grain}</dd>
-                        <dt>"Tags"</dt><dd>{tags}</dd>
-                        <dt>"Provenance"</dt><dd>{provenance}</dd>
-                        <dt>"Fields"</dt><dd>{if fields.is_empty() { "No output fields".into() } else { fields }}</dd>
-                    </dl>
+                    <table class="info-list-table component-editor__context-table">
+                        <tbody>
+                            <tr><th scope="row">"Grain"</th><td>{dataset.grain}</td></tr>
+                            <tr><th scope="row">"Tags"</th><td>{tags}</td></tr>
+                            <tr><th scope="row">"Provenance"</th><td>{provenance}</td></tr>
+                        </tbody>
+                    </table>
                 }.into_any()
             } else {
                 view! {
@@ -663,44 +639,6 @@ fn DatasetCatalogContext(dataset: Signal<Option<DatasetSummary>>) -> impl IntoVi
 }
 
 #[component]
-fn DetailAuthoringControls(
-    fields: Signal<Vec<DatasetFieldDefinition>>,
-    columns: RwSignal<String>,
-) -> impl IntoView {
-    view! {
-        <fieldset class="route-panel__section">
-            <legend>"Columns"</legend>
-            {move || if fields.get().is_empty() {
-                view! { <p class="muted">"Select a Dataset version to choose columns."</p> }.into_any()
-            } else {
-                let column_fields = fields.get();
-                view! {
-                    <div class="component-field-picker">
-                        {column_fields.into_iter().map(|field| {
-                            let field_key = field.key.clone();
-                            let field_key_for_toggle = field.key.clone();
-                            let label = format!("{} ({})", field.label, field.field_type);
-                            view! {
-                                <label class="checkbox-row">
-                                    <input
-                                        type="checkbox"
-                                        prop:checked=move || csv_contains(&columns.get(), &field_key)
-                                        on:change=move |_| {
-                                            columns.update(|value| toggle_csv_key(value, &field_key_for_toggle));
-                                        }
-                                    />
-                                    <span>{label}</span>
-                                </label>
-                            }
-                        }).collect_view()}
-                    </div>
-                }.into_any()
-            }}
-        </fieldset>
-    }
-}
-
-#[component]
 fn TableDefaultsControls(
     fields: Signal<Vec<DatasetFieldDefinition>>,
     sort_field: RwSignal<String>,
@@ -708,7 +646,7 @@ fn TableDefaultsControls(
     page_size: RwSignal<String>,
 ) -> impl IntoView {
     view! {
-        <fieldset class="route-panel__section">
+        <fieldset class="route-panel__section component-editor__subpanel component-editor__table-defaults">
             <legend>"Table Defaults"</legend>
             <label class="form-field">
                 <span>"Sort Field"</span>
@@ -757,6 +695,31 @@ fn ComponentsBreadcrumb(#[prop(into)] current: String) -> impl IntoView {
 }
 
 #[component]
+fn ComponentViewerBreadcrumb(
+    #[prop(into)] component_ref: String,
+    component: RwSignal<Option<ComponentDefinition>>,
+) -> impl IntoView {
+    view! {
+        <Breadcrumb>
+            <BreadcrumbItem>
+                <BreadcrumbLink href="/components">"Components"</BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator/>
+            <BreadcrumbItem>
+                <BreadcrumbPage>
+                    {move || {
+                        component
+                            .get()
+                            .map(|component| component.name)
+                            .unwrap_or_else(|| component_ref.clone())
+                    }}
+                </BreadcrumbPage>
+            </BreadcrumbItem>
+        </Breadcrumb>
+    }
+}
+
+#[component]
 fn ComponentNestedBreadcrumb(
     #[prop(into)] component_href: String,
     #[prop(into)] component_label: String,
@@ -780,6 +743,85 @@ fn ComponentNestedBreadcrumb(
 }
 
 #[component]
+fn ComponentTablePreviewSection(
+    table: Option<ComponentTable>,
+    table_error: Option<String>,
+) -> impl IntoView {
+    view! {
+        <section class="route-panel__section component-table-preview">
+            {if let Some(message) = table_error {
+                view! { <EmptyState title="Preview unavailable" message=message/> }.into_any()
+            } else if let Some(table) = table {
+                view! { <ComponentTablePreview table/> }.into_any()
+            } else {
+                view! { <EmptyState title="Loading preview" message="Fetching the published table preview."/> }.into_any()
+            }}
+        </section>
+    }
+}
+
+#[component]
+fn ComponentTablePreview(table: ComponentTable) -> impl IntoView {
+    let columns = table.columns.clone();
+    let rows = table.rows.clone();
+    let column_count = columns.len();
+    let row_count = rows.len();
+    let table_columns = columns
+        .iter()
+        .map(|column| {
+            InteractiveTableColumn::new(
+                column.key.clone(),
+                column.label.clone(),
+                sentence_label(&column.field_type),
+            )
+        })
+        .collect::<Vec<_>>();
+    let table_rows = rows
+        .into_iter()
+        .map(|row| {
+            let values = columns
+                .iter()
+                .map(|column| {
+                    let value = row
+                        .values
+                        .get(&column.key)
+                        .cloned()
+                        .flatten()
+                        .unwrap_or_default();
+                    (column.key.clone(), value)
+                })
+                .collect::<BTreeMap<_, _>>();
+            InteractiveTableRow::new(row.row_id, values)
+        })
+        .collect::<Vec<_>>();
+
+    view! {
+        <div class="component-table-preview__header">
+            <div>
+                <h2>"Preview"</h2>
+                <p>{format!("Showing {row_count} rows across {column_count} visible columns.")}</p>
+            </div>
+        </div>
+        {if columns.is_empty() {
+            view! { <EmptyState title="No visible columns" message="This component does not currently expose any table columns."/> }.into_any()
+        } else if row_count == 0 {
+            view! { <EmptyState title="No rows to display" message="The published table returned no rows for its current configuration."/> }.into_any()
+        } else {
+            view! {
+                <InteractiveDataTable
+                    columns=table_columns
+                    rows=table_rows
+                    search_label="Search component rows"
+                    search_placeholder="Search table"
+                    item_label="table rows"
+                    empty_message="No table rows match the current controls."
+                />
+            }.into_any()
+        }}
+    }
+}
+
+#[component]
 fn ComponentVersionsSection(versions: Vec<ComponentVersionSummary>) -> impl IntoView {
     view! {
         <section class="route-panel__section">
@@ -791,16 +833,25 @@ fn ComponentVersionsSection(versions: Vec<ComponentVersionSummary>) -> impl Into
                         <th>"Status"</th>
                         <th>"Kind"</th>
                         <th>"Dataset Version"</th>
+                        <th>"Note"</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {versions.into_iter().map(|version| view! {
-                        <tr>
-                            <td>{version.version_label}</td>
-                            <td>{component_status_label(&version.status)}</td>
-                            <td>{component_type_label(&version.component_type)}</td>
-                            <td>{format!("v{}", version.dataset_version_major)}</td>
-                        </tr>
+                    {versions.into_iter().map(|version| {
+                        let version_note = if version.version_note.trim().is_empty() {
+                            "-".to_string()
+                        } else {
+                            version.version_note.clone()
+                        };
+                        view! {
+                            <tr>
+                                <td>{version.version_label}</td>
+                                <td>{component_status_label(&version.status)}</td>
+                                <td>{component_type_label(&version.component_type)}</td>
+                                <td>{format!("v{}", version.dataset_version_major)}</td>
+                                <td>{version_note}</td>
+                            </tr>
+                        }
                     }).collect_view()}
                 </tbody>
             </DataTable>
@@ -885,6 +936,7 @@ fn ComponentsTable(components: Vec<ComponentSummary>) -> impl IntoView {
                                         options=table_kind_options.clone()
                                     />
                                 </th>
+                                <th class="data-table__cell--center" scope="col">"Revision"</th>
                                 <th class="data-table__cell--center" scope="col">
                                     <TableFilterHeader
                                         label="Status"
@@ -917,17 +969,23 @@ fn ComponentsTable(components: Vec<ComponentSummary>) -> impl IntoView {
                                             let versions_href = format!("/components/{}/versions", component.slug);
                                             let kind_label = component_summary_kind_label(&component);
                                             let status_label = component_summary_status_label(&component);
+                                            let revision_label = component_summary_revision_label(&component);
                                             view! {
                                                 <tr>
                                                     <th scope="row">
                                                         <a class="data-table__primary-link" href=href>{component.name}</a>
                                                     </th>
                                                     <td class="data-table__cell--center">{kind_label}</td>
+                                                    <td class="data-table__cell--center">{revision_label}</td>
                                                     <td class="data-table__cell--center">{status_label}</td>
                                                     <td class="data-table__cell--center">
                                                         <div class="components-list-actions">
-                                                            <a class="button button--compact button--secondary" href=edit_href>"Edit"</a>
-                                                            <a class="button button--compact button--secondary" href=versions_href>"Versions"</a>
+                                                            <a class="icon-button" href=edit_href aria-label="Edit component" title="Edit component">
+                                                                <Pencil class="icon-button__icon"/>
+                                                            </a>
+                                                            <a class="icon-button" href=versions_href aria-label="View component versions" title="View component versions">
+                                                                <History class="icon-button__icon"/>
+                                                            </a>
                                                         </div>
                                                     </td>
                                                 </tr>
@@ -990,6 +1048,7 @@ fn ComponentsMobileCards(
                             let versions_href = format!("/components/{}/versions", component.slug);
                             let kind_label = component_summary_kind_label(&component);
                             let status_label = component_summary_status_label(&component);
+                            let revision_label = component_summary_revision_label(&component);
                             view! {
                                 <article class="forms-list-mobile-card components-list-mobile-card">
                                     <div class="forms-list-mobile-card__header">
@@ -1004,10 +1063,18 @@ fn ComponentsMobileCards(
                                             <dt>"Status"</dt>
                                             <dd>{status_label}</dd>
                                         </div>
+                                        <div>
+                                            <dt>"Revision"</dt>
+                                            <dd>{revision_label}</dd>
+                                        </div>
                                     </dl>
                                     <div class="forms-list-mobile-card__actions components-list-mobile-card__actions">
-                                        <a class="button button--compact button--secondary" href=edit_href>"Edit"</a>
-                                        <a class="button button--compact button--secondary" href=versions_href>"Versions"</a>
+                                        <a class="icon-button" href=edit_href aria-label="Edit component" title="Edit component">
+                                            <Pencil class="icon-button__icon"/>
+                                        </a>
+                                        <a class="icon-button" href=versions_href aria-label="View component versions" title="View component versions">
+                                            <History class="icon-button__icon"/>
+                                        </a>
                                     </div>
                                 </article>
                             }
@@ -1099,39 +1166,7 @@ fn ComponentsMobileFilterSheet(
     }
 }
 
-#[component]
-fn ComponentTableView(table: ComponentTable) -> impl IntoView {
-    if table.materialization_state != "ready" {
-        let (title, message) = materialization_empty_state(&table.materialization_state);
-        return view! {
-            <EmptyState title=title message=message/>
-        }
-        .into_any();
-    }
-    view! {
-        <DataTable>
-            <thead>
-                <tr>
-                    {table.columns.iter().map(|column| view! { <th>{column.label.clone()}</th> }).collect_view()}
-                </tr>
-            </thead>
-            <tbody>
-                {table.rows.into_iter().map(|row| {
-                    let columns = table.columns.clone();
-                    view! {
-                        <tr>
-                            {columns.into_iter().map(|column| {
-                                let value = row.values.get(&column.key).and_then(Clone::clone).unwrap_or_default();
-                                view! { <td>{value}</td> }
-                            }).collect_view()}
-                        </tr>
-                    }
-                }).collect_view()}
-            </tbody>
-        </DataTable>
-    }.into_any()
-}
-
+#[cfg_attr(not(test), allow(dead_code))]
 fn materialization_empty_state(state: &str) -> (&'static str, String) {
     match state {
         "failed" | "error" => (
@@ -1170,15 +1205,26 @@ fn component_summary_kind_label(component: &ComponentSummary) -> &'static str {
         .current_component_type
         .as_deref()
         .map(component_type_label)
-        .unwrap_or("Draft")
+        .unwrap_or("Table")
 }
 
 fn component_summary_status_label(component: &ComponentSummary) -> &'static str {
-    if component.current_version_id.is_some() {
+    if component.current_version_id.is_some() && component.draft_version_id.is_some() {
+        "Updating"
+    } else if component.current_version_id.is_some() {
         "Published"
     } else {
         "Draft"
     }
+}
+
+fn component_summary_revision_label(component: &ComponentSummary) -> String {
+    component
+        .current_version_label
+        .as_deref()
+        .or(component.draft_version_label.as_deref())
+        .map(|label| format!("v{label}"))
+        .unwrap_or_else(|| "Draft".into())
 }
 
 fn component_kind_filter_options(components: &[ComponentSummary]) -> Vec<String> {
@@ -1245,6 +1291,16 @@ fn component_pagination_page_start(
     }
 }
 
+fn component_data_ops_field(field: &DatasetFieldDefinition) -> DataOpsDatasetFieldDraft {
+    DataOpsDatasetFieldDraft {
+        key: field.key.clone(),
+        label: field.label.clone(),
+        source_alias: "dataset".into(),
+        source_field_key: field.key.clone(),
+        field_type: field.field_type.clone(),
+    }
+}
+
 fn dataset_catalog_option_label(dataset: &DatasetSummary, major: i32) -> String {
     let mut parts = vec![format!("{} · v{}", dataset.name, major)];
     if !dataset.tags.is_empty() {
@@ -1279,6 +1335,21 @@ fn dataset_provenance_label(provenance: &super::types::DatasetProvenanceSummary)
     }
 }
 
+fn sentence_label(value: &str) -> String {
+    value
+        .split('_')
+        .filter(|part| !part.is_empty())
+        .map(|part| {
+            let mut chars = part.chars();
+            match chars.next() {
+                Some(first) => format!("{}{}", first.to_uppercase(), chars.as_str()),
+                None => String::new(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 fn dataset_picker_majors(dataset: &DatasetSummary) -> Vec<i32> {
     if dataset.major_versions.is_empty() {
         dataset.current_version_major.into_iter().collect()
@@ -1296,10 +1367,7 @@ fn csv_field_keys(value: &str) -> Vec<String> {
         .collect()
 }
 
-fn csv_contains(value: &str, key: &str) -> bool {
-    csv_field_keys(value).iter().any(|existing| existing == key)
-}
-
+#[cfg_attr(not(test), allow(dead_code))]
 fn toggle_csv_key(value: &mut String, key: &str) {
     let mut keys = csv_field_keys(value);
     if keys.iter().any(|existing| existing == key) {
@@ -1310,6 +1378,7 @@ fn toggle_csv_key(value: &mut String, key: &str) {
     *value = keys.join(", ");
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn toggle_visible_column(value: &mut String, key: &str, all_keys: &[String]) {
     let mut keys = if value.trim().is_empty() {
         all_keys.to_vec()
@@ -1335,18 +1404,47 @@ fn toggle_visible_column(value: &mut String, key: &str, all_keys: &[String]) {
 
 #[cfg_attr(not(any(feature = "hydrate", test)), allow(dead_code))]
 fn build_component_config(
-    columns: &str,
+    columns: &[DataOpsDatasetFieldDraft],
+    filters: &[DataOpsRowFilterDraft],
     sort_field: &str,
     sort_direction: &str,
     page_size: &str,
 ) -> Value {
-    let fields = csv_field_keys(columns);
     let defaults = table_defaults_config(sort_field, sort_direction, page_size);
+    let display_labels = columns
+        .iter()
+        .map(|field| (field.key.clone(), Value::String(field.label.clone())))
+        .collect::<serde_json::Map<_, _>>();
+    let filters = filters
+        .iter()
+        .filter(|filter| !filter.field_key.trim().is_empty())
+        .map(table_filter_config)
+        .collect::<Vec<_>>();
     let mut config = json!({
-        "visible_columns": fields
+        "visible_columns": columns
+            .iter()
+            .map(|field| field.key.clone())
+            .collect::<Vec<_>>(),
+        "display_labels": display_labels,
+        "filters": filters
     });
     merge_table_defaults(&mut config, defaults);
     config
+}
+
+fn table_filter_config(filter: &DataOpsRowFilterDraft) -> Value {
+    let mut filter_config = serde_json::Map::new();
+    filter_config.insert("field_key".into(), Value::String(filter.field_key.clone()));
+    filter_config.insert("operator".into(), Value::String(filter.operator.clone()));
+    if filter.value_mode == "field" {
+        filter_config.insert(
+            "value_field_key".into(),
+            Value::String(filter.value_field_key.clone()),
+        );
+    } else if !filter.value.trim().is_empty() {
+        filter_config.insert("value".into(), Value::String(filter.value.clone()));
+    }
+    Value::Object(filter_config)
 }
 
 fn table_defaults_config(sort_field: &str, sort_direction: &str, page_size: &str) -> Value {
@@ -1427,6 +1525,29 @@ fn table_visible_columns_from_config(config: &Value) -> String {
 }
 
 #[cfg_attr(not(any(feature = "hydrate", test)), allow(dead_code))]
+fn table_projection_fields_from_config_keys(config: &Value) -> Vec<DataOpsDatasetFieldDraft> {
+    let labels = config
+        .get("display_labels")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    csv_field_keys(&table_visible_columns_from_config(config))
+        .into_iter()
+        .map(|key| DataOpsDatasetFieldDraft {
+            label: labels
+                .get(&key)
+                .and_then(Value::as_str)
+                .unwrap_or(&key)
+                .into(),
+            source_alias: "dataset".into(),
+            source_field_key: key.clone(),
+            field_type: String::new(),
+            key,
+        })
+        .collect()
+}
+
+#[cfg_attr(not(any(feature = "hydrate", test)), allow(dead_code))]
 fn table_sort_from_config(config: &Value) -> (String, String) {
     let Some(sort) = config.get("default_sort") else {
         return (String::new(), "asc".into());
@@ -1453,6 +1574,45 @@ fn table_page_size_from_config(config: &Value) -> String {
 }
 
 #[cfg_attr(not(any(feature = "hydrate", test)), allow(dead_code))]
+fn table_filter_drafts_from_config(config: &Value) -> Vec<DataOpsRowFilterDraft> {
+    config
+        .get("filters")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .enumerate()
+        .filter_map(|(index, filter)| {
+            let field_key = filter.get("field_key").and_then(Value::as_str)?.trim();
+            let operator = filter.get("operator").and_then(Value::as_str)?.trim();
+            if field_key.is_empty() || operator.is_empty() {
+                return None;
+            }
+            let value_field_key = filter
+                .get("value_field_key")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string();
+            Some(DataOpsRowFilterDraft {
+                id: (index as u64) + 1,
+                field_key: field_key.into(),
+                operator: operator.into(),
+                value: filter
+                    .get("value")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .into(),
+                value_mode: if value_field_key.is_empty() {
+                    "value".into()
+                } else {
+                    "field".into()
+                },
+                value_field_key,
+            })
+        })
+        .collect()
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
 struct ComponentTableQueryInput<'a> {
     search: &'a str,
     page_size: &'a str,
@@ -1465,7 +1625,7 @@ struct ComponentTableQueryInput<'a> {
     visible_columns: &'a str,
 }
 
-#[cfg_attr(not(any(feature = "hydrate", test)), allow(dead_code))]
+#[allow(dead_code)]
 fn build_component_table_query(input: ComponentTableQueryInput<'_>) -> String {
     let mut params = Vec::new();
     push_query_param(&mut params, "q", input.search);
@@ -1500,6 +1660,7 @@ fn build_component_table_query(input: ComponentTableQueryInput<'_>) -> String {
     params.join("&")
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn push_query_param(params: &mut Vec<String>, key: &str, value: &str) {
     let value = value.trim();
     if !value.is_empty() {
@@ -1511,6 +1672,7 @@ fn push_query_param(params: &mut Vec<String>, key: &str, value: &str) {
     }
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn percent_encode_query_component(value: &str) -> String {
     value
         .bytes()
@@ -1532,10 +1694,14 @@ fn load_components(
     leptos::task::spawn_local(async move {
         is_loading.set(true);
         load_error.set(None);
-        match api::fetch_components().await {
+        match api::fetch_admin_components().await {
             Ok(Some(response)) => components.set(response),
             Ok(None) => components.set(Vec::new()),
-            Err(message) => load_error.set(Some(message)),
+            Err(_) => match api::fetch_components().await {
+                Ok(Some(response)) => components.set(response),
+                Ok(None) => components.set(Vec::new()),
+                Err(message) => load_error.set(Some(message)),
+            },
         }
         is_loading.set(false);
     });
@@ -1614,13 +1780,15 @@ fn load_component_for_edit(
     component_ref: String,
     editing_component_id: RwSignal<Option<String>>,
     editing_version_id: RwSignal<Option<String>>,
+    current_published_version_id: RwSignal<Option<String>>,
     name: RwSignal<String>,
     slug: RwSignal<String>,
     description: RwSignal<String>,
     dataset_id: RwSignal<String>,
     dataset_major: RwSignal<String>,
     component_type: RwSignal<String>,
-    columns: RwSignal<String>,
+    columns: RwSignal<Vec<DataOpsDatasetFieldDraft>>,
+    filters: RwSignal<Vec<DataOpsRowFilterDraft>>,
     sort_field: RwSignal<String>,
     sort_direction: RwSignal<String>,
     page_size: RwSignal<String>,
@@ -1631,6 +1799,13 @@ fn load_component_for_edit(
         match api::fetch_admin_component(&component_ref).await {
             Ok(Some(component)) => {
                 editing_component_id.set(Some(component.id.clone()));
+                current_published_version_id.set(
+                    component
+                        .versions
+                        .iter()
+                        .find(|version| version.status == "published")
+                        .map(|version| version.id.clone()),
+                );
                 name.set(component.name.clone());
                 slug.set(component.slug.clone());
                 description.set(component.description.clone().unwrap_or_default());
@@ -1644,7 +1819,8 @@ fn load_component_for_edit(
                     sort_field.set(loaded_sort_field);
                     sort_direction.set(loaded_sort_direction);
                     page_size.set(table_page_size_from_config(&version.config));
-                    columns.set(table_visible_columns_from_config(&version.config));
+                    columns.set(table_projection_fields_from_config_keys(&version.config));
+                    filters.set(table_filter_drafts_from_config(&version.config));
                 }
             }
             Ok(None) => error.set(Some("Component could not be loaded.".into())),
@@ -1659,13 +1835,15 @@ fn load_component_for_edit(
     _: String,
     _: RwSignal<Option<String>>,
     _: RwSignal<Option<String>>,
+    _: RwSignal<Option<String>>,
     _: RwSignal<String>,
     _: RwSignal<String>,
     _: RwSignal<String>,
     _: RwSignal<String>,
     _: RwSignal<String>,
     _: RwSignal<String>,
-    _: RwSignal<String>,
+    _: RwSignal<Vec<DataOpsDatasetFieldDraft>>,
+    _: RwSignal<Vec<DataOpsRowFilterDraft>>,
     _: RwSignal<String>,
     _: RwSignal<String>,
     _: RwSignal<String>,
@@ -1731,26 +1909,27 @@ struct ComponentFormValues {
     description: String,
     dataset_id: String,
     dataset_major: String,
-    columns: String,
+    columns: Vec<DataOpsDatasetFieldDraft>,
+    filters: Vec<DataOpsRowFilterDraft>,
     sort_field: String,
     sort_direction: String,
     page_size: String,
 }
 
-#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
-struct ComponentValidationValues {
-    dataset_id: String,
-    dataset_major: String,
-    columns: String,
-    sort_field: String,
-    sort_direction: String,
-    page_size: String,
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ComponentPublishAction {
+    SaveDraft,
+    UpdateExistingVersion,
+    CreateNewVersion,
 }
 
 #[cfg(feature = "hydrate")]
 fn create_component_from_form(
     editing_component_id: Option<String>,
     editing_version_id: Option<String>,
+    current_published_version_id: Option<String>,
+    publish_action: ComponentPublishAction,
+    version_note: Option<String>,
     values: ComponentFormValues,
     message: RwSignal<Option<String>>,
     error: RwSignal<Option<String>>,
@@ -1763,6 +1942,7 @@ fn create_component_from_form(
         let major = values.dataset_major.trim().parse::<i32>().unwrap_or(1);
         let config = build_component_config(
             &values.columns,
+            &values.filters,
             &values.sort_field,
             &values.sort_direction,
             &values.page_size,
@@ -1772,13 +1952,70 @@ fn create_component_from_form(
             dataset_version_major: Some(major),
             component_type: "table".into(),
             config,
+            version_note: normalized_component_version_note(version_note),
         };
+        match api::validate_component_version(version.clone()).await {
+            Ok(response) if response.valid => {}
+            Ok(response) => {
+                findings.set(response.findings);
+                return;
+            }
+            Err(message) => {
+                error.set(Some(message));
+                return;
+            }
+        }
         let description = if values.description.trim().is_empty() {
             None
         } else {
             Some(values.description.trim().to_string())
         };
         let redirect_ref = component_redirect_ref(&values.slug);
+        if publish_action == ComponentPublishAction::UpdateExistingVersion {
+            let Some(component_id) = editing_component_id.clone() else {
+                error.set(Some(
+                    "Save the component draft before updating an existing version.".into(),
+                ));
+                return;
+            };
+            let Some(version_id) = current_published_version_id.clone() else {
+                error.set(Some(
+                    "This component does not have an existing published version to update.".into(),
+                ));
+                return;
+            };
+            match api::update_component(
+                &component_id,
+                UpdateComponentRequest {
+                    name: values.name,
+                    slug: values.slug,
+                    description,
+                },
+            )
+            .await
+            {
+                Ok(_) => match api::update_published_component_version(
+                    &component_id,
+                    &version_id,
+                    version,
+                )
+                .await
+                {
+                    Ok(_) => {
+                        message.set(Some("Existing component version updated.".into()));
+                        if let Some(window) = web_sys::window() {
+                            let _ = window
+                                .location()
+                                .set_href(&format!("/components/{redirect_ref}"));
+                        }
+                    }
+                    Err(message) => error.set(Some(message)),
+                },
+                Err(message) => error.set(Some(message)),
+            }
+            return;
+        }
+
         let result = if let Some(component_id) = editing_component_id {
             match api::update_component(
                 &component_id,
@@ -1791,30 +2028,69 @@ fn create_component_from_form(
             .await
             {
                 Ok(_) => {
-                    if let Some(version_id) = editing_version_id {
+                    let version_result = if let Some(version_id) = editing_version_id {
                         api::update_component_version(&component_id, &version_id, version).await
                     } else {
                         api::save_component_version(&component_id, version).await
-                    }
+                    };
+                    version_result.map(|response| (component_id, response.id))
                 }
                 Err(message) => Err(message),
             }
         } else {
-            api::create_component(CreateComponentRequest {
+            match api::create_component(CreateComponentRequest {
                 name: values.name,
                 slug: values.slug,
                 description,
                 version: Some(version),
             })
             .await
+            {
+                Ok(response) => {
+                    let component_id = response.id;
+                    if publish_action == ComponentPublishAction::CreateNewVersion {
+                        match api::fetch_admin_component(&redirect_ref).await {
+                            Ok(Some(component)) => component
+                                .versions
+                                .iter()
+                                .find(|version| version.status == "draft")
+                                .map(|version| (component_id, version.id.clone()))
+                                .ok_or_else(|| {
+                                    "Component draft could not be found after saving.".to_string()
+                                }),
+                            Ok(None) => {
+                                Err("Component draft could not be loaded after saving.".to_string())
+                            }
+                            Err(message) => Err(message),
+                        }
+                    } else {
+                        Ok((component_id, String::new()))
+                    }
+                }
+                Err(message) => Err(message),
+            }
         };
         match result {
-            Ok(_) => {
-                message.set(Some("Component draft saved.".into()));
-                if let Some(window) = web_sys::window() {
-                    let _ = window
-                        .location()
-                        .set_href(&format!("/components/{redirect_ref}"));
+            Ok((component_id, version_id)) => {
+                if publish_action == ComponentPublishAction::CreateNewVersion {
+                    match api::publish_component_version(&component_id, &version_id).await {
+                        Ok(_) => {
+                            message.set(Some("Component saved and published.".into()));
+                            if let Some(window) = web_sys::window() {
+                                let _ = window
+                                    .location()
+                                    .set_href(&format!("/components/{redirect_ref}"));
+                            }
+                        }
+                        Err(message) => error.set(Some(message)),
+                    }
+                } else {
+                    message.set(Some("Component draft saved.".into()));
+                    if let Some(window) = web_sys::window() {
+                        let _ = window
+                            .location()
+                            .set_href(&format!("/components/{redirect_ref}/edit"));
+                    }
                 }
             }
             Err(message) => error.set(Some(message)),
@@ -1827,9 +2103,44 @@ fn component_redirect_ref(slug: &str) -> String {
     slug.trim().to_string()
 }
 
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+fn normalized_component_version_note(note: Option<String>) -> Option<String> {
+    note.map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn commit_component_name(name: RwSignal<String>, slug: RwSignal<String>, value: String) {
+    let derived_slug = snake_case_component_slug(&value);
+    name.set(value);
+
+    if slug.get_untracked().trim().is_empty() && !derived_slug.is_empty() {
+        slug.set(derived_slug);
+    }
+}
+
+fn snake_case_component_slug(value: &str) -> String {
+    let mut slug = String::new();
+    let mut previous_was_separator = false;
+
+    for character in value.trim().chars() {
+        if character.is_ascii_alphanumeric() {
+            slug.push(character.to_ascii_lowercase());
+            previous_was_separator = false;
+        } else if !previous_was_separator && !slug.is_empty() {
+            slug.push('_');
+            previous_was_separator = true;
+        }
+    }
+
+    slug.trim_end_matches('_').to_string()
+}
+
 #[cfg(not(feature = "hydrate"))]
 fn create_component_from_form(
     _: Option<String>,
+    _: Option<String>,
+    _: Option<String>,
+    _: ComponentPublishAction,
     _: Option<String>,
     _: ComponentFormValues,
     _: RwSignal<Option<String>>,
@@ -1839,35 +2150,36 @@ fn create_component_from_form(
 }
 
 #[cfg(feature = "hydrate")]
-fn validate_component_form(
-    values: ComponentValidationValues,
+fn delete_component_draft(
+    component_id: String,
+    version_id: String,
     message: RwSignal<Option<String>>,
     error: RwSignal<Option<String>>,
     findings: RwSignal<Vec<ComponentValidationFinding>>,
 ) {
+    let confirmed = web_sys::window()
+        .and_then(|window| {
+            window
+                .confirm_with_message(
+                    "Delete this component draft? Published versions will remain available.",
+                )
+                .ok()
+        })
+        .unwrap_or(false);
+    if !confirmed {
+        return;
+    }
+
     leptos::task::spawn_local(async move {
         message.set(None);
         error.set(None);
         findings.set(Vec::new());
-        let major = values.dataset_major.trim().parse::<i32>().unwrap_or(1);
-        let config = build_component_config(
-            &values.columns,
-            &values.sort_field,
-            &values.sort_direction,
-            &values.page_size,
-        );
-        let payload = CreateComponentVersionRequest {
-            dataset_id: Some(values.dataset_id),
-            dataset_version_major: Some(major),
-            component_type: "table".into(),
-            config,
-        };
-        match api::validate_component_version(payload).await {
-            Ok(response) if response.valid => {
-                message.set(Some("Component draft is valid.".into()));
-            }
-            Ok(response) => {
-                findings.set(response.findings);
+        match api::delete_component_version(&component_id, &version_id).await {
+            Ok(_) => {
+                message.set(Some("Component draft deleted.".into()));
+                if let Some(window) = web_sys::window() {
+                    let _ = window.location().set_href("/components");
+                }
             }
             Err(message) => error.set(Some(message)),
         }
@@ -1875,8 +2187,9 @@ fn validate_component_form(
 }
 
 #[cfg(not(feature = "hydrate"))]
-fn validate_component_form(
-    _: ComponentValidationValues,
+fn delete_component_draft(
+    _: String,
+    _: String,
     _: RwSignal<Option<String>>,
     _: RwSignal<Option<String>>,
     _: RwSignal<Vec<ComponentValidationFinding>>,
@@ -1899,6 +2212,7 @@ fn validate_component_draft(
             dataset_version_major: Some(draft.dataset_version_major),
             component_type: draft.component_type,
             config: draft.config,
+            version_note: None,
         };
         match api::validate_component_version(payload).await {
             Ok(response) if response.valid => {
@@ -1962,9 +2276,14 @@ mod tests {
     use super::{
         component_redirect_ref, dataset_catalog_option_label, dataset_provenance_label,
         editable_component_version, materialization_empty_state, selected_dataset_major_value,
-        table_page_size_from_config, table_sort_from_config, table_visible_columns_from_config,
+        snake_case_component_slug, table_page_size_from_config, table_sort_from_config,
+        table_visible_columns_from_config,
     };
     use crate::types::{ComponentSummary, DatasetProvenanceItem, DatasetProvenanceSummary};
+    use tessara_web_data_ops::{
+        DatasetFieldDraft as DataOpsDatasetFieldDraft,
+        DatasetRowFilterDraft as DataOpsRowFilterDraft,
+    };
 
     fn dataset(major_versions: Vec<i32>, current_version_major: Option<i32>) -> DatasetSummary {
         DatasetSummary {
@@ -1991,7 +2310,10 @@ mod tests {
             slug: name.to_lowercase().replace(' ', "-"),
             description: None,
             current_version_id: published.then(|| format!("{name}-version")),
+            current_version_label: published.then(|| "1".into()),
             current_component_type: component_type.map(str::to_string),
+            draft_version_id: (!published).then(|| format!("{name}-draft")),
+            draft_version_label: (!published).then(|| "1".into()),
         }
     }
 
@@ -2042,15 +2364,19 @@ mod tests {
     fn component_list_filters_match_name_kind_and_status() {
         let published_table = component_summary("Program Snapshot", Some("table"), true);
         let draft_component = component_summary("Program Draft", None, false);
-        let components = vec![published_table.clone(), draft_component.clone()];
+        let mut updating_component = component_summary("Program Update", Some("table"), true);
+        updating_component.draft_version_id = Some("Program Update-draft".into());
+        updating_component.draft_version_label = Some("2".into());
+        let components = vec![
+            published_table.clone(),
+            draft_component.clone(),
+            updating_component.clone(),
+        ];
 
-        assert_eq!(
-            component_kind_filter_options(&components),
-            vec!["Draft", "Table"]
-        );
+        assert_eq!(component_kind_filter_options(&components), vec!["Table"]);
         assert_eq!(
             component_status_filter_options(&components),
-            vec!["Draft", "Published"]
+            vec!["Draft", "Published", "Updating"]
         );
         assert!(component_matches_filters(
             &published_table,
@@ -2067,22 +2393,38 @@ mod tests {
         assert!(component_matches_filters(
             &draft_component,
             "program",
-            "Draft",
+            "Table",
             "Draft"
+        ));
+        assert!(component_matches_filters(
+            &updating_component,
+            "program",
+            "Table",
+            "Updating"
         ));
     }
 
     #[test]
     fn table_config_uses_visible_columns_and_defaults() {
-        let config = build_component_config("program, amount", "program", "desc", "25");
+        let config = build_component_config(
+            &projection_fields(&["program", "amount"]),
+            &[filter_draft(1, "program", "equals", "Afterschool")],
+            "program",
+            "desc",
+            "25",
+        );
 
         assert_eq!(
             config["visible_columns"],
             serde_json::json!(["program", "amount"])
         );
+        assert_eq!(config["display_labels"]["program"], "program");
         assert_eq!(config["default_sort"]["field_key"], "program");
         assert_eq!(config["default_sort"]["direction"], "desc");
         assert_eq!(config["page_size"], 25);
+        assert_eq!(config["filters"][0]["field_key"], "program");
+        assert_eq!(config["filters"][0]["operator"], "equals");
+        assert_eq!(config["filters"][0]["value"], "Afterschool");
     }
 
     #[test]
@@ -2212,6 +2554,19 @@ mod tests {
     }
 
     #[test]
+    fn snake_case_component_slug_normalizes_component_names() {
+        assert_eq!(
+            snake_case_component_slug("UAT Table Component"),
+            "uat_table_component"
+        );
+        assert_eq!(
+            snake_case_component_slug(" Demo Partner: Snapshot 2026 "),
+            "demo_partner_snapshot_2026"
+        );
+        assert_eq!(snake_case_component_slug("Already_snake"), "already_snake");
+    }
+
+    #[test]
     fn editable_component_version_prefers_draft() {
         let component = ComponentDefinition {
             id: "component-1".into(),
@@ -2242,7 +2597,36 @@ mod tests {
             component_type: "table".into(),
             status: status.into(),
             version_label: "1".into(),
+            version_note: String::new(),
             config: serde_json::json!({ "visible_columns": ["program"] }),
+        }
+    }
+
+    fn projection_fields(keys: &[&str]) -> Vec<DataOpsDatasetFieldDraft> {
+        keys.iter()
+            .map(|key| DataOpsDatasetFieldDraft {
+                key: (*key).into(),
+                label: (*key).into(),
+                source_alias: "dataset".into(),
+                source_field_key: (*key).into(),
+                field_type: "text".into(),
+            })
+            .collect()
+    }
+
+    fn filter_draft(
+        id: u64,
+        field_key: &str,
+        operator: &str,
+        value: &str,
+    ) -> DataOpsRowFilterDraft {
+        DataOpsRowFilterDraft {
+            id,
+            field_key: field_key.into(),
+            operator: operator.into(),
+            value: value.into(),
+            value_mode: "value".into(),
+            value_field_key: String::new(),
         }
     }
 }

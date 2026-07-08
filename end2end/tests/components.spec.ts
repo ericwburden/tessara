@@ -596,15 +596,11 @@ VALUES ('${draftDashboard.id}', '${component.versions[0].id}', 99, '{}'::jsonb);
 
     await page.goto(`/components/${slug}`);
     await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toContainText("Components");
+    await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toContainText(name);
     await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
-    await expect(page.getByRole("columnheader", { name: firstField.label })).toBeVisible();
-    const visibleColumns = page.getByRole("group", { name: "Visible Columns" });
-    await expect(
-      visibleColumns.getByRole("checkbox", { name: firstField.label }),
-    ).toBeChecked();
-    await page.getByLabel("Filter Field").selectOption(firstField.key);
-    await page.getByLabel("Filter Operator").selectOption("is_not_null");
-    await expect(page.getByRole("table").filter({ hasText: firstField.label })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: "Table Display" })).toBeVisible();
+    await expect(page.getByRole("textbox", { name: `Display label for ${firstField.label}` })).toHaveValue(firstField.label);
+    await expect(page.getByText("No default filters configured.")).toBeVisible();
 
     const renamedName = `${name} Updated`;
     const renamedDescription = "Updated by the Sprint 4A component workflow.";
@@ -696,8 +692,11 @@ VALUES ('${draftDashboard.id}', '${component.versions[0].id}', 99, '{}'::jsonb);
 
     await page.goto(`/components/${slug}`);
     await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toContainText("Components");
+    await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toContainText(renamedName);
     await expect(page.getByRole("heading", { level: 1, name: renamedName })).toBeVisible();
-    await expect(page.getByRole("columnheader", { name: firstField.label })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: "Table Display" })).toBeVisible();
+    await expect(page.getByRole("textbox", { name: `Display label for ${firstField.label}` })).toHaveValue(firstField.label);
+    await expect(page.getByRole("table").filter({ hasText: firstField.label })).toHaveCount(0);
     await expect(page.getByRole("heading", { level: 2, name: "Versions" })).toBeVisible();
     let versionsTable = page.getByRole("table").filter({ hasText: "Dataset Version" });
     await expect(versionsTable).toContainText("Draft");

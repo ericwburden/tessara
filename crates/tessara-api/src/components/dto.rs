@@ -33,6 +33,8 @@ pub struct CreateComponentVersionRequest {
     pub(crate) dataset_version_major: Option<i32>,
     pub(crate) component_type: String,
     pub(crate) config: Value,
+    #[serde(default)]
+    pub(crate) version_note: Option<String>,
 }
 
 /// Component validation response used by authoring and pre-publish flows.
@@ -59,7 +61,10 @@ pub struct ComponentSummary {
     pub(crate) slug: String,
     pub(crate) description: Option<String>,
     pub(crate) current_version_id: Option<Uuid>,
+    pub(crate) current_version_label: Option<String>,
     pub(crate) current_component_type: Option<String>,
+    pub(crate) draft_version_id: Option<Uuid>,
+    pub(crate) draft_version_label: Option<String>,
 }
 
 /// Component detail with its revision history.
@@ -83,6 +88,7 @@ pub struct ComponentVersionSummary {
     pub(crate) component_type: String,
     pub(crate) status: String,
     pub(crate) version_label: String,
+    pub(crate) version_note: String,
     pub(crate) config: Value,
 }
 

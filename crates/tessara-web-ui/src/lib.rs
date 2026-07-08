@@ -24,7 +24,9 @@ pub use breadcrumb::{
 };
 pub use button::Button;
 pub use combobox::{Combobox, ComboboxOption};
-pub use data_table::DataTable;
+pub use data_table::{
+    DataTable, InteractiveDataTable, InteractiveTableColumn, InteractiveTableRow,
+};
 pub use draggable_panel_list::{
     DraggablePanelList, DraggablePanelListAnchor, DraggablePanelListDraggable,
     DraggablePanelListDropZone, DraggablePanelListItem, DraggablePanelListMove,

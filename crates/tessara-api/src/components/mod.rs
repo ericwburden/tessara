@@ -64,7 +64,11 @@ pub(crate) fn routes() -> Router<AppState> {
         )
         .route(
             "/api/admin/components/{component_id}/versions/{version_id}",
-            axum::routing::patch(update_component_version),
+            axum::routing::patch(update_component_version).delete(delete_component_version),
+        )
+        .route(
+            "/api/admin/components/{component_id}/versions/{version_id}/published",
+            axum::routing::patch(update_published_component_version),
         )
         .route(
             "/api/admin/components/{component_id}/versions/{version_id}/publish",
@@ -203,6 +207,7 @@ pub async fn validate_component(
     body: Bytes,
 ) -> ApiResult<Json<ComponentValidationResponse>> {
     let payload = parse_component_payload::<CreateComponentVersionRequest>(&body)?;
+    validate_component_version_note(payload.version_note.as_deref())?;
     let account = auth::require_capability(&state.pool, &headers, "components:manage").await?;
     let mut findings = Vec::new();
     let binding = match resolve_component_dataset_binding(&state.pool, &payload).await {
@@ -277,6 +282,7 @@ pub async fn create_component_version(
     body: Bytes,
 ) -> ApiResult<Json<IdResponse>> {
     let payload = parse_component_payload::<CreateComponentVersionRequest>(&body)?;
+    validate_component_version_note(payload.version_note.as_deref())?;
     let account = auth::require_capability(&state.pool, &headers, "components:manage").await?;
     let binding = resolve_component_dataset_binding(&state.pool, &payload).await?;
     require_dataset_major_line_exists(
@@ -317,6 +323,7 @@ pub async fn update_component_version(
     body: Bytes,
 ) -> ApiResult<Json<IdResponse>> {
     let payload = parse_component_payload::<CreateComponentVersionRequest>(&body)?;
+    validate_component_version_note(payload.version_note.as_deref())?;
     let account = auth::require_capability(&state.pool, &headers, "components:manage").await?;
     let binding = resolve_component_dataset_binding(&state.pool, &payload).await?;
     require_dataset_major_line_exists(
@@ -345,6 +352,7 @@ pub async fn update_component_version(
     )
     .await?;
     validate_component_config(&payload.component_type, &payload.config, &dataset_fields)?;
+    let version_note = normalized_component_version_note(payload.version_note.as_deref())?;
 
     let update_result = sqlx::query(
         r#"
@@ -353,7 +361,8 @@ pub async fn update_component_version(
             dataset_version_major = $2,
             binding_mode = 'major_line',
             component_type = $3::component_type,
-            config = $4
+            config = $4,
+            version_note = COALESCE($7, version_note)
         WHERE component_id = $5
           AND id = $6
           AND status = 'draft'::component_version_status
@@ -365,11 +374,129 @@ pub async fn update_component_version(
     .bind(&payload.config)
     .bind(component_id)
     .bind(version_id)
+    .bind(version_note)
     .execute(&mut *tx)
     .await?;
     if update_result.rows_affected() != 1 {
         return Err(ApiError::BadRequest(format!(
             "component version {version_id} could not be updated because it is no longer a draft"
+        )));
+    }
+    tx.commit().await?;
+    Ok(Json(IdResponse { id: version_id }))
+}
+
+/// Updates the current published component version in place and clears any pending draft.
+pub async fn update_published_component_version(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((component_id, version_id)): Path<(Uuid, Uuid)>,
+    body: Bytes,
+) -> ApiResult<Json<IdResponse>> {
+    let payload = parse_component_payload::<CreateComponentVersionRequest>(&body)?;
+    validate_component_version_note(payload.version_note.as_deref())?;
+    let account = auth::require_capability(&state.pool, &headers, "components:manage").await?;
+    let binding = resolve_component_dataset_binding(&state.pool, &payload).await?;
+    require_dataset_major_line_exists(
+        &state.pool,
+        binding.dataset_id,
+        binding.dataset_version_major,
+    )
+    .await?;
+    require_dataset_fully_in_capability_scope(
+        &state.pool,
+        &account,
+        "components:manage",
+        binding.dataset_id,
+    )
+    .await?;
+    validate_component_type(&payload.component_type)?;
+    let dataset_fields = load_dataset_major_line_fields(
+        &state.pool,
+        binding.dataset_id,
+        binding.dataset_version_major,
+    )
+    .await?;
+    validate_component_config(&payload.component_type, &payload.config, &dataset_fields)?;
+
+    let mut tx = state.pool.begin().await?;
+    lock_component_in_tx(&mut tx, component_id).await?;
+    require_component_fully_manageable_in_tx(&mut tx, &state.pool, &account, component_id).await?;
+    require_component_version_status_row_in_tx(&mut tx, component_id, version_id, "published")
+        .await?;
+    let version_note = normalized_component_version_note(payload.version_note.as_deref())?;
+
+    let update_result = sqlx::query(
+        r#"
+        UPDATE component_versions
+        SET dataset_id = $1,
+            dataset_version_major = $2,
+            binding_mode = 'major_line',
+            component_type = $3::component_type,
+            config = $4,
+            version_note = COALESCE($7, version_note)
+        WHERE component_id = $5
+          AND id = $6
+          AND status = 'published'::component_version_status
+        "#,
+    )
+    .bind(binding.dataset_id)
+    .bind(binding.dataset_version_major)
+    .bind(&payload.component_type)
+    .bind(&payload.config)
+    .bind(component_id)
+    .bind(version_id)
+    .bind(version_note)
+    .execute(&mut *tx)
+    .await?;
+    if update_result.rows_affected() != 1 {
+        return Err(ApiError::BadRequest(format!(
+            "component version {version_id} could not be updated because it is no longer published"
+        )));
+    }
+
+    sqlx::query(
+        r#"
+        DELETE FROM component_versions
+        WHERE component_id = $1
+          AND status = 'draft'::component_version_status
+        "#,
+    )
+    .bind(component_id)
+    .execute(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
+    Ok(Json(IdResponse { id: version_id }))
+}
+
+/// Deletes a draft component version without affecting published history.
+pub async fn delete_component_version(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((component_id, version_id)): Path<(Uuid, Uuid)>,
+) -> ApiResult<Json<IdResponse>> {
+    let account = auth::require_capability(&state.pool, &headers, "components:manage").await?;
+    let mut tx = state.pool.begin().await?;
+    lock_component_in_tx(&mut tx, component_id).await?;
+    require_component_fully_manageable_in_tx(&mut tx, &state.pool, &account, component_id).await?;
+    require_component_version_draft_row_in_tx(&mut tx, component_id, version_id).await?;
+
+    let delete_result = sqlx::query(
+        r#"
+        DELETE FROM component_versions
+        WHERE component_id = $1
+          AND id = $2
+          AND status = 'draft'::component_version_status
+        "#,
+    )
+    .bind(component_id)
+    .bind(version_id)
+    .execute(&mut *tx)
+    .await?;
+    if delete_result.rows_affected() != 1 {
+        return Err(ApiError::BadRequest(format!(
+            "component version {version_id} could not be deleted because it is no longer a draft"
         )));
     }
     tx.commit().await?;
@@ -396,6 +523,7 @@ async fn upsert_component_draft_version(
     binding: &ComponentDatasetBinding,
     payload: &CreateComponentVersionRequest,
 ) -> ApiResult<Uuid> {
+    let version_note = normalized_component_version_note(payload.version_note.as_deref())?;
     let id = sqlx::query_scalar(
         r#"
         WITH next_version AS (
@@ -405,17 +533,18 @@ async fn upsert_component_draft_version(
         )
         INSERT INTO component_versions
             (component_id, dataset_id, dataset_version_major, binding_mode,
-             component_type, version_number, version_label, status, config)
+             component_type, version_number, version_label, version_note, status, config)
         SELECT $1, $2, $3, 'major_line', $4::component_type,
                next_version.version_number, next_version.version_number::text,
-               'draft'::component_version_status, $5
+               COALESCE($6, ''), 'draft'::component_version_status, $5
         FROM next_version
         ON CONFLICT (component_id) WHERE status = 'draft'::component_version_status
         DO UPDATE SET dataset_id = EXCLUDED.dataset_id,
                       dataset_version_major = EXCLUDED.dataset_version_major,
                       binding_mode = EXCLUDED.binding_mode,
                       component_type = EXCLUDED.component_type,
-                      config = EXCLUDED.config
+                      config = EXCLUDED.config,
+                      version_note = COALESCE($6, component_versions.version_note)
         RETURNING id
         "#,
     )
@@ -424,6 +553,7 @@ async fn upsert_component_draft_version(
     .bind(binding.dataset_version_major)
     .bind(&payload.component_type)
     .bind(&payload.config)
+    .bind(version_note)
     .fetch_one(&mut **tx)
     .await?;
     Ok(id)
@@ -1270,6 +1400,15 @@ async fn require_component_version_draft_row_in_tx(
     component_id: Uuid,
     version_id: Uuid,
 ) -> ApiResult<()> {
+    require_component_version_status_row_in_tx(tx, component_id, version_id, "draft").await
+}
+
+async fn require_component_version_status_row_in_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    component_id: Uuid,
+    version_id: Uuid,
+    expected_status: &str,
+) -> ApiResult<()> {
     let status: String = sqlx::query_scalar(
         r#"
         SELECT status::text
@@ -1284,7 +1423,13 @@ async fn require_component_version_draft_row_in_tx(
     .fetch_optional(&mut **tx)
     .await?
     .ok_or_else(|| ApiError::NotFound(format!("component version {version_id}")))?;
-    require_component_version_draft(version_id, &status)
+    if status == expected_status {
+        Ok(())
+    } else {
+        Err(ApiError::BadRequest(format!(
+            "component version {version_id} has status '{status}', expected '{expected_status}'"
+        )))
+    }
 }
 
 async fn load_component_summaries(
@@ -1302,11 +1447,17 @@ async fn load_component_summaries(
             components.slug,
             components.description,
             current_versions.id AS current_version_id,
-            current_versions.component_type::text AS current_component_type
+            current_versions.version_label AS current_version_label,
+            current_versions.component_type::text AS current_component_type,
+            draft_versions.id AS draft_version_id,
+            draft_versions.version_label AS draft_version_label
         FROM components
         LEFT JOIN component_versions AS current_versions
             ON current_versions.component_id = components.id
            AND current_versions.status = 'published'::component_version_status
+        LEFT JOIN component_versions AS draft_versions
+            ON draft_versions.component_id = components.id
+           AND draft_versions.status = 'draft'::component_version_status
         WHERE NOT EXISTS (
             SELECT 1
             FROM component_versions AS governed_versions
@@ -1331,11 +1482,17 @@ async fn load_component_summaries(
             components.slug,
             components.description,
             current_versions.id AS current_version_id,
-            current_versions.component_type::text AS current_component_type
+            current_versions.version_label AS current_version_label,
+            current_versions.component_type::text AS current_component_type,
+            draft_versions.id AS draft_version_id,
+            draft_versions.version_label AS draft_version_label
         FROM components
         LEFT JOIN component_versions AS current_versions
             ON current_versions.component_id = components.id
            AND current_versions.status = 'published'::component_version_status
+        LEFT JOIN component_versions AS draft_versions
+            ON draft_versions.component_id = components.id
+           AND draft_versions.status = 'draft'::component_version_status
         WHERE EXISTS (
             SELECT 1
             FROM dataset_scope_nodes
@@ -1358,11 +1515,17 @@ async fn load_component_summaries(
             components.slug,
             components.description,
             current_versions.id AS current_version_id,
-            current_versions.component_type::text AS current_component_type
+            current_versions.version_label AS current_version_label,
+            current_versions.component_type::text AS current_component_type,
+            draft_versions.id AS draft_version_id,
+            draft_versions.version_label AS draft_version_label
         FROM components
         LEFT JOIN component_versions AS current_versions
             ON current_versions.component_id = components.id
            AND current_versions.status = 'published'::component_version_status
+        LEFT JOIN component_versions AS draft_versions
+            ON draft_versions.component_id = components.id
+           AND draft_versions.status = 'draft'::component_version_status
         WHERE ($1 OR current_versions.id IS NOT NULL)
         ORDER BY components.name, components.id
         "#,
@@ -1382,7 +1545,10 @@ async fn load_component_summaries(
                 slug: row.try_get("slug")?,
                 description: row.try_get("description")?,
                 current_version_id: row.try_get("current_version_id")?,
+                current_version_label: row.try_get("current_version_label")?,
                 current_component_type: row.try_get("current_component_type")?,
+                draft_version_id: row.try_get("draft_version_id")?,
+                draft_version_label: row.try_get("draft_version_label")?,
             })
         })
         .collect::<Result<Vec<_>, sqlx::Error>>()
@@ -1498,7 +1664,8 @@ async fn load_component_versions(
                component_versions.dataset_id, component_versions.dataset_version_major,
                component_versions.binding_mode,
                component_versions.component_type::text AS component_type,
-               component_versions.status::text AS status, component_versions.version_label, component_versions.config
+               component_versions.status::text AS status, component_versions.version_label,
+               component_versions.version_note, component_versions.config
         FROM component_versions
         WHERE component_id = $1
           AND ($3 OR component_versions.status = 'published'::component_version_status)
@@ -1519,7 +1686,7 @@ async fn load_component_versions(
         auth::CapabilityBoundary::Global => sqlx::query(
             r#"
         SELECT id, component_id, dataset_id, dataset_version_major, binding_mode, component_type::text AS component_type,
-               status::text AS status, version_label, config
+               status::text AS status, version_label, version_note, config
         FROM component_versions
         WHERE component_id = $1
           AND ($2 OR status = 'published'::component_version_status)
@@ -1544,6 +1711,7 @@ async fn load_component_versions(
                 component_type: row.try_get("component_type")?,
                 status: row.try_get("status")?,
                 version_label: row.try_get("version_label")?,
+                version_note: row.try_get("version_note")?,
                 config: row.try_get("config")?,
             })
         })
@@ -1557,6 +1725,20 @@ fn validate_component_type(component_type: &str) -> ApiResult<()> {
             "unsupported component type '{other}'"
         ))),
     }
+}
+
+fn validate_component_version_note(note: Option<&str>) -> ApiResult<()> {
+    if note.map(str::trim).unwrap_or_default().len() > 2_000 {
+        return Err(ApiError::BadRequest(
+            "component version note must be 2000 characters or fewer".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn normalized_component_version_note(note: Option<&str>) -> ApiResult<Option<String>> {
+    validate_component_version_note(note)?;
+    Ok(note.map(|value| value.trim().to_string()))
 }
 
 #[derive(Deserialize)]

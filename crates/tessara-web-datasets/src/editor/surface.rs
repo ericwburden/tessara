@@ -45,6 +45,13 @@ pub(crate) fn DatasetEditorSurface(
             state.operation_order.get(),
         )
     });
+    let available_tags = Signal::derive(move || {
+        dataset_tag_options(
+            state.datasets.get(),
+            state.tags.get(),
+            state.known_tags.get(),
+        )
+    });
 
     view! {
         <section class="route-panel datasets-page">
@@ -96,8 +103,15 @@ pub(crate) fn DatasetEditorSurface(
             }>
                 <fieldset class="dataset-editor__fieldset" disabled=move || !state.editor_ready.get()>
                     <DatasetIdentitySection
+                        dataset_id=dataset_id.clone()
                         name=state.name
                         slug=state.slug
+                        tags=state.tags
+                        known_tags=state.known_tags
+                        tag_input=state.tag_input
+                        available_tags=available_tags
+                        save_error=state.save_error
+                        save_message=state.save_message
                     />
                     <DatasetSourcesEditor
                         initial_source=state.initial_source
@@ -159,5 +173,40 @@ pub(crate) fn DatasetEditorSurface(
                 </button>
             </div>
         </section>
+    }
+}
+
+fn dataset_tag_options(
+    datasets: Vec<super::super::types::DatasetSummary>,
+    selected_tags: Vec<String>,
+    known_tags: Vec<String>,
+) -> Vec<String> {
+    let mut tags = datasets
+        .into_iter()
+        .flat_map(|dataset| dataset.tags)
+        .chain(selected_tags)
+        .chain(known_tags)
+        .map(|tag| tag.trim().to_string())
+        .filter(|tag| !tag.is_empty())
+        .collect::<Vec<_>>();
+    tags.sort_by_key(|tag| tag.to_ascii_lowercase());
+    tags.dedup_by(|left, right| left.eq_ignore_ascii_case(right));
+    tags
+}
+
+#[cfg(test)]
+mod tests {
+    use super::dataset_tag_options;
+
+    #[test]
+    fn dataset_tag_options_include_catalog_and_selected_tags_once() {
+        assert_eq!(
+            dataset_tag_options(
+                Vec::new(),
+                vec!["Demo".into(), "demo".into()],
+                vec!["New".into()]
+            ),
+            vec!["Demo".to_string(), "New".to_string()]
+        );
     }
 }
