@@ -469,67 +469,6 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
 }
 
 #[component]
-pub fn ComponentPublishContent(component_ref: String) -> impl IntoView {
-    let component = RwSignal::new(None::<ComponentDefinition>);
-    let is_loading = RwSignal::new(true);
-    let load_error = RwSignal::new(None::<String>);
-    let publish_error = RwSignal::new(None::<String>);
-    let publish_message = RwSignal::new(None::<String>);
-    let validation_error = RwSignal::new(None::<String>);
-    let validation_message = RwSignal::new(None::<String>);
-    let validation_findings = RwSignal::new(Vec::<ComponentValidationFinding>::new());
-
-    Effect::new({
-        let component_ref = component_ref.clone();
-        move |_| load_admin_component(component_ref.clone(), component, is_loading, load_error)
-    });
-
-    view! {
-        <section class="route-panel components-page">
-            <ComponentsBreadcrumb current="Publish Component"/>
-            <PageHeader title="Publish Component"/>
-            {move || publish_error.get().map(|message| view! { <p class="form-status is-error">{message}</p> })}
-            {move || publish_message.get().map(|message| view! { <p class="form-status is-success">{message}</p> })}
-            {move || validation_error.get().map(|message| view! { <p class="form-status is-error">{message}</p> })}
-            {move || validation_message.get().map(|message| view! { <p class="form-status is-success">{message}</p> })}
-            {move || {
-                let findings = validation_findings.get();
-                (!findings.is_empty()).then(|| view! { <ValidationFindingsPanel findings/> })
-            }}
-            {move || {
-                if is_loading.get() {
-                    view! { <EmptyState title="Loading draft" message="Fetching component versions."/> }.into_any()
-                } else if let Some(message) = load_error.get() {
-                    view! { <EmptyState title="Component unavailable" message=message/> }.into_any()
-                } else if let Some(component) = component.get() {
-                    let draft = component.versions.iter().find(|version| version.status == "draft").cloned();
-                    if let Some(draft) = draft {
-                        let component_id = component.id.clone();
-                        let version_id = draft.id.clone();
-                        let draft_for_validation = draft.clone();
-                        view! {
-                            <section class="route-panel__section">
-                                <p>{format!("Draft {} is ready to publish.", draft.version_label)}</p>
-                                <button class="button button--secondary" type="button" on:click=move |_| {
-                                    validate_component_draft(draft_for_validation.clone(), validation_message, validation_error, validation_findings);
-                                }>"Validate Draft"</button>
-                                <button class="button" type="button" on:click=move |_| {
-                                    publish_component(component_id.clone(), version_id.clone(), publish_message, publish_error);
-                                }>"Publish Draft"</button>
-                            </section>
-                        }.into_any()
-                    } else {
-                        view! { <EmptyState title="No draft" message="This component does not have a draft version to publish."/> }.into_any()
-                    }
-                } else {
-                    view! { <EmptyState title="Component unavailable" message="Component detail could not be loaded."/> }.into_any()
-                }
-            }}
-        </section>
-    }
-}
-
-#[component]
 pub fn ComponentViewerContent(component_ref: String) -> impl IntoView {
     let component = RwSignal::new(None::<ComponentDefinition>);
     let component_loading = RwSignal::new(true);
@@ -1746,35 +1685,6 @@ async fn fetch_authoring_or_reader_component(
 }
 
 #[cfg(feature = "hydrate")]
-fn load_admin_component(
-    component_ref: String,
-    component: RwSignal<Option<ComponentDefinition>>,
-    is_loading: RwSignal<bool>,
-    load_error: RwSignal<Option<String>>,
-) {
-    leptos::task::spawn_local(async move {
-        is_loading.set(true);
-        load_error.set(None);
-        match api::fetch_admin_component(&component_ref).await {
-            Ok(Some(response)) => component.set(Some(response)),
-            Ok(None) => component.set(None),
-            Err(message) => load_error.set(Some(message)),
-        }
-        is_loading.set(false);
-    });
-}
-
-#[cfg(not(feature = "hydrate"))]
-fn load_admin_component(
-    _: String,
-    _: RwSignal<Option<ComponentDefinition>>,
-    is_loading: RwSignal<bool>,
-    _: RwSignal<Option<String>>,
-) {
-    is_loading.set(false);
-}
-
-#[cfg(feature = "hydrate")]
 #[allow(clippy::too_many_arguments)]
 fn load_component_for_edit(
     component_ref: String,
@@ -1924,6 +1834,7 @@ enum ComponentPublishAction {
 }
 
 #[cfg(feature = "hydrate")]
+#[allow(clippy::too_many_arguments)]
 fn create_component_from_form(
     editing_component_id: Option<String>,
     editing_version_id: Option<String>,
@@ -2193,71 +2104,6 @@ fn delete_component_draft(
     _: RwSignal<Option<String>>,
     _: RwSignal<Option<String>>,
     _: RwSignal<Vec<ComponentValidationFinding>>,
-) {
-}
-
-#[cfg(feature = "hydrate")]
-fn validate_component_draft(
-    draft: ComponentVersionSummary,
-    message: RwSignal<Option<String>>,
-    error: RwSignal<Option<String>>,
-    findings: RwSignal<Vec<ComponentValidationFinding>>,
-) {
-    leptos::task::spawn_local(async move {
-        message.set(None);
-        error.set(None);
-        findings.set(Vec::new());
-        let payload = CreateComponentVersionRequest {
-            dataset_id: Some(draft.dataset_id),
-            dataset_version_major: Some(draft.dataset_version_major),
-            component_type: draft.component_type,
-            config: draft.config,
-            version_note: None,
-        };
-        match api::validate_component_version(payload).await {
-            Ok(response) if response.valid => {
-                message.set(Some("Component draft is valid.".into()));
-            }
-            Ok(response) => {
-                findings.set(response.findings);
-            }
-            Err(message) => error.set(Some(message)),
-        }
-    });
-}
-
-#[cfg(not(feature = "hydrate"))]
-fn validate_component_draft(
-    _: ComponentVersionSummary,
-    _: RwSignal<Option<String>>,
-    _: RwSignal<Option<String>>,
-    _: RwSignal<Vec<ComponentValidationFinding>>,
-) {
-}
-
-#[cfg(feature = "hydrate")]
-fn publish_component(
-    component_id: String,
-    version_id: String,
-    message: RwSignal<Option<String>>,
-    error: RwSignal<Option<String>>,
-) {
-    leptos::task::spawn_local(async move {
-        message.set(None);
-        error.set(None);
-        match api::publish_component_version(&component_id, &version_id).await {
-            Ok(_) => message.set(Some("Component published.".into())),
-            Err(error_message) => error.set(Some(error_message)),
-        }
-    });
-}
-
-#[cfg(not(feature = "hydrate"))]
-fn publish_component(
-    _: String,
-    _: String,
-    _: RwSignal<Option<String>>,
-    _: RwSignal<Option<String>>,
 ) {
 }
 

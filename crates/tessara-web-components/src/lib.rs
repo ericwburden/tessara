@@ -8,6 +8,6 @@ mod pages;
 mod types;
 
 pub use pages::{
-    ComponentEditorContent, ComponentPublishContent, ComponentVersionsContent,
-    ComponentViewerContent, ComponentsIndexContent,
+    ComponentEditorContent, ComponentVersionsContent, ComponentViewerContent,
+    ComponentsIndexContent,
 };

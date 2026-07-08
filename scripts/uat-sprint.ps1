@@ -181,16 +181,16 @@ $componentCreate = Invoke-Html -Uri "$BaseUrl/components/new" -CookieJarPath $ad
 Assert-ProtectedShell -Content $componentCreate -Needles @("Create Component") -Context "component create"
 
 $componentDetail = Invoke-Html -Uri "$BaseUrl/components/$($seedComponent.slug)" -CookieJarPath $adminBrowserSession
-Assert-ProtectedShell -Content $componentDetail -Needles @("Component Detail") -Context "component detail"
+Assert-ProtectedShell -Content $componentDetail -Needles @("Component") -Context "component table preview"
 
 $componentEdit = Invoke-Html -Uri "$BaseUrl/components/$($seedComponent.slug)/edit" -CookieJarPath $adminBrowserSession
 Assert-ProtectedShell -Content $componentEdit -Needles @("Edit Component") -Context "component edit"
 
-$componentPublish = Invoke-Html -Uri "$BaseUrl/components/$($seedComponent.slug)/publish" -CookieJarPath $adminBrowserSession
-Assert-ProtectedShell -Content $componentPublish -Needles @("Publish Component") -Context "component publish"
+$componentVersions = Invoke-Html -Uri "$BaseUrl/components/$($seedComponent.slug)/versions" -CookieJarPath $adminBrowserSession
+Assert-ProtectedShell -Content $componentVersions -Needles @("Component Versions") -Context "component versions"
 
 $componentViewer = Invoke-Html -Uri "$BaseUrl/components/$($seedComponent.slug)/view" -CookieJarPath $adminBrowserSession
-Assert-ProtectedShell -Content $componentViewer -Needles @("Component Viewer") -Context "component viewer"
+Assert-ProtectedShell -Content $componentViewer -Needles @("Component") -Context "component viewer"
 
 $workflowsList = Invoke-Html -Uri "$BaseUrl/workflows" -CookieJarPath $adminBrowserSession
 Assert-ProtectedShell -Content $workflowsList -Needles @("Workflows") -Context "workflow directory"

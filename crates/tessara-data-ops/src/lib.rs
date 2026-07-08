@@ -487,13 +487,13 @@ mod tests {
     }
 
     #[test]
-    fn parses_component_and_legacy_dataset_aggregate_names() {
+    fn parses_public_and_dataset_aggregate_names() {
         assert_eq!(
             AggregateFunction::parse("count").expect("count should parse"),
             AggregateFunction::Count
         );
         assert_eq!(
-            AggregateFunction::parse("count_values").expect("legacy count values should parse"),
+            AggregateFunction::parse("count_values").expect("count values should parse"),
             AggregateFunction::CountValues
         );
         assert_eq!(

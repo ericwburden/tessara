@@ -14,7 +14,8 @@ The sprint delivers:
 - component draft/version/publish workflows;
 - published-history dashboard placement;
 - scoped read/authoring authorization for Dataset-backed components;
-- native Leptos table authoring, publishing, and viewing routes.
+- native Leptos table authoring, versioning, publishing, and viewing routes;
+- shared interactive table rendering for Dataset previews and Component viewers.
 
 The earlier Detail Table / Aggregate Table split is intentionally removed before merge. Aggregate and detail shaping should be modeled as display-ready Datasets, then rendered through the same Table component.
 
@@ -33,11 +34,13 @@ Kickoff defaults:
 - A table that needs grouped or aggregated output should bind to a Dataset whose final shape is already grouped or aggregated.
 - Dataset catalog growth is handled with search, tags, and provenance rather than formal analytical/display Dataset classes.
 - Dataset tags are searchable metadata, not authorization or execution semantics.
-- Dataset provenance should help authors answer "what produced this Dataset?" by showing contributing Forms and upstream Datasets.
+- Dataset provenance should help authors answer "what produced this Dataset?" by showing a full ancestor lineage rooted at the Dataset and including contributing Forms and upstream Datasets.
 - Component versions bind major-line only: store `dataset_id`, `dataset_version_major`, and `binding_mode = major_line`; enforce `binding_mode = 'major_line'`.
 - Component versions do not retain `dataset_revision_id`.
-- The explicit publish endpoint is the only publish flow: `POST /api/admin/components/{component_id}/versions/{version_id}/publish`.
+- Component publishing is initiated from the edit screen. Authors manually choose whether an edit updates the current published version in place or creates a new version. New-version publishing opens a consumer-review modal with a searchable consumer list placeholder and a required version-note affordance.
+- The system does not classify component edits as breaking or non-breaking. The author owns the decision to update the current version or create a new version.
 - Public reader routes list/load only published component versions. Management routes expose drafts plus published/superseded history to users with `components:manage`.
+- Component list status distinguishes `Draft`, `Published`, and `Updating`; the list also shows the current revision label.
 - Dashboard placements may reference only immutable published-history component versions: `published` or `superseded`.
 - Read visibility is audience-based overlap. Authoring, binding, publishing, and dashboard placement remain governance-based containment.
 
@@ -75,8 +78,9 @@ Dataset tags:
 Dataset provenance:
 
 - Derived from `dataset_sources`, source Forms, and upstream Dataset references.
-- Returned by Dataset list/detail APIs as compact summaries.
-- Rendered in Dataset detail and picker context.
+- Returned by Dataset list/detail APIs as compact summaries and lineage data.
+- Rendered in Dataset detail as a tree rooted at the current Dataset, with Form/Dataset icons and expand/collapse behavior.
+- Rendered in Dataset and Component picker context as compact source summaries.
 - Does not change Dataset version compatibility rules in Sprint 4A.
 
 ## Component Contracts
@@ -105,8 +109,10 @@ Application routes:
 - `/components/new`
 - `/components/:component_ref`
 - `/components/:component_ref/edit`
-- `/components/:component_ref/publish`
+- `/components/:component_ref/versions`
 - `/components/:component_ref/view`
+
+The previous `/components/:component_ref/publish` interstitial route is intentionally removed. Publishing and version decisions belong on the edit screen.
 
 Component binding:
 
@@ -163,6 +169,9 @@ Validation findings are returned for visible, authorized payloads with invalid c
 - Materialization pending/failure is a render state, not a component validation failure.
 - Current component table route uses only the current published version.
 - Explicit version table route allows published or superseded versions and authorizes against the selected version's Dataset scope.
+- Dataset previews and Component rendering use the shared interactive table display: search, column selection, header sort/filter menus, reset controls, pagination, and horizontal overflow behavior.
+- Header filter controls live in anchored menus and do not replace table horizontal scrolling with page scrolling.
+- Column visibility, sort, filter, and search are viewer state. They do not mutate Dataset definitions or Component version config.
 
 Query encoding:
 
@@ -198,17 +207,18 @@ Supported viewer filter operators:
 `crates/tessara-web-components` owns:
 
 - component API adapters and DTOs;
-- directory/detail/create/edit/publish/viewer pages;
+- directory/detail/create/edit/versions/viewer pages;
 - Dataset picker with catalog search, tags, provenance, field preview, and major-line choice;
 - presentation-only Table config controls;
+- edit-screen publish/version workflow and consumer-review placeholder modal;
 - validation display;
-- viewer wrappers around the Rust/UI Data Table pattern.
+- viewer wrappers around the shared interactive table display.
 
 `crates/tessara-web-datasets` owns:
 
 - Dataset directory search/filter UX;
 - Dataset tag editing;
-- Dataset provenance display;
+- Dataset provenance lineage display;
 - Dataset detail/catalog presentation.
 
 Root `tessara-web` owns route adapters, app shell integration, session guard integration, document metadata, hydration, CSS/assets, and cargo-leptos ownership.
@@ -224,13 +234,15 @@ Do not introduce feature-crate cross dependencies. Component authoring may consu
 - Component authoring picker shows Dataset tags, provenance, major versions, and field preview.
 - A tester can create, validate, publish, and view a Table component.
 - Component versions bind to Dataset major version lines, not revisions.
+- Component versions are constrained to `component_type = table`.
 - Component config stores only presentation-level table options.
 - Component validation rejects fields/sorts/search fields not present in the bound major-line contract.
 - Component table execution renders the Dataset major-line table surface directly.
 - A component bound to Dataset v1 renders data from all published minor/patch revisions in v1.
 - Publishing Dataset v2 does not affect components bound to v1.
 - Draft/edit flows preserve the current published version until publish.
-- Publishing a draft supersedes the prior published version atomically.
+- Authors can update an existing published version in place or create a new version.
+- Creating a new version records a version note and prepares a consumer-review/re-pinning workflow.
 - Published and superseded component versions cannot be mutated.
 - Public reader routes and dashboards consume only published-history component versions; drafts remain admin-only authoring state.
 - Dataset dependency summaries and impact rows ignore working component drafts and report only published-history consumers.
@@ -241,6 +253,7 @@ Do not introduce feature-crate cross dependencies. Component authoring may consu
 - Scoped users cannot publish a component version bound to an out-of-scope Dataset major line.
 - Scoped users cannot direct-load hidden component detail or table viewer routes.
 - Touched component routes remain native Leptos SSR routes.
+- The old component publish page is absent from route adapters, scripts, and docs.
 
 ## Manual Test Plan
 
@@ -252,11 +265,12 @@ Admin happy path:
 4. Edit Dataset tags and verify directory/search/detail update.
 5. Open `/components/new`.
 6. Search for a Dataset by tag or provenance.
-7. Select a Dataset major line, choose visible columns, optional search fields, default sort, and page size.
+7. Select a Dataset major line, choose displayed fields, optional default filters, default sort, and page size.
 8. Save the Table component draft.
-9. Validate, publish, and view the Table component.
-10. Edit a published component and confirm the viewer remains unchanged until the draft is published.
-11. Publish the draft and confirm the viewer reflects the new presentation config.
+9. Publish from the edit screen by choosing either update existing version or create new version.
+10. For create-new-version, review the consumer modal and add a version note.
+11. View the Table component and confirm it uses the shared interactive table display.
+12. Edit a published component and confirm the viewer remains unchanged until the draft is published or the existing published version is updated.
 
 Major-line behavior:
 
@@ -303,7 +317,8 @@ Backend/API scenarios:
 - Reject binding to out-of-scope major line.
 - Reject visible/search/sort fields not in the major-line contract.
 - Reject unsupported component kinds.
-- Publish draft supersedes existing published version.
+- Update existing published version mutates that version in place.
+- Create new version supersedes the prior published version and records a version note.
 - Published/superseded component versions are immutable.
 - Concurrent version creation preserves version-number and one-draft invariants.
 - Concurrent publish preserves single-published invariant.
@@ -317,10 +332,10 @@ Frontend/E2E scenarios:
 - Dataset detail renders tags and provenance.
 - Dataset tag edit/save flow.
 - Component Dataset picker search by tag/provenance.
-- `/components`, `/components/new`, `/components/:component_ref`, `/components/:component_ref/edit`, `/components/:component_ref/publish`, and `/components/:component_ref/view` load natively.
-- Create Table -> save draft -> publish -> view.
+- `/components`, `/components/new`, `/components/:component_ref`, `/components/:component_ref/edit`, `/components/:component_ref/versions`, and `/components/:component_ref/view` load natively.
+- Create Table -> save draft or publish from the edit screen -> view.
 - Edit published Table -> draft visible -> viewer unchanged.
-- Publish edited draft -> viewer changes.
+- From the edit screen, either update the existing published version in place or create a new version after reviewing current consumers and writing a version note.
 - Validation findings render next to relevant fields.
 - Table viewer renders headers, rows, toolbar, column picker, filters, and pagination.
 - Sort/filter/search over Dataset output fields.
@@ -339,13 +354,15 @@ Update `docs/playwright-permissions-scenarios.md` for component create/edit/publ
 4. Simplify component frontend authoring to a single Table form with Dataset picker/catalog context.
 5. Add Dataset catalog/search/tag/provenance UI.
 6. Rewrite component and permission tests to remove DetailTable/AggregateTable assumptions.
-7. Run full validation and update sprint closeout notes.
+7. Replace Dataset previews and Component rendering with the shared interactive table display.
+8. Remove superseded publish-page/aggregate-detail compatibility paths and enforce table-only component versions.
+9. Run full validation and update sprint closeout notes.
 
 ## Risks And Scope Traps
 
 - Recreating Dataset authoring inside Components is the main trap. If a table needs shaping, create or edit a Dataset.
 - Tags are discoverability metadata only. Do not use tags for permissions, materialization, or version compatibility.
-- Provenance must be helpful without becoming a graph explorer. Sprint 4A shows compact direct source summaries.
+- Provenance must be helpful without becoming a workflow editor. Sprint 4A shows a lineage tree for ancestry and compact summaries in picker contexts.
 - Component tables must not render only the latest Dataset revision; they execute over the full major-line materialized surface.
 - Publish-time materialization coupling would make components invalid when cache policy changes. Validate contracts at publish; ensure materialization at render.
 - Client-only filtering/sorting/pagination can accidentally operate only on the current page. Use server-driven table execution.

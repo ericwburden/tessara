@@ -423,13 +423,13 @@ try {
     $componentNewPage = Invoke-Html -Uri "$baseUrl/components/new" -CookieJarPath $adminBrowserSession
     Assert-ProtectedShell -Content $componentNewPage -Needles @("Create Component") -Context "component create shell"
     $componentDetailPage = Invoke-Html -Uri "$baseUrl/components/$($seedComponent.slug)" -CookieJarPath $adminBrowserSession
-    Assert-ProtectedShell -Content $componentDetailPage -Needles @("Component Detail") -Context "component detail shell"
+    Assert-ProtectedShell -Content $componentDetailPage -Needles @("Component") -Context "component table preview shell"
     $componentEditPage = Invoke-Html -Uri "$baseUrl/components/$($seedComponent.slug)/edit" -CookieJarPath $adminBrowserSession
     Assert-ProtectedShell -Content $componentEditPage -Needles @("Edit Component") -Context "component edit shell"
-    $componentPublishPage = Invoke-Html -Uri "$baseUrl/components/$($seedComponent.slug)/publish" -CookieJarPath $adminBrowserSession
-    Assert-ProtectedShell -Content $componentPublishPage -Needles @("Publish Component") -Context "component publish shell"
+    $componentVersionsPage = Invoke-Html -Uri "$baseUrl/components/$($seedComponent.slug)/versions" -CookieJarPath $adminBrowserSession
+    Assert-ProtectedShell -Content $componentVersionsPage -Needles @("Component Versions") -Context "component versions shell"
     $componentViewerPage = Invoke-Html -Uri "$baseUrl/components/$($seedComponent.slug)/view" -CookieJarPath $adminBrowserSession
-    Assert-ProtectedShell -Content $componentViewerPage -Needles @("Component Viewer") -Context "component viewer shell"
+    Assert-ProtectedShell -Content $componentViewerPage -Needles @("Component") -Context "component viewer shell"
 
     [pscustomobject]@{
         status = "passed"

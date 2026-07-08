@@ -10,8 +10,8 @@ use crate::routes::PRIMARY_SSR_MODE;
 use crate::types::route_params::{ComponentRouteParams, require_route_params};
 use crate::ui::AppShell;
 use tessara_web_components::{
-    ComponentEditorContent, ComponentPublishContent, ComponentVersionsContent,
-    ComponentViewerContent, ComponentsIndexContent,
+    ComponentEditorContent, ComponentVersionsContent, ComponentViewerContent,
+    ComponentsIndexContent,
 };
 
 pub fn component_routes() -> impl MatchNestedRoutes + Clone {
@@ -30,11 +30,6 @@ pub fn component_routes() -> impl MatchNestedRoutes + Clone {
             <Route
                 path=path!("/components/:component_ref/edit")
                 view=ComponentsEditPage
-                ssr=PRIMARY_SSR_MODE
-            />
-            <Route
-                path=path!("/components/:component_ref/publish")
-                view=ComponentsPublishPage
                 ssr=PRIMARY_SSR_MODE
             />
             <Route
@@ -80,16 +75,6 @@ fn ComponentsEditPage() -> impl IntoView {
     view! {
         <AppShell active_route="components" title="Edit Component">
             <ComponentEditorContent component_ref=Some(params.component_ref)/>
-        </AppShell>
-    }
-}
-
-#[component]
-fn ComponentsPublishPage() -> impl IntoView {
-    let params = require_route_params::<ComponentRouteParams>();
-    view! {
-        <AppShell active_route="components" title="Publish Component">
-            <ComponentPublishContent component_ref=params.component_ref/>
         </AppShell>
     }
 }

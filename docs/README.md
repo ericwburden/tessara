@@ -29,7 +29,7 @@ The active direction for Tessara is:
 - preserve the implemented baseline as of June 28, 2026
 - transition from the current reporting stack into the `Dataset -> Component -> Dashboard` model
 - use a `cargo-leptos` SSR-first frontend pipeline with root-owned route adapters and major feature areas implemented in focused `tessara-web-*` crates
-- develop the next major frontend feature area, Components, as `tessara-web-components` from the start
+- treat Components as an implemented major frontend feature area in `tessara-web-components`
 - plan future delivery as explicit vertical-slice sprints
 - require every sprint to leave the application user-testable through usable application UI
 

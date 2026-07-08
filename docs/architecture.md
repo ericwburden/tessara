@@ -82,7 +82,7 @@ The current frontend is a native Leptos SSR application with root route ownershi
 Feature crates own feature UI implementation and feature-local browser transport:
 
 - `tessara-web-ui` owns generic, policy-neutral UI primitives
-- `tessara-web-data-ops` owns neutral data-operation authoring controls and draft contracts reused by feature crates, such as the aggregation editor shared by Dataset Aggregation operations and Component AggregateTable authoring
+- `tessara-web-data-ops` owns neutral data-operation authoring controls and draft contracts reused by feature crates, such as projection and filter editors shared by Dataset authoring and thin Table Component authoring
 - `tessara-web-datasets`, `tessara-web-components`, `tessara-web-forms`, `tessara-web-workflows`, `tessara-web-responses`, and `tessara-web-organization` own their respective content components, loaders/actions, web DTOs, display helpers, and local support helpers
 - feature crates expose narrow content facades and do not depend on root `tessara-web`, `tessara-api`, root route modules, `AppShell`, `leptos_router`, `leptos_meta`, auth/session/navigation policy, or sibling feature crates other than shared UI
 
@@ -91,7 +91,7 @@ Frontend delivery should follow these rules:
 - use `cargo-leptos` as the canonical workspace build pipeline
 - keep a single `axum` binary (`tessara-api`) that serves API routes, SSR HTML, SVG assets, and the built wasm/js package
 - keep `tessara-web` focused on root application composition and route adapters rather than growing new major feature implementation inside the root crate
-- implement the next major feature area as its own feature crate from the start; in the current roadmap, Component authoring/viewing should be built as `tessara-web-components`
+- implement major feature areas as focused feature crates when the boundary is clear; Component authoring/viewing is implemented in `tessara-web-components`
 - replace the current broad Administration grouping with individual administrative feature areas when that work is revisited: User Management, Roles and Access, and Organization Schema are the intended slices, while Datasets is already separate and Components should be built as its own planned feature area
 - keep REST endpoints as the stable transport contract during the migration; UI components should read and mutate data through feature-local adapters rather than embedding raw fetch logic throughout the component tree
 - keep the root-level native application URLs as the active UI contract
@@ -146,23 +146,9 @@ Internal structure:
 
 ### Component
 
-Versioned presentation asset over a `DatasetRevision`.
+Versioned presentation asset over a Dataset major line. Sprint 4A supports a single thin Table Component that renders a display-ready Dataset with last-mile table presentation choices such as visible fields, display labels, default sort, default filters, and page size.
 
-v1 component types:
-
-- `DetailTable`
-- `AggregateTable`
-- `Bar`
-- `Line`
-- `Pie/Donut`
-- `StatCard`
-
-Owns:
-
-- grouping
-- measures
-- bucketing
-- presentation configuration
+Future component types may add charts or stat cards, but analytical shaping, aggregation, grouping, and bucketing belong in Dataset authoring rather than in separate table component backends.
 
 ### Dashboard
 

@@ -727,12 +727,13 @@ VALUES ('${draftDashboard.id}', '${component.versions[0].id}', 99, '{}'::jsonb);
     );
     await expect(page.getByRole("heading", { name: "Dataset Context" })).toBeVisible();
 
-    await page.goto(`/components/${slug}/publish`);
-    await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toContainText("Components");
-    await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toContainText("Publish Component");
-    await expect(page.getByRole("heading", { level: 1, name: "Publish Component" })).toBeVisible();
-    await page.getByRole("button", { name: "Publish Draft" }).click();
-    await expect(page.getByText("Component published.")).toBeVisible();
+    await page.goto(`/components/${slug}/edit`);
+    await page.getByRole("button", { name: "Save and Publish" }).click();
+    await page.getByRole("menuitem", { name: "Create New Version" }).click();
+    await expect(page.getByRole("dialog", { name: "Review component consumers" })).toBeVisible();
+    await page.getByLabel("New Version Note").fill("Playwright replacement version.");
+    await page.getByRole("button", { name: "Create New Version" }).click();
+    await expect(page.getByRole("heading", { level: 1, name: renamedName })).toBeVisible();
 
     component = await loadComponent(page, slug);
     expect(component.versions.find((version) => version.id === secondDraft.id)?.status).toBe(

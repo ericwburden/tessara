@@ -57,6 +57,7 @@ The codebase already includes a substantial vertical foundation:
 - extracted Leptos feature crates for shared UI, Datasets, Forms, Workflows, Responses, and Organization, with root-owned route adapters preserving shell, auth, route parsing, hydration, CSS, and cargo-leptos ownership
 - Sprint 2B authentication hardening: Argon2id credential storage, server-side session expiry/revocation/last-seen tracking, same-origin `HttpOnly` browser cookies, stable auth/session errors, and native SSR login/session behavior
 - UI Overhaul 2.0 detour work: approved shell navigation posture, access-denied redirect plus transient feedback, sidebar footer account/scope/theme context, queue-first home posture, explorer-oriented organization work, section-oriented form-builder UI, and section description/column-count persistence
+- Sprint 4A Dataset Catalog and Thin Table Components: searchable Dataset tags, Dataset provenance lineage, one thin Table Component over Dataset major-line outputs, edit-screen component versioning/publishing, and shared interactive table rendering for Dataset previews and Component viewers
 
 ### Current UI baseline
 
@@ -631,7 +632,7 @@ This section records the completed foundation sequence that led to the current n
 
 ## Phase 4: Components
 
-### Sprint 4A: Dataset Catalog And Thin Table Components (Next)
+### Sprint 4A: Dataset Catalog And Thin Table Components (Implemented)
 
 **Outcome:** Dataset discovery improves and table-oriented presentation assets become thin display components over Dataset major-line outputs.
 
@@ -639,18 +640,21 @@ This section records the completed foundation sequence that led to the current n
 
 - implement Component frontend surfaces in a dedicated `tessara-web-components` crate from the start, with root `tessara-web` retaining route adapters, shell/auth/session/navigation policy, hydration, document integration, CSS, and assets
 - one public `table` component kind with presentation-only config: visible columns, default sort, page size, optional search fields, and display-label overrides
-- Dataset catalog tags, direct-source provenance summaries, and searchable Dataset directory/detail surfaces so authors can choose display-ready Datasets as the source of truth
+- Dataset catalog tags, provenance lineage, and searchable Dataset directory/detail surfaces so authors can choose display-ready Datasets as the source of truth
 - component versioning and publication
+- edit-screen version decisions: update existing published version in place or create a new version through a consumer-review modal with a version note
 - validation and Dataset major-line binding behavior; component versions do not bind Dataset revisions directly
+- table-only component-version storage enforced by schema constraint
 - any retained legacy analytical endpoints stay adapter-only; no new core behavior may deepen deprecated asset families
 - touched reporting and component routes continuing hybrid-shell removal rather than creating a second long-lived bridge
 - component list/detail endpoints enforce scoped dataset and component visibility with negative operator coverage
 
 **Application UI delivered this sprint:**
 
-- component directory/detail/create/edit/publish flows
-- table viewers inside the application
-- Dataset catalog search, tags, and provenance context in Dataset and Component authoring surfaces
+- component directory/detail/create/edit/versions/view flows
+- edit-screen publishing with Update Existing Version and Create New Version actions
+- table viewers inside the application using the shared interactive table display
+- Dataset catalog search, tag editing, provenance lineage, and Dataset context in Component authoring surfaces
 
 **User-testable exit condition:** a tester can tag and discover Datasets, review direct provenance, then create, version, publish, and view thin table components in the app.
 

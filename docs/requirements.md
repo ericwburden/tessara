@@ -80,16 +80,11 @@ Dataset -> Component -> Dashboard
 
 ### Component requirements
 
-- Components must be versioned presentation assets over `DatasetRevision`.
-- v1 components must support:
-  - `DetailTable`
-  - `AggregateTable`
-  - `Bar`
-  - `Line`
-  - `Pie/Donut`
-  - `StatCard`
-- Components must own grouping, measures, bucketing, and presentation configuration.
-- Components must replace target-state planning that previously assumed separate report, aggregation, and chart assets.
+- Components must be versioned presentation assets over Dataset major lines.
+- Sprint 4A components support a single thin `Table` type for rendering display-ready Datasets.
+- Table Components must own last-mile display configuration, including visible fields, display labels, default sort, default filters, page size, and viewer affordances.
+- Analytical shaping, aggregation, grouping, bucketing, and reusable field contracts belong in Dataset authoring, not in separate DetailTable/AggregateTable component backends.
+- Future component types may add charts or stat cards once those product needs are explicitly scoped.
 
 ### Dashboard requirements
 

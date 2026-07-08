@@ -11,14 +11,26 @@ project direction.
   - replaced the Detail Table / Aggregate Table split with one thin `table` component kind whose config is presentation-only
   - moved analytical shaping back to Datasets as the source of truth; grouped or aggregated displays should bind to display-ready Dataset major lines
   - added Dataset catalog tags and direct-source provenance summaries to improve Dataset discoverability as the catalog grows
+- Final product shape:
+  - Component authoring uses one Table flow; the former `/components/:component_ref/publish` interstitial route was removed
+  - publishing happens from the edit screen, where authors choose whether to update the existing published version in place or create a new version
+  - creating a new version opens a consumer-review modal with a version note; the note is shown in component version history
+  - draft-only components remain visible to managers, show `Draft` status, and can be edited/published from the edit screen
+  - components with a current published version plus a pending draft show `Updating`
+  - component version storage is table-only and major-line-only: `dataset_id`, `dataset_version_major`, `binding_mode = major_line`, and `component_type = table`
 - Completed:
   - rewrote `docs/sprints/sprint-4a-plan.md` around "Thin Table Components + Dataset provenance/search"
   - added `dataset_tags`, tag update API, tag normalization, Dataset list/detail tag loading, and direct provenance summaries
-  - updated Dataset directory/detail UI so search includes tags, provenance names, field labels/keys, grain, and slug; detail shows editable tags and direct provenance
+  - updated Dataset directory/detail UI so search includes tags, provenance names, field labels/keys, grain, and slug; detail shows tags and provenance tabs
+  - moved Dataset tag editing into Dataset authoring with combobox/chip editing and custom tag creation
+  - replaced direct provenance tables with a full ancestor lineage tree that distinguishes Forms and Datasets
   - simplified backend component validation/execution to a single `table` config with `visible_columns`, `search_fields`, `default_sort`, `page_size`, and display-label overrides
-  - simplified component authoring UI to one Table flow with Dataset catalog context, visible columns, default sort, and page size
+  - simplified component authoring UI to one Table flow with Dataset catalog context, displayed fields, default filters, default sort, and page size
+  - introduced shared projection/filter/collapsible-panel controls in neutral UI/data-ops boundaries instead of duplicating Dataset authoring controls inside Components
+  - introduced the shared interactive table display for Dataset previews and Component rendering, with search, column visibility, header sort/filter menus, pagination, and reset controls
   - rewrote component Playwright coverage around thin table behavior instead of component-owned aggregation
   - updated roadmap and permission-scenario docs to remove stale aggregate/detail component language
+  - removed the old component publish page and updated validation/UAT scripts to exercise the edit-screen publish workflow
 - Validation so far:
   - `cargo fmt --all --check` - passed
   - `cargo test -p tessara-api` - passed: 59 unit tests, 6 demo-flow tests, 25 workflow-runtime tests, and doc tests
@@ -29,9 +41,10 @@ project direction.
   - `.\scripts\local-launch.ps1 -FreshData -SkipSeed; .\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"` - passed for organization, forms, datasets, components, and seed flows
   - from `end2end/`: `npx playwright test tests/components.spec.ts tests/permissions.spec.ts` - passed: 21/21
   - from `end2end/`: `npx playwright test` - passed: 39/39
+  - post-cleanup checks passed: `cargo fmt --all --check`, `cargo check -p tessara-api`, focused Playwright component spec discovery, and `cargo clippy -p tessara-data-ops -p tessara-web-components -p tessara-web -p tessara-api --features tessara-web-components/hydrate,tessara-web/hydrate -- -D warnings`
 - Current local handoff state:
   - the Tessara stack is running at `http://localhost:8080`
-  - UAT seeded the refreshed database during the final validation pass
+  - UAT seeded the refreshed database during validation, and the local database has the Sprint 4A table-only component constraint applied
 
 ## 2026-07-03 - Sprint 4A Kickoff
 

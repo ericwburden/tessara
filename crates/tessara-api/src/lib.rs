@@ -286,16 +286,6 @@ pub fn router(state: AppState) -> Router {
             }),
         )
         .route(
-            "/components/{component_ref}/publish",
-            get(|Path(component_ref): Path<String>| async move {
-                native_app(
-                    format!("/components/{component_ref}/publish"),
-                    "Publish Component",
-                    "Publish a Tessara component.",
-                )
-            }),
-        )
-        .route(
             "/components/{component_ref}/view",
             get(|Path(component_ref): Path<String>| async move {
                 native_app(
