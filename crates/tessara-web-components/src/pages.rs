@@ -67,10 +67,19 @@ pub fn ComponentVersionsContent(component_ref: String) -> impl IntoView {
     let component = RwSignal::new(None::<ComponentDefinition>);
     let is_loading = RwSignal::new(true);
     let load_error = RwSignal::new(None::<String>);
+    let can_manage_component = RwSignal::new(false);
 
     Effect::new({
         let component_ref = component_ref.clone();
-        move |_| load_component(component_ref.clone(), component, is_loading, load_error)
+        move |_| {
+            load_component(
+                component_ref.clone(),
+                component,
+                is_loading,
+                load_error,
+                can_manage_component,
+            )
+        }
     });
 
     view! {
@@ -90,7 +99,9 @@ pub fn ComponentVersionsContent(component_ref: String) -> impl IntoView {
                             current="Versions"
                         />
                         <PageHeader title=component.name.clone()>
-                            <a class="button button--secondary" href=edit_href>"Edit"</a>
+                            {can_manage_component.get().then(|| view! {
+                                <a class="button button--secondary" href=edit_href>"Edit"</a>
+                            })}
                             <a class="button" href=view_href>"View"</a>
                         </PageHeader>
                         <ComponentVersionsSection versions=component.versions/>
@@ -494,6 +505,7 @@ pub fn ComponentViewerContent(component_ref: String) -> impl IntoView {
     let component = RwSignal::new(None::<ComponentDefinition>);
     let component_loading = RwSignal::new(true);
     let component_error = RwSignal::new(None::<String>);
+    let can_manage_component = RwSignal::new(false);
     let table = RwSignal::new(None::<ComponentTable>);
     let error = RwSignal::new(None::<String>);
     let component_ref_for_title = component_ref.clone();
@@ -506,6 +518,7 @@ pub fn ComponentViewerContent(component_ref: String) -> impl IntoView {
                 component,
                 component_loading,
                 component_error,
+                can_manage_component,
             )
         }
     });
@@ -1694,14 +1707,20 @@ fn load_component(
     component: RwSignal<Option<ComponentDefinition>>,
     is_loading: RwSignal<bool>,
     load_error: RwSignal<Option<String>>,
+    can_manage_component: RwSignal<bool>,
 ) {
     leptos::task::spawn_local(async move {
         is_loading.set(true);
         load_error.set(None);
         match fetch_authoring_or_reader_component(&component_ref).await {
-            Ok(Some(response)) => component.set(Some(response)),
-            Ok(None) => component.set(None),
-            Err(message) => load_error.set(Some(message)),
+            Ok((response, can_manage)) => {
+                can_manage_component.set(can_manage);
+                component.set(response);
+            }
+            Err(message) => {
+                can_manage_component.set(false);
+                load_error.set(Some(message));
+            }
         }
         is_loading.set(false);
     });
@@ -1710,10 +1729,12 @@ fn load_component(
 #[cfg(feature = "hydrate")]
 async fn fetch_authoring_or_reader_component(
     component_ref: &str,
-) -> Result<Option<ComponentDefinition>, String> {
+) -> Result<(Option<ComponentDefinition>, bool), String> {
     match api::fetch_admin_component(component_ref).await {
-        Ok(response) => Ok(response),
-        Err(_) => api::fetch_component(component_ref).await,
+        Ok(response) => Ok((response, true)),
+        Err(_) => api::fetch_component(component_ref)
+            .await
+            .map(|response| (response, false)),
     }
 }
 
@@ -1800,6 +1821,7 @@ fn load_component(
     _: RwSignal<Option<ComponentDefinition>>,
     is_loading: RwSignal<bool>,
     _: RwSignal<Option<String>>,
+    _: RwSignal<bool>,
 ) {
     is_loading.set(false);
 }
