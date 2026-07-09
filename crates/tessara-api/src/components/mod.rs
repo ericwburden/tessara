@@ -50,6 +50,9 @@ where
 }
 
 pub(crate) fn routes() -> Router<AppState> {
+    // The edit-screen authoring workflow is POST /api/admin/components/save.
+    // The granular admin routes remain internal API/setup primitives for tests,
+    // migrations, and narrowly scoped lifecycle operations such as draft delete.
     Router::new()
         .route(
             "/api/admin/components",
@@ -1240,6 +1243,8 @@ fn table_search_fields<'a>(
     config: &TableComponentConfig,
     fields: &[&'a DataField],
 ) -> ApiResult<Vec<&'a DataField>> {
+    // Blank search fields means search every projected component field using
+    // text coercion, matching the shared interactive table viewer behavior.
     if config.search_fields.is_empty() {
         return Ok(fields.to_vec());
     }

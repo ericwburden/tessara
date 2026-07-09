@@ -97,6 +97,8 @@ Management routes:
 - `POST /api/admin/components/{component_id}/versions/{version_id}/publish`
 - `POST /api/admin/components/validate`
 
+`POST /api/admin/components/save` is the application authoring workflow for component edit-screen saves, published-version updates, and new-version creation. The granular component admin routes remain internal API/setup primitives for tests, migrations, validation, and narrowly scoped lifecycle operations such as deleting a draft; they are not the documented user-facing author workflow.
+
 Reader/viewer routes:
 
 - `GET /api/components`
@@ -167,7 +169,7 @@ Validation findings are returned for visible, authorized payloads with invalid c
 - `visible_columns` defines the component projection contract and rendered column order.
 - If `visible_columns` is blank, the component projection contract is the Dataset major-line output contract.
 - `filters` defines the component's saved default filter set over the bound Dataset major-line output fields. These filters run before viewer filters.
-- `search_fields` controls global search fields. If blank, search defaults to text-like fields in the component projection contract.
+- `search_fields` controls global search fields. If blank, search runs across every field in the component projection contract using text coercion.
 - Default sort, display-label, runtime visible-column, and viewer filter validation use the component projection contract so viewer state cannot reveal fields hidden by the component.
 - Default sort and page size come from component config unless overridden by query params.
 - Runtime query state does not mutate component version config.
