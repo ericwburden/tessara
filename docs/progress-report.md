@@ -12,7 +12,7 @@ project direction.
 - PR: `https://github.com/ericwburden/tessara/pull/103`
 - Status: complete and ready for merge review, with Sprint 4B marked next in the roadmap
 - Completed:
-  - pivoted the sprint from component-owned Detail/Aggregate Tables to one thin `table` component over Dataset major-line outputs
+  - pivoted from component-owned Detail/Aggregate Tables to one thin `table` component over Dataset major-line outputs
   - added Dataset catalog tags, searchable Dataset discovery, Dataset detail tabs, and editable catalog metadata that does not create Dataset revisions
   - added Dataset provenance lineage as a tree rooted at the current Dataset, with Form and Dataset ancestors linked from the lineage view
   - simplified Component storage and APIs to table-only, major-line-only versions with `dataset_id`, `dataset_version_major`, `binding_mode = major_line`, `component_type = table`, and optional version notes
@@ -22,71 +22,189 @@ project direction.
   - added atomic component save behavior so component metadata, draft changes, update-existing-version, and create-new-version actions commit or fail together
   - added shared table rendering for Dataset previews and Component viewers, including search, column visibility, header sort/filter menus, reset controls, pagination, and horizontal-scroll-safe menus
   - updated Component list UX with status distinctions for `Draft`, `Published`, and `Updating`, current revision display, icon actions, filters, and shared pagination footer styling
+  - hid draft component metadata and authoring controls from reader-only component list/detail/version surfaces while keeping drafts manager-visible
   - removed legacy Detail Table, Aggregate Table, revision-bound component compatibility, inline publish flag, and old component kind paths from the Sprint 4A product surface
   - clarified the remaining granular component admin endpoints as API/test setup paths; the edit screen uses the atomic save command as the authoring workflow
 - Validation:
+  - `.\scripts\local-launch.ps1` - passed after full API image rebuild and launched `http://localhost:8080`
   - `.\scripts\local-launch.ps1 -FreshData -SkipSeed` - passed and launched a clean empty stack for UAT seeding
   - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"` - passed for organization, forms, datasets, components, and seed flows
-  - `cargo fmt --all` - passed
-  - `cargo clippy -p tessara-api -p tessara-web -p tessara-web-components -p tessara-web-datasets -p tessara-web-data-ops --all-targets -- -D warnings` - passed
-  - `cargo test -p tessara-api` - passed: 70 component/dataset unit tests, 6 demo-flow tests, 25 workflow-runtime tests, and doc tests
-  - `cargo test -p tessara-web` - passed: 4 web shell tests and doc tests
-  - `cargo test -p tessara-web-components -p tessara-web-datasets -p tessara-web-data-ops` - passed: 16 component tests, 1 data-ops test, 24 dataset tests, and doc tests
-  - from `end2end/`: `npx playwright test --workers=1` - passed: 39/39 browser tests
   - `.\scripts\smoke.ps1` - passed: 6 demo-flow smoke tests plus JSON smoke summary
-  - `.\scripts\local-launch.ps1 -FreshData` - passed after smoke and relaunched the seeded app for handoff
-- Current local handoff state:
-  - the Tessara stack is running at `http://localhost:8080`
-  - standard demo accounts remain available, including `admin@tessara.local / tessara-dev-admin`
-- Next sprint:
-  - Sprint 4B: Chart And Stat Component Slice
+  - `cargo fmt --all` - passed
+  - `cargo test -p tessara-api` - passed: 71 component/dataset unit tests, 6 demo-flow tests, 25 workflow-runtime tests, and doc tests
+  - `cargo test -p tessara-web` - passed: 4 web shell tests and doc tests
+  - `cargo test -p tessara-web-components -p tessara-web-datasets -p tessara-web-data-ops` - passed: 17 component tests, 1 data-ops test, 24 dataset tests, and doc tests
+  - from `end2end/`: `npx playwright test` - passed: 39/39 browser tests
+  - final `.\scripts\local-launch.ps1 -FreshData` - passed and relaunched the seeded app for handoff
+- Next Sprint: Sprint 4B: Chart And Stat Component Slice
 
 ### Sprint Handoff / Demo Instructions
 
-1. Launch the app:
-   - `.\scripts\local-launch.ps1 -FreshData`
-   - Open `http://localhost:8080`
-   - Log in as `admin@tessara.local / tessara-dev-admin`
-2. Dataset catalog tags and search:
-   - Go to `Datasets`
-   - Confirm Dataset search can find Datasets by name, slug, tag, source/provenance name, grain, and field metadata
-   - Open a Dataset, review the `Tags` tab, then use `Edit Dataset` to add/remove tags with the combobox/chip control
-3. Dataset provenance lineage:
-   - Open a Dataset with multiple sources
-   - Use the `Sources` tab for direct inputs
-   - Use the `Provenance` tab for the full ancestor tree rooted at the current Dataset, with Form and Dataset icons and links
-4. Thin Table Component authoring:
-   - Go to `Components`
-   - Create or edit a Table Component
-   - Choose a Dataset major-line source, review Dataset Context, configure Displayed Fields, Default Filters, default sort, and page size
-   - Save as draft, update an existing published version, or create a new version with a required version note
-5. Component viewer and version history:
-   - Open a published Component from the directory
-   - Confirm the default route renders the table preview using the shared interactive table
-   - Use search, column controls, reset, header sort/filter menus, pagination, and horizontal scrolling
-   - Open version history and confirm version notes appear for newly created versions
-6. Scope and governance behavior:
-   - Use existing Playwright permission scenarios for scoped negative checks
-   - Drafts remain manager-visible but reader-hidden; published and superseded history remains renderable only when the selected version's Dataset scope is visible
+#### Dataset Catalog Search And Tags
+- Role: admin
+- Paths:
+  - `http://localhost:8080/datasets`
+  - `http://localhost:8080/datasets/{dataset_id}`
+  - `http://localhost:8080/datasets/{dataset_id}/edit`
+- Steps:
+  1. Log in as `admin@tessara.local / tessara-dev-admin`.
+  2. Open `Datasets` and search by Dataset name, slug, grain, tag, field label/key, and provenance source name.
+  3. Open a Dataset detail page and review its tag display.
+  4. Use `Edit Dataset` to add and remove tags with the combobox/chip control.
+- Expected:
+  - Dataset directory and detail surfaces expose tags, and search responds to tags plus source/field metadata.
+- Acceptance check:
+  - Pass when tag edits persist and the directory search can rediscover the Dataset by the saved tag.
+- Evidence location:
+  - `end2end/tests/components.spec.ts`
+  - `end2end/tests/datasets.spec.ts`
+  - `cargo test -p tessara-web-datasets`
+
+#### Dataset Provenance Lineage
+- Role: admin
+- Paths:
+  - `http://localhost:8080/datasets/{dataset_id}`
+- Steps:
+  1. Open a Dataset with contributing Forms or upstream Datasets.
+  2. Review the direct `Sources` view.
+  3. Open the `Provenance` view and inspect the full ancestor tree rooted at the current Dataset.
+- Expected:
+  - Form and Dataset ancestors are visible with distinct lineage entries and links where applicable.
+- Acceptance check:
+  - Pass when the Dataset detail distinguishes direct sources from full provenance lineage.
+- Evidence location:
+  - `cargo test -p tessara-api`
+  - `cargo test -p tessara-web-datasets`
+  - `npx playwright test`
+
+#### Thin Table Component Authoring
+- Role: admin
+- Paths:
+  - `http://localhost:8080/components`
+  - `http://localhost:8080/components/new`
+  - `http://localhost:8080/components/{component_ref}/edit`
+- Steps:
+  1. Open `Components` and create a new component.
+  2. Choose a Dataset major-line source and review the Dataset Context panel.
+  3. Configure Displayed Fields, Default Filters, default sort, and page size.
+  4. Save as draft, update an existing published version, or create a new version with a version note.
+- Expected:
+  - Component authoring stores only table presentation config and binds to a Dataset major line, not a Dataset revision.
+- Acceptance check:
+  - Pass when a draft can be saved, a version can be published, and the old publish interstitial route is absent.
+- Evidence location:
+  - `end2end/tests/components.spec.ts`
+  - `crates/tessara-api/tests/demo_flow.rs`
+  - `cargo test -p tessara-web-components`
+
+#### Component Viewer And Version History
+- Role: admin
+- Paths:
+  - `http://localhost:8080/components/{component_ref}`
+  - `http://localhost:8080/components/{component_ref}/view`
+  - `http://localhost:8080/components/{component_ref}/versions`
+  - `GET /api/components/{component_ref}/table`
+  - `GET /api/components/{component_ref}/versions/{version_id}/table`
+- Steps:
+  1. Open a published Component from the directory.
+  2. Confirm the default route renders the table preview with the shared interactive table.
+  3. Use search, column controls, reset, header sort/filter menus, pagination, and horizontal scrolling.
+  4. Open version history and confirm version notes appear for created versions.
+- Expected:
+  - Component viewers render published table data and keep superseded published-history versions readable when scoped access allows.
+- Acceptance check:
+  - Pass when the viewer displays rows from the bound Dataset major line and viewer controls do not mutate component config.
+- Evidence location:
+  - `end2end/tests/components.spec.ts`
+  - `end2end/tests/permissions.spec.ts`
+  - `.\scripts\smoke.ps1`
+
+#### Reader And Scoped Governance
+- Role: operator
+- Paths:
+  - `http://localhost:8080/components`
+  - `http://localhost:8080/components/{component_ref}`
+  - `http://localhost:8080/components/{component_ref}/versions`
+  - `POST /api/admin/components/validate`
+  - `POST /api/admin/components/{component_id}/versions/{version_id}/publish`
+- Steps:
+  1. Log in with a scoped non-admin account from the seeded demo set.
+  2. Confirm hidden Datasets and hidden Components are absent or forbidden.
+  3. Confirm reader component surfaces do not show draft metadata, create/edit actions, or draft-only versions.
+  4. Attempt an out-of-scope component bind or publish through the scripted permission fixtures.
+- Expected:
+  - Readers see only published visible components; managers see only manageable drafts/versions; guessed out-of-scope IDs are denied.
+- Acceptance check:
+  - Pass when reader-only users cannot discover drafts or authoring controls, and scoped managers cannot bind/publish hidden Dataset major lines.
+- Evidence location:
+  - `end2end/tests/permissions.spec.ts`
+  - `components::tests::reader_component_summary_omits_absent_draft_metadata`
+  - `pages::tests::reader_component_summary_without_draft_metadata_stays_published`
 
 ### Acceptance Mapping
 
-- Roadmap exit condition: "a tester can tag and discover Datasets, review direct provenance, then create, version, publish, and view thin table components in the app."
-  - Covered by Dataset search/tag UI, Dataset provenance tree, Component authoring, edit-screen publish decisions, Component viewer, Playwright `Sprint 4A component workflow`, UAT seed checks, and smoke validation.
-- Dataset catalog discoverability:
-  - Covered by Dataset tags, Dataset search expansion, Dataset detail tabs, tag editing, and provenance summaries.
-- Provenance:
-  - Covered by the direct Sources table plus full ancestor lineage tree in the Provenance tab.
-- Thin Table Component model:
-  - Covered by schema constraints, table-only component validation, single `table` config, major-line binding, and rejection tests for legacy component kinds and `dataset_revision_id` payloads.
-- Version governance:
-  - Covered by manual edit-screen choices to Save Draft, Update Existing Version, or Create New Version; new versions require a note and prepare the consumer review workflow.
-- Runtime table behavior:
-  - Covered by shared interactive table rendering for Dataset previews and Component viewers, saved/default filters, search, column visibility, sorting, filtering, pagination, and reset controls.
-- Authorization:
-  - Covered by read-overlap and authoring-containment semantics in docs, selected historical version authorization, dashboard draft rejection, scoped component bind/publish denial, and permission Playwright tests.
-- Legacy cleanup:
-  - Covered by removal of the publish interstitial route, old Detail/Aggregate component UI, revision-bound component compatibility, inline publish flag support, and stale docs.
+- Exit condition:
+  - A tester can tag and discover Datasets, review direct provenance, then create, version, publish, and view thin table components in the app.
+- Manual demonstration:
+  - `Dataset Catalog Search And Tags`, `Dataset Provenance Lineage`, `Thin Table Component Authoring`, and `Component Viewer And Version History`.
+- Automated check:
+  - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`, `npx playwright test`, `cargo test -p tessara-api`, `cargo test -p tessara-web-components -p tessara-web-datasets -p tessara-web-data-ops`.
+
+- Exit condition:
+  - Dataset APIs expose tags and provenance summaries; directory search matches tags, fields, Forms, and upstream Datasets; Dataset managers can edit tags.
+- Manual demonstration:
+  - `Dataset Catalog Search And Tags` and `Dataset Provenance Lineage`.
+- Automated check:
+  - `end2end/tests/datasets.spec.ts`, `end2end/tests/components.spec.ts`, `cargo test -p tessara-web-datasets`, `cargo test -p tessara-api`.
+
+- Exit condition:
+  - Component versions bind to Dataset major version lines, are constrained to `component_type = table`, and store only presentation-level table options.
+- Manual demonstration:
+  - `Thin Table Component Authoring`.
+- Automated check:
+  - `crates/tessara-api/src/components/mod.rs` unit tests for legacy kind rejection, legacy revision payload rejection, presentation-field validation, and config validation.
+
+- Exit condition:
+  - Component validation rejects unknown fields, sorts, search fields, unsupported kinds, and invalid saved filters before reader execution.
+- Manual demonstration:
+  - `Thin Table Component Authoring`.
+- Automated check:
+  - `cargo test -p tessara-api`, `cargo test -p tessara-web-components`, and Playwright component validation assertions.
+
+- Exit condition:
+  - Component table execution renders the Dataset major-line table surface, including compatible minor/patch rows, while later major versions do not affect a v1-bound component.
+- Manual demonstration:
+  - `Component Viewer And Version History`.
+- Automated check:
+  - `crates/tessara-api/tests/demo_flow.rs`, `end2end/tests/datasets.spec.ts`, `end2end/tests/components.spec.ts`, and `.\scripts\smoke.ps1`.
+
+- Exit condition:
+  - Draft/edit flows preserve the current published version until publish; authors can update an existing version in place or create a new version with a note and consumer-review placeholder.
+- Manual demonstration:
+  - `Thin Table Component Authoring` and `Component Viewer And Version History`.
+- Automated check:
+  - `end2end/tests/components.spec.ts`, `crates/tessara-api/tests/demo_flow.rs`, and `cargo test -p tessara-api`.
+
+- Exit condition:
+  - Public reader routes and dashboards consume only published-history component versions; drafts remain admin-only authoring state.
+- Manual demonstration:
+  - `Reader And Scoped Governance`.
+- Automated check:
+  - `end2end/tests/permissions.spec.ts`, `components::tests::reader_component_summary_omits_absent_draft_metadata`, and `pages::tests::reader_component_summary_without_draft_metadata_stays_published`.
+
+- Exit condition:
+  - Scoped users cannot list hidden Dataset major lines, bind guessed hidden Dataset IDs, publish out-of-scope component versions, or direct-load hidden component detail/table routes.
+- Manual demonstration:
+  - `Reader And Scoped Governance`.
+- Automated check:
+  - `end2end/tests/permissions.spec.ts` scoped component and historical version checks plus API demo-flow scope assertions.
+
+- Exit condition:
+  - Touched component routes remain native Leptos SSR routes and the old component publish page is absent.
+- Manual demonstration:
+  - Open `/components`, `/components/new`, `/components/{component_ref}`, `/components/{component_ref}/edit`, `/components/{component_ref}/versions`, and `/components/{component_ref}/view`.
+- Automated check:
+  - `end2end/tests/components.spec.ts`, `end2end/tests/app.spec.ts`, `cargo test -p tessara-web`, and route adapter review in `crates/tessara-web/src/routes/components.rs`.
 
 ## 2026-07-05 - Sprint 4A Dataset Catalog And Thin Table Pivot
 
