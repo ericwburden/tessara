@@ -26,6 +26,33 @@ Kickoff defaults:
 
 Visual presentation assets are first-class components.
 
+### Settled Sprint Decisions
+
+- Component kind storage stays on the existing `component_versions.component_type` enum and `component_versions.config` JSON contract. Sprint 4B widens the enum from `table` to `table`, `bar`, `line`, `pie`, `donut`, and `stat_card`; it does not add a separate chart/report/visual-analysis asset table.
+- Visual components bind to Dataset major lines exactly like Table components: `dataset_id`, `dataset_version_major`, and `binding_mode = major_line`. They do not bind directly to Dataset revisions and do not create component-owned aggregation definitions.
+- Dataset major-line outputs are expected to be display-ready for the intended visual. Bar/Line/Pie/Donut components map existing output rows to marks; StatCard maps an existing output row/field to a displayed statistic. Any grouping, calculation, filtering, or aggregation needed to make the data display-ready belongs in the Dataset authoring layer.
+- The v1 visual renderer should be native Leptos/SVG/CSS in `tessara-web-components`. Do not introduce a JavaScript chart controller, bridge asset, or workbench-owned rendering path for this sprint.
+- Existing `/api/components/{component_ref}/table` and versioned table execution endpoints remain table-only compatibility endpoints for Table viewers and tests. Sprint 4B may add visual execution endpoints or a polymorphic component render endpoint, but whichever path is chosen must use `ComponentVersion` as the only visual source of truth and must preserve the existing table endpoints.
+- Pie and Donut share the same validation and data contract, with `component_type` selecting the visual treatment. Both are accepted deliverables; the UI may expose them as a single segmented Pie/Donut kind selector.
+- Legacy visual-analysis endpoints should not be touched unless implementation proves they are necessary for compatibility. If touched, the sprint must document the exact endpoint and prove it is adapter-only with scoped component/dashboard visibility enforcement.
+
+### V1 Visual Config Contracts
+
+Visual configs are intentionally presentation-level. All field references below must resolve against the bound Dataset major-line output fields.
+
+- `bar`: `category_field`, `value_field`, optional `label`, optional `value_format`, optional `orientation` of `vertical` or `horizontal`, optional `max_items`.
+- `line`: `x_field`, `y_field`, optional `label`, optional `value_format`, optional `max_items`.
+- `pie` / `donut`: `category_field`, `value_field`, optional `label`, optional `value_format`, optional `max_slices`.
+- `stat_card`: `stat_field`, optional `label`, optional `value_format`, optional `supporting_text_field`, optional `trend_field`.
+
+Validation should reject:
+
+- missing required fields for the selected kind;
+- field references outside the bound Dataset major-line contract;
+- numeric chart value fields that are not Dataset `number` fields for Bar, Line, Pie, and Donut;
+- unsupported enum values such as unknown orientation or format options;
+- configs containing stale analytical keys such as `metrics`, `group_by`, `aggregation`, or legacy report/chart identifiers.
+
 ### Component Kinds
 
 Sprint 4B adds authoring and viewing support for:
