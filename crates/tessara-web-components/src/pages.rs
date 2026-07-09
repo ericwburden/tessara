@@ -31,18 +31,21 @@ pub fn ComponentsIndexContent() -> impl IntoView {
     let components = RwSignal::new(Vec::<ComponentSummary>::new());
     let is_loading = RwSignal::new(true);
     let load_error = RwSignal::new(None::<String>);
+    let can_manage_components = RwSignal::new(false);
 
     Effect::new(move |_| {
-        load_components(components, is_loading, load_error);
+        load_components(components, is_loading, load_error, can_manage_components);
     });
 
     view! {
         <section class="route-panel components-page">
             <div class="page-header">
                 <div></div>
-                <div class="page-header__actions">
-                    <a class="button" href="/components/new">"Create Component"</a>
-                </div>
+                {move || can_manage_components.get().then(|| view! {
+                    <div class="page-header__actions">
+                        <a class="button" href="/components/new">"Create Component"</a>
+                    </div>
+                })}
             </div>
             {move || {
                 if is_loading.get() {
@@ -52,7 +55,7 @@ pub fn ComponentsIndexContent() -> impl IntoView {
                 } else if components.get().is_empty() {
                     view! { <EmptyState title="No visible components" message="No components are visible for the current account."/> }.into_any()
                 } else {
-                    view! { <ComponentsTable components=components.get()/> }.into_any()
+                    view! { <ComponentsTable components=components.get() can_manage=can_manage_components.get()/> }.into_any()
                 }
             }}
         </section>
@@ -817,7 +820,7 @@ fn ComponentVersionsSection(versions: Vec<ComponentVersionSummary>) -> impl Into
 }
 
 #[component]
-fn ComponentsTable(components: Vec<ComponentSummary>) -> impl IntoView {
+fn ComponentsTable(components: Vec<ComponentSummary>, can_manage: bool) -> impl IntoView {
     let search = RwSignal::new(String::new());
     let kind_filter = RwSignal::new(String::from("all"));
     let status_filter = RwSignal::new(String::from("all"));
@@ -902,16 +905,19 @@ fn ComponentsTable(components: Vec<ComponentSummary>) -> impl IntoView {
                                         options=table_status_options.clone()
                                     />
                                 </th>
-                                <th class="data-table__cell--center" scope="col">"Actions"</th>
+                                {can_manage.then(|| view! {
+                                    <th class="data-table__cell--center" scope="col">"Actions"</th>
+                                })}
                             </tr>
                         </thead>
                         <tbody>
                             {move || {
                                 let components = filtered_components.get();
                                 if components.is_empty() {
+                                    let colspan = if can_manage { 5 } else { 4 };
                                     view! {
                                         <tr>
-                                            <td class="data-table__empty" colspan="4">"No Components to Display"</td>
+                                            <td class="data-table__empty" colspan=colspan>"No Components to Display"</td>
                                         </tr>
                                     }
                                     .into_any()
@@ -935,16 +941,18 @@ fn ComponentsTable(components: Vec<ComponentSummary>) -> impl IntoView {
                                                     <td class="data-table__cell--center">{kind_label}</td>
                                                     <td class="data-table__cell--center">{revision_label}</td>
                                                     <td class="data-table__cell--center">{status_label}</td>
-                                                    <td class="data-table__cell--center">
-                                                        <div class="components-list-actions">
-                                                            <a class="icon-button" href=edit_href aria-label="Edit component" title="Edit component">
-                                                                <Pencil class="icon-button__icon"/>
-                                                            </a>
-                                                            <a class="icon-button" href=versions_href aria-label="View component versions" title="View component versions">
-                                                                <History class="icon-button__icon"/>
-                                                            </a>
-                                                        </div>
-                                                    </td>
+                                                    {can_manage.then(|| view! {
+                                                        <td class="data-table__cell--center">
+                                                            <div class="components-list-actions">
+                                                                <a class="icon-button" href=edit_href aria-label="Edit component" title="Edit component">
+                                                                    <Pencil class="icon-button__icon"/>
+                                                                </a>
+                                                                <a class="icon-button" href=versions_href aria-label="View component versions" title="View component versions">
+                                                                    <History class="icon-button__icon"/>
+                                                                </a>
+                                                            </div>
+                                                        </td>
+                                                    })}
                                                 </tr>
                                             }
                                         })
@@ -967,6 +975,7 @@ fn ComponentsTable(components: Vec<ComponentSummary>) -> impl IntoView {
                     total_count=total_count
                     page_size=page_size
                     page_index=page_index
+                    can_manage=can_manage
                 />
                 <TablePaginationFooter
                     aria_label="Components table pagination"
@@ -986,6 +995,7 @@ fn ComponentsMobileCards(
     total_count: Memo<usize>,
     page_size: RwSignal<usize>,
     page_index: RwSignal<usize>,
+    can_manage: bool,
 ) -> impl IntoView {
     view! {
         <div class="forms-list-mobile-cards components-list-mobile-cards">
@@ -1025,14 +1035,16 @@ fn ComponentsMobileCards(
                                             <dd>{revision_label}</dd>
                                         </div>
                                     </dl>
-                                    <div class="forms-list-mobile-card__actions components-list-mobile-card__actions">
-                                        <a class="icon-button" href=edit_href aria-label="Edit component" title="Edit component">
-                                            <Pencil class="icon-button__icon"/>
-                                        </a>
-                                        <a class="icon-button" href=versions_href aria-label="View component versions" title="View component versions">
-                                            <History class="icon-button__icon"/>
-                                        </a>
-                                    </div>
+                                    {can_manage.then(|| view! {
+                                        <div class="forms-list-mobile-card__actions components-list-mobile-card__actions">
+                                            <a class="icon-button" href=edit_href aria-label="Edit component" title="Edit component">
+                                                <Pencil class="icon-button__icon"/>
+                                            </a>
+                                            <a class="icon-button" href=versions_href aria-label="View component versions" title="View component versions">
+                                                <History class="icon-button__icon"/>
+                                            </a>
+                                        </div>
+                                    })}
                                 </article>
                             }
                         })
@@ -1633,17 +1645,33 @@ fn load_components(
     components: RwSignal<Vec<ComponentSummary>>,
     is_loading: RwSignal<bool>,
     load_error: RwSignal<Option<String>>,
+    can_manage_components: RwSignal<bool>,
 ) {
     leptos::task::spawn_local(async move {
         is_loading.set(true);
         load_error.set(None);
         match api::fetch_admin_components().await {
-            Ok(Some(response)) => components.set(response),
-            Ok(None) => components.set(Vec::new()),
+            Ok(Some(response)) => {
+                can_manage_components.set(true);
+                components.set(response);
+            }
+            Ok(None) => {
+                can_manage_components.set(true);
+                components.set(Vec::new());
+            }
             Err(_) => match api::fetch_components().await {
-                Ok(Some(response)) => components.set(response),
-                Ok(None) => components.set(Vec::new()),
-                Err(message) => load_error.set(Some(message)),
+                Ok(Some(response)) => {
+                    can_manage_components.set(false);
+                    components.set(response);
+                }
+                Ok(None) => {
+                    can_manage_components.set(false);
+                    components.set(Vec::new());
+                }
+                Err(message) => {
+                    can_manage_components.set(false);
+                    load_error.set(Some(message));
+                }
             },
         }
         is_loading.set(false);
@@ -1655,6 +1683,7 @@ fn load_components(
     _: RwSignal<Vec<ComponentSummary>>,
     is_loading: RwSignal<bool>,
     _: RwSignal<Option<String>>,
+    _: RwSignal<bool>,
 ) {
     is_loading.set(false);
 }
@@ -2041,7 +2070,8 @@ mod tests {
         component_kind_filter_options, component_matches_filters, component_status_filter_options,
     };
     use super::{
-        component_redirect_ref, dataset_catalog_option_label, dataset_provenance_label,
+        component_redirect_ref, component_summary_kind_label, component_summary_revision_label,
+        component_summary_status_label, dataset_catalog_option_label, dataset_provenance_label,
         editable_component_version, materialization_empty_state, selected_dataset_major_value,
         snake_case_component_slug, table_page_size_from_config, table_sort_from_config,
         table_visible_columns_from_config,
@@ -2169,6 +2199,15 @@ mod tests {
             "Table",
             "Updating"
         ));
+    }
+
+    #[test]
+    fn reader_component_summary_without_draft_metadata_stays_published() {
+        let reader_summary = component_summary("Reader Visible Table", Some("table"), true);
+
+        assert_eq!(component_summary_kind_label(&reader_summary), "Table");
+        assert_eq!(component_summary_status_label(&reader_summary), "Published");
+        assert_eq!(component_summary_revision_label(&reader_summary), "v1");
     }
 
     #[test]

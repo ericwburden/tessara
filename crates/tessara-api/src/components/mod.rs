@@ -1861,15 +1861,12 @@ async fn load_component_summaries(
             current_versions.id AS current_version_id,
             current_versions.version_label AS current_version_label,
             current_versions.component_type::text AS current_component_type,
-            draft_versions.id AS draft_version_id,
-            draft_versions.version_label AS draft_version_label
+            NULL::uuid AS draft_version_id,
+            NULL::text AS draft_version_label
         FROM components
         LEFT JOIN component_versions AS current_versions
             ON current_versions.component_id = components.id
            AND current_versions.status = 'published'::component_version_status
-        LEFT JOIN component_versions AS draft_versions
-            ON draft_versions.component_id = components.id
-           AND draft_versions.status = 'draft'::component_version_status
         WHERE EXISTS (
             SELECT 1
             FROM dataset_scope_nodes
@@ -1894,8 +1891,8 @@ async fn load_component_summaries(
             current_versions.id AS current_version_id,
             current_versions.version_label AS current_version_label,
             current_versions.component_type::text AS current_component_type,
-            draft_versions.id AS draft_version_id,
-            draft_versions.version_label AS draft_version_label
+            CASE WHEN $1 THEN draft_versions.id ELSE NULL::uuid END AS draft_version_id,
+            CASE WHEN $1 THEN draft_versions.version_label ELSE NULL::text END AS draft_version_label
         FROM components
         LEFT JOIN component_versions AS current_versions
             ON current_versions.component_id = components.id
@@ -2538,7 +2535,7 @@ mod tests {
     use uuid::Uuid;
 
     use super::{
-        ComponentTableQuery, ComponentVersionForTable, CreateComponentRequest,
+        ComponentSummary, ComponentTableQuery, ComponentVersionForTable, CreateComponentRequest,
         CreateComponentVersionRequest, UpdateComponentRequest, component_filter_sql,
         component_pagination_sql, effective_component_page_size, parse_component_query_filters,
         parse_component_sort, require_component_version_draft, table_order_by_sql,
@@ -2552,6 +2549,26 @@ mod tests {
             field_type,
             position: 0,
         }
+    }
+
+    #[test]
+    fn reader_component_summary_omits_absent_draft_metadata() {
+        let summary = ComponentSummary {
+            id: Uuid::nil(),
+            name: "Published Table".into(),
+            slug: "published_table".into(),
+            description: None,
+            current_version_id: Some(Uuid::nil()),
+            current_version_label: Some("1".into()),
+            current_component_type: Some("table".into()),
+            draft_version_id: None,
+            draft_version_label: None,
+        };
+
+        let value = serde_json::to_value(summary).expect("summary should serialize");
+
+        assert!(value.get("draft_version_id").is_none());
+        assert!(value.get("draft_version_label").is_none());
     }
 
     #[test]

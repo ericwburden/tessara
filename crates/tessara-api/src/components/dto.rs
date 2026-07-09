@@ -87,7 +87,9 @@ pub struct ComponentSummary {
     pub(crate) current_version_id: Option<Uuid>,
     pub(crate) current_version_label: Option<String>,
     pub(crate) current_component_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) draft_version_id: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) draft_version_label: Option<String>,
 }
 

@@ -15,7 +15,9 @@ pub(crate) struct ComponentSummary {
     pub(crate) current_version_id: Option<String>,
     pub(crate) current_version_label: Option<String>,
     pub(crate) current_component_type: Option<String>,
+    #[serde(default)]
     pub(crate) draft_version_id: Option<String>,
+    #[serde(default)]
     pub(crate) draft_version_label: Option<String>,
 }
 
