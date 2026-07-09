@@ -63,13 +63,15 @@ Shared validation:
 - `unique_count` counts distinct non-missing `summary_field` values after the selected missing policy is applied, except that `explicit_missing` counts missing summary values as one distinct missing value.
 - `sum`, `average`, and `median` operate only on numeric `summary_field` values. Even-sized `median` uses the average of the two middle numeric values.
 - `sort_field` must name a valid visual output field for the selected kind and mode. Default ordering is label ascending.
-- Limits apply after grouping and sorting. Top/bottom fraction behavior is expressed through `sort_field`, `sort_direction`, and `number_of_points`; avoid hidden implicit ordering rules.
+- Valid `sort_field` values are `category` or `summary_value` for Bar summary; `category`, `comparison`, or `summary_value` for Bar comparison; `x` or `summary_value` for Line; and `category` or `summary_value` for Pie/Donut. StatCard rejects sort keys because it emits a single summarized value.
+- Limits apply after grouping and sorting. Top/bottom behavior is expressed through `sort_field`, `sort_direction`, and `number_of_points`; avoid hidden implicit ordering rules.
 - `max_slices` and `number_of_points` are positive integers with default `20` and maximum `100`. Sprint 4B does not use `max_items`.
+- For `sum`, `average`, and `median`, groups with no contributing numeric values after missing-policy handling are omitted from multi-point visuals. A StatCard with no contributing numeric values returns a stable empty-value view-model state rather than `0`.
 
 Kind-specific config:
 
-- `stat_card`: `summary_field`, `summary_type`, optional `label`, optional `value_format`, optional `supporting_text`, optional `panel_style`.
-- `bar`: `mode` of `summary` or `comparison`, `summary_field`, `summary_type`, `category_field`, optional `orientation` of `vertical` or `horizontal`, optional `number_of_points`, optional `fraction` of `top` or `bottom`. `comparison_field` is required when `mode = comparison` and rejected when `mode = summary`.
+- `stat_card`: `summary_field`, `summary_type`, optional `label`, optional `value_format`, optional `supporting_text`, optional `panel_style` of `default`, `muted`, or `accent`; default `default`.
+- `bar`: `mode` of `summary` or `comparison`, `summary_field`, `summary_type`, `category_field`, optional `orientation` of `vertical` or `horizontal`, optional `sort_field`, optional `sort_direction`, optional `number_of_points`. `comparison_field` is required when `mode = comparison` and rejected when `mode = summary`.
 - `line`: `summary_field`, `summary_type`, `x_field`, optional `number_of_points`.
 - `pie` / `donut`: `summary_field`, `summary_type`, `category_field`, optional `max_slices`.
 
@@ -84,7 +86,7 @@ Validation should reject:
 
 - missing required fields for the selected kind;
 - field references outside the bound Dataset major-line contract;
-- unsupported enum values such as unknown mode, fraction, orientation, missing policy, format, sort field, or sort direction options;
+- unsupported enum values such as unknown mode, orientation, panel style, missing policy, format, sort field, or sort direction options;
 - out-of-range limits;
 - `comparison_field` when `bar.mode = summary`;
 - missing `comparison_field` when `bar.mode = comparison`;
@@ -210,7 +212,7 @@ Backend/API scenarios:
 - Reject unknown, unsupported, and deprecated component kinds.
 - Accept valid visual configs using `count`, `unique_count`, `sum`, `average`, and `median` summary functions.
 - Reject numeric summary functions against non-number fields.
-- Reject unsupported `value_format`, `missing_policy`, Bar mode, Bar fraction, orientation, and out-of-range limit values.
+- Reject unsupported `value_format`, `missing_policy`, Bar mode, StatCard panel style, orientation, and out-of-range limit values.
 - Reject invalid visual sort fields and sort directions.
 - Reject Bar summary configs that include `comparison_field`, and reject Bar comparison configs that omit `comparison_field`.
 - Reject unused `max_items`.
