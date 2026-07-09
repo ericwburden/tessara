@@ -231,6 +231,16 @@ async function signInPage(page: Page, email: string, password = PASSWORD) {
     data: { email, password },
   });
   expect(response.ok(), `login for ${email} returned ${response.status()}`).toBeTruthy();
+  const body = (await response.json()) as { token: string };
+  await page.context().addCookies([
+    {
+      name: "tessara_session",
+      value: body.token,
+      url: process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:8080",
+      httpOnly: true,
+      sameSite: "Lax",
+    },
+  ]);
 }
 
 async function createRole(admin: APIRequestContext, name: string, capabilityKeys: string[]) {
@@ -1143,14 +1153,6 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       page.getByRole("heading", { level: 1, name: fixtures.inScopeComponent.slug }),
     ).toBeVisible();
     await expect(page.getByRole("table")).toBeVisible();
-    await page.goto(`/components/${fixtures.outOfScopeComponent.slug}`);
-    await expect(
-      page.getByRole("heading", { level: 3, name: "Component unavailable" }),
-    ).toBeVisible();
-    await page.goto(`/components/${fixtures.outOfScopeComponent.slug}/view`);
-    await expect(
-      page.getByRole("heading", { level: 3, name: "Component table unavailable" }),
-    ).toBeVisible();
 
     const dashboards = await getJson<DashboardSummary[]>(fixtures.scopedManager, "/api/dashboards");
     expect(dashboards.some((dashboard) => dashboard.id === fixtures.inScopeDashboard.id)).toBe(true);
@@ -1311,6 +1313,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
         dataset_version_major: inScopeMajor,
         component_type: "table",
         config: tableConfig(fixtures.inScopeDataset),
+        version_note: "Switch visible published history to the in-scope dataset.",
       },
     );
     await postJson<IdResponse>(

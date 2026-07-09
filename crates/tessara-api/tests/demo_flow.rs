@@ -1244,6 +1244,18 @@ async fn dataset_revision_draft_publish_preserves_current_until_publish() {
             .len(),
         initial_major_line_row_count
     );
+    let revision_before_component_draft = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/datasets/{dataset_id}/revisions/{initial_revision_id}"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    let published_history_dependency_count =
+        revision_before_component_draft["dependencies"]["component_version_count"].clone();
     let concurrent_draft_payload = json!({
         "dataset_id": dataset_id,
         "dataset_version_major": 1,
@@ -1314,7 +1326,8 @@ async fn dataset_revision_draft_publish_preserves_current_until_publish() {
     )
     .await;
     assert_eq!(
-        revision_with_component_draft["dependencies"]["component_version_count"], 1,
+        revision_with_component_draft["dependencies"]["component_version_count"],
+        published_history_dependency_count,
         "working component drafts should not inflate published-history dependency counts"
     );
     let no_op_draft = request_json(

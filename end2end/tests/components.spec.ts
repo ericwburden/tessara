@@ -403,9 +403,9 @@ test.describe.serial("Sprint 4A component workflow", () => {
     if (dataset.tags?.length) {
       await expect(datasetContext).toContainText(dataset.tags[0]);
     }
-    const columnPicker = page.getByRole("group", { name: "Columns" });
-    const selectedColumns = await columnPicker.getByRole("checkbox").all();
-    expect(selectedColumns.length).toBeGreaterThan(0);
+    await page.getByRole("button", { name: "Displayed Fields" }).click();
+    const availableFields = page.getByRole("listbox", { name: "Available fields" });
+    await expect(availableFields.locator(".dataset-projection-builder__option")).not.toHaveCount(0);
     const invalidValidation = await expectJson<ComponentValidationResponse>(
       await page.request.post("/api/admin/components/validate", {
         data: {
@@ -448,7 +448,7 @@ test.describe.serial("Sprint 4A component workflow", () => {
 
     await page.goto(`/components/${slug}`);
     await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
-    await expect(page.getByRole("cell", { name: "Draft" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "No published version" })).toBeVisible();
     await expect(page.getByText("Component unavailable")).toHaveCount(0);
 
     const draftDashboard = await expectJson<IdResponse>(
@@ -719,7 +719,7 @@ VALUES ('${draftDashboard.id}', '${component.versions[0].id}', 99, '{}'::jsonb);
     await page.getByRole("button", { name: "Filter Kind" }).click();
     await page.getByRole("menuitemradio", { name: "Table" }).click();
     await page.getByRole("button", { name: "Filter Status" }).click();
-    await page.getByRole("menuitemradio", { name: "Published" }).click();
+    await page.getByRole("menuitemradio", { name: "Updating" }).click();
     await expect(page.getByRole("link", { name: renamedName })).toBeVisible();
     await page.setViewportSize({ width: 544, height: 912 });
     await page.getByRole("button", { name: "Open component filters" }).click();
@@ -730,7 +730,7 @@ VALUES ('${draftDashboard.id}', '${component.versions[0].id}', 99, '{}'::jsonb);
     await expect(page.getByLabel("Filter components by kind")).toHaveValue("all");
     await expect(page.getByLabel("Filter components by status")).toHaveValue("all");
     await page.getByLabel("Filter components by kind").selectOption("Table");
-    await page.getByLabel("Filter components by status").selectOption("Published");
+    await page.getByLabel("Filter components by status").selectOption("Updating");
     await page.getByTitle("Close component filters").click();
     await expect(page.locator(".components-list-mobile-card").filter({ hasText: renamedName })).toBeVisible();
     await expect(page.locator(".components-list-responsive-table .table-wrap")).toBeHidden();
@@ -743,11 +743,7 @@ VALUES ('${draftDashboard.id}', '${component.versions[0].id}', 99, '{}'::jsonb);
     await expect(page.getByRole("searchbox", { name: "Search component rows" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Reset table controls" })).toBeVisible();
     await expect(page.getByRole("table").filter({ hasText: firstField.label })).toBeVisible();
-    await expect(page.getByRole("heading", { level: 2, name: "Versions" })).toBeVisible();
-    let versionsTable = page.getByRole("table").filter({ hasText: "Dataset Version" });
-    await expect(versionsTable).toContainText("Draft");
-    await expect(versionsTable).toContainText("Published");
-    await expect(versionsTable).toContainText(`v${major}`);
+    await expect(page.getByRole("heading", { level: 2, name: "Versions" })).toHaveCount(0);
 
     await page.goto(`/components/${slug}/versions`);
     await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toContainText("Components");
@@ -757,7 +753,7 @@ VALUES ('${draftDashboard.id}', '${component.versions[0].id}', 99, '{}'::jsonb);
     await expect(page.getByRole("link", { name: "Edit" })).toBeVisible();
     await expect(page.getByRole("link", { name: "View" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Publish" })).toHaveCount(0);
-    versionsTable = page.getByRole("table").filter({ hasText: "Dataset Version" });
+    let versionsTable = page.getByRole("table").filter({ hasText: "Dataset Version" });
     await expect(versionsTable).toContainText("Draft");
     await expect(versionsTable).toContainText("Published");
     await expect(versionsTable).toContainText(`v${major}`);
@@ -774,8 +770,11 @@ VALUES ('${draftDashboard.id}', '${component.versions[0].id}', 99, '{}'::jsonb);
     await expect(page.getByRole("heading", { name: "Dataset Context" })).toBeVisible();
 
     await page.goto(`/components/${slug}/edit`);
-    await page.getByRole("button", { name: "Save and Publish" }).click();
-    await page.getByRole("menuitem", { name: "Create New Version" }).click();
+    await page.waitForLoadState("networkidle");
+    const publishMenu = page.locator(".component-editor__publish-menu");
+    await publishMenu.locator(".component-editor__publish-button").click();
+    await expect(publishMenu).toHaveClass(/is-open/);
+    await publishMenu.getByRole("menuitem", { name: "Create New Version" }).click();
     await expect(page.getByRole("dialog", { name: "Review component consumers" })).toBeVisible();
     await page.getByLabel("New Version Note").fill("Playwright replacement version.");
     await page.getByRole("button", { name: "Create New Version" }).click();
