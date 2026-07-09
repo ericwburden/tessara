@@ -5,6 +5,27 @@ artifacts, old sprint worktrees, `/app/*` routes, or earlier crate names. Use
 `docs/roadmap.md`, `docs/architecture.md`, and `docs/README.md` for current
 project direction.
 
+## 2026-07-09 - Sprint 4B Kickoff
+
+- Sprint: Sprint 4B: Chart And Stat Component Slice
+- Kickoff status: started from clean `main` after fast-forward landing Sprint 4A
+- Branch: `codex/sprint-4b`
+- Worktree: `C:\Users\eric-dev\Projects\tessara-sprint-4b`
+- Plan file: `docs/sprints/sprint-4b-plan.md`
+- Planned verification commands:
+  - `cargo fmt --all`
+  - `cargo test -p tessara-api`
+  - `cargo test -p tessara-web`
+  - `cargo test -p tessara-web-components`
+  - `cargo test -p tessara-web-datasets`
+  - `cargo test -p tessara-web-data-ops`
+  - `npx playwright test`
+  - `.\scripts\smoke.ps1`
+  - `.\scripts\local-launch.ps1`
+  - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`
+- Immediate implementation focus:
+  - inventory Sprint 4A ComponentVersion table contracts and define typed visual config contracts for Bar, Line, Pie/Donut, and StatCard components
+
 ## 2026-07-09 - Sprint 4A Final Closeout
 
 - Sprint: Sprint 4A: Dataset Catalog And Thin Table Components
