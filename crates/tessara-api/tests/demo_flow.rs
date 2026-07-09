@@ -931,6 +931,156 @@ async fn dataset_revision_draft_publish_preserves_current_until_publish() {
         ),
     )
     .await;
+    let atomic_slug = "atomic-save-command-component";
+    let atomic_created = request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/components/save",
+            &admin_token,
+            Some(json!({
+                "action": "save_draft",
+                "component": {
+                    "name": "Atomic Save Command Component",
+                    "slug": atomic_slug,
+                    "description": "Created through the edit-screen command endpoint."
+                },
+                "version": {
+                    "dataset_id": dataset_id,
+                    "dataset_version_major": 1,
+                    "component_type": "table",
+                    "config": {
+                        "visible_columns": [first_key]
+                    }
+                }
+            })),
+        ),
+    )
+    .await;
+    let atomic_component_id = atomic_created["id"].as_str().expect("atomic component id");
+    let atomic_draft_detail = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/admin/components/{atomic_slug}"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    let atomic_draft_id = atomic_draft_detail["versions"][0]["id"]
+        .as_str()
+        .expect("atomic draft id");
+    assert_eq!(atomic_draft_detail["versions"][0]["status"], "draft");
+
+    request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/components/save",
+            &admin_token,
+            Some(json!({
+                "component_id": atomic_component_id,
+                "draft_version_id": atomic_draft_id,
+                "action": "create_new_version",
+                "component": {
+                    "name": "Atomic Save Command Component",
+                    "slug": atomic_slug,
+                    "description": "Published through the edit-screen command endpoint."
+                },
+                "version": {
+                    "dataset_id": dataset_id,
+                    "dataset_version_major": 1,
+                    "component_type": "table",
+                    "version_note": "Initial atomic publish.",
+                    "config": {
+                        "visible_columns": [first_key]
+                    }
+                }
+            })),
+        ),
+    )
+    .await;
+    let atomic_published_detail = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/admin/components/{atomic_slug}"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    let atomic_published_id = atomic_published_detail["versions"][0]["id"]
+        .as_str()
+        .expect("atomic published id");
+    assert_eq!(
+        atomic_published_detail["versions"][0]["status"],
+        "published"
+    );
+    assert_eq!(
+        atomic_published_detail["versions"][0]["version_note"],
+        "Initial atomic publish."
+    );
+
+    request_json(
+        app.clone(),
+        authorized_request(
+            "POST",
+            "/api/admin/components/save",
+            &admin_token,
+            Some(json!({
+                "component_id": atomic_component_id,
+                "published_version_id": atomic_published_id,
+                "action": "update_existing_version",
+                "component": {
+                    "name": "Atomic Save Command Component Updated",
+                    "slug": atomic_slug,
+                    "description": "Updated in place through the edit-screen command endpoint."
+                },
+                "version": {
+                    "dataset_id": dataset_id,
+                    "dataset_version_major": 1,
+                    "component_type": "table",
+                    "version_note": "Updated current version in place.",
+                    "config": {
+                        "visible_columns": [first_key]
+                    }
+                }
+            })),
+        ),
+    )
+    .await;
+    let atomic_updated_detail = request_json(
+        app.clone(),
+        authorized_request(
+            "GET",
+            &format!("/api/admin/components/{atomic_slug}"),
+            &admin_token,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(
+        atomic_updated_detail["name"],
+        "Atomic Save Command Component Updated"
+    );
+    assert_eq!(
+        atomic_updated_detail["versions"][0]["id"],
+        atomic_published_id
+    );
+    assert_eq!(atomic_updated_detail["versions"][0]["status"], "published");
+    assert_eq!(
+        atomic_updated_detail["versions"][0]["version_note"],
+        "Updated current version in place."
+    );
+    assert!(
+        atomic_updated_detail["versions"]
+            .as_array()
+            .expect("atomic versions")
+            .iter()
+            .all(|version| version["status"] != "draft")
+    );
     let (legacy_shell_status, legacy_shell_body) = request_status_and_json(
         app.clone(),
         authorized_request(

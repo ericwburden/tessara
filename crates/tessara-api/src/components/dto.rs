@@ -23,6 +23,30 @@ pub struct UpdateComponentRequest {
     pub(crate) description: Option<String>,
 }
 
+/// Atomic edit-screen command for component shell metadata plus version action.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SaveComponentEditRequest {
+    #[serde(default)]
+    pub(crate) component_id: Option<Uuid>,
+    #[serde(default)]
+    pub(crate) draft_version_id: Option<Uuid>,
+    #[serde(default)]
+    pub(crate) published_version_id: Option<Uuid>,
+    pub(crate) action: SaveComponentEditAction,
+    pub(crate) component: UpdateComponentRequest,
+    pub(crate) version: CreateComponentVersionRequest,
+}
+
+/// Author-selected edit-screen version action.
+#[derive(Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SaveComponentEditAction {
+    SaveDraft,
+    UpdateExistingVersion,
+    CreateNewVersion,
+}
+
 /// Payload for creating a component version bound to a dataset major line.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]

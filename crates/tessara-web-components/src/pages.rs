@@ -3,7 +3,9 @@
 use std::collections::BTreeMap;
 
 #[cfg(feature = "hydrate")]
-use super::types::{CreateComponentRequest, CreateComponentVersionRequest, UpdateComponentRequest};
+use super::types::{
+    CreateComponentVersionRequest, SaveComponentEditRequest, UpdateComponentRequest,
+};
 use icons::{ChevronDown, History, ListFilter, Pencil, Search, X};
 use leptos::prelude::*;
 use serde_json::{Value, json};
@@ -1872,126 +1874,40 @@ fn create_component_from_form(
             Some(values.description.trim().to_string())
         };
         let redirect_ref = component_redirect_ref(&values.slug);
-        if publish_action == ComponentPublishAction::UpdateExistingVersion {
-            let Some(component_id) = editing_component_id.clone() else {
-                error.set(Some(
-                    "Save the component draft before updating an existing version.".into(),
-                ));
-                return;
-            };
-            let Some(version_id) = current_published_version_id.clone() else {
-                error.set(Some(
-                    "This component does not have an existing published version to update.".into(),
-                ));
-                return;
-            };
-            match api::update_component(
-                &component_id,
-                UpdateComponentRequest {
-                    name: values.name,
-                    slug: values.slug,
-                    description,
-                },
-            )
-            .await
-            {
-                Ok(_) => match api::update_published_component_version(
-                    &component_id,
-                    &version_id,
-                    version,
-                )
-                .await
-                {
-                    Ok(_) => {
-                        message.set(Some("Existing component version updated.".into()));
-                        if let Some(window) = web_sys::window() {
-                            let _ = window
-                                .location()
-                                .set_href(&format!("/components/{redirect_ref}"));
-                        }
-                    }
-                    Err(message) => error.set(Some(message)),
-                },
-                Err(message) => error.set(Some(message)),
-            }
-            return;
-        }
-
-        let result = if let Some(component_id) = editing_component_id {
-            match api::update_component(
-                &component_id,
-                UpdateComponentRequest {
-                    name: values.name,
-                    slug: values.slug,
-                    description,
-                },
-            )
-            .await
-            {
-                Ok(_) => {
-                    let version_result = if let Some(version_id) = editing_version_id {
-                        api::update_component_version(&component_id, &version_id, version).await
-                    } else {
-                        api::save_component_version(&component_id, version).await
-                    };
-                    version_result.map(|response| (component_id, response.id))
-                }
-                Err(message) => Err(message),
-            }
-        } else {
-            match api::create_component(CreateComponentRequest {
+        let action = match publish_action {
+            ComponentPublishAction::SaveDraft => "save_draft",
+            ComponentPublishAction::UpdateExistingVersion => "update_existing_version",
+            ComponentPublishAction::CreateNewVersion => "create_new_version",
+        };
+        let request = SaveComponentEditRequest {
+            component_id: editing_component_id,
+            draft_version_id: editing_version_id,
+            published_version_id: current_published_version_id,
+            action: action.into(),
+            component: UpdateComponentRequest {
                 name: values.name,
                 slug: values.slug,
                 description,
-                version: Some(version),
-            })
-            .await
-            {
-                Ok(response) => {
-                    let component_id = response.id;
-                    if publish_action == ComponentPublishAction::CreateNewVersion {
-                        match api::fetch_admin_component(&redirect_ref).await {
-                            Ok(Some(component)) => component
-                                .versions
-                                .iter()
-                                .find(|version| version.status == "draft")
-                                .map(|version| (component_id, version.id.clone()))
-                                .ok_or_else(|| {
-                                    "Component draft could not be found after saving.".to_string()
-                                }),
-                            Ok(None) => {
-                                Err("Component draft could not be loaded after saving.".to_string())
-                            }
-                            Err(message) => Err(message),
-                        }
-                    } else {
-                        Ok((component_id, String::new()))
-                    }
-                }
-                Err(message) => Err(message),
-            }
+            },
+            version,
         };
-        match result {
-            Ok((component_id, version_id)) => {
-                if publish_action == ComponentPublishAction::CreateNewVersion {
-                    match api::publish_component_version(&component_id, &version_id).await {
-                        Ok(_) => {
-                            message.set(Some("Component saved and published.".into()));
-                            if let Some(window) = web_sys::window() {
-                                let _ = window
-                                    .location()
-                                    .set_href(&format!("/components/{redirect_ref}"));
-                            }
-                        }
-                        Err(message) => error.set(Some(message)),
+        match api::save_component_edit(request).await {
+            Ok(_) => {
+                let saved_message = match publish_action {
+                    ComponentPublishAction::SaveDraft => "Component draft saved.",
+                    ComponentPublishAction::UpdateExistingVersion => {
+                        "Existing component version updated."
                     }
-                } else {
-                    message.set(Some("Component draft saved.".into()));
-                    if let Some(window) = web_sys::window() {
-                        let _ = window
-                            .location()
-                            .set_href(&format!("/components/{redirect_ref}/edit"));
-                    }
+                    ComponentPublishAction::CreateNewVersion => "Component saved and published.",
+                };
+                message.set(Some(saved_message.into()));
+                if let Some(window) = web_sys::window() {
+                    let target = if publish_action == ComponentPublishAction::SaveDraft {
+                        format!("/components/{redirect_ref}/edit")
+                    } else {
+                        format!("/components/{redirect_ref}")
+                    };
+                    let _ = window.location().set_href(&target);
                 }
             }
             Err(message) => error.set(Some(message)),

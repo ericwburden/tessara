@@ -13,6 +13,7 @@ use axum::{
     http::HeaderMap,
     routing::{get, post},
 };
+use chrono::{DateTime, NaiveDate, NaiveDateTime};
 use serde::Deserialize;
 use sqlx::{Column, Postgres, Row, Transaction};
 use tessara_data_ops::{DataField, FieldType, FilterOperator};
@@ -24,7 +25,8 @@ pub use dto::{
     ComponentDefinition, ComponentSummary, ComponentTable, ComponentTableColumn,
     ComponentTablePagination, ComponentTableRow, ComponentValidationFinding,
     ComponentValidationResponse, ComponentVersionSummary, CreateComponentRequest,
-    CreateComponentVersionRequest, UpdateComponentRequest,
+    CreateComponentVersionRequest, SaveComponentEditAction, SaveComponentEditRequest,
+    UpdateComponentRequest,
 };
 
 use crate::{
@@ -53,6 +55,7 @@ pub(crate) fn routes() -> Router<AppState> {
             "/api/admin/components",
             get(list_admin_components).post(create_component),
         )
+        .route("/api/admin/components/save", post(save_component_edit))
         .route(
             "/api/admin/components/{component_id}",
             get(get_admin_component).patch(update_component),
@@ -182,6 +185,178 @@ pub async fn update_component(
     require_component_fully_manageable(&state.pool, &account, component_id).await?;
     require_text("component name", &payload.name)?;
     require_text("component slug", &payload.slug)?;
+    let mut tx = state.pool.begin().await?;
+    update_component_shell_in_tx(&mut tx, component_id, &payload).await?;
+    tx.commit().await?;
+    Ok(Json(IdResponse { id: component_id }))
+}
+
+/// Atomically applies the edit-screen component metadata plus version action.
+pub async fn save_component_edit(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> ApiResult<Json<IdResponse>> {
+    let payload = parse_component_payload::<SaveComponentEditRequest>(&body)?;
+    let account = auth::require_capability(&state.pool, &headers, "components:manage").await?;
+    require_text("component name", &payload.component.name)?;
+    require_text("component slug", &payload.component.slug)?;
+    validate_component_version_note(payload.version.version_note.as_deref())?;
+    if payload.action == SaveComponentEditAction::CreateNewVersion {
+        require_new_version_note(payload.version.version_note.as_deref().unwrap_or_default())?;
+    }
+
+    let binding = resolve_component_dataset_binding(&state.pool, &payload.version).await?;
+    require_dataset_major_line_exists(
+        &state.pool,
+        binding.dataset_id,
+        binding.dataset_version_major,
+    )
+    .await?;
+    require_dataset_fully_in_capability_scope(
+        &state.pool,
+        &account,
+        "components:manage",
+        binding.dataset_id,
+    )
+    .await?;
+    validate_component_type(&payload.version.component_type)?;
+    let dataset_fields = load_dataset_major_line_fields(
+        &state.pool,
+        binding.dataset_id,
+        binding.dataset_version_major,
+    )
+    .await?;
+    validate_component_config(
+        &payload.version.component_type,
+        &payload.version.config,
+        &dataset_fields,
+    )?;
+
+    let mut tx = state.pool.begin().await?;
+    let component_id = if let Some(component_id) = payload.component_id {
+        lock_component_in_tx(&mut tx, component_id).await?;
+        require_component_fully_manageable_in_tx(&mut tx, &state.pool, &account, component_id)
+            .await?;
+        update_component_shell_in_tx(&mut tx, component_id, &payload.component).await?;
+        match payload.action {
+            SaveComponentEditAction::SaveDraft => {
+                if let Some(version_id) = payload.draft_version_id {
+                    update_component_version_row_in_tx(
+                        &mut tx,
+                        component_id,
+                        version_id,
+                        "draft",
+                        &binding,
+                        &payload.version,
+                    )
+                    .await?;
+                } else {
+                    upsert_component_draft_version(
+                        &mut tx,
+                        component_id,
+                        &binding,
+                        &payload.version,
+                    )
+                    .await?;
+                }
+            }
+            SaveComponentEditAction::UpdateExistingVersion => {
+                let version_id = payload.published_version_id.ok_or_else(|| {
+                    ApiError::BadRequest(
+                        "updating an existing component version requires a published version"
+                            .into(),
+                    )
+                })?;
+                update_component_version_row_in_tx(
+                    &mut tx,
+                    component_id,
+                    version_id,
+                    "published",
+                    &binding,
+                    &payload.version,
+                )
+                .await?;
+                delete_component_drafts_in_tx(&mut tx, component_id).await?;
+            }
+            SaveComponentEditAction::CreateNewVersion => {
+                let version_id = if let Some(version_id) = payload.draft_version_id {
+                    update_component_version_row_in_tx(
+                        &mut tx,
+                        component_id,
+                        version_id,
+                        "draft",
+                        &binding,
+                        &payload.version,
+                    )
+                    .await?;
+                    version_id
+                } else {
+                    upsert_component_draft_version(
+                        &mut tx,
+                        component_id,
+                        &binding,
+                        &payload.version,
+                    )
+                    .await?
+                };
+                publish_component_version_in_tx(
+                    &mut tx,
+                    &state.pool,
+                    &account,
+                    component_id,
+                    version_id,
+                )
+                .await?;
+            }
+        }
+        component_id
+    } else {
+        let component_id: Uuid = sqlx::query_scalar(
+            r#"
+            INSERT INTO components (name, slug, description)
+            VALUES ($1, $2, $3)
+            RETURNING id
+            "#,
+        )
+        .bind(payload.component.name.trim())
+        .bind(payload.component.slug.trim())
+        .bind(&payload.component.description)
+        .fetch_one(&mut *tx)
+        .await?;
+        let version_id =
+            upsert_component_draft_version(&mut tx, component_id, &binding, &payload.version)
+                .await?;
+        match payload.action {
+            SaveComponentEditAction::SaveDraft => {}
+            SaveComponentEditAction::CreateNewVersion => {
+                publish_component_version_in_tx(
+                    &mut tx,
+                    &state.pool,
+                    &account,
+                    component_id,
+                    version_id,
+                )
+                .await?;
+            }
+            SaveComponentEditAction::UpdateExistingVersion => {
+                return Err(ApiError::BadRequest(
+                    "updating an existing component version requires an existing component".into(),
+                ));
+            }
+        }
+        component_id
+    };
+
+    tx.commit().await?;
+    Ok(Json(IdResponse { id: component_id }))
+}
+
+async fn update_component_shell_in_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    component_id: Uuid,
+    payload: &UpdateComponentRequest,
+) -> ApiResult<()> {
     sqlx::query(
         r#"
         UPDATE components
@@ -195,9 +370,9 @@ pub async fn update_component(
     .bind(payload.slug.trim())
     .bind(&payload.description)
     .bind(component_id)
-    .execute(&state.pool)
+    .execute(&mut **tx)
     .await?;
-    Ok(Json(IdResponse { id: component_id }))
+    Ok(())
 }
 
 /// Validates a component version payload against the bound Dataset major-line contract.
@@ -557,6 +732,65 @@ async fn upsert_component_draft_version(
     .fetch_one(&mut **tx)
     .await?;
     Ok(id)
+}
+
+async fn update_component_version_row_in_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    component_id: Uuid,
+    version_id: Uuid,
+    status: &str,
+    binding: &ComponentDatasetBinding,
+    payload: &CreateComponentVersionRequest,
+) -> ApiResult<()> {
+    require_component_version_status_row_in_tx(tx, component_id, version_id, status).await?;
+    let version_note = normalized_component_version_note(payload.version_note.as_deref())?;
+    let update_result = sqlx::query(
+        r#"
+        UPDATE component_versions
+        SET dataset_id = $1,
+            dataset_version_major = $2,
+            binding_mode = 'major_line',
+            component_type = $3::component_type,
+            config = $4,
+            version_note = COALESCE($8, version_note)
+        WHERE component_id = $5
+          AND id = $6
+          AND status = $7::component_version_status
+        "#,
+    )
+    .bind(binding.dataset_id)
+    .bind(binding.dataset_version_major)
+    .bind(&payload.component_type)
+    .bind(&payload.config)
+    .bind(component_id)
+    .bind(version_id)
+    .bind(status)
+    .bind(version_note)
+    .execute(&mut **tx)
+    .await?;
+    if update_result.rows_affected() != 1 {
+        return Err(ApiError::BadRequest(format!(
+            "component version {version_id} could not be updated because it is no longer {status}"
+        )));
+    }
+    Ok(())
+}
+
+async fn delete_component_drafts_in_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    component_id: Uuid,
+) -> ApiResult<()> {
+    sqlx::query(
+        r#"
+        DELETE FROM component_versions
+        WHERE component_id = $1
+          AND status = 'draft'::component_version_status
+        "#,
+    )
+    .bind(component_id)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
 }
 
 async fn publish_component_version_in_tx(
@@ -1084,11 +1318,110 @@ fn filter_to_sql(
     operator
         .validate_for_field(field)
         .map_err(component_data_op_error)?;
+    validate_component_filter_value(field, operator, filter.value.as_deref(), label)?;
     Ok(filter_predicate_sql(
         field,
         operator,
         filter.value.as_deref(),
     ))
+}
+
+fn validate_component_filter_value(
+    field: &DataField,
+    operator: FilterOperator,
+    value: Option<&str>,
+    label: &str,
+) -> ApiResult<()> {
+    if !operator.requires_value() {
+        return Ok(());
+    }
+    if matches!(
+        operator,
+        FilterOperator::Between | FilterOperator::NotBetween
+    ) {
+        let value = required_filter_value(field, value, operator, label)?;
+        let (lower, upper) = parse_filter_range(value).ok_or_else(|| {
+            ApiError::BadRequest(format!(
+                "{label} for field '{}' requires two values for operator '{}'",
+                field.key,
+                operator.as_str()
+            ))
+        })?;
+        validate_filter_scalar(field, lower, operator, label)?;
+        validate_filter_scalar(field, upper, operator, label)?;
+        return Ok(());
+    }
+    let value = required_filter_value(field, value, operator, label)?;
+    validate_filter_scalar(field, value, operator, label)
+}
+
+fn required_filter_value<'a>(
+    field: &DataField,
+    value: Option<&'a str>,
+    operator: FilterOperator,
+    label: &str,
+) -> ApiResult<&'a str> {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            ApiError::BadRequest(format!(
+                "{label} for field '{}' requires a value for operator '{}'",
+                field.key,
+                operator.as_str()
+            ))
+        })
+}
+
+fn parse_filter_range(value: &str) -> Option<(&str, &str)> {
+    value
+        .split_once("..")
+        .or_else(|| value.split_once(','))
+        .and_then(|(lower, upper)| {
+            let lower = lower.trim();
+            let upper = upper.trim();
+            if lower.is_empty() || upper.is_empty() {
+                None
+            } else {
+                Some((lower, upper))
+            }
+        })
+}
+
+fn validate_filter_scalar(
+    field: &DataField,
+    value: &str,
+    operator: FilterOperator,
+    label: &str,
+) -> ApiResult<()> {
+    let valid = match &field.field_type {
+        FieldType::Number => value.parse::<f64>().is_ok(),
+        FieldType::Boolean => matches!(
+            value.to_ascii_lowercase().as_str(),
+            "true" | "t" | "1" | "yes" | "y" | "false" | "f" | "0" | "no" | "n"
+        ),
+        FieldType::Date => NaiveDate::parse_from_str(value, "%Y-%m-%d").is_ok(),
+        FieldType::DateTime | FieldType::Timestamp => parse_filter_timestamp(value),
+        _ => true,
+    };
+    if valid {
+        Ok(())
+    } else {
+        Err(ApiError::BadRequest(format!(
+            "{label} for field '{}' has invalid value '{}' for operator '{}' and type '{}'",
+            field.key,
+            value,
+            operator.as_str(),
+            field.field_type.as_str()
+        )))
+    }
+}
+
+fn parse_filter_timestamp(value: &str) -> bool {
+    DateTime::parse_from_rfc3339(value).is_ok()
+        || DateTime::parse_from_str(value, "%Y-%m-%d %H:%M:%S%.f%#z").is_ok()
+        || NaiveDateTime::parse_from_str(value, "%Y-%m-%d %H:%M:%S%.f").is_ok()
+        || NaiveDate::parse_from_str(value, "%Y-%m-%d").is_ok()
 }
 
 fn parse_component_cursor(cursor: Option<&str>) -> ApiResult<usize> {
@@ -2285,6 +2618,59 @@ mod tests {
                 .to_string()
                 .contains("filter operator 'contains' is not supported")
         );
+    }
+
+    #[test]
+    fn table_config_rejects_invalid_numeric_saved_filter_value() {
+        let fields = vec![field("score", FieldType::Number)];
+        let config = json!({
+            "visible_columns": ["score"],
+            "filters": [
+                {
+                    "field_key": "score",
+                    "operator": "equals",
+                    "value": "not-a-number"
+                }
+            ]
+        });
+
+        let error = validate_component_config("table", &config, &fields)
+            .expect_err("invalid numeric saved filter should fail");
+        assert!(error.to_string().contains("invalid value 'not-a-number'"));
+    }
+
+    #[test]
+    fn table_config_rejects_invalid_date_saved_filter_range() {
+        let fields = vec![field("submitted_on", FieldType::Date)];
+        let config = json!({
+            "visible_columns": ["submitted_on"],
+            "filters": [
+                {
+                    "field_key": "submitted_on",
+                    "operator": "between",
+                    "value": "2026-01-01..soon"
+                }
+            ]
+        });
+
+        let error = validate_component_config("table", &config, &fields)
+            .expect_err("invalid date saved filter range should fail");
+        assert!(error.to_string().contains("invalid value 'soon'"));
+    }
+
+    #[test]
+    fn component_filter_sql_rejects_invalid_runtime_filter_value() {
+        let fields = vec![field("submitted_on", FieldType::Date)];
+        let filters = vec![super::ComponentFilterConfig {
+            field_key: "submitted_on".into(),
+            operator: "gte".into(),
+            value: Some("not-a-date".into()),
+        }];
+        let refs = fields.iter().collect::<Vec<_>>();
+
+        let error = component_filter_sql(&filters, &refs)
+            .expect_err("invalid runtime filter literal should fail");
+        assert!(error.to_string().contains("invalid value 'not-a-date'"));
     }
 
     #[test]

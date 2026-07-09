@@ -14,6 +14,7 @@ project direction.
 - Final product shape:
   - Component authoring uses one Table flow; the former `/components/:component_ref/publish` interstitial route was removed
   - publishing happens from the edit screen, where authors choose whether to update the existing published version in place or create a new version
+  - edit-screen save/publish actions use one backend command endpoint so component metadata and version changes commit or fail together
   - creating a new version opens a consumer-review modal with a version note; the note is shown in component version history
   - draft-only components remain visible to managers, show `Draft` status, and can be edited/published from the edit screen
   - components with a current published version plus a pending draft show `Updating`
@@ -26,6 +27,7 @@ project direction.
   - replaced direct provenance tables with a full ancestor lineage tree that distinguishes Forms and Datasets
   - simplified backend component validation/execution to a single `table` config with `visible_columns`, saved `filters`, `search_fields`, `default_sort`, `page_size`, and display-label overrides
   - simplified component authoring UI to one Table flow with Dataset catalog context, displayed fields, default filters, default sort, and page size
+  - added pre-publish and runtime validation for saved/default filter literals so invalid numeric/date/boolean filters fail with controlled validation errors before reader execution
   - introduced shared projection/filter/collapsible-panel controls in neutral UI/data-ops boundaries instead of duplicating Dataset authoring controls inside Components
   - introduced the shared interactive table display for Dataset previews and Component rendering, with search, column visibility, header sort/filter menus, pagination, and reset controls
   - rewrote component Playwright coverage around thin table behavior instead of component-owned aggregation

@@ -5,8 +5,7 @@ use super::http::{fetch_json_request, send_json_request};
 #[cfg(feature = "hydrate")]
 use super::types::{
     ComponentDefinition, ComponentSummary, ComponentTable, ComponentValidationResponse,
-    CreateComponentRequest, CreateComponentVersionRequest, DatasetSummary, IdResponse,
-    UpdateComponentRequest,
+    CreateComponentVersionRequest, DatasetSummary, IdResponse, SaveComponentEditRequest,
 };
 
 #[cfg(feature = "hydrate")]
@@ -64,75 +63,14 @@ pub(crate) async fn fetch_datasets() -> Result<Option<Vec<DatasetSummary>>, Stri
 }
 
 #[cfg(feature = "hydrate")]
-pub(crate) async fn create_component(
-    payload: CreateComponentRequest,
+pub(crate) async fn save_component_edit(
+    payload: SaveComponentEditRequest,
 ) -> Result<IdResponse, String> {
     send_json_request(
-        gloo_net::http::Request::post("/api/admin/components"),
-        serde_json::to_string(&payload).map_err(|_| "Component payload is invalid.".to_string())?,
-        "Create component",
-    )
-    .await
-}
-
-#[cfg(feature = "hydrate")]
-pub(crate) async fn update_component(
-    component_id: &str,
-    payload: UpdateComponentRequest,
-) -> Result<IdResponse, String> {
-    send_json_request(
-        gloo_net::http::Request::patch(&format!("/api/admin/components/{component_id}")),
+        gloo_net::http::Request::post("/api/admin/components/save"),
         serde_json::to_string(&payload)
-            .map_err(|_| "Component metadata payload is invalid.".to_string())?,
-        "Update component",
-    )
-    .await
-}
-
-#[cfg(feature = "hydrate")]
-pub(crate) async fn save_component_version(
-    component_id: &str,
-    payload: CreateComponentVersionRequest,
-) -> Result<IdResponse, String> {
-    send_json_request(
-        gloo_net::http::Request::post(&format!("/api/admin/components/{component_id}/versions")),
-        serde_json::to_string(&payload)
-            .map_err(|_| "Component version payload is invalid.".to_string())?,
-        "Save component draft",
-    )
-    .await
-}
-
-#[cfg(feature = "hydrate")]
-pub(crate) async fn update_component_version(
-    component_id: &str,
-    version_id: &str,
-    payload: CreateComponentVersionRequest,
-) -> Result<IdResponse, String> {
-    send_json_request(
-        gloo_net::http::Request::patch(&format!(
-            "/api/admin/components/{component_id}/versions/{version_id}"
-        )),
-        serde_json::to_string(&payload)
-            .map_err(|_| "Component version payload is invalid.".to_string())?,
-        "Update component draft",
-    )
-    .await
-}
-
-#[cfg(feature = "hydrate")]
-pub(crate) async fn update_published_component_version(
-    component_id: &str,
-    version_id: &str,
-    payload: CreateComponentVersionRequest,
-) -> Result<IdResponse, String> {
-    send_json_request(
-        gloo_net::http::Request::patch(&format!(
-            "/api/admin/components/{component_id}/versions/{version_id}/published"
-        )),
-        serde_json::to_string(&payload)
-            .map_err(|_| "Component version payload is invalid.".to_string())?,
-        "Update published component version",
+            .map_err(|_| "Component save payload is invalid.".to_string())?,
+        "Save component",
     )
     .await
 }
@@ -161,21 +99,6 @@ pub(crate) async fn validate_component_version(
         serde_json::to_string(&payload)
             .map_err(|_| "Component validation payload is invalid.".to_string())?,
         "Validate component",
-    )
-    .await
-}
-
-#[cfg(feature = "hydrate")]
-pub(crate) async fn publish_component_version(
-    component_id: &str,
-    version_id: &str,
-) -> Result<IdResponse, String> {
-    send_json_request(
-        gloo_net::http::Request::post(&format!(
-            "/api/admin/components/{component_id}/versions/{version_id}/publish"
-        )),
-        "{}".into(),
-        "Publish component",
     )
     .await
 }

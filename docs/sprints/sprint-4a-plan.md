@@ -89,6 +89,7 @@ Management routes:
 
 - `GET /api/admin/components`
 - `POST /api/admin/components`
+- `POST /api/admin/components/save`
 - `PATCH /api/admin/components/{component_id}`
 - `GET /api/admin/components/{component_ref}`
 - `POST /api/admin/components/{component_id}/versions`
@@ -247,7 +248,10 @@ Do not introduce feature-crate cross dependencies. Component authoring may consu
 - Draft/edit flows preserve the current published version until publish.
 - Authors can update an existing published version in place or create a new version.
 - Creating a new version records a version note and prepares a consumer-review/re-pinning workflow.
-- Published and superseded component versions cannot be mutated.
+- Superseded component versions cannot be mutated. The current published version may be
+  updated in place only through the explicit edit-screen "Update Existing Version" action;
+  authors choose this path when pinned consumers should receive the update without being
+  repinned to a new version.
 - Public reader routes and dashboards consume only published-history component versions; drafts remain admin-only authoring state.
 - Dataset dependency summaries and impact rows ignore working component drafts and report only published-history consumers.
 - Reader routes expose only published, visible components.
@@ -323,7 +327,8 @@ Backend/API scenarios:
 - Reject unsupported component kinds.
 - Update existing published version mutates that version in place.
 - Create new version supersedes the prior published version and records a version note.
-- Published/superseded component versions are immutable.
+- Superseded component versions are immutable, while the current published version supports
+  the explicit edit-screen update-in-place workflow.
 - Concurrent version creation preserves version-number and one-draft invariants.
 - Concurrent publish preserves single-published invariant.
 - Reader component list/detail omit draft-only components and expose only published versions.

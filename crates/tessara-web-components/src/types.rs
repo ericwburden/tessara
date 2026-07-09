@@ -77,18 +77,23 @@ pub(crate) struct ComponentTableRow {
 }
 
 #[derive(Clone, Serialize)]
-pub(crate) struct CreateComponentRequest {
-    pub(crate) name: String,
-    pub(crate) slug: String,
-    pub(crate) description: Option<String>,
-    pub(crate) version: Option<CreateComponentVersionRequest>,
-}
-
-#[derive(Clone, Serialize)]
 pub(crate) struct UpdateComponentRequest {
     pub(crate) name: String,
     pub(crate) slug: String,
     pub(crate) description: Option<String>,
+}
+
+#[derive(Clone, Serialize)]
+pub(crate) struct SaveComponentEditRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) component_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) draft_version_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) published_version_id: Option<String>,
+    pub(crate) action: String,
+    pub(crate) component: UpdateComponentRequest,
+    pub(crate) version: CreateComponentVersionRequest,
 }
 
 #[derive(Clone, Deserialize, PartialEq, Eq)]

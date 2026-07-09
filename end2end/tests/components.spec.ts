@@ -83,6 +83,12 @@ type ApiErrorBody = {
   error: string;
 };
 
+type ComponentFilterConfig = {
+  field_key: string;
+  operator: string;
+  value?: string;
+};
+
 type DashboardSummary = {
   id: string;
   component_count: number;
@@ -189,9 +195,14 @@ function textLikeField(fields: DatasetFieldDefinition[]) {
   return field!;
 }
 
-function tableConfig(fieldKeys: string[], pageSize = 25) {
+function tableConfig(
+  fieldKeys: string[],
+  pageSize = 25,
+  filters: ComponentFilterConfig[] = [],
+) {
   return {
     visible_columns: fieldKeys,
+    filters,
     default_sort: fieldKeys[0]
       ? {
           field_key: fieldKeys[0],
@@ -209,6 +220,7 @@ async function createComponentDraft(
   dataset: DatasetSummary,
   major: number,
   fieldKeys: string[],
+  filters: ComponentFilterConfig[] = [],
 ) {
   return expectJson<IdResponse>(
     await page.request.post("/api/admin/components", {
@@ -220,7 +232,7 @@ async function createComponentDraft(
           dataset_id: dataset.id,
           dataset_version_major: major,
           component_type: "table",
-          config: tableConfig(fieldKeys),
+          config: tableConfig(fieldKeys, 25, filters),
         },
       },
     }),
@@ -544,6 +556,40 @@ VALUES ('${draftDashboard.id}', '${component.versions[0].id}', 99, '{}'::jsonb);
     expect(filteredTable.rows.length).toBeGreaterThan(0);
     expect(
       filteredTable.rows.every((row) => row.values[firstField.key] === filterValue),
+    ).toBe(true);
+
+    const savedFilterSlug = `${slug}_saved_filter`;
+    const savedFilterCreated = await createComponentDraft(
+      page,
+      `${name} Saved Filter`,
+      savedFilterSlug,
+      dataset,
+      major,
+      [firstField.key],
+      [
+        {
+          field_key: firstField.key,
+          operator: "equals",
+          value: filterValue!,
+        },
+      ],
+    );
+    const savedFilterComponent = await loadComponent(page, savedFilterSlug);
+    await publishComponentVersion(
+      page,
+      savedFilterCreated.id,
+      savedFilterComponent.versions[0].id,
+    );
+    const savedFilterTable = await expectJson<ComponentTable>(
+      await page.request.get(`/api/components/${savedFilterSlug}/table`, {
+        params: {
+          visible_columns: firstField.key,
+        },
+      }),
+    );
+    expect(savedFilterTable.rows.length).toBeGreaterThan(0);
+    expect(
+      savedFilterTable.rows.every((row) => row.values[firstField.key] === filterValue),
     ).toBe(true);
 
     const searchTerm = filterValue!.slice(0, Math.min(4, filterValue!.length));
