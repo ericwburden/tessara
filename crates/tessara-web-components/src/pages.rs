@@ -392,7 +392,7 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
                                 </button>
                             </header>
                             <p class="component-consumers-modal__intro">
-                                "Consumers pinned to the current version can be repinned to the new version. Deselect any consumer that should remain on the current version."
+                                "This step prepares the consumer review workflow for the new version. Consumer re-pinning will use this list when dashboard and report consumers are available."
                             </p>
                             <label class="form-field component-consumers-modal__search">
                                 <span>"Search consumers"</span>
@@ -405,8 +405,8 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
                             </label>
                             <div class="component-consumers-modal__list" role="list">
                                 <EmptyState
-                                    title="No consumers found"
-                                    message="No dashboards or reports are currently pinned to this component version. Creating a new version will not repin any consumers yet."
+                                    title="Consumer review placeholder"
+                                    message="Consumer discovery is not wired in Sprint 4A yet. Creating a new version will not automatically repin dashboards or reports."
                                 />
                             </div>
                             <label class="form-field component-consumers-modal__note">
@@ -426,6 +426,10 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
                                     "Cancel"
                                 </button>
                                 <button class="button" type="button" on:click=move |_| {
+                                    if new_version_note.get_untracked().trim().is_empty() {
+                                        error.set(Some("New versions require a version note.".into()));
+                                        return;
+                                    }
                                     consumer_modal_open.set(false);
                                     create_component_from_form(
                                         editing_component_id.get_untracked(),
@@ -1375,12 +1379,7 @@ fn table_filter_config(filter: &DataOpsRowFilterDraft) -> Value {
     let mut filter_config = serde_json::Map::new();
     filter_config.insert("field_key".into(), Value::String(filter.field_key.clone()));
     filter_config.insert("operator".into(), Value::String(filter.operator.clone()));
-    if filter.value_mode == "field" {
-        filter_config.insert(
-            "value_field_key".into(),
-            Value::String(filter.value_field_key.clone()),
-        );
-    } else if !filter.value.trim().is_empty() {
+    if !filter.value.trim().is_empty() {
         filter_config.insert("value".into(), Value::String(filter.value.clone()));
     }
     Value::Object(filter_config)
@@ -1463,7 +1462,7 @@ fn table_visible_columns_from_config(config: &Value) -> String {
         .join(", ")
 }
 
-#[cfg_attr(not(any(feature = "hydrate", test)), allow(dead_code))]
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
 fn table_projection_fields_from_config_keys(config: &Value) -> Vec<DataOpsDatasetFieldDraft> {
     let labels = config
         .get("display_labels")
@@ -1512,7 +1511,7 @@ fn table_page_size_from_config(config: &Value) -> String {
         .unwrap_or_else(|| "50".into())
 }
 
-#[cfg_attr(not(any(feature = "hydrate", test)), allow(dead_code))]
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
 fn table_filter_drafts_from_config(config: &Value) -> Vec<DataOpsRowFilterDraft> {
     config
         .get("filters")
@@ -1526,11 +1525,6 @@ fn table_filter_drafts_from_config(config: &Value) -> Vec<DataOpsRowFilterDraft>
             if field_key.is_empty() || operator.is_empty() {
                 return None;
             }
-            let value_field_key = filter
-                .get("value_field_key")
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_string();
             Some(DataOpsRowFilterDraft {
                 id: (index as u64) + 1,
                 field_key: field_key.into(),
@@ -1540,12 +1534,8 @@ fn table_filter_drafts_from_config(config: &Value) -> Vec<DataOpsRowFilterDraft>
                     .and_then(Value::as_str)
                     .unwrap_or_default()
                     .into(),
-                value_mode: if value_field_key.is_empty() {
-                    "value".into()
-                } else {
-                    "field".into()
-                },
-                value_field_key,
+                value_mode: "value".into(),
+                value_field_key: String::new(),
             })
         })
         .collect()

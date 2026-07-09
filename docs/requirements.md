@@ -82,7 +82,7 @@ Dataset -> Component -> Dashboard
 
 - Components must be versioned presentation assets over Dataset major lines.
 - Sprint 4A components support a single thin `Table` type for rendering display-ready Datasets.
-- Table Components must own last-mile display configuration, including visible fields, display labels, default sort, default filters, page size, and viewer affordances.
+- Table Components must own one last-mile visible-field projection, one saved default filter set, display labels, default sort, page size, and viewer affordances.
 - Analytical shaping, aggregation, grouping, bucketing, and reusable field contracts belong in Dataset authoring, not in separate DetailTable/AggregateTable component backends.
 - Future component types may add charts or stat cards once those product needs are explicitly scoped.
 

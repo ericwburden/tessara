@@ -8,7 +8,7 @@ project direction.
 ## 2026-07-05 - Sprint 4A Dataset Catalog And Thin Table Pivot
 
 - Sprint pivot:
-  - replaced the Detail Table / Aggregate Table split with one thin `table` component kind whose config is presentation-only
+  - replaced the Detail Table / Aggregate Table split with one thin `table` component kind whose config owns one last-mile projection, one saved default filter set, display labels, default sort, page size, and viewer affordances
   - moved analytical shaping back to Datasets as the source of truth; grouped or aggregated displays should bind to display-ready Dataset major lines
   - added Dataset catalog tags and direct-source provenance summaries to improve Dataset discoverability as the catalog grows
 - Final product shape:
@@ -24,13 +24,14 @@ project direction.
   - updated Dataset directory/detail UI so search includes tags, provenance names, field labels/keys, grain, and slug; detail shows tags and provenance tabs
   - moved Dataset tag editing into Dataset authoring with combobox/chip editing and custom tag creation
   - replaced direct provenance tables with a full ancestor lineage tree that distinguishes Forms and Datasets
-  - simplified backend component validation/execution to a single `table` config with `visible_columns`, `search_fields`, `default_sort`, `page_size`, and display-label overrides
+  - simplified backend component validation/execution to a single `table` config with `visible_columns`, saved `filters`, `search_fields`, `default_sort`, `page_size`, and display-label overrides
   - simplified component authoring UI to one Table flow with Dataset catalog context, displayed fields, default filters, default sort, and page size
   - introduced shared projection/filter/collapsible-panel controls in neutral UI/data-ops boundaries instead of duplicating Dataset authoring controls inside Components
   - introduced the shared interactive table display for Dataset previews and Component rendering, with search, column visibility, header sort/filter menus, pagination, and reset controls
   - rewrote component Playwright coverage around thin table behavior instead of component-owned aggregation
   - updated roadmap and permission-scenario docs to remove stale aggregate/detail component language
   - removed the old component publish page and updated validation/UAT scripts to exercise the edit-screen publish workflow
+  - squashed Sprint 4A schema work into the baseline migration because the development database resets between sprints
 - Validation so far:
   - `cargo fmt --all --check` - passed
   - `cargo test -p tessara-api` - passed: 59 unit tests, 6 demo-flow tests, 25 workflow-runtime tests, and doc tests

@@ -570,7 +570,7 @@ async fn publish_component_version_in_tx(
     let row = sqlx::query(
         r#"
         SELECT dataset_id, dataset_version_major, component_type::text AS component_type,
-               config, status::text AS status
+               config, status::text AS status, version_note
         FROM component_versions
         WHERE component_id = $1
           AND id = $2
@@ -588,6 +588,7 @@ async fn publish_component_version_in_tx(
     let dataset_version_major = row.try_get("dataset_version_major")?;
     let component_type: String = row.try_get("component_type")?;
     let config = row.try_get("config")?;
+    let version_note: String = row.try_get("version_note")?;
 
     require_component_fully_manageable_in_tx(tx, pool, account, component_id).await?;
     require_dataset_fully_in_capability_scope(pool, account, "components:manage", dataset_id)
@@ -596,6 +597,7 @@ async fn publish_component_version_in_tx(
     let dataset_fields =
         load_dataset_major_line_fields(pool, dataset_id, dataset_version_major).await?;
     validate_component_config(&component_type, &config, &dataset_fields)?;
+    require_new_version_note_when_replacing_published(tx, component_id, &version_note).await?;
 
     sqlx::query(
         r#"
@@ -626,6 +628,42 @@ async fn publish_component_version_in_tx(
         return Err(ApiError::BadRequest(format!(
             "component version {version_id} could not be published because it is no longer a draft"
         )));
+    }
+    Ok(())
+}
+
+async fn require_new_version_note_when_replacing_published(
+    tx: &mut Transaction<'_, Postgres>,
+    component_id: Uuid,
+    version_note: &str,
+) -> ApiResult<()> {
+    let replaces_published: bool = sqlx::query_scalar(
+        r#"
+        SELECT EXISTS(
+            SELECT 1
+            FROM component_versions
+            WHERE component_id = $1
+              AND status IN (
+                  'published'::component_version_status,
+                  'superseded'::component_version_status
+              )
+        )
+        "#,
+    )
+    .bind(component_id)
+    .fetch_one(&mut **tx)
+    .await?;
+    if replaces_published && version_note.trim().is_empty() {
+        require_new_version_note(version_note)?;
+    }
+    Ok(())
+}
+
+fn require_new_version_note(version_note: &str) -> ApiResult<()> {
+    if version_note.trim().is_empty() {
+        return Err(ApiError::BadRequest(
+            "new component versions require a version note".into(),
+        ));
     }
     Ok(())
 }
@@ -836,17 +874,14 @@ async fn execute_table_component(
             ApiError::BadRequest(format!("table component config is invalid: {error}"))
         })?;
     let field_refs = fields.iter().collect::<Vec<_>>();
-    let default_visible_columns = config
+    let configured_visible_columns = config
         .visible_columns
         .iter()
         .map(|column| column.field_key().to_string())
         .collect::<Vec<_>>();
-    let visible_columns = if query.visible_columns.is_empty() {
-        &default_visible_columns
-    } else {
-        &query.visible_columns
-    };
-    let selected_fields = visible_table_fields(&field_refs, visible_columns)?;
+    let component_contract_fields = visible_table_fields(&field_refs, &configured_visible_columns)?;
+    let component_contract_refs = component_contract_fields.to_vec();
+    let selected_fields = visible_table_fields(&component_contract_refs, &query.visible_columns)?;
     let columns = selected_fields
         .iter()
         .map(|field| component_table_column(field, &config.display_labels))
@@ -857,16 +892,20 @@ async fn execute_table_component(
         .collect::<Vec<_>>();
     let mut predicates =
         vec![tier_access_predicate_for_materialization(pool, account, &materialization).await?];
-    predicates.extend(component_filter_sql(&query.filters, fields)?);
+    predicates.extend(component_filter_sql(&config.filters, &field_refs)?);
+    predicates.extend(component_filter_sql(
+        &query.filters,
+        &component_contract_fields,
+    )?);
     if let Some(search) = query.search.as_deref() {
-        let search_fields = table_search_fields(&config, fields)?;
+        let search_fields = table_search_fields(&config, &component_contract_fields)?;
         if !search_fields.is_empty() {
             predicates.push(search_predicate_sql(&search_fields, search));
         }
     }
     let full_name = materialized_full_name(&materialization);
     let sort = query.sort.or(config.default_sort);
-    let order_by = table_order_by_sql(sort.as_ref(), &field_refs, "__row_id")?;
+    let order_by = table_order_by_sql(sort.as_ref(), &component_contract_refs, "__row_id")?;
     let page_size = effective_component_page_size(query.page_size, config.page_size);
     let page = component_pagination_sql(query.offset, page_size);
     let sql = format!(
@@ -965,15 +1004,15 @@ fn visible_table_fields<'a>(
 
 fn table_search_fields<'a>(
     config: &TableComponentConfig,
-    fields: &'a [DataField],
+    fields: &[&'a DataField],
 ) -> ApiResult<Vec<&'a DataField>> {
     if config.search_fields.is_empty() {
-        return Ok(fields.iter().collect());
+        return Ok(fields.to_vec());
     }
     config
         .search_fields
         .iter()
-        .map(|key| require_component_field(fields, key, "table search field"))
+        .map(|key| require_component_field_ref(fields, key, "table search field"))
         .collect()
 }
 
@@ -1037,10 +1076,10 @@ fn effective_component_page_size(
 
 fn filter_to_sql(
     filter: &ComponentFilterConfig,
-    fields: &[DataField],
+    fields: &[&DataField],
     label: &str,
 ) -> ApiResult<String> {
-    let field = require_component_field(fields, &filter.field_key, label)?;
+    let field = require_component_field_ref(fields, &filter.field_key, label)?;
     let operator = FilterOperator::parse(&filter.operator).map_err(component_data_op_error)?;
     operator
         .validate_for_field(field)
@@ -1136,7 +1175,7 @@ fn materialized_full_name(materialization: &MajorLineMaterialization) -> String 
 
 fn component_filter_sql(
     filters: &[ComponentFilterConfig],
-    fields: &[DataField],
+    fields: &[&DataField],
 ) -> ApiResult<Vec<String>> {
     filters
         .iter()
@@ -1742,9 +1781,12 @@ fn normalized_component_version_note(note: Option<&str>) -> ApiResult<Option<Str
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct TableComponentConfig {
     #[serde(default)]
     visible_columns: Vec<ComponentFieldRef>,
+    #[serde(default)]
+    filters: Vec<ComponentFilterConfig>,
     #[serde(default)]
     search_fields: Vec<String>,
     #[serde(default)]
@@ -1756,6 +1798,7 @@ struct TableComponentConfig {
 }
 
 #[derive(Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct ComponentSortConfig {
     field_key: String,
     #[serde(default = "default_sort_direction")]
@@ -1785,6 +1828,7 @@ impl ComponentFieldRef {
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct ComponentFilterConfig {
     field_key: String,
     operator: String,
@@ -1813,22 +1857,35 @@ fn validate_table_component_config(
     for column in &config.visible_columns {
         require_component_field(fields, column.field_key(), "table visible column")?;
     }
+    let field_refs = fields.iter().collect::<Vec<_>>();
+    let configured_visible_columns = config
+        .visible_columns
+        .iter()
+        .map(|column| column.field_key().to_string())
+        .collect::<Vec<_>>();
+    let component_contract_fields = visible_table_fields(&field_refs, &configured_visible_columns)?;
+    let component_filter_fields = fields.iter().collect::<Vec<_>>();
+    component_filter_sql(&config.filters, &component_filter_fields)?;
     for field_key in &config.search_fields {
-        require_component_field(fields, field_key, "table search field")?;
+        require_component_field_ref(&component_contract_fields, field_key, "table search field")?;
     }
     for field_key in config.display_labels.keys() {
-        require_component_field(fields, field_key, "table display label")?;
+        require_component_field_ref(&component_contract_fields, field_key, "table display label")?;
     }
-    validate_component_sort(&config.default_sort, fields, "table sort")
+    validate_component_sort(
+        &config.default_sort,
+        &component_contract_fields,
+        "table sort",
+    )
 }
 
 fn validate_component_sort(
     sort: &Option<ComponentSortConfig>,
-    fields: &[DataField],
+    fields: &[&DataField],
     label: &str,
 ) -> ApiResult<()> {
     if let Some(sort) = sort {
-        require_component_field(fields, &sort.field_key, label)?;
+        require_component_field_ref(fields, &sort.field_key, label)?;
         match sort.direction.to_ascii_lowercase().as_str() {
             "asc" | "desc" => {}
             _ => {
@@ -1852,6 +1909,22 @@ fn require_component_field<'a>(
         .ok_or_else(|| {
             ApiError::BadRequest(format!(
                 "{label} references field '{field_key}' outside the dataset major-line contract"
+            ))
+        })
+}
+
+fn require_component_field_ref<'a>(
+    fields: &[&'a DataField],
+    field_key: &str,
+    label: &str,
+) -> ApiResult<&'a DataField> {
+    fields
+        .iter()
+        .copied()
+        .find(|field| field.key == field_key)
+        .ok_or_else(|| {
+            ApiError::BadRequest(format!(
+                "{label} references field '{field_key}' outside the component table contract"
             ))
         })
 }
@@ -2151,6 +2224,13 @@ mod tests {
         ];
         let config = json!({
             "visible_columns": ["program", "amount"],
+            "filters": [
+                {
+                    "field_key": "program",
+                    "operator": "not_contains",
+                    "value": "archived"
+                }
+            ],
             "search_fields": ["program"],
             "default_sort": {
                 "field_key": "amount",
@@ -2164,6 +2244,70 @@ mod tests {
 
         validate_component_config("table", &config, &fields)
             .expect("valid table component config should pass");
+    }
+
+    #[test]
+    fn table_config_rejects_stale_analytical_keys() {
+        let fields = vec![field("program", FieldType::Text)];
+        let config = json!({
+            "visible_columns": ["program"],
+            "metrics": [
+                {
+                    "function": "count",
+                    "field_key": "program"
+                }
+            ]
+        });
+
+        let error = validate_component_config("table", &config, &fields)
+            .expect_err("component analytical keys should fail");
+        assert!(error.to_string().contains("unknown field `metrics`"));
+    }
+
+    #[test]
+    fn table_config_validates_saved_filters() {
+        let fields = vec![field("score", FieldType::Number)];
+        let config = json!({
+            "visible_columns": ["score"],
+            "filters": [
+                {
+                    "field_key": "score",
+                    "operator": "contains",
+                    "value": "10"
+                }
+            ]
+        });
+
+        let error = validate_component_config("table", &config, &fields)
+            .expect_err("invalid saved filter should fail");
+        assert!(
+            error
+                .to_string()
+                .contains("filter operator 'contains' is not supported")
+        );
+    }
+
+    #[test]
+    fn table_config_rejects_field_mode_component_filters() {
+        let fields = vec![field("program", FieldType::Text)];
+        let config = json!({
+            "visible_columns": ["program"],
+            "filters": [
+                {
+                    "field_key": "program",
+                    "operator": "equals",
+                    "value_field_key": "other_program"
+                }
+            ]
+        });
+
+        let error = validate_component_config("table", &config, &fields)
+            .expect_err("field-mode component filter should fail");
+        assert!(
+            error
+                .to_string()
+                .contains("unknown field `value_field_key`")
+        );
     }
 
     #[test]
@@ -2212,8 +2356,9 @@ mod tests {
             operator: "not_contains".into(),
             value: Some("archived".into()),
         }];
+        let refs = fields.iter().collect::<Vec<_>>();
 
-        let sql = component_filter_sql(&filters, &fields).expect("filter should compile");
+        let sql = component_filter_sql(&filters, &refs).expect("filter should compile");
         assert_eq!(
             sql,
             vec!["POSITION(LOWER('archived') IN LOWER(COALESCE(\"program\", ''))) = 0"]
@@ -2228,8 +2373,9 @@ mod tests {
             operator: "contains".into(),
             value: Some("10".into()),
         }];
+        let refs = fields.iter().collect::<Vec<_>>();
 
-        let error = component_filter_sql(&filters, &fields)
+        let error = component_filter_sql(&filters, &refs)
             .expect_err("text operator on numeric field should fail");
         assert!(
             error
@@ -2309,9 +2455,10 @@ mod tests {
     }
 
     #[test]
-    fn table_search_defaults_to_output_contract_not_visible_subset() {
+    fn table_search_defaults_to_component_projection_contract() {
         let config = super::TableComponentConfig {
             visible_columns: vec![super::ComponentFieldRef::Key("score".into())],
+            filters: Vec::new(),
             search_fields: Vec::new(),
             default_sort: None,
             page_size: None,
@@ -2326,7 +2473,7 @@ mod tests {
         let selected = visible_table_fields(&refs, &["score".into()])
             .expect("visible column projection should pass");
 
-        let search_fields = table_search_fields(&config, &fields).expect("search fields");
+        let search_fields = table_search_fields(&config, &selected).expect("search fields");
 
         assert_eq!(
             selected
@@ -2340,7 +2487,37 @@ mod tests {
                 .iter()
                 .map(|field| field.key.as_str())
                 .collect::<Vec<_>>(),
-            vec!["program", "score"]
+            vec!["score"]
+        );
+    }
+
+    #[test]
+    fn runtime_visible_columns_can_only_narrow_component_projection() {
+        let fields = [
+            field("program", FieldType::Text),
+            field("score", FieldType::Number),
+            field("hidden", FieldType::Text),
+        ];
+        let refs = fields.iter().collect::<Vec<_>>();
+        let component_contract = visible_table_fields(&refs, &["program".into(), "score".into()])
+            .expect("configured projection should pass");
+
+        let selected = visible_table_fields(&component_contract, &["score".into()])
+            .expect("query projection can narrow component projection");
+        assert_eq!(
+            selected
+                .iter()
+                .map(|field| field.key.as_str())
+                .collect::<Vec<_>>(),
+            vec!["score"]
+        );
+
+        let error = visible_table_fields(&component_contract, &["hidden".into()])
+            .expect_err("query projection cannot expand component projection");
+        assert!(
+            error
+                .to_string()
+                .contains("visible column 'hidden' is outside")
         );
     }
 
@@ -2363,6 +2540,14 @@ mod tests {
         assert!(require_component_version_draft(version_id, "draft").is_ok());
         assert!(require_component_version_draft(version_id, "published").is_err());
         assert!(require_component_version_draft(version_id, "superseded").is_err());
+    }
+
+    #[test]
+    fn new_component_versions_require_notes() {
+        assert!(super::require_new_version_note("changed displayed fields").is_ok());
+        let error =
+            super::require_new_version_note("   ").expect_err("blank new-version note should fail");
+        assert!(error.to_string().contains("require a version note"));
     }
 
     #[test]

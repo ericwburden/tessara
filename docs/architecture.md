@@ -146,7 +146,7 @@ Internal structure:
 
 ### Component
 
-Versioned presentation asset over a Dataset major line. Sprint 4A supports a single thin Table Component that renders a display-ready Dataset with last-mile table presentation choices such as visible fields, display labels, default sort, default filters, and page size.
+Versioned presentation asset over a Dataset major line. Sprint 4A supports a single thin Table Component that renders a display-ready Dataset with one last-mile projection, one saved default filter set, display labels, default sort, page size, and viewer affordances.
 
 Future component types may add charts or stat cards, but analytical shaping, aggregation, grouping, and bucketing belong in Dataset authoring rather than in separate table component backends.
 
@@ -169,8 +169,8 @@ Detailed flow:
 - forms and workflows collect structured responses
 - runtime persists canonical response payloads
 - materialization produces reporting-friendly source relations
-- datasets compile those sources into stable dataset revisions
-- components bind to specific dataset revisions
+- datasets compile those sources into stable dataset revisions and major-line materializations
+- components bind to Dataset major lines, not individual revisions
 - dashboards compose component versions for end-user consumption
 
 ## Compatibility And Upgrade Behavior
@@ -184,7 +184,7 @@ When a dependent draft is rebound to a newer dependency version:
 This behavior applies most directly to:
 
 - dataset revision consumers
-- component drafts bound to newer dataset revisions
+- component drafts bound to newer Dataset major lines
 - dashboard composition when component versions change
 
 Dataset major-line sources use an append-all contract. A source labeled `Version N` resolves to a single prebuilt `dataset_major_materializations` table for major version `N`, populated from every published historical revision in that major line. Minor and patch publishes rebuild that table; a new major publish leaves prior-major consumers bound to their existing `Version N`. The major-line table uses the latest published contract in that major line as its schema; rows from older revisions project `NULL` for fields added later in the same major line.
@@ -268,7 +268,6 @@ Target analytical lifecycle examples:
 - `GET /datasets/{dataset_id}/revisions/{dataset_revision_id}` for revision detail, including generated SQL
 - `POST /components`
 - `POST /components/{component_id}/versions`
-- `POST /components/{component_id}/versions/{component_version_id}/validate`
 - `POST /components/{component_id}/versions/{component_version_id}/publish`
 
 ## Rust Workspace Direction

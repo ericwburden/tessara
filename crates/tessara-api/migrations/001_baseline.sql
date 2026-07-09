@@ -14,14 +14,7 @@ CREATE TYPE field_type AS ENUM (
 CREATE TYPE form_version_status AS ENUM ('draft', 'published', 'superseded');
 CREATE TYPE submission_status AS ENUM ('draft', 'submitted');
 CREATE TYPE dataset_revision_status AS ENUM ('draft', 'published', 'superseded');
-CREATE TYPE component_type AS ENUM (
-    'table',
-    'bar',
-    'line',
-    'pie',
-    'donut',
-    'stat_card'
-);
+CREATE TYPE component_type AS ENUM ('table');
 CREATE TYPE component_version_status AS ENUM ('draft', 'published', 'superseded');
 
 CREATE TABLE accounts (
@@ -494,11 +487,13 @@ CREATE TABLE component_versions (
     component_type component_type NOT NULL,
     version_number integer NOT NULL,
     version_label text NOT NULL,
+    version_note text NOT NULL DEFAULT '',
     status component_version_status NOT NULL DEFAULT 'draft',
     config jsonb NOT NULL DEFAULT '{}'::jsonb,
     published_at timestamptz,
     created_at timestamptz NOT NULL DEFAULT now(),
-    UNIQUE (component_id, version_number)
+    UNIQUE (component_id, version_number),
+    CONSTRAINT component_versions_component_type_table_chk CHECK (component_type = 'table'::component_type)
 );
 
 CREATE UNIQUE INDEX component_versions_one_published_idx

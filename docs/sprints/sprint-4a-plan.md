@@ -4,8 +4,8 @@ Kickoff status: started from clean `main` on 2026-07-03.
 
 ## Sprint Summary
 
-Sprint 4A pivots from component-owned table shaping to a Dataset-first presentation model.
-Datasets are the source of truth for analytical and display-ready table shape: joins, projections, filters, aggregations, calculations, labels, and field contracts belong in Dataset authoring. Components are last-mile presentation and publication assets that bind to Dataset major lines and render a single Table component with a small presentation config.
+Sprint 4A pivots from component-owned analytical shaping to a Dataset-first presentation model.
+Datasets are the source of truth for reusable analytical and display-ready table shape: joins, aggregations, calculations, labels, and stable field contracts belong in Dataset authoring. Components are last-mile presentation and publication assets that bind to Dataset major lines and render a single Table component with one projection, one default filter set, and simple viewer defaults.
 
 The sprint delivers:
 
@@ -29,8 +29,8 @@ Kickoff defaults:
 
 - Datasets own data shaping. Components own presentation, publication, and placement.
 - Sprint 4A exposes one public component kind: `table`.
-- Component configs are presentation-only. They may store `visible_columns`, `default_sort`, `page_size`, optional `search_fields`, and optional display-label overrides.
-- Component configs must not own aggregate metrics, group fields, pre/post aggregate filters, Dataset-like calculations, joins, or projections.
+- Component configs own exactly one last-mile table projection and one optional default filter set. They may store `visible_columns`, `filters`, `default_sort`, `page_size`, optional `search_fields`, and optional display-label overrides.
+- Component configs must not own aggregate metrics, group fields, pre/post aggregate filters, Dataset-like calculations, joins, or reusable analytical field-contract shaping.
 - A table that needs grouped or aggregated output should bind to a Dataset whose final shape is already grouped or aggregated.
 - Dataset catalog growth is handled with search, tags, and provenance rather than formal analytical/display Dataset classes.
 - Dataset tags are searchable metadata, not authorization or execution semantics.
@@ -129,6 +129,9 @@ Table component config:
 ```text
 {
   "visible_columns": ["field_a", "field_b"],
+  "filters": [
+    { "field_key": "field_a", "operator": "contains", "value": "active" }
+  ],
   "default_sort": { "field_key": "field_a", "direction": "asc" },
   "page_size": 50,
   "search_fields": ["field_a", "field_b"],
@@ -159,11 +162,12 @@ Validation findings are returned for visible, authorized payloads with invalid c
 ## Table Behavior
 
 - A Table component renders the Dataset major-line materialized surface directly.
-- Component table execution never performs extra grouping, metric calculation, joins, projections, or row-shaping beyond Dataset output.
-- `visible_columns` controls rendered output columns and order.
-- If `visible_columns` is blank, render the Dataset major-line output contract.
-- `search_fields` controls global search fields. If blank, search defaults to visible/output text-like fields.
-- Sort and filter validation use the Dataset major-line output contract.
+- Component table execution never performs extra grouping, metric calculation, joins, analytical projection/re-keying, or row-shaping beyond Dataset output.
+- `visible_columns` defines the component projection contract and rendered column order.
+- If `visible_columns` is blank, the component projection contract is the Dataset major-line output contract.
+- `filters` defines the component's saved default filter set over the bound Dataset major-line output fields. These filters run before viewer filters.
+- `search_fields` controls global search fields. If blank, search defaults to text-like fields in the component projection contract.
+- Default sort, display-label, runtime visible-column, and viewer filter validation use the component projection contract so viewer state cannot reveal fields hidden by the component.
 - Default sort and page size come from component config unless overridden by query params.
 - Runtime query state does not mutate component version config.
 - Materialization pending/failure is a render state, not a component validation failure.
@@ -209,7 +213,7 @@ Supported viewer filter operators:
 - component API adapters and DTOs;
 - directory/detail/create/edit/versions/viewer pages;
 - Dataset picker with catalog search, tags, provenance, field preview, and major-line choice;
-- presentation-only Table config controls;
+- thin Table config controls for visible fields, saved filters, labels, sort, page size, and viewer defaults;
 - edit-screen publish/version workflow and consumer-review placeholder modal;
 - validation display;
 - viewer wrappers around the shared interactive table display.
@@ -350,7 +354,7 @@ Update `docs/playwright-permissions-scenarios.md` for component create/edit/publ
 
 1. Rewrite Sprint 4A plan around Dataset catalog/provenance/tags and thin Table components.
 2. Add Dataset tag/provenance API contracts and schema/storage.
-3. Simplify component backend validation/execution to one `table` component type and presentation-only config.
+3. Simplify component backend validation/execution to one `table` component type with one last-mile projection and one saved default filter set.
 4. Simplify component frontend authoring to a single Table form with Dataset picker/catalog context.
 5. Add Dataset catalog/search/tag/provenance UI.
 6. Rewrite component and permission tests to remove DetailTable/AggregateTable assumptions.
