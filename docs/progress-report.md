@@ -20,9 +20,13 @@ project direction.
   - `cargo test -p tessara-web-datasets`
   - `cargo test -p tessara-web-data-ops`
   - `npx playwright test`
+  - `.\scripts\validate-e2e.ps1 -BaseUrl "http://127.0.0.1:8080"`
   - `.\scripts\smoke.ps1`
   - `.\scripts\local-launch.ps1`
   - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`
+- Revised closeout documentation requirements:
+  - update `docs/playwright-permissions-scenarios.md` for visual component reader, manager, and scoped negative cases
+  - record the legacy visual-analysis endpoint inventory in closeout notes
 - Immediate implementation focus:
   - inventory Sprint 4A ComponentVersion table contracts and define typed visual config contracts for Bar, Line, Pie/Donut, and StatCard components
 

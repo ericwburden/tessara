@@ -34,13 +34,14 @@ Visual presentation assets are first-class components.
 - Sprint 4B delivers core legacy-chart parity adapted to Components: StatCard replaces the legacy Badge concept, Bar supports both summary and comparison modes, Line supports trend-style summaries, and Pie/Donut share summary-by-category behavior. Gauges, richer chart controls, and additional chart types remain future scope.
 - The v1 visual renderer should be native Leptos/SVG/CSS in `tessara-web-components`. Do not introduce a JavaScript chart controller, bridge asset, or workbench-owned rendering path for this sprint.
 - Existing `/api/components/{component_ref}/table` and versioned table execution endpoints remain table-only compatibility endpoints for Table viewers and tests. Visual execution uses kind-specific endpoints: `GET /api/components/{component_ref}/bar`, `/line`, `/pie`, `/donut`, and `/stat-card`, plus versioned variants under `GET /api/components/{component_ref}/versions/{version_id}/{kind}`. These endpoints must load only the selected `ComponentVersion`, its Dataset major-line binding, and the bound Dataset major-line rows/fields.
+- Kind-specific visual execution endpoints must reject component-kind mismatches with a stable 400 error. `/stat-card` is the only public StatCard execution path and maps to `component_type = stat_card`; `/stat_card` is not a public alias and should fall through normal routing as a 404.
 - The common Component list/detail/version routes remain the entrypoint for all Component kinds. Kind-specific execution endpoints are implementation/API boundaries for viewers and tests, not separate product asset families.
 - Pie and Donut share the same validation and data contract, with `component_type` selecting the visual treatment. Both are accepted deliverables; the UI may expose them as a single segmented Pie/Donut kind selector.
 - Legacy visual-analysis endpoints should not be touched unless implementation proves they are necessary for compatibility. If touched, the sprint must document the exact endpoint and prove it is adapter-only with scoped component/dashboard visibility enforcement.
 
 ### V1 Visual Config Contracts
 
-Visual configs are presentation-level transforms over Dataset major-line rows. All field references below must resolve against the bound Dataset major-line output fields. Unknown config keys are rejected.
+Visual configs are presentation-level transforms over Dataset major-line rows. Transforms run after Dataset major-line row visibility and scope are resolved, and they never mutate or persist analytical artifacts. All field references below must resolve against the bound Dataset major-line output fields. Unknown config keys are rejected.
 
 Shared config:
 
@@ -48,29 +49,46 @@ Shared config:
 - `summary_type`: one of `count`, `unique_count`, `sum`, `average`, or `median`.
 - `value_format`: optional `plain`, `integer`, `decimal`, or `percent`; default `plain`.
 - `missing_policy`: optional `omit`, `zero`, or `explicit_missing`; default `omit`.
+- `sort_field`: optional visual output field key; supported values are output labels/dimensions for the selected visual, such as `category`, `x`, `comparison`, or derived `summary_value`.
+- `sort_direction`: optional `asc` or `desc`; default `asc`.
 
 Shared validation:
 
 - `sum`, `average`, and `median` require `summary_field` to be a Dataset `number` field.
 - `count` and `unique_count` may summarize any field type.
-- `missing_policy = omit` drops rows with missing selected chart inputs from the visual transform.
-- `missing_policy = zero` treats missing numeric summary values as `0` where a numeric calculation is required.
-- `missing_policy = explicit_missing` preserves missing category/group/x values as a visible missing-data bucket. Missing summary-field values are included as an explicit missing bucket for `count` and `unique_count`; numeric blanks are excluded from `sum`, `average`, and `median` instead of being fabricated.
-- `max_items`, `max_slices`, and `number_of_points` are positive integers with default `20` and maximum `100`.
+- `missing_policy = omit` drops rows with missing selected inputs from the visual transform, including missing summary values.
+- `missing_policy = zero` treats missing numeric summary values as `0`; missing category/x/comparison values are omitted.
+- `missing_policy = explicit_missing` emits a stable missing bucket for missing category/x/comparison output labels. For `count`, missing summary rows are counted after the selected missing policy is applied. For `unique_count`, missing summary values count as one distinct missing value. For numeric summaries, missing numeric values are excluded instead of fabricated.
+- `count` counts rows after the selected missing policy is applied.
+- `unique_count` counts distinct non-missing `summary_field` values after the selected missing policy is applied, except that `explicit_missing` counts missing summary values as one distinct missing value.
+- `sum`, `average`, and `median` operate only on numeric `summary_field` values. Even-sized `median` uses the average of the two middle numeric values.
+- `sort_field` must name a valid visual output field for the selected kind and mode. Default ordering is label ascending.
+- Limits apply after grouping and sorting. Top/bottom fraction behavior is expressed through `sort_field`, `sort_direction`, and `number_of_points`; avoid hidden implicit ordering rules.
+- `max_slices` and `number_of_points` are positive integers with default `20` and maximum `100`. Sprint 4B does not use `max_items`.
 
 Kind-specific config:
 
 - `stat_card`: `summary_field`, `summary_type`, optional `label`, optional `value_format`, optional `supporting_text`, optional `panel_style`.
-- `bar`: `mode` of `summary` or `comparison`, `summary_field`, `summary_type`, `category_field`, optional `comparison_field` when `mode = comparison`, optional `orientation` of `vertical` or `horizontal`, optional `number_of_points`, optional `fraction` of `top` or `bottom`.
+- `bar`: `mode` of `summary` or `comparison`, `summary_field`, `summary_type`, `category_field`, optional `orientation` of `vertical` or `horizontal`, optional `number_of_points`, optional `fraction` of `top` or `bottom`. `comparison_field` is required when `mode = comparison` and rejected when `mode = summary`.
 - `line`: `summary_field`, `summary_type`, `x_field`, optional `number_of_points`.
 - `pie` / `donut`: `summary_field`, `summary_type`, `category_field`, optional `max_slices`.
+
+Deterministic output semantics:
+
+- Bar summary groups by `category_field`.
+- Bar comparison groups by `category_field` and `comparison_field`.
+- Line groups duplicate `x_field` values into one point using `summary_type`.
+- Pie and Donut group by `category_field` and share the same data contract while preserving distinct `component_type` treatment.
 
 Validation should reject:
 
 - missing required fields for the selected kind;
 - field references outside the bound Dataset major-line contract;
-- unsupported enum values such as unknown mode, fraction, orientation, missing policy, or format options;
+- unsupported enum values such as unknown mode, fraction, orientation, missing policy, format, sort field, or sort direction options;
 - out-of-range limits;
+- `comparison_field` when `bar.mode = summary`;
+- missing `comparison_field` when `bar.mode = comparison`;
+- unused legacy or removed config keys such as `max_items`;
 - stale legacy asset identifiers such as `report_id`, `chart_id`, `aggregation_id`, or workbench references.
 
 Future carry-forward:
@@ -121,6 +139,7 @@ The application must provide visual component builder and viewer screens for the
 - Published visual components render through application viewer screens.
 - Visual component viewers use ComponentVersion as the source of truth, not deprecated report/chart/workbench assets.
 - Kind-specific visual execution endpoints return stable view models for Bar, Line, Pie, Donut, and StatCard, including explicit version viewing.
+- Kind-specific visual execution endpoints reject wrong-kind requests with stable 400 errors; `/stat-card` is the only public StatCard execution path.
 - Table execution endpoints remain table-only and reject visual component kinds with stable unsupported-kind errors.
 - Reader routes expose only visible published visual components.
 - Management routes expose only manageable visual component drafts/versions.
@@ -192,11 +211,22 @@ Backend/API scenarios:
 - Accept valid visual configs using `count`, `unique_count`, `sum`, `average`, and `median` summary functions.
 - Reject numeric summary functions against non-number fields.
 - Reject unsupported `value_format`, `missing_policy`, Bar mode, Bar fraction, orientation, and out-of-range limit values.
+- Reject invalid visual sort fields and sort directions.
+- Reject Bar summary configs that include `comparison_field`, and reject Bar comparison configs that omit `comparison_field`.
+- Reject unused `max_items`.
 - Reject visual component configs that reference fields outside the Dataset major-line contract.
 - Reject incomplete visual component configs with stable validation findings.
 - Execute/render published visual component data from the ComponentVersion and bound Dataset major line through kind-specific endpoints.
 - Confirm kind-specific explicit-version endpoints return the requested published version instead of always returning the current published version.
+- Confirm kind-specific wrong-kind endpoint requests return stable 400 errors, including `/bar` against a Line component, `/line` against a Bar component, and versioned endpoint mismatches.
+- Confirm `/stat-card` works for `stat_card` and `/stat_card` is not a public alias.
 - Confirm table endpoints continue to work for Table components and reject visual component kinds with stable unsupported-kind errors.
+- Assert deterministic view-model output for `count`, `unique_count`, `sum`, `average`, and `median`.
+- Assert deterministic view-model output for `omit`, `zero`, and `explicit_missing`.
+- Assert deterministic Bar summary and Bar comparison output shapes, including post-group sorting and post-sort limits.
+- Assert deterministic Line duplicate-x grouping and label-ascending default sort.
+- Assert Pie and Donut return the same data contract while preserving distinct `component_type` treatment.
+- Assert post-group visual sorting by valid output fields and post-sort limits.
 - Preserve Sprint 4A Table component behavior while adding visual kinds.
 - Preserve atomic edit-screen behavior: a failed visual save does not partially mutate component metadata or the existing published config.
 - Keep draft-only visual components hidden from reader routes.
