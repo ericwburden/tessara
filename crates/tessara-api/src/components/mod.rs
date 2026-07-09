@@ -2646,7 +2646,7 @@ mod tests {
 
     #[test]
     fn table_config_rejects_invalid_date_saved_filter_range() {
-        let fields = vec![field("submitted_on", FieldType::Date)];
+        let fields = [field("submitted_on", FieldType::Date)];
         let config = json!({
             "visible_columns": ["submitted_on"],
             "filters": [
@@ -2665,7 +2665,7 @@ mod tests {
 
     #[test]
     fn component_filter_sql_rejects_invalid_runtime_filter_value() {
-        let fields = vec![field("submitted_on", FieldType::Date)];
+        let fields = [field("submitted_on", FieldType::Date)];
         let filters = vec![super::ComponentFilterConfig {
             field_key: "submitted_on".into(),
             operator: "gte".into(),
@@ -2680,7 +2680,7 @@ mod tests {
 
     #[test]
     fn table_config_rejects_field_mode_component_filters() {
-        let fields = vec![field("program", FieldType::Text)];
+        let fields = [field("program", FieldType::Text)];
         let config = json!({
             "visible_columns": ["program"],
             "filters": [
@@ -2703,7 +2703,7 @@ mod tests {
 
     #[test]
     fn table_config_rejects_missing_visible_column() {
-        let fields = vec![field("program", FieldType::Text)];
+        let fields = [field("program", FieldType::Text)];
         let config = json!({
             "visible_columns": ["program", "amount"]
         });
@@ -2719,7 +2719,7 @@ mod tests {
 
     #[test]
     fn old_component_table_kinds_are_rejected() {
-        let fields = vec![field("program", FieldType::Text)];
+        let fields = [field("program", FieldType::Text)];
         let config = json!({ "visible_columns": ["program"] });
 
         let detail_error = validate_component_config("detail_table", &config, &fields)
@@ -2741,7 +2741,7 @@ mod tests {
 
     #[test]
     fn component_filter_sql_supports_negative_operator() {
-        let fields = vec![field("program", FieldType::Text)];
+        let fields = [field("program", FieldType::Text)];
         let filters = vec![super::ComponentFilterConfig {
             field_key: "program".into(),
             operator: "not_contains".into(),
@@ -2758,7 +2758,7 @@ mod tests {
 
     #[test]
     fn component_filter_sql_validates_operator_field_compatibility() {
-        let fields = vec![field("score", FieldType::Number)];
+        let fields = [field("score", FieldType::Number)];
         let filters = vec![super::ComponentFilterConfig {
             field_key: "score".into(),
             operator: "contains".into(),
@@ -2855,7 +2855,7 @@ mod tests {
             page_size: None,
             display_labels: BTreeMap::new(),
         };
-        let fields = vec![
+        let fields = [
             field("program", FieldType::Text),
             field("score", FieldType::Number),
         ];

@@ -181,11 +181,13 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
             <form class="route-panel__section form-grid component-editor-form" on:submit=move |event| {
                 event.prevent_default();
                 create_component_from_form(
-                    editing_component_id.get_untracked(),
-                    editing_version_id.get_untracked(),
-                    current_published_version_id.get_untracked(),
-                    ComponentPublishAction::SaveDraft,
-                    None,
+                    ComponentSaveIntent {
+                        editing_component_id: editing_component_id.get_untracked(),
+                        editing_version_id: editing_version_id.get_untracked(),
+                        current_published_version_id: current_published_version_id.get_untracked(),
+                        publish_action: ComponentPublishAction::SaveDraft,
+                        version_note: None,
+                    },
                     ComponentFormValues {
                         name: name.get_untracked(),
                         slug: slug.get_untracked(),
@@ -198,9 +200,11 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
                         sort_direction: sort_direction.get_untracked(),
                         page_size: page_size.get_untracked(),
                     },
-                    message,
-                    error,
-                    validation_findings,
+                    ComponentFormFeedback {
+                        message,
+                        error,
+                        findings: validation_findings,
+                    },
                 );
             }>
                 <label class="form-field">
@@ -333,11 +337,13 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
                                 on:click=move |_| {
                                 publish_menu_open.set(false);
                                 create_component_from_form(
-                                    editing_component_id.get_untracked(),
-                                    editing_version_id.get_untracked(),
-                                    current_published_version_id.get_untracked(),
-                                    ComponentPublishAction::UpdateExistingVersion,
-                                    None,
+                                    ComponentSaveIntent {
+                                        editing_component_id: editing_component_id.get_untracked(),
+                                        editing_version_id: editing_version_id.get_untracked(),
+                                        current_published_version_id: current_published_version_id.get_untracked(),
+                                        publish_action: ComponentPublishAction::UpdateExistingVersion,
+                                        version_note: None,
+                                    },
                                     ComponentFormValues {
                                         name: name.get_untracked(),
                                         slug: slug.get_untracked(),
@@ -350,9 +356,11 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
                                         sort_direction: sort_direction.get_untracked(),
                                         page_size: page_size.get_untracked(),
                                     },
-                                    message,
-                                    error,
-                                    validation_findings,
+                                    ComponentFormFeedback {
+                                        message,
+                                        error,
+                                        findings: validation_findings,
+                                    },
                                 );
                             }>
                                 "Update Existing Version"
@@ -434,11 +442,13 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
                                     }
                                     consumer_modal_open.set(false);
                                     create_component_from_form(
-                                        editing_component_id.get_untracked(),
-                                        editing_version_id.get_untracked(),
-                                        current_published_version_id.get_untracked(),
-                                        ComponentPublishAction::CreateNewVersion,
-                                        Some(new_version_note.get_untracked()),
+                                        ComponentSaveIntent {
+                                            editing_component_id: editing_component_id.get_untracked(),
+                                            editing_version_id: editing_version_id.get_untracked(),
+                                            current_published_version_id: current_published_version_id.get_untracked(),
+                                            publish_action: ComponentPublishAction::CreateNewVersion,
+                                            version_note: Some(new_version_note.get_untracked()),
+                                        },
                                         ComponentFormValues {
                                             name: name.get_untracked(),
                                             slug: slug.get_untracked(),
@@ -451,9 +461,11 @@ pub fn ComponentEditorContent(component_ref: Option<String>) -> impl IntoView {
                                             sort_direction: sort_direction.get_untracked(),
                                             page_size: page_size.get_untracked(),
                                         },
-                                        message,
-                                        error,
-                                        validation_findings,
+                                        ComponentFormFeedback {
+                                            message,
+                                            error,
+                                            findings: validation_findings,
+                                        },
                                     );
                                 }>
                                     "Create New Version"
@@ -1818,6 +1830,22 @@ struct ComponentFormValues {
     page_size: String,
 }
 
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+struct ComponentSaveIntent {
+    editing_component_id: Option<String>,
+    editing_version_id: Option<String>,
+    current_published_version_id: Option<String>,
+    publish_action: ComponentPublishAction,
+    version_note: Option<String>,
+}
+
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+struct ComponentFormFeedback {
+    message: RwSignal<Option<String>>,
+    error: RwSignal<Option<String>>,
+    findings: RwSignal<Vec<ComponentValidationFinding>>,
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum ComponentPublishAction {
     SaveDraft,
@@ -1826,22 +1854,15 @@ enum ComponentPublishAction {
 }
 
 #[cfg(feature = "hydrate")]
-#[allow(clippy::too_many_arguments)]
 fn create_component_from_form(
-    editing_component_id: Option<String>,
-    editing_version_id: Option<String>,
-    current_published_version_id: Option<String>,
-    publish_action: ComponentPublishAction,
-    version_note: Option<String>,
+    intent: ComponentSaveIntent,
     values: ComponentFormValues,
-    message: RwSignal<Option<String>>,
-    error: RwSignal<Option<String>>,
-    findings: RwSignal<Vec<ComponentValidationFinding>>,
+    feedback: ComponentFormFeedback,
 ) {
     leptos::task::spawn_local(async move {
-        message.set(None);
-        error.set(None);
-        findings.set(Vec::new());
+        feedback.message.set(None);
+        feedback.error.set(None);
+        feedback.findings.set(Vec::new());
         let major = values.dataset_major.trim().parse::<i32>().unwrap_or(1);
         let config = build_component_config(
             &values.columns,
@@ -1855,16 +1876,16 @@ fn create_component_from_form(
             dataset_version_major: Some(major),
             component_type: "table".into(),
             config,
-            version_note: normalized_component_version_note(version_note),
+            version_note: normalized_component_version_note(intent.version_note),
         };
         match api::validate_component_version(version.clone()).await {
             Ok(response) if response.valid => {}
             Ok(response) => {
-                findings.set(response.findings);
+                feedback.findings.set(response.findings);
                 return;
             }
             Err(message) => {
-                error.set(Some(message));
+                feedback.error.set(Some(message));
                 return;
             }
         }
@@ -1874,15 +1895,15 @@ fn create_component_from_form(
             Some(values.description.trim().to_string())
         };
         let redirect_ref = component_redirect_ref(&values.slug);
-        let action = match publish_action {
+        let action = match intent.publish_action {
             ComponentPublishAction::SaveDraft => "save_draft",
             ComponentPublishAction::UpdateExistingVersion => "update_existing_version",
             ComponentPublishAction::CreateNewVersion => "create_new_version",
         };
         let request = SaveComponentEditRequest {
-            component_id: editing_component_id,
-            draft_version_id: editing_version_id,
-            published_version_id: current_published_version_id,
+            component_id: intent.editing_component_id,
+            draft_version_id: intent.editing_version_id,
+            published_version_id: intent.current_published_version_id,
             action: action.into(),
             component: UpdateComponentRequest {
                 name: values.name,
@@ -1893,16 +1914,16 @@ fn create_component_from_form(
         };
         match api::save_component_edit(request).await {
             Ok(_) => {
-                let saved_message = match publish_action {
+                let saved_message = match intent.publish_action {
                     ComponentPublishAction::SaveDraft => "Component draft saved.",
                     ComponentPublishAction::UpdateExistingVersion => {
                         "Existing component version updated."
                     }
                     ComponentPublishAction::CreateNewVersion => "Component saved and published.",
                 };
-                message.set(Some(saved_message.into()));
+                feedback.message.set(Some(saved_message.into()));
                 if let Some(window) = web_sys::window() {
-                    let target = if publish_action == ComponentPublishAction::SaveDraft {
+                    let target = if intent.publish_action == ComponentPublishAction::SaveDraft {
                         format!("/components/{redirect_ref}/edit")
                     } else {
                         format!("/components/{redirect_ref}")
@@ -1910,7 +1931,7 @@ fn create_component_from_form(
                     let _ = window.location().set_href(&target);
                 }
             }
-            Err(message) => error.set(Some(message)),
+            Err(message) => feedback.error.set(Some(message)),
         }
     });
 }
@@ -1954,15 +1975,9 @@ fn snake_case_component_slug(value: &str) -> String {
 
 #[cfg(not(feature = "hydrate"))]
 fn create_component_from_form(
-    _: Option<String>,
-    _: Option<String>,
-    _: Option<String>,
-    _: ComponentPublishAction,
-    _: Option<String>,
+    _: ComponentSaveIntent,
     _: ComponentFormValues,
-    _: RwSignal<Option<String>>,
-    _: RwSignal<Option<String>>,
-    _: RwSignal<Vec<ComponentValidationFinding>>,
+    _: ComponentFormFeedback,
 ) {
 }
 

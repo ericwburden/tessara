@@ -632,7 +632,7 @@ This section records the completed foundation sequence that led to the current n
 
 ## Phase 4: Components
 
-### Sprint 4A: Dataset Catalog And Thin Table Components (Implemented)
+### Sprint 4A: Dataset Catalog And Thin Table Components (Complete)
 
 **Outcome:** Dataset discovery improves and table-oriented presentation assets become thin display components over Dataset major-line outputs.
 
@@ -658,7 +658,7 @@ This section records the completed foundation sequence that led to the current n
 
 **User-testable exit condition:** a tester can tag and discover Datasets, review direct provenance, then create, version, publish, and view thin table components in the app.
 
-### Sprint 4B: Chart And Stat Component Slice
+### Sprint 4B: Chart And Stat Component Slice (Next)
 
 **Outcome:** visual presentation assets are first-class components.
 

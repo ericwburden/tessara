@@ -5,6 +5,89 @@ artifacts, old sprint worktrees, `/app/*` routes, or earlier crate names. Use
 `docs/roadmap.md`, `docs/architecture.md`, and `docs/README.md` for current
 project direction.
 
+## 2026-07-09 - Sprint 4A Final Closeout
+
+- Sprint: Sprint 4A: Dataset Catalog And Thin Table Components
+- Branch: `codex/sprint-4a`
+- PR: `https://github.com/ericwburden/tessara/pull/103`
+- Status: complete and ready for merge review, with Sprint 4B marked next in the roadmap
+- Completed:
+  - pivoted the sprint from component-owned Detail/Aggregate Tables to one thin `table` component over Dataset major-line outputs
+  - added Dataset catalog tags, searchable Dataset discovery, Dataset detail tabs, and editable catalog metadata that does not create Dataset revisions
+  - added Dataset provenance lineage as a tree rooted at the current Dataset, with Form and Dataset ancestors linked from the lineage view
+  - simplified Component storage and APIs to table-only, major-line-only versions with `dataset_id`, `dataset_version_major`, `binding_mode = major_line`, `component_type = table`, and optional version notes
+  - removed the old `/components/:component_ref/publish` interstitial route and moved authoring decisions into the edit screen
+  - added edit-screen version actions: `Save Draft`, `Update Existing Version`, and `Create New Version`
+  - added the Create New Version consumer-review placeholder modal with searchable consumer list space and required New Version Note
+  - added atomic component save behavior so component metadata, draft changes, update-existing-version, and create-new-version actions commit or fail together
+  - added shared table rendering for Dataset previews and Component viewers, including search, column visibility, header sort/filter menus, reset controls, pagination, and horizontal-scroll-safe menus
+  - updated Component list UX with status distinctions for `Draft`, `Published`, and `Updating`, current revision display, icon actions, filters, and shared pagination footer styling
+  - removed legacy Detail Table, Aggregate Table, revision-bound component compatibility, inline publish flag, and old component kind paths from the Sprint 4A product surface
+  - clarified the remaining granular component admin endpoints as API/test setup paths; the edit screen uses the atomic save command as the authoring workflow
+- Validation:
+  - `.\scripts\local-launch.ps1 -FreshData -SkipSeed` - passed and launched a clean empty stack for UAT seeding
+  - `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"` - passed for organization, forms, datasets, components, and seed flows
+  - `cargo fmt --all` - passed
+  - `cargo clippy -p tessara-api -p tessara-web -p tessara-web-components -p tessara-web-datasets -p tessara-web-data-ops --all-targets -- -D warnings` - passed
+  - `cargo test -p tessara-api` - passed: 70 component/dataset unit tests, 6 demo-flow tests, 25 workflow-runtime tests, and doc tests
+  - `cargo test -p tessara-web` - passed: 4 web shell tests and doc tests
+  - `cargo test -p tessara-web-components -p tessara-web-datasets -p tessara-web-data-ops` - passed: 16 component tests, 1 data-ops test, 24 dataset tests, and doc tests
+  - from `end2end/`: `npx playwright test --workers=1` - passed: 39/39 browser tests
+  - `.\scripts\smoke.ps1` - passed: 6 demo-flow smoke tests plus JSON smoke summary
+  - `.\scripts\local-launch.ps1 -FreshData` - passed after smoke and relaunched the seeded app for handoff
+- Current local handoff state:
+  - the Tessara stack is running at `http://localhost:8080`
+  - standard demo accounts remain available, including `admin@tessara.local / tessara-dev-admin`
+- Next sprint:
+  - Sprint 4B: Chart And Stat Component Slice
+
+### Sprint Handoff / Demo Instructions
+
+1. Launch the app:
+   - `.\scripts\local-launch.ps1 -FreshData`
+   - Open `http://localhost:8080`
+   - Log in as `admin@tessara.local / tessara-dev-admin`
+2. Dataset catalog tags and search:
+   - Go to `Datasets`
+   - Confirm Dataset search can find Datasets by name, slug, tag, source/provenance name, grain, and field metadata
+   - Open a Dataset, review the `Tags` tab, then use `Edit Dataset` to add/remove tags with the combobox/chip control
+3. Dataset provenance lineage:
+   - Open a Dataset with multiple sources
+   - Use the `Sources` tab for direct inputs
+   - Use the `Provenance` tab for the full ancestor tree rooted at the current Dataset, with Form and Dataset icons and links
+4. Thin Table Component authoring:
+   - Go to `Components`
+   - Create or edit a Table Component
+   - Choose a Dataset major-line source, review Dataset Context, configure Displayed Fields, Default Filters, default sort, and page size
+   - Save as draft, update an existing published version, or create a new version with a required version note
+5. Component viewer and version history:
+   - Open a published Component from the directory
+   - Confirm the default route renders the table preview using the shared interactive table
+   - Use search, column controls, reset, header sort/filter menus, pagination, and horizontal scrolling
+   - Open version history and confirm version notes appear for newly created versions
+6. Scope and governance behavior:
+   - Use existing Playwright permission scenarios for scoped negative checks
+   - Drafts remain manager-visible but reader-hidden; published and superseded history remains renderable only when the selected version's Dataset scope is visible
+
+### Acceptance Mapping
+
+- Roadmap exit condition: "a tester can tag and discover Datasets, review direct provenance, then create, version, publish, and view thin table components in the app."
+  - Covered by Dataset search/tag UI, Dataset provenance tree, Component authoring, edit-screen publish decisions, Component viewer, Playwright `Sprint 4A component workflow`, UAT seed checks, and smoke validation.
+- Dataset catalog discoverability:
+  - Covered by Dataset tags, Dataset search expansion, Dataset detail tabs, tag editing, and provenance summaries.
+- Provenance:
+  - Covered by the direct Sources table plus full ancestor lineage tree in the Provenance tab.
+- Thin Table Component model:
+  - Covered by schema constraints, table-only component validation, single `table` config, major-line binding, and rejection tests for legacy component kinds and `dataset_revision_id` payloads.
+- Version governance:
+  - Covered by manual edit-screen choices to Save Draft, Update Existing Version, or Create New Version; new versions require a note and prepare the consumer review workflow.
+- Runtime table behavior:
+  - Covered by shared interactive table rendering for Dataset previews and Component viewers, saved/default filters, search, column visibility, sorting, filtering, pagination, and reset controls.
+- Authorization:
+  - Covered by read-overlap and authoring-containment semantics in docs, selected historical version authorization, dashboard draft rejection, scoped component bind/publish denial, and permission Playwright tests.
+- Legacy cleanup:
+  - Covered by removal of the publish interstitial route, old Detail/Aggregate component UI, revision-bound component compatibility, inline publish flag support, and stale docs.
+
 ## 2026-07-05 - Sprint 4A Dataset Catalog And Thin Table Pivot
 
 - Sprint pivot:
